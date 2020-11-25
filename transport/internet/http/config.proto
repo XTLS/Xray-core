@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package xray.transport.internet.http;
+option csharp_namespace = "Xray.Transport.Internet.Http";
+option go_package = "github.com/xtls/xray-core/v1/transport/internet/http";
+option java_package = "com.xray.transport.internet.http";
+option java_multiple_files = true;
+
+message Config {
+  repeated string host = 1;
+  string path = 2;
+}
