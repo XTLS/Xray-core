@@ -15,7 +15,7 @@
 
 ## License
 
-[Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/main/LICENSE)
+[Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
 
 ## Credits
 
