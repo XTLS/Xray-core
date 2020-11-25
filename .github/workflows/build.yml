@@ -1,0 +1,40 @@
+on:
+  push:
+    paths:
+      - 'version'
+
+name: release-build
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set Env
+        run: |
+          echo "GOLANG=$(wget -qO- https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | grep 'version' | cut -d\" -f4 | head -1)" >> $GITHUB_ENV
+          echo "VERSION=$(cat "version" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Install Golang
+        uses: actions/setup-go@v2
+        with: 
+          go-version: ${{ env.GOLANG }}
+
+      - name: Build binaries
+        run: |
+          make release
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: ${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            ./build/*
