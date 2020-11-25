@@ -6,6 +6,8 @@
 
 - Linux script
   - [Xray-install](https://github.com/XTLS/Xray-install)
+- Docker
+  - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 
 ## Usage
 
