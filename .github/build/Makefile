@@ -13,22 +13,31 @@ geoip.dat:
 geosite.dat:
 	wget -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
 
-%.zip: % geosite.dat geoip.dat
-	zip -du $(BUILD_DIR)/Xray-$@ -j $(BUILD_DIR)/Xray-$</*
-	zip -du $(BUILD_DIR)/Xray-$@ -j *.dat
+systemd:
+	cp -r .github/build/systemd ${PWD}/systemd
+
+%.zip: % geosite.dat geoip.dat systemd
+	zip $(BUILD_DIR)/Xray-$@ *.dat systemd README.md && zip -du $(BUILD_DIR)/Xray-$@ -j $(BUILD_DIR)/Xray-$</*
 	rm -rf $(BUILD_DIR)/Xray-$<
 	openssl dgst --md5 $(BUILD_DIR)/Xray-$@ | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$@.dgst
 	openssl dgst --sha1 $(BUILD_DIR)/Xray-$@ | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$@.dgst
 	openssl dgst --sha256 $(BUILD_DIR)/Xray-$@ | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$@.dgst
 	openssl dgst --sha512 $(BUILD_DIR)/Xray-$@ | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$@.dgst
 
-release: geosite.dat geoip.dat linux-32.zip linux-64.zip freebsd-32.zip freebsd-64.zip \
-        openbsd-32.zip openbsd-64.zip dragonfly-64.zip linux-riscv64.zip linux-arm32-v5.zip \
-        linux-arm32-v6.zip linux-arm32-v7a.zip linux-arm64-v8a.zip linux-mips32-hardfloat.zip \
-        linux-mips32-softfloat.zip linux-mips32le-hardfloat.zip linux-mips32le-softfloat.zip \
-        linux-mips64-hardfloat.zip linux-mips64-softfloat.zip linux-mips64le-hardfloat.zip \
-        linux-mips64le-softfloat.zip linux-ppc64.zip linux-ppc64le.zip linux-s390x.zip \
-        macos-64.zip windows-32.zip windows-64.zip windows-arm32-v7a.zip
+%.zip2: % geosite.dat geoip.dat
+	zip $(BUILD_DIR)/Xray-$<.zip *.dat README.md && zip -du $(BUILD_DIR)/Xray-$<.zip -j $(BUILD_DIR)/Xray-$</*
+	rm -rf $(BUILD_DIR)/Xray-$<
+	openssl dgst --md5 $(BUILD_DIR)/Xray-$<.zip | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$<.zip.dgst
+	openssl dgst --sha1 $(BUILD_DIR)/Xray-$<.zip | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$<.zip.dgst
+	openssl dgst --sha256 $(BUILD_DIR)/Xray-$<.zip | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$<.zip.dgst
+	openssl dgst --sha512 $(BUILD_DIR)/Xray-$<.zip | sed 's/([^)]*)//g' >> $(BUILD_DIR)/Xray-$<.zip.dgst
+
+release: geosite.dat geoip.dat linux-32.zip linux-64.zip linux-riscv64.zip linux-arm32-v5.zip \
+        linux-arm32-v6.zip linux-arm32-v7a.zip linux-arm64-v8a.zip linux-mips32.zip \
+        linux-mips32-softfloat.zip linux-mips32le.zip linux-mips32le-softfloat.zip \
+        linux-mips64.zip linux-mips64le.zip linux-ppc64.zip linux-ppc64le.zip linux-s390x.zip \
+        freebsd-32.zip2 freebsd-64.zip2 openbsd-32.zip2 openbsd-64.zip2 dragonfly-64.zip2 \
+        macos-64.zip2 windows-32.zip2 windows-64.zip2 windows-arm32-v7a.zip2
 
 linux-32:
 	mkdir -p $(BUILD_DIR)/Xray-$@
@@ -78,7 +87,7 @@ linux-arm64-v8a:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=arm64 $(GOBUILD)/Xray-$@/xray ./main
 
-linux-mips32-hardfloat:
+linux-mips32:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mips GOMIPS=hardfloat $(GOBUILD)/Xray-$@/xray ./main
 
@@ -86,7 +95,7 @@ linux-mips32-softfloat:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mips GOMIPS=softfloat $(GOBUILD)/Xray-$@/xray ./main
 
-linux-mips32le-hardfloat:
+linux-mips32le:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mipsle GOMIPS=hardfloat $(GOBUILD)/Xray-$@/xray ./main
 
@@ -94,21 +103,13 @@ linux-mips32le-softfloat:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mipsle GOMIPS=softfloat $(GOBUILD)/Xray-$@/xray ./main
 
-linux-mips64-hardfloat:
+linux-mips64:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mips64 GOMIPS64=hardfloat $(GOBUILD)/Xray-$@/xray ./main
 
-linux-mips64-softfloat:
-	mkdir -p $(BUILD_DIR)/Xray-$@
-	env GOOS=linux GOARCH=mips64 GOMIPS64=softfloat $(GOBUILD)/Xray-$@/xray ./main
-
-linux-mips64le-hardfloat:
+linux-mips64le:
 	mkdir -p $(BUILD_DIR)/Xray-$@
 	env GOOS=linux GOARCH=mips64le GOMIPS64=hardfloat $(GOBUILD)/Xray-$@/xray ./main
-
-linux-mips64le-softfloat:
-	mkdir -p $(BUILD_DIR)/Xray-$@
-	env GOOS=linux GOARCH=mips64le GOMIPS64=softfloat $(GOBUILD)/Xray-$@/xray ./main
 
 linux-ppc64:
 	mkdir -p $(BUILD_DIR)/Xray-$@

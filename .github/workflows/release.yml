@@ -1,9 +1,9 @@
 on:
   push:
     paths:
-      - 'version'
+      - '.github/build/version'
 
-name: release-build
+name: release
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,17 +14,17 @@ jobs:
 
       - name: Set Env
         run: |
-          echo "GOLANG=$(wget -qO- https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | grep 'version' | cut -d\" -f4 | head -1)" >> $GITHUB_ENV
-          echo "VERSION=$(cat "version" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
+          echo "VERSION=$(cat ".github/build/version" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
         shell: bash
 
       - name: Install Golang
         uses: actions/setup-go@v2
         with: 
-          go-version: ${{ env.GOLANG }}
+          go-version: 1.15.x
 
       - name: Build binaries
         run: |
+          cp .github/build/Makefile $PWD
           make release
 
       - name: Release
