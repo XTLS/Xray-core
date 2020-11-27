@@ -6,6 +6,7 @@
 
 - Linux Script
   - [Xray-install](https://github.com/XTLS/Xray-install)
+  - [Xray-script](https://github.com/kirin10000/Xray-script)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - One Click
