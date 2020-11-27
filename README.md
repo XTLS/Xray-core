@@ -4,10 +4,13 @@
 
 ## Installation
 
-- Linux script
+- Linux Script
   - [Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
+- One Click
+  - [ProxySU](https://github.com/proxysu/ProxySU)
+  - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
 
 ## Usage
 
