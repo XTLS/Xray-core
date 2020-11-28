@@ -1,0 +1,114 @@
+name: Build Experimental Binaries
+
+on:
+  push:
+    branches: "*"
+  pull_request:
+    branches: "*"
+
+jobs:
+  build:
+    name: Build
+    strategy:
+      matrix:
+        os: [ windows, darwin, linux, freebsd, openbsd, dragonfly ]
+        arch: [ amd64, 386 ]
+        include: 
+          # windows/linux arm5/6/7/64
+          - os: linux
+            arch: arm
+            arm: 5
+          - os: linux
+            arch: arm
+            arm: 6
+          - os: linux
+            arch: arm
+            arm: 7
+          - os: linux
+            arch: arm64
+          - os: windows
+            arch: arm
+            arm: 7
+            
+          # other linux
+          - os: linux
+            arch: mips
+            mips: hardfloat
+          - os: linux
+            arch: mips
+            mips: softfloat
+          - os: linux
+            arch: mipsle
+            mips: hardfloat
+          - os: linux
+            arch: mipsle
+            mips: softfloat
+          - os: linux
+            arch: mips64
+            mips64: hardfloat
+          - os: linux
+            arch: mips64le
+            mips64: hardfloat
+          - os: linux
+            arch: ppc64
+          - os: linux
+            arch: ppc64le
+          - os: linux
+            arch: s390x
+            
+        exclude:
+          - os: darwin
+            arch: 386
+          - os: dragonfly
+            arch: 386
+      fail-fast: false
+    runs-on: ubuntu-latest
+    env:
+      GOOS: ${{ matrix.os }}
+      GOARCH: ${{ matrix.arch }}
+      GOARM: ${{ matrix.arm }}
+      GOMIPS: ${{ matrix.mips }}
+      GOMIPS64: ${{ matrix.mips64 }}
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.15
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+      
+    - name: Cache Go modules path
+      uses: actions/cache@v2
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+          
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+      
+    - name: Build Xray
+      if: ${{ matrix.os != 'windows' }}
+      run: |
+        mkdir build
+        go build -o ./build/xray -trimpath -ldflags "-s -w -buildid=" ./main
+    - name: Build Xray (Windows)
+      if: ${{ matrix.os == 'windows' }}
+      run: |
+        mkdir build
+        go build -o ./build/xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+
+    - name: Get file name
+      id: filename
+      run: |
+        export Name=$(python3 ./.github/build/filename.py "${GOOS}" "${GOARCH}" "${GOARM}" "${GOMIPS}" )
+        echo "::set-output name=Filename::$Name"
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ steps.filename.outputs.Filename }}
+        path: ./build/*
