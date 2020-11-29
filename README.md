@@ -57,3 +57,7 @@ go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 [Project X](https://t.me/projectXray)
 
 [Project X Channel](https://t.me/projectXtls)
+
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/XTLS/Xray-core.svg)](https://starchart.cc/XTLS/Xray-core)
