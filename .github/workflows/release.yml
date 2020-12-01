@@ -120,11 +120,15 @@ jobs:
           openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
 
-      - name: Upload ZIP file to Artifacts
+      - name: Change the name
+        run: |
+          mv build_assets xray-$ASSET_NAME
+
+      - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
-          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
+          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
 
       - name: Upload files to GitHub release
         uses: softprops/action-gh-release@v1

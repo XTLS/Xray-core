@@ -143,20 +143,12 @@ jobs:
         if: matrix.goos == 'linux'
         run: cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
-      - name: Create ZIP archive
+      - name: Change the name
         run: |
-          pushd build_assets || exit 1
-          zip -9vr ../xray-$ASSET_NAME.zip .
-          popd || exit 1
-          FILE=./xray-$ASSET_NAME.zip
-          DGST=$FILE.dgst
-          openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
+          mv build_assets xray-$ASSET_NAME
 
-      - name: Upload ZIP file to Artifacts
+      - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
-          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
+          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
