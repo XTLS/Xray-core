@@ -1,11 +1,46 @@
-name: Release
+name: Test
 
 on:
   push:
+    branches:
+      - main
     paths:
-      - '.github/build/version'
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
 
 jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15.x
+
+      - name: Checkout codebase
+        uses: actions/checkout@v2
+
+      - name: Cache go module
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      - name: Test
+        run: go test -timeout 1h -v ./...
+
   build:
     strategy:
       matrix:
@@ -125,15 +160,3 @@ jobs:
         with:
           name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
           path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
-
-      - name: Upload files to GitHub release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          name: ${{ env.VERSION }}
-          tag_name: ${{ env.VERSION }}
-          draft: false
-          prerelease: false
-          files: |
-            ./xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
