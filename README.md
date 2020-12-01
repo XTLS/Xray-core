@@ -25,6 +25,17 @@
 
 [Xray-examples](https://github.com/XTLS/Xray-examples) / [VLESS-TCP-XTLS-WHATEVER](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-WHATEVER)
 
+## GUI Clients
+
+- OpenWrt
+  - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
+- Windows
+  - [v2rayN](https://github.com/2dust/v2rayN)
+- Android
+  - [v2rayNG](https://github.com/2dust/v2rayNG)
+- iOS / Mac
+  - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+
 ## Credits
 
 This repo relies on the following third-party projects:
