@@ -104,16 +104,30 @@ func fetchHTTPContent(target string) ([]byte, error) {
 }
 
 func showResponese(m proto.Message) {
+	if isNil(m) {
+		return
+	}
+	b := new(bytes.Buffer)
+	e := json.NewEncoder(b)
+	e.SetIndent("", "    ")
+	e.SetEscapeHTML(false)
+	err := e.Encode(m)
 	msg := ""
-	bs, err := proto.Marshal(m)
 	if err != nil {
-		msg = err.Error()
+		msg = fmt.Sprintf("error: %s\n\n%v", err, m)
 	} else {
-		msg = string(bs)
-		msg = strings.TrimSpace(msg)
+		msg = strings.TrimSpace(b.String())
 	}
 	if msg == "" {
 		return
 	}
 	fmt.Println(msg)
+}
+
+func isNil(i interface{}) bool {
+	vi := reflect.ValueOf(i)
+	if vi.Kind() == reflect.Ptr {
+		return vi.IsNil()
+	}
+	return i == nil
 }
