@@ -185,7 +185,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 			if conn.DirectIn {
 				conn.DirectIn = false
 				if sctx != nil {
-					if inbound := session.InboundFromContext(sctx); inbound != nil {
+					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
 						iConn := inbound.Conn
 						statConn, ok := iConn.(*internet.StatCouterConnection)
 						if ok {
@@ -208,7 +208,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 							panic("XTLS Splice: not TCP inbound")
 						}
 					} else {
-						panic("XTLS Splice: nil inbound")
+						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
 				reader = buf.NewReadVReader(conn.Connection, rawConn)
