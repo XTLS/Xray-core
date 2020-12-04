@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.blackhole;
 option csharp_namespace = "Xray.Proxy.Blackhole";
-option go_package = "github.com/xtls/xray-core/v1/proxy/blackhole";
+option go_package = "github.com/xtls/xray-core/proxy/blackhole";
 option java_package = "com.xray.proxy.blackhole";
 option java_multiple_files = true;
 

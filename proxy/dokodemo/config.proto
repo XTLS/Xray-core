@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.dokodemo;
 option csharp_namespace = "Xray.Proxy.Dokodemo";
-option go_package = "github.com/xtls/xray-core/v1/proxy/dokodemo";
+option go_package = "github.com/xtls/xray-core/proxy/dokodemo";
 option java_package = "com.xray.proxy.dokodemo";
 option java_multiple_files = true;
 

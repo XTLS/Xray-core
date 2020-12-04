@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	. "github.com/xtls/xray-core/v1/common"
+	. "github.com/xtls/xray-core/common"
 )
 
 type TConfig struct {

@@ -1,4 +1,4 @@
-package tlscmd
+package tls
 
 import (
 	"crypto/tls"
@@ -6,34 +6,37 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/xtls/xray-core/v1/main/commands/base"
+	"github.com/xtls/xray-core/main/commands/base"
 )
 
-// CmdPing is the tls ping command
-var CmdPing = &base.Command{
+// cmdPing is the tls ping command
+var cmdPing = &base.Command{
 	UsageLine: "{{.Exec}} tls ping [-ip <ip>] <domain>",
 	Short:     "Ping the domain with TLS handshake",
 	Long: `
 Ping the domain with TLS handshake.
 
-The -ip flag sets the IP address of the domain.
-	`,
+Arguments:
+
+	-ip
+		The IP address of the domain.
+`,
 }
 
 func init() {
-	CmdPing.Run = executePing // break init loop
+	cmdPing.Run = executePing // break init loop
 }
 
 var (
-	pingIPStr = CmdPing.Flag.String("ip", "", "")
+	pingIPStr = cmdPing.Flag.String("ip", "", "")
 )
 
 func executePing(cmd *base.Command, args []string) {
-	if CmdPing.Flag.NArg() < 1 {
+	if cmdPing.Flag.NArg() < 1 {
 		base.Fatalf("domain not specified")
 	}
 
-	domain := CmdPing.Flag.Arg(0)
+	domain := cmdPing.Flag.Arg(0)
 	fmt.Println("Tls ping: ", domain)
 
 	var ip net.IP

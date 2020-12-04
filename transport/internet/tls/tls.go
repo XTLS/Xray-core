@@ -5,11 +5,11 @@ package tls
 import (
 	"crypto/tls"
 
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
 )
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 var (
 	_ buf.Writer = (*Conn)(nil)

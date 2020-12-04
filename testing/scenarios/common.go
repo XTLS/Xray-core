@@ -14,15 +14,15 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/xtls/xray-core/v1/app/dispatcher"
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/log"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/retry"
-	"github.com/xtls/xray-core/v1/common/serial"
-	core "github.com/xtls/xray-core/v1/core"
+	"github.com/xtls/xray-core/app/dispatcher"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/serial"
+	core "github.com/xtls/xray-core/core"
 )
 
 func xor(b []byte) []byte {

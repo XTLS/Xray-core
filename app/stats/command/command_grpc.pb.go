@@ -91,6 +91,7 @@ type UnsafeStatsServiceServer interface {
 
 func RegisterStatsServiceServer(s grpc.ServiceRegistrar, srv StatsServiceServer) {
 	s.RegisterService(&_StatsService_serviceDesc, srv)
+	s.RegisterService(&_StatsService_serviceDesc2, srv)
 }
 
 func _StatsService_GetStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -149,6 +150,27 @@ func _StatsService_GetSysStats_Handler(srv interface{}, ctx context.Context, dec
 
 var _StatsService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.stats.command.StatsService",
+	HandlerType: (*StatsServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetStats",
+			Handler:    _StatsService_GetStats_Handler,
+		},
+		{
+			MethodName: "QueryStats",
+			Handler:    _StatsService_QueryStats_Handler,
+		},
+		{
+			MethodName: "GetSysStats",
+			Handler:    _StatsService_GetSysStats_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "app/stats/command/command.proto",
+}
+
+var _StatsService_serviceDesc2 = grpc.ServiceDesc{
+	ServiceName: "v2ray.core.app.stats.command.StatsService",
 	HandlerType: (*StatsServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

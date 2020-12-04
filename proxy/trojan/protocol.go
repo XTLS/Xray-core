@@ -6,13 +6,13 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (

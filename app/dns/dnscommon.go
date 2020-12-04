@@ -6,10 +6,10 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	dns_feature "github.com/xtls/xray-core/v1/features/dns"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
 )
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport;
 option csharp_namespace = "Xray.Transport";
-option go_package = "github.com/xtls/xray-core/v1/transport";
+option go_package = "github.com/xtls/xray-core/transport";
 option java_package = "com.xray.transport";
 option java_multiple_files = true;
 

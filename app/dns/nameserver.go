@@ -5,8 +5,8 @@ package dns
 import (
 	"context"
 
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/features/dns/localdns"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns/localdns"
 )
 
 // IPOption is an object for IP query options.

@@ -1,13 +1,13 @@
 // Package session provides functions for sessions of incoming requests.
-package session // import "github.com/xtls/xray-core/v1/common/session"
+package session // import "github.com/xtls/xray-core/common/session"
 
 import (
 	"context"
 	"math/rand"
 
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 )
 
 // ID of a session.
@@ -37,12 +37,14 @@ func ExportIDToError(ctx context.Context) errors.ExportOption {
 type Inbound struct {
 	// Source address of the inbound connection.
 	Source net.Destination
-	// Getaway address
+	// Getaway address.
 	Gateway net.Destination
 	// Tag of the inbound proxy that handles the connection.
 	Tag string
 	// User is the user that authencates for the inbound. May be nil if the protocol allows anounymous traffic.
 	User *protocol.MemoryUser
+	// Conn is actually internet.Connection.
+	Conn net.Conn
 }
 
 // Outbound is the metadata of an outbound connection.

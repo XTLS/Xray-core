@@ -2,7 +2,7 @@
 
 package dns
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/v1/app/router"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/strmatcher"
-	"github.com/xtls/xray-core/v1/common/uuid"
-	core "github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features"
-	"github.com/xtls/xray-core/v1/features/dns"
-	"github.com/xtls/xray-core/v1/features/routing"
+	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/strmatcher"
+	"github.com/xtls/xray-core/common/uuid"
+	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features"
+	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/routing"
 )
 
 // Server is a DNS rely server.

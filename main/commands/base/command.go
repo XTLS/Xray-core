@@ -22,13 +22,19 @@ type Command struct {
 	Run func(cmd *Command, args []string)
 
 	// UsageLine is the one-line usage message.
-	// The words between "go" and the first flag or argument in the line are taken to be the command name.
+	// The words between the first word (the "executable name") and the first flag or argument in the line are taken to be the command name.
+	//
+	// UsageLine supports go template syntax. It's recommended to use "{{.Exec}}" instead of hardcoding name
 	UsageLine string
 
 	// Short is the short description shown in the 'go help' output.
+	//
+	// Note: Short does not support go template syntax.
 	Short string
 
 	// Long is the long message shown in the 'go help <this-command>' output.
+	//
+	// Long supports go template syntax. It's recommended to use "{{.Exec}}", "{{.LongName}}" instead of hardcoding strings
 	Long string
 
 	// Flag is a set of flags specific to this command.
@@ -44,16 +50,18 @@ type Command struct {
 	Commands []*Command
 }
 
-// LongName returns the command's long name: all the words in the usage line between "go" and a flag or argument,
+// LongName returns the command's long name: all the words in the usage line between first word (e.g. "xray") and a flag or argument,
 func (c *Command) LongName() string {
 	name := c.UsageLine
 	if i := strings.Index(name, " ["); i >= 0 {
-		name = name[:i]
+		name = strings.TrimSpace(name[:i])
 	}
-	if name == CommandEnv.Exec {
-		return ""
+	if i := strings.Index(name, " "); i >= 0 {
+		name = name[i+1:]
+	} else {
+		name = ""
 	}
-	return strings.TrimPrefix(name, CommandEnv.Exec+" ")
+	return strings.TrimSpace(name)
 }
 
 // Name returns the command's short name: the last word in the usage line before a flag or argument.
@@ -62,11 +70,12 @@ func (c *Command) Name() string {
 	if i := strings.LastIndex(name, " "); i >= 0 {
 		name = name[i+1:]
 	}
-	return name
+	return strings.TrimSpace(name)
 }
 
 // Usage prints usage of the Command
 func (c *Command) Usage() {
+	buildCommandText(c)
 	fmt.Fprintf(os.Stderr, "usage: %s\n", c.UsageLine)
 	fmt.Fprintf(os.Stderr, "Run 'xray help %s' for details.\n", c.LongName())
 	SetExitStatus(2)

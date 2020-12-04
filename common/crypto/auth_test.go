@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	. "github.com/xtls/xray-core/v1/common/crypto"
-	"github.com/xtls/xray-core/v1/common/protocol"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	. "github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/protocol"
 )
 
 func TestAuthenticationReaderWriter(t *testing.T) {

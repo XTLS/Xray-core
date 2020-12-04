@@ -1,10 +1,10 @@
 package dns
 
 import (
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/features"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/features"
 )
 
 // Client is a Xray feature for querying DNS information.

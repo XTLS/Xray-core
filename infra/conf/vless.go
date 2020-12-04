@@ -8,12 +8,12 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/proxy/vless"
-	"github.com/xtls/xray-core/v1/proxy/vless/inbound"
-	"github.com/xtls/xray-core/v1/proxy/vless/outbound"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/proxy/vless/inbound"
+	"github.com/xtls/xray-core/proxy/vless/outbound"
 )
 
 type VLessInboundFallback struct {
@@ -47,6 +47,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 
 		switch account.Flow {
 		case "", "xtls-rprx-origin", "xtls-rprx-direct":
+		case "xtls-rprx-splice":
+			return nil, newError(`VLESS clients: inbound doesn't support "xtls-rprx-splice" in this version, please use "xtls-rprx-direct" instead`)
 		default:
 			return nil, newError(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
@@ -167,6 +169,10 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 
 			switch account.Flow {
 			case "", "xtls-rprx-origin", "xtls-rprx-origin-udp443", "xtls-rprx-direct", "xtls-rprx-direct-udp443":
+			case "xtls-rprx-splice", "xtls-rprx-splice-udp443":
+				if runtime.GOOS != "linux" {
+					return nil, newError(`VLESS users: "` + account.Flow + `" only support linux in this version`)
+				}
 			default:
 				return nil, newError(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}

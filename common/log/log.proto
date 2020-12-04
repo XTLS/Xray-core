@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.common.log;
 option csharp_namespace = "Xray.Common.Log";
-option go_package = "github.com/xtls/xray-core/v1/common/log";
+option go_package = "github.com/xtls/xray-core/common/log";
 option java_package = "com.xray.common.log";
 option java_multiple_files = true;
 

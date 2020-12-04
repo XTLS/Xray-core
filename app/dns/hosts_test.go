@@ -5,9 +5,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	. "github.com/xtls/xray-core/v1/app/dns"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
+	. "github.com/xtls/xray-core/app/dns"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
 )
 
 func TestStaticHosts(t *testing.T) {

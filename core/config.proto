@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.core;
 option csharp_namespace = "Xray.Core";
-option go_package = "github.com/xtls/xray-core/v1/core";
+option go_package = "github.com/xtls/xray-core/core";
 option java_package = "com.xray.core";
 option java_multiple_files = true;
 
