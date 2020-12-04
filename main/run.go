@@ -64,7 +64,7 @@ func executeRun(cmd *base.Command, args []string) {
 	printVersion()
 	server, err := startXray()
 	if err != nil {
-		base.Fatalf("Filed to start: %s", err)
+		base.Fatalf("Failed to start: %s", err)
 	}
 
 	if *test {
@@ -74,7 +74,7 @@ func executeRun(cmd *base.Command, args []string) {
 	}
 
 	if err := server.Start(); err != nil {
-		base.Fatalf("Filed to start: %s", err)
+		base.Fatalf("Failed to start: %s", err)
 	}
 	defer server.Close()
 
