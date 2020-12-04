@@ -170,7 +170,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			switch account.Flow {
 			case "", "xtls-rprx-origin", "xtls-rprx-origin-udp443", "xtls-rprx-direct", "xtls-rprx-direct-udp443":
 			case "xtls-rprx-splice", "xtls-rprx-splice-udp443":
-				if runtime.GOOS != "linux" {
+				if runtime.GOOS != "linux" && runtime.GOOS != "android" {
 					return nil, newError(`VLESS users: "` + account.Flow + `" only support linux in this version`)
 				}
 			default:
