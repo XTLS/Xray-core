@@ -1,15 +1,15 @@
 package json
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"io"
 	"os"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/cmdarg"
-	core "github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/main/confloader"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/cmdarg"
+	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/main/confloader"
 )
 
 func init() {

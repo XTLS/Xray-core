@@ -2,21 +2,25 @@
 
 package encoding
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"syscall"
+	"time"
 
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/proxy/vless"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 const (
@@ -174,12 +178,39 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 	return responseAddons, nil
 }
 
-func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter) error {
+func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
 	err := func() error {
 		var ct stats.Counter
 		for {
 			if conn.DirectIn {
 				conn.DirectIn = false
+				if sctx != nil {
+					if inbound := session.InboundFromContext(sctx); inbound != nil {
+						iConn := inbound.Conn
+						statConn, ok := iConn.(*internet.StatCouterConnection)
+						if ok {
+							iConn = statConn.Connection
+						}
+						if tc, ok := iConn.(*net.TCPConn); ok {
+							if conn.SHOW {
+								fmt.Println(conn.MARK, "Splice")
+							}
+							time.Sleep(time.Millisecond) // necessary
+							w, err := tc.ReadFrom(conn.Connection)
+							if counter != nil {
+								counter.Add(w)
+							}
+							if statConn != nil && statConn.WriteCounter != nil {
+								statConn.WriteCounter.Add(w)
+							}
+							return err
+						} else {
+							panic("XTLS Splice: not TCP inbound")
+						}
+					} else {
+						panic("XTLS Splice: nil inbound")
+					}
+				}
 				reader = buf.NewReadVReader(conn.Connection, rawConn)
 				ct = counter
 				if conn.SHOW {

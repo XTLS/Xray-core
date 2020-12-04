@@ -5,4 +5,4 @@
 //    xtaci@github for translating to Golang
 package kcp
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen

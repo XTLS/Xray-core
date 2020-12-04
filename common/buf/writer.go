@@ -5,8 +5,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 // BufferToBytesWriter is a Writer that writes alloc.Buffer into underlying writer.

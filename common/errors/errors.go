@@ -1,14 +1,16 @@
 // Package errors is a drop-in replacement for Golang lib 'errors'.
-package errors // import "github.com/xtls/xray-core/v1/common/errors"
+package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
 	"os"
 	"reflect"
 	"strings"
 
-	"github.com/xtls/xray-core/v1/common/log"
-	"github.com/xtls/xray-core/v1/common/serial"
+	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/serial"
 )
+
+const trim = len("github.com/xtls/xray-core/")
 
 type hasInnerError interface {
 	// Inner returns the underlying error of this one.
@@ -37,7 +39,7 @@ func (err *Error) pkgPath() string {
 	if err.pathObj == nil {
 		return ""
 	}
-	return reflect.TypeOf(err.pathObj).PkgPath()
+	return reflect.TypeOf(err.pathObj).PkgPath()[trim:]
 }
 
 // Error implements error.Error().

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport.internet;
 option csharp_namespace = "Xray.Transport.Internet";
-option go_package = "github.com/xtls/xray-core/v1/transport/internet";
+option go_package = "github.com/xtls/xray-core/transport/internet";
 option java_package = "com.xray.transport.internet";
 option java_multiple_files = true;
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.vmess.inbound;
 option csharp_namespace = "Xray.Proxy.Vmess.Inbound";
-option go_package = "github.com/xtls/xray-core/v1/proxy/vmess/inbound";
+option go_package = "github.com/xtls/xray-core/proxy/vmess/inbound";
 option java_package = "com.xray.proxy.vmess.inbound";
 option java_multiple_files = true;
 

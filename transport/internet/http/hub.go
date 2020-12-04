@@ -14,14 +14,14 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
-	http_proto "github.com/xtls/xray-core/v1/common/protocol/http"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal/done"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/tls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	http_proto "github.com/xtls/xray-core/common/protocol/http"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type Listener struct {

@@ -2,14 +2,14 @@
 
 package log
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/log"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 )
 
 // Instance is a log.Handler that handles logs.

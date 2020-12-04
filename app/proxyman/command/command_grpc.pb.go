@@ -133,6 +133,7 @@ type UnsafeHandlerServiceServer interface {
 
 func RegisterHandlerServiceServer(s grpc.ServiceRegistrar, srv HandlerServiceServer) {
 	s.RegisterService(&_HandlerService_serviceDesc, srv)
+	s.RegisterService(&_HandlerService_serviceDesc2, srv)
 }
 
 func _HandlerService_AddInbound_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -245,6 +246,39 @@ func _HandlerService_AlterOutbound_Handler(srv interface{}, ctx context.Context,
 
 var _HandlerService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.proxyman.command.HandlerService",
+	HandlerType: (*HandlerServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "AddInbound",
+			Handler:    _HandlerService_AddInbound_Handler,
+		},
+		{
+			MethodName: "RemoveInbound",
+			Handler:    _HandlerService_RemoveInbound_Handler,
+		},
+		{
+			MethodName: "AlterInbound",
+			Handler:    _HandlerService_AlterInbound_Handler,
+		},
+		{
+			MethodName: "AddOutbound",
+			Handler:    _HandlerService_AddOutbound_Handler,
+		},
+		{
+			MethodName: "RemoveOutbound",
+			Handler:    _HandlerService_RemoveOutbound_Handler,
+		},
+		{
+			MethodName: "AlterOutbound",
+			Handler:    _HandlerService_AlterOutbound_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "app/proxyman/command/command.proto",
+}
+
+var _HandlerService_serviceDesc2 = grpc.ServiceDesc{
+	ServiceName: "v2ray.core.app.proxyman.command.HandlerService",
 	HandlerType: (*HandlerServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

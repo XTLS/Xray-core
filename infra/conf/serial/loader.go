@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/infra/conf"
-	json_reader "github.com/xtls/xray-core/v1/infra/conf/json"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf"
+	json_reader "github.com/xtls/xray-core/infra/conf/json"
 )
 
 type offset struct {

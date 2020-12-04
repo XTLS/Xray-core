@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.mtproto;
 option csharp_namespace = "Xray.Proxy.Mtproto";
-option go_package = "github.com/xtls/xray-core/v1/proxy/mtproto";
+option go_package = "github.com/xtls/xray-core/proxy/mtproto";
 option java_package = "com.xray.proxy.mtproto";
 option java_multiple_files = true;
 

@@ -4,4 +4,4 @@ Websocket transport implements an HTTP(S) compliable, surveillance proof transpo
 */
 package websocket
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen

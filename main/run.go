@@ -12,10 +12,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/xtls/xray-core/v1/common/cmdarg"
-	"github.com/xtls/xray-core/v1/common/platform"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/main/commands/base"
+	"github.com/xtls/xray-core/common/cmdarg"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/main/commands/base"
 )
 
 var cmdRun = &base.Command{

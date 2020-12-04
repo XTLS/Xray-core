@@ -10,11 +10,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	. "github.com/xtls/xray-core/v1/transport/internet/kcp"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
+	. "github.com/xtls/xray-core/transport/internet/kcp"
 )
 
 func TestDialAndListen(t *testing.T) {

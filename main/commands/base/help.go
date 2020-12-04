@@ -41,6 +41,7 @@ Args:
 	if len(cmd.Commands) > 0 {
 		PrintUsage(os.Stdout, cmd)
 	} else {
+		buildCommandText(cmd)
 		tmpl(os.Stdout, helpTemplate, makeTmplData(cmd))
 	}
 }
@@ -49,11 +50,11 @@ var usageTemplate = `{{.Long | trim}}
 
 Usage:
 
-	{{.Exec}} <command> [arguments]
+	{{.UsageLine}} <command> [arguments]
 
 The commands are:
 {{range .Commands}}{{if and (ne .Short "") (or (.Runnable) .Commands)}}
-	{{.Name | printf "%-12s"}} {{.Short}}{{end}}{{end}}
+	{{.Name | width $.CommandsWidth}} {{.Short}}{{end}}{{end}}
 
 Use "{{.Exec}} help{{with .LongName}} {{.}}{{end}} <command>" for more information about a command.
 `
@@ -91,7 +92,7 @@ func (w *errWriter) Write(b []byte) (int, error) {
 // tmpl executes the given template text on data, writing the result to w.
 func tmpl(w io.Writer, text string, data interface{}) {
 	t := template.New("top")
-	t.Funcs(template.FuncMap{"trim": strings.TrimSpace, "capitalize": capitalize})
+	t.Funcs(template.FuncMap{"trim": strings.TrimSpace, "capitalize": capitalize, "width": width})
 	template.Must(t.Parse(text))
 	ew := &errWriter{w: w}
 	err := t.Execute(ew, data)
@@ -116,26 +117,28 @@ func capitalize(s string) string {
 	return string(unicode.ToTitle(r)) + s[n:]
 }
 
+func width(width int, value string) string {
+	format := fmt.Sprintf("%%-%ds", width)
+	return fmt.Sprintf(format, value)
+}
+
 // PrintUsage prints usage of cmd to w
 func PrintUsage(w io.Writer, cmd *Command) {
+	buildCommandText(cmd)
 	bw := bufio.NewWriter(w)
 	tmpl(bw, usageTemplate, makeTmplData(cmd))
 	bw.Flush()
 }
 
-// buildCommandsText build text of command and its children as template
-func buildCommandsText(cmd *Command) {
-	buildCommandText(cmd)
-	for _, cmd := range cmd.Commands {
-		buildCommandsText(cmd)
-	}
-}
-
 // buildCommandText build command text as template
 func buildCommandText(cmd *Command) {
-	cmd.UsageLine = buildText(cmd.UsageLine, makeTmplData(cmd))
-	cmd.Short = buildText(cmd.Short, makeTmplData(cmd))
-	cmd.Long = buildText(cmd.Long, makeTmplData(cmd))
+	data := makeTmplData(cmd)
+	cmd.UsageLine = buildText(cmd.UsageLine, data)
+	// DO NOT SUPPORT ".Short":
+	// - It's not necessary
+	// - Or, we have to build text for all sub commands of current command, like "xray help api"
+	// cmd.Short = buildText(cmd.Short, data)
+	cmd.Long = buildText(cmd.Long, data)
 }
 
 func buildText(text string, data interface{}) string {
@@ -150,6 +153,15 @@ type tmplData struct {
 }
 
 func makeTmplData(cmd *Command) tmplData {
+	// Minimum width of the command column
+	width := 12
+	for _, c := range cmd.Commands {
+		l := len(c.Name())
+		if width < l {
+			width = l
+		}
+	}
+	CommandEnv.CommandsWidth = width
 	return tmplData{
 		Command:          cmd,
 		CommandEnvHolder: &CommandEnv,

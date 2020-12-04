@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.reverse;
 option csharp_namespace = "Xray.Proxy.Reverse";
-option go_package = "github.com/xtls/xray-core/v1/app/reverse";
+option go_package = "github.com/xtls/xray-core/app/reverse";
 option java_package = "com.xray.proxy.reverse";
 option java_multiple_files = true;
 

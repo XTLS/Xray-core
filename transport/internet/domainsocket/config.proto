@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport.internet.domainsocket;
 option csharp_namespace = "Xray.Transport.Internet.DomainSocket";
-option go_package = "github.com/xtls/xray-core/v1/transport/internet/domainsocket";
+option go_package = "github.com/xtls/xray-core/transport/internet/domainsocket";
 option java_package = "com.xray.transport.internet.domainsocket";
 option java_multiple_files = true;
 

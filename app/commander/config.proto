@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.commander;
 option csharp_namespace = "Xray.App.Commander";
-option go_package = "github.com/xtls/xray-core/v1/app/commander";
+option go_package = "github.com/xtls/xray-core/app/commander";
 option java_package = "com.xray.app.commander";
 option java_multiple_files = true;
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/xtls/xray-core/v1/common/serial"
+	"github.com/xtls/xray-core/common/serial"
 )
 
 type logKey int

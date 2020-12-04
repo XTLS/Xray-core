@@ -1,12 +1,12 @@
-package uuid // import "github.com/xtls/xray-core/v1/common/uuid"
+package uuid // import "github.com/xtls/xray-core/common/uuid"
 
 import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 var (

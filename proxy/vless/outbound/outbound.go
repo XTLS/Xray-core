@@ -2,30 +2,30 @@
 
 package outbound
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/platform"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/retry"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/common/task"
-	core "github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/policy"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/proxy/vless"
-	"github.com/xtls/xray-core/v1/proxy/vless/encoding"
-	"github.com/xtls/xray-core/v1/transport"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
+	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (
@@ -128,14 +128,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	var rawConn syscall.RawConn
+	var sctx context.Context
 
 	allowUDP443 := false
 	switch requestAddons.Flow {
-	case vless.XRO + "-udp443", vless.XRD + "-udp443":
+	case vless.XRO + "-udp443", vless.XRD + "-udp443", vless.XRS + "-udp443":
 		allowUDP443 = true
 		requestAddons.Flow = requestAddons.Flow[:16]
 		fallthrough
-	case vless.XRO, vless.XRD:
+	case vless.XRO, vless.XRD, vless.XRS:
 		switch request.Command {
 		case protocol.RequestCommandMux:
 			return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
@@ -149,6 +150,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				xtlsConn.RPRX = true
 				xtlsConn.SHOW = xtls_show
 				xtlsConn.MARK = "XTLS"
+				if requestAddons.Flow == vless.XRS {
+					sctx = ctx
+					requestAddons.Flow = vless.XRD
+				}
 				if requestAddons.Flow == vless.XRD {
 					xtlsConn.DirectMode = true
 					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
@@ -219,7 +224,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter)
+			err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

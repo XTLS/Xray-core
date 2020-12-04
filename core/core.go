@@ -9,16 +9,16 @@
 // connections.
 package core
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"runtime"
 
-	"github.com/xtls/xray-core/v1/common/serial"
+	"github.com/xtls/xray-core/common/serial"
 )
 
 var (
-	version  = "1.0.0"
+	version  = "1.1.0"
 	build    = "Custom"
 	codename = "Xray, Penetrates Everything."
 	intro    = "A unified platform for anti-censorship."

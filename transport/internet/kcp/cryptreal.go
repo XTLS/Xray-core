@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 
-	"github.com/xtls/xray-core/v1/common"
+	"github.com/xtls/xray-core/common"
 )
 
 func NewAEADAESGCMBasedOnSeed(seed string) cipher.AEAD {
