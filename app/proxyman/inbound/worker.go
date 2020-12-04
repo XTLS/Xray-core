@@ -423,17 +423,6 @@ func (w *dsWorker) callback(conn internet.Connection) {
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
 
-	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
-		Gateway: net.UnixDestination(w.address),
-		Tag:     w.tag,
-	})
-	content := new(session.Content)
-	if w.sniffingConfig != nil {
-		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
-		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-	}
-	ctx = session.ContextWithContent(ctx, content)
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
 		conn = &internet.StatCouterConnection{
 			Connection:   conn,
@@ -441,6 +430,20 @@ func (w *dsWorker) callback(conn internet.Connection) {
 			WriteCounter: w.downlinkCounter,
 		}
 	}
+	ctx = session.ContextWithInbound(ctx, &session.Inbound{
+		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		Gateway: net.UnixDestination(w.address),
+		Tag:     w.tag,
+		Conn:    conn,
+	})
+
+	content := new(session.Content)
+	if w.sniffingConfig != nil {
+		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
+		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+	}
+	ctx = session.ContextWithContent(ctx, content)
+
 	if err := w.proxy.Process(ctx, net.Network_UNIX, conn, w.dispatcher); err != nil {
 		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
