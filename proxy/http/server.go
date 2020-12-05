@@ -143,7 +143,7 @@ Start:
 	})
 
 	if strings.EqualFold(request.Method, "CONNECT") {
-		return s.handleConnect(ctx, request, reader, conn, dest, dispatcher)
+		return s.handleConnect(ctx, request, reader, conn, dest, dispatcher, inbound)
 	}
 
 	keepAlive := (strings.TrimSpace(strings.ToLower(request.Header.Get("Proxy-Connection"))) == "keep-alive")
@@ -159,7 +159,7 @@ Start:
 	return err
 }
 
-func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *bufio.Reader, conn internet.Connection, dest net.Destination, dispatcher routing.Dispatcher) error {
+func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *bufio.Reader, conn internet.Connection, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
 	_, err := conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 	if err != nil {
 		return newError("failed to write back OK response").Base(err)
@@ -168,6 +168,10 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *buf
 	plcy := s.policy()
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, dest)

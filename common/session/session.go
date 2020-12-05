@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/signal"
 )
 
 // ID of a session.
@@ -43,8 +44,10 @@ type Inbound struct {
 	Tag string
 	// User is the user that authencates for the inbound. May be nil if the protocol allows anounymous traffic.
 	User *protocol.MemoryUser
-	// Conn is actually internet.Connection.
+	// Conn is actually internet.Connection. May be nil.
 	Conn net.Conn
+	// Timer of the inbound buf copier. May be nil.
+	Timer *signal.ActivityTimer
 }
 
 // Outbound is the metadata of an outbound connection.

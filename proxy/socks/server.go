@@ -128,7 +128,7 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 			})
 		}
 
-		return s.transport(ctx, reader, conn, dest, dispatcher)
+		return s.transport(ctx, reader, conn, dest, dispatcher, inbound)
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
@@ -144,9 +144,13 @@ func (*Server) handleUDP(c io.Reader) error {
 	return common.Error2(io.Copy(buf.DiscardBytes, c))
 }
 
-func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher) error {
+func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, s.policy().Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
 
 	plcy := s.policy()
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
