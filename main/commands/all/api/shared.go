@@ -109,7 +109,7 @@ func showResponese(m proto.Message) {
 	if isNil(m) {
 		return
 	}
-	b := new(bytes.Buffer)
+	b := new(strings.Builder)
 	e := json.NewEncoder(b)
 	e.SetIndent("", "    ")
 	e.SetEscapeHTML(false)
