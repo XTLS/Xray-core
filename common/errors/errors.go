@@ -36,12 +36,16 @@ func (err *Error) WithPathObj(obj interface{}) *Error {
 }
 
 func (err *Error) pkgPath() string {
-	if err.pathObj != nil {
-		if p := reflect.TypeOf(err.pathObj).PkgPath(); !strings.HasPrefix(p, "main") {
-			return p[trim:]
+	if err.pathObj == nil {
+		return ""
+	}
+	path := reflect.TypeOf(err.pathObj).PkgPath()
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' {
+			return path[trim:]
 		}
 	}
-	return ""
+	return path
 }
 
 // Error implements error.Error().
