@@ -103,7 +103,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn in
 		return newError("unable to get destination")
 	}
 
-	if inbound := session.InboundFromContext(ctx); inbound != nil {
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
 		inbound.User = &protocol.MemoryUser{
 			Level: d.config.UserLevel,
 		}
@@ -120,6 +121,10 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn in
 	plcy := d.policy()
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, dest)
