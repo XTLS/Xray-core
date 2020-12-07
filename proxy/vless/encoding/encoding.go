@@ -8,8 +8,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -195,7 +195,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 							if conn.SHOW {
 								fmt.Println(conn.MARK, "Splice")
 							}
-							time.Sleep(time.Millisecond) // necessary
+							runtime.Gosched() // necessary
 							w, err := tc.ReadFrom(conn.Connection)
 							if counter != nil {
 								counter.Add(w)
