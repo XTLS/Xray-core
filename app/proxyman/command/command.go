@@ -140,6 +140,9 @@ func (s *service) Register(server *grpc.Server) {
 		hs.ohm = om
 	}))
 	RegisterHandlerServiceServer(server, hs)
+	vCoreDesc := _HandlerService_serviceDesc
+	vCoreDesc.ServiceName = "v2ray.core.app.proxyman.command.HandlerService"
+	server.RegisterService(&vCoreDesc, hs)
 }
 
 func init() {
