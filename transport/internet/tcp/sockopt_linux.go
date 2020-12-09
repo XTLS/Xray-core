@@ -1,10 +1,10 @@
 // +build linux
-// +build !confonly
 
 package tcp
 
 import (
 	"syscall"
+	"unsafe"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
@@ -23,14 +23,21 @@ func GetOriginalDestination(conn internet.Connection) (net.Destination, error) {
 	}
 	var dest net.Destination
 	err = rawConn.Control(func(fd uintptr) {
-		addr, err := syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
+		level := syscall.IPPROTO_IP
+		if conn.RemoteAddr().String()[0] == '[' {
+			level = syscall.IPPROTO_IPV6
+		}
+		addr, err := syscall.GetsockoptIPv6MTUInfo(int(fd), level, SO_ORIGINAL_DST)
 		if err != nil {
 			newError("failed to call getsockopt").Base(err).WriteToLog()
 			return
 		}
-		ip := net.IPAddress(addr.Multiaddr[4:8])
-		port := uint16(addr.Multiaddr[2])<<8 + uint16(addr.Multiaddr[3])
-		dest = net.TCPDestination(ip, net.Port(port))
+		ip := (*[4]byte)(unsafe.Pointer(&addr.Addr.Flowinfo))[:4]
+		if level == syscall.IPPROTO_IPV6 {
+			ip = addr.Addr.Addr[:]
+		}
+		port := (*[2]byte)(unsafe.Pointer(&addr.Addr.Port))[:2]
+		dest = net.TCPDestination(net.IPAddress(ip), net.PortFromBytes(port))
 	})
 	if err != nil {
 		return net.Destination{}, newError("failed to control connection").Base(err)
