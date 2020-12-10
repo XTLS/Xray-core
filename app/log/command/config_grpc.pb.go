@@ -63,7 +63,6 @@ type UnsafeLoggerServiceServer interface {
 
 func RegisterLoggerServiceServer(s grpc.ServiceRegistrar, srv LoggerServiceServer) {
 	s.RegisterService(&_LoggerService_serviceDesc, srv)
-	s.RegisterService(&_LoggerService_serviceDesc2, srv)
 }
 
 func _LoggerService_RestartLogger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -86,19 +85,6 @@ func _LoggerService_RestartLogger_Handler(srv interface{}, ctx context.Context, 
 
 var _LoggerService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.log.command.LoggerService",
-	HandlerType: (*LoggerServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "RestartLogger",
-			Handler:    _LoggerService_RestartLogger_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "app/log/command/config.proto",
-}
-
-var _LoggerService_serviceDesc2 = grpc.ServiceDesc{
-	ServiceName: "v2ray.core.app.log.command.LoggerService",
 	HandlerType: (*LoggerServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

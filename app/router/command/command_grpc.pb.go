@@ -100,7 +100,6 @@ type UnsafeRoutingServiceServer interface {
 
 func RegisterRoutingServiceServer(s grpc.ServiceRegistrar, srv RoutingServiceServer) {
 	s.RegisterService(&_RoutingService_serviceDesc, srv)
-	s.RegisterService(&_RoutingService_serviceDesc2, srv)
 }
 
 func _RoutingService_SubscribeRoutingStats_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -144,25 +143,6 @@ func _RoutingService_TestRoute_Handler(srv interface{}, ctx context.Context, dec
 
 var _RoutingService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.router.command.RoutingService",
-	HandlerType: (*RoutingServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "TestRoute",
-			Handler:    _RoutingService_TestRoute_Handler,
-		},
-	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "SubscribeRoutingStats",
-			Handler:       _RoutingService_SubscribeRoutingStats_Handler,
-			ServerStreams: true,
-		},
-	},
-	Metadata: "app/router/command/command.proto",
-}
-
-var _RoutingService_serviceDesc2 = grpc.ServiceDesc{
-	ServiceName: "v2ray.core.app.router.command.RoutingService",
 	HandlerType: (*RoutingServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

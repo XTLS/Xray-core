@@ -83,7 +83,11 @@ type service struct {
 
 func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		RegisterRoutingServiceServer(server, NewRoutingServer(router, nil))
+		rs := NewRoutingServer(router, nil)
+		RegisterRoutingServiceServer(server, rs)
+		vCoreDesc := _RoutingService_serviceDesc
+		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
+		server.RegisterService(&vCoreDesc, rs)
 	}))
 }
 
