@@ -40,9 +40,13 @@ type service struct {
 }
 
 func (s *service) Register(server *grpc.Server) {
-	RegisterLoggerServiceServer(server, &LoggerServer{
+	ls := &LoggerServer{
 		V: s.v,
-	})
+	}
+	RegisterLoggerServiceServer(server, ls)
+	vCoreDesc := _LoggerService_serviceDesc
+	vCoreDesc.ServiceName = "v2ray.core.app.log.command.LoggerService"
+	server.RegisterService(&vCoreDesc, ls)
 }
 
 func init() {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,13 +13,25 @@ import (
 	"github.com/xtls/xray-core/core"
 )
 
+var directory = flag.String("pwd", "", "Working directory of Xray vprotogen.")
+
 func main() {
-	pwd, wdErr := os.Getwd()
-	if wdErr != nil {
-		fmt.Println("Can not get current working directory.")
-		os.Exit(1)
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of vprotogen:\n")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if !filepath.IsAbs(*directory) {
+		pwd, wdErr := os.Getwd()
+		if wdErr != nil {
+			fmt.Println("Can not get current working directory.")
+			os.Exit(1)
+		}
+		*directory = filepath.Join(pwd, *directory)
 	}
 
+	pwd := *directory
 	GOBIN := common.GetGOBIN()
 	binPath := os.Getenv("PATH")
 	pathSlice := []string{binPath, GOBIN, pwd}
@@ -39,7 +52,7 @@ func main() {
 	}
 
 	protoFilesMap := make(map[string][]string)
-	walkErr := filepath.Walk("./", func(path string, info os.FileInfo, err error) error {
+	walkErr := filepath.Walk(pwd, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println(err)
 			return err
@@ -52,6 +65,7 @@ func main() {
 		dir := filepath.Dir(path)
 		filename := filepath.Base(path)
 		if strings.HasSuffix(filename, ".proto") {
+			path = path[len(pwd)+1:]
 			protoFilesMap[dir] = append(protoFilesMap[dir], path)
 		}
 
@@ -73,6 +87,7 @@ func main() {
 			args = append(args, relProtoFile)
 			cmd := exec.Command(protoc, args...)
 			cmd.Env = append(cmd.Env, os.Environ()...)
+			cmd.Dir = pwd
 			output, cmdErr := cmd.CombinedOutput()
 			if len(output) > 0 {
 				fmt.Println(string(output))
