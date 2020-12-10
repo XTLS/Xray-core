@@ -44,6 +44,8 @@ func (s *service) Register(server *grpc.Server) {
 		V: s.v,
 	}
 	RegisterLoggerServiceServer(server, ls)
+
+	// For compatibility purposes
 	vCoreDesc := _LoggerService_serviceDesc
 	vCoreDesc.ServiceName = "v2ray.core.app.log.command.LoggerService"
 	server.RegisterService(&vCoreDesc, ls)

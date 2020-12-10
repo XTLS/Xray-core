@@ -113,6 +113,8 @@ type service struct {
 func (s *service) Register(server *grpc.Server) {
 	ss := NewStatsServer(s.statsManager)
 	RegisterStatsServiceServer(server, ss)
+
+	// For compatibility purposes
 	vCoreDesc := _StatsService_serviceDesc
 	vCoreDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
 	server.RegisterService(&vCoreDesc, ss)

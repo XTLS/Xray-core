@@ -85,6 +85,8 @@ func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
 		rs := NewRoutingServer(router, nil)
 		RegisterRoutingServiceServer(server, rs)
+
+		// For compatibility purposes
 		vCoreDesc := _RoutingService_serviceDesc
 		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
 		server.RegisterService(&vCoreDesc, rs)
