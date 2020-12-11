@@ -94,15 +94,16 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	var rawConn syscall.RawConn
+	var sctx context.Context
 
 	connWriter := &ConnWriter{}
 	allowUDP443 := false
 	switch account.Flow {
-	case XRO + "-udp443", XRD + "-udp443":
+	case XRO + "-udp443", XRD + "-udp443", XRS + "-udp443":
 		allowUDP443 = true
 		account.Flow = account.Flow[:16]
 		fallthrough
-	case XRO, XRD:
+	case XRO, XRD, XRS:
 		if destination.Address.Family().IsDomain() && destination.Address.Domain() == muxCoolAddress {
 			return newError(account.Flow + " doesn't support Mux").AtWarning()
 		}
@@ -114,13 +115,18 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
 				xtlsConn.SHOW = trojanXTLSShow
-				connWriter.Flow = account.Flow
+				xtlsConn.MARK = "XTLS"
+				if account.Flow == XRS {
+					sctx = ctx
+					account.Flow = XRD
+				}
 				if account.Flow == XRD {
 					xtlsConn.DirectMode = true
+					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
+						rawConn, _ = sc.SyscallConn()
+					}
 				}
-				if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
-					rawConn, _ = sc.SyscallConn()
-				}
+				connWriter.Flow = account.Flow
 			} else {
 				return newError(`failed to use ` + account.Flow + `, maybe "security" is not "xtls"`).AtWarning()
 			}
@@ -185,7 +191,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			return ReadV(reader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter)
+			return ReadV(reader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
 		}
 		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
 	}
