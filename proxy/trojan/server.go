@@ -310,7 +310,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter)
+			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
 		} else {
 			err = buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer))
 		}

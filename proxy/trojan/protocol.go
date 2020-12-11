@@ -1,17 +1,21 @@
 package trojan
 
 import (
+	"context"
 	"encoding/binary"
 	fmt "fmt"
 	"io"
+	"runtime"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
@@ -29,6 +33,8 @@ var (
 
 const (
 	maxLength = 8192
+	// XRS is constant for XTLS splice mode
+	XRS = "xtls-rprx-splice"
 	// XRD is constant for XTLS direct mode
 	XRD = "xtls-rprx-direct"
 	// XRO is constant for XTLS origin mode
@@ -307,12 +313,39 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 	return &PacketPayload{Target: dest, Buffer: mb}, nil
 }
 
-func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter) error {
+func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
 	err := func() error {
 		var ct stats.Counter
 		for {
 			if conn.DirectIn {
 				conn.DirectIn = false
+				if sctx != nil {
+					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
+						iConn := inbound.Conn
+						statConn, ok := iConn.(*internet.StatCouterConnection)
+						if ok {
+							iConn = statConn.Connection
+						}
+						if tc, ok := iConn.(*net.TCPConn); ok {
+							if conn.SHOW {
+								fmt.Println(conn.MARK, "Splice")
+							}
+							runtime.Gosched() // necessary
+							w, err := tc.ReadFrom(conn.Connection)
+							if counter != nil {
+								counter.Add(w)
+							}
+							if statConn != nil && statConn.WriteCounter != nil {
+								statConn.WriteCounter.Add(w)
+							}
+							return err
+						} else {
+							panic("XTLS Splice: not TCP inbound")
+						}
+					} else {
+						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
+					}
+				}
 				reader = buf.NewReadVReader(conn.Connection, rawConn)
 				ct = counter
 				if conn.SHOW {
