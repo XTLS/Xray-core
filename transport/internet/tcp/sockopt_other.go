@@ -1,5 +1,4 @@
 // +build !linux,!freebsd
-// +build !confonly
 
 package tcp
 
