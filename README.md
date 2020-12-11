@@ -13,7 +13,7 @@
   - [Xray-script](https://github.com/kirin10000/Xray-script)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
-  - [charlieethan](https://github.com/users/charlieethan/packages/container/package/xray)
+  - Xray-docker
 - One Click
   - [ProxySU](https://github.com/proxysu/ProxySU)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
