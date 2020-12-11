@@ -1,5 +1,3 @@
-// +build !confonly
-
 package xtls
 
 import (

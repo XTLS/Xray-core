@@ -1,5 +1,3 @@
-// +build !confonly
-
 package socks
 
 import "github.com/xtls/xray-core/common/protocol"
