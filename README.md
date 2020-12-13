@@ -29,6 +29,8 @@
 
 - OpenWrt
   - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
+  - [Hello World](https://github.com/jerrykuku/luci-app-vssr)
+  - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
 - Android
