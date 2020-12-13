@@ -33,8 +33,10 @@
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
+  - [Qv2ray](https://github.com/Qv2ray/Qv2ray)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
+  - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
 - iOS / Mac
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
 
