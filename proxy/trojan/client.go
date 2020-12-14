@@ -79,62 +79,63 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	defer conn.Close()
 
-	user := server.PickUser()
-	account, ok := user.Account.(*MemoryAccount)
-	if !ok {
-		return newError("user account is not valid")
-	}
-
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
 		iConn = statConn.Connection
 	}
 
+	user := server.PickUser()
+	account, ok := user.Account.(*MemoryAccount)
+	if !ok {
+		return newError("user account is not valid")
+	}
+
+	connWriter := &ConnWriter{
+		Flow: account.Flow,
+	}
+
 	var rawConn syscall.RawConn
 	var sctx context.Context
 
-	connWriter := &ConnWriter{}
 	allowUDP443 := false
-	switch account.Flow {
+	switch connWriter.Flow {
 	case XRO + "-udp443", XRD + "-udp443", XRS + "-udp443":
 		allowUDP443 = true
-		account.Flow = account.Flow[:16]
+		connWriter.Flow = connWriter.Flow[:16]
 		fallthrough
 	case XRO, XRD, XRS:
 		if destination.Address.Family().IsDomain() && destination.Address.Domain() == muxCoolAddress {
-			return newError(account.Flow + " doesn't support Mux").AtWarning()
+			return newError(connWriter.Flow + " doesn't support Mux").AtWarning()
 		}
 		if destination.Network == net.Network_UDP {
 			if !allowUDP443 && destination.Port == 443 {
-				return newError(account.Flow + " stopped UDP/443").AtInfo()
+				return newError(connWriter.Flow + " stopped UDP/443").AtInfo()
 			}
+			connWriter.Flow = ""
 		} else { // enable XTLS only if making TCP request
 			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
-				xtlsConn.SHOW = trojanXTLSShow
+				xtlsConn.SHOW = xtls_show
 				xtlsConn.MARK = "XTLS"
-				if account.Flow == XRS {
+				if connWriter.Flow == XRS {
 					sctx = ctx
-					account.Flow = XRD
+					connWriter.Flow = XRD
 				}
-				if account.Flow == XRD {
+				if connWriter.Flow == XRD {
 					xtlsConn.DirectMode = true
 					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
 				}
-				connWriter.Flow = account.Flow
 			} else {
-				return newError(`failed to use ` + account.Flow + `, maybe "security" is not "xtls"`).AtWarning()
+				return newError(`failed to use ` + connWriter.Flow + `, maybe "security" is not "xtls"`).AtWarning()
 			}
 		}
-	case "":
+	default:
 		if _, ok := iConn.(*xtls.Conn); ok {
 			panic(`To avoid misunderstanding, you must fill in Trojan "flow" when using XTLS.`)
 		}
-	default:
-		return newError("unsupported flow " + account.Flow).AtWarning()
 	}
 
 	sessionPolicy := c.policyManager.ForLevel(user.Level)
@@ -211,6 +212,6 @@ func init() {
 
 	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
 	if xtlsShow == "true" {
-		trojanXTLSShow = true
+		xtls_show = true
 	}
 }
