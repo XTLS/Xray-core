@@ -52,6 +52,17 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			Password: rec.Password,
 			Flow:     rec.Flow,
 		}
+
+		switch account.Flow {
+		case "", "xtls-rprx-origin", "xtls-rprx-origin-udp443", "xtls-rprx-direct", "xtls-rprx-direct-udp443":
+		case "xtls-rprx-splice", "xtls-rprx-splice-udp443":
+			if runtime.GOOS != "linux" && runtime.GOOS != "android" {
+				return nil, newError(`Trojan servers: "` + account.Flow + `" only support linux in this version`)
+			}
+		default:
+			return nil, newError(`Trojan servers: "flow" doesn't support "` + account.Flow + `" in this version`)
+		}
+
 		trojan := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
@@ -105,6 +116,14 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		account := &trojan.Account{
 			Password: rawUser.Password,
 			Flow:     rawUser.Flow,
+		}
+
+		switch account.Flow {
+		case "", "xtls-rprx-origin", "xtls-rprx-direct":
+		case "xtls-rprx-splice":
+			return nil, newError(`Trojan clients: inbound doesn't support "xtls-rprx-splice" in this version, please use "xtls-rprx-direct" instead`)
+		default:
+			return nil, newError(`Trojan clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 
 		user.Email = rawUser.Email

@@ -38,7 +38,7 @@ func init() {
 
 	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
 	if xtlsShow == "true" {
-		trojanXTLSShow = true
+		xtls_show = true
 	}
 }
 
@@ -219,7 +219,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 			}
 			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
-				xtlsConn.SHOW = trojanXTLSShow
+				xtlsConn.SHOW = xtls_show
+				xtlsConn.MARK = "XTLS"
 				if clientReader.Flow == XRD {
 					xtlsConn.DirectMode = true
 					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
@@ -230,11 +231,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 				return newError(`failed to use ` + clientReader.Flow + `, maybe "security" is not "xtls"`).AtWarning()
 			}
 		} else {
-			return newError("unable to use ", clientReader.Flow).AtWarning()
+			return newError(account.Password + " is not able to use " + clientReader.Flow).AtWarning()
 		}
 	case "":
-	default:
-		return newError("unsupported flow " + account.Flow).AtWarning()
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
