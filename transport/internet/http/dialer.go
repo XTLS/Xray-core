@@ -21,7 +21,7 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(_ context.Context, dest net.Destination, tlsSettings *tls.Config) (*http.Client, error) {
+func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config) (*http.Client, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -48,7 +48,7 @@ func getHTTPClient(_ context.Context, dest net.Destination, tlsSettings *tls.Con
 			}
 			address := net.ParseAddress(rawHost)
 
-			pconn, err := internet.DialSystem(context.Background(), net.TCPDestination(address, port), nil)
+			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), nil)
 			if err != nil {
 				return nil, err
 			}
