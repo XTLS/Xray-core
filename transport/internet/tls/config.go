@@ -196,6 +196,17 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		opt(config)
 	}
 
+	switch c.MinVersion {
+	case "1.0":
+		config.MinVersion = tls.VersionTLS10
+	case "1.1":
+		config.MinVersion = tls.VersionTLS11
+	case "1.2":
+		config.MinVersion = tls.VersionTLS12
+	case "1.3":
+		config.MinVersion = tls.VersionTLS13
+	}
+
 	config.Certificates = c.BuildCertificates()
 	config.BuildNameToCertificate()
 
