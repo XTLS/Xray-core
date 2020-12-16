@@ -238,7 +238,6 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 			}
 		}
 	}
-	newError(cipherSuites).AtError().WriteToLog()
 	config.CipherSuites = cipherSuites
 
 	return config
