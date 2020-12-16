@@ -44,4 +44,7 @@ message Config {
   // If true, root certificates on the system will not be loaded for
   // verification.
   bool disable_system_root = 7;
+
+  //Whether to specify the minimum TLS version
+  string minVersion = 8;
 }
