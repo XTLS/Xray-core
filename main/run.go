@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
@@ -78,6 +79,10 @@ func executeRun(cmd *base.Command, args []string) {
 		base.Fatalf("Failed to start: %s", err)
 	}
 	defer server.Close()
+
+	conf.FileCache = nil
+	conf.IPCache = nil
+	conf.SiteCache = nil
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
