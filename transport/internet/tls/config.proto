@@ -47,4 +47,10 @@ message Config {
 
   // The minimum TLS version.
   string min_version = 8;
+
+  //The TLS cipher suites
+  string cipher_suites = 9;
+
+  // If true, server selects the client's most preferred ciphersuite
+  bool prefer_server_cipher_suites = 10;
 }

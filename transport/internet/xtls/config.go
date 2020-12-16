@@ -2,6 +2,7 @@ package xtls
 
 import (
 	"crypto/x509"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,11 +176,12 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	}
 
 	config := &xtls.Config{
-		ClientSessionCache:     globalSessionCache,
-		RootCAs:                root,
-		InsecureSkipVerify:     c.AllowInsecure,
-		NextProtos:             c.NextProtocol,
-		SessionTicketsDisabled: c.DisableSessionResumption,
+		ClientSessionCache:       globalSessionCache,
+		RootCAs:                  root,
+		InsecureSkipVerify:       c.AllowInsecure,
+		NextProtos:               c.NextProtocol,
+		SessionTicketsDisabled:   c.DisableSessionResumption,
+		PreferServerCipherSuites: c.PreferServerCipherSuites,
 	}
 
 	for _, opt := range opts {
@@ -212,6 +214,23 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	case "1.3":
 		config.MinVersion = xtls.VersionTLS13
 	}
+
+	var cipherSuites []uint16
+	if c.PreferServerCipherSuites && len(c.CipherSuites) > 0 {
+		cipherSuitesArray := strings.Split(c.CipherSuites, ":")
+		if len(cipherSuitesArray) > 0 {
+			all := xtls.CipherSuites()
+			for _, suite := range cipherSuitesArray {
+				for _, s := range all {
+					if s.Name == suite {
+						cipherSuites = append(cipherSuites, s.ID)
+					}
+				}
+			}
+		}
+	}
+	config.CipherSuites = cipherSuites
+
 	return config
 }
 

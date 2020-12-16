@@ -185,11 +185,12 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	config := &tls.Config{
-		ClientSessionCache:     globalSessionCache,
-		RootCAs:                root,
-		InsecureSkipVerify:     c.AllowInsecure,
-		NextProtos:             c.NextProtocol,
-		SessionTicketsDisabled: c.DisableSessionResumption,
+		ClientSessionCache:       globalSessionCache,
+		RootCAs:                  root,
+		InsecureSkipVerify:       c.AllowInsecure,
+		NextProtos:               c.NextProtocol,
+		SessionTicketsDisabled:   c.DisableSessionResumption,
+		PreferServerCipherSuites: c.PreferServerCipherSuites,
 	}
 
 	for _, opt := range opts {
@@ -222,6 +223,22 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(config.NextProtos) == 0 {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
+
+	var cipherSuites []uint16
+	if c.PreferServerCipherSuites && len(c.CipherSuites) > 0 {
+		cipherSuitesArray := strings.Split(c.CipherSuites, ":")
+		if len(cipherSuitesArray) > 0 {
+			all := tls.CipherSuites()
+			for _, suite := range cipherSuitesArray {
+				for _, s := range all {
+					if s.Name == suite {
+						cipherSuites = append(cipherSuites, s.ID)
+					}
+				}
+			}
+		}
+	}
+	config.CipherSuites = cipherSuites
 
 	return config
 }
