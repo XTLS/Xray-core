@@ -326,6 +326,9 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 						if ok {
 							iConn = statConn.Connection
 						}
+						if xc, ok := iConn.(*xtls.Conn); ok {
+							iConn = xc.Connection
+						}
 						if tc, ok := iConn.(*net.TCPConn); ok {
 							if conn.SHOW {
 								fmt.Println(conn.MARK, "Splice")
