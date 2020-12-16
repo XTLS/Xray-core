@@ -295,6 +295,8 @@ type TLSConfig struct {
 	DisableSessionResumption bool             `json:"disableSessionResumption"`
 	DisableSystemRoot        bool             `json:"disableSystemRoot"`
 	MinVersion               string           `json:"minVersion"`
+	CipherSuites             string           `json:"cipherSuites"`
+	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
 }
 
 // Build implements Buildable.
@@ -318,6 +320,8 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
+	config.CipherSuites = c.CipherSuites
+	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.DisableSessionResumption = c.DisableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	return config, nil
@@ -372,6 +376,8 @@ type XTLSConfig struct {
 	DisableSessionResumption bool              `json:"disableSessionResumption"`
 	DisableSystemRoot        bool              `json:"disableSystemRoot"`
 	MinVersion               string            `json:"minVersion"`
+	CipherSuites             string            `json:"cipherSuites"`
+	PreferServerCipherSuites bool              `json:"preferServerCipherSuites"`
 }
 
 // Build implements Buildable.
@@ -395,6 +401,8 @@ func (c *XTLSConfig) Build() (proto.Message, error) {
 		config.NextProtocol = []string(*c.ALPN)
 	}
 	config.MinVersion = c.MinVersion
+	config.CipherSuites = c.CipherSuites
+	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.DisableSessionResumption = c.DisableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	return config, nil
