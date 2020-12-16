@@ -65,9 +65,7 @@ func TestExpiredCertificate(t *testing.T) {
 }
 
 func TestInsecureCertificates(t *testing.T) {
-	c := &Config{
-		AllowInsecureCiphers: true,
-	}
+	c := &Config{}
 
 	xtlsConfig := c.GetXTLSConfig()
 	if len(xtlsConfig.CipherSuites) > 0 {

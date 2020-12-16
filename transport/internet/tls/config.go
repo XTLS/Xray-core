@@ -185,27 +185,15 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	config := &tls.Config{
-		ClientSessionCache:       globalSessionCache,
-		RootCAs:                  root,
-		InsecureSkipVerify:       c.AllowInsecure,
-		NextProtos:               c.NextProtocol,
-		SessionTicketsDisabled:   c.DisableSessionResumption,
-		PreferServerCipherSuites: c.PreferServerCipherSuites,
+		ClientSessionCache:     globalSessionCache,
+		RootCAs:                root,
+		InsecureSkipVerify:     c.AllowInsecure,
+		NextProtos:             c.NextProtocol,
+		SessionTicketsDisabled: c.DisableSessionResumption,
 	}
 
 	for _, opt := range opts {
 		opt(config)
-	}
-
-	switch c.MinVersion {
-	case "1.0":
-		config.MinVersion = tls.VersionTLS10
-	case "1.1":
-		config.MinVersion = tls.VersionTLS11
-	case "1.2":
-		config.MinVersion = tls.VersionTLS12
-	case "1.3":
-		config.MinVersion = tls.VersionTLS13
 	}
 
 	config.Certificates = c.BuildCertificates()
@@ -224,8 +212,30 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
 
+	switch c.MinVersion {
+	case "1.0":
+		config.MinVersion = tls.VersionTLS10
+	case "1.1":
+		config.MinVersion = tls.VersionTLS11
+	case "1.2":
+		config.MinVersion = tls.VersionTLS12
+	case "1.3":
+		config.MinVersion = tls.VersionTLS13
+	}
+
+	switch c.MaxVersion {
+	case "1.0":
+		config.MaxVersion = tls.VersionTLS10
+	case "1.1":
+		config.MaxVersion = tls.VersionTLS11
+	case "1.2":
+		config.MaxVersion = tls.VersionTLS12
+	case "1.3":
+		config.MaxVersion = tls.VersionTLS13
+	}
+
 	var cipherSuites []uint16
-	if c.PreferServerCipherSuites && len(c.CipherSuites) > 0 {
+	if len(c.CipherSuites) > 0 {
 		cipherSuitesArray := strings.Split(c.CipherSuites, ":")
 		if len(cipherSuitesArray) > 0 {
 			all := tls.CipherSuites()
@@ -233,12 +243,14 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 				for _, s := range all {
 					if s.Name == suite {
 						cipherSuites = append(cipherSuites, s.ID)
+						break
 					}
 				}
 			}
 		}
 	}
 	config.CipherSuites = cipherSuites
+	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 
 	return config
 }
