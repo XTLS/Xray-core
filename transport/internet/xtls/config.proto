@@ -7,10 +7,10 @@ option java_package = "com.xray.transport.internet.xtls";
 option java_multiple_files = true;
 
 message Certificate {
-  // XTLS certificate in x509 format.
+  // TLS certificate in x509 format.
   bytes Certificate = 1;
 
-  // XTLS key in x509 format.
+  // TLS key in x509 format.
   bytes Key = 2;
 
   enum Usage {
@@ -45,6 +45,6 @@ message Config {
   // verification.
   bool disable_system_root = 7;
 
-  //Whether to specify the minimum TLS version
-  string minVersion = 8;
+  // The minimum TLS version.
+  string min_version = 8;
 }

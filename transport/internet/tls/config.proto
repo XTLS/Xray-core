@@ -45,6 +45,6 @@ message Config {
   // verification.
   bool disable_system_root = 7;
 
-  //Whether to specify the minimum TLS version
+  // The minimum TLS version.
   string min_version = 8;
 }
