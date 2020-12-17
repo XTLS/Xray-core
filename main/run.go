@@ -164,7 +164,7 @@ func startXray() (core.Server, error) {
 
 	config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
 	if err != nil {
-		return nil, newError("failed to read config files: [", configFiles.String(), "]").Base(err)
+		return nil, newError("failed to load config files: [", configFiles.String(), "]").Base(err)
 	}
 
 	server, err := core.New(config)
