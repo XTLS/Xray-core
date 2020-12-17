@@ -212,8 +212,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				}
 			}
 			pfb := apfb[sni][alpn]
-			newError(apfb).AtError().WriteToLog(sid)
-			newError(pfb).AtError().WriteToLog(sid)
 			if pfb == nil {
 				return newError(`failed to find the default "alpn" config`).AtWarning()
 			}
