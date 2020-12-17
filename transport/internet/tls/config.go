@@ -234,22 +234,18 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.MaxVersion = tls.VersionTLS13
 	}
 
-	var cipherSuites []uint16
 	if len(c.CipherSuites) > 0 {
-		cipherSuitesArray := strings.Split(c.CipherSuites, ":")
-		if len(cipherSuitesArray) > 0 {
-			all := tls.CipherSuites()
-			for _, suite := range cipherSuitesArray {
-				for _, s := range all {
-					if s.Name == suite {
-						cipherSuites = append(cipherSuites, s.ID)
-						break
-					}
-				}
+		id := make(map[string]uint16)
+		for _, s := range tls.CipherSuites() {
+			id[s.Name] = s.ID
+		}
+		for _, n := range strings.Split(c.CipherSuites, ":") {
+			if id[n] != 0 {
+				config.CipherSuites = append(config.CipherSuites, id[n])
 			}
 		}
 	}
-	config.CipherSuites = cipherSuites
+
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 
 	return config
