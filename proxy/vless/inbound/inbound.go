@@ -63,7 +63,7 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             *vless.Validator
 	dns                   dns.Client
-	fallbacks             map[string]map[string]*Fallback // or nil
+	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -88,13 +88,16 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	}
 
 	if config.Fallbacks != nil {
-		handler.fallbacks = make(map[string]map[string]*Fallback)
+		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
 		// handler.regexps = make(map[string]*regexp.Regexp)
 		for _, fb := range config.Fallbacks {
-			if handler.fallbacks[fb.Alpn] == nil {
-				handler.fallbacks[fb.Alpn] = make(map[string]*Fallback)
+			if handler.fallbacks[fb.Sni] == nil {
+				handler.fallbacks[fb.Sni] = make(map[string]map[string]*Fallback)
 			}
-			handler.fallbacks[fb.Alpn][fb.Path] = fb
+			if handler.fallbacks[fb.Sni][fb.Alpn] == nil {
+				handler.fallbacks[fb.Sni][fb.Alpn] = make(map[string]*Fallback)
+			}
+			handler.fallbacks[fb.Sni][fb.Alpn][fb.Path] = fb
 			/*
 				if fb.Path != "" {
 					if r, err := regexp.Compile(fb.Path); err != nil {
@@ -187,20 +190,30 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			}
 			newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
 
+			sni := ""
 			alpn := ""
 			if len(apfb) > 1 || apfb[""] == nil {
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
+					sni = tlsConn.ConnectionState().ServerName
 					alpn = tlsConn.ConnectionState().NegotiatedProtocol
+					newError("realSni = " + sni).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+					sni = xtlsConn.ConnectionState().ServerName
 					alpn = xtlsConn.ConnectionState().NegotiatedProtocol
+					newError("realSni = " + sni).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				}
-				if apfb[alpn] == nil {
+				if apfb[sni] == nil {
+					sni = ""
+				}
+				if apfb[sni][alpn] == nil {
 					alpn = ""
 				}
 			}
-			pfb := apfb[alpn]
+			pfb := apfb[sni][alpn]
+			newError(apfb).AtError().WriteToLog(sid)
+			newError(pfb).AtError().WriteToLog(sid)
 			if pfb == nil {
 				return newError(`failed to find the default "alpn" config`).AtWarning()
 			}

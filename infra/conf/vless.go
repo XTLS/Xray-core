@@ -22,6 +22,7 @@ type VLessInboundFallback struct {
 	Type string          `json:"type"`
 	Dest json.RawMessage `json:"dest"`
 	Xver uint64          `json:"xver"`
+	Sni  string          `json:"sni"`
 }
 
 type VLessInboundConfig struct {
@@ -83,6 +84,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			Type: fb.Type,
 			Dest: s,
 			Xver: fb.Xver,
+			Sni:  fb.Sni,
 		})
 	}
 	for _, fb := range config.Fallbacks {
