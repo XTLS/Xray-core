@@ -17,12 +17,12 @@ import (
 )
 
 type VLessInboundFallback struct {
+	Name string          `json:"name"`
 	Alpn string          `json:"alpn"`
 	Path string          `json:"path"`
 	Type string          `json:"type"`
 	Dest json.RawMessage `json:"dest"`
 	Xver uint64          `json:"xver"`
-	Sni  string          `json:"sni"`
 }
 
 type VLessInboundConfig struct {
@@ -79,12 +79,12 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			_ = json.Unmarshal(fb.Dest, &s)
 		}
 		config.Fallbacks = append(config.Fallbacks, &inbound.Fallback{
+			Name: fb.Name,
 			Alpn: fb.Alpn,
 			Path: fb.Path,
 			Type: fb.Type,
 			Dest: s,
 			Xver: fb.Xver,
-			Sni:  fb.Sni,
 		})
 	}
 	for _, fb := range config.Fallbacks {

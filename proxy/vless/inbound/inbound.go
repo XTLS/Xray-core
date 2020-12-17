@@ -91,13 +91,13 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
 		// handler.regexps = make(map[string]*regexp.Regexp)
 		for _, fb := range config.Fallbacks {
-			if handler.fallbacks[fb.Sni] == nil {
-				handler.fallbacks[fb.Sni] = make(map[string]map[string]*Fallback)
+			if handler.fallbacks[fb.Name] == nil {
+				handler.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
 			}
-			if handler.fallbacks[fb.Sni][fb.Alpn] == nil {
-				handler.fallbacks[fb.Sni][fb.Alpn] = make(map[string]*Fallback)
+			if handler.fallbacks[fb.Name][fb.Alpn] == nil {
+				handler.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
 			}
-			handler.fallbacks[fb.Sni][fb.Alpn][fb.Path] = fb
+			handler.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
 			/*
 				if fb.Path != "" {
 					if r, err := regexp.Compile(fb.Path); err != nil {
@@ -190,28 +190,28 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			}
 			newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
 
-			sni := ""
+			name := ""
 			alpn := ""
 			if len(apfb) > 1 || apfb[""] == nil {
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
-					sni = tlsConn.ConnectionState().ServerName
+					name = tlsConn.ConnectionState().ServerName
 					alpn = tlsConn.ConnectionState().NegotiatedProtocol
-					newError("realSni = " + sni).AtInfo().WriteToLog(sid)
+					newError("realName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-					sni = xtlsConn.ConnectionState().ServerName
+					name = xtlsConn.ConnectionState().ServerName
 					alpn = xtlsConn.ConnectionState().NegotiatedProtocol
-					newError("realSni = " + sni).AtInfo().WriteToLog(sid)
+					newError("realName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				}
-				if apfb[sni] == nil {
-					sni = ""
+				if apfb[name] == nil {
+					name = ""
 				}
-				if apfb[sni][alpn] == nil {
+				if apfb[name][alpn] == nil {
 					alpn = ""
 				}
 			}
-			pfb := apfb[sni][alpn]
+			pfb := apfb[name][alpn]
 			if pfb == nil {
 				return newError(`failed to find the default "alpn" config`).AtWarning()
 			}
