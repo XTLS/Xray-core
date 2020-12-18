@@ -131,7 +131,7 @@ func parseSecurityType(b byte) protocol.SecurityType {
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func (s *ServerSession) DecodeRequestHeader(reader io.Reader) (*protocol.RequestHeader, error) {
+func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*protocol.RequestHeader, error) {
 	buffer := buf.New()
 	behaviorRand := dice.NewDeterministicDice(int64(s.userValidator.GetBehaviorSeed()))
 	BaseDrainSize := behaviorRand.Roll(3266)
@@ -143,7 +143,7 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader) (*protocol.Request
 	drainConnection := func(e error) error {
 		// We read a deterministic generated length of data before closing the connection to offset padding read pattern
 		readSizeRemain -= int(buffer.Len())
-		if readSizeRemain > 0 {
+		if readSizeRemain > 0 && isDrain {
 			err := s.DrainConnN(reader, readSizeRemain)
 			if err != nil {
 				return newError("failed to drain connection DrainSize = ", BaseDrainSize, " ", RandDrainMax, " ", RandDrainRolled).Base(err).Base(e)
