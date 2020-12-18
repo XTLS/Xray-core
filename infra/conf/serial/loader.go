@@ -3,12 +3,13 @@ package serial
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-
+	"github.com/ghodss/yaml"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	json_reader "github.com/xtls/xray-core/infra/conf/json"
+	"io"
+	"io/ioutil"
 )
 
 type offset struct {
@@ -76,6 +77,38 @@ func LoadJSONConfig(reader io.Reader) (*core.Config, error) {
 	pbConfig, err := jsonConfig.Build()
 	if err != nil {
 		return nil, newError("failed to parse json config").Base(err)
+	}
+
+	return pbConfig, nil
+}
+
+// DecodeYAMLConfig reads from reader and decode the config into *conf.Config
+// using github.com/ghodss/yaml to convert yaml to json
+// syntax error could be detected.
+func DecodeYAMLConfig(reader io.Reader) (*conf.Config, error) {
+
+	yamlFile, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, newError("failed to read config file").Base(err)
+	}
+
+	jsonFile, err := yaml.YAMLToJSON(yamlFile)
+	if err != nil {
+		return nil, newError("failed to read config file").Base(err)
+	}
+
+	return DecodeJSONConfig(bytes.NewReader(jsonFile))
+}
+
+func LoadYAMLConfig(reader io.Reader) (*core.Config, error) {
+	yamlConfig, err := DecodeYAMLConfig(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	pbConfig, err := yamlConfig.Build()
+	if err != nil {
+		return nil, newError("failed to parse yaml config").Base(err)
 	}
 
 	return pbConfig, nil
