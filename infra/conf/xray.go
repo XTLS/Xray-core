@@ -428,39 +428,40 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	// deprecated attrs
 
-	// update the Inbound in slice if the only one in overide config has same tag
+	// update the Inbound in slice, config with existed tag will be override, others will be appended to tail
 	if len(o.InboundConfigs) > 0 {
-		if len(c.InboundConfigs) > 0 && len(o.InboundConfigs) == 1 {
-			if idx := c.findInboundTag(o.InboundConfigs[0].Tag); idx > -1 {
-				c.InboundConfigs[idx] = o.InboundConfigs[0]
-				ctllog.Println("[", fn, "] updated inbound with tag: ", o.InboundConfigs[0].Tag)
+		for _, inbound := range o.InboundConfigs {
+			if idx := c.findInboundTag(inbound.Tag); idx > -1 {
+				c.InboundConfigs[idx] = inbound
+				ctllog.Println("[", fn, "] updated inbound with tag: ", inbound.Tag)
 			} else {
-				c.InboundConfigs = append(c.InboundConfigs, o.InboundConfigs[0])
-				ctllog.Println("[", fn, "] appended inbound with tag: ", o.InboundConfigs[0].Tag)
+				c.InboundConfigs = append(c.InboundConfigs, inbound)
+				ctllog.Println("[", fn, "] appended inbound with tag: ", inbound.Tag)
 			}
-		} else {
-			c.InboundConfigs = o.InboundConfigs
 		}
 	}
 
-	// update the Outbound in slice if the only one in overide config has same tag
+	// update the Outbound in slice, config with existed tag will be override, tags with 'tail' keyword will be appended
+	// to tail, others will be prepended to head
 	if len(o.OutboundConfigs) > 0 {
-		if len(c.OutboundConfigs) > 0 && len(o.OutboundConfigs) == 1 {
-			if idx := c.findOutboundTag(o.OutboundConfigs[0].Tag); idx > -1 {
-				c.OutboundConfigs[idx] = o.OutboundConfigs[0]
-				ctllog.Println("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[0].Tag)
+		headConfigs := make([]OutboundDetourConfig, 0)
+		tailConfigs := make([]OutboundDetourConfig, 0)
+		for _, outbound := range o.OutboundConfigs {
+			if idx := c.findOutboundTag(outbound.Tag); idx > -1 {
+				c.OutboundConfigs[idx] = outbound
+				ctllog.Println("[", fn, "] updated outbound with tag: ", outbound.Tag)
 			} else {
 				if strings.Contains(strings.ToLower(fn), "tail") {
-					c.OutboundConfigs = append(c.OutboundConfigs, o.OutboundConfigs[0])
-					ctllog.Println("[", fn, "] appended outbound with tag: ", o.OutboundConfigs[0].Tag)
+					tailConfigs = append(tailConfigs, outbound)
+					ctllog.Println("[", fn, "] appended outbound with tag: ", outbound.Tag)
 				} else {
-					c.OutboundConfigs = append(o.OutboundConfigs, c.OutboundConfigs...)
-					ctllog.Println("[", fn, "] prepended outbound with tag: ", o.OutboundConfigs[0].Tag)
+					headConfigs = append(headConfigs, outbound)
+					ctllog.Println("[", fn, "] prepended outbound with tag: ", outbound.Tag)
 				}
 			}
-		} else {
-			c.OutboundConfigs = o.OutboundConfigs
 		}
+		c.OutboundConfigs = append(headConfigs, c.OutboundConfigs...)
+		c.OutboundConfigs = append(c.OutboundConfigs, tailConfigs...)
 	}
 }
 
