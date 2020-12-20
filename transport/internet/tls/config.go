@@ -3,6 +3,7 @@ package tls
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/xtls/xray-core/common/ocsp"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,13 @@ func (c *Config) BuildCertificates() []tls.Certificate {
 		if err != nil {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
+		}
+		if entry.OCSPFile != "" {
+			ocspData, err := ocsp.GetOCSPStapling(keyPair.Certificate, entry.OCSPFile)
+			if err != nil {
+				newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+			}
+			keyPair.OCSPStaple = ocspData
 		}
 		certs = append(certs, keyPair)
 	}

@@ -251,6 +251,7 @@ type TLSCertConfig struct {
 	CertStr  []string `json:"certificate"`
 	KeyFile  string   `json:"keyFile"`
 	KeyStr   []string `json:"key"`
+	OCSPFile string   `json:"OCSPFile"`
 	Usage    string   `json:"usage"`
 }
 
@@ -282,7 +283,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
-
+	certificate.OCSPFile = c.OCSPFile
 	return certificate, nil
 }
 
@@ -333,6 +334,7 @@ type XTLSCertConfig struct {
 	KeyFile  string   `json:"keyFile"`
 	KeyStr   []string `json:"key"`
 	Usage    string   `json:"usage"`
+	OCSPFile string   `json:"OCSPFile"`
 }
 
 // Build implements Buildable.
@@ -363,7 +365,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	default:
 		certificate.Usage = xtls.Certificate_ENCIPHERMENT
 	}
-
+	certificate.OCSPFile = c.OCSPFile
 	return certificate, nil
 }
 
