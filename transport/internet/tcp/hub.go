@@ -48,7 +48,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen Unix Doman Socket on ", address).Base(err)
+			return nil, newError("failed to listen Unix Domain Socket on ", address).Base(err)
 		}
 		newError("listening Unix Domain Socket on ", address).WriteToLog(session.ExportIDToError(ctx))
 		locker := ctx.Value(address.Domain())
