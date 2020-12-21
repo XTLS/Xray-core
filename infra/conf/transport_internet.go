@@ -247,12 +247,12 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 }
 
 type TLSCertConfig struct {
-	CertFile string   `json:"certificateFile"`
-	CertStr  []string `json:"certificate"`
-	KeyFile  string   `json:"keyFile"`
-	KeyStr   []string `json:"key"`
-	OCSPFile string   `json:"OCSPFile"`
-	Usage    string   `json:"usage"`
+	CertFile     string   `json:"certificateFile"`
+	CertStr      []string `json:"certificate"`
+	KeyFile      string   `json:"keyFile"`
+	KeyStr       []string `json:"key"`
+	Usage        string   `json:"usage"`
+	OcspStapling int64    `json:"ocspStapling"`
 }
 
 // Build implements Buildable.
@@ -283,7 +283,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
-	certificate.OCSPFile = c.OCSPFile
+	certificate.OcspStapling = c.OcspStapling
 	return certificate, nil
 }
 
@@ -329,12 +329,12 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 }
 
 type XTLSCertConfig struct {
-	CertFile string   `json:"certificateFile"`
-	CertStr  []string `json:"certificate"`
-	KeyFile  string   `json:"keyFile"`
-	KeyStr   []string `json:"key"`
-	Usage    string   `json:"usage"`
-	OCSPFile string   `json:"OCSPFile"`
+	CertFile     string   `json:"certificateFile"`
+	CertStr      []string `json:"certificate"`
+	KeyFile      string   `json:"keyFile"`
+	KeyStr       []string `json:"key"`
+	Usage        string   `json:"usage"`
+	OcspStapling int64    `json:"ocspStapling"`
 }
 
 // Build implements Buildable.
@@ -365,7 +365,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	default:
 		certificate.Usage = xtls.Certificate_ENCIPHERMENT
 	}
-	certificate.OCSPFile = c.OCSPFile
+	certificate.OcspStapling = c.OcspStapling
 	return certificate, nil
 }
 

@@ -21,7 +21,7 @@ message Certificate {
 
   Usage usage = 3;
 
-  string OCSPFile = 4;
+  int64 ocspStapling = 4;
 }
 
 message Config {

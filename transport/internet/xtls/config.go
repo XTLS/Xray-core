@@ -43,7 +43,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 // BuildCertificates builds a list of TLS certificates from proto definition.
 func (c *Config) BuildCertificates() []xtls.Certificate {
 	certs := make([]xtls.Certificate, 0, len(c.Certificate))
-	for _, entry := range c.Certificate {
+	for i, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
@@ -52,14 +52,22 @@ func (c *Config) BuildCertificates() []xtls.Certificate {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-		if entry.OCSPFile != "" {
-			ocspData, err := ocsp.GetOCSPStapling(keyPair.Certificate, entry.OCSPFile)
-			if err != nil {
-				newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
-			}
-			keyPair.OCSPStaple = ocspData
-		}
 		certs = append(certs, keyPair)
+		if entry.OcspStapling != 0 {
+			*&certs[i].OCSPStaple, _ = ocsp.GetOCSPForCert(keyPair.Certificate)
+			go func(ocspData *[]byte) {
+				t := time.NewTicker(time.Second * time.Duration(entry.OcspStapling))
+				for {
+					select {
+					case <-t.C:
+						*ocspData, err = ocsp.GetOCSPForCert(keyPair.Certificate)
+						if err != nil {
+							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						}
+					}
+				}
+			}(&certs[i].OCSPStaple)
+		}
 	}
 	return certs
 }
