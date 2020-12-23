@@ -128,31 +128,43 @@ type PacketWriter struct {
 
 // WriteMultiBuffer implements buf.Writer
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	b := make([]byte, maxLength)
-	for !mb.IsEmpty() {
-		var length int
-		mb, length = buf.SplitBytes(mb, b)
-		if _, err := w.writePacket(b[:length], w.Target); err != nil {
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		target := w.Target
+		if b.UDP != nil {
+			target.Address = net.IPAddress(b.UDP.IP)
+			target.Port = net.Port(b.UDP.Port)
+		}
+		if _, err := w.writePacket(b.Bytes(), target); err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
 	}
-
 	return nil
 }
 
 // WriteMultiBufferWithMetadata writes udp packet with destination specified
 func (w *PacketWriter) WriteMultiBufferWithMetadata(mb buf.MultiBuffer, dest net.Destination) error {
-	b := make([]byte, maxLength)
-	for !mb.IsEmpty() {
-		var length int
-		mb, length = buf.SplitBytes(mb, b)
-		if _, err := w.writePacket(b[:length], dest); err != nil {
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		source := dest
+		if b.UDP != nil {
+			source.Address = net.IPAddress(b.UDP.IP)
+			source.Port = net.Port(b.UDP.Port)
+		}
+		if _, err := w.writePacket(b.Bytes(), source); err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -300,6 +312,10 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 		}
 
 		b := buf.New()
+		b.UDP = &net.UDPAddr{
+			IP:   addr.IP(),
+			Port: int(port.Value()),
+		}
 		mb = append(mb, b)
 		n, err := b.ReadFullFrom(r, int32(length))
 		if err != nil {

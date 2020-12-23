@@ -196,6 +196,15 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		if request == nil {
 			return
 		}
+
+		if payload.UDP != nil {
+			request = &protocol.RequestHeader{
+				User:    request.User,
+				Address: net.IPAddress(payload.UDP.IP),
+				Port:    net.Port(payload.UDP.Port),
+			}
+		}
+
 		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
 		payload.Release()
 
@@ -210,6 +219,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
 		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
 	}
+
+	var dest net.Destination
 
 	reader := buf.NewPacketReader(conn)
 	for {
@@ -242,8 +253,17 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 				})
 			}
 
+			payload.UDP = &net.UDPAddr{
+				IP:   request.Address.IP(),
+				Port: int(request.Port),
+			}
+
+			if dest.Network == 0 {
+				dest = request.Destination() // JUST FOLLOW THE FIREST PACKET
+			}
+
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, request.Destination(), payload)
+			udpServer.Dispatch(currentPacketCtx, dest, payload)
 		}
 	}
 }
