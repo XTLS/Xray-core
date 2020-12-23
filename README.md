@@ -14,12 +14,14 @@
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
   - Xray-docker
-- One Click
+- One Click (Linux server)
   - [ProxySU](https://github.com/proxysu/ProxySU)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
-- Magisk
+- Magisk (Android)
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
+- Homebrew Tap (macOS)
+  - [xiruizhao/homebrew-xray](https://github.com/xiruizhao/homebrew-xray)
 
 ## Usage
 
