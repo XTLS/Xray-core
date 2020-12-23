@@ -63,6 +63,8 @@ import (
 	// The following line loads JSON internally
 	_ "github.com/xtls/xray-core/main/jsonem"
 
+	_ "github.com/xtls/xray-core/main/toml"
+
 	// Load config from file or http(s)
 	_ "github.com/xtls/xray-core/main/confloader/external"
 
