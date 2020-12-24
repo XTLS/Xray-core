@@ -62,6 +62,7 @@ import (
 	// _ "github.com/xtls/xray-core/main/json"
 	// The following line loads JSON internally
 	_ "github.com/xtls/xray-core/main/jsonem"
+	_ "github.com/xtls/xray-core/main/yaml"
 
 	_ "github.com/xtls/xray-core/main/toml"
 

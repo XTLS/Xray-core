@@ -152,6 +152,8 @@ func getConfigFilePath() cmdarg.Arg {
 
 func getConfigFormat() string {
 	switch strings.ToLower(*format) {
+	case "yaml", "yml":
+		return "yaml"
 	case "pb", "protobuf":
 		return "protobuf"
 	case "toml":
@@ -165,6 +167,9 @@ func startXray() (core.Server, error) {
 	configFiles := getConfigFilePath()
 
 	config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
+
+	//config, err := core.LoadConfigs(getConfigFormat(), configFiles)
+
 	if err != nil {
 		return nil, newError("failed to load config files: [", configFiles.String(), "]").Base(err)
 	}
