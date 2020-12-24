@@ -51,14 +51,19 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	// Destination of the inner request.
 	destination := outbound.Target
 
+	// Outbound server.
 	var server *protocol.ServerSpec
+	// Outbound server's destination.
+	var dest net.Destination
+	// Connection to the outbound server.
 	var conn internet.Connection
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
 		server = c.serverPicker.PickServer()
-		dest := server.Destination()
+		dest = server.Destination()
 		rawConn, err := dialer.Dial(ctx, dest)
 		if err != nil {
 			return err
@@ -100,6 +105,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	udpRequest, err := ClientHandshake(request, conn, conn)
 	if err != nil {
 		return newError("failed to establish connection to server").AtWarning().Base(err)
+	}
+	if udpRequest != nil {
+		if udpRequest.Address == net.AnyIP || udpRequest.Address == net.AnyIPv6 {
+			udpRequest.Address = dest.Address
+		}
 	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {

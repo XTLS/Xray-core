@@ -89,8 +89,10 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 	}
 
 	svrSession := &ServerSession{
-		config: s.config,
-		port:   inbound.Gateway.Port,
+		config:        s.config,
+		address:       inbound.Gateway.Address,
+		port:          inbound.Gateway.Port,
+		clientAddress: inbound.Source.Address,
 	}
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}

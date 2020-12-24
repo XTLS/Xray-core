@@ -1,4 +1,5 @@
 // +build !windows
+// +build !android
 
 package domainsocket_test
 
