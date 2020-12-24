@@ -3,6 +3,7 @@ module github.com/xtls/xray-core
 go 1.15
 
 require (
+	github.com/BurntSushi/toml v0.3.1
 	github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/golang/mock v1.4.4

@@ -156,6 +156,8 @@ func getConfigFormat() string {
 		return "yaml"
 	case "pb", "protobuf":
 		return "protobuf"
+	case "toml":
+		return "toml"
 	default:
 		return "json"
 	}

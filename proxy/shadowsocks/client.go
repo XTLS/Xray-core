@@ -134,13 +134,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
-		writer := &buf.SequentialWriter{Writer: &UDPWriter{
-			Writer:  conn,
-			Request: request,
-		}}
 
 		requestDone := func() error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+
+			writer := &UDPWriter{
+				Writer:  conn,
+				Request: request,
+			}
 
 			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
 				return newError("failed to transport all UDP request").Base(err)

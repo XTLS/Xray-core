@@ -64,6 +64,8 @@ import (
 	_ "github.com/xtls/xray-core/main/jsonem"
 	_ "github.com/xtls/xray-core/main/yaml"
 
+	_ "github.com/xtls/xray-core/main/toml"
+
 	// Load config from file or http(s)
 	_ "github.com/xtls/xray-core/main/confloader/external"
 

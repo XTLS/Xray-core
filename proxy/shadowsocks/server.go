@@ -77,6 +77,15 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 		}
 
 		payload := packet.Payload
+
+		if payload.UDP != nil {
+			request = &protocol.RequestHeader{
+				User:    request.User,
+				Address: net.IPAddress(payload.UDP.IP),
+				Port:    net.Port(payload.UDP.Port),
+			}
+		}
+
 		data, err := EncodeUDPPacket(request, payload.Bytes())
 		payload.Release()
 		if err != nil {
@@ -93,6 +102,8 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 		panic("no inbound metadata")
 	}
 	inbound.User = s.user
+
+	var dest net.Destination
 
 	reader := buf.NewPacketReader(conn)
 	for {
@@ -118,17 +129,25 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 			}
 
 			currentPacketCtx := ctx
-			dest := request.Destination()
 			if inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
-					To:     dest,
+					To:     request.Destination(),
 					Status: log.AccessAccepted,
 					Reason: "",
 					Email:  request.User.Email,
 				})
 			}
-			newError("tunnelling request to ", dest).WriteToLog(session.ExportIDToError(currentPacketCtx))
+			newError("tunnelling request to ", request.Destination()).WriteToLog(session.ExportIDToError(currentPacketCtx))
+
+			data.UDP = &net.UDPAddr{
+				IP:   request.Address.IP(),
+				Port: int(request.Port),
+			}
+
+			if dest.Network == 0 {
+				dest = request.Destination() // JUST FOLLOW THE FIREST PACKET
+			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
 			udpServer.Dispatch(currentPacketCtx, dest, data)

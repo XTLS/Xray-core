@@ -2,6 +2,7 @@ package buf
 
 import (
 	"io"
+	"net"
 
 	"github.com/xtls/xray-core/common/bytespool"
 )
@@ -20,6 +21,7 @@ type Buffer struct {
 	v     []byte
 	start int32
 	end   int32
+	UDP   *net.UDPAddr
 }
 
 // New creates a Buffer with 0 length and 2K capacity.
