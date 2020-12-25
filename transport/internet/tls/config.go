@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"github.com/xtls/xray-core/common/ocsp"
@@ -61,9 +62,12 @@ func (c *Config) BuildCertificates() []tls.Certificate {
 				for {
 					select {
 					case <-t.C:
-						*ocspData, err = ocsp.GetOCSPForCert(keyPair.Certificate)
+						newOCSPData, err := ocsp.GetOCSPForCert(keyPair.Certificate)
 						if err != nil {
 							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						}
+						if len(newOCSPData) != len(*ocspData) && !bytes.Equal(*ocspData, newOCSPData) {
+							*ocspData = newOCSPData
 						}
 					}
 				}
