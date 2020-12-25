@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	"golang.org/x/crypto/ocsp"
 	"io/ioutil"
 	"net/http"
 	"os"
+
+	"golang.org/x/crypto/ocsp"
+
+	"github.com/xtls/xray-core/common/platform/filesystem"
 )
 
 func GetOCSPForFile(path string) ([]byte, error) {

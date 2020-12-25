@@ -8,10 +8,10 @@ option java_multiple_files = true;
 
 message Certificate {
   // TLS certificate in x509 format.
-  bytes Certificate = 1;
+  bytes certificate = 1;
 
   // TLS key in x509 format.
-  bytes Key = 2;
+  bytes key = 2;
 
   enum Usage {
     ENCIPHERMENT = 0;
@@ -21,7 +21,7 @@ message Certificate {
 
   Usage usage = 3;
 
-  int64 ocspStapling = 4;
+  int64 ocsp_stapling = 4;
 }
 
 message Config {

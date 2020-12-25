@@ -283,7 +283,9 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
+
 	certificate.OcspStapling = c.OcspStapling
+
 	return certificate, nil
 }
 
@@ -365,7 +367,9 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	default:
 		certificate.Usage = xtls.Certificate_ENCIPHERMENT
 	}
+
 	certificate.OcspStapling = c.OcspStapling
+
 	return certificate, nil
 }
 
