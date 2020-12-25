@@ -20,6 +20,8 @@ message Certificate {
   }
 
   Usage usage = 3;
+
+  int64 ocspStapling = 4;
 }
 
 message Config {

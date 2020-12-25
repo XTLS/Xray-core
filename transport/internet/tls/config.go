@@ -1,8 +1,10 @@
 package tls
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/xtls/xray-core/common/ocsp"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +45,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 // BuildCertificates builds a list of TLS certificates from proto definition.
 func (c *Config) BuildCertificates() []tls.Certificate {
 	certs := make([]tls.Certificate, 0, len(c.Certificate))
-	for _, entry := range c.Certificate {
+	for i, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
@@ -53,6 +55,24 @@ func (c *Config) BuildCertificates() []tls.Certificate {
 			continue
 		}
 		certs = append(certs, keyPair)
+		if entry.OcspStapling != 0 {
+			*&certs[i].OCSPStaple, _ = ocsp.GetOCSPForCert(keyPair.Certificate)
+			go func(ocspData *[]byte) {
+				t := time.NewTicker(time.Second * time.Duration(entry.OcspStapling))
+				for {
+					select {
+					case <-t.C:
+						newOCSPData, err := ocsp.GetOCSPForCert(keyPair.Certificate)
+						if err != nil {
+							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						}
+						if len(newOCSPData) != len(*ocspData) && !bytes.Equal(*ocspData, newOCSPData) {
+							*ocspData = newOCSPData
+						}
+					}
+				}
+			}(&certs[i].OCSPStaple)
+		}
 	}
 	return certs
 }
