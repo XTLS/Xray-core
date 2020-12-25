@@ -137,7 +137,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 
 func TestDomainSocket(t *testing.T) {
 	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
-		t.Skip("Not supported on windows and android")
+		t.Skip("Not supported on windows or android")
 		return
 	}
 	tcpServer := tcp.Server{

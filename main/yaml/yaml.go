@@ -22,9 +22,13 @@ func init() {
 				for i, arg := range v {
 					newError("Reading config: ", arg).AtInfo().WriteToLog()
 					r, err := confloader.LoadConfig(arg)
-					common.Must(err)
+					if err != nil {
+						return nil, newError("failed to read config: ", arg).Base(err)
+					}
 					c, err := serial.DecodeYAMLConfig(r)
-					common.Must(err)
+					if err != nil {
+						return nil, newError("failed to decode config: ", arg).Base(err)
+					}
 					if i == 0 {
 						// This ensure even if the muti-json parser do not support a setting,
 						// It is still respected automatically for the first configure file

@@ -66,17 +66,19 @@ func executeRun(cmd *base.Command, args []string) {
 	printVersion()
 	server, err := startXray()
 	if err != nil {
-		base.Fatalf("Failed to start: %s", err)
+		fmt.Println("Failed to start:", err)
+		// Configuration error. Exit with a special value to prevent systemd from restarting.
+		os.Exit(23)
 	}
 
 	if *test {
 		fmt.Println("Configuration OK.")
-		base.SetExitStatus(0)
-		base.Exit()
+		os.Exit(0)
 	}
 
 	if err := server.Start(); err != nil {
-		base.Fatalf("Failed to start: %s", err)
+		fmt.Println("Failed to start:", err)
+		os.Exit(-1)
 	}
 	defer server.Close()
 
@@ -152,10 +154,10 @@ func getConfigFilePath() cmdarg.Arg {
 
 func getConfigFormat() string {
 	switch strings.ToLower(*format) {
-	case "yaml", "yml":
-		return "yaml"
 	case "pb", "protobuf":
 		return "protobuf"
+	case "yaml", "yml":
+		return "yaml"
 	case "toml":
 		return "toml"
 	default:

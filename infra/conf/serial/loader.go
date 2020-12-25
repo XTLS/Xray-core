@@ -85,6 +85,8 @@ func LoadJSONConfig(reader io.Reader) (*core.Config, error) {
 	return pbConfig, nil
 }
 
+// DecodeTOMLConfig reads from reader and decode the config into *conf.Config
+// using github.com/BurntSushi/toml and map to convert toml to json.
 func DecodeTOMLConfig(reader io.Reader) (*conf.Config, error) {
 	tomlFile, err := ioutil.ReadAll(reader)
 	if err != nil {
@@ -92,15 +94,13 @@ func DecodeTOMLConfig(reader io.Reader) (*conf.Config, error) {
 	}
 
 	configMap := make(map[string]interface{})
-
 	if _, err := toml.Decode(string(tomlFile), &configMap); err != nil {
-		return nil, newError("failed to convert TOML to Map").Base(err)
+		return nil, newError("failed to convert toml to map").Base(err)
 	}
 
 	jsonFile, err := json.Marshal(&configMap)
-
 	if err != nil {
-		return nil, newError("failed to convert Map to JSON").Base(err)
+		return nil, newError("failed to convert map to json").Base(err)
 	}
 
 	return DecodeJSONConfig(bytes.NewReader(jsonFile))
@@ -121,10 +121,8 @@ func LoadTOMLConfig(reader io.Reader) (*core.Config, error) {
 }
 
 // DecodeYAMLConfig reads from reader and decode the config into *conf.Config
-// using github.com/ghodss/yaml to convert yaml to json
-// syntax error could be detected.
+// using github.com/ghodss/yaml to convert yaml to json.
 func DecodeYAMLConfig(reader io.Reader) (*conf.Config, error) {
-
 	yamlFile, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return nil, newError("failed to read config file").Base(err)
@@ -132,7 +130,7 @@ func DecodeYAMLConfig(reader io.Reader) (*conf.Config, error) {
 
 	jsonFile, err := yaml.YAMLToJSON(yamlFile)
 	if err != nil {
-		return nil, newError("failed to read config file").Base(err)
+		return nil, newError("failed to convert yaml to json").Base(err)
 	}
 
 	return DecodeJSONConfig(bytes.NewReader(jsonFile))
