@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -124,10 +125,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	bwriter := buf.NewBufferedWriter(pwriter)
 	common.Must(bwriter.SetBuffered(false))
-	return net.NewConnection(
-		net.ConnectionOutput(response.Body),
-		net.ConnectionInput(bwriter),
-		net.ConnectionOnClose(common.ChainedClosable{breader, bwriter, response.Body}),
+	return cnc.NewConnection(
+		cnc.ConnectionOutput(response.Body),
+		cnc.ConnectionInput(bwriter),
+		cnc.ConnectionOnClose(common.ChainedClosable{breader, bwriter, response.Body}),
 	), nil
 }
 

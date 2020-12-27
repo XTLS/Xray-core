@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
@@ -173,7 +174,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (internet.Conn
 				downlinkReader, downlinkWriter := pipe.New(opts...)
 
 				go handler.Dispatch(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
-				conn := net.NewConnection(net.ConnectionInputMulti(uplinkWriter), net.ConnectionOutputMulti(downlinkReader))
+				conn := cnc.NewConnection(cnc.ConnectionInputMulti(uplinkWriter), cnc.ConnectionOutputMulti(downlinkReader))
 
 				if config := tls.ConfigFromStreamSettings(h.streamSettings); config != nil {
 					tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))

@@ -14,6 +14,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -97,12 +98,12 @@ func (l *Listener) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	}
 
 	done := done.New()
-	conn := net.NewConnection(
-		net.ConnectionOutput(request.Body),
-		net.ConnectionInput(flushWriter{w: writer, d: done}),
-		net.ConnectionOnClose(common.ChainedClosable{done, request.Body}),
-		net.ConnectionLocalAddr(l.Addr()),
-		net.ConnectionRemoteAddr(remoteAddr),
+	conn := cnc.NewConnection(
+		cnc.ConnectionOutput(request.Body),
+		cnc.ConnectionInput(flushWriter{w: writer, d: done}),
+		cnc.ConnectionOnClose(common.ChainedClosable{done, request.Body}),
+		cnc.ConnectionLocalAddr(l.Addr()),
+		cnc.ConnectionRemoteAddr(remoteAddr),
 	)
 	l.handler(conn)
 	<-done.Wait()

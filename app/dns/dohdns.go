@@ -14,6 +14,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/pubsub"
@@ -65,9 +66,9 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, clientIP net.
 			if err != nil {
 				return nil, err
 			}
-			return net.NewConnection(
-				net.ConnectionInputMulti(link.Writer),
-				net.ConnectionOutputMulti(link.Reader),
+			return cnc.NewConnection(
+				cnc.ConnectionInputMulti(link.Writer),
+				cnc.ConnectionOutputMulti(link.Reader),
 			), nil
 		},
 	}
