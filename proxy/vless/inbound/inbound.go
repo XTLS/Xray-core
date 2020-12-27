@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -196,13 +197,22 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
 					name = tlsConn.ConnectionState().ServerName
 					alpn = tlsConn.ConnectionState().NegotiatedProtocol
-					newError("realSni = " + name).AtInfo().WriteToLog(sid)
+					newError("realServerName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 					name = xtlsConn.ConnectionState().ServerName
 					alpn = xtlsConn.ConnectionState().NegotiatedProtocol
-					newError("realSni = " + name).AtInfo().WriteToLog(sid)
+					newError("realServerName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+				}
+				labels := strings.Split(name, ".")
+				for i := range labels {
+					labels[i] = "*"
+					candidate := strings.Join(labels, ".")
+					if apfb[candidate] != nil {
+						name = candidate
+						break
+					}
 				}
 				if apfb[name] == nil {
 					name = ""
