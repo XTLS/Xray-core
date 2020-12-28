@@ -202,8 +202,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		if payload.UDP != nil {
 			request = &protocol.RequestHeader{
 				User:    request.User,
-				Address: net.IPAddress(payload.UDP.IP),
-				Port:    net.Port(payload.UDP.Port),
+				Address: payload.UDP.Address,
+				Port:    payload.UDP.Port,
 			}
 		}
 
@@ -244,24 +244,24 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 				payload.Release()
 				continue
 			}
+
+			destination := request.Destination()
+
 			currentPacketCtx := ctx
-			newError("send packet to ", request.Destination(), " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
+			newError("send packet to ", destination, " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
 			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
-					To:     request.Destination(),
+					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
 				})
 			}
 
-			payload.UDP = &net.UDPAddr{
-				IP:   request.Address.IP(),
-				Port: int(request.Port),
-			}
+			payload.UDP = &destination
 
 			if dest.Network == 0 {
-				dest = request.Destination() // JUST FOLLOW THE FIREST PACKET
+				dest = destination // JUST FOLLOW THE FIRST PACKET
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)

@@ -81,8 +81,8 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 		if payload.UDP != nil {
 			request = &protocol.RequestHeader{
 				User:    request.User,
-				Address: net.IPAddress(payload.UDP.IP),
-				Port:    net.Port(payload.UDP.Port),
+				Address: payload.UDP.Address,
+				Port:    payload.UDP.Port,
 			}
 		}
 
@@ -128,25 +128,24 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 				continue
 			}
 
+			destination := request.Destination()
+
 			currentPacketCtx := ctx
 			if inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
-					To:     request.Destination(),
+					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
 					Email:  request.User.Email,
 				})
 			}
-			newError("tunnelling request to ", request.Destination()).WriteToLog(session.ExportIDToError(currentPacketCtx))
+			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(currentPacketCtx))
 
-			data.UDP = &net.UDPAddr{
-				IP:   request.Address.IP(),
-				Port: int(request.Port),
-			}
+			data.UDP = &destination
 
 			if dest.Network == 0 {
-				dest = request.Destination() // JUST FOLLOW THE FIREST PACKET
+				dest = request.Destination() // JUST FOLLOW THE FIRST PACKET
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)

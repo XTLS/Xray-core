@@ -2,9 +2,9 @@ package buf
 
 import (
 	"io"
-	"net"
 
 	"github.com/xtls/xray-core/common/bytespool"
+	"github.com/xtls/xray-core/common/net"
 )
 
 const (
@@ -21,7 +21,7 @@ type Buffer struct {
 	v     []byte
 	start int32
 	end   int32
-	UDP   *net.UDPAddr
+	UDP   *net.Destination
 }
 
 // New creates a Buffer with 0 length and 2K capacity.
@@ -49,6 +49,7 @@ func (b *Buffer) Release() {
 	b.v = nil
 	b.Clear()
 	pool.Put(p)
+	b.UDP = nil
 }
 
 // Clear clears the content of the buffer, results an empty buffer with

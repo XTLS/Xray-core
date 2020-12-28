@@ -235,10 +235,8 @@ func (v *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		buffer.Release()
 		return nil, err
 	}
-	payload.UDP = &net.UDPAddr{
-		IP:   u.Address.IP(),
-		Port: int(u.Port),
-	}
+	dest := u.Destination()
+	payload.UDP = &dest
 	return buf.MultiBuffer{payload}, nil
 }
 
@@ -254,18 +252,15 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if b == nil {
 			break
 		}
-		var packet *buf.Buffer
-		var err error
+		request := w.Request
 		if b.UDP != nil {
-			request := &protocol.RequestHeader{
+			request = &protocol.RequestHeader{
 				User:    w.Request.User,
-				Address: net.IPAddress(b.UDP.IP),
-				Port:    net.Port(b.UDP.Port),
+				Address: b.UDP.Address,
+				Port:    b.UDP.Port,
 			}
-			packet, err = EncodeUDPPacket(request, b.Bytes())
-		} else {
-			packet, err = EncodeUDPPacket(w.Request, b.Bytes())
 		}
+		packet, err := EncodeUDPPacket(request, b.Bytes())
 		b.Release()
 		if err != nil {
 			buf.ReleaseMulti(mb)

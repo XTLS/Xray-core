@@ -149,7 +149,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			writer = buf.NewWriter(conn)
 		} else {
-			writer = NewPacketWriter(conn)
+			writer = NewPacketWriter(conn, h, ctx)
 		}
 
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
@@ -215,14 +215,18 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return nil, err
 	}
 	b.Resize(0, int32(n))
-	b.UDP = d.(*net.UDPAddr)
+	b.UDP = &net.Destination{
+		Address: net.IPAddress(d.(*net.UDPAddr).IP),
+		Port:    net.Port(d.(*net.UDPAddr).Port),
+		Network: net.Network_UDP,
+	}
 	if r.Counter != nil {
 		r.Counter.Add(int64(n))
 	}
 	return buf.MultiBuffer{b}, nil
 }
 
-func NewPacketWriter(conn net.Conn) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
@@ -236,6 +240,8 @@ func NewPacketWriter(conn net.Conn) buf.Writer {
 		return &PacketWriter{
 			PacketConnWrapper: c,
 			Counter:           counter,
+			Handler:           h,
+			Context:           ctx,
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
@@ -244,6 +250,8 @@ func NewPacketWriter(conn net.Conn) buf.Writer {
 type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
+	*Handler
+	context.Context
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -256,7 +264,18 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		var n int
 		var err error
 		if b.UDP != nil {
-			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), b.UDP)
+			if w.Handler.config.useIP() && b.UDP.Address.Family().IsDomain() {
+				ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
+				if ip != nil {
+					b.UDP.Address = ip
+				}
+			}
+			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+			if destAddr == nil {
+				b.Release()
+				continue
+			}
+			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
 		} else {
 			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}

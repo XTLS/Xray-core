@@ -281,7 +281,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 			newError("tunnelling request to ", p.Target).WriteToLog(session.ExportIDToError(ctx))
 
 			if dest.Network == 0 {
-				dest = p.Target // JUST FOLLOW THE FIREST PACKET
+				dest = p.Target // JUST FOLLOW THE FIRST PACKET
 			}
 
 			for _, b := range p.Buffer {

@@ -134,12 +134,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if b == nil {
 			break
 		}
-		target := w.Target
+		target := &w.Target
 		if b.UDP != nil {
-			target.Address = net.IPAddress(b.UDP.IP)
-			target.Port = net.Port(b.UDP.Port)
+			target = b.UDP
 		}
-		if _, err := w.writePacket(b.Bytes(), target); err != nil {
+		if _, err := w.writePacket(b.Bytes(), *target); err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
@@ -155,12 +154,11 @@ func (w *PacketWriter) WriteMultiBufferWithMetadata(mb buf.MultiBuffer, dest net
 		if b == nil {
 			break
 		}
-		source := dest
+		source := &dest
 		if b.UDP != nil {
-			source.Address = net.IPAddress(b.UDP.IP)
-			source.Port = net.Port(b.UDP.Port)
+			source = b.UDP
 		}
-		if _, err := w.writePacket(b.Bytes(), source); err != nil {
+		if _, err := w.writePacket(b.Bytes(), *source); err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
@@ -312,10 +310,7 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 		}
 
 		b := buf.New()
-		b.UDP = &net.UDPAddr{
-			IP:   addr.IP(),
-			Port: int(port.Value()),
-		}
+		b.UDP = &dest
 		mb = append(mb, b)
 		n, err := b.ReadFullFrom(r, int32(length))
 		if err != nil {
