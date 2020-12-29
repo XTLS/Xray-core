@@ -20,14 +20,14 @@ func TestUDPEncoding(t *testing.T) {
 		Address: net.IPAddress([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6}),
 		Port:    1024,
 	}
-	writer := &buf.SequentialWriter{Writer: NewUDPWriter(request, b)}
+	writer := &UDPWriter{Writer: b, Request: request}
 
 	content := []byte{'a'}
 	payload := buf.New()
 	payload.Write(content)
 	common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{payload}))
 
-	reader := NewUDPReader(b)
+	reader := &UDPReader{Reader: b}
 
 	decodedPayload, err := reader.ReadMultiBuffer()
 	common.Must(err)
