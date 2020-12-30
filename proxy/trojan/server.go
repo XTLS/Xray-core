@@ -256,7 +256,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 	inbound := session.InboundFromContext(ctx)
 	user := inbound.User
 
-	var dest net.Destination
+	var dest *net.Destination
 
 	for {
 		select {
@@ -280,12 +280,12 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 			})
 			newError("tunnelling request to ", p.Target).WriteToLog(session.ExportIDToError(ctx))
 
-			if dest.Network == 0 {
-				dest = p.Target // JUST FOLLOW THE FIRST PACKET
+			if !buf.Cone || dest == nil {
+				dest = &p.Target
 			}
 
 			for _, b := range p.Buffer {
-				udpServer.Dispatch(ctx, dest, b)
+				udpServer.Dispatch(ctx, *dest, b)
 			}
 		}
 	}

@@ -222,7 +222,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
 	}
 
-	var dest net.Destination
+	var dest *net.Destination
 
 	reader := buf.NewPacketReader(conn)
 	for {
@@ -260,12 +260,12 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 
 			payload.UDP = &destination
 
-			if dest.Network == 0 {
-				dest = destination // JUST FOLLOW THE FIRST PACKET
+			if !buf.Cone || dest == nil {
+				dest = &destination
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, dest, payload)
+			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
 }

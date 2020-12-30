@@ -103,7 +103,7 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 	}
 	inbound.User = s.user
 
-	var dest net.Destination
+	var dest *net.Destination
 
 	reader := buf.NewPacketReader(conn)
 	for {
@@ -144,12 +144,12 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 
 			data.UDP = &destination
 
-			if dest.Network == 0 {
-				dest = request.Destination() // JUST FOLLOW THE FIRST PACKET
+			if !buf.Cone || dest == nil {
+				dest = &destination
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, dest, data)
+			udpServer.Dispatch(currentPacketCtx, *dest, data)
 		}
 	}
 
