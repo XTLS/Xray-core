@@ -3,7 +3,6 @@ module github.com/xtls/xray-core
 go 1.15
 
 require (
-	github.com/BurntSushi/toml v0.3.1
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.3
@@ -11,6 +10,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/lucas-clemente/quic-go v0.19.3
 	github.com/miekg/dns v1.1.35
+	github.com/pelletier/go-toml v1.8.1
 	github.com/pires/go-proxyproto v0.3.3
 	github.com/seiflotfy/cuckoofilter v0.0.0-20201222105146-bc6005554a0c
 	github.com/stretchr/testify v1.6.1
