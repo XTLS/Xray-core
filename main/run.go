@@ -121,7 +121,7 @@ func readConfDir(dirPath string) {
 		log.Fatalln(err)
 	}
 	for _, f := range confs {
-		matched, err := regexp.MatchString("^[\\s\\S]+?\\.(json|toml|yaml|yml)$", f.Name())
+		matched, err := regexp.MatchString(`^.+\.(json|toml|yaml|yml)$`, f.Name())
 		if err != nil {
 			log.Fatalln(err)
 		}
