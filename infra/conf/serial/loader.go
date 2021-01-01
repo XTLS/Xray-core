@@ -6,8 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/BurntSushi/toml"
 	"github.com/ghodss/yaml"
+	"github.com/pelletier/go-toml"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
@@ -86,7 +86,7 @@ func LoadJSONConfig(reader io.Reader) (*core.Config, error) {
 }
 
 // DecodeTOMLConfig reads from reader and decode the config into *conf.Config
-// using github.com/BurntSushi/toml and map to convert toml to json.
+// using github.com/pelletier/go-toml and map to convert toml to json.
 func DecodeTOMLConfig(reader io.Reader) (*conf.Config, error) {
 	tomlFile, err := ioutil.ReadAll(reader)
 	if err != nil {
@@ -94,7 +94,7 @@ func DecodeTOMLConfig(reader io.Reader) (*conf.Config, error) {
 	}
 
 	configMap := make(map[string]interface{})
-	if _, err := toml.Decode(string(tomlFile), &configMap); err != nil {
+	if err := toml.Unmarshal(tomlFile, &configMap); err != nil {
 		return nil, newError("failed to convert toml to map").Base(err)
 	}
 
