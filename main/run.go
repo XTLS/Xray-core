@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -120,7 +121,11 @@ func readConfDir(dirPath string) {
 		log.Fatalln(err)
 	}
 	for _, f := range confs {
-		if strings.HasSuffix(f.Name(), ".json") {
+		matched, err := regexp.MatchString(`^.+\.(json|toml|yaml|yml)$`, f.Name())
+		if err != nil {
+			log.Fatalln(err)
+		}
+		if matched {
 			configFiles.Set(path.Join(dirPath, f.Name()))
 		}
 	}
