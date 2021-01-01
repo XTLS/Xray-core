@@ -263,9 +263,11 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		skipRoutePick = content.SkipRoutePick
 	}
 
+	var inTag string
 	if d.router != nil && !skipRoutePick {
 		if route, err := d.router.PickRoute(routing_session.AsRoutingContext(ctx)); err == nil {
 			tag := route.GetOutboundTag()
+			inTag = route.GetInboundTag()
 			if h := d.ohm.GetHandler(tag); h != nil {
 				newError("taking detour [", tag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 				handler = h
@@ -290,7 +292,11 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
 		if tag := handler.Tag(); tag != "" {
-			accessMessage.Detour = tag
+			if inTag != "" {
+				accessMessage.Detour = inTag + " -> " + tag
+			} else {
+				accessMessage.Detour = tag
+			}
 		}
 		log.Record(accessMessage)
 	}
