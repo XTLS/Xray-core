@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.app.pprof;
+option csharp_namespace = "Xray.App.Pprof";
+option go_package = "github.com/xtls/xray-core/app/pprof";
+option java_package = "com.xray.app.pprof";
+option java_multiple_files = true;
+
+// Config is the settings for pprof.
+message Config {
+  // Tag of the outbound handler that handles pprof http connections.
+  string tag = 1;
+}
