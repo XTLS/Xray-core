@@ -12,14 +12,6 @@ import (
 
 func cipherFromString(c string) shadowsocks.CipherType {
 	switch strings.ToLower(c) {
-	case "aes-256-cfb":
-		return shadowsocks.CipherType_AES_256_CFB
-	case "aes-128-cfb":
-		return shadowsocks.CipherType_AES_128_CFB
-	case "chacha20":
-		return shadowsocks.CipherType_CHACHA20
-	case "chacha20-ietf":
-		return shadowsocks.CipherType_CHACHA20_IETF
 	case "aes-128-gcm", "aead_aes_128_gcm":
 		return shadowsocks.CipherType_AES_128_GCM
 	case "aes-256-gcm", "aead_aes_256_gcm":
