@@ -37,8 +37,8 @@ message Config {
   // Lists of string as ALPN values.
   repeated string next_protocol = 4;
 
-  // Whether or not to disable session (ticket) resumption.
-  bool disable_session_resumption = 5;
+  // Whether or not to enable session (ticket) resumption.
+  bool enable_session_resumption = 5;
 
   // If true, root certificates on the system will not be loaded for
   // verification.

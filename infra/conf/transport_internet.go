@@ -294,7 +294,7 @@ type TLSConfig struct {
 	Certs                    []*TLSCertConfig `json:"certificates"`
 	ServerName               string           `json:"serverName"`
 	ALPN                     *StringList      `json:"alpn"`
-	DisableSessionResumption bool             `json:"disableSessionResumption"`
+	EnableSessionResumption  bool             `json:"enableSessionResumption"`
 	DisableSystemRoot        bool             `json:"disableSystemRoot"`
 	MinVersion               string           `json:"minVersion"`
 	MaxVersion               string           `json:"maxVersion"`
@@ -321,7 +321,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
-	config.DisableSessionResumption = c.DisableSessionResumption
+	config.EnableSessionResumption = c.EnableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	config.MinVersion = c.MinVersion
 	config.MaxVersion = c.MaxVersion
@@ -378,7 +378,7 @@ type XTLSConfig struct {
 	Certs                    []*XTLSCertConfig `json:"certificates"`
 	ServerName               string            `json:"serverName"`
 	ALPN                     *StringList       `json:"alpn"`
-	DisableSessionResumption bool              `json:"disableSessionResumption"`
+	EnableSessionResumption  bool              `json:"enableSessionResumption"`
 	DisableSystemRoot        bool              `json:"disableSystemRoot"`
 	MinVersion               string            `json:"minVersion"`
 	MaxVersion               string            `json:"maxVersion"`
@@ -405,7 +405,7 @@ func (c *XTLSConfig) Build() (proto.Message, error) {
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
-	config.DisableSessionResumption = c.DisableSessionResumption
+	config.EnableSessionResumption = c.EnableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	config.MinVersion = c.MinVersion
 	config.MaxVersion = c.MaxVersion
