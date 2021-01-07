@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -63,7 +64,7 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             *vless.Validator
 	dns                   dns.Client
-	fallbacks             map[string]map[string]*Fallback // or nil
+	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -88,13 +89,16 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	}
 
 	if config.Fallbacks != nil {
-		handler.fallbacks = make(map[string]map[string]*Fallback)
+		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
 		// handler.regexps = make(map[string]*regexp.Regexp)
 		for _, fb := range config.Fallbacks {
-			if handler.fallbacks[fb.Alpn] == nil {
-				handler.fallbacks[fb.Alpn] = make(map[string]*Fallback)
+			if handler.fallbacks[fb.Name] == nil {
+				handler.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
 			}
-			handler.fallbacks[fb.Alpn][fb.Path] = fb
+			if handler.fallbacks[fb.Name][fb.Alpn] == nil {
+				handler.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
+			}
+			handler.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
 			/*
 				if fb.Path != "" {
 					if r, err := regexp.Compile(fb.Path); err != nil {
@@ -187,20 +191,38 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			}
 			newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
 
+			name := ""
 			alpn := ""
 			if len(apfb) > 1 || apfb[""] == nil {
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
+					name = tlsConn.ConnectionState().ServerName
 					alpn = tlsConn.ConnectionState().NegotiatedProtocol
+					newError("realServerName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+					name = xtlsConn.ConnectionState().ServerName
 					alpn = xtlsConn.ConnectionState().NegotiatedProtocol
+					newError("realServerName = " + name).AtInfo().WriteToLog(sid)
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 				}
-				if apfb[alpn] == nil {
+				labels := strings.Split(name, ".")
+				for i := range labels {
+					labels[i] = "*"
+					candidate := strings.Join(labels, ".")
+					if apfb[candidate] != nil {
+						name = candidate
+						break
+					}
+				}
+				if apfb[name] == nil {
+					name = ""
+				}
+				if apfb[name][alpn] == nil {
 					alpn = ""
 				}
+
 			}
-			pfb := apfb[alpn]
+			pfb := apfb[name][alpn]
 			if pfb == nil {
 				return newError(`failed to find the default "alpn" config`).AtWarning()
 			}
