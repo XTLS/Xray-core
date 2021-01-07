@@ -6,18 +6,10 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"syscall"
 )
 
 func FakeUDP(addr *net.UDPAddr, mark int) (net.PacketConn, error) {
-
-	if addr == nil {
-		addr = &net.UDPAddr{
-			IP:   []byte{0, 0, 0, 0},
-			Port: 0,
-		}
-	}
 
 	localSocketAddress, af, err := udpAddrToSocketAddr(addr)
 	if err != nil {
@@ -75,11 +67,6 @@ func udpAddrToSocketAddr(addr *net.UDPAddr) (syscall.Sockaddr, int, error) {
 		ip := [16]byte{}
 		copy(ip[:], addr.IP.To16())
 
-		zoneID, err := strconv.ParseUint(addr.Zone, 10, 32)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		return &syscall.SockaddrInet6{Addr: ip, Port: addr.Port, ZoneId: uint32(zoneID)}, syscall.AF_INET6, nil
+		return &syscall.SockaddrInet6{Addr: ip, Port: addr.Port, ZoneId: 0}, syscall.AF_INET6, nil
 	}
 }

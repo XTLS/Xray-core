@@ -163,14 +163,19 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn in
 		if !destinationOverridden {
 			writer = &buf.SequentialWriter{Writer: conn}
 		} else {
-			var addr *net.UDPAddr
-			var mark int
-			if dest.Address.Family().IsIP() {
-				addr = &net.UDPAddr{
-					IP:   dest.Address.IP(),
-					Port: int(dest.Port),
+			back := conn.RemoteAddr().(*net.UDPAddr)
+			if !dest.Address.Family().IsIP() {
+				if len(back.IP) == 4 {
+					dest.Address = net.AnyIP
+				} else {
+					dest.Address = net.AnyIPv6
 				}
 			}
+			addr := &net.UDPAddr{
+				IP:   dest.Address.IP(),
+				Port: int(dest.Port),
+			}
+			var mark int
 			if d.sockopt != nil {
 				mark = int(d.sockopt.Mark)
 			}
@@ -178,8 +183,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn in
 			if err != nil {
 				return err
 			}
-			back := net.DestinationFromAddr(conn.RemoteAddr())
-			writer = NewPacketWriter(pConn, &dest, mark, &back)
+			writer = NewPacketWriter(pConn, &dest, mark, back)
 			defer writer.(*PacketWriter).Close()
 			/*
 				sockopt := &internet.SocketConfig{
@@ -236,15 +240,12 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn in
 	return nil
 }
 
-func NewPacketWriter(conn net.PacketConn, d *net.Destination, mark int, back *net.Destination) buf.Writer {
+func NewPacketWriter(conn net.PacketConn, d *net.Destination, mark int, back *net.UDPAddr) buf.Writer {
 	writer := &PacketWriter{
 		conn:  conn,
 		conns: make(map[net.Destination]net.PacketConn),
 		mark:  mark,
-		back: &net.UDPAddr{
-			IP:   back.Address.IP(),
-			Port: int(back.Port),
-		},
+		back:  back,
 	}
 	writer.conns[*d] = conn
 	return writer
