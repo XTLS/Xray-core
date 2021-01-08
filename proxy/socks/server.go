@@ -218,7 +218,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		conn.Write(udpMessage.Bytes())
 	})
 
-	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil && inbound.Source.IsValid() {
 		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
 	}
 
@@ -249,7 +250,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 
 			currentPacketCtx := ctx
 			newError("send packet to ", destination, " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+			if inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
 					To:     destination,

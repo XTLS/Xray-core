@@ -251,7 +251,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		udpPayload := packet.Payload
-		udpPayload.UDP = &packet.Source
+		if udpPayload.UDP == nil {
+			udpPayload.UDP = &packet.Source
+		}
 		common.Must(clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}))
 	})
 
@@ -274,23 +276,30 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 			}
 
 			mb2, b := buf.SplitFirst(mb)
+			if b == nil {
+				continue
+			}
 			destination := *b.UDP
-			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-				From:   inbound.Source,
-				To:     destination,
-				Status: log.AccessAccepted,
-				Reason: "",
-				Email:  user.Email,
-			})
+
+			currentPacketCtx := ctx
+			if inbound.Source.IsValid() {
+				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+					From:   inbound.Source,
+					To:     destination,
+					Status: log.AccessAccepted,
+					Reason: "",
+					Email:  user.Email,
+				})
+			}
 			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(ctx))
 
 			if !buf.Cone || dest == nil {
 				dest = &destination
 			}
 
-			udpServer.Dispatch(ctx, *dest, b) // first packet
+			udpServer.Dispatch(currentPacketCtx, *dest, b) // first packet
 			for _, payload := range mb2 {
-				udpServer.Dispatch(ctx, *dest, payload)
+				udpServer.Dispatch(currentPacketCtx, *dest, payload)
 			}
 		}
 	}
