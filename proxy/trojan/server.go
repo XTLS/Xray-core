@@ -250,7 +250,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
-		common.Must(clientWriter.WriteMultiBufferWithMetadata(buf.MultiBuffer{packet.Payload}, packet.Source))
+		udpPayload := packet.Payload
+		udpPayload.UDP = &packet.Source
+		common.Must(clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}))
 	})
 
 	inbound := session.InboundFromContext(ctx)
@@ -263,7 +265,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 		case <-ctx.Done():
 			return nil
 		default:
-			p, err := clientReader.ReadMultiBufferWithMetadata()
+			mb, err := clientReader.ReadMultiBuffer()
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					return newError("unexpected EOF").Base(err)
@@ -271,21 +273,24 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 				return nil
 			}
 
+			mb2, b := buf.SplitFirst(mb)
+			destination := *b.UDP
 			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 				From:   inbound.Source,
-				To:     p.Target,
+				To:     destination,
 				Status: log.AccessAccepted,
 				Reason: "",
 				Email:  user.Email,
 			})
-			newError("tunnelling request to ", p.Target).WriteToLog(session.ExportIDToError(ctx))
+			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(ctx))
 
 			if !buf.Cone || dest == nil {
-				dest = &p.Target
+				dest = &destination
 			}
 
-			for _, b := range p.Buffer {
-				udpServer.Dispatch(ctx, *dest, b)
+			udpServer.Dispatch(ctx, *dest, b) // first packet
+			for _, payload := range mb2 {
+				udpServer.Dispatch(ctx, *dest, payload)
 			}
 		}
 	}
