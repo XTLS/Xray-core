@@ -146,26 +146,6 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return nil
 }
 
-// WriteMultiBufferWithMetadata writes udp packet with destination specified
-func (w *PacketWriter) WriteMultiBufferWithMetadata(mb buf.MultiBuffer, dest net.Destination) error {
-	for {
-		mb2, b := buf.SplitFirst(mb)
-		mb = mb2
-		if b == nil {
-			break
-		}
-		source := &dest
-		if b.UDP != nil {
-			source = b.UDP
-		}
-		if _, err := w.writePacket(b.Bytes(), *source); err != nil {
-			buf.ReleaseMulti(mb)
-			return err
-		}
-	}
-	return nil
-}
-
 func (w *PacketWriter) writePacket(payload []byte, dest net.Destination) (int, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
@@ -259,12 +239,6 @@ func (c *ConnReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, err
 }
 
-// PacketPayload combines udp payload and destination
-type PacketPayload struct {
-	Target net.Destination
-	Buffer buf.MultiBuffer
-}
-
 // PacketReader is UDP Connection Reader Wrapper for trojan protocol
 type PacketReader struct {
 	io.Reader
@@ -272,15 +246,6 @@ type PacketReader struct {
 
 // ReadMultiBuffer implements buf.Reader
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	p, err := r.ReadMultiBufferWithMetadata()
-	if p != nil {
-		return p.Buffer, err
-	}
-	return nil, err
-}
-
-// ReadMultiBufferWithMetadata reads udp packet with destination
-func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 	addr, port, err := addrParser.ReadAddressPort(nil, r)
 	if err != nil {
 		return nil, newError("failed to read address and port").Base(err)
@@ -321,7 +286,7 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 		remain -= int(n)
 	}
 
-	return &PacketPayload{Target: dest, Buffer: mb}, nil
+	return mb, nil
 }
 
 func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
