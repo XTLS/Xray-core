@@ -180,6 +180,11 @@ func (s *DoHNameServer) newReqID() uint16 {
 func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPOption) {
 	newError(s.name, " querying: ", domain).AtInfo().WriteToLog(session.ExportIDToError(ctx))
 
+	if s.name+"." == "DOH//"+domain {
+		newError(s.name, " tries to resolve itself! Use IP or set \"hosts\" instead.").AtError().WriteToLog(session.ExportIDToError(ctx))
+		return
+	}
+
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP))
 
 	var deadline time.Time
@@ -201,8 +206,8 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPO
 			}
 
 			dnsCtx = session.ContextWithContent(dnsCtx, &session.Content{
-				Protocol:      "https",
-				SkipRoutePick: true,
+				Protocol: "https",
+				//SkipRoutePick: true,
 			})
 
 			// forced to use mux for DOH
