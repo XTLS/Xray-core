@@ -239,6 +239,9 @@ type udpWorker struct {
 
 	checker    *task.Periodic
 	activeConn map[connID]*udpConn
+
+	ctx  context.Context
+	cone bool
 }
 
 func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
@@ -279,7 +282,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		src: source,
 	}
 	if originalDest.IsValid() {
-		if !buf.Cone {
+		if !w.cone {
 			id.dest = originalDest
 		}
 		b.UDP = &originalDest
@@ -359,6 +362,8 @@ func (w *udpWorker) Start() error {
 	if err != nil {
 		return err
 	}
+
+	w.cone = w.ctx.Value("cone").(bool)
 
 	w.checker = &task.Periodic{
 		Interval: time.Minute,

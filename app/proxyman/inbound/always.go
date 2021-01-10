@@ -136,6 +136,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 					uplinkCounter:   uplinkCounter,
 					downlinkCounter: downlinkCounter,
 					stream:          mss,
+					ctx:             ctx,
 				}
 				h.workers = append(h.workers, worker)
 			}

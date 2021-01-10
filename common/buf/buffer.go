@@ -14,8 +14,6 @@ const (
 
 var pool = bytespool.GetPool(Size)
 
-var Cone = true
-
 // Buffer is a recyclable allocation of a byte array. Buffer.Release() recycles
 // the buffer into an internal buffer pool, in order to recreate a buffer more
 // quickly.

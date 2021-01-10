@@ -24,6 +24,7 @@ type Server struct {
 	config        *ServerConfig
 	user          *protocol.MemoryUser
 	policyManager policy.Manager
+	cone          bool
 }
 
 // NewServer create a new Shadowsocks server.
@@ -42,6 +43,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		user:          mUser,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
 	}
 
 	return s, nil
@@ -144,7 +146,7 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 
 			data.UDP = &destination
 
-			if !buf.Cone || dest == nil {
+			if !s.cone || dest == nil {
 				dest = &destination
 			}
 
