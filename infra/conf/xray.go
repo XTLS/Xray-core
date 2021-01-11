@@ -58,8 +58,9 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled      bool        `json:"enabled"`
-	DestOverride *StringList `json:"destOverride"`
+	Enabled       bool        `json:"enabled"`
+	DestOverride  *StringList `json:"destOverride"`
+	DomainExclude *StringList `json:"domainExclude"`
 }
 
 // Build implements Buildable.
@@ -78,9 +79,17 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		}
 	}
 
+	var d []string
+	if c.DomainExclude != nil {
+		for _, exclude := range *c.DomainExclude {
+			d = append(d, exclude)
+		}
+	}
+
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: p,
+		DomainExclude:       d,
 	}, nil
 }
 

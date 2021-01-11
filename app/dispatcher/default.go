@@ -175,12 +175,19 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	return inboundLink, outboundLink
 }
 
-func shouldOverride(result SniffResult, domainOverride []string) bool {
-	for _, p := range domainOverride {
+func shouldOverride(result SniffResult, request session.SniffingRequest) bool {
+	for _, d := range request.ExcludeForDomain {
+		if result.Domain() == d {
+			return false
+		}
+	}
+
+	for _, p := range request.OverrideDestinationForProtocol {
 		if strings.HasPrefix(result.Protocol(), p) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -213,7 +220,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
-			if err == nil && shouldOverride(result, sniffingRequest.OverrideDestinationForProtocol) {
+			if err == nil && shouldOverride(result, sniffingRequest) {
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
