@@ -50,6 +50,8 @@ func (u *UUID) Equals(another *UUID) bool {
 func New() UUID {
 	var uuid UUID
 	common.Must2(rand.Read(uuid.Bytes()))
+	uuid[6] = (uuid[6] & 0x0f) | (4 << 4)
+	uuid[8] = (uuid[8]&(0xff>>2) | (0x02 << 6))
 	return uuid
 }
 
