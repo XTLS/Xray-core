@@ -29,6 +29,7 @@ import (
 // which is compatible with traditional dns over udp(RFC1035),
 // thus most of the DOH implementation is copied from udpns.go
 type DoHNameServer struct {
+	dispatcher routing.Dispatcher
 	sync.RWMutex
 	ips        map[string]record
 	pub        *pubsub.Service
@@ -45,40 +46,8 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, clientIP net.
 	newError("DNS: created Remote DOH client for ", url.String()).AtInfo().WriteToLog()
 	s := baseDOHNameServer(url, "DOH", clientIP)
 
-	// Dispatched connection will be closed (interrupted) after each request
-	// This makes DOH inefficient without a keep-alived connection
-	// See: core/app/proxyman/outbound/handler.go:113
-	// Using mux (https request wrapped in a stream layer) improves the situation.
-	// Recommend to use NewDoHLocalNameServer (DOHL:) if xray instance is running on
-	//  a normal network eg. the server side of xray
-	tr := &http.Transport{
-		MaxIdleConns:        30,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 30 * time.Second,
-		ForceAttemptHTTP2:   true,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			dest, err := net.ParseDestination(network + ":" + addr)
-			if err != nil {
-				return nil, err
-			}
+	s.dispatcher = dispatcher
 
-			link, err := dispatcher.Dispatch(ctx, dest)
-			if err != nil {
-				return nil, err
-			}
-			return cnc.NewConnection(
-				cnc.ConnectionInputMulti(link.Writer),
-				cnc.ConnectionOutputMulti(link.Reader),
-			), nil
-		},
-	}
-
-	dispatchedClient := &http.Client{
-		Transport: tr,
-		Timeout:   60 * time.Second,
-	}
-
-	s.httpClient = dispatchedClient
 	return s, nil
 }
 
@@ -211,6 +180,11 @@ func (s *DoHNameServer) newReqID() uint16 {
 func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPOption) {
 	newError(s.name, " querying: ", domain).AtInfo().WriteToLog(session.ExportIDToError(ctx))
 
+	if s.name+"." == "DOH//"+domain {
+		newError(s.name, " tries to resolve itself! Use IP or set \"hosts\" instead.").AtError().WriteToLog(session.ExportIDToError(ctx))
+		return
+	}
+
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP))
 
 	var deadline time.Time
@@ -232,12 +206,12 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPO
 			}
 
 			dnsCtx = session.ContextWithContent(dnsCtx, &session.Content{
-				Protocol:      "https",
-				SkipRoutePick: true,
+				Protocol: "https",
+				//SkipRoutePick: true,
 			})
 
 			// forced to use mux for DOH
-			dnsCtx = session.ContextWithMuxPrefered(dnsCtx, true)
+			// dnsCtx = session.ContextWithMuxPrefered(dnsCtx, true)
 
 			var cancel context.CancelFunc
 			dnsCtx, cancel = context.WithDeadline(dnsCtx, deadline)
@@ -245,17 +219,17 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPO
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				newError("failed to pack dns query").Base(err).AtError().WriteToLog()
+				newError("failed to pack dns query for ", domain).Base(err).AtError().WriteToLog()
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
-				newError("failed to retrieve response").Base(err).AtError().WriteToLog()
+				newError("failed to retrieve response for ", domain).Base(err).AtError().WriteToLog()
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
-				newError("failed to handle DOH response").Base(err).AtError().WriteToLog()
+				newError("failed to handle DOH response for ", domain).Base(err).AtError().WriteToLog()
 				return
 			}
 			s.updateIP(r, rec)
@@ -273,7 +247,44 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 	req.Header.Add("Accept", "application/dns-message")
 	req.Header.Add("Content-Type", "application/dns-message")
 
-	resp, err := s.httpClient.Do(req.WithContext(ctx))
+	hc := s.httpClient
+
+	// Dispatched connection will be closed (interrupted) after each request
+	// This makes DOH inefficient without a keep-alived connection
+	// See: core/app/proxyman/outbound/handler.go:113
+	// Using mux (https request wrapped in a stream layer) improves the situation.
+	// Recommend to use NewDoHLocalNameServer (DOHL:) if xray instance is running on
+	//  a normal network eg. the server side of xray
+
+	if s.dispatcher != nil {
+		tr := &http.Transport{
+			MaxIdleConns:        30,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 30 * time.Second,
+			ForceAttemptHTTP2:   true,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dest, err := net.ParseDestination(network + ":" + addr)
+				if err != nil {
+					return nil, err
+				}
+
+				link, err := s.dispatcher.Dispatch(ctx, dest)
+				if err != nil {
+					return nil, err
+				}
+				return cnc.NewConnection(
+					cnc.ConnectionInputMulti(link.Writer),
+					cnc.ConnectionOutputMulti(link.Reader),
+				), nil
+			},
+		}
+		hc = &http.Client{
+			Timeout:   time.Second * 180,
+			Transport: tr,
+		}
+	}
+
+	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
