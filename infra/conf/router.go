@@ -18,9 +18,20 @@ type RouterRulesConfig struct {
 	DomainStrategy string            `json:"domainStrategy"`
 }
 
+// BalancingOptimalStrategyConfig store BalancingOptimalStrategy config
+type BalancingOptimalStrategyConfig struct {
+	Timeout  uint32            `json:"timeout,omitempty"`
+	Interval uint32            `json:"interval,omitempty"`
+	URL      string            `json:"url,omitempty"`
+	Count    uint32            `json:"count,omitempty"`
+	Weights  []*router.Weights `json:"weights,omitempty"`
+}
+
 type BalancingRule struct {
-	Tag       string     `json:"tag"`
-	Selectors StringList `json:"selector"`
+	Tag                   string                          `json:"tag"`
+	Selectors             StringList                      `json:"selector"`
+	Strategy              string                          `json:"strategy"`
+	OptimalStrategyConfig *BalancingOptimalStrategyConfig `json:"optimalSettings"`
 }
 
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
@@ -31,9 +42,20 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		return nil, newError("empty selector list")
 	}
 
+	optimalStrategyConfig := &router.BalancingOptimalStrategyConfig{}
+	if r.OptimalStrategyConfig != nil {
+		optimalStrategyConfig.Timeout = r.OptimalStrategyConfig.Timeout
+		optimalStrategyConfig.Interval = r.OptimalStrategyConfig.Interval
+		optimalStrategyConfig.Url = r.OptimalStrategyConfig.URL
+		optimalStrategyConfig.Count = r.OptimalStrategyConfig.Count
+		optimalStrategyConfig.Weights = r.OptimalStrategyConfig.Weights
+	}
+
 	return &router.BalancingRule{
-		Tag:              r.Tag,
-		OutboundSelector: []string(r.Selectors),
+		Tag:                   r.Tag,
+		OutboundSelector:      []string(r.Selectors),
+		Strategy:              r.Strategy,
+		OptimalStrategyConfig: optimalStrategyConfig,
 	}, nil
 }
 
