@@ -19,7 +19,7 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20201231184435-2d18734c6014
+	golang.org/x/sys v0.0.0-20210110051926-789bb1bd4061
 	google.golang.org/grpc v1.34.0
 	google.golang.org/protobuf v1.25.0
 	h12.io/socks v1.0.2

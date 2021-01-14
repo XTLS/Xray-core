@@ -156,6 +156,7 @@ func (h *DynamicInboundHandler) refresh() error {
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
 				stream:          h.streamSettings,
+				ctx:             h.ctx,
 			}
 			if err := worker.Start(); err != nil {
 				newError("failed to create UDP worker").Base(err).AtWarning().WriteToLog()

@@ -26,6 +26,7 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	cone          bool
 }
 
 // NewServer creates a new Server object.
@@ -34,6 +35,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
 	}
 	return s, nil
 }
@@ -89,10 +91,10 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 	}
 
 	svrSession := &ServerSession{
-		config:        s.config,
-		address:       inbound.Gateway.Address,
-		port:          inbound.Gateway.Port,
-		clientAddress: inbound.Source.Address,
+		config:       s.config,
+		address:      inbound.Gateway.Address,
+		port:         inbound.Gateway.Port,
+		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
 	}
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
@@ -218,7 +220,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		conn.Write(udpMessage.Bytes())
 	})
 
-	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil && inbound.Source.IsValid() {
 		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
 	}
 
@@ -249,7 +252,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 
 			currentPacketCtx := ctx
 			newError("send packet to ", destination, " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+			if inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
 					To:     destination,
@@ -260,7 +263,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 
 			payload.UDP = &destination
 
-			if !buf.Cone || dest == nil {
+			if !s.cone || dest == nil {
 				dest = &destination
 			}
 

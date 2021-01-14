@@ -47,6 +47,7 @@ type Server struct {
 	policyManager policy.Manager
 	validator     *Validator
 	fallbacks     map[string]map[string]*Fallback // or nil
+	cone          bool
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -67,6 +68,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	server := &Server{
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
+		cone:          ctx.Value("cone").(bool),
 	}
 
 	if config.Fallbacks != nil {
@@ -250,7 +252,14 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
-		common.Must(clientWriter.WriteMultiBufferWithMetadata(buf.MultiBuffer{packet.Payload}, packet.Source))
+		udpPayload := packet.Payload
+		if udpPayload.UDP == nil {
+			udpPayload.UDP = &packet.Source
+		}
+
+		if err := clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}); err != nil {
+			newError("failed to write response").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		}
 	})
 
 	inbound := session.InboundFromContext(ctx)
@@ -263,7 +272,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 		case <-ctx.Done():
 			return nil
 		default:
-			p, err := clientReader.ReadMultiBufferWithMetadata()
+			mb, err := clientReader.ReadMultiBuffer()
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					return newError("unexpected EOF").Base(err)
@@ -271,21 +280,31 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 				return nil
 			}
 
-			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-				From:   inbound.Source,
-				To:     p.Target,
-				Status: log.AccessAccepted,
-				Reason: "",
-				Email:  user.Email,
-			})
-			newError("tunnelling request to ", p.Target).WriteToLog(session.ExportIDToError(ctx))
+			mb2, b := buf.SplitFirst(mb)
+			if b == nil {
+				continue
+			}
+			destination := *b.UDP
 
-			if !buf.Cone || dest == nil {
-				dest = &p.Target
+			currentPacketCtx := ctx
+			if inbound.Source.IsValid() {
+				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+					From:   inbound.Source,
+					To:     destination,
+					Status: log.AccessAccepted,
+					Reason: "",
+					Email:  user.Email,
+				})
+			}
+			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(ctx))
+
+			if !s.cone || dest == nil {
+				dest = &destination
 			}
 
-			for _, b := range p.Buffer {
-				udpServer.Dispatch(ctx, *dest, b)
+			udpServer.Dispatch(currentPacketCtx, *dest, b) // first packet
+			for _, payload := range mb2 {
+				udpServer.Dispatch(currentPacketCtx, *dest, payload)
 			}
 		}
 	}

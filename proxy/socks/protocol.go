@@ -39,10 +39,10 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config        *ServerConfig
-	address       net.Address
-	port          net.Port
-	clientAddress net.Address
+	config       *ServerConfig
+	address      net.Address
+	port         net.Port
+	localAddress net.Address
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -192,14 +192,11 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 	//nolint:gocritic // Use if else chain for clarity
 	if request.Command == protocol.RequestCommandUDP {
 		if s.config.Address != nil {
-			// Use configured IP as remote address in the response to UdpAssociate
+			// Use configured IP as remote address in the response to UDP Associate
 			responseAddress = s.config.Address.AsAddress()
-		} else if s.clientAddress == net.LocalHostIP || s.clientAddress == net.LocalHostIPv6 {
-			// For localhost clients use loopback IP
-			responseAddress = s.clientAddress
 		} else {
-			// For non-localhost clients use inbound listening address
-			responseAddress = s.address
+			// Use conn.LocalAddr() IP as remote address in the response by default
+			responseAddress = s.localAddress
 		}
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {

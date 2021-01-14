@@ -7,6 +7,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
@@ -145,12 +146,13 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		var bodyWriter buf.Writer
 		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+
 		connWriter.Writer = bufferWriter
 		connWriter.Target = destination
 		connWriter.Account = account
 
+		var bodyWriter buf.Writer
 		if destination.Network == net.Network_UDP {
 			bodyWriter = &PacketWriter{Writer: connWriter, Target: destination}
 		} else {
@@ -165,6 +167,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
 		if err = bufferWriter.SetBuffered(false); err != nil {
 			return newError("failed to flush payload").Base(err).AtWarning()
+		}
+
+		// Send header if not sent yet
+		if _, err = connWriter.Write([]byte{}); err != nil {
+			return err.(*errors.Error).AtWarning()
 		}
 
 		if err = buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer)); err != nil {

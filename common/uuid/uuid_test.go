@@ -35,9 +35,10 @@ func TestParseString(t *testing.T) {
 		t.Fatal(r)
 	}
 
-	_, err = ParseString("2418d087")
-	if err == nil {
-		t.Fatal("Expect error but nil")
+	u0, _ := ParseString("example")
+	u5, _ := ParseString("feb54431-301b-52bb-a6dd-e1e93e81bb9e")
+	if r := cmp.Diff(u0, u5); r != "" {
+		t.Fatal(r)
 	}
 
 	_, err = ParseString("2418d087-648k-4990-86e8-19dca1d006d3")

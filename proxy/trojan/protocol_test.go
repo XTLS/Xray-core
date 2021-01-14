@@ -71,21 +71,22 @@ func TestUDPRequest(t *testing.T) {
 	common.Must(connReader.ParseHeader())
 
 	packetReader := &PacketReader{Reader: connReader}
-	p, err := packetReader.ReadMultiBufferWithMetadata()
+	mb, err := packetReader.ReadMultiBuffer()
 	common.Must(err)
 
-	if p.Buffer.IsEmpty() {
+	if mb.IsEmpty() {
 		t.Error("no request data")
 	}
 
-	if r := cmp.Diff(p.Target, destination); r != "" {
+	mb2, b := buf.SplitFirst(mb)
+	defer buf.ReleaseMulti(mb2)
+
+	dest := *b.UDP
+	if r := cmp.Diff(dest, destination); r != "" {
 		t.Error("destination: ", r)
 	}
 
-	mb, decoded := buf.SplitFirst(p.Buffer)
-	buf.ReleaseMulti(mb)
-
-	if r := cmp.Diff(decoded.Bytes(), payload); r != "" {
+	if r := cmp.Diff(b.Bytes(), payload); r != "" {
 		t.Error("data: ", r)
 	}
 }
