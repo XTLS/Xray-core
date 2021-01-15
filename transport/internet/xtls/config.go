@@ -7,7 +7,6 @@ import (
 	"time"
 
 	xtls "github.com/xtls/go"
-
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
@@ -41,8 +40,8 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 }
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []xtls.Certificate {
-	certs := make([]xtls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() []*xtls.Certificate {
+	certs := make([]*xtls.Certificate, 0, len(c.Certificate))
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -52,7 +51,8 @@ func (c *Config) BuildCertificates() []xtls.Certificate {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-		certs = append(certs, keyPair)
+		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		certs = append(certs, &keyPair)
 		if entry.OcspStapling != 0 {
 			go func(cert *xtls.Certificate) {
 				t := time.NewTicker(time.Duration(entry.OcspStapling) * time.Second)
@@ -64,7 +64,7 @@ func (c *Config) BuildCertificates() []xtls.Certificate {
 					}
 					<-t.C
 				}
-			}(&certs[len(certs)-1])
+			}(certs[len(certs)-1])
 		}
 	}
 	return certs
@@ -103,6 +103,38 @@ func (c *Config) getCustomCA() []*Certificate {
 		}
 	}
 	return certs
+}
+
+func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+		var matchCert *xtls.Certificate
+		var matched bool
+		for _, keyPair := range certs {
+			sni := keyPair.Leaf.Subject.CommonName
+			dnsNames := keyPair.Leaf.DNSNames
+			matched = isDomainNameMatched(sni, hello.ServerName)
+			for _, name := range dnsNames {
+				if isDomainNameMatched(name, hello.ServerName) {
+					matched = true
+					matchCert = keyPair
+					break
+				}
+			}
+		}
+		if !matched {
+			return nil, newError("sni mismatched: " + hello.ServerName + ", expected: " + hello.ServerName)
+		}
+		return matchCert, nil
+	}
+}
+
+func isDomainNameMatched(sni string, serverName string) bool {
+	if strings.HasPrefix(sni, "*.") {
+		suffix := sni[2:]
+		domainPrefixLen := len(serverName) - len(suffix) - 1
+		return strings.HasSuffix(serverName, suffix) && domainPrefixLen > 0 && !strings.Contains(serverName[:domainPrefixLen], ".")
+	}
+	return sni == serverName
 }
 
 func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
@@ -200,13 +232,12 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	for _, opt := range opts {
 		opt(config)
 	}
-
-	config.Certificates = c.BuildCertificates()
-	config.BuildNameToCertificate()
-
+	certificate := c.BuildCertificates()
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
+	} else {
+		config.GetCertificate = getNewGetCertficateFunc(certificate)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
