@@ -44,11 +44,11 @@ jobs:
         rm -f -r xray
         CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
         upx xray.exe
-        zip -r Xray-winodws-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        zip -r Xray-windows-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         rm -f -r xray.exe
         CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
         upx xray.exe
-        zip -r Xray-winodws-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        zip -r Xray-windows-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         rm -f -r xray.exe
         CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         upx xray
