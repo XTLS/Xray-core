@@ -226,14 +226,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			}
 
 			if len(napfb) > 1 || napfb[""] == nil {
-				if napfb[name] == nil {
-					generic := "*"
-					if index := strings.IndexByte(name, '.'); index != -1 {
-						generic += name[index:]
+				if name != "" && napfb[name] == nil {
+					match := ""
+					for n := range napfb {
+						if n != "" && strings.Contains(name, n) && len(n) > len(match) {
+							match = n
+						}
 					}
-					if napfb[generic] != nil {
-						name = generic
-					}
+					name = match
 				}
 			}
 
