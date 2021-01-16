@@ -42,8 +42,8 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 }
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []tls.Certificate {
-	certs := make([]tls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() []*tls.Certificate {
+	certs := make([]*tls.Certificate, 0, len(c.Certificate))
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -53,7 +53,8 @@ func (c *Config) BuildCertificates() []tls.Certificate {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-		certs = append(certs, keyPair)
+		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		certs = append(certs, &keyPair)
 		if entry.OcspStapling != 0 {
 			go func(cert *tls.Certificate) {
 				t := time.NewTicker(time.Duration(entry.OcspStapling) * time.Second)
@@ -65,7 +66,7 @@ func (c *Config) BuildCertificates() []tls.Certificate {
 					}
 					<-t.C
 				}
-			}(&certs[len(certs)-1])
+			}(certs[len(certs)-1])
 		}
 	}
 	return certs
@@ -94,6 +95,42 @@ func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, erro
 	newCertPEM, newKeyPEM := newCert.ToPEM()
 	cert, err := tls.X509KeyPair(newCertPEM, newKeyPEM)
 	return &cert, err
+}
+
+func isDomainNameMatched(sni string, serverName string) bool {
+	if strings.HasPrefix(sni, "*.") {
+		suffix := sni[2:]
+		domainPrefixLen := len(serverName) - len(suffix) - 1
+		return strings.HasSuffix(serverName, suffix) && domainPrefixLen > 0 && !strings.Contains(serverName[:domainPrefixLen], ".")
+	}
+	return sni == serverName
+}
+
+func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if len(certs) == 1 {
+			return certs[0], nil
+		}
+		var matchCert *tls.Certificate
+		var matched bool
+		serverName := strings.ToLower(hello.ServerName)
+		for _, keyPair := range certs {
+			sni := keyPair.Leaf.Subject.CommonName
+			dnsNames := keyPair.Leaf.DNSNames
+			matched = isDomainNameMatched(sni, serverName)
+			for _, name := range dnsNames {
+				if isDomainNameMatched(name, serverName) {
+					matched = true
+					matchCert = keyPair
+					break
+				}
+			}
+		}
+		if !matched {
+			return nil, newError("sni mismatched: " + serverName + ", expected: " + serverName)
+		}
+		return matchCert, nil
+	}
 }
 
 func (c *Config) getCustomCA() []*Certificate {
@@ -209,13 +246,13 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	for _, opt := range opts {
 		opt(config)
 	}
-
-	config.Certificates = c.BuildCertificates()
-	config.BuildNameToCertificate()
+	certificate := c.BuildCertificates()
 
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
+	} else {
+		config.GetCertificate = getNewGetCertficateFunc(certificate)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

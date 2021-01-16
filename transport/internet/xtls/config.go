@@ -7,7 +7,7 @@ import (
 	"time"
 
 	xtls "github.com/xtls/go"
-	
+
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
@@ -108,14 +108,18 @@ func (c *Config) getCustomCA() []*Certificate {
 
 func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+		if len(certs) == 1 {
+			return certs[0], nil
+		}
 		var matchCert *xtls.Certificate
 		var matched bool
+		serverName := strings.ToLower(hello.ServerName)
 		for _, keyPair := range certs {
 			sni := keyPair.Leaf.Subject.CommonName
 			dnsNames := keyPair.Leaf.DNSNames
-			matched = isDomainNameMatched(sni, hello.ServerName)
+			matched = isDomainNameMatched(sni, serverName)
 			for _, name := range dnsNames {
-				if isDomainNameMatched(name, hello.ServerName) {
+				if isDomainNameMatched(name, serverName) {
 					matched = true
 					matchCert = keyPair
 					break
@@ -123,7 +127,7 @@ func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientH
 			}
 		}
 		if !matched {
-			return nil, newError("sni mismatched: " + hello.ServerName + ", expected: " + hello.ServerName)
+			return nil, newError("sni mismatched: " + serverName + ", expected: " + serverName)
 		}
 		return matchCert, nil
 	}
