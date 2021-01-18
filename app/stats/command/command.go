@@ -113,8 +113,26 @@ func (s *service) Register(server *grpc.Server) {
 	RegisterStatsServiceServer(server, ss)
 
 	// For compatibility purposes
-	vCoreDesc := _StatsService_serviceDesc
-	vCoreDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
+	vCoreDesc := grpc.ServiceDesc{
+		ServiceName: "v2ray.core.app.stats.command.StatsService",
+		HandlerType: (*StatsServiceServer)(nil),
+		Methods: []grpc.MethodDesc{
+			{
+				MethodName: "GetStats",
+				Handler:    _StatsService_GetStats_Handler,
+			},
+			{
+				MethodName: "QueryStats",
+				Handler:    _StatsService_QueryStats_Handler,
+			},
+			{
+				MethodName: "GetSysStats",
+				Handler:    _StatsService_GetSysStats_Handler,
+			},
+		},
+		Streams:  []grpc.StreamDesc{},
+		Metadata: "app/stats/command/command.proto",
+	}
 	server.RegisterService(&vCoreDesc, ss)
 }
 

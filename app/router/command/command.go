@@ -85,8 +85,24 @@ func (s *service) Register(server *grpc.Server) {
 		RegisterRoutingServiceServer(server, rs)
 
 		// For compatibility purposes
-		vCoreDesc := _RoutingService_serviceDesc
-		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
+		vCoreDesc := grpc.ServiceDesc{
+			ServiceName: "v2ray.core.app.router.command.RoutingService",
+			HandlerType: (*RoutingServiceServer)(nil),
+			Methods: []grpc.MethodDesc{
+				{
+					MethodName: "TestRoute",
+					Handler:    _RoutingService_TestRoute_Handler,
+				},
+			},
+			Streams: []grpc.StreamDesc{
+				{
+					StreamName:    "SubscribeRoutingStats",
+					Handler:       _RoutingService_SubscribeRoutingStats_Handler,
+					ServerStreams: true,
+				},
+			},
+			Metadata: "app/router/command/command.proto",
+		}
 		server.RegisterService(&vCoreDesc, rs)
 	}))
 }

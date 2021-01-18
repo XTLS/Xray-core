@@ -44,8 +44,18 @@ func (s *service) Register(server *grpc.Server) {
 	RegisterLoggerServiceServer(server, ls)
 
 	// For compatibility purposes
-	vCoreDesc := _LoggerService_serviceDesc
-	vCoreDesc.ServiceName = "v2ray.core.app.log.command.LoggerService"
+	vCoreDesc := grpc.ServiceDesc{
+		ServiceName: "v2ray.core.app.log.command.LoggerService",
+		HandlerType: (*LoggerServiceServer)(nil),
+		Methods: []grpc.MethodDesc{
+			{
+				MethodName: "RestartLogger",
+				Handler:    _LoggerService_RestartLogger_Handler,
+			},
+		},
+		Streams:  []grpc.StreamDesc{},
+		Metadata: "app/log/command/config.proto",
+	}
 	server.RegisterService(&vCoreDesc, ls)
 }
 

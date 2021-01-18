@@ -140,8 +140,38 @@ func (s *service) Register(server *grpc.Server) {
 	RegisterHandlerServiceServer(server, hs)
 
 	// For compatibility purposes
-	vCoreDesc := _HandlerService_serviceDesc
-	vCoreDesc.ServiceName = "v2ray.core.app.proxyman.command.HandlerService"
+	vCoreDesc := grpc.ServiceDesc{
+		ServiceName: "v2ray.core.app.proxyman.command.HandlerService",
+		HandlerType: (*HandlerServiceServer)(nil),
+		Methods: []grpc.MethodDesc{
+			{
+				MethodName: "AddInbound",
+				Handler:    _HandlerService_AddInbound_Handler,
+			},
+			{
+				MethodName: "RemoveInbound",
+				Handler:    _HandlerService_RemoveInbound_Handler,
+			},
+			{
+				MethodName: "AlterInbound",
+				Handler:    _HandlerService_AlterInbound_Handler,
+			},
+			{
+				MethodName: "AddOutbound",
+				Handler:    _HandlerService_AddOutbound_Handler,
+			},
+			{
+				MethodName: "RemoveOutbound",
+				Handler:    _HandlerService_RemoveOutbound_Handler,
+			},
+			{
+				MethodName: "AlterOutbound",
+				Handler:    _HandlerService_AlterOutbound_Handler,
+			},
+		},
+		Streams:  []grpc.StreamDesc{},
+		Metadata: "app/proxyman/command/command.proto",
+	}
 	server.RegisterService(&vCoreDesc, hs)
 }
 
