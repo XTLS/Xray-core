@@ -11,6 +11,7 @@ import (
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // StatsServiceClient is the client API for StatsService service.
@@ -90,7 +91,7 @@ type UnsafeStatsServiceServer interface {
 }
 
 func RegisterStatsServiceServer(s grpc.ServiceRegistrar, srv StatsServiceServer) {
-	s.RegisterService(&_StatsService_serviceDesc, srv)
+	s.RegisterService(&StatsService_ServiceDesc, srv)
 }
 
 func _StatsService_GetStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -147,7 +148,10 @@ func _StatsService_GetSysStats_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-var _StatsService_serviceDesc = grpc.ServiceDesc{
+// StatsService_ServiceDesc is the grpc.ServiceDesc for StatsService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var StatsService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.stats.command.StatsService",
 	HandlerType: (*StatsServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
