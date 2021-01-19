@@ -268,6 +268,9 @@ func DecodeUDPPacket(users []*protocol.MemoryUser, payload *buf.Buffer) (*protoc
 
 	if len(users) > 1 {
 		bs := payload.Bytes()
+		if len(bs) <= 32 {
+			return nil, nil, newError("len(bs) <= 32")
+		}
 
 		var aeadCipher *AEADCipher
 		var ivLen int32
