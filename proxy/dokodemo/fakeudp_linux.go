@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 func FakeUDP(addr *net.UDPAddr, mark int) (net.PacketConn, error) {
@@ -31,6 +33,11 @@ func FakeUDP(addr *net.UDPAddr, mark int) (net.PacketConn, error) {
 	if err = syscall.SetsockoptInt(fileDescriptor, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
 		syscall.Close(fileDescriptor)
 		return nil, &net.OpError{Op: "fake", Err: fmt.Errorf("set socket option: SO_REUSEADDR: %s", err)}
+	}
+
+	if err = syscall.SetsockoptInt(fileDescriptor, syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
+		syscall.Close(fileDescriptor)
+		return nil, &net.OpError{Op: "fake", Err: fmt.Errorf("set socket option: SO_REUSEPORT: %s", err)}
 	}
 
 	if err = syscall.SetsockoptInt(fileDescriptor, syscall.SOL_IP, syscall.IP_TRANSPARENT, 1); err != nil {
