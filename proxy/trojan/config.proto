@@ -15,12 +15,18 @@ message Account {
 }
 
 message Fallback {
+  enum InjectPoint {
+    BeforeTransport = 0;
+    AfterTransport = 1;
+  }
   string name = 1;
   string alpn = 2;
   string path = 3;
   string type = 4;
   string dest = 5;
   uint64 xver = 6;
+  string itag = 7;
+  InjectPoint ipos = 8;
 }
 
 message ClientConfig {

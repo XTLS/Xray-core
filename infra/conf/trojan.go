@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/golang/protobuf/proto"
@@ -91,6 +92,8 @@ type TrojanInboundFallback struct {
 	Type string          `json:"type"`
 	Dest json.RawMessage `json:"dest"`
 	Xver uint64          `json:"xver"`
+	ITag string          `json:"itag"`
+	IPos string          `json:"pos"`
 }
 
 // TrojanUserConfig is user configuration
@@ -144,6 +147,17 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		} else {
 			_ = json.Unmarshal(fb.Dest, &s)
 		}
+
+		var ipos trojan.Fallback_InjectPoint
+		switch strings.ToLower(fb.IPos) {
+		case "aftertls", "beforetransport":
+			ipos = trojan.Fallback_BeforeTransport
+		case "aftertransport", "passthrough", "":
+			ipos = trojan.Fallback_AfterTransport
+		default:
+			return nil, newError("unexpected inject position: fb.IPos")
+		}
+
 		config.Fallbacks = append(config.Fallbacks, &trojan.Fallback{
 			Name: fb.Name,
 			Alpn: fb.Alpn,
@@ -151,6 +165,8 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 			Type: fb.Type,
 			Dest: s,
 			Xver: fb.Xver,
+			Ipos: ipos,
+			Itag: fb.ITag,
 		})
 	}
 	for _, fb := range config.Fallbacks {
@@ -184,8 +200,8 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 				}
 			}
 		}
-		if fb.Type == "" {
-			return nil, newError(`Trojan fallbacks: please fill in a valid value for every "dest"`)
+		if fb.Type == "" && fb.Itag == "" {
+			return nil, newError(`Trojan fallbacks: please fill in a valid value for every "dest" or "itag"`)
 		}
 		if fb.Xver > 2 {
 			return nil, newError(`Trojan fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)

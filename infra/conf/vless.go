@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/golang/protobuf/proto"
@@ -24,6 +25,8 @@ type VLessInboundFallback struct {
 	Type string          `json:"type"`
 	Dest json.RawMessage `json:"dest"`
 	Xver uint64          `json:"xver"`
+	ITag string          `json:"itag"`
+	IPos string          `json:"pos"`
 }
 
 type VLessInboundConfig struct {
@@ -85,6 +88,17 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		} else {
 			_ = json.Unmarshal(fb.Dest, &s)
 		}
+
+		var ipos inbound.Fallback_InjectPoint
+		switch strings.ToLower(fb.IPos) {
+		case "aftertls", "beforetransport":
+			ipos = inbound.Fallback_BeforeTransport
+		case "aftertransport", "passthrough", "":
+			ipos = inbound.Fallback_AfterTransport
+		default:
+			return nil, newError("unexpected inject position: fb.IPos")
+		}
+
 		config.Fallbacks = append(config.Fallbacks, &inbound.Fallback{
 			Name: fb.Name,
 			Alpn: fb.Alpn,
@@ -92,6 +106,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			Type: fb.Type,
 			Dest: s,
 			Xver: fb.Xver,
+			Itag: fb.ITag,
+			Ipos: ipos,
 		})
 	}
 	for _, fb := range config.Fallbacks {
@@ -125,8 +141,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 				}
 			}
 		}
-		if fb.Type == "" {
-			return nil, newError(`VLESS fallbacks: please fill in a valid value for every "dest"`)
+		if fb.Type == "" && fb.Itag == "" {
+			return nil, newError(`VLESS fallbacks: please fill in a valid value for every "dest" or "itag"`)
 		}
 		if fb.Xver > 2 {
 			return nil, newError(`VLESS fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)

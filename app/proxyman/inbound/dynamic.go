@@ -200,3 +200,43 @@ func (h *DynamicInboundHandler) GetRandomInboundProxy() (interface{}, net.Port, 
 func (h *DynamicInboundHandler) Tag() string {
 	return h.tag
 }
+
+// ReceiveConfig implements inbound.Handler.ReceiveConfig.
+func (h *DynamicInboundHandler) ReceiveConfig() interface{} {
+	return nil
+}
+
+// Process implements inbound.Handler.Process.
+func (h *DynamicInboundHandler) Process(c net.Conn) {
+	for _, worker := range h.worker {
+		if tWorker, match := worker.(*tcpWorker); match {
+			tWorker.callback(c)
+			return
+		}
+		if dWorker, match := worker.(*dsWorker); match {
+			dWorker.callback(c)
+			return
+		}
+	}
+	newError("no worker found").AtWarning().WriteToLog()
+}
+func (h *DynamicInboundHandler) BeforeStart(ctx context.Context) error {
+	var err error
+	for _, worker := range h.worker {
+		err = worker.BeforeStart(h.ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (h *DynamicInboundHandler) AfterStart(ctx context.Context) error {
+	var err error
+	for _, worker := range h.worker {
+		err = worker.AfterStart(h.ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

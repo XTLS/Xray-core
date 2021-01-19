@@ -88,6 +88,16 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 
 // Start implements common.Runnable.
 func (m *Manager) Start() error {
+	for _, handler := range m.taggedHandlers {
+		if err := handler.BeforeStart(nil); err != nil {
+			return err
+		}
+	}
+	for _, handler := range m.untaggedHandler {
+		if err := handler.BeforeStart(nil); err != nil {
+			return err
+		}
+	}
 	m.access.Lock()
 	defer m.access.Unlock()
 
@@ -101,6 +111,18 @@ func (m *Manager) Start() error {
 
 	for _, handler := range m.untaggedHandler {
 		if err := handler.Start(); err != nil {
+			return err
+		}
+	}
+
+	for _, handler := range m.taggedHandlers {
+		if err := handler.AfterStart(nil); err != nil {
+			return err
+		}
+	}
+
+	for _, handler := range m.untaggedHandler {
+		if err := handler.AfterStart(nil); err != nil {
 			return err
 		}
 	}

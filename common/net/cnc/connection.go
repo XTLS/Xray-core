@@ -1,6 +1,7 @@
 package cnc
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -57,9 +58,32 @@ func ConnectionOutputMultiUDP(reader buf.Reader) ConnectionOption {
 	}
 }
 
+type cancelCloser struct {
+	context.CancelFunc
+}
+
+func (c cancelCloser) Close() error {
+	if c.CancelFunc != nil {
+		c.CancelFunc()
+	}
+	return nil
+}
+
 func ConnectionOnClose(n io.Closer) ConnectionOption {
 	return func(c *connection) {
 		c.onClose = n
+	}
+}
+
+func ConnectionCancelOnClose(cancel context.CancelFunc) ConnectionOption {
+	return func(c *connection) {
+		c.onClose = cancelCloser{cancel}
+	}
+}
+
+func ConnectionRawConn(conn net.Conn) ConnectionOption {
+	return func(c *connection) {
+		c.rawConn = conn
 	}
 }
 
@@ -90,6 +114,7 @@ type connection struct {
 	onClose io.Closer
 	local   net.Addr
 	remote  net.Addr
+	rawConn net.Conn
 }
 
 func (c *connection) Read(b []byte) (int, error) {
@@ -146,15 +171,37 @@ func (c *connection) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.SetDeadline().
 func (c *connection) SetDeadline(t time.Time) error {
+	if c.rawConn != nil {
+		return c.rawConn.SetDeadline(t)
+	}
 	return nil
 }
 
 // SetReadDeadline implements net.Conn.SetReadDeadline().
 func (c *connection) SetReadDeadline(t time.Time) error {
+	if c.rawConn != nil {
+		return c.rawConn.SetReadDeadline(t)
+	}
 	return nil
 }
 
 // SetWriteDeadline implements net.Conn.SetWriteDeadline().
 func (c *connection) SetWriteDeadline(t time.Time) error {
+	if c.rawConn != nil {
+		return c.rawConn.SetWriteDeadline(t)
+	}
+	return nil
+}
+
+func (c *connection) RawNetConn() net.Conn {
+	if c.rawConn != nil {
+		if rConn, ok := c.rawConn.(interface {
+			RawNetConn() net.Conn
+		}); ok {
+			return rConn.RawNetConn()
+		} else {
+			return c.rawConn
+		}
+	}
 	return nil
 }

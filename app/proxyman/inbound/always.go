@@ -46,6 +46,8 @@ type AlwaysOnInboundHandler struct {
 	workers []worker
 	mux     *mux.Server
 	tag     string
+	mss     *internet.MemoryStreamConfig
+	ctx     context.Context
 }
 
 func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *proxyman.ReceiverConfig, proxyConfig interface{}) (*AlwaysOnInboundHandler, error) {
@@ -62,6 +64,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		proxy: p,
 		mux:   mux.NewServer(ctx),
 		tag:   tag,
+		ctx:   ctx,
 	}
 
 	uplinkCounter, downlinkCounter := getStatCounter(core.MustFromContext(ctx), tag)
@@ -74,6 +77,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	}
 
 	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
+	h.mss = mss
 	if err != nil {
 		return nil, newError("failed to parse stream config").Base(err).AtWarning()
 	}
@@ -169,6 +173,26 @@ func (h *AlwaysOnInboundHandler) Close() error {
 	return nil
 }
 
+// ReceiveConfig implements inbound.Handler.ReceiveConfig.
+func (h *AlwaysOnInboundHandler) ReceiveConfig() interface{} {
+	return h.mss
+}
+
+// Process implements inbound.Handler.Process.
+func (h *AlwaysOnInboundHandler) Process(c net.Conn) {
+	for _, worker := range h.workers {
+		if tWorker, match := worker.(*tcpWorker); match {
+			tWorker.callback(c)
+			return
+		}
+		if dWorker, match := worker.(*dsWorker); match {
+			dWorker.callback(c)
+			return
+		}
+	}
+	newError("no worker found").AtWarning().WriteToLog()
+}
+
 func (h *AlwaysOnInboundHandler) GetRandomInboundProxy() (interface{}, net.Port, int) {
 	if len(h.workers) == 0 {
 		return nil, 0, 0
@@ -183,4 +207,25 @@ func (h *AlwaysOnInboundHandler) Tag() string {
 
 func (h *AlwaysOnInboundHandler) GetInbound() proxy.Inbound {
 	return h.proxy
+}
+
+func (h *AlwaysOnInboundHandler) BeforeStart(ctx context.Context) error {
+	var err error
+	for _, worker := range h.workers {
+		err = worker.BeforeStart(h.ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (h *AlwaysOnInboundHandler) AfterStart(ctx context.Context) error {
+	var err error
+	for _, worker := range h.workers {
+		err = worker.AfterStart(h.ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

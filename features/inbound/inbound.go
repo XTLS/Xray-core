@@ -13,9 +13,14 @@ import (
 // xray:api:stable
 type Handler interface {
 	common.Runnable
+	common.AfterStartEventHandler
+	common.BeforeStartEventHandler
 	// The tag of this handler.
 	Tag() string
-
+	// Config of this handler. may be nil
+	ReceiveConfig() interface{}
+	// Process connection. Non-block
+	Process(net.Conn)
 	// Deprecated: Do not use in new code.
 	GetRandomInboundProxy() (interface{}, net.Port, int)
 }

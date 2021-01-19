@@ -3,9 +3,13 @@ package trojan
 import (
 	"context"
 	"crypto/tls"
+	"github.com/xtls/xray-core/common/net/cnc"
+	feature_inbound "github.com/xtls/xray-core/features/inbound"
+	feature_listener "github.com/xtls/xray-core/features/listener"
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,6 +53,12 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
+
+	inboundHandlerManager feature_inbound.Manager
+	listenerManager       feature_listener.ListenerManager
+	fallbackInbounds      map[string]feature_inbound.Handler
+	fallbackListener      map[string]feature_listener.MultiListener
+	fbInboundLock         *sync.RWMutex
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -67,9 +77,14 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 
 	v := core.MustFromContext(ctx)
 	server := &Server{
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:     validator,
-		cone:          ctx.Value("cone").(bool),
+		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
+		validator:             validator,
+		cone:                  ctx.Value("cone").(bool),
+		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
+		listenerManager:       v.GetFeature(feature_listener.ManagerType()).(feature_listener.ListenerManager),
+		fbInboundLock:         new(sync.RWMutex),
+		fallbackInbounds:      make(map[string]feature_inbound.Handler),
+		fallbackListener:      make(map[string]feature_listener.MultiListener),
 	}
 
 	if config.Fallbacks != nil {
@@ -140,6 +155,66 @@ func (s *Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
+// BeforeStart implements common.BeforeStartEventHandler.BeforeStart().
+func (h *Server) BeforeStart(ctx context.Context) error {
+	newError("Handling BeforeStart").AtInfo().WriteToLog()
+	var err error
+	for _, pfb := range h.fallbacks {
+		for _, nfb := range pfb {
+			for _, fb := range nfb {
+				if fb.Itag == "" {
+					continue
+				}
+				var handler feature_inbound.Handler
+				handler, err = h.inboundHandlerManager.GetHandler(ctx, fb.Itag)
+				if err == nil {
+					h.fallbackInbounds[fb.Itag] = handler
+				}
+			}
+
+		}
+	}
+	if err != nil {
+		return newError("failed to find fallback inbound").AtError().Base(err)
+	}
+	return nil
+}
+
+// Network implements common.AfterStartEventHandler.AfterStart().
+func (h *Server) AfterStart(ctx context.Context) error {
+	newError("Handling AfterStart").AtWarning().WriteToLog()
+
+	h.fbInboundLock.Lock()
+	for _, pfb := range h.fallbacks {
+		for _, nfb := range pfb {
+			for _, fb := range nfb {
+				if fb.Itag != "" && fb.Ipos == Fallback_BeforeTransport {
+					if iHandler, found := h.fallbackInbounds[fb.Itag]; found {
+						transportProtocol := iHandler.ReceiveConfig().(*internet.MemoryStreamConfig).ProtocolName
+						if transportProtocol != "websocket" {
+							return newError("unsupported stream config: ", transportProtocol).AtError()
+						}
+					} else {
+						return newError("unable to find fallback inbound: ", fb.Itag).AtError()
+					}
+
+					handler := h.listenerManager.GetListener(common.Identifer(fb.Itag))
+					if handler != nil {
+						if _, found := h.fallbackListener[fb.Itag]; found {
+							continue
+						}
+						newError("found listener for ", fb.Itag).AtInfo().WriteToLog()
+						h.fallbackListener[fb.Itag] = handler
+					}
+				}
+			}
+
+		}
+	}
+	h.fbInboundLock.Unlock()
+	return nil
+}
+
 // Process implements proxy.Inbound.Process().
 func (s *Server) Process(ctx context.Context, network net.Network, conn internet.Connection, dispatcher routing.Dispatcher) error {
 	sid := session.ExportIDToError(ctx)
@@ -148,6 +223,15 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
 		iConn = statConn.Connection
+	}
+
+	xConn, ok := iConn.(interface {
+		RawNetConn() net.Conn
+	})
+	if ok {
+		if rc := xConn.RawNetConn(); rc != nil {
+			iConn = rc
+		}
 	}
 
 	sessionPolicy := s.policyManager.ForLevel(0)
@@ -473,6 +557,43 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	fb := pfb[path]
 	if fb == nil {
 		return newError(`failed to find the default "path" config`).AtWarning()
+	}
+
+	if fb.Itag != "" {
+		switch fb.Ipos {
+		case Fallback_AfterTransport:
+			inbound, found := s.fallbackInbounds[fb.Itag]
+			if !found {
+				return newError("failed to find inbound ", fb.Itag).AtError()
+			}
+			inbound.Process(cnc.NewConnection(
+				cnc.ConnectionRemoteAddr(connection.LocalAddr()),
+				cnc.ConnectionLocalAddr(connection.RemoteAddr()),
+				cnc.ConnectionOutputMulti(reader),
+				cnc.ConnectionInput(connection),
+				cnc.ConnectionRawConn(iConn),
+			))
+			return nil
+		case Fallback_BeforeTransport:
+			s.fbInboundLock.Lock()
+			listener, found := s.fallbackListener[fb.Itag]
+			s.fbInboundLock.Unlock()
+			if !found {
+				return newError("failed to find inbound ", fb.Itag).AtError()
+			}
+			ctx, cancel := context.WithCancel(ctx)
+			listener.Recv(cnc.NewConnection(
+				cnc.ConnectionLocalAddr(connection.LocalAddr()),
+				cnc.ConnectionRemoteAddr(connection.RemoteAddr()),
+				cnc.ConnectionOutputMulti(reader),
+				cnc.ConnectionInput(connection),
+				cnc.ConnectionCancelOnClose(cancel),
+				cnc.ConnectionRawConn(iConn),
+			))
+			<-ctx.Done()
+			return nil
+		}
+		return nil
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

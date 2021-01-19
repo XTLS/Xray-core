@@ -302,6 +302,13 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 						if ok {
 							iConn = statConn.Connection
 						}
+
+						if rc, ok := iConn.(interface {
+							RawNetConn() net.Conn
+						}); ok {
+							iConn = rc.RawNetConn()
+						}
+
 						if xc, ok := iConn.(*xtls.Conn); ok {
 							iConn = xc.Connection
 						}

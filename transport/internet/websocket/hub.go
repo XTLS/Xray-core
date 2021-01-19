@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"sync"
 	"time"
@@ -13,6 +12,8 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
+	feature_listener "github.com/xtls/xray-core/features/listener"
 	"github.com/xtls/xray-core/transport/internet"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -105,10 +106,16 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 		newError("accepting PROXY protocol").AtWarning().WriteToLog(session.ExportIDToError(ctx))
 	}
 
+	v := core.FromContext(ctx)
+	lm := v.GetFeature(feature_listener.ManagerType()).(feature_listener.ListenerManager)
+
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
-			listener = tls.NewListener(listener, tlsConfig)
+			// listener = tls.NewListener(listener, tlsConfig)
+			listener = lm.NewTLSListener(ctx, listener, tlsConfig)
 		}
+	} else {
+		listener = lm.NewListener(ctx, listener)
 	}
 
 	l.listener = listener

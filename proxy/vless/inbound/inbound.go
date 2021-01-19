@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	sync "sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
@@ -24,6 +26,7 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
+	feature_listener "github.com/xtls/xray-core/features/listener"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
@@ -64,7 +67,11 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             *vless.Validator
 	dns                   dns.Client
+	listenerManager       feature_listener.ListenerManager
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
+	fallbackInbounds      map[string]feature_inbound.Handler
+	fallbackListener      map[string]feature_listener.MultiListener
+	fbInboundLock         *sync.RWMutex
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -76,6 +83,10 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:             new(vless.Validator),
 		dns:                   dc,
+		listenerManager:       v.GetFeature(feature_listener.ManagerType()).(feature_listener.ListenerManager),
+		fbInboundLock:         new(sync.RWMutex),
+		fallbackInbounds:      make(map[string]feature_inbound.Handler),
+		fallbackListener:      make(map[string]feature_listener.MultiListener),
 	}
 
 	for _, user := range config.Clients {
@@ -171,6 +182,66 @@ func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
+// BeforeStart implements common.BeforeStartEventHandler.BeforeStart().
+func (h *Handler) BeforeStart(ctx context.Context) error {
+	newError("Handling BeforeStart").AtInfo().WriteToLog()
+	var err error
+	for _, pfb := range h.fallbacks {
+		for _, nfb := range pfb {
+			for _, fb := range nfb {
+				if fb.Itag == "" {
+					continue
+				}
+				var handler feature_inbound.Handler
+				handler, err = h.inboundHandlerManager.GetHandler(ctx, fb.Itag)
+				if err == nil {
+					h.fallbackInbounds[fb.Itag] = handler
+				}
+			}
+
+		}
+	}
+	if err != nil {
+		return newError("failed to find fallback inbound").AtError().Base(err)
+	}
+	return nil
+}
+
+// Network implements common.AfterStartEventHandler.AfterStart().
+func (h *Handler) AfterStart(ctx context.Context) error {
+	newError("Handling AfterStart").AtWarning().WriteToLog()
+
+	h.fbInboundLock.Lock()
+	for _, pfb := range h.fallbacks {
+		for _, nfb := range pfb {
+			for _, fb := range nfb {
+				if fb.Itag != "" && fb.Ipos == Fallback_BeforeTransport {
+					if iHandler, found := h.fallbackInbounds[fb.Itag]; found {
+						transportProtocol := iHandler.ReceiveConfig().(*internet.MemoryStreamConfig).ProtocolName
+						if transportProtocol != "websocket" {
+							return newError("unsupported stream config: ", transportProtocol).AtError()
+						}
+					} else {
+						return newError("unable to find fallback inbound: ", fb.Itag).AtError()
+					}
+
+					handler := h.listenerManager.GetListener(common.Identifer(fb.Itag))
+					if handler != nil {
+						if _, found := h.fallbackListener[fb.Itag]; found {
+							continue
+						}
+						newError("found listener for ", fb.Itag).AtInfo().WriteToLog()
+						h.fallbackListener[fb.Itag] = handler
+					}
+				}
+			}
+
+		}
+	}
+	h.fbInboundLock.Unlock()
+	return nil
+}
+
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection internet.Connection, dispatcher routing.Dispatcher) error {
 	sid := session.ExportIDToError(ctx)
@@ -179,6 +250,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
 		iConn = statConn.Connection
+	}
+
+	xConn, ok := iConn.(interface {
+		RawNetConn() net.Conn
+	})
+	if ok {
+		if rc := xConn.RawNetConn(); rc != nil {
+			iConn = rc
+		}
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -308,6 +388,43 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			fb := pfb[path]
 			if fb == nil {
 				return newError(`failed to find the default "path" config`).AtWarning()
+			}
+
+			if fb.Itag != "" {
+				switch fb.Ipos {
+				case Fallback_AfterTransport:
+					inbound, found := h.fallbackInbounds[fb.Itag]
+					if !found {
+						return newError("failed to find inbound ", fb.Itag).AtError()
+					}
+					inbound.Process(cnc.NewConnection(
+						cnc.ConnectionRemoteAddr(connection.LocalAddr()),
+						cnc.ConnectionLocalAddr(connection.RemoteAddr()),
+						cnc.ConnectionOutputMulti(reader),
+						cnc.ConnectionInput(connection),
+						cnc.ConnectionRawConn(iConn),
+					))
+					return nil
+				case Fallback_BeforeTransport:
+					h.fbInboundLock.Lock()
+					listener, found := h.fallbackListener[fb.Itag]
+					h.fbInboundLock.Unlock()
+					if !found {
+						return newError("failed to find inbound ", fb.Itag).AtError()
+					}
+					ctx, cancel := context.WithCancel(ctx)
+					listener.Recv(cnc.NewConnection(
+						cnc.ConnectionLocalAddr(connection.LocalAddr()),
+						cnc.ConnectionRemoteAddr(connection.RemoteAddr()),
+						cnc.ConnectionOutputMulti(reader),
+						cnc.ConnectionInput(connection),
+						cnc.ConnectionCancelOnClose(cancel),
+						cnc.ConnectionRawConn(iConn),
+					))
+					<-ctx.Done()
+					return nil
+				}
+				return nil
 			}
 
 			ctx, cancel := context.WithCancel(ctx)
@@ -447,6 +564,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 					xtlsConn.MARK = "XTLS"
 					if requestAddons.Flow == vless.XRD {
 						xtlsConn.DirectMode = true
+
+						if xConn != nil {
+							break
+						}
 						if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}

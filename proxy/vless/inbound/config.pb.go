@@ -26,17 +26,65 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
+type Fallback_InjectPoint int32
+
+const (
+	Fallback_BeforeTransport Fallback_InjectPoint = 0
+	Fallback_AfterTransport  Fallback_InjectPoint = 1
+)
+
+// Enum value maps for Fallback_InjectPoint.
+var (
+	Fallback_InjectPoint_name = map[int32]string{
+		0: "BeforeTransport",
+		1: "AfterTransport",
+	}
+	Fallback_InjectPoint_value = map[string]int32{
+		"BeforeTransport": 0,
+		"AfterTransport":  1,
+	}
+)
+
+func (x Fallback_InjectPoint) Enum() *Fallback_InjectPoint {
+	p := new(Fallback_InjectPoint)
+	*p = x
+	return p
+}
+
+func (x Fallback_InjectPoint) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Fallback_InjectPoint) Descriptor() protoreflect.EnumDescriptor {
+	return file_proxy_vless_inbound_config_proto_enumTypes[0].Descriptor()
+}
+
+func (Fallback_InjectPoint) Type() protoreflect.EnumType {
+	return &file_proxy_vless_inbound_config_proto_enumTypes[0]
+}
+
+func (x Fallback_InjectPoint) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Fallback_InjectPoint.Descriptor instead.
+func (Fallback_InjectPoint) EnumDescriptor() ([]byte, []int) {
+	return file_proxy_vless_inbound_config_proto_rawDescGZIP(), []int{0, 0}
+}
+
 type Fallback struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Alpn string `protobuf:"bytes,2,opt,name=alpn,proto3" json:"alpn,omitempty"`
-	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	Type string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Dest string `protobuf:"bytes,5,opt,name=dest,proto3" json:"dest,omitempty"`
-	Xver uint64 `protobuf:"varint,6,opt,name=xver,proto3" json:"xver,omitempty"`
+	Name string               `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Alpn string               `protobuf:"bytes,2,opt,name=alpn,proto3" json:"alpn,omitempty"`
+	Path string               `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Type string               `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Dest string               `protobuf:"bytes,5,opt,name=dest,proto3" json:"dest,omitempty"`
+	Xver uint64               `protobuf:"varint,6,opt,name=xver,proto3" json:"xver,omitempty"`
+	Itag string               `protobuf:"bytes,7,opt,name=itag,proto3" json:"itag,omitempty"`
+	Ipos Fallback_InjectPoint `protobuf:"varint,8,opt,name=ipos,proto3,enum=xray.proxy.vless.inbound.Fallback_InjectPoint" json:"ipos,omitempty"`
 }
 
 func (x *Fallback) Reset() {
@@ -113,6 +161,20 @@ func (x *Fallback) GetXver() uint64 {
 	return 0
 }
 
+func (x *Fallback) GetItag() string {
+	if x != nil {
+		return x.Itag
+	}
+	return ""
+}
+
+func (x *Fallback) GetIpos() Fallback_InjectPoint {
+	if x != nil {
+		return x.Ipos
+	}
+	return Fallback_BeforeTransport
+}
+
 type Config struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -186,7 +248,7 @@ var file_proxy_vless_inbound_config_proto_rawDesc = []byte{
 	0x74, 0x6f, 0x12, 0x18, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x2e, 0x76,
 	0x6c, 0x65, 0x73, 0x73, 0x2e, 0x69, 0x6e, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x1a, 0x1a, 0x63, 0x6f,
 	0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x2f, 0x75, 0x73,
-	0x65, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x82, 0x01, 0x0a, 0x08, 0x46, 0x61, 0x6c,
+	0x65, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x92, 0x02, 0x0a, 0x08, 0x46, 0x61, 0x6c,
 	0x6c, 0x62, 0x61, 0x63, 0x6b, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20,
 	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x61, 0x6c, 0x70,
 	0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x61, 0x6c, 0x70, 0x6e, 0x12, 0x12, 0x0a,
@@ -194,7 +256,16 @@ var file_proxy_vless_inbound_config_proto_rawDesc = []byte{
 	0x68, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52,
 	0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x65, 0x73, 0x74, 0x18, 0x05, 0x20,
 	0x01, 0x28, 0x09, 0x52, 0x04, 0x64, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x78, 0x76, 0x65,
-	0x72, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x04, 0x78, 0x76, 0x65, 0x72, 0x22, 0xa0, 0x01,
+	0x72, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x04, 0x78, 0x76, 0x65, 0x72, 0x12, 0x12, 0x0a,
+	0x04, 0x69, 0x74, 0x61, 0x67, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x69, 0x74, 0x61,
+	0x67, 0x12, 0x42, 0x0a, 0x04, 0x69, 0x70, 0x6f, 0x73, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0e, 0x32,
+	0x2e, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x2e, 0x76, 0x6c, 0x65,
+	0x73, 0x73, 0x2e, 0x69, 0x6e, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x2e, 0x46, 0x61, 0x6c, 0x6c, 0x62,
+	0x61, 0x63, 0x6b, 0x2e, 0x49, 0x6e, 0x6a, 0x65, 0x63, 0x74, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x52,
+	0x04, 0x69, 0x70, 0x6f, 0x73, 0x22, 0x36, 0x0a, 0x0b, 0x49, 0x6e, 0x6a, 0x65, 0x63, 0x74, 0x50,
+	0x6f, 0x69, 0x6e, 0x74, 0x12, 0x13, 0x0a, 0x0f, 0x42, 0x65, 0x66, 0x6f, 0x72, 0x65, 0x54, 0x72,
+	0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x10, 0x00, 0x12, 0x12, 0x0a, 0x0e, 0x41, 0x66, 0x74,
+	0x65, 0x72, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x10, 0x01, 0x22, 0xa0, 0x01,
 	0x0a, 0x06, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x34, 0x0a, 0x07, 0x63, 0x6c, 0x69, 0x65,
 	0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x78, 0x72, 0x61, 0x79,
 	0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c,
@@ -227,20 +298,23 @@ func file_proxy_vless_inbound_config_proto_rawDescGZIP() []byte {
 	return file_proxy_vless_inbound_config_proto_rawDescData
 }
 
+var file_proxy_vless_inbound_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proxy_vless_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proxy_vless_inbound_config_proto_goTypes = []interface{}{
-	(*Fallback)(nil),      // 0: xray.proxy.vless.inbound.Fallback
-	(*Config)(nil),        // 1: xray.proxy.vless.inbound.Config
-	(*protocol.User)(nil), // 2: xray.common.protocol.User
+	(Fallback_InjectPoint)(0), // 0: xray.proxy.vless.inbound.Fallback.InjectPoint
+	(*Fallback)(nil),          // 1: xray.proxy.vless.inbound.Fallback
+	(*Config)(nil),            // 2: xray.proxy.vless.inbound.Config
+	(*protocol.User)(nil),     // 3: xray.common.protocol.User
 }
 var file_proxy_vless_inbound_config_proto_depIdxs = []int32{
-	2, // 0: xray.proxy.vless.inbound.Config.clients:type_name -> xray.common.protocol.User
-	0, // 1: xray.proxy.vless.inbound.Config.fallbacks:type_name -> xray.proxy.vless.inbound.Fallback
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // 0: xray.proxy.vless.inbound.Fallback.ipos:type_name -> xray.proxy.vless.inbound.Fallback.InjectPoint
+	3, // 1: xray.proxy.vless.inbound.Config.clients:type_name -> xray.common.protocol.User
+	1, // 2: xray.proxy.vless.inbound.Config.fallbacks:type_name -> xray.proxy.vless.inbound.Fallback
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vless_inbound_config_proto_init() }
@@ -279,13 +353,14 @@ func file_proxy_vless_inbound_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_proxy_vless_inbound_config_proto_rawDesc,
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proxy_vless_inbound_config_proto_goTypes,
 		DependencyIndexes: file_proxy_vless_inbound_config_proto_depIdxs,
+		EnumInfos:         file_proxy_vless_inbound_config_proto_enumTypes,
 		MessageInfos:      file_proxy_vless_inbound_config_proto_msgTypes,
 	}.Build()
 	File_proxy_vless_inbound_config_proto = out.File

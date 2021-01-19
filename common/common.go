@@ -20,6 +20,9 @@ var (
 	ErrNoClue = errors.New("not enough information for making a decision")
 )
 
+// Identifer used to indentify inbound listener
+type Identifer string
+
 // Must panics if err is not nil.
 func Must(err error) {
 	if err != nil {

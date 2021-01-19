@@ -1,6 +1,10 @@
 package common
 
-import "github.com/xtls/xray-core/common/errors"
+import (
+	"context"
+
+	"github.com/xtls/xray-core/common/errors"
+)
 
 // Closable is the interface for objects that can release its resources.
 //
@@ -51,6 +55,14 @@ type HasType interface {
 	// Type returns the type of the object.
 	// Usually it returns (*Type)(nil) of the object.
 	Type() interface{}
+}
+
+type BeforeStartEventHandler interface {
+	BeforeStart(context.Context) error
+}
+
+type AfterStartEventHandler interface {
+	AfterStart(context.Context) error
 }
 
 // ChainedClosable is a Closable that consists of multiple Closable objects.

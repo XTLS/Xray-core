@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/task"
+	feature_listener "github.com/xtls/xray-core/features/listener"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
@@ -28,6 +29,8 @@ type worker interface {
 	Close() error
 	Port() net.Port
 	Proxy() proxy.Inbound
+	common.AfterStartEventHandler
+	common.BeforeStartEventHandler
 }
 
 type tcpWorker struct {
@@ -113,8 +116,28 @@ func (w *tcpWorker) Proxy() proxy.Inbound {
 	return w.proxy
 }
 
+func (w *tcpWorker) BeforeStart(ctx context.Context) error {
+	if handler, is := w.proxy.(common.BeforeStartEventHandler); is {
+		err := handler.BeforeStart(ctx)
+		if err != nil {
+			return newError("failed to handle before start: ", w.tag).AtWarning().Base(err)
+		}
+	}
+	return nil
+}
+
+func (w *tcpWorker) AfterStart(ctx context.Context) error {
+	if handler, is := w.proxy.(common.AfterStartEventHandler); is {
+		err := handler.AfterStart(ctx)
+		if err != nil {
+			return newError("failed to handle before start: ", w.tag).AtWarning().Base(err)
+		}
+	}
+	return nil
+}
+
 func (w *tcpWorker) Start() error {
-	ctx := context.Background()
+	ctx := feature_listener.ContextWithListenerIdentifer(w.ctx, common.Identifer(w.tag))
 	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn internet.Connection) {
 		go w.callback(conn)
 	})
@@ -355,6 +378,14 @@ func (w *udpWorker) clean() error {
 	return nil
 }
 
+func (w *udpWorker) BeforeStart(ctx context.Context) error {
+	return nil
+}
+
+func (w *udpWorker) AfterStart(ctx context.Context) error {
+	return nil
+}
+
 func (w *udpWorker) Start() error {
 	w.activeConn = make(map[connID]*udpConn, 16)
 	ctx := context.Background()
@@ -468,8 +499,9 @@ func (w *dsWorker) Proxy() proxy.Inbound {
 func (w *dsWorker) Port() net.Port {
 	return net.Port(0)
 }
+
 func (w *dsWorker) Start() error {
-	ctx := context.Background()
+	ctx := feature_listener.ContextWithListenerIdentifer(w.ctx, common.Identifer(w.tag))
 	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn internet.Connection) {
 		go w.callback(conn)
 	})
@@ -477,6 +509,26 @@ func (w *dsWorker) Start() error {
 		return newError("failed to listen Unix Domain Socket on ", w.address).AtWarning().Base(err)
 	}
 	w.hub = hub
+	return nil
+}
+
+func (w *dsWorker) BeforeStart(ctx context.Context) error {
+	if handler, is := w.proxy.(common.BeforeStartEventHandler); is {
+		err := handler.BeforeStart(ctx)
+		if err != nil {
+			return newError("failed to handle before start: ", w.tag).AtWarning().Base(err)
+		}
+	}
+	return nil
+}
+
+func (w *dsWorker) AfterStart(ctx context.Context) error {
+	if handler, is := w.proxy.(common.AfterStartEventHandler); is {
+		err := handler.AfterStart(ctx)
+		if err != nil {
+			return newError("failed to handle before start: ", w.tag).AtWarning().Base(err)
+		}
+	}
 	return nil
 }
 
