@@ -277,17 +277,17 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					w.mark,
 				)
 				if err != nil {
+					newError(err).WriteToLog()
 					b.Release()
-					buf.ReleaseMulti(mb)
-					return err
+					continue
 				}
 				w.conns[*b.UDP] = conn
 			}
 			_, err = conn.WriteTo(b.Bytes(), w.back)
 			if err != nil {
-				conn.Close()
-				w.conns[*b.UDP] = nil
 				newError(err).WriteToLog()
+				w.conns[*b.UDP] = nil
+				conn.Close()
 			}
 			b.Release()
 		} else {
