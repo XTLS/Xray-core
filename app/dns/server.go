@@ -370,6 +370,8 @@ func (s *Server) lookupIPInternal(domain string, option IPOption) ([]net.IP, err
 		domain = domain[:len(domain)-1]
 	}
 
+	domain = strings.ToLower(domain)
+
 	ips := s.lookupStatic(domain, option, 0)
 	if ips != nil && ips[0].Family().IsIP() {
 		newError("returning ", len(ips), " IPs for domain ", domain).WriteToLog()
