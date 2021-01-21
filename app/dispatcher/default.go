@@ -176,14 +176,16 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 }
 
 func shouldOverride(result SniffResult, request session.SniffingRequest) bool {
+	domain := result.Domain()
 	for _, d := range request.ExcludeForDomain {
-		if result.Domain() == d {
+		if domain == d {
 			return false
 		}
 	}
 
+	protocol := result.Protocol()
 	for _, p := range request.OverrideDestinationForProtocol {
-		if strings.HasPrefix(result.Protocol(), p) {
+		if strings.HasPrefix(protocol, p) {
 			return true
 		}
 	}
