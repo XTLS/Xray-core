@@ -442,44 +442,57 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 		if fb.Xver != 0 {
-			remoteAddr, remotePort, err := net.SplitHostPort(connection.RemoteAddr().String())
-			if err != nil {
-				return err
-			}
-			localAddr, localPort, err := net.SplitHostPort(connection.LocalAddr().String())
-			if err != nil {
-				return err
-			}
-			ipv4 := true
-			for i := 0; i < len(remoteAddr); i++ {
-				if remoteAddr[i] == ':' {
-					ipv4 = false
-					break
+			var remoteAddr, remotePort, localAddr, localPort string
+			tcp, ipv4 := false, true
+			if connection.RemoteAddr().Network()[:3] == "tcp" {
+				tcp = true
+				var err error
+				remoteAddr, remotePort, err = net.SplitHostPort(connection.RemoteAddr().String())
+				if err != nil {
+					return err
+				}
+				localAddr, localPort, err = net.SplitHostPort(connection.LocalAddr().String())
+				if err != nil {
+					return err
+				}
+				for i := 0; i < len(remoteAddr); i++ {
+					if remoteAddr[i] == ':' {
+						ipv4 = false
+						break
+					}
 				}
 			}
 			pro := buf.New()
 			defer pro.Release()
 			switch fb.Xver {
 			case 1:
-				if ipv4 {
-					common.Must2(pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
+				if tcp {
+					if ipv4 {
+						common.Must2(pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
+					} else {
+						common.Must2(pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
+					}
 				} else {
-					common.Must2(pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
+					common.Must2(pro.Write([]byte("PROXY UNKNOWN\r\n")))
 				}
 			case 2:
-				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21"))) // signature + v2 + PROXY
-				if ipv4 {
-					common.Must2(pro.Write([]byte("\x11\x00\x0C"))) // AF_INET + STREAM + 12 bytes
-					common.Must2(pro.Write(net.ParseIP(remoteAddr).To4()))
-					common.Must2(pro.Write(net.ParseIP(localAddr).To4()))
+				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"))) // signature
+				if tcp {
+					if ipv4 {
+						common.Must2(pro.Write([]byte("\x21\x11\x00\x0C"))) // v2 + PROXY + AF_INET + STREAM + 12 bytes
+						common.Must2(pro.Write(net.ParseIP(remoteAddr).To4()))
+						common.Must2(pro.Write(net.ParseIP(localAddr).To4()))
+					} else {
+						common.Must2(pro.Write([]byte("\x21\x21\x00\x24"))) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
+						common.Must2(pro.Write(net.ParseIP(remoteAddr).To16()))
+						common.Must2(pro.Write(net.ParseIP(localAddr).To16()))
+					}
+					p1, _ := strconv.ParseUint(remotePort, 10, 16)
+					p2, _ := strconv.ParseUint(localPort, 10, 16)
+					common.Must2(pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)}))
 				} else {
-					common.Must2(pro.Write([]byte("\x21\x00\x24"))) // AF_INET6 + STREAM + 36 bytes
-					common.Must2(pro.Write(net.ParseIP(remoteAddr).To16()))
-					common.Must2(pro.Write(net.ParseIP(localAddr).To16()))
+					common.Must2(pro.Write([]byte("\x20\x00\x00\x00"))) // v2 + LOCAL + UNSPEC + UNSPEC + 0 bytes
 				}
-				p1, _ := strconv.ParseUint(remotePort, 10, 16)
-				p2, _ := strconv.ParseUint(localPort, 10, 16)
-				common.Must2(pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)}))
 			}
 			if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pro}); err != nil {
 				return newError("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
