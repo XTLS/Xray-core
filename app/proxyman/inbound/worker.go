@@ -97,7 +97,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainExclude
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
@@ -450,7 +450,7 @@ func (w *dsWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainExclude
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
