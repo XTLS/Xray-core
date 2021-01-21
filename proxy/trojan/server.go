@@ -412,6 +412,8 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		newError("realName = " + name).AtInfo().WriteToLog(sid)
 		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 	}
+	name = strings.ToLower(name)
+	alpn = strings.ToLower(alpn)
 
 	if len(napfb) > 1 || napfb[""] == nil {
 		if name != "" && napfb[name] == nil {
