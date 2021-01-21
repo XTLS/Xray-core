@@ -232,6 +232,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				newError("realName = " + name).AtInfo().WriteToLog(sid)
 				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 			}
+			name = strings.ToLower(name)
+			alpn = strings.ToLower(alpn)
 
 			if len(napfb) > 1 || napfb[""] == nil {
 				if name != "" && napfb[name] == nil {
