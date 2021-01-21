@@ -58,38 +58,38 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled       bool        `json:"enabled"`
-	DestOverride  *StringList `json:"destOverride"`
-	DomainExclude *StringList `json:"domainExclude"`
+	Enabled         bool        `json:"enabled"`
+	DestOverride    *StringList `json:"destOverride"`
+	DomainsExcluded *StringList `json:"domainsExcluded"`
 }
 
 // Build implements Buildable.
 func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	var p []string
 	if c.DestOverride != nil {
-		for _, domainOverride := range *c.DestOverride {
-			switch strings.ToLower(domainOverride) {
+		for _, protocol := range *c.DestOverride {
+			switch strings.ToLower(protocol) {
 			case "http":
 				p = append(p, "http")
 			case "tls", "https", "ssl":
 				p = append(p, "tls")
 			default:
-				return nil, newError("unknown protocol: ", domainOverride)
+				return nil, newError("unknown protocol: ", protocol)
 			}
 		}
 	}
 
 	var d []string
-	if c.DomainExclude != nil {
-		for _, exclude := range *c.DomainExclude {
-			d = append(d, exclude)
+	if c.DomainsExcluded != nil {
+		for _, domain := range *c.DomainsExcluded {
+			d = append(d, strings.ToLower(domain))
 		}
 	}
 
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: p,
-		DomainExclude:       d,
+		DomainsExcluded:     d,
 	}, nil
 }
 
