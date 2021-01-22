@@ -119,11 +119,17 @@ message RoutingRule {
   repeated string protocol = 9;
 
   string attributes = 15;
+  string rule_set = 17;
 }
 
 message BalancingRule {
   string tag = 1;
   repeated string outbound_selector = 2;
+}
+
+message RoutingRules {
+  string identifier = 1;
+  repeated RoutingRule rules = 2;
 }
 
 message Config {
@@ -143,4 +149,5 @@ message Config {
   DomainStrategy domain_strategy = 1;
   repeated RoutingRule rule = 2;
   repeated BalancingRule balancing_rule = 3;
+  repeated RoutingRules rule_sets = 4;
 }

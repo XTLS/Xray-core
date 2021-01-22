@@ -42,12 +42,30 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 		r.balancers[rule.Tag] = balancer
 	}
 
+	var rulSets = make(map[string]Condition)
+	for _, rs := range config.RuleSets {
+		cond, err := rs.BuildCondition()
+		if err != nil {
+			return err
+		}
+		rulSets[rs.Identifier] = cond
+	}
+
 	r.rules = make([]*Rule, 0, len(config.Rule))
 	for _, rule := range config.Rule {
 		cond, err := rule.BuildCondition()
 		if err != nil {
 			return err
 		}
+
+		if rule.RuleSet != "" {
+			if ruleset, found := rulSets[rule.RuleSet]; found {
+				cond.Add(ruleset)
+			} else {
+				return newError("undefined rule set: " + rule.RuleSet).AtError()
+			}
+		}
+
 		rr := &Rule{
 			Condition: cond,
 			Tag:       rule.GetTag(),

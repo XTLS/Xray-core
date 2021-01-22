@@ -37,11 +37,39 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	}, nil
 }
 
+type RuleSet struct {
+	Identifier string            `json:"tag"`
+	Rules      []json.RawMessage `json:"rules"`
+}
+
+func (r *RuleSet) Build() (*router.RoutingRules, error) {
+	if r.Identifier == "" {
+		return nil, newError("empty rule set tag")
+	}
+	if len(r.Rules) == 0 {
+		return nil, newError("empty rule set")
+	}
+
+	ruleSet := new(router.RoutingRules)
+	ruleSet.Identifier = r.Identifier
+
+	for _, rr := range r.Rules {
+		if rule, err := ParseRule(rr, true); err != nil {
+			return nil, err
+		} else {
+			ruleSet.Rules = append(ruleSet.Rules, rule)
+		}
+	}
+
+	return ruleSet, nil
+}
+
 type RouterConfig struct {
 	Settings       *RouterRulesConfig `json:"settings"` // Deprecated
 	RuleList       []json.RawMessage  `json:"rules"`
 	DomainStrategy *string            `json:"domainStrategy"`
 	Balancers      []*BalancingRule   `json:"balancers"`
+	RuleSets       []*RuleSet         `json:"rule_sets"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -78,7 +106,7 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 	}
 
 	for _, rawRule := range rawRuleList {
-		rule, err := ParseRule(rawRule)
+		rule, err := ParseRule(rawRule, false)
 		if err != nil {
 			return nil, err
 		}
@@ -90,6 +118,13 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 			return nil, err
 		}
 		config.BalancingRule = append(config.BalancingRule, balancer)
+	}
+	for _, rawRuleSet := range c.RuleSets {
+		rawRuleSet, err := rawRuleSet.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.RuleSets = append(config.RuleSets, rawRuleSet)
 	}
 	return config, nil
 }
@@ -456,7 +491,7 @@ func toCidrList(ips StringList) ([]*router.GeoIP, error) {
 	return geoipList, nil
 }
 
-func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
+func parseFieldRule(msg json.RawMessage, skipTargetCheck bool) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
 		Domain     *StringList  `json:"domain"`
@@ -469,6 +504,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		InboundTag *StringList  `json:"inboundTag"`
 		Protocols  *StringList  `json:"protocol"`
 		Attributes string       `json:"attrs"`
+		RuleSet    string       `json:"rule_set"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -477,17 +513,20 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	rule := new(router.RoutingRule)
-	switch {
-	case len(rawFieldRule.OutboundTag) > 0:
-		rule.TargetTag = &router.RoutingRule_Tag{
-			Tag: rawFieldRule.OutboundTag,
+
+	if !skipTargetCheck {
+		switch {
+		case len(rawFieldRule.OutboundTag) > 0:
+			rule.TargetTag = &router.RoutingRule_Tag{
+				Tag: rawFieldRule.OutboundTag,
+			}
+		case len(rawFieldRule.BalancerTag) > 0:
+			rule.TargetTag = &router.RoutingRule_BalancingTag{
+				BalancingTag: rawFieldRule.BalancerTag,
+			}
+		default:
+			return nil, newError("neither outboundTag nor balancerTag is specified in routing rule")
 		}
-	case len(rawFieldRule.BalancerTag) > 0:
-		rule.TargetTag = &router.RoutingRule_BalancingTag{
-			BalancingTag: rawFieldRule.BalancerTag,
-		}
-	default:
-		return nil, newError("neither outboundTag nor balancerTag is specified in routing rule")
 	}
 
 	if rawFieldRule.Domain != nil {
@@ -550,17 +589,19 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		rule.Attributes = rawFieldRule.Attributes
 	}
 
+	rule.RuleSet = rawFieldRule.RuleSet
+
 	return rule, nil
 }
 
-func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
+func ParseRule(msg json.RawMessage, skipTargetCheck bool) (*router.RoutingRule, error) {
 	rawRule := new(RouterRule)
 	err := json.Unmarshal(msg, rawRule)
 	if err != nil {
 		return nil, newError("invalid router rule").Base(err)
 	}
 	if rawRule.Type == "field" {
-		fieldrule, err := parseFieldRule(msg)
+		fieldrule, err := parseFieldRule(msg, skipTargetCheck)
 		if err != nil {
 			return nil, newError("invalid field rule").Base(err)
 		}

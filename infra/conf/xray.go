@@ -391,9 +391,6 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.LogConfig != nil {
 		c.LogConfig = o.LogConfig
 	}
-	if o.RouterConfig != nil {
-		c.RouterConfig = o.RouterConfig
-	}
 	if o.DNSConfig != nil {
 		c.DNSConfig = o.DNSConfig
 	}
@@ -460,6 +457,42 @@ func (c *Config) Override(o *Config, fn string) {
 			}
 		} else {
 			c.OutboundConfigs = o.OutboundConfigs
+		}
+	}
+
+	if o.RouterConfig != nil {
+		if len(o.RouterConfig.Balancers) > 0 {
+			c.RouterConfig.Balancers = o.RouterConfig.Balancers
+		}
+		if o.RouterConfig.DomainStrategy != nil {
+			c.RouterConfig.DomainStrategy = o.RouterConfig.DomainStrategy
+		}
+		if len(o.RouterConfig.RuleList) > 0 {
+			c.RouterConfig.RuleList = o.RouterConfig.RuleList
+		}
+		if o.RouterConfig.Settings != nil {
+			c.RouterConfig.Settings = o.RouterConfig.Settings
+		}
+
+		if len(o.RouterConfig.RuleSets) > 0 {
+			if len(c.RouterConfig.RuleSets) > 0 {
+				for _, set := range o.RouterConfig.RuleSets {
+					found := false
+					for _, cset := range c.RouterConfig.RuleSets {
+						if cset.Identifier == set.Identifier {
+							found = true
+						}
+					}
+
+					if found {
+						ctllog.Println("[", fn, "] found existing rule set: "+set.Identifier+", ignoring")
+					} else {
+						c.RouterConfig.RuleSets = append(c.RouterConfig.RuleSets, set)
+					}
+				}
+			} else {
+				c.RouterConfig.RuleSets = o.RouterConfig.RuleSets
+			}
 		}
 	}
 }

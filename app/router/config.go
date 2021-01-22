@@ -63,7 +63,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition() (Condition, error) {
+func (rr *RoutingRule) BuildCondition() (*ConditionChan, error) {
 	conds := NewConditionChan()
 
 	if len(rr.Domain) > 0 {
@@ -138,7 +138,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(cond)
 	}
 
-	if conds.Len() == 0 {
+	if conds.Len() == 0 && rr.RuleSet == "" {
 		return nil, newError("this rule has no effective fields").AtWarning()
 	}
 
@@ -151,4 +151,24 @@ func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
 		strategy:  &RandomStrategy{},
 		ohm:       ohm,
 	}, nil
+}
+
+func (rrs *RoutingRules) BuildCondition() (Condition, error) {
+	conds := NewOrConditionChan()
+
+	for _, rr := range rrs.Rules {
+		if rr.GetTag() != "" || rr.GetBalancingTag() != "" {
+			newError("ignoring tag in rule set").AtWarning().WriteToLog()
+		}
+		cond, err := rr.BuildCondition()
+		if err != nil {
+			return nil, err
+		}
+		conds.Add(cond)
+	}
+	if conds.Len() == 0 {
+		return nil, newError("this rule set has no effective fields").AtWarning()
+	}
+
+	return conds, nil
 }

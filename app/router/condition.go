@@ -41,6 +41,32 @@ func (v *ConditionChan) Len() int {
 	return len(*v)
 }
 
+type OrConditionChan []Condition
+
+func NewOrConditionChan() *OrConditionChan {
+	var condChan OrConditionChan = make([]Condition, 0, 8)
+	return &condChan
+}
+
+func (v *OrConditionChan) Add(cond Condition) *OrConditionChan {
+	*v = append(*v, cond)
+	return v
+}
+
+// Apply applies all conditions registered in this chan.
+func (v *OrConditionChan) Apply(ctx routing.Context) bool {
+	for _, cond := range *v {
+		if cond.Apply(ctx) {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *OrConditionChan) Len() int {
+	return len(*v)
+}
+
 var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 	Domain_Plain:  strmatcher.Substr,
 	Domain_Regex:  strmatcher.Regex,
