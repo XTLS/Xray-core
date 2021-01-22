@@ -334,9 +334,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 				if fb.Xver != 0 {
 					var remoteAddr, remotePort, localAddr, localPort string
-					tcp, ipv4 := false, true
-					if connection.RemoteAddr().Network()[:3] == "tcp" {
-						tcp = true
+					ipType, network := 0, connection.RemoteAddr().Network()
+					if len(network) >= 3 && network[:3] == "tcp" {
 						var err error
 						remoteAddr, remotePort, err = net.SplitHostPort(connection.RemoteAddr().String())
 						if err != nil {
@@ -346,9 +345,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 						if err != nil {
 							return err
 						}
+						ipType = 4
 						for i := 0; i < len(remoteAddr); i++ {
 							if remoteAddr[i] == ':' {
-								ipv4 = false
+								ipType = 6
 								break
 							}
 						}
@@ -357,33 +357,33 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 					defer pro.Release()
 					switch fb.Xver {
 					case 1:
-						if tcp {
-							if ipv4 {
-								pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
-							} else {
-								pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
-							}
-						} else {
+						if ipType == 0 {
 							pro.Write([]byte("PROXY UNKNOWN\r\n"))
+							break
+						}
+						if ipType == 4 {
+							pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
+						} else {
+							pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
 						}
 					case 2:
 						pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A")) // signature
-						if tcp {
-							if ipv4 {
-								pro.Write([]byte("\x21\x11\x00\x0C")) // v2 + PROXY + AF_INET + STREAM + 12 bytes
-								pro.Write(net.ParseIP(remoteAddr).To4())
-								pro.Write(net.ParseIP(localAddr).To4())
-							} else {
-								pro.Write([]byte("\x21\x21\x00\x24")) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
-								pro.Write(net.ParseIP(remoteAddr).To16())
-								pro.Write(net.ParseIP(localAddr).To16())
-							}
-							p1, _ := strconv.ParseUint(remotePort, 10, 16)
-							p2, _ := strconv.ParseUint(localPort, 10, 16)
-							pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)})
-						} else {
+						if ipType == 0 {
 							pro.Write([]byte("\x20\x00\x00\x00")) // v2 + LOCAL + UNSPEC + UNSPEC + 0 bytes
+							break
 						}
+						if ipType == 4 {
+							pro.Write([]byte("\x21\x11\x00\x0C")) // v2 + PROXY + AF_INET + STREAM + 12 bytes
+							pro.Write(net.ParseIP(remoteAddr).To4())
+							pro.Write(net.ParseIP(localAddr).To4())
+						} else {
+							pro.Write([]byte("\x21\x21\x00\x24")) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
+							pro.Write(net.ParseIP(remoteAddr).To16())
+							pro.Write(net.ParseIP(localAddr).To16())
+						}
+						p1, _ := strconv.ParseUint(remotePort, 10, 16)
+						p2, _ := strconv.ParseUint(localPort, 10, 16)
+						pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)})
 					}
 					if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pro}); err != nil {
 						return newError("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
