@@ -15,11 +15,11 @@ require (
 	github.com/seiflotfy/cuckoofilter v0.0.0-20201222105146-bc6005554a0c
 	github.com/stretchr/testify v1.7.0
 	github.com/xtls/go v0.0.0-20201118062508-3632bf3b7499
-	go.starlark.net v0.0.0-20210114021256-8756d3ec1770
+	go.starlark.net v0.0.0-20210121225809-cea917ab6e0f
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
-	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
+	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210113181707-4bcb84eeeb78
+	golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4
 	google.golang.org/grpc v1.35.0
 	google.golang.org/protobuf v1.25.0
 	h12.io/socks v1.0.2
