@@ -102,7 +102,7 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 					return errNotClientHello
 				}
 				if nameType == 0 {
-					serverName := string(d[:nameLen])
+					serverName := strings.ToLower(string(d[:nameLen]))
 					// An SNI value may not include a
 					// trailing dot. See
 					// https://tools.ietf.org/html/rfc6066#section-3.

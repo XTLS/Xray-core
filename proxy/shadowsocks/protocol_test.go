@@ -28,7 +28,7 @@ func TestUDPEncoding(t *testing.T) {
 			Email: "love@example.com",
 			Account: toAccount(&Account{
 				Password:   "shadowsocks-password",
-				CipherType: CipherType_AES_128_CFB,
+				CipherType: CipherType_AES_128_GCM,
 			}),
 		},
 	}
@@ -38,7 +38,7 @@ func TestUDPEncoding(t *testing.T) {
 	encodedData, err := EncodeUDPPacket(request, data.Bytes())
 	common.Must(err)
 
-	decodedRequest, decodedData, err := DecodeUDPPacket(request.User, encodedData)
+	decodedRequest, decodedData, err := DecodeUDPPacket([]*protocol.MemoryUser{request.User}, encodedData)
 	common.Must(err)
 
 	if r := cmp.Diff(decodedData.Bytes(), data.Bytes()); r != "" {
@@ -65,7 +65,7 @@ func TestTCPRequest(t *testing.T) {
 					Email: "love@example.com",
 					Account: toAccount(&Account{
 						Password:   "tcp-password",
-						CipherType: CipherType_CHACHA20,
+						CipherType: CipherType_CHACHA20_POLY1305,
 					}),
 				},
 			},
@@ -81,7 +81,7 @@ func TestTCPRequest(t *testing.T) {
 					Email: "love@example.com",
 					Account: toAccount(&Account{
 						Password:   "password",
-						CipherType: CipherType_AES_256_CFB,
+						CipherType: CipherType_AES_256_GCM,
 					}),
 				},
 			},
@@ -97,7 +97,7 @@ func TestTCPRequest(t *testing.T) {
 					Email: "love@example.com",
 					Account: toAccount(&Account{
 						Password:   "password",
-						CipherType: CipherType_CHACHA20_IETF,
+						CipherType: CipherType_AES_128_GCM,
 					}),
 				},
 			},
@@ -117,7 +117,7 @@ func TestTCPRequest(t *testing.T) {
 
 		common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{data}))
 
-		decodedRequest, reader, err := ReadTCPSession(request.User, cache)
+		decodedRequest, reader, err := ReadTCPSession([]*protocol.MemoryUser{request.User}, cache)
 		common.Must(err)
 		if r := cmp.Diff(decodedRequest, request); r != "" {
 			t.Error("request: ", r)
@@ -139,7 +139,7 @@ func TestUDPReaderWriter(t *testing.T) {
 	user := &protocol.MemoryUser{
 		Account: toAccount(&Account{
 			Password:   "test-password",
-			CipherType: CipherType_CHACHA20_IETF,
+			CipherType: CipherType_CHACHA20_POLY1305,
 		}),
 	}
 	cache := buf.New()

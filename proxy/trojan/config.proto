@@ -15,11 +15,12 @@ message Account {
 }
 
 message Fallback {
-  string alpn = 1;
-  string path = 2;
-  string type = 3;
-  string dest = 4;
-  uint64 xver = 5;
+  string name = 1;
+  string alpn = 2;
+  string path = 3;
+  string type = 4;
+  string dest = 5;
+  uint64 xver = 6;
 }
 
 message ClientConfig {

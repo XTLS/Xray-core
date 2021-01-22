@@ -28,11 +28,8 @@ enum CipherType {
 }
 
 message ServerConfig {
-  // UdpEnabled specified whether or not to enable UDP for Shadowsocks.
-  // Deprecated. Use 'network' field.
-  bool udp_enabled = 1 [deprecated = true];
-  xray.common.protocol.User user = 2;
-  repeated xray.common.net.Network network = 3;
+  repeated xray.common.protocol.User users = 1;
+  repeated xray.common.net.Network network = 2;
 }
 
 message ClientConfig {
