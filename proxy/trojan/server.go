@@ -467,13 +467,13 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 			switch fb.Xver {
 			case 1:
 				if ipType == 0 {
-					pro.Write([]byte("PROXY UNKNOWN\r\n"))
+					common.Must2(pro.Write([]byte("PROXY UNKNOWN\r\n")))
 					break
 				}
 				if ipType == 4 {
-					pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
+					common.Must2(pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				} else {
-					pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
+					common.Must2(pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				}
 			case 2:
 				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"))) // signature
