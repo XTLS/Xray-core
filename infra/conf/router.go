@@ -69,7 +69,7 @@ type RouterConfig struct {
 	RuleList       []json.RawMessage  `json:"rules"`
 	DomainStrategy *string            `json:"domainStrategy"`
 	Balancers      []*BalancingRule   `json:"balancers"`
-	RuleSets       []*RuleSet         `json:"rule_sets"`
+	RuleSets       []*RuleSet         `json:"ruleSets"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -504,7 +504,7 @@ func parseFieldRule(msg json.RawMessage, skipTargetCheck bool) (*router.RoutingR
 		InboundTag *StringList  `json:"inboundTag"`
 		Protocols  *StringList  `json:"protocol"`
 		Attributes string       `json:"attrs"`
-		RuleSet    string       `json:"rule_set"`
+		RuleSet    string       `json:"ruleSet"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
