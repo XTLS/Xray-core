@@ -500,19 +500,16 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 		if fb.Xver != 0 {
-			var remoteAddr, remotePort, localAddr, localPort string
-			ipType, network := 0, connection.RemoteAddr().Network()
-			if len(network) >= 3 && network[:3] == "tcp" {
-				var err error
-				remoteAddr, remotePort, err = net.SplitHostPort(connection.RemoteAddr().String())
-				if err != nil {
-					return err
-				}
-				localAddr, localPort, err = net.SplitHostPort(connection.LocalAddr().String())
-				if err != nil {
-					return err
-				}
-				ipType = 4
+			ipType := 4
+			remoteAddr, remotePort, err := net.SplitHostPort(connection.RemoteAddr().String())
+			if err != nil {
+				ipType = 0
+			}
+			localAddr, localPort, err := net.SplitHostPort(connection.LocalAddr().String())
+			if err != nil {
+				ipType = 0
+			}
+			if ipType == 4 {
 				for i := 0; i < len(remoteAddr); i++ {
 					if remoteAddr[i] == ':' {
 						ipType = 6
