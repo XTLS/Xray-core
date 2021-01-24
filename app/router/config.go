@@ -63,7 +63,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition() (*ConditionChan, error) {
+func (rr *RoutingRule) BuildCondition(rsm *rsManager) (*ConditionChan, error) {
 	conds := NewConditionChan()
 
 	if len(rr.Domain) > 0 {
@@ -138,6 +138,14 @@ func (rr *RoutingRule) BuildCondition() (*ConditionChan, error) {
 		conds.Add(cond)
 	}
 
+	if rr.RuleSet != "" {
+		if rsCond, err := rsm.getRuleSet(rr.RuleSet); err != nil {
+			return nil, err
+		} else {
+			conds.Add(rsCond)
+		}
+	}
+
 	if conds.Len() == 0 && rr.RuleSet == "" {
 		return nil, newError("this rule has no effective fields").AtWarning()
 	}
@@ -153,14 +161,18 @@ func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
 	}, nil
 }
 
-func (rrs *RoutingRules) BuildCondition() (Condition, error) {
+func (rrs *RoutingRules) BuildCondition(rsm *rsManager) (Condition, error) {
 	conds := NewOrConditionChan()
 
 	for _, rr := range rrs.Rules {
 		if rr.GetTag() != "" || rr.GetBalancingTag() != "" {
 			newError("ignoring tag in rule set").AtWarning().WriteToLog()
 		}
-		cond, err := rr.BuildCondition()
+
+		if rr.RuleSet == rrs.Identifier {
+			return nil, newError("import cycle found for tag: " + rrs.Identifier)
+		}
+		cond, err := rr.BuildCondition(rsm)
 		if err != nil {
 			return nil, err
 		}
