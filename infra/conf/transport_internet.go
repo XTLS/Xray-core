@@ -300,6 +300,7 @@ type TLSConfig struct {
 	MaxVersion               string           `json:"maxVersion"`
 	CipherSuites             string           `json:"cipherSuites"`
 	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
+	Fingerprint              string           `json:"fingerprint"`
 }
 
 // Build implements Buildable.
@@ -321,6 +322,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
+	config.Fingerprint = c.Fingerprint
 	config.EnableSessionResumption = c.EnableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	config.MinVersion = c.MinVersion

@@ -21,6 +21,17 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
+		if config.Fingerprint != "" {
+			fingerprint, err := tls.GetuTLSClientHelloID(config.Fingerprint)
+			if err != nil {
+				conn = tls.Client(conn, tlsConfig)
+				newError("Switching to TLS.").Base(err).AtWarning().WriteToLog()
+			} else {
+				conn = tls.UClient(conn, tlsConfig, *fingerprint)
+			}
+		} else {
+			conn = tls.Client(conn, tlsConfig)
+		}
 		/*
 			if config.IsExperiment8357() {
 				conn = tls.UClient(conn, tlsConfig)
@@ -28,7 +39,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				conn = tls.Client(conn, tlsConfig)
 			}
 		*/
-		conn = tls.Client(conn, tlsConfig)
 	} else if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
 		xtlsConfig := config.GetXTLSConfig(xtls.WithDestination(dest))
 		conn = xtls.Client(conn, xtlsConfig)

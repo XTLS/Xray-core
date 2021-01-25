@@ -55,4 +55,7 @@ message Config {
 
   // Whether the server selects its most preferred ciphersuite.
   bool prefer_server_cipher_suites = 10;
+
+  // ClientHello fingerprinting resistance(utls)
+  string fingerprint = 11;
 }
