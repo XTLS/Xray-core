@@ -465,8 +465,12 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 		command = byte(cmdUDPAssociate)
 	}
 	common.Must2(b.Write([]byte{socks5Version, command, 0x00 /* reserved */}))
-	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
-		return nil, err
+	if request.Command == protocol.RequestCommandUDP {
+		common.Must2(b.Write([]byte{1, 0, 0, 0, 0, 0, 0 /* RFC 1928 */}))
+	} else {
+		if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
