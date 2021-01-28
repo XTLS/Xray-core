@@ -25,9 +25,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			fingerprint, err := tls.GetuTLSClientHelloID(config.Fingerprint)
 			if err != nil {
 				conn = tls.Client(conn, tlsConfig)
-				newError("Switching to TLS.").Base(err).AtWarning().WriteToLog()
+				newError("switching to TLS.").Base(err).AtWarning().WriteToLog()
 			} else {
 				conn = tls.UClient(conn, tlsConfig, *fingerprint)
+				newError("switching to uTLS. fingerprint: " + fingerprint.Str()).AtInfo().WriteToLog()
 			}
 		} else {
 			conn = tls.Client(conn, tlsConfig)
