@@ -65,7 +65,7 @@ func copyConfig(c *tls.Config) *utls.Config {
 
 func GetuTLSClientHelloID(name string) (*utls.ClientHelloID, error) {
 	switch name {
-	case "randomized":
+	case "random":
 		return &utls.HelloRandomized, nil
 	case "chrome":
 		return &utls.HelloChrome_Auto, nil
