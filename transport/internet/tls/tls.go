@@ -65,14 +65,14 @@ func copyConfig(c *tls.Config) *utls.Config {
 
 func GetuTLSClientHelloID(name string) (*utls.ClientHelloID, error) {
 	switch name {
-	case "random":
-		return &utls.HelloRandomized, nil
 	case "chrome":
 		return &utls.HelloChrome_Auto, nil
 	case "firefox":
 		return &utls.HelloFirefox_Auto, nil
-	case "ios":
+	case "safari":
 		return &utls.HelloIOS_Auto, nil
+	case "randomized":
+		return &utls.HelloRandomized, nil
 	default:
 		return nil, newError("invalid fingerprint: " + name)
 	}
