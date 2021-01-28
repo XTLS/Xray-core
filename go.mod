@@ -11,7 +11,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.19.3
 	github.com/miekg/dns v1.1.35
 	github.com/pelletier/go-toml v1.8.1
-	github.com/pires/go-proxyproto v0.4.1
+	github.com/pires/go-proxyproto v0.4.2
 	github.com/seiflotfy/cuckoofilter v0.0.0-20201222105146-bc6005554a0c
 	github.com/stretchr/testify v1.7.0
 	github.com/xtls/go v0.0.0-20201118062508-3632bf3b7499
