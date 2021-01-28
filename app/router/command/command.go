@@ -85,7 +85,7 @@ func (s *service) Register(server *grpc.Server) {
 		RegisterRoutingServiceServer(server, rs)
 
 		// For compatibility purposes
-		vCoreDesc := _RoutingService_serviceDesc
+		vCoreDesc := RoutingService_ServiceDesc
 		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
 		server.RegisterService(&vCoreDesc, rs)
 	}))

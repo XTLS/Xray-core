@@ -113,7 +113,7 @@ func (s *service) Register(server *grpc.Server) {
 	RegisterStatsServiceServer(server, ss)
 
 	// For compatibility purposes
-	vCoreDesc := _StatsService_serviceDesc
+	vCoreDesc := StatsService_ServiceDesc
 	vCoreDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
 	server.RegisterService(&vCoreDesc, ss)
 }

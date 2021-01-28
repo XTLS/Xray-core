@@ -14,8 +14,6 @@ const (
 
 var pool = bytespool.GetPool(Size)
 
-var Cone = true
-
 // Buffer is a recyclable allocation of a byte array. Buffer.Release() recycles
 // the buffer into an internal buffer pool, in order to recreate a buffer more
 // quickly.
@@ -111,6 +109,9 @@ func (b *Buffer) BytesFrom(from int32) []byte {
 func (b *Buffer) BytesTo(to int32) []byte {
 	if to < 0 {
 		to += b.Len()
+	}
+	if to < 0 {
+		to = 0
 	}
 	return b.v[b.start : b.start+to]
 }

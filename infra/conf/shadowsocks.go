@@ -33,35 +33,60 @@ func cipherFromString(c string) shadowsocks.CipherType {
 	}
 }
 
+type ShadowsocksUserConfig struct {
+	Cipher   string `json:"method"`
+	Password string `json:"password"`
+	Level    byte   `json:"level"`
+	Email    string `json:"email"`
+}
+
 type ShadowsocksServerConfig struct {
-	Cipher      string       `json:"method"`
-	Password    string       `json:"password"`
-	UDP         bool         `json:"udp"`
-	Level       byte         `json:"level"`
-	Email       string       `json:"email"`
-	NetworkList *NetworkList `json:"network"`
+	Cipher      string                   `json:"method"`
+	Password    string                   `json:"password"`
+	Level       byte                     `json:"level"`
+	Email       string                   `json:"email"`
+	Users       []*ShadowsocksUserConfig `json:"clients"`
+	NetworkList *NetworkList             `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	config := new(shadowsocks.ServerConfig)
-	config.UdpEnabled = v.UDP
 	config.Network = v.NetworkList.Build()
 
-	if v.Password == "" {
-		return nil, newError("Shadowsocks password is not specified.")
-	}
-	account := &shadowsocks.Account{
-		Password: v.Password,
-	}
-	account.CipherType = cipherFromString(v.Cipher)
-	if account.CipherType == shadowsocks.CipherType_UNKNOWN {
-		return nil, newError("unknown cipher method: ", v.Cipher)
-	}
-
-	config.User = &protocol.User{
-		Email:   v.Email,
-		Level:   uint32(v.Level),
-		Account: serial.ToTypedMessage(account),
+	if v.Users != nil {
+		for _, user := range v.Users {
+			account := &shadowsocks.Account{
+				Password:   user.Password,
+				CipherType: cipherFromString(user.Cipher),
+			}
+			if account.Password == "" {
+				return nil, newError("Shadowsocks password is not specified.")
+			}
+			if account.CipherType < 5 || account.CipherType > 7 {
+				return nil, newError("unsupported cipher method: ", user.Cipher)
+			}
+			config.Users = append(config.Users, &protocol.User{
+				Email:   user.Email,
+				Level:   uint32(user.Level),
+				Account: serial.ToTypedMessage(account),
+			})
+		}
+	} else {
+		account := &shadowsocks.Account{
+			Password:   v.Password,
+			CipherType: cipherFromString(v.Cipher),
+		}
+		if account.Password == "" {
+			return nil, newError("Shadowsocks password is not specified.")
+		}
+		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
+			return nil, newError("unknown cipher method: ", v.Cipher)
+		}
+		config.Users = append(config.Users, &protocol.User{
+			Email:   v.Email,
+			Level:   uint32(v.Level),
+			Account: serial.ToTypedMessage(account),
+		})
 	}
 
 	return config, nil
@@ -73,7 +98,6 @@ type ShadowsocksServerTarget struct {
 	Cipher   string   `json:"method"`
 	Password string   `json:"password"`
 	Email    string   `json:"email"`
-	Ota      bool     `json:"ota"`
 	Level    byte     `json:"level"`
 }
 

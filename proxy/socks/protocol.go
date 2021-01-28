@@ -39,10 +39,10 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config        *ServerConfig
-	address       net.Address
-	port          net.Port
-	clientAddress net.Address
+	config       *ServerConfig
+	address      net.Address
+	port         net.Port
+	localAddress net.Address
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -192,14 +192,11 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 	//nolint:gocritic // Use if else chain for clarity
 	if request.Command == protocol.RequestCommandUDP {
 		if s.config.Address != nil {
-			// Use configured IP as remote address in the response to UdpAssociate
+			// Use configured IP as remote address in the response to UDP Associate
 			responseAddress = s.config.Address.AsAddress()
-		} else if s.clientAddress == net.LocalHostIP || s.clientAddress == net.LocalHostIPv6 {
-			// For localhost clients use loopback IP
-			responseAddress = s.clientAddress
 		} else {
-			// For non-localhost clients use inbound listening address
-			responseAddress = s.address
+			// Use conn.LocalAddr() IP as remote address in the response by default
+			responseAddress = s.localAddress
 		}
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
@@ -425,16 +422,6 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 	defer b.Release()
 
 	common.Must2(b.Write([]byte{socks5Version, 0x01, authByte}))
-	if authByte == authPassword {
-		account := request.User.Account.(*Account)
-
-		common.Must(b.WriteByte(0x01))
-		common.Must(b.WriteByte(byte(len(account.Username))))
-		common.Must2(b.WriteString(account.Username))
-		common.Must(b.WriteByte(byte(len(account.Password))))
-		common.Must2(b.WriteString(account.Password))
-	}
-
 	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
 		return nil, err
 	}
@@ -453,6 +440,17 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 
 	if authByte == authPassword {
 		b.Clear()
+		account := request.User.Account.(*Account)
+		common.Must(b.WriteByte(0x01))
+		common.Must(b.WriteByte(byte(len(account.Username))))
+		common.Must2(b.WriteString(account.Username))
+		common.Must(b.WriteByte(byte(len(account.Password))))
+		common.Must2(b.WriteString(account.Password))
+		if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
+			return nil, err
+		}
+
+		b.Clear()
 		if _, err := b.ReadFullFrom(reader, 2); err != nil {
 			return nil, err
 		}
@@ -468,8 +466,12 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 		command = byte(cmdUDPAssociate)
 	}
 	common.Must2(b.Write([]byte{socks5Version, command, 0x00 /* reserved */}))
-	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
-		return nil, err
+	if request.Command == protocol.RequestCommandUDP {
+		common.Must2(b.Write([]byte{1, 0, 0, 0, 0, 0, 0 /* RFC 1928 */}))
+	} else {
+		if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {

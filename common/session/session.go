@@ -60,6 +60,7 @@ type Outbound struct {
 
 // SniffingRequest controls the behavior of content sniffing.
 type SniffingRequest struct {
+	ExcludeForDomain               []string
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 }

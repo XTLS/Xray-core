@@ -97,6 +97,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
@@ -239,6 +240,9 @@ type udpWorker struct {
 
 	checker    *task.Periodic
 	activeConn map[connID]*udpConn
+
+	ctx  context.Context
+	cone bool
 }
 
 func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
@@ -279,7 +283,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		src: source,
 	}
 	if originalDest.IsValid() {
-		if !buf.Cone {
+		if !w.cone {
 			id.dest = originalDest
 		}
 		b.UDP = &originalDest
@@ -339,7 +343,7 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 8 { // TODO Timeout too small
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 300 {
 			delete(w.activeConn, addr)
 			conn.Close()
 		}
@@ -360,8 +364,10 @@ func (w *udpWorker) Start() error {
 		return err
 	}
 
+	w.cone = w.ctx.Value("cone").(bool)
+
 	w.checker = &task.Periodic{
-		Interval: time.Second * 16,
+		Interval: time.Minute,
 		Execute:  w.clean,
 	}
 
@@ -444,6 +450,7 @@ func (w *dsWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
