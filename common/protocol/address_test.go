@@ -82,9 +82,11 @@ func TestAddressReading(t *testing.T) {
 			Port:    net.Port(80),
 		},
 	}
+
 	for _, tc := range data {
-		b := buf.New()
 		parser := NewAddressParser(tc.Options...)
+
+		b := buf.New()
 		addr, port, err := parser.ReadAddressPort(b, bytes.NewReader(tc.Input))
 		b.Release()
 		if tc.Error {
