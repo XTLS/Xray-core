@@ -17,6 +17,8 @@ func BuildXray() error {
 
 	fmt.Printf("Building Xray into path (%s)\n", testBinaryPath)
 	cmd := exec.Command("go", "build", "-o="+testBinaryPath, GetSourcePath())
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
