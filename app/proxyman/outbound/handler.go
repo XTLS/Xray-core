@@ -3,6 +3,8 @@ package outbound
 import (
 	"context"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/mux"
@@ -158,7 +160,7 @@ func (h *Handler) Address() net.Address {
 }
 
 // Dial implements internet.Dialer.
-func (h *Handler) Dial(ctx context.Context, dest net.Destination) (internet.Connection, error) {
+func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil {
 		if h.senderSettings.ProxySettings.HasTag() {
 			tag := h.senderSettings.ProxySettings.Tag
@@ -201,9 +203,9 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (internet.Conn
 	return h.getStatCouterConnection(conn), err
 }
 
-func (h *Handler) getStatCouterConnection(conn internet.Connection) internet.Connection {
+func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {
 	if h.uplinkCounter != nil || h.downlinkCounter != nil {
-		return &internet.StatCouterConnection{
+		return &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  h.downlinkCounter,
 			WriteCounter: h.uplinkCounter,

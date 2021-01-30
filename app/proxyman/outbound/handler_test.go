@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/app/policy"
 	. "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/stats"
@@ -12,7 +14,6 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/proxy/freedom"
-	"github.com/xtls/xray-core/transport/internet"
 )
 
 func TestInterfaces(t *testing.T) {
@@ -44,9 +45,9 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 	})
 	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
-	_, ok := conn.(*internet.StatCouterConnection)
+	_, ok := conn.(*stat.CounterConnection)
 	if ok {
-		t.Errorf("Expected conn to not be StatCouterConnection")
+		t.Errorf("Expected conn to not be CounterConnection")
 	}
 }
 
@@ -73,8 +74,8 @@ func TestOutboundWithStatCounter(t *testing.T) {
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 	})
 	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
-	_, ok := conn.(*internet.StatCouterConnection)
+	_, ok := conn.(*stat.CounterConnection)
 	if !ok {
-		t.Errorf("Expected conn to be StatCouterConnection")
+		t.Errorf("Expected conn to be CounterConnection")
 	}
 }

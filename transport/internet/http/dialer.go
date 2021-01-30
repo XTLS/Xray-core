@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -110,7 +112,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 }
 
 // Dial dials a new TCP connection to the given destination.
-func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (internet.Connection, error) {
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
 	client, err := getHTTPClient(ctx, dest, streamSettings)
 	if err != nil {

@@ -5,6 +5,8 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
@@ -17,14 +19,14 @@ import (
 // Dialer is the interface for dialing outbound connections.
 type Dialer interface {
 	// Dial dials a system connection to the given destination.
-	Dial(ctx context.Context, destination net.Destination) (Connection, error)
+	Dial(ctx context.Context, destination net.Destination) (stat.Connection, error)
 
 	// Address returns the address used by this Dialer. Maybe nil if not known.
 	Address() net.Address
 }
 
 // dialFunc is an interface to dial network connection to a specific destination.
-type dialFunc func(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (Connection, error)
+type dialFunc func(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (stat.Connection, error)
 
 var (
 	transportDialerCache = make(map[string]dialFunc)
@@ -40,7 +42,7 @@ func RegisterTransportDialer(protocol string, dialer dialFunc) error {
 }
 
 // Dial dials a internet connection towards the given destination.
-func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (Connection, error) {
+func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (stat.Connection, error) {
 	if dest.Network == net.Network_TCP {
 		if streamSettings == nil {
 			s, err := ToMemoryStreamConfig(nil)

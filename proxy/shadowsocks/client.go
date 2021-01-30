@@ -3,6 +3,8 @@ package shadowsocks
 import (
 	"context"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -55,7 +57,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	network := destination.Network
 
 	var server *protocol.ServerSpec
-	var conn internet.Connection
+	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		server = c.serverPicker.PickServer()
