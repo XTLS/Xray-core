@@ -97,42 +97,6 @@ func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, erro
 	return &cert, err
 }
 
-func isDomainNameMatched(sni string, serverName string) bool {
-	if strings.HasPrefix(sni, "*.") {
-		suffix := sni[2:]
-		domainPrefixLen := len(serverName) - len(suffix) - 1
-		return strings.HasSuffix(serverName, suffix) && domainPrefixLen > 0 && !strings.Contains(serverName[:domainPrefixLen], ".")
-	}
-	return sni == serverName
-}
-
-func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		if len(certs) == 1 {
-			return certs[0], nil
-		}
-		var matchCert *tls.Certificate
-		var matched bool
-		serverName := strings.ToLower(hello.ServerName)
-		for _, keyPair := range certs {
-			sni := keyPair.Leaf.Subject.CommonName
-			dnsNames := keyPair.Leaf.DNSNames
-			matched = isDomainNameMatched(sni, serverName)
-			for _, name := range dnsNames {
-				if isDomainNameMatched(name, serverName) {
-					matched = true
-					matchCert = keyPair
-					break
-				}
-			}
-		}
-		if !matched {
-			return nil, newError("sni mismatched: " + serverName + ", expected: " + serverName)
-		}
-		return matchCert, nil
-	}
-}
-
 func (c *Config) getCustomCA() []*Certificate {
 	certs := make([]*Certificate, 0, len(c.Certificate))
 	for _, certificate := range c.Certificate {
@@ -203,6 +167,33 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 		access.Unlock()
 
 		return issuedCertificate, nil
+	}
+}
+
+func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if len(certs) == 0 {
+			return nil, newError("empty certs")
+		}
+		sni := strings.ToLower(hello.ServerName)
+		if len(certs) == 1 || sni == "" {
+			return certs[0], nil
+		}
+		gsni := "*"
+		if index := strings.IndexByte(sni, '.'); index != -1 {
+			gsni += sni[index:]
+		}
+		for _, keyPair := range certs {
+			if keyPair.Leaf.Subject.CommonName == sni || keyPair.Leaf.Subject.CommonName == gsni {
+				return keyPair, nil
+			}
+			for _, name := range keyPair.Leaf.DNSNames {
+				if name == sni || name == gsni {
+					return keyPair, nil
+				}
+			}
+		}
+		return certs[0], nil
 	}
 }
 
