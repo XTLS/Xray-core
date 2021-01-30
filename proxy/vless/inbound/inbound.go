@@ -4,12 +4,7 @@ package inbound
 
 import (
 	"context"
-	"io"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
-
+	"github.com/xtaci/smux"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -27,11 +22,17 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	simplesocks "github.com/xtls/xray-core/proxy/simplesocks/inbound"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
+	"io"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
 )
 
 var (
@@ -472,6 +473,25 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	case "":
 	default:
 		return newError("unknown request flow " + requestAddons.Flow).AtWarning()
+	}
+
+	// Handle SMUX command
+	if request.Command == protocol.RequestCommandSmux {
+		vlessConn := NewInboundConn(connection, h.validator)
+		smuxSession, err := smux.Server(vlessConn, nil)
+		if err != nil {
+			return err
+		}
+		defer smuxSession.Close()
+
+		for {
+			smuxStream, err := smuxSession.AcceptStream()
+			if err != nil {
+				return newError("failed to get mux stream")
+			}
+			go simplesocks.HandleInboundConnection(ctx, smuxStream, dispatcher)
+		}
+		return nil
 	}
 
 	if request.Command != protocol.RequestCommandMux {

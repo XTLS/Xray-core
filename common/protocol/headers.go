@@ -12,9 +12,10 @@ import (
 type RequestCommand byte
 
 const (
-	RequestCommandTCP = RequestCommand(0x01)
-	RequestCommandUDP = RequestCommand(0x02)
-	RequestCommandMux = RequestCommand(0x03)
+	RequestCommandTCP  = RequestCommand(0x01)
+	RequestCommandUDP  = RequestCommand(0x02)
+	RequestCommandMux  = RequestCommand(0x03)
+	RequestCommandSmux = RequestCommand(0x04)
 )
 
 func (c RequestCommand) TransferType() TransferType {

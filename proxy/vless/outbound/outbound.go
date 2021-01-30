@@ -4,11 +4,11 @@ package outbound
 
 import (
 	"context"
-	"syscall"
-	"time"
-
+	"github.com/xtaci/smux"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/connman"
+	"github.com/xtls/xray-core/common/connman/connection"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
@@ -16,14 +16,17 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
+	simplesocks "github.com/xtls/xray-core/proxy/simplesocks/outbound"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
+	"syscall"
+	"time"
 )
 
 var (
@@ -48,6 +51,8 @@ type Handler struct {
 	serverList    *protocol.ServerList
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
+	smux          bool
+	connManager   *connman.SmuxManager
 }
 
 // New creates a new VLess outbound handler.
@@ -66,6 +71,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		serverList:    serverList,
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		connManager:   connman.NewSmuxManager(),
 	}
 
 	return handler, nil
@@ -75,48 +81,90 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	var rec *protocol.ServerSpec
 	var conn internet.Connection
+	var useSmux bool
+	var request *protocol.RequestHeader
 
+	// Get outbound metadata from context
+	outbound := session.OutboundFromContext(ctx)
+	if outbound == nil || !outbound.Target.IsValid() {
+		return newError("target not specified").AtError()
+	}
+
+	// Dial to remote server
 	if err := retry.ExponentialBackoff(5, 200).On(func() error {
 		rec = h.serverPicker.PickServer()
-		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination())
-		if err != nil {
-			return err
+		useSmux = rec.UseSmux()
+		request = &protocol.RequestHeader{
+			Version: encoding.Version,
+			User:    rec.PickUser(),
+			Command: h.getCommand(outbound.Target, useSmux),
+			Address: outbound.Target.Address,
+			Port:    outbound.Target.Port,
+		}
+		// Use connection manager to obtain the connection to remote server if Smux is used, otherwise dial directly
+		if useSmux {
+			var err error
+			conn, err = h.connManager.GetConnection(ctx, rec.Destination(), dialer, request,
+				func(c internet.Connection, h *protocol.RequestHeader) (internet.Connection, error) {
+					conn := NewOutboundConn(c, h)
+					smuxSession, err := smux.Client(conn, smux.DefaultConfig())
+					if err != nil {
+						_ = conn.Close()
+						return nil, err
+					}
+					smuxConnection := &connection.SmuxConnection{
+						Conn:        conn,
+						SmuxSession: smuxSession,
+					}
+					return smuxConnection, nil
+				})
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			conn, err = dialer.Dial(ctx, rec.Destination())
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
 		return newError("failed to find an available destination").Base(err).AtWarning()
 	}
+
+	newError("tunneling request to ", outbound.Target, " via ", rec.Destination()).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+
+	// Check if Smux should be used
+	if useSmux {
+		smuxConn, ok := conn.(*connection.SmuxConnection)
+		if !ok {
+			return newError("failed to establish mux session")
+		}
+
+		smuxStream, err := smuxConn.SmuxSession.OpenStream()
+		if err != nil {
+			h.connManager.RemoveConnection(rec.Destination())
+			return newError("failed to get mux stream")
+		}
+		defer smuxStream.Close()
+
+		if err := simplesocks.HandleOutboundConnection(ctx, smuxStream, link, request); err != nil {
+			// Detect connection loss by checking errors
+			if err.Error() != "context canceled" {
+				h.connManager.RemoveConnection(rec.Destination())
+			}
+			return newError("simplesocks connection ends").Base(err).AtError()
+		}
+		return nil
+	}
+
 	defer conn.Close()
 
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
 		iConn = statConn.Connection
-	}
-
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
-		return newError("target not specified").AtError()
-	}
-
-	target := outbound.Target
-	newError("tunneling request to ", target, " via ", rec.Destination()).AtInfo().WriteToLog(session.ExportIDToError(ctx))
-
-	command := protocol.RequestCommandTCP
-	if target.Network == net.Network_UDP {
-		command = protocol.RequestCommandUDP
-	}
-	if target.Address.Family().IsDomain() && target.Address.Domain() == "v1.mux.cool" {
-		command = protocol.RequestCommandMux
-	}
-
-	request := &protocol.RequestHeader{
-		Version: encoding.Version,
-		User:    rec.PickUser(),
-		Command: command,
-		Address: target.Address,
-		Port:    target.Port,
 	}
 
 	account := request.User.Account.(*vless.MemoryAccount)
@@ -136,7 +184,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		fallthrough
 	case vless.XRO, vless.XRD, vless.XRS:
 		switch request.Command {
-		case protocol.RequestCommandMux:
+		case protocol.RequestCommandMux, protocol.RequestCommandSmux:
 			return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
 		case protocol.RequestCommandUDP:
 			if !allowUDP443 && request.Port == 443 {
@@ -240,4 +288,19 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	return nil
+}
+
+// Determine which command the request encapsulates based on the destination and Smux option
+func (h *Handler) getCommand(destination net.Destination, useSmux bool) protocol.RequestCommand {
+	command := protocol.RequestCommandTCP
+	if destination.Network == net.Network_UDP {
+		command = protocol.RequestCommandUDP
+	}
+	if destination.Address.Family().IsDomain() && destination.Address.Domain() == "v1.mux.cool" {
+		command = protocol.RequestCommandMux
+	}
+	if useSmux {
+		command = protocol.RequestCommandSmux
+	}
+	return command
 }

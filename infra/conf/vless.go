@@ -140,6 +140,7 @@ type VLessOutboundVnext struct {
 	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
+	Smux    bool              `json:"smux"`
 }
 
 type VLessOutboundConfig struct {
@@ -164,6 +165,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
+			Smux:    rec.Smux,
 			User:    make([]*protocol.User, len(rec.Users)),
 		}
 		for idx, rawUser := range rec.Users {

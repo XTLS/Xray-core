@@ -47,14 +47,16 @@ type ServerSpec struct {
 	sync.RWMutex
 	dest  net.Destination
 	users []*MemoryUser
+	smux  bool
 	valid ValidationStrategy
 }
 
-func NewServerSpec(dest net.Destination, valid ValidationStrategy, users ...*MemoryUser) *ServerSpec {
+func NewServerSpec(dest net.Destination, valid ValidationStrategy, smux bool, users ...*MemoryUser) *ServerSpec {
 	return &ServerSpec{
 		dest:  dest,
 		users: users,
 		valid: valid,
+		smux:  smux,
 	}
 }
 
@@ -68,7 +70,7 @@ func NewServerSpecFromPB(spec *ServerEndpoint) (*ServerSpec, error) {
 		}
 		mUsers[idx] = mUser
 	}
-	return NewServerSpec(dest, AlwaysValid(), mUsers...), nil
+	return NewServerSpec(dest, AlwaysValid(), spec.Smux, mUsers...), nil
 }
 
 func (s *ServerSpec) Destination() net.Destination {
@@ -85,6 +87,10 @@ func (s *ServerSpec) HasUser(user *MemoryUser) bool {
 		}
 	}
 	return false
+}
+
+func (s *ServerSpec) UseSmux() bool {
+	return s.smux
 }
 
 func (s *ServerSpec) AddUser(user *MemoryUser) {

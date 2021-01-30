@@ -120,7 +120,7 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		case protocol.RequestCommandMux:
 			request.Address = net.DomainAddress("v1.mux.cool")
 			request.Port = 0
-		case protocol.RequestCommandTCP, protocol.RequestCommandUDP:
+		case protocol.RequestCommandTCP, protocol.RequestCommandUDP, protocol.RequestCommandSmux:
 			if addr, port, err := addrParser.ReadAddressPort(&buffer, reader); err == nil {
 				request.Address = addr
 				request.Port = port
