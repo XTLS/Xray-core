@@ -11,6 +11,8 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // routingServer is an implementation of RoutingService.
@@ -70,6 +72,80 @@ func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequ
 			return stream.Context().Err()
 		}
 	}
+}
+
+func (s *routingServer) GetBalancers(ctx context.Context, request *GetBalancersRequest) (*GetBalancersResponse, error) {
+	h, ok := s.router.(routing.RouterChecker)
+	if !ok {
+		return nil, status.Errorf(codes.Unavailable, "current router is not a health checker")
+	}
+	results, err := h.GetBalancersInfo(request.BalancerTags)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+	rsp := &GetBalancersResponse{
+		Balancers: make([]*BalancerMsg, 0),
+	}
+	for _, result := range results {
+		var override *OverrideSelectingMsg
+		if result.Override != nil {
+			override = &OverrideSelectingMsg{
+				Until:   result.Override.Until.Local().String(),
+				Selects: result.Override.Selects,
+			}
+		}
+		stat := &BalancerMsg{
+			Tag:              result.Tag,
+			StrategySettings: result.Strategy.Settings,
+			Titles:           result.Strategy.ValueTitles,
+			Override:         override,
+			Selects:          make([]*OutboundMsg, 0),
+			Others:           make([]*OutboundMsg, 0),
+		}
+		for _, item := range result.Strategy.Selects {
+			stat.Selects = append(stat.Selects, &OutboundMsg{
+				Tag:    item.Tag,
+				Values: item.Values,
+			})
+		}
+		for _, item := range result.Strategy.Others {
+			stat.Others = append(stat.Others, &OutboundMsg{
+				Tag:    item.Tag,
+				Values: item.Values,
+			})
+		}
+		rsp.Balancers = append(rsp.Balancers, stat)
+	}
+	return rsp, nil
+}
+func (s *routingServer) CheckBalancers(ctx context.Context, request *CheckBalancersRequest) (*CheckBalancersResponse, error) {
+	h, ok := s.router.(routing.RouterChecker)
+	if !ok {
+		return nil, status.Errorf(codes.Unavailable, "current router is not a health checker")
+	}
+	go func() {
+		err := h.CheckBalancers(request.BalancerTags)
+		if err != nil {
+			newError("CheckBalancers error:", err).AtInfo().WriteToLog()
+		}
+	}()
+	return &CheckBalancersResponse{}, nil
+}
+
+func (s *routingServer) OverrideSelecting(ctx context.Context, request *OverrideSelectingRequest) (*OverrideSelectingResponse, error) {
+	bo, ok := s.router.(routing.BalancingOverrider)
+	if !ok {
+		return nil, status.Errorf(codes.Unavailable, "current router doesn't support balancing override")
+	}
+	err := bo.OverrideSelecting(
+		request.BalancerTag,
+		request.Selectors,
+		time.Duration(request.Validity),
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	return &OverrideSelectingResponse{}, nil
 }
 
 func (s *routingServer) mustEmbedUnimplementedRoutingServiceServer() {}

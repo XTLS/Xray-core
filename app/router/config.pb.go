@@ -131,7 +131,7 @@ func (x Config_DomainStrategy) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Config_DomainStrategy.Descriptor instead.
 func (Config_DomainStrategy) EnumDescriptor() ([]byte, []int) {
-	return file_app_router_config_proto_rawDescGZIP(), []int{8, 0}
+	return file_app_router_config_proto_rawDescGZIP(), []int{11, 0}
 }
 
 // Domain for routing decision.
@@ -707,9 +707,11 @@ type BalancingRule struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Tag              string   `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	OutboundSelector []string `protobuf:"bytes,2,rep,name=outbound_selector,json=outboundSelector,proto3" json:"outbound_selector,omitempty"`
-	Strategy         string   `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	Tag              string               `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	OutboundSelector []string             `protobuf:"bytes,2,rep,name=outbound_selector,json=outboundSelector,proto3" json:"outbound_selector,omitempty"`
+	Strategy         string               `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	StrategySettings *serial.TypedMessage `protobuf:"bytes,4,opt,name=strategy_settings,json=strategySettings,proto3" json:"strategy_settings,omitempty"`
+	FallbackTag      string               `protobuf:"bytes,5,opt,name=fallback_tag,json=fallbackTag,proto3" json:"fallback_tag,omitempty"`
 }
 
 func (x *BalancingRule) Reset() {
@@ -765,6 +767,260 @@ func (x *BalancingRule) GetStrategy() string {
 	return ""
 }
 
+func (x *BalancingRule) GetStrategySettings() *serial.TypedMessage {
+	if x != nil {
+		return x.StrategySettings
+	}
+	return nil
+}
+
+func (x *BalancingRule) GetFallbackTag() string {
+	if x != nil {
+		return x.FallbackTag
+	}
+	return ""
+}
+
+type StrategyWeight struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Regexp bool    `protobuf:"varint,1,opt,name=regexp,proto3" json:"regexp,omitempty"`
+	Match  string  `protobuf:"bytes,2,opt,name=match,proto3" json:"match,omitempty"`
+	Value  float32 `protobuf:"fixed32,3,opt,name=value,proto3" json:"value,omitempty"`
+}
+
+func (x *StrategyWeight) Reset() {
+	*x = StrategyWeight{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_config_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StrategyWeight) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StrategyWeight) ProtoMessage() {}
+
+func (x *StrategyWeight) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_config_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StrategyWeight.ProtoReflect.Descriptor instead.
+func (*StrategyWeight) Descriptor() ([]byte, []int) {
+	return file_app_router_config_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *StrategyWeight) GetRegexp() bool {
+	if x != nil {
+		return x.Regexp
+	}
+	return false
+}
+
+func (x *StrategyWeight) GetMatch() string {
+	if x != nil {
+		return x.Match
+	}
+	return ""
+}
+
+func (x *StrategyWeight) GetValue() float32 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+type StrategyLeastLoadConfig struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	HealthCheck *HealthPingConfig `protobuf:"bytes,1,opt,name=healthCheck,proto3" json:"healthCheck,omitempty"`
+	// weight settings
+	Costs []*StrategyWeight `protobuf:"bytes,2,rep,name=costs,proto3" json:"costs,omitempty"`
+	// RTT baselines for selecting, int64 values of time.Duration
+	Baselines []int64 `protobuf:"varint,3,rep,packed,name=baselines,proto3" json:"baselines,omitempty"`
+	// expected nodes count to select
+	Expected int32 `protobuf:"varint,4,opt,name=expected,proto3" json:"expected,omitempty"`
+	// max acceptable rtt, filter away high delay nodes. defalut 0
+	MaxRTT int64 `protobuf:"varint,5,opt,name=maxRTT,proto3" json:"maxRTT,omitempty"`
+	// acceptable failure rate
+	Tolerance float32 `protobuf:"fixed32,6,opt,name=tolerance,proto3" json:"tolerance,omitempty"`
+}
+
+func (x *StrategyLeastLoadConfig) Reset() {
+	*x = StrategyLeastLoadConfig{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_config_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StrategyLeastLoadConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StrategyLeastLoadConfig) ProtoMessage() {}
+
+func (x *StrategyLeastLoadConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_config_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StrategyLeastLoadConfig.ProtoReflect.Descriptor instead.
+func (*StrategyLeastLoadConfig) Descriptor() ([]byte, []int) {
+	return file_app_router_config_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StrategyLeastLoadConfig) GetHealthCheck() *HealthPingConfig {
+	if x != nil {
+		return x.HealthCheck
+	}
+	return nil
+}
+
+func (x *StrategyLeastLoadConfig) GetCosts() []*StrategyWeight {
+	if x != nil {
+		return x.Costs
+	}
+	return nil
+}
+
+func (x *StrategyLeastLoadConfig) GetBaselines() []int64 {
+	if x != nil {
+		return x.Baselines
+	}
+	return nil
+}
+
+func (x *StrategyLeastLoadConfig) GetExpected() int32 {
+	if x != nil {
+		return x.Expected
+	}
+	return 0
+}
+
+func (x *StrategyLeastLoadConfig) GetMaxRTT() int64 {
+	if x != nil {
+		return x.MaxRTT
+	}
+	return 0
+}
+
+func (x *StrategyLeastLoadConfig) GetTolerance() float32 {
+	if x != nil {
+		return x.Tolerance
+	}
+	return 0
+}
+
+type HealthPingConfig struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// destination url, need 204 for success return
+	// default http://www.google.com/gen_204
+	Destination string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
+	// connectivity check url
+	Connectivity string `protobuf:"bytes,2,opt,name=connectivity,proto3" json:"connectivity,omitempty"`
+	// health check interval, int64 values of time.Duration
+	Interval int64 `protobuf:"varint,3,opt,name=interval,proto3" json:"interval,omitempty"`
+	// samplingcount is the amount of recent ping results which are kept for calculation
+	SamplingCount int32 `protobuf:"varint,4,opt,name=samplingCount,proto3" json:"samplingCount,omitempty"`
+	// ping timeout, int64 values of time.Duration
+	Timeout int64 `protobuf:"varint,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+}
+
+func (x *HealthPingConfig) Reset() {
+	*x = HealthPingConfig{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_config_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *HealthPingConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HealthPingConfig) ProtoMessage() {}
+
+func (x *HealthPingConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_config_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HealthPingConfig.ProtoReflect.Descriptor instead.
+func (*HealthPingConfig) Descriptor() ([]byte, []int) {
+	return file_app_router_config_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HealthPingConfig) GetDestination() string {
+	if x != nil {
+		return x.Destination
+	}
+	return ""
+}
+
+func (x *HealthPingConfig) GetConnectivity() string {
+	if x != nil {
+		return x.Connectivity
+	}
+	return ""
+}
+
+func (x *HealthPingConfig) GetInterval() int64 {
+	if x != nil {
+		return x.Interval
+	}
+	return 0
+}
+
+func (x *HealthPingConfig) GetSamplingCount() int32 {
+	if x != nil {
+		return x.SamplingCount
+	}
+	return 0
+}
+
+func (x *HealthPingConfig) GetTimeout() int64 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
 type Config struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -778,7 +1034,7 @@ type Config struct {
 func (x *Config) Reset() {
 	*x = Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_app_router_config_proto_msgTypes[8]
+		mi := &file_app_router_config_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -791,7 +1047,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_router_config_proto_msgTypes[8]
+	mi := &file_app_router_config_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1060,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_router_config_proto_rawDescGZIP(), []int{8}
+	return file_app_router_config_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Config) GetDomainStrategy() Config_DomainStrategy {
@@ -844,7 +1100,7 @@ type Domain_Attribute struct {
 func (x *Domain_Attribute) Reset() {
 	*x = Domain_Attribute{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_app_router_config_proto_msgTypes[9]
+		mi := &file_app_router_config_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -857,7 +1113,7 @@ func (x *Domain_Attribute) String() string {
 func (*Domain_Attribute) ProtoMessage() {}
 
 func (x *Domain_Attribute) ProtoReflect() protoreflect.Message {
-	mi := &file_app_router_config_proto_msgTypes[9]
+	mi := &file_app_router_config_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1224,7 +1480,7 @@ func file_app_router_config_proto_init() {
 			}
 		}
 		file_app_router_config_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Config); i {
+			switch v := v.(*StrategyWeight); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1236,6 +1492,42 @@ func file_app_router_config_proto_init() {
 			}
 		}
 		file_app_router_config_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*StrategyLeastLoadConfig); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_config_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*HealthPingConfig); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_config_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Config); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_config_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Domain_Attribute); i {
 			case 0:
 				return &v.state
@@ -1252,7 +1544,7 @@ func file_app_router_config_proto_init() {
 		(*RoutingRule_Tag)(nil),
 		(*RoutingRule_BalancingTag)(nil),
 	}
-	file_app_router_config_proto_msgTypes[9].OneofWrappers = []interface{}{
+	file_app_router_config_proto_msgTypes[12].OneofWrappers = []interface{}{
 		(*Domain_Attribute_BoolValue)(nil),
 		(*Domain_Attribute_IntValue)(nil),
 	}

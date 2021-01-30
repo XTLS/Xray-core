@@ -60,10 +60,55 @@ message TestRouteRequest {
   bool PublishResult = 3;
 }
 
+message GetBalancersRequest {
+  repeated string balancerTags = 1;
+}
+
+message OutboundMsg {
+  string tag = 1;
+  repeated string values = 2;
+}
+
+message OverrideSelectingMsg {
+  string until = 1;
+  repeated string selects = 2;
+}
+
+message BalancerMsg {
+  string tag = 1;
+  repeated string strategySettings = 2;
+  repeated string titles = 4;
+  OverrideSelectingMsg override = 5;
+  repeated OutboundMsg selects = 6;
+  repeated OutboundMsg others = 7;
+}
+
+message GetBalancersResponse {
+  repeated BalancerMsg balancers = 1;
+}
+
+message CheckBalancersRequest {
+  repeated string balancerTags = 1;
+}
+
+message CheckBalancersResponse {}
+
+
+message OverrideSelectingRequest {
+  string balancerTag = 1;
+  repeated string selectors = 2;
+  int64 validity = 3;
+}
+
+message OverrideSelectingResponse {}
+
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
   rpc TestRoute(TestRouteRequest) returns (RoutingContext) {}
+  rpc GetBalancers(GetBalancersRequest) returns (GetBalancersResponse) {}
+  rpc CheckBalancers(CheckBalancersRequest) returns (CheckBalancersResponse) {}
+  rpc OverrideSelecting(OverrideSelectingRequest) returns (OverrideSelectingResponse) {}
 }
 
 message Config {}

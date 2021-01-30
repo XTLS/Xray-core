@@ -294,6 +294,483 @@ func (x *TestRouteRequest) GetPublishResult() bool {
 	return false
 }
 
+type GetBalancersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BalancerTags []string `protobuf:"bytes,1,rep,name=balancerTags,proto3" json:"balancerTags,omitempty"`
+}
+
+func (x *GetBalancersRequest) Reset() {
+	*x = GetBalancersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetBalancersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBalancersRequest) ProtoMessage() {}
+
+func (x *GetBalancersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBalancersRequest.ProtoReflect.Descriptor instead.
+func (*GetBalancersRequest) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetBalancersRequest) GetBalancerTags() []string {
+	if x != nil {
+		return x.BalancerTags
+	}
+	return nil
+}
+
+type OutboundMsg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Tag    string   `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	Values []string `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+}
+
+func (x *OutboundMsg) Reset() {
+	*x = OutboundMsg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OutboundMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OutboundMsg) ProtoMessage() {}
+
+func (x *OutboundMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OutboundMsg.ProtoReflect.Descriptor instead.
+func (*OutboundMsg) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *OutboundMsg) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *OutboundMsg) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type OverrideSelectingMsg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Until   string   `protobuf:"bytes,1,opt,name=until,proto3" json:"until,omitempty"`
+	Selects []string `protobuf:"bytes,2,rep,name=selects,proto3" json:"selects,omitempty"`
+}
+
+func (x *OverrideSelectingMsg) Reset() {
+	*x = OverrideSelectingMsg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OverrideSelectingMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverrideSelectingMsg) ProtoMessage() {}
+
+func (x *OverrideSelectingMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverrideSelectingMsg.ProtoReflect.Descriptor instead.
+func (*OverrideSelectingMsg) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *OverrideSelectingMsg) GetUntil() string {
+	if x != nil {
+		return x.Until
+	}
+	return ""
+}
+
+func (x *OverrideSelectingMsg) GetSelects() []string {
+	if x != nil {
+		return x.Selects
+	}
+	return nil
+}
+
+type BalancerMsg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Tag              string                `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	StrategySettings []string              `protobuf:"bytes,2,rep,name=strategySettings,proto3" json:"strategySettings,omitempty"`
+	Titles           []string              `protobuf:"bytes,4,rep,name=titles,proto3" json:"titles,omitempty"`
+	Override         *OverrideSelectingMsg `protobuf:"bytes,5,opt,name=override,proto3" json:"override,omitempty"`
+	Selects          []*OutboundMsg        `protobuf:"bytes,6,rep,name=selects,proto3" json:"selects,omitempty"`
+	Others           []*OutboundMsg        `protobuf:"bytes,7,rep,name=others,proto3" json:"others,omitempty"`
+}
+
+func (x *BalancerMsg) Reset() {
+	*x = BalancerMsg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BalancerMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BalancerMsg) ProtoMessage() {}
+
+func (x *BalancerMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BalancerMsg.ProtoReflect.Descriptor instead.
+func (*BalancerMsg) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BalancerMsg) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *BalancerMsg) GetStrategySettings() []string {
+	if x != nil {
+		return x.StrategySettings
+	}
+	return nil
+}
+
+func (x *BalancerMsg) GetTitles() []string {
+	if x != nil {
+		return x.Titles
+	}
+	return nil
+}
+
+func (x *BalancerMsg) GetOverride() *OverrideSelectingMsg {
+	if x != nil {
+		return x.Override
+	}
+	return nil
+}
+
+func (x *BalancerMsg) GetSelects() []*OutboundMsg {
+	if x != nil {
+		return x.Selects
+	}
+	return nil
+}
+
+func (x *BalancerMsg) GetOthers() []*OutboundMsg {
+	if x != nil {
+		return x.Others
+	}
+	return nil
+}
+
+type GetBalancersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Balancers []*BalancerMsg `protobuf:"bytes,1,rep,name=balancers,proto3" json:"balancers,omitempty"`
+}
+
+func (x *GetBalancersResponse) Reset() {
+	*x = GetBalancersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetBalancersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBalancersResponse) ProtoMessage() {}
+
+func (x *GetBalancersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBalancersResponse.ProtoReflect.Descriptor instead.
+func (*GetBalancersResponse) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetBalancersResponse) GetBalancers() []*BalancerMsg {
+	if x != nil {
+		return x.Balancers
+	}
+	return nil
+}
+
+type CheckBalancersRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BalancerTags []string `protobuf:"bytes,1,rep,name=balancerTags,proto3" json:"balancerTags,omitempty"`
+}
+
+func (x *CheckBalancersRequest) Reset() {
+	*x = CheckBalancersRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CheckBalancersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckBalancersRequest) ProtoMessage() {}
+
+func (x *CheckBalancersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckBalancersRequest.ProtoReflect.Descriptor instead.
+func (*CheckBalancersRequest) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CheckBalancersRequest) GetBalancerTags() []string {
+	if x != nil {
+		return x.BalancerTags
+	}
+	return nil
+}
+
+type CheckBalancersResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *CheckBalancersResponse) Reset() {
+	*x = CheckBalancersResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CheckBalancersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckBalancersResponse) ProtoMessage() {}
+
+func (x *CheckBalancersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckBalancersResponse.ProtoReflect.Descriptor instead.
+func (*CheckBalancersResponse) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{9}
+}
+
+type OverrideSelectingRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BalancerTag string   `protobuf:"bytes,1,opt,name=balancerTag,proto3" json:"balancerTag,omitempty"`
+	Selectors   []string `protobuf:"bytes,2,rep,name=selectors,proto3" json:"selectors,omitempty"`
+	Validity    int64    `protobuf:"varint,3,opt,name=validity,proto3" json:"validity,omitempty"`
+}
+
+func (x *OverrideSelectingRequest) Reset() {
+	*x = OverrideSelectingRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OverrideSelectingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverrideSelectingRequest) ProtoMessage() {}
+
+func (x *OverrideSelectingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverrideSelectingRequest.ProtoReflect.Descriptor instead.
+func (*OverrideSelectingRequest) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OverrideSelectingRequest) GetBalancerTag() string {
+	if x != nil {
+		return x.BalancerTag
+	}
+	return ""
+}
+
+func (x *OverrideSelectingRequest) GetSelectors() []string {
+	if x != nil {
+		return x.Selectors
+	}
+	return nil
+}
+
+func (x *OverrideSelectingRequest) GetValidity() int64 {
+	if x != nil {
+		return x.Validity
+	}
+	return 0
+}
+
+type OverrideSelectingResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *OverrideSelectingResponse) Reset() {
+	*x = OverrideSelectingResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_router_command_command_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *OverrideSelectingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverrideSelectingResponse) ProtoMessage() {}
+
+func (x *OverrideSelectingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_router_command_command_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverrideSelectingResponse.ProtoReflect.Descriptor instead.
+func (*OverrideSelectingResponse) Descriptor() ([]byte, []int) {
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{11}
+}
+
 type Config struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -303,7 +780,7 @@ type Config struct {
 func (x *Config) Reset() {
 	*x = Config{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_app_router_command_command_proto_msgTypes[3]
+		mi := &file_app_router_command_command_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -316,7 +793,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_router_command_command_proto_msgTypes[3]
+	mi := &file_app_router_command_command_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -329,7 +806,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_router_command_command_proto_rawDescGZIP(), []int{3}
+	return file_app_router_command_command_proto_rawDescGZIP(), []int{12}
 }
 
 var File_app_router_command_command_proto protoreflect.FileDescriptor
@@ -427,7 +904,7 @@ func file_app_router_command_command_proto_rawDescGZIP() []byte {
 	return file_app_router_command_command_proto_rawDescData
 }
 
-var file_app_router_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_app_router_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_app_router_command_command_proto_goTypes = []interface{}{
 	(*RoutingContext)(nil),               // 0: xray.app.router.command.RoutingContext
 	(*SubscribeRoutingStatsRequest)(nil), // 1: xray.app.router.command.SubscribeRoutingStatsRequest
@@ -494,6 +971,114 @@ func file_app_router_command_command_proto_init() {
 			}
 		}
 		file_app_router_command_command_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetBalancersRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*OutboundMsg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*OverrideSelectingMsg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BalancerMsg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetBalancersResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CheckBalancersRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CheckBalancersResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*OverrideSelectingRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*OverrideSelectingResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_router_command_command_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Config); i {
 			case 0:
 				return &v.state
@@ -512,7 +1097,7 @@ func file_app_router_command_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_app_router_command_command_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

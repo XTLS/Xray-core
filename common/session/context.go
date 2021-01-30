@@ -24,6 +24,7 @@ const (
 	dispatcherKey
 	timeoutOnlyKey
 	allowedNetworkKey
+	handlerSessionKey
 )
 
 // ContextWithID returns a new context with the given ID.
@@ -159,4 +160,17 @@ func AllowedNetworkFromContext(ctx context.Context) net.Network {
 		return val
 	}
 	return net.Network_Unknown
+}
+
+// ContextWithHandler returns a new context with handler
+func ContextWithHandler(ctx context.Context, handler *Handler) context.Context {
+	return context.WithValue(ctx, handlerSessionKey, handler)
+}
+
+// HandlerFromContext returns handler config in this context, or nil if not
+func HandlerFromContext(ctx context.Context) *Handler {
+	if handler, ok := ctx.Value(handlerSessionKey).(*Handler); ok {
+		return handler
+	}
+	return nil
 }
