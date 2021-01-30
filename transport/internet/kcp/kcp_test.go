@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
@@ -21,8 +23,8 @@ func TestDialAndListen(t *testing.T) {
 	listerner, err := NewListener(context.Background(), net.LocalHostIP, net.Port(0), &internet.MemoryStreamConfig{
 		ProtocolName:     "mkcp",
 		ProtocolSettings: &Config{},
-	}, func(conn internet.Connection) {
-		go func(c internet.Connection) {
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
 			payload := make([]byte, 4096)
 			for {
 				nBytes, err := c.Read(payload)

@@ -8,6 +8,8 @@ package proxy
 import (
 	"context"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/features/routing"
@@ -21,7 +23,7 @@ type Inbound interface {
 	Network() []net.Network
 
 	// Process processes a connection of given network. If necessary, the Inbound can dispatch the connection to an Outbound.
-	Process(context.Context, net.Network, internet.Connection, routing.Dispatcher) error
+	Process(context.Context, net.Network, stat.Connection, routing.Dispatcher) error
 }
 
 // An Outbound process outbound connections.

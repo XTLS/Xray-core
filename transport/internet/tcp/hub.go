@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	goxtls "github.com/xtls/go"
 
 	"github.com/xtls/xray-core/common"
@@ -119,7 +121,7 @@ func (v *Listener) keepAccepting() {
 			conn = v.authConfig.Server(conn)
 		}
 
-		v.addConn(internet.Connection(conn))
+		v.addConn(stat.Connection(conn))
 	}
 }
 
