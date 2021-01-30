@@ -246,13 +246,12 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	for _, opt := range opts {
 		opt(config)
 	}
-	certificate := c.BuildCertificates()
 
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertficateFunc(certificate)
+		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
