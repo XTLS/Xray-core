@@ -195,11 +195,13 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 		}
 		if l >= 17 && s[11:17] == "trojan" || l >= 22 && s[11:22] == "shadowsocks" {
 			t = true
-			var m proxyman.SenderConfig
-			proto.Unmarshal(outbound.SenderSettings.Value, &m)
-			if m.MultiplexSettings != nil && m.MultiplexSettings.Enabled {
-				cone = false
-				break
+			if outbound.SenderSettings != nil {
+				var m proxyman.SenderConfig
+				proto.Unmarshal(outbound.SenderSettings.Value, &m)
+				if m.MultiplexSettings != nil && m.MultiplexSettings.Enabled {
+					cone = false
+					break
+				}
 			}
 		}
 	}

@@ -45,7 +45,7 @@ func TestUDPEncoding(t *testing.T) {
 		t.Error("data: ", r)
 	}
 
-	if r := cmp.Diff(decodedRequest, request); r != "" {
+	if r := cmp.Diff(decodedRequest, request, cmp.Comparer(func(a1, a2 protocol.Account) bool { return a1.Equals(a2) })); r != "" {
 		t.Error("request: ", r)
 	}
 }
@@ -119,7 +119,7 @@ func TestTCPRequest(t *testing.T) {
 
 		decodedRequest, reader, err := ReadTCPSession([]*protocol.MemoryUser{request.User}, cache)
 		common.Must(err)
-		if r := cmp.Diff(decodedRequest, request); r != "" {
+		if r := cmp.Diff(decodedRequest, request, cmp.Comparer(func(a1, a2 protocol.Account) bool { return a1.Equals(a2) })); r != "" {
 			t.Error("request: ", r)
 		}
 
