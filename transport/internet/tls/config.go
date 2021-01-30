@@ -54,6 +54,10 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			continue
 		}
 		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		if err != nil {
+			newError("ignoring invalid certificate").Base(err).AtWarning().WriteToLog()
+			continue
+		}
 		certs = append(certs, &keyPair)
 		if entry.OcspStapling != 0 {
 			go func(cert *tls.Certificate) {
