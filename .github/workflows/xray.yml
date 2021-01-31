@@ -124,11 +124,6 @@ jobs:
         zip -r Xray-upx-Macos-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
-        CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        zip -r Xray-Macos-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Macos-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        rm -f -r xray
     - name: 编译安卓
       run: |
 
