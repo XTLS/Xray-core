@@ -31,7 +31,7 @@ jobs:
         cd /Users/Shared/xray/Xray-core
     - name: 编译linux
       run: |
-       
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
         CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
@@ -62,7 +62,7 @@ jobs:
 
     - name: 编译windows
       run: | 
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
 
         CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
@@ -73,16 +73,17 @@ jobs:
         
     - name: 编译MacOS
       run: |
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
     - name: 编译安卓
       run: |
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
     - name: 编译其他
       run: |
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=freebsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
 
@@ -103,5 +104,24 @@ jobs:
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-
+        - name: Update dist folder to repository
+    - name: Update dist folder to repository
+      env:
+        # 你的GitHub名字
+        GITHUB_USERNAME: "xinb"
+        # 你的邮箱
+        EMAIL: ${{ secrets.EMAIL }}
+        # GitHub Pages仓库名
+        DIST_REPO: ${{ secrets.REP }}
+        # GitHub Token
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        
+      run: |
+        cd /Users/Shared/xray/Xray-core
+        mkdir /Users/Shared/xray/upload
+        mv /Users/Shared/xray/Xray-core/Xray* /Users/Shared/xray/upload
+        git config --global user.email $GITHUB_USERNAME
+        git config --global user.name $EMAIL
+        
+        cd /Users/Shared/xray/upload && git init && git add .
 
