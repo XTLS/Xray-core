@@ -32,7 +32,7 @@ jobs:
         cd /Users/Shared/xray/Xray-core
     - name: 编译linux
       run: |
-       
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         upx xray
@@ -98,7 +98,7 @@ jobs:
         rm -f -r xray
     - name: 编译windows
       run: | 
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-windows-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         upx xray.exe
@@ -117,7 +117,7 @@ jobs:
         
     - name: 编译MacOS
       run: |
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Macos-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         upx xray
@@ -126,12 +126,13 @@ jobs:
 
     - name: 编译安卓
       run: |
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
     - name: 编译其他
       run: |
-
+        cd /Users/Shared/xray/Xray-core
         CGO_ENABLED=0 GOOS=freebsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-freebsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
@@ -175,6 +176,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
         
       run: |
+        cd /Users/Shared/xray/Xray-core
         mkdir /Users/Shared/xray/upload
         mv /Users/Shared/xray/Xray-core/Xray*  /Users/Shared/xray/upload
         git config --global user.email $GITHUB_USERNAME
