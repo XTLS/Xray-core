@@ -1,4 +1,4 @@
-name: 更新xray二进制
+name: xray编译测试
 
 env:
   TZ: Asia/Shanghai
