@@ -126,21 +126,8 @@ jobs:
 
     - name: 编译安卓
       run: |
-
-        CGO_ENABLED=0 GOOS=android GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        zip -r Xray-Android-arm-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        rm -f -r xray
-
         CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        rm -f -r xray
-
-        CGO_ENABLED=0 GOOS=android GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        zip -r Xray-Android-x86-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        rm -f -r xray
-
-        CGO_ENABLED=0 GOOS=android GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        zip -r Xray-Android-x86-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
     - name: 编译其他
       run: |
