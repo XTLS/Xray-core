@@ -134,8 +134,6 @@ jobs:
 
         CGO_ENABLED=0 GOOS=freebsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-freebsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-freebsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
@@ -152,8 +150,6 @@ jobs:
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-openbsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-openbsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
