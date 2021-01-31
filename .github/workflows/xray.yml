@@ -23,38 +23,191 @@ jobs:
         node-version: '12'
     
     # 安装和构建
-    - name: Install and Build
+    - name: 安装UPX，拉取源码
       run: |
         brew install upx
         mkdir /Users/Shared/xray
         cd /Users/Shared/xray
         git clone https://github.com/xinb/Xray-core.git
         cd /Users/Shared/xray/Xray-core
+    - name: 编译linux
+      run: |
+# linux64
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        upx xray
         zip -r Xray-Linux-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
+# linux32
         CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        upx xray
         zip -r Xray-Linux-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
+# linux-arm32
         CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         upx xray
-        zip -r Xray-Linux-ARM-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        zip -r Xray-upx-Linux-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
+    # linux-arm64
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-mips32
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-mips32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-mips32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray  
+    # linux-mips64
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-mips64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-mips64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-mips32le
+        CGO_ENABLED=0 GOOS=linux GOARCH=mipsle go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-mips32le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-mips32le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-mips64le
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-mips64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-mips64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-ppc64
+        CGO_ENABLED=0 GOOS=linux GOARCH=ppc64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-ppc64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-ppc64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-ppc64le
+        CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-ppc64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-ppc64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-riscv64
+        CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-riscv64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-riscv64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # linux-s390x
+        CGO_ENABLED=0 GOOS=linux GOARCH=s390x go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Linux-s390x-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Linux-s390x-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    - name: 编译windows
+      run: | 
+# windows 64
         CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
-        upx xray.exe
         zip -r Xray-windows-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
-        rm -f -r xray.exe
-        CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
         upx xray.exe
-        zip -r Xray-windows-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        zip -r Xray-upx-windows-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         rm -f -r xray.exe
-        CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        upx xray
+    # windows 32
+        CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-windows-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        upx xray.exe
+        zip -r Xray-upx-windows-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        rm -f -r xray.exe
+    - name: 编译MacOS
+      run: |
+# Macos 64
+        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Macos-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Macos-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
-        
+    # Macos Arm64
+        CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Macos-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Macos-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    - name: 编译安卓
+      run: |
+# Android arm32
+        CGO_ENABLED=0 GOOS=android GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Android-arm-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Android-arm-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # Android arm64
+        CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # Android 32
+        CGO_ENABLED=0 GOOS=android GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Android-x86-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Android-x86-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # Android 64
+        CGO_ENABLED=0 GOOS=android GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-Android-x86-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-Android-x86-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    - name: 编译其他
+      run: |
+# freebsd32
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-freebsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-freebsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # freebsd64
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-freebsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-freebsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # freebsd arm32
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-freebsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-freebsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # freebsd arm64
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-freebsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-freebsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # openbsd32
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-openbsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-openbsd-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # openbsd64
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-openbsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-openbsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # openbsd arm32
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-openbsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-openbsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
+    # openbsd arm64
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-openbsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        upx xray
+        zip -r Xray-upx-openbsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        rm -f -r xray
     - name: Update dist folder to repository
       env:
         # 你的GitHub名字
