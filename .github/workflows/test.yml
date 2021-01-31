@@ -104,7 +104,6 @@ jobs:
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        - name: Update dist folder to repository
     - name: Update dist folder to repository
       env:
         # 你的GitHub名字
