@@ -65,8 +65,6 @@ jobs:
 
         CGO_ENABLED=0 GOOS=linux GOARCH=mips64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-mips64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Linux-mips64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=linux GOARCH=mipsle go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
@@ -75,10 +73,8 @@ jobs:
         zip -r Xray-upx-Linux-mips32le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
-        CGO_ENABLED=0 GOOS=linux GOARCH=mips64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips64le go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-mips64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Linux-mips64le-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=linux GOARCH=ppc64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
