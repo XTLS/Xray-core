@@ -118,6 +118,13 @@ jobs:
         upx xray.exe
         zip -r Xray-upx-windows-32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         rm -f -r xray.exe
+        
+        CGO_ENABLED=0 GOOS=windows GOARCH=arm go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+        zip -r Xray-windows-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        upx xray.exe
+        zip -r Xray-upx-windows-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
+        rm -f -r xray.exe
+        
     - name: 编译MacOS
       run: |
 
