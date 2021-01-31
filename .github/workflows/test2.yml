@@ -17,11 +17,6 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@main
-    - uses: actions/setup-node@v1
-      with:
-        node-version: '12'
-    
     # 安装和构建
     - name: 安装UPX，拉取源码
       run: |
