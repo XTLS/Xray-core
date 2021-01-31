@@ -1,0 +1,107 @@
+name: 更新xray二进制
+
+env:
+  TZ: Asia/Shanghai
+
+on:
+  # 当master分支提交时
+  workflow_dispatch:
+  push:
+    branches: 
+      - code
+
+# 开始任务
+jobs:
+  main:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+    - uses: actions/setup-node@v1
+      with:
+        node-version: '12'
+    
+    # 安装和构建
+    - name: 安装UPX，拉取源码
+      run: |
+        mkdir /Users/Shared/xray
+        cd /Users/Shared/xray
+        git clone https://github.com/xinb/Xray-core.git
+        cd /Users/Shared/xray/Xray-core
+    - name: 编译linux
+      run: |
+       
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=mipsle go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=mips64le go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=ppc64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=s390x go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+    - name: 编译windows
+      run: | 
+
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+
+        
+        CGO_ENABLED=0 GOOS=windows GOARCH=arm go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+
+        
+    - name: 编译MacOS
+      run: |
+
+        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+    - name: 编译安卓
+      run: |
+        CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+    - name: 编译其他
+      run: |
+
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
+
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+        CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+
