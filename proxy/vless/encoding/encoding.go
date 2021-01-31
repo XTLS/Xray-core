@@ -213,7 +213,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
-				reader = buf.NewReadVReader(conn.Connection, rawConn)
+				reader = buf.NewReadVReader(conn.Connection, rawConn, nil)
 				ct = counter
 				if conn.SHOW {
 					fmt.Println(conn.MARK, "ReadV")
