@@ -29,9 +29,6 @@ jobs:
         cd /Users/Shared/xray
         git clone https://github.com/xinb/Xray-core.git
         cd /Users/Shared/xray/Xray-core
-    - name: 编译linux
-      run: |
-       
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         ls
