@@ -176,7 +176,7 @@ jobs:
         
       run: |
         mkdir /Users/Shared/xray/upload
-        mv /Users/Shared/xray/Xray-core/Xray* /Users/Shared/xray/upload
+        mv /Users/Shared/xray/Xray-core/Xray*  /Users/Shared/xray/upload
         git config --global user.email $GITHUB_USERNAME
         git config --global user.name $EMAIL
         
