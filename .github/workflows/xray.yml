@@ -91,14 +91,10 @@ jobs:
 
         CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-riscv64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Linux-riscv64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=linux GOARCH=s390x go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Linux-s390x-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Linux-s390x-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
     - name: 编译windows
       run: | 
@@ -117,8 +113,6 @@ jobs:
         
         CGO_ENABLED=0 GOOS=windows GOARCH=arm go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-windows-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
-        upx xray.exe
-        zip -r Xray-upx-windows-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray.exe
         rm -f -r xray.exe
         
     - name: 编译MacOS
@@ -140,26 +134,18 @@ jobs:
 
         CGO_ENABLED=0 GOOS=android GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-arm-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Android-arm-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Android-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=android GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-x86-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Android-x86-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=android GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-Android-x86-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-Android-x86-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
     - name: 编译其他
       run: |
@@ -172,20 +158,14 @@ jobs:
 
         CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-freebsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-freebsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=freebsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-freebsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-freebsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-freebsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-freebsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=386 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
@@ -196,20 +176,14 @@ jobs:
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-openbsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-openbsd-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-openbsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-openbsd-arm32-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
 
         CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
         zip -r Xray-openbsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
-        upx xray
-        zip -r Xray-upx-openbsd-arm64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
         rm -f -r xray
     - name: Update dist folder to repository
       env:
