@@ -30,7 +30,7 @@ jobs:
         uses: johnwbyrd/update-release@v1.0.0
         with:
           tag: AutoBuilding
-          release: 自动编译
+          release: AutoBuilding $(date +'%Y-%m-%d %H:%M:%S')
           prerelease: true
           message: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建
           body: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建 \n https://github.com/XTLS/Xray-core/releases
