@@ -119,6 +119,7 @@ jobs:
         run: |
           sudo apt-get install upx-ucl
           ls
+          cd ./build_assets || exit 1
           upx xray*
           zip -9vr ../xray-upx-$ASSET_NAME.zip .
           popd || exit 1
