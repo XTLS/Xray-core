@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: 
-      - main
+      - xxx
 
 # 开始任务
 jobs:
