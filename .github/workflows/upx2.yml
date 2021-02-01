@@ -33,14 +33,6 @@ jobs:
             goarm: 5
             UPXX: 1
           # END Linux ARM 5 6 7
-          # BEGIN Android ARM 8
-          - goos: android
-            goarch: arm64
-          # END Android ARM 8
-          # Windows ARM 7
-          - goos: windows
-            goarch: arm
-            goarm: 7
           # BEGIN Other architectures
           - goos: linux
             goarch: arm64
@@ -48,10 +40,6 @@ jobs:
           - goos: linux
             goarch: riscv64
           # BEGIN MIPS
-          - goos: linux
-            goarch: mips64
-          - goos: linux
-            goarch: mips64le
           - goos: linux
             goarch: mipsle
             UPXX: 1
@@ -74,26 +62,6 @@ jobs:
           - goos: linux
             goarch: ppc64le
             UPXX: 1
-          # END PPC
-          # BEGIN FreeBSD ARM
-          - goos: freebsd
-            goarch: arm64
-          - goos: freebsd
-            goarch: arm
-            goarm: 7
-          # END FreeBSD ARM
-          # BEGIN S390X
-          - goos: linux
-            goarch: s390x
-          # END S390X
-          # END Other architectures
-          # BEGIN OPENBSD ARM
-          - goos: openbsd
-            goarch: arm64
-          - goos: openbsd
-            goarch: arm
-            goarm: 7
-          # END OPENBSD ARM
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -150,7 +118,6 @@ jobs:
           cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
       - name: Create upx package
-        if: matrix.upx == '1'
         run: |
           sudo apt-get install upx-ucl
           upx xray*
