@@ -182,4 +182,4 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            ./xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+            ./xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
