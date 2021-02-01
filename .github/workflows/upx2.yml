@@ -1,6 +1,7 @@
-name: Release
+name: Release Update
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/build/version'
@@ -23,12 +24,15 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
+            upx: 1
           - goos: linux
             goarch: arm
             goarm: 6
+            upx: 1
           - goos: linux
             goarch: arm
             goarm: 5
+            upx: 1
           # END Linux ARM 5 6 7
           # BEGIN Android ARM 8
           - goos: android
@@ -41,6 +45,7 @@ jobs:
           # BEGIN Other architectures
           - goos: linux
             goarch: arm64
+            upx: 1
           - goos: linux
             goarch: riscv64
           # BEGIN MIPS
@@ -50,16 +55,46 @@ jobs:
             goarch: mips64le
           - goos: linux
             goarch: mipsle
+            upx: 1
           - goos: linux
             goarch: mipsle
             gomips: softfloat
+            upx: 1
           - goos: linux
             goarch: mips
+            upx: 1
           - goos: linux
             goarch: mips
             gomips: softfloat
+            upx: 1
           # END MIPS
+          # BEGIN PPC
+          - goos: linux
+            goarch: ppc64
+            upx: 1
+          - goos: linux
+            goarch: ppc64le
+            upx: 1
+          # END PPC
+          # BEGIN FreeBSD ARM
+          - goos: freebsd
+            goarch: arm64
+          - goos: freebsd
+            goarch: arm
+            goarm: 7
+          # END FreeBSD ARM
+          # BEGIN S390X
+          - goos: linux
+            goarch: s390x
+          # END S390X
           # END Other architectures
+          # BEGIN OPENBSD ARM
+          - goos: openbsd
+            goarch: arm64
+          - goos: openbsd
+            goarch: arm
+            goarm: 7
+          # END OPENBSD ARM
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -68,6 +103,7 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       GOARM: ${{ matrix.goarm }}
       GOMIPS: ${{ matrix.gomips }}
+      UPX: ${{matrix.upx}}
       CGO_ENABLED: 0
 
     steps:
@@ -82,6 +118,7 @@ jobs:
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -94,47 +131,67 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+
       - name: Build Windows Xray
         if: matrix.goos == 'windows'
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
+
       - name: Prepare to release
         run: |
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           wget -O ./build_assets/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
           wget -O ./build_assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+
       - name: Prepare package for Linux
         if: matrix.goos == 'linux'
         run: |
           ls 
           cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
+
       - name: Create ZIP archive
         run: |
           pushd build_assets || exit 1
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
           FILE=./xray-$ASSET_NAME.zip
+          DGST=z-$FILE.dgst
+          openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
+          openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
+          openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
+          openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
+          pushd build_assets || exit 1
+      - name: Create upx package
+        if: matrix.upx == 1
+        run: |
+          sudo apt-get install upx-ucl
+          upx xray*
+          zip -9vr ../xray-upx-$ASSET_NAME.zip .
+          popd || exit 1
+          FILE=./xray-upx-$ASSET_NAME.zip
           DGST=$FILE.dgst
           openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
+
       - name: Change the name
         run: |
           mv build_assets xray-$ASSET_NAME
+          mv build_assets xray-upx-$ASSET_NAME
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
-          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }} xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }} 
+          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }} xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}
 
       - name: Upload files to GitHub release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ env.VERSION }}
+          name: Xray-core-upx ${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
           draft: false
           prerelease: true
