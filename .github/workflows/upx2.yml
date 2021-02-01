@@ -1,4 +1,4 @@
-name: Release Update
+name: Release Upx Update
 
 on:
   workflow_dispatch:
