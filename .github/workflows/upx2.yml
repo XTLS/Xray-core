@@ -150,18 +150,6 @@ jobs:
           ls 
           cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
-      - name: Create ZIP archive
-        run: |
-          pushd build_assets || exit 1
-          zip -9vr ../xray-$ASSET_NAME.zip .
-          popd || exit 1
-          FILE=./xray-$ASSET_NAME.zip
-          DGST=$FILE.dgst
-          openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
-          pushd build_assets || exit 1
       - name: Create upx package
         if: matrix.upx == 1
         run: |
@@ -178,13 +166,12 @@ jobs:
 
       - name: Change the name
         run: |
-          mv build_assets xray-$ASSET_NAME
           mv build_assets xray-upx-$ASSET_NAME
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }} xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }} 
-          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }} xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}
+          name: xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }} 
+          path: xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}
 
       - name: Upload files to GitHub release
         uses: softprops/action-gh-release@v1
