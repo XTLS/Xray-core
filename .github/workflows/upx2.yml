@@ -180,6 +180,6 @@ jobs:
           name: Xray-core-upx ${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
           draft: false
-          prerelease: true
+          prerelease: false
           files: |
-            ./xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
+            ./xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
