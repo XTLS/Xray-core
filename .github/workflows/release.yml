@@ -24,7 +24,7 @@ jobs:
           wget https://github.com/xinb/Xray-core/releases/download/v1.2.4/Xray-windows-64-2021-02-01.zip
           
       - name: Update release
-        uses: johnwbyrd/update-release@v1
+        uses: johnwbyrd/update-release@v1.0.0
         with:
           token: ${{ secrets.TOKEN }}
           files: ./Xray-windows-64-2021-02-01.zip
