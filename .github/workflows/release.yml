@@ -17,7 +17,7 @@ jobs:
 # 开始任务
       - name: 安装UPX，拉取源码
         run: |
-          mkdir /Users/Shared/xray/Xray-core
+          mkdir /Users/Shared/xray
           cd /Users/Shared/xray
           mkdir /Users/Shared/xray/Xray-core
           cd /Users/Shared/xray/Xray-core
