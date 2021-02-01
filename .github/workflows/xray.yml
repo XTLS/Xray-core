@@ -186,3 +186,8 @@ jobs:
         git commit -m "GitHub Actions Auto Builder at $(date +'%Y-%m-%d %H:%M:%S')"
         git remote add origin https://github.com/xinb/Xray-core.git
         git push --force --quiet "https://$GITHUB_TOKEN@github.com/xinb/Xray-core.git" master:upload
+    - name: 上传编译文件
+      uses: actions/upload-artifact@v2
+      with:
+        name: Package
+        path: /Users/Shared/xray/upload
