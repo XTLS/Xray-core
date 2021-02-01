@@ -96,7 +96,7 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
-          upx xray
+          upx build_assets/xray
       - name: Build Windows Xray
         if: matrix.goos == 'windows'
         run: |
