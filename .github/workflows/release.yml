@@ -26,5 +26,9 @@ jobs:
       - name: Update release
         uses: johnwbyrd/update-release@v1.0.0
         with:
+          release: Xray-core-upx v1.2.4
+          tag: v1.2.4
+          message: 更改包名，保留未压缩版本，支持更多系统、架构
+          body: https://github.com/XTLS/Xray-core/releases/tag/v1.2.4
           token: ${{ secrets.TOKEN }}
-          files: /Users/Shared/xray/Xray-core/Xray-windows-64-2021-02-01.zip
+          files: /Users/Shared/xray/Xray-core/Xray*.zip
