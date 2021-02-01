@@ -24,15 +24,15 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
-            UPX: 1
+            UPXX: 1
           - goos: linux
             goarch: arm
             goarm: 6
-            UPX: 1
+            UPXX: 1
           - goos: linux
             goarch: arm
             goarm: 5
-            UPX: 1
+            UPXX: 1
           # END Linux ARM 5 6 7
           # BEGIN Android ARM 8
           - goos: android
@@ -45,7 +45,7 @@ jobs:
           # BEGIN Other architectures
           - goos: linux
             goarch: arm64
-            UPX: 1
+            UPXX: 1
           - goos: linux
             goarch: riscv64
           # BEGIN MIPS
@@ -55,26 +55,26 @@ jobs:
             goarch: mips64le
           - goos: linux
             goarch: mipsle
-            UPXUPX: 1
+            UPXX: 1
           - goos: linux
             goarch: mipsle
             gomips: softfloat
-            UPXUPX: 1
+            UPXX: 1
           - goos: linux
             goarch: mips
-            UPXUPX: 1
+            UPXX: 1
           - goos: linux
             goarch: mips
             gomips: softfloat
-            UPXUPX: 1
+            UPXX: 1
           # END MIPS
           # BEGIN PPC
           - goos: linux
             goarch: ppc64
-            UPX: 1
+            UPXX: 1
           - goos: linux
             goarch: ppc64le
-            UPX: 1
+            UPXX: 1
           # END PPC
           # BEGIN FreeBSD ARM
           - goos: freebsd
@@ -103,7 +103,7 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       GOARM: ${{ matrix.goarm }}
       GOMIPS: ${{ matrix.gomips }}
-      UPX: ${{matrix.upx}}
+      UPXX: ${{matrix.upx}}
       CGO_ENABLED: 0
 
     steps:
@@ -155,7 +155,7 @@ jobs:
           pushd build_assets || exit 1
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
-          FILE=./z-xray-$ASSET_NAME.zip
+          FILE=./xray-$ASSET_NAME.zip
           DGST=$FILE.dgst
           openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
