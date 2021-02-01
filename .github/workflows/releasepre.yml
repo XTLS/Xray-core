@@ -76,7 +76,7 @@ jobs:
         id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "VERSION=$(cat ".github/build/version" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
+          echo "VERSION=$(cat ".github/build/versionpre" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
@@ -136,6 +136,6 @@ jobs:
           name: Xray-core-upx ${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
           draft: false
-          prerelease: false
+          prerelease: true
           files: |
             ./xray-upx-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
