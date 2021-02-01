@@ -1,0 +1,22 @@
+name: xray 版本发布
+
+env:
+  TZ: Asia/Shanghai
+
+on:
+  # 当master分支提交时
+  workflow_dispatch:
+  push:
+    branches: 
+      - main
+
+# 开始任务
+jobs:
+   release-please:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: GoogleCloudPlatform/release-please-action@v2
+         with:
+           token: ${{ secrets.TOKEN }}
+           release-type: node
+           package-name: test-release-please-action
