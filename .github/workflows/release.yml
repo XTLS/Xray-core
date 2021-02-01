@@ -17,9 +17,9 @@ jobs:
 # 开始任务
       - name: 安装UPX，拉取源码
         run: |
-          mkdir /Users/Shared/xray
+          mkdir /Users/Shared/xray/Xray-core
           cd /Users/Shared/xray
-          git clone https://github.com/xinb/Xray-core.git
+          mkdir /Users/Shared/xray/Xray-core
           cd /Users/Shared/xray/Xray-core
           wget https://github.com/xinb/Xray-core/releases/download/v1.2.4/Xray-windows-64-2021-02-01.zip
           
@@ -31,4 +31,4 @@ jobs:
           message: 更改包名，保留未压缩版本，支持更多系统、架构
           body: https://github.com/XTLS/Xray-core/releases/tag/v1.2.4
           token: ${{ secrets.TOKEN }}
-          files: /Users/Shared/xray/Xray-core/Xray*.zip
+          files: /Users/Shared/xray/Xray-core
