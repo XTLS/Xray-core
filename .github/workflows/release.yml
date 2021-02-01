@@ -1,4 +1,5 @@
-name: release-please
+
+name: release test
 
 env:
   TZ: Asia/Shanghai
@@ -8,15 +9,22 @@ on:
   workflow_dispatch:
   push:
     branches: 
-      - main
-
-# 开始任务
+      - code
 jobs:
-   release-please:
-     runs-on: ubuntu-latest
-     steps:
-       - uses: GoogleCloudPlatform/release-please-action@v2
-         with:
-           token: ${{ secrets.TOKEN }}
-           release-type: node
-           package-name: test-release-please-action
+  main:
+    runs-on: macos-latest
+    steps:
+# 开始任务
+      - name: 安装UPX，拉取源码
+        run: |
+          mkdir /Users/Shared/xray
+          cd /Users/Shared/xray
+          git clone https://github.com/xinb/Xray-core.git
+          cd /Users/Shared/xray/Xray-core
+          wget https://github.com/xinb/Xray-core/releases/download/v1.2.4/Xray-windows-64-2021-02-01.zip
+          
+      - name: Update release
+        uses: johnwbyrd/update-release@v1
+        with:
+          token: ${{ secrets.TOKEN }}
+          files: ./Xray-windows-64-2021-02-01.zip
