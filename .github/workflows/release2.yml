@@ -142,6 +142,6 @@ jobs:
           name: ${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
           draft: false
-          prerelease: false
+          prerelease: true
           files: |
             ./xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
