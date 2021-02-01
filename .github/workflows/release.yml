@@ -18,7 +18,7 @@ jobs:
           mkdir /Users/Shared/xray
           mkdir /Users/Shared/xray/upload
           cd /Users/Shared/xray/upload
-          sleep 1
+          sleep 1200
           wget https://github.com/xinb/Xray-core/archive/upload.zip
           unzip upload.zip
           cd /Users/Shared/xray/upload/Xray-core-upload
@@ -29,7 +29,7 @@ jobs:
         uses: johnwbyrd/update-release@v1.0.0
         with:
           tag: auto
-          release: AutoBuilding at $(date +'%Y-%m-%d %H:%M:%S')
+          release: AutoBuilding
           prerelease: true
           message: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建
           body: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建  https://github.com/XTLS/Xray-core/releases
