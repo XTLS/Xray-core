@@ -1,4 +1,4 @@
-name: xray 版本发布
+name: release-please
 
 env:
   TZ: Asia/Shanghai
