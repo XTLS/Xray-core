@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/build/version'
@@ -59,7 +60,31 @@ jobs:
             goarch: mips
             gomips: softfloat
           # END MIPS
+          # BEGIN PPC
+          - goos: linux
+            goarch: ppc64
+          - goos: linux
+            goarch: ppc64le
+          # END PPC
+          # BEGIN FreeBSD ARM
+          - goos: freebsd
+            goarch: arm64
+          - goos: freebsd
+            goarch: arm
+            goarm: 7
+          # END FreeBSD ARM
+          # BEGIN S390X
+          - goos: linux
+            goarch: s390x
+          # END S390X
           # END Other architectures
+          # BEGIN OPENBSD ARM
+          - goos: openbsd
+            goarch: arm64
+          - goos: openbsd
+            goarch: arm
+            goarm: 7
+          # END OPENBSD ARM
       fail-fast: false
 
     runs-on: ubuntu-latest
