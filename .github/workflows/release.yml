@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: 
-      - code
+      - upload
 jobs:
   main:
     runs-on: macos-latest
@@ -29,7 +29,10 @@ jobs:
       - name: Update release
         uses: johnwbyrd/update-release@v1.0.0
         with:
-          message: 更改包名，保留未压缩版本，支持更多系统、架构
-          body: https://github.com/XTLS/Xray-core/releases/tag/v1.2.4
+          tag: AutoBuilding
+          release: 自动编译
+          prerelease: true
+          message: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建
+          body: https://github.com/XTLS/Xray-core/releases
           token: ${{ secrets.TOKEN }}
           files: /Users/Shared/xray/upload/Xray-Android-arm64.zip /Users/Shared/xray/upload/Xray-freebsd-32.zip /Users/Shared/xray/upload/Xray-freebsd-64.zip /Users/Shared/xray/upload/Xray-freebsd-arm32.zip /Users/Shared/xray/upload/Xray-freebsd-arm64.zip /Users/Shared/xray/upload/Xray-Linux-32.zip /Users/Shared/xray/upload/Xray-Linux-64.zip /Users/Shared/xray/upload/Xray-Linux-arm32.zip /Users/Shared/xray/upload/Xray-Linux-arm64.zip /Users/Shared/xray/upload/Xray-Linux-mips32.zip /Users/Shared/xray/upload/Xray-Linux-mips32le.zip /Users/Shared/xray/upload/Xray-Linux-mips64.zip /Users/Shared/xray/upload/Xray-Linux-mips64le.zip /Users/Shared/xray/upload/Xray-Linux-ppc64.zip /Users/Shared/xray/upload/Xray-Linux-ppc64le.zip /Users/Shared/xray/upload/Xray-Linux-riscv64.zip /Users/Shared/xray/upload/Xray-Linux-s390x.zip /Users/Shared/xray/upload/Xray-Macos-64.zip /Users/Shared/xray/upload/Xray-openbsd-32.zip /Users/Shared/xray/upload/Xray-openbsd-64.zip /Users/Shared/xray/upload/Xray-openbsd-arm32.zip /Users/Shared/xray/upload/Xray-openbsd-arm64.zip /Users/Shared/xray/upload/Xray-upx-Linux-32.zip /Users/Shared/xray/upload/Xray-upx-Linux-64.zip /Users/Shared/xray/upload/Xray-upx-Linux-arm32.zip /Users/Shared/xray/upload/Xray-upx-Linux-arm64.zip /Users/Shared/xray/upload/Xray-upx-Linux-mips32.zip /Users/Shared/xray/upload/Xray-upx-Linux-mips32le.zip /Users/Shared/xray/upload/Xray-upx-Linux-ppc64.zip /Users/Shared/xray/upload/Xray-upx-Linux-ppc64le.zip /Users/Shared/xray/upload/Xray-upx-Macos-64.zip /Users/Shared/xray/upload/Xray-upx-windows-32.zip /Users/Shared/xray/upload/Xray-upx-windows-64.zip /Users/Shared/xray/upload/Xray-windows-32.zip /Users/Shared/xray/upload/Xray-windows-64.zip /Users/Shared/xray/upload/Xray-windows-arm32.zip
