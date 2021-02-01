@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-latest
     steps:
 # 开始任务
-      - name: 安装UPX，拉取源码
+      - name: sleep1200秒拉取upload，更新release
         run: |
           mkdir /Users/Shared/xray
           mkdir /Users/Shared/xray/upload
