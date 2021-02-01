@@ -27,7 +27,7 @@ jobs:
       - name: Update release
         uses: johnwbyrd/update-release@v1.0.0
         with:
-          tag: AutoBuilding
+          tag: auto
           release: AutoBuilding
           prerelease: true
           message: 更改包名，保留未压缩版本，支持更多系统、架构。此发布为Github Action自动创建
