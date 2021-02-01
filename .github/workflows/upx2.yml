@@ -24,15 +24,15 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
-            upx: 1
+            UPX: 1
           - goos: linux
             goarch: arm
             goarm: 6
-            upx: 1
+            UPX: 1
           - goos: linux
             goarch: arm
             goarm: 5
-            upx: 1
+            UPX: 1
           # END Linux ARM 5 6 7
           # BEGIN Android ARM 8
           - goos: android
@@ -45,7 +45,7 @@ jobs:
           # BEGIN Other architectures
           - goos: linux
             goarch: arm64
-            upx: 1
+            UPX: 1
           - goos: linux
             goarch: riscv64
           # BEGIN MIPS
@@ -55,26 +55,26 @@ jobs:
             goarch: mips64le
           - goos: linux
             goarch: mipsle
-            upx: 1
+            UPXUPX: 1
           - goos: linux
             goarch: mipsle
             gomips: softfloat
-            upx: 1
+            UPXUPX: 1
           - goos: linux
             goarch: mips
-            upx: 1
+            UPXUPX: 1
           - goos: linux
             goarch: mips
             gomips: softfloat
-            upx: 1
+            UPXUPX: 1
           # END MIPS
           # BEGIN PPC
           - goos: linux
             goarch: ppc64
-            upx: 1
+            UPX: 1
           - goos: linux
             goarch: ppc64le
-            upx: 1
+            UPX: 1
           # END PPC
           # BEGIN FreeBSD ARM
           - goos: freebsd
