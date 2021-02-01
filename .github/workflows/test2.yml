@@ -1,4 +1,4 @@
-name: xray推送测试
+name: xray编译保存测试
 
 env:
   TZ: Asia/Shanghai
@@ -47,7 +47,9 @@ jobs:
       run: |
         mkdir /Users/Shared/xray/upload
         mv /Users/Shared/xray/Xray-core/Xray* /Users/Shared/xray/upload
-        git config --global user.email $GITHUB_USERNAME
-        git config --global user.name $EMAIL
-        
-        cd /Users/Shared/xray/upload && git init && git add .
+        - uses: actions/upload-artifact@v2
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: test
+        path: /Users/Shared/xray/upload
