@@ -155,8 +155,8 @@ jobs:
           pushd build_assets || exit 1
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
-          FILE=./xray-$ASSET_NAME.zip
-          DGST=z-$FILE.dgst
+          FILE=./z-xray-$ASSET_NAME.zip
+          DGST=$FILE.dgst
           openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
