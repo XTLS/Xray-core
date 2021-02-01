@@ -1,20 +1,21 @@
-name: 更新xray二进制
+name: 自动编译xray二进制
 
 env:
   TZ: Asia/Shanghai
 
 on:
-  # 当master分支提交时
+  # 当点击运行时
   workflow_dispatch:
+  # 当有版本文件更新时
   push:
-    branches: 
-      - code
+    paths:
+    - 'core/**'
+    - '!testing/**'
 
 # 开始任务
 jobs:
   main:
     runs-on: macos-latest
-
     steps:
     - name: Checkout
       uses: actions/checkout@main
