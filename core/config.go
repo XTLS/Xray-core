@@ -97,7 +97,7 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 		// only one protobuf config file is allowed
 		if hasProtobuf {
 			if len(v) == 1 {
-				return configLoaderByName["protobuf"].Loader(v[0])
+				return configLoaderByName["protobuf"].Loader(v)
 			} else {
 				return nil, newError("Only one protobuf config file is allowed").AtWarning()
 			}
