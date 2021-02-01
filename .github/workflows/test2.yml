@@ -1,4 +1,4 @@
-name: xray推送测试
+name: xray编译保存测试
 
 env:
   TZ: Asia/Shanghai
@@ -28,8 +28,7 @@ jobs:
         cd /Users/Shared/xray
         git clone https://github.com/xinb/Xray-core.git
         cd /Users/Shared/xray/Xray-core
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
-        zip -r Xray-Linux-64-$(date +'%Y-%m-%d %H:%M:%S').zip xray
+        wget https://github.com/xinb/Xray-core/releases/download/v1.2.4/Xray-upx-windows-64-2021-02-01.zip
         ls
         rm -f -r xray
         ls
@@ -47,7 +46,8 @@ jobs:
       run: |
         mkdir /Users/Shared/xray/upload
         mv /Users/Shared/xray/Xray-core/Xray* /Users/Shared/xray/upload
-        git config --global user.email $GITHUB_USERNAME
-        git config --global user.name $EMAIL
-        
-        cd /Users/Shared/xray/upload && git init && git add .
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: test
+        path: /Users/Shared/xray/upload
