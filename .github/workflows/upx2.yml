@@ -120,6 +120,7 @@ jobs:
       - name: Create upx package
         run: |
           sudo apt-get install upx-ucl
+          ls
           upx xray*
           zip -9vr ../xray-upx-$ASSET_NAME.zip .
           popd || exit 1
