@@ -8,6 +8,8 @@ on:
   # 当master分支提交时
   workflow_dispatch:
   push:
+    branches: 
+      - upload
 jobs:
   main:
     runs-on: macos-latest
