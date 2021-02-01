@@ -150,7 +150,7 @@ jobs:
           cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
       - name: Create upx package
-        if: matrix.upx == 1
+        if: matrix.upx == '1'
         run: |
           sudo apt-get install upx-ucl
           upx xray*
