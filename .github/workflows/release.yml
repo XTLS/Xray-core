@@ -18,7 +18,6 @@ jobs:
           mkdir /Users/Shared/xray
           mkdir /Users/Shared/xray/upload
           cd /Users/Shared/xray/upload
-          sleep 1200
           wget https://github.com/xinb/Xray-core/archive/upload.zip
           unzip upload.zip
           cd /Users/Shared/xray/upload/Xray-core-upload
