@@ -7,10 +7,10 @@ on:
   # 当点击运行时
   workflow_dispatch:
   # 当有版本文件更新时
-  push:
-    paths:
-    - 'core/**'
-    - '!testing/**'
+# push:
+  #  paths:
+  #  - 'core/**'
+  #  - '!testing/**'
 
 # 开始任务
 jobs:
