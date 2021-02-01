@@ -37,8 +37,6 @@ jobs:
           - goos: linux
             goarch: arm64
             UPXX: 1
-          - goos: linux
-            goarch: riscv64
           # BEGIN MIPS
           - goos: linux
             goarch: mipsle
