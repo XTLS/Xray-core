@@ -9,6 +9,6 @@
      steps:
        - uses: GoogleCloudPlatform/release-please-action@v2
          with:
-           token: ${{ secrets.GITHUB_TOKEN }}
+           token: ${{ secrets.TOKEN }}
            release-type: node
-           package-name: release-please-action
+           package-name: test-release-please-action
