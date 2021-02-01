@@ -11,12 +11,11 @@ jobs:
     strategy:
       matrix:
         # Include amd64 on all platforms.
-        goos: [windows, freebsd, openbsd, linux, dragonfly, darwin]
+        goos: [windows, linux, darwin]
         goarch: [amd64, 386]
+        UPXX: [1]
         exclude:
           # Exclude i386 on darwin and dragonfly.
-          - goarch: 386
-            goos: dragonfly
           - goarch: 386
             goos: darwin
         include:
