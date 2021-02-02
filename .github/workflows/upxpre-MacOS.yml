@@ -1,4 +1,4 @@
-name: Release Upx Update Pre By MacOS
+name:  Pre Release Update UPX on MacOS
 
 on:
   workflow_dispatch:
