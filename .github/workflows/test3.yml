@@ -1,4 +1,4 @@
-name: Test
+name: Release Test
 
 on:
   push:
@@ -97,7 +97,7 @@ jobs:
           # END Other architectures
       fail-fast: false
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
