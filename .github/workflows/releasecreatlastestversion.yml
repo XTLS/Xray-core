@@ -1,4 +1,4 @@
-name: Release Update
+name: Release Update Lastest
 
 on:
   workflow_dispatch:
