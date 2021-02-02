@@ -81,12 +81,12 @@ jobs:
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
       - name: Set up Go
-        uses: xinb/go-versions@v2
+        uses: xinb/go-versions
         with:
           go-version: 1.15.7
       - name: Set up Go(MacOS)
         if: matrix.goos == 'darwin'
-        uses: xinb/go-versions@v2
+        uses: xinb/go-versions
         with:
           go-version: 1.16rc1
 
