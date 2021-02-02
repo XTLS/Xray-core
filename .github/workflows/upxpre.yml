@@ -1,4 +1,4 @@
-name: Release Upx Update Pre
+name:  Pre Release Update UPX
 
 on:
   workflow_dispatch:
