@@ -1,4 +1,4 @@
-name: Release Test
+name: Xray Test
 
 on:
   push:
