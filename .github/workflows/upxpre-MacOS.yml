@@ -81,10 +81,6 @@ jobs:
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.15.x
 
       - name: Get project dependencies
         run: go mod download
