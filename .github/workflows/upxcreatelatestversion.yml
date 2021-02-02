@@ -1,4 +1,4 @@
-name: Release Upx lastest
+name: Lastest Release Update UPX
 
 on:
   workflow_dispatch:
