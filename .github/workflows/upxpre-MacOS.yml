@@ -81,10 +81,6 @@ jobs:
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
-
-      - name: Get project dependencies
-        run: go mod download
-
       - name: Build Xray
         run: |
           mkdir -p build_assets
