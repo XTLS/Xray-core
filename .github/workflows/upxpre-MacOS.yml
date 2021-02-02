@@ -59,7 +59,7 @@ jobs:
             UPXX: 1
       fail-fast: false
 
-    runs-on: macos-11.0
+    runs-on: macos-latest
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
