@@ -62,7 +62,7 @@ jobs:
             UPXX: 1
       fail-fast: false
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
