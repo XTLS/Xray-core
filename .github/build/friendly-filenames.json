@@ -1,6 +1,7 @@
 {
   "android-arm64": { "friendlyName": "android-arm64-v8a"},
   "darwin-amd64": { "friendlyName": "macos-64" },
+  "darwin-arm64": { "friendlyName": "macos-arm64-v8a" },
   "dragonfly-amd64": { "friendlyName": "dragonfly-64" },
   "freebsd-386": { "friendlyName": "freebsd-32" },
   "freebsd-amd64": { "friendlyName": "freebsd-64" },
