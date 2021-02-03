@@ -83,7 +83,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.15.7
+          stable: 'false'
+          go-version: 1.16rc1
 
       - name: Get project dependencies
         run: go mod download
