@@ -64,13 +64,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	case net.Network_TCP:
 		return s.handleConnection(ctx, conn, dispatcher)
 	case net.Network_UDP:
-		return s.handlerUDPPayload(ctx, conn, dispatcher)
+		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
 		return newError("unknown network: ", network)
 	}
 }
 
-func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		request := protocol.RequestHeaderFromContext(ctx)
 		if request == nil {
