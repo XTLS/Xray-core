@@ -42,6 +42,17 @@ func (v *Validator) Del(e string) error {
 	return nil
 }
 
+// Count the number of Shadowsocks users
+func (v *Validator) Count() int {
+	length := 0
+	v.users.Range(func(_, _ interface{}) bool {
+		length++
+
+		return true
+	})
+	return length
+}
+
 // Get a Shadowsocks user and the user's cipher.
 func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol.MemoryUser, aead cipher.AEAD, ret []byte, ivLen int32, err error) {
 	var dataSize int
@@ -78,6 +89,16 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 		}
 		return true
 	})
+
+	return
+}
+
+func (v *Validator) GetSigleUser() (u *protocol.MemoryUser, ivLen int32) {
+	v.users.Range(func(_, user interface{}) bool {
+		u = user.(*protocol.MemoryUser)
+		return false
+	})
+	ivLen = u.Account.(*MemoryAccount).Cipher.IVSize()
 
 	return
 }
