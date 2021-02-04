@@ -17,13 +17,19 @@ type Validator struct {
 
 // Add a Shadowsocks user, Email must be empty or unique.
 func (v *Validator) Add(u *protocol.MemoryUser) error {
+	account := u.Account.(*MemoryAccount)
+
+	if !account.Cipher.IsAEAD() && v.Count() > 0 {
+		return newError("The cipher do not support Single-port Multi-user")
+	}
+
 	if u.Email != "" {
 		_, loaded := v.email.LoadOrStore(strings.ToLower(u.Email), u)
 		if loaded {
 			return newError("User ", u.Email, " already exists.")
 		}
 	}
-	account := u.Account.(*MemoryAccount)
+
 	v.users.Store(string(account.Key)+"&"+account.GetCipherName(), u)
 	return nil
 }
