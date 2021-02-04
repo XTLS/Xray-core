@@ -38,7 +38,9 @@ func TestUDPEncoding(t *testing.T) {
 	encodedData, err := EncodeUDPPacket(request, data.Bytes())
 	common.Must(err)
 
-	decodedRequest, decodedData, err := DecodeUDPPacket([]*protocol.MemoryUser{request.User}, encodedData)
+	validator := new(Validator)
+	validator.Add(request.User)
+	decodedRequest, decodedData, err := DecodeUDPPacket(validator, encodedData)
 	common.Must(err)
 
 	if r := cmp.Diff(decodedData.Bytes(), data.Bytes()); r != "" {
@@ -117,7 +119,9 @@ func TestTCPRequest(t *testing.T) {
 
 		common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{data}))
 
-		decodedRequest, reader, err := ReadTCPSession([]*protocol.MemoryUser{request.User}, cache)
+		validator := new(Validator)
+		validator.Add(request.User)
+		decodedRequest, reader, err := ReadTCPSession(validator, cache)
 		common.Must(err)
 		if r := cmp.Diff(decodedRequest, request, cmp.Comparer(func(a1, a2 protocol.Account) bool { return a1.Equals(a2) })); r != "" {
 			t.Error("request: ", r)
