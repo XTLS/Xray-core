@@ -38,15 +38,24 @@ func (v *Validator) Del(e string) error {
 		return newError("User ", e, " not found.")
 	}
 	v.email.Delete(le)
-	v.users.Delete(u.(*protocol.MemoryUser).Account.(*MemoryAccount).Key)
+	v.users.Delete(string(u.(*protocol.MemoryUser).Account.(*MemoryAccount).Key))
 	return nil
 }
 
-// Get a Shadowsocks user and the user's cipher, nil,nil if user doesn't exist.
-func (v *Validator) Get(bs []byte) (u *protocol.MemoryUser, aead cipher.AEAD, ivLen int32, err error) {
+// Get a Shadowsocks user and the user's cipher.
+func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol.MemoryUser, aead cipher.AEAD, ret []byte, ivLen int32, err error) {
+	var dataSize int
+
+	switch command {
+	case protocol.RequestCommandTCP:
+		dataSize = 16
+	case protocol.RequestCommandUDP:
+		dataSize = 8192
+	}
+
 	var aeadCipher *AEADCipher
 	subkey := make([]byte, 32)
-	length := make([]byte, 16)
+	data := make([]byte, dataSize)
 
 	v.users.Range(func(key, user interface{}) bool {
 		account := user.(*protocol.MemoryUser).Account.(*MemoryAccount)
@@ -55,7 +64,14 @@ func (v *Validator) Get(bs []byte) (u *protocol.MemoryUser, aead cipher.AEAD, iv
 		subkey = subkey[:aeadCipher.KeyBytes]
 		hkdfSHA1(account.Key, bs[:ivLen], subkey)
 		aead = aeadCipher.AEADAuthCreator(subkey)
-		_, err = aead.Open(length[:0], length[4:16], bs[ivLen:ivLen+18], nil)
+
+		switch command {
+		case protocol.RequestCommandTCP:
+			ret, err = aead.Open(data[:0], data[4:16], bs[ivLen:ivLen+18], nil)
+		case protocol.RequestCommandUDP:
+			ret, err = aead.Open(data[:0], data[8180:8192], bs[ivLen:], nil)
+		}
+
 		if err == nil {
 			u = user.(*protocol.MemoryUser)
 			return false

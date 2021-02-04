@@ -23,7 +23,6 @@ import (
 type Server struct {
 	config        *ServerConfig
 	validator     *Validator
-	users         []*protocol.MemoryUser
 	policyManager policy.Manager
 	cone          bool
 }
@@ -52,14 +51,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
-	}
-
-	for _, user := range config.Users {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, newError("failed to parse user account").Base(err)
-		}
-		s.users = append(s.users, u)
 	}
 
 	return s, nil
@@ -126,9 +117,6 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
-	if len(s.users) == 1 {
-		inbound.User = s.users[0]
-	}
 
 	var dest *net.Destination
 
@@ -144,13 +132,9 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 			var data *buf.Buffer
 			var err error
 
-			if inbound.User != nil {
-				request, data, err = DecodeUDPPacket([]*protocol.MemoryUser{inbound.User}, payload)
-			} else {
-				request, data, err = DecodeUDPPacket(s.users, payload)
-				if err == nil {
-					inbound.User = request.User
-				}
+			request, data, err = DecodeUDPPacket(s.validator, payload)
+			if err == nil {
+				inbound.User = request.User
 			}
 
 			if err != nil {
