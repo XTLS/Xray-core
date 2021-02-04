@@ -17,6 +17,7 @@ type Instance struct {
 	accessLogger log.Handler
 	errorLogger  log.Handler
 	active       bool
+	dns          bool
 }
 
 // New creates a new log.Instance based on the given config.
@@ -24,6 +25,7 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	g := &Instance{
 		config: config,
 		active: false,
+		dns:    config.EnableDnsLog,
 	}
 	log.RegisterHandler(g)
 
@@ -101,6 +103,10 @@ func (g *Instance) Handle(msg log.Message) {
 	switch msg := msg.(type) {
 	case *log.AccessMessage:
 		if g.accessLogger != nil {
+			g.accessLogger.Handle(msg)
+		}
+	case *log.DNSLog:
+		if g.dns && g.accessLogger != nil {
 			g.accessLogger.Handle(msg)
 		}
 	case *log.GeneralMessage:
