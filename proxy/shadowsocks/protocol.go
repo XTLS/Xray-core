@@ -54,12 +54,9 @@ func (r *FullReader) Read(p []byte) (n int, err error) {
 }
 
 // ReadTCPSession reads a Shadowsocks TCP session from the given reader, returns its header and remaining parts.
-func ReadTCPSession(users []*protocol.MemoryUser, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
-	user := users[0]
-	account := user.Account.(*MemoryAccount)
+func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
 
 	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
-	hashkdf.Write(account.Key)
 
 	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))
 
@@ -72,54 +69,34 @@ func ReadTCPSession(users []*protocol.MemoryUser, reader io.Reader) (*protocol.R
 
 	var r2 buf.Reader
 
-	if len(users) > 1 {
-		buffer := buf.New()
-		defer buffer.Release()
-
-		if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed to read 50 bytes").Base(err)
-		}
-
-		bs := buffer.Bytes()
-
-		var aeadCipher *AEADCipher
-		var ivLen int32
-		subkey := make([]byte, 32)
-		length := make([]byte, 16)
-		var aead cipher.AEAD
-		var err error
-		for _, user = range users {
-			account = user.Account.(*MemoryAccount)
-			aeadCipher = account.Cipher.(*AEADCipher)
-			ivLen = aeadCipher.IVSize()
-			subkey = subkey[:aeadCipher.KeyBytes]
-			hkdfSHA1(account.Key, bs[:ivLen], subkey)
-			aead = aeadCipher.AEADAuthCreator(subkey)
-			_, err = aead.Open(length[:0], length[4:16], bs[ivLen:ivLen+18], nil)
-			if err == nil {
-				reader = &FullReader{reader, bs[ivLen:]}
-				auth := &crypto.AEADAuthenticator{
-					AEAD:           aead,
-					NonceGenerator: crypto.GenerateInitialAEADNonce(),
-				}
-				r2 = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
-					Auth: auth,
-				}, reader, protocol.TransferTypeStream, nil)
-				break
-			}
-		}
-		if err != nil {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed to match an user").Base(err)
-		}
-	}
-
 	buffer := buf.New()
 	defer buffer.Release()
 
+	if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("failed to read 50 bytes").Base(err)
+	}
+
+	bs := buffer.Bytes()
+	user, aead, ivLen, err := validator.Get(bs)
+
+	if user != nil {
+		reader = &FullReader{reader, bs[ivLen:]}
+		auth := &crypto.AEADAuthenticator{
+			AEAD:           aead,
+			NonceGenerator: crypto.GenerateInitialAEADNonce(),
+		}
+		r2 = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
+			Auth: auth,
+		}, reader, protocol.TransferTypeStream, nil)
+	} else {
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("failed to match an user").Base(err)
+	}
+
+	account := user.Account.(*MemoryAccount)
 	if r2 == nil {
 		ivLen := account.Cipher.IVSize()
 		var iv []byte

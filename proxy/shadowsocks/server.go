@@ -22,6 +22,7 @@ import (
 
 type Server struct {
 	config        *ServerConfig
+	validator     *Validator
 	users         []*protocol.MemoryUser
 	policyManager policy.Manager
 	cone          bool
@@ -33,9 +34,22 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		return nil, newError("empty users")
 	}
 
+	validator := new(Validator)
+	for _, user := range config.Users {
+		u, err := user.ToMemoryUser()
+		if err != nil {
+			return nil, newError("failed to get shadowsocks user").Base(err).AtError()
+		}
+
+		if err := validator.Add(u); err != nil {
+			return nil, newError("failed to add user").Base(err).AtError()
+		}
+	}
+
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
+		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
@@ -49,6 +63,16 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// AddUser implements proxy.UserManager.AddUser().
+func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	return s.validator.Add(u)
+}
+
+// RemoveUser implements proxy.UserManager.RemoveUser().
+func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	return s.validator.Del(e)
 }
 
 func (s *Server) Network() []net.Network {
@@ -178,7 +202,7 @@ func (s *Server) handleConnection(ctx context.Context, conn internet.Connection,
 	}
 
 	bufferedReader := buf.BufferedReader{Reader: buf.NewReader(conn)}
-	request, bodyReader, err := ReadTCPSession(s.users, &bufferedReader)
+	request, bodyReader, err := ReadTCPSession(s.validator, &bufferedReader)
 	if err != nil {
 		log.Record(&log.AccessMessage{
 			From:   conn.RemoteAddr(),
