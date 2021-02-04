@@ -118,6 +118,10 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 		panic("no inbound metadata")
 	}
 
+	if s.validator.Count() == 1 {
+		inbound.User, _ = s.validator.GetSigleUser()
+	}
+
 	var dest *net.Destination
 
 	reader := buf.NewPacketReader(conn)
@@ -132,9 +136,15 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 			var data *buf.Buffer
 			var err error
 
-			request, data, err = DecodeUDPPacket(s.validator, payload)
-			if err == nil {
-				inbound.User = request.User
+			if inbound.User != nil {
+				validator := new(Validator)
+				validator.Add(inbound.User)
+				request, data, err = DecodeUDPPacket(validator, payload)
+			} else {
+				request, data, err = DecodeUDPPacket(s.validator, payload)
+				if err == nil {
+					inbound.User = request.User
+				}
 			}
 
 			if err != nil {

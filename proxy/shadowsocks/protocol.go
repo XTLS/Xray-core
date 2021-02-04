@@ -255,7 +255,7 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 
 	if validator.Count() > 1 {
 		var d []byte
-		user, _, d, _, err := validator.Get(bs, protocol.RequestCommandUDP)
+		user, _, d, _, err = validator.Get(bs, protocol.RequestCommandUDP)
 
 		if user != nil {
 			payload.Clear()
