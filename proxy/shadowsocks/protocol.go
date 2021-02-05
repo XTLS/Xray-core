@@ -75,7 +75,12 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 	var ivLen int32
 	var err error
 
-	if validator.Count() > 1 {
+	count := validator.Count()
+	if count == 0 {
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("invalid user")
+	} else if count > 1 {
 		var aead cipher.AEAD
 
 		if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
@@ -253,7 +258,10 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 	var user *protocol.MemoryUser
 	var err error
 
-	if validator.Count() > 1 {
+	count := validator.Count()
+	if count == 0 {
+		return nil, nil, newError("invalid user")
+	} else if count > 1 {
 		var d []byte
 		user, _, d, _, err = validator.Get(bs, protocol.RequestCommandUDP)
 

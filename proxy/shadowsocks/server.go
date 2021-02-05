@@ -29,10 +29,6 @@ type Server struct {
 
 // NewServer create a new Shadowsocks server.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	if config.Users == nil {
-		return nil, newError("empty users")
-	}
-
 	validator := new(Validator)
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
