@@ -101,7 +101,8 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 	return
 }
 
-func (v *Validator) GetSigleUser() (u *protocol.MemoryUser, ivLen int32) {
+// Get the only user without authentication
+func (v *Validator) GetOnlyUser() (u *protocol.MemoryUser, ivLen int32) {
 	v.users.Range(func(_, user interface{}) bool {
 		u = user.(*protocol.MemoryUser)
 		return false

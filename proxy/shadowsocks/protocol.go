@@ -102,7 +102,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 			return nil, nil, newError("failed to match an user").Base(err)
 		}
 	} else {
-		user, ivLen = validator.GetSigleUser()
+		user, ivLen = validator.GetOnlyUser()
 		account := user.Account.(*MemoryAccount)
 		hashkdf.Write(account.Key)
 		var iv []byte
@@ -264,7 +264,7 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
 		}
 	} else {
-		user, _ = validator.GetSigleUser()
+		user, _ = validator.GetOnlyUser()
 		account := user.Account.(*MemoryAccount)
 
 		var iv []byte

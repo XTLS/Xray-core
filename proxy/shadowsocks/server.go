@@ -119,7 +119,7 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 	}
 
 	if s.validator.Count() == 1 {
-		inbound.User, _ = s.validator.GetSigleUser()
+		inbound.User, _ = s.validator.GetOnlyUser()
 	}
 
 	var dest *net.Destination
