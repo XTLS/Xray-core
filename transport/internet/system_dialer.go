@@ -2,23 +2,43 @@ package internet
 
 import (
 	"context"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/features/dns"
 )
 
 var (
 	effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
+	useInternalDNS                     = false
 )
+
+func init() {
+	iDNS := platform.NewEnvFlag("xray.dialer.resolve.enable").GetValue(func() string {
+		return "false"
+	})
+	if strings.ToLower(iDNS) == "true" {
+		useInternalDNS = true
+	}
+}
+
+// SetSystemDialerDNS: It's private method and you are NOT supposed to use this function.
+func SetSystemDialerDNS(dc dns.Client) {
+	effectiveSystemDialer.setDnsClient(dc)
+}
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
+	setDnsClient(dc dns.Client)
 }
 
 type DefaultSystemDialer struct {
 	controllers []controller
+	dns         dns.Client
 }
 
 func resolveSrcAddr(network net.Network, src net.Address) net.Addr {
@@ -44,6 +64,18 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 }
 
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+	newError("dialing to " + dest.String()).AtDebug().WriteToLog()
+	if dest.Address.Family() == net.AddressFamilyDomain && d.dns != nil {
+		ips, err := d.dns.LookupIP(dest.Address.String())
+		if err == nil && len(ips) > 0 {
+			dest.Address = net.IPAddress(ips[0])
+			newError("replace destination with " + dest.String()).AtInfo().WriteToLog()
+		} else {
+			newError("failed to resolve ip").Base(err).AtWarning().WriteToLog()
+		}
+
+	}
+
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
 		if srcAddr == nil {
@@ -96,6 +128,13 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	}
 
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
+}
+
+func (d *DefaultSystemDialer) setDnsClient(dc dns.Client) {
+	if useInternalDNS {
+		d.dns = dc
+		newError("using internal dns server to resolve domain").AtWarning().WriteToLog()
+	}
 }
 
 type PacketConnWrapper struct {
@@ -157,6 +196,8 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 		adapter: dialer,
 	}
 }
+
+func (v *SimpleSystemDialer) setDnsClient(dc dns.Client) {}
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
