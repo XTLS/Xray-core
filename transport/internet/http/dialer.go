@@ -22,7 +22,7 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config) (*http.Client, error) {
+func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config, sockopt *internet.SocketConfig) (*http.Client, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -49,7 +49,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			}
 			address := net.ParseAddress(rawHost)
 
-			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), nil)
+			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +90,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if tlsConfig == nil {
 		return nil, newError("TLS must be enabled for http transport.").AtWarning()
 	}
-	client, err := getHTTPClient(ctx, dest, tlsConfig)
+	client, err := getHTTPClient(ctx, dest, tlsConfig, streamSettings.SocketSettings)
 	if err != nil {
 		return nil, err
 	}
