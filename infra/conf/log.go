@@ -19,7 +19,7 @@ type LogConfig struct {
 	AccessLog string `json:"access"`
 	ErrorLog  string `json:"error"`
 	LogLevel  string `json:"loglevel"`
-	DNSLog    bool   `json:"dns_log"`
+	DNSLog    bool   `json:"dnsLog"`
 }
 
 func (v *LogConfig) Build() *log.Config {
