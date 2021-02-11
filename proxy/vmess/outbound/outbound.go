@@ -15,7 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/vudp"
+	"github.com/xtls/xray-core/common/xudp"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/proxy/vmess"
@@ -140,7 +140,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		bodyWriter := session.EncodeRequestBody(request, writer)
 		bodyWriter2 := bodyWriter
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			bodyWriter = vudp.NewPacketWriter(bodyWriter, target)
+			bodyWriter = xudp.NewPacketWriter(bodyWriter, target)
 		}
 		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 			return newError("failed to write first payload").Base(err)
@@ -175,7 +175,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		bodyReader := session.DecodeResponseBody(request, reader)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			bodyReader = vudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
+			bodyReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
 		}
 
 		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))

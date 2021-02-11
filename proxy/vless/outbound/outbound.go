@@ -16,7 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/vudp"
+	"github.com/xtls/xray-core/common/xudp"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
@@ -193,7 +193,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		// default: serverWriter := bufferWriter
 		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			serverWriter = vudp.NewPacketWriter(serverWriter, target)
+			serverWriter = xudp.NewPacketWriter(serverWriter, target)
 		}
 		if err := buf.CopyOnceTimeout(clientReader, serverWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 			return err // ...
@@ -227,7 +227,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			serverReader = vudp.NewPacketReader(conn)
+			serverReader = xudp.NewPacketReader(conn)
 		}
 
 		if rawConn != nil {
