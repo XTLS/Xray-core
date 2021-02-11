@@ -49,6 +49,7 @@ type Handler struct {
 	serverList    *protocol.ServerList
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
+	cone          bool
 }
 
 // New creates a new VLess outbound handler.
@@ -67,6 +68,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		serverList:    serverList,
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
 	}
 
 	return handler, nil
@@ -176,7 +178,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
 
-	if request.Command == protocol.RequestCommandUDP {
+	if request.Command == protocol.RequestCommandUDP && h.cone {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
