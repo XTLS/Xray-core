@@ -2,6 +2,9 @@ name:  Pre Release Update UPX
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/build/versionpre'
 
 jobs:
   build:
