@@ -2,7 +2,9 @@ name: Pre Release Update
 
 on:
   workflow_dispatch:
-
+  push:
+    paths:
+      - '.github/build/versionpre'
 jobs:
   build:
     strategy:
