@@ -81,6 +81,9 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 		if err := addrParser.WriteAddressPort(b, f.Target.Address, f.Target.Port); err != nil {
 			return err
 		}
+	} else if b.UDP != nil {
+		b.WriteByte(byte(TargetNetworkUDP))
+		addrParser.WriteAddressPort(b, b.UDP.Address, b.UDP.Port)
 	}
 
 	len1 := b.Len()
@@ -119,7 +122,7 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 	f.Option = bitmask.Byte(b.Byte(3))
 	f.Target.Network = net.Network_Unknown
 
-	if f.SessionStatus == SessionStatusNew {
+	if f.SessionStatus == SessionStatusNew || (f.SessionStatus == SessionStatusKeep && b.Len() != 4) {
 		if b.Len() < 8 {
 			return newError("insufficient buffer: ", b.Len())
 		}
