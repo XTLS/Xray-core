@@ -19,6 +19,9 @@ jobs:
           - goarch: 386
             goos: darwin
         include:
+          - goos: darwin
+            goarch: arm64
+            UPXX: 1
           # BEGIN Linux ARM 5 6 7
           - goos: linux
             goarch: arm
