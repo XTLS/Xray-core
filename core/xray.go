@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"sync"
 
@@ -179,7 +180,7 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
-	server.ctx = context.WithValue(server.ctx, "cone", true)
+	server.ctx = context.WithValue(server.ctx, "cone", os.Getenv("XRAY_CONE_DISABLED") != "true")
 
 	if config.Transport != nil {
 		features.PrintDeprecatedFeatureWarning("global transport settings")
