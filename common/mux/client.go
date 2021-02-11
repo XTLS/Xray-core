@@ -330,7 +330,7 @@ func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 		return buf.Copy(NewStreamReader(reader), buf.Discard)
 	}
 
-	rr := s.NewReader(reader)
+	rr := s.NewReader(reader, &meta.Target)
 	err := buf.Copy(rr, s.output)
 	if err != nil && buf.IsWriteError(err) {
 		newError("failed to write to downstream. closing session ", s.ID).Base(err).WriteToLog()
