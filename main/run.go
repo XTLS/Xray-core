@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/cmdarg"
@@ -158,30 +157,25 @@ func getConfigFilePath() cmdarg.Arg {
 }
 
 func getConfigFormat() string {
-	switch strings.ToLower(*format) {
-	case "pb", "protobuf":
-		return "protobuf"
-	case "yaml", "yml":
-		return "yaml"
-	case "toml":
-		return "toml"
-	default:
-		return "json"
+	f := core.GetFormatByExtension(*format)
+	if f == "" {
+		f = "json"
 	}
+	return f
 }
 
 func startXray() (core.Server, error) {
 	configFiles := getConfigFilePath()
 
-	config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
+	//config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
 
-	//config, err := core.LoadConfigs(getConfigFormat(), configFiles)
+	c, err := core.LoadConfig(getConfigFormat(), configFiles)
 
 	if err != nil {
 		return nil, newError("failed to load config files: [", configFiles.String(), "]").Base(err)
 	}
 
-	server, err := core.New(config)
+	server, err := core.New(c)
 	if err != nil {
 		return nil, newError("failed to create server").Base(err)
 	}
