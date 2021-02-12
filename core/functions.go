@@ -25,7 +25,7 @@ func CreateObject(v *Instance, config interface{}) (interface{}, error) {
 //
 // xray:api:stable
 func StartInstance(configFormat string, configBytes []byte) (*Instance, error) {
-	config, err := LoadConfig(configFormat, "", bytes.NewReader(configBytes))
+	config, err := LoadConfig(configFormat, bytes.NewReader(configBytes))
 	if err != nil {
 		return nil, err
 	}
