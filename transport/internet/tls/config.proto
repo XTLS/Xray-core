@@ -22,6 +22,12 @@ message Certificate {
   Usage usage = 3;
 
   int64 ocsp_stapling = 4;
+
+  // TLS certificate path
+  string certificate_path = 5;
+
+  // TLS Key path
+  string key_path = 6;
 }
 
 message Config {

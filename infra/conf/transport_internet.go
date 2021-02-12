@@ -264,6 +264,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -271,6 +272,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {
@@ -348,6 +350,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -355,6 +358,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {

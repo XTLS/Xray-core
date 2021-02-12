@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -60,17 +61,47 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 		}
 		certs = append(certs, &keyPair)
 		if entry.OcspStapling != 0 {
-			go func(cert *tls.Certificate) {
+			index := len(certs) - 1
+			go func(cert *tls.Certificate, index int) {
 				t := time.NewTicker(time.Duration(entry.OcspStapling) * time.Second)
 				for {
-					if newData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
-						newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
-					} else if string(newData) != string(cert.OCSPStaple) {
-						cert.OCSPStaple = newData
+					if entry.CertificatePath != "" && entry.KeyPath != "" {
+						newCert, err := filesystem.ReadFile(entry.CertificatePath)
+						if err != nil {
+							newError("failed to parse certificate").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						newKey, err := filesystem.ReadFile(entry.KeyPath)
+						if err != nil {
+							newError("failed to parse key").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						if string(newCert) != string(entry.Certificate) && string(newKey) != string(entry.Key) {
+							newKeyPair, err := tls.X509KeyPair(newCert, newKey)
+							if err != nil {
+								newError("ignoring invalid X509 key pair").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							if newKeyPair.Leaf, err = x509.ParseCertificate(newKeyPair.Certificate[0]); err != nil {
+								newError("ignoring invalid certificate").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							cert = &newKeyPair
+						}
 					}
+					if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
+						newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+					} else if string(newOCSPData) != string(cert.OCSPStaple) {
+						cert.OCSPStaple = newOCSPData
+					}
+					certs[index] = cert
 					<-t.C
 				}
-			}(certs[len(certs)-1])
+			}(certs[len(certs)-1], index)
 		}
 	}
 	return certs
