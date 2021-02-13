@@ -121,14 +121,12 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
-          sudo touch -mt 202001010000 *
 
       - name: Build Windows Xray
         if: matrix.goos == 'windows'
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
-          sudo touch -mt 202001010000 *
       - name: Prepare to release
         run: |
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
@@ -144,6 +142,8 @@ jobs:
       - name: Create ZIP archive
         run: |
           pushd build_assets || exit 1
+          touch -mt 202001010000 xray*
+          touch -mt 202001010000 *
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
           FILE=./xray-$ASSET_NAME.zip
