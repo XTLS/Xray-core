@@ -164,8 +164,8 @@ jobs:
       - name: Create ZIP archive
         run: |
           pushd build_assets || exit 1
-          sudo touch -mt 202001010000 xray*
-          sudo touch -mt 202001010000 *
+          touch -mt 202001010000 xray*
+          touch -mt 202001010000 *
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
           FILE=./xray-$ASSET_NAME.zip
