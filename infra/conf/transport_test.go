@@ -34,12 +34,14 @@ func TestSocketConfig(t *testing.T) {
 		{
 			Input: `{
 				"mark": 1,
-				"tcpFastOpen": true
+				"tcpFastOpen": true,
+				"domain_strategy": "UseIP"
 			}`,
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
-				Mark: 1,
-				Tfo:  internet.SocketConfig_Enable,
+				Mark:           1,
+				Tfo:            internet.SocketConfig_Enable,
+				DomainStrategy: internet.DomainStrategy_USE_IP,
 			},
 		},
 	})

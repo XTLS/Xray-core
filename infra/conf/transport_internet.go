@@ -441,6 +441,7 @@ type SocketConfig struct {
 	TFO                 *bool  `json:"tcpFastOpen"`
 	TProxy              string `json:"tproxy"`
 	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+	DomainStrategy      string `json:"domain_strategy"`
 }
 
 // Build implements Buildable.
@@ -463,10 +464,21 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_Off
 	}
 
+	var dStrategy = internet.DomainStrategy_AS_IS
+	switch strings.ToLower(c.DomainStrategy) {
+	case "useip", "use_ip":
+		dStrategy = internet.DomainStrategy_USE_IP
+	case "useip4", "useipv4", "use_ipv4", "use_ip_v4", "use_ip4":
+		dStrategy = internet.DomainStrategy_USE_IP4
+	case "useip6", "useipv6", "use_ipv6", "use_ip_v6", "use_ip6":
+		dStrategy = internet.DomainStrategy_USE_IP6
+	}
+
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
 		Tfo:                 tfoSettings,
 		Tproxy:              tproxy,
+		DomainStrategy:      dStrategy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
 	}, nil
 }

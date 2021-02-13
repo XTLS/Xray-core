@@ -61,6 +61,7 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, clientIP net.
 			if content := session.ContentFromContext(ctx); content != nil {
 				dispatcherCtx = session.ContextWithContent(dispatcherCtx, content)
 			}
+			dispatcherCtx = internet.ContextWithLookupDomain(dispatcherCtx, internet.LookupDomainFromContext(ctx))
 
 			dest, err := net.ParseDestination(network + ":" + addr)
 			if err != nil {

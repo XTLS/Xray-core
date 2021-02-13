@@ -5,20 +5,29 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/features/dns"
 )
 
 var (
 	effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
 )
 
+// SetSystemDialerDNS: It's private method and you are NOT supposed to use this function.
+func SetSystemDialerDNS(dc dns.Client) {
+	effectiveSystemDialer.setDnsClient(dc)
+}
+
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
+	setDnsClient(dc dns.Client)
 }
 
 type DefaultSystemDialer struct {
 	controllers []controller
+	dns         dns.Client
 }
 
 func resolveSrcAddr(network net.Network, src net.Address) net.Addr {
@@ -43,7 +52,60 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 	return sockopt != nil && len(sockopt.BindAddress) > 0 && sockopt.BindPort > 0
 }
 
+func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+	if d.dns == nil {
+		return nil, nil
+	}
+
+	var lookup = d.dns.LookupIP
+
+	switch {
+	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
+		if lookupIPv4, ok := d.dns.(dns.IPv4Lookup); ok {
+			lookup = lookupIPv4.LookupIPv4
+		}
+	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
+		if lookupIPv4, ok := d.dns.(dns.IPv4Lookup); ok {
+			lookup = lookupIPv4.LookupIPv4
+		}
+	case strategy == DomainStrategy_AS_IS:
+		return nil, nil
+	}
+
+	return lookup(domain)
+}
+
+// Fqdn normalize domain make sure it ends with '.'
+func Fqdn(domain string) string {
+	if len(domain) > 0 && domain[len(domain)-1] == '.' {
+		return domain
+	}
+	return domain + "."
+}
+
+func (d *DefaultSystemDialer) canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
+	if sockopt == nil || dst.Address.Family().IsIP() || d.dns == nil {
+		return false
+	}
+	if Fqdn(dst.Address.Domain()) == LookupDomainFromContext(ctx) {
+		newError("infinite loop detected").AtError().WriteToLog(session.ExportIDToError(ctx))
+		return false
+	}
+	return sockopt.DomainStrategy != DomainStrategy_AS_IS
+}
+
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+	newError("dialing to " + dest.String()).AtDebug().WriteToLog()
+	if d.canLookupIP(ctx, dest, sockopt) {
+		ips, err := d.lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
+		if err == nil && len(ips) > 0 {
+			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			newError("replace destination with " + dest.String()).AtInfo().WriteToLog()
+		} else if err != nil {
+			newError("failed to resolve ip").Base(err).AtWarning().WriteToLog()
+		}
+	}
+
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
 		if srcAddr == nil {
@@ -96,6 +158,10 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	}
 
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
+}
+
+func (d *DefaultSystemDialer) setDnsClient(dc dns.Client) {
+	d.dns = dc
 }
 
 type PacketConnWrapper struct {
@@ -157,6 +223,8 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 		adapter: dialer,
 	}
 }
+
+func (v *SimpleSystemDialer) setDnsClient(dc dns.Client) {}
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
