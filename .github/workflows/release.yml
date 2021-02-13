@@ -142,14 +142,14 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
-          sudo touch -mt 202001010000 *
+          sudo touch -mt 202001010000 xray
 
       - name: Build Windows Xray
         if: matrix.goos == 'windows'
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
-          sudo touch -mt 202001010000 *
+          sudo touch -mt 202001010000 xray.exe
 
       - name: Prepare to release
         run: |
