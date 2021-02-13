@@ -166,7 +166,6 @@ jobs:
           pushd build_assets || exit 1
           sudo touch -mt 202001010000 xray*
           sudo touch -mt 202001010000 *
-          sudo touch -mt 202001010000 ./build_assets/systemd/*
           zip -9vr ../xray-$ASSET_NAME.zip .
           popd || exit 1
           FILE=./xray-$ASSET_NAME.zip
