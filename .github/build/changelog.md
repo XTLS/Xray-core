@@ -1,4 +1,5 @@
-# v1.3.0迭代内容Refactor: VLESS & VMess & Mux UDP FullCone NAT（named xudp）
+# v1.3.0迭代内容
+Refactor: VLESS & VMess & Mux UDP FullCone NAT（named xudp）
 Add environment variable XRAY_CONE_DISABLED option
 Fix a typo & Support loading config from different formats
 Refactor: Add Shadowsocks Validator
