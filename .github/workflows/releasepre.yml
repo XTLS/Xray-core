@@ -2,9 +2,8 @@ name: Pre Release Update
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/build/preversion'
+#  release:
+#    types: [prereleased]
 jobs:
   build:
     strategy:
@@ -104,7 +103,7 @@ jobs:
         id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "VERSION=$(cat ".github/build/preversion" | head -1 | tr -d [:space:])" >> $GITHUB_ENV
+          echo "VERSION=$(grep version core/core.go| head -n 1| cut -d = -f2| tr -d \"' ')" >> $GITHUB_ENV
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
@@ -144,9 +143,9 @@ jobs:
           pushd build_assets || exit 1
           touch -mt 202001010000 xray*
           touch -mt 202001010000 *
-          zip -9vr ../xray-$ASSET_NAME.zip .
+          zip -9vr ../Xray-$ASSET_NAME.zip .
           popd || exit 1
-          FILE=./xray-$ASSET_NAME.zip
+          FILE=./Xray-$ASSET_NAME.zip
           DGST=$FILE.dgst
           openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
@@ -155,22 +154,20 @@ jobs:
 
       - name: Change the name
         run: |
-          mv build_assets xray-$ASSET_NAME
+          mv build_assets Xray-$ASSET_NAME
 
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
-          path: xray-${{ steps.get_filename.outputs.ASSET_NAME }}
-
-      - name: Upload files to GitHub release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          path: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
         with:
-          name: Xray-core ${{ env.VERSION }}
-          tag_name: ${{ env.VERSION }}
-          draft: false
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+          asset_name: Xray-core v${{ env.VERSION }}
+          tag: v${{ env.VERSION }}
+          file_glob: true
           prerelease: true
-          files: |
-            ./xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+          overwrite: true

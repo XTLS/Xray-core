@@ -1,10 +1,22 @@
-name: Release Update
+name: Release every change
 
 on:
   workflow_dispatch:
-#  release:
-#    types: [released]
-
+#  push:
+#    branches:
+#      - main
+#    paths:
+    #  - "**/*.go"
+    #  - "go.mod"
+    #  - "go.sum"
+    #  - ".github/workflows/*.yml"
+#  pull_request:
+#    types: [opened, synchronize, reopened]
+#    paths:
+#      - "**/*.go"
+#      - "go.mod"
+#      - "go.sum"
+#      - ".github/workflows/*.yml"
 jobs:
   build:
     strategy:
@@ -114,7 +126,6 @@ jobs:
         with:
           stable: 'false'
           go-version: 1.16.0-rc1
-
       - name: Get project dependencies
         run: go mod download
 
@@ -128,7 +139,6 @@ jobs:
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
-
       - name: Prepare to release
         run: |
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
@@ -164,36 +174,3 @@ jobs:
         with:
           name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
           path: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
-
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
-          asset_name: Xray-core v${{ env.VERSION }}
-          tag: v${{ env.VERSION }}
-          file_glob: true
-          prerelease: false
-          overwrite: true
-  UpdateChangelog:
-    needs: build
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Show workflow information
-        id: get_filename
-        run: |
-          echo "VERSION=$(grep version core/core.go| head -n 1| cut -d = -f2| tr -d \"' ')" >> $GITHUB_ENV
-      - name: Upload changelog to GitHub release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          name: Xray-core v${{ env.VERSION }}
-          tag_name: v${{ env.VERSION }}
-          draft: false
-          prerelease: false
-          body_path: '.github/build/changelog.md'
-
-    
