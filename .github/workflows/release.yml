@@ -158,11 +158,6 @@ jobs:
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
           wget -O ./build_assets/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
           wget -O ./build_assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-      - name: Prepare package for Linux #添加ststemd
-        if: matrix.goos == 'linux'
-        run: |
-          ls 
-          cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
       - name: Create ZIP archive #创建包，添加校验
         run: |
