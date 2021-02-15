@@ -17,6 +17,7 @@
 - One Click
   - [ProxySU](https://github.com/proxysu/ProxySU)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
+  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
