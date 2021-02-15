@@ -158,10 +158,19 @@ jobs:
           wget -O ./build_assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
 
       - name: Create ZIP archive #创建包，添加校验
+        shell: bash
         run: |
           pushd build_assets || exit 1
           touch -mt 202101010000 *
           zip -9vr ../Xray-$ASSET_NAME.zip .
+          for CORE in $(ls xray*)
+          do
+            COREDGST=$CORE.dgst
+            openssl dgst -md5    $CORE | sed 's/([^)]*)//g' >>$COREDGST
+            openssl dgst -sha1   $CORE | sed 's/([^)]*)//g' >>$COREDGST
+            openssl dgst -sha256 $CORE | sed 's/([^)]*)//g' >>$COREDGST
+            openssl dgst -sha512 $CORE | sed 's/([^)]*)//g' >>$COREDGST
+          done
           popd || exit 1
           FILE=./Xray-$ASSET_NAME.zip
           DGST=$FILE.dgst
@@ -178,7 +187,8 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
-          path: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+          path: |
+            ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}/*
 
       - name: Upload binaries to release #上传文件至release
         uses: svenstaro/upload-release-action@v2
