@@ -1,4 +1,4 @@
-name: Xray Build Test
+name: Test
 
 on:
   push:
@@ -50,10 +50,8 @@ jobs:
           - goarch: 386
             goos: darwin
         include:
-          # BEIGIN MacOS ARM64
           - goos: darwin
             goarch: arm64
-          # END MacOS ARM64
           # BEGIN Linux ARM 5 6 7
           - goos: linux
             goarch: arm
@@ -74,12 +72,10 @@ jobs:
             goarch: arm
             goarm: 7
           # BEGIN Other architectures
-          # BEGIN riscv64 & ARM64
           - goos: linux
             goarch: arm64
           - goos: linux
             goarch: riscv64
-          # END riscv64 & ARM64
           # BEGIN MIPS
           - goos: linux
             goarch: mips64
@@ -118,23 +114,20 @@ jobs:
             goarm: 7
           # END OPENBSD ARM
       fail-fast: false
-
     runs-on: ubuntu-20.04
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
       GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
-
+      BUILD: ${{github.sha}}
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v2
-
-      - name: Show workflow information
+      - name: Show workflow information 
         id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "VERSION=$(grep version core/core.go| head -n 1| cut -d = -f2| tr -d \"' ')" >> $GITHUB_ENV
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
@@ -147,61 +140,44 @@ jobs:
 
       - name: Get project dependencies
         run: go mod download
-
-      - name: Build Xray
+      
+      - name: Auto Build Xray #自动编译
+        if: github.event_name != 'release'
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+      - name: Release Build Xray #Release编译
+        if: github.event_name == 'release'
+        run: |
+          mkdir -p build_assets
+          go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+    
+      - name: Build Mips softfloat Xray #编译softfloat
+        if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
+        run: |
+          GOMIPS=softfloat go build -v -o build_assets/xray_softfloat -trimpath -ldflags "-s -w -buildid=" ./main
 
-      - name: Build Windows Xray
+      - name: Build Windows Xray #重命名windows执行文件
         if: matrix.goos == 'windows'
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
 
-      - name: Prepare to release
+      - name: Prepare to release #添加LICENSE, README.md, geoip, geosite.
         run: |
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
           wget -O ./build_assets/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
           wget -O ./build_assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-
-      - name: Prepare package for Linux
+      - name: Prepare package for Linux #添加ststemd
         if: matrix.goos == 'linux'
         run: |
           ls 
           cp -rv ${GITHUB_WORKSPACE}/.github/build/systemd ./build_assets/systemd
 
-      - name: Build Mips softfloat Xray and Create ZIP archive
-        if: matrix.softfloat == 'softfloat'
+      - name: Create ZIP archive #创建包，添加校验
         run: |
           pushd build_assets || exit 1
-          touch -mt 202001010000 xray*
-          touch -mt 202001010000 *
-          zip -9vr ../Xray-$ASSET_NAME-hardfloat.zip .
-          popd || exit 1
-          GOMIPS=softfloat go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
-          pushd build_assets || exit 1
-          touch -mt 202001010000 xray*
-          touch -mt 202001010000 *
-          zip -9vr ../Xray-$ASSET_NAME-softfloat.zip .
-          popd || exit 1
-          GOMIPS=hardfloat
-          zip -9vr ./Xray-$ASSET_NAME.zip ./Xray-$ASSET_NAME-*
-          rm -rf ./build_assets/*
-          cp ./Xray-$ASSET_NAME-* ./build_assets/
-          FILE=./Xray-$ASSET_NAME.zip
-          DGST=$FILE.dgst
-          openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
-
-      - name: Create ZIP archive
-        if: matrix.softfloat != 'softfloat'
-        run: |
-          pushd build_assets || exit 1
-          touch -mt 202001010000 xray*
           touch -mt 202001010000 *
           zip -9vr ../Xray-$ASSET_NAME.zip .
           popd || exit 1
@@ -211,7 +187,3 @@ jobs:
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
-
-      - name: Change the name
-        run: |
-          mv build_assets Xray-$ASSET_NAME
