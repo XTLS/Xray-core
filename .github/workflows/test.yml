@@ -33,14 +33,6 @@ jobs:
 
       - name: Checkout codebase
         uses: actions/checkout@v2
-
-      - name: Cache go module
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-go-
-
       - name: Test
         run: go test -timeout 1h -v ./...
 
@@ -166,9 +158,9 @@ jobs:
       - name: Prepare to release
         run: |
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
+          cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
           wget -O ./build_assets/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
           wget -O ./build_assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-          wget -O ./build_assets/LICENSE https://raw.githubusercontent.com/XTLS/Xray-core/main/LICENSE
 
       - name: Prepare package for Linux
         if: matrix.goos == 'linux'
