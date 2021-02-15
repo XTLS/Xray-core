@@ -20,8 +20,10 @@ jobs:
           - goarch: 386
             goos: darwin
         include:
+          # BEIGIN MacOS ARM64
           - goos: darwin
             goarch: arm64
+          # END MacOS ARM64
           # BEGIN Linux ARM 5 6 7
           - goos: linux
             goarch: arm
@@ -42,10 +44,12 @@ jobs:
             goarch: arm
             goarm: 7
           # BEGIN Other architectures
+          # BEGIN riscv64 & ARM64
           - goos: linux
             goarch: arm64
           - goos: linux
             goarch: riscv64
+          # END riscv64 & ARM64
           # BEGIN MIPS
           - goos: linux
             goarch: mips64
@@ -162,6 +166,7 @@ jobs:
           openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
           openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
+
       - name: Create ZIP archive
         if: matrix.softfloat != 'softfloat'
         run: |
@@ -184,7 +189,7 @@ jobs:
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip
+          name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
           path: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
 
       - name: Upload binaries to release
@@ -197,6 +202,7 @@ jobs:
           file_glob: true
           prerelease: false
           overwrite: true
+
   UpdateChangelog:
     needs: build
     runs-on: ubuntu-20.04
