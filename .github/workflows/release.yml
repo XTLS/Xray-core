@@ -3,7 +3,7 @@ name: Release and Build
 on:
   workflow_dispatch:
   release:
-    types: [prereleased,released]
+    types: [prereleased]
   push:
     branches:
       - main
@@ -191,4 +191,3 @@ jobs:
           asset_name: Xray-core ${{ github.ref }}
           tag: ${{ github.ref }}
           file_glob: true
-          overwrite: true
