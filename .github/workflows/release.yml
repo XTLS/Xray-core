@@ -130,6 +130,9 @@ jobs:
       - name: Build Xray <Not Release> # 自动编译
         if: github.event_name != 'release'
         run: |
+          BUILD=$(expr substr $BUILD 1 7)
+          sed -i '/build/ s/Custom/'$BUILD'/' ./core/core.go
+          cat ./core/core.go
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
       - name: Build Xray <Released> #Release编译
