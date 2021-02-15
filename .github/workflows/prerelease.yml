@@ -104,7 +104,6 @@ jobs:
         id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "VERSION=$(grep version core/core.go| head -n 1| cut -d = -f2| tr -d \"' ')" >> $GITHUB_ENV
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
@@ -191,8 +190,8 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
-          asset_name: Xray-core v${{ env.VERSION }}
-          tag: v${{ env.VERSION }}
+          asset_name: Xray-core ${{ github.ref }}
+          tag: ${{ github.ref }}
           file_glob: true
           prerelease: true
           overwrite: true
