@@ -109,6 +109,7 @@ jobs:
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v2
+
       - name: Show workflow information 
         id: get_filename
         run: |
@@ -133,6 +134,7 @@ jobs:
           sed -i '/build/ s/Custom/'$ID'/' ./core/core.go
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+ 
       - name: Build Xray <Released> #Release编译
         if: github.event_name == 'release'
         run: |
@@ -166,18 +168,18 @@ jobs:
           for CORE in $(ls xray*)
           do
             COREDGST=$CORE.dgst
-            openssl dgst -md5    $CORE | sed 's/([^)]*)//g' >>$COREDGST
-            openssl dgst -sha1   $CORE | sed 's/([^)]*)//g' >>$COREDGST
-            openssl dgst -sha256 $CORE | sed 's/([^)]*)//g' >>$COREDGST
-            openssl dgst -sha512 $CORE | sed 's/([^)]*)//g' >>$COREDGST
+            for METHOD in {"md5","sha1","sha256","sha512"}
+            do
+              openssl dgst -$METHOD $CORE | sed 's/([^)]*)//g' >>$COREDGST
+            done
           done
           popd || exit 1
           FILE=./Xray-$ASSET_NAME.zip
           DGST=$FILE.dgst
-          openssl dgst -md5    $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha1   $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha256 $FILE | sed 's/([^)]*)//g' >>$DGST
-          openssl dgst -sha512 $FILE | sed 's/([^)]*)//g' >>$DGST
+          for METHOD in {"md5","sha1","sha256","sha512"}
+          do
+          openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
+          done
 
       - name: Change the name #准备发布，将build文件夹重命名
         run: |
@@ -196,6 +198,5 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
-          asset_name: Xray-core ${{ github.ref }}
           tag: ${{ github.ref }}
           file_glob: true
