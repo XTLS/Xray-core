@@ -1,4 +1,4 @@
-name: Release and Build
+name: Build and Release
 
 on:
   workflow_dispatch:
@@ -178,7 +178,7 @@ jobs:
           DGST=$FILE.dgst
           for METHOD in {"md5","sha1","sha256","sha512"}
           do
-          openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
+            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
 
       - name: Change the name #准备发布，将build文件夹重命名
