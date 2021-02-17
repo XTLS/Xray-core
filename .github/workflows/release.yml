@@ -130,7 +130,7 @@ jobs:
         if: github.event_name != 'release'
         run: |
           ID=$(git rev-parse --short ${{ github.sha }})
-          if [ "${{ github.event_name }" == 'pull_request' ]
+          if [ "${{ github.event_name }}" == 'pull_request' ]
           then
             ID=$(git rev-parse --short ${{ github.event.pull_request.head.sha }})
           fi
