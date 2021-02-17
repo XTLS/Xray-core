@@ -412,6 +412,8 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		newError("realName = " + name).AtInfo().WriteToLog(sid)
 		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 	}
+	name = strings.ToLower(name)
+	alpn = strings.ToLower(alpn)
 
 	if len(napfb) > 1 || napfb[""] == nil {
 		if name != "" && napfb[name] == nil {
@@ -498,38 +500,48 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 		if fb.Xver != 0 {
+			ipType := 4
 			remoteAddr, remotePort, err := net.SplitHostPort(connection.RemoteAddr().String())
 			if err != nil {
-				return err
+				ipType = 0
 			}
 			localAddr, localPort, err := net.SplitHostPort(connection.LocalAddr().String())
 			if err != nil {
-				return err
+				ipType = 0
 			}
-			ipv4 := true
-			for i := 0; i < len(remoteAddr); i++ {
-				if remoteAddr[i] == ':' {
-					ipv4 = false
-					break
+			if ipType == 4 {
+				for i := 0; i < len(remoteAddr); i++ {
+					if remoteAddr[i] == ':' {
+						ipType = 6
+						break
+					}
 				}
 			}
 			pro := buf.New()
 			defer pro.Release()
 			switch fb.Xver {
 			case 1:
-				if ipv4 {
+				if ipType == 0 {
+					common.Must2(pro.Write([]byte("PROXY UNKNOWN\r\n")))
+					break
+				}
+				if ipType == 4 {
 					common.Must2(pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				} else {
 					common.Must2(pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				}
 			case 2:
-				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21"))) // signature + v2 + PROXY
-				if ipv4 {
-					common.Must2(pro.Write([]byte("\x11\x00\x0C"))) // AF_INET + STREAM + 12 bytes
+				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"))) // signature
+				if ipType == 0 {
+					common.Must2(pro.Write([]byte("\x20\x00\x00\x00"))) // v2 + LOCAL + UNSPEC + UNSPEC + 0 bytes
+					break
+				}
+				if ipType == 4 {
+					common.Must2(pro.Write([]byte("\x21\x11\x00\x0C"))) // v2 + PROXY + AF_INET + STREAM + 12 bytes
 					common.Must2(pro.Write(net.ParseIP(remoteAddr).To4()))
 					common.Must2(pro.Write(net.ParseIP(localAddr).To4()))
 				} else {
-					common.Must2(pro.Write([]byte("\x21\x00\x24"))) // AF_INET6 + STREAM + 36 bytes
+					common.Must2(pro.Write([]byte("\x21\x21\x00\x24"))) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
 					common.Must2(pro.Write(net.ParseIP(remoteAddr).To16()))
 					common.Must2(pro.Write(net.ParseIP(localAddr).To16()))
 				}

@@ -110,6 +110,9 @@ func (b *Buffer) BytesTo(to int32) []byte {
 	if to < 0 {
 		to += b.Len()
 	}
+	if to < 0 {
+		to = 0
+	}
 	return b.v[b.start : b.start+to]
 }
 

@@ -17,6 +17,7 @@
 - One Click
   - [ProxySU](https://github.com/proxysu/ProxySU)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
+  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
@@ -34,9 +35,11 @@
   - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
   - [Hello World](https://github.com/jerrykuku/luci-app-vssr)
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
+  - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+  - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)

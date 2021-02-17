@@ -54,12 +54,9 @@ func (r *FullReader) Read(p []byte) (n int, err error) {
 }
 
 // ReadTCPSession reads a Shadowsocks TCP session from the given reader, returns its header and remaining parts.
-func ReadTCPSession(users []*protocol.MemoryUser, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
-	user := users[0]
-	account := user.Account.(*MemoryAccount)
+func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
 
 	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
-	hashkdf.Write(account.Key)
 
 	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))
 
@@ -71,10 +68,20 @@ func ReadTCPSession(users []*protocol.MemoryUser, reader io.Reader) (*protocol.R
 	readSizeRemain := DrainSize
 
 	var r2 buf.Reader
+	buffer := buf.New()
+	defer buffer.Release()
 
-	if len(users) > 1 {
-		buffer := buf.New()
-		defer buffer.Release()
+	var user *protocol.MemoryUser
+	var ivLen int32
+	var err error
+
+	count := validator.Count()
+	if count == 0 {
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("invalid user")
+	} else if count > 1 {
+		var aead cipher.AEAD
 
 		if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
 			readSizeRemain -= int(buffer.Len())
@@ -83,45 +90,26 @@ func ReadTCPSession(users []*protocol.MemoryUser, reader io.Reader) (*protocol.R
 		}
 
 		bs := buffer.Bytes()
+		user, aead, _, ivLen, err = validator.Get(bs, protocol.RequestCommandTCP)
 
-		var aeadCipher *AEADCipher
-		var ivLen int32
-		subkey := make([]byte, 32)
-		length := make([]byte, 16)
-		var aead cipher.AEAD
-		var err error
-		for _, user = range users {
-			account = user.Account.(*MemoryAccount)
-			aeadCipher = account.Cipher.(*AEADCipher)
-			ivLen = aeadCipher.IVSize()
-			subkey = subkey[:aeadCipher.KeyBytes]
-			hkdfSHA1(account.Key, bs[:ivLen], subkey)
-			aead = aeadCipher.AEADAuthCreator(subkey)
-			_, err = aead.Open(length[:0], length[4:16], bs[ivLen:ivLen+18], nil)
-			if err == nil {
-				reader = &FullReader{reader, bs[ivLen:]}
-				auth := &crypto.AEADAuthenticator{
-					AEAD:           aead,
-					NonceGenerator: crypto.GenerateInitialAEADNonce(),
-				}
-				r2 = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
-					Auth: auth,
-				}, reader, protocol.TransferTypeStream, nil)
-				break
+		if user != nil {
+			reader = &FullReader{reader, bs[ivLen:]}
+			auth := &crypto.AEADAuthenticator{
+				AEAD:           aead,
+				NonceGenerator: crypto.GenerateInitialAEADNonce(),
 			}
-		}
-		if err != nil {
+			r2 = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
+				Auth: auth,
+			}, reader, protocol.TransferTypeStream, nil)
+		} else {
 			readSizeRemain -= int(buffer.Len())
 			DrainConnN(reader, readSizeRemain)
 			return nil, nil, newError("failed to match an user").Base(err)
 		}
-	}
-
-	buffer := buf.New()
-	defer buffer.Release()
-
-	if r2 == nil {
-		ivLen := account.Cipher.IVSize()
+	} else {
+		user, ivLen = validator.GetOnlyUser()
+		account := user.Account.(*MemoryAccount)
+		hashkdf.Write(account.Key)
 		var iv []byte
 		if ivLen > 0 {
 			if _, err := buffer.ReadFullFrom(reader, ivLen); err != nil {
@@ -261,40 +249,31 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 	return buffer, nil
 }
 
-func DecodeUDPPacket(users []*protocol.MemoryUser, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
+func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
+	bs := payload.Bytes()
+	if len(bs) <= 32 {
+		return nil, nil, newError("len(bs) <= 32")
+	}
+
 	var user *protocol.MemoryUser
-	var account *MemoryAccount
 	var err error
 
-	if len(users) > 1 {
-		bs := payload.Bytes()
-		if len(bs) <= 32 {
-			return nil, nil, newError("len(bs) <= 32")
-		}
-
-		var aeadCipher *AEADCipher
-		var ivLen int32
-		subkey := make([]byte, 32)
-		data := make([]byte, 8192)
-		var aead cipher.AEAD
+	count := validator.Count()
+	if count == 0 {
+		return nil, nil, newError("invalid user")
+	} else if count > 1 {
 		var d []byte
-		for _, user = range users {
-			account = user.Account.(*MemoryAccount)
-			aeadCipher = account.Cipher.(*AEADCipher)
-			ivLen = aeadCipher.IVSize()
-			subkey = subkey[:aeadCipher.KeyBytes]
-			hkdfSHA1(account.Key, bs[:ivLen], subkey)
-			aead = aeadCipher.AEADAuthCreator(subkey)
-			d, err = aead.Open(data[:0], data[8180:8192], bs[ivLen:], nil)
-			if err == nil {
-				payload.Clear()
-				payload.Write(d)
-				break
-			}
+		user, _, d, _, err = validator.Get(bs, protocol.RequestCommandUDP)
+
+		if user != nil {
+			payload.Clear()
+			payload.Write(d)
+		} else {
+			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
 		}
 	} else {
-		user = users[0]
-		account = user.Account.(*MemoryAccount)
+		user, _ = validator.GetOnlyUser()
+		account := user.Account.(*MemoryAccount)
 
 		var iv []byte
 		if !account.Cipher.IsAEAD() && account.Cipher.IVSize() > 0 {
@@ -302,12 +281,9 @@ func DecodeUDPPacket(users []*protocol.MemoryUser, payload *buf.Buffer) (*protoc
 			iv = make([]byte, account.Cipher.IVSize())
 			copy(iv, payload.BytesTo(account.Cipher.IVSize()))
 		}
-
-		err = account.Cipher.DecodePacket(account.Key, payload)
-	}
-
-	if err != nil {
-		return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+		if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
+			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+		}
 	}
 
 	request := &protocol.RequestHeader{
@@ -341,7 +317,10 @@ func (v *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		buffer.Release()
 		return nil, err
 	}
-	u, payload, err := DecodeUDPPacket([]*protocol.MemoryUser{v.User}, buffer)
+	validator := new(Validator)
+	validator.Add(v.User)
+
+	u, payload, err := DecodeUDPPacket(validator, buffer)
 	if err != nil {
 		buffer.Release()
 		return nil, err

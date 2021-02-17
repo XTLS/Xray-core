@@ -21,7 +21,7 @@ func init() {
 	common.Must(err)
 
 	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
-		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "release", "config", "geoip.dat")))
+		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "resources", "geoip.dat")))
 	}
 
 	geositeFilePath := filepath.Join(wd, "geosite.dat")
@@ -115,6 +115,11 @@ func TestDNSConfigParsing(t *testing.T) {
 					{
 						Type:   dns.DomainMatchingType_Full,
 						Domain: "example.com",
+						Ip:     [][]byte{{127, 0, 0, 1}},
+					},
+					{
+						Type:   dns.DomainMatchingType_Full,
+						Domain: "example.com",
 						Ip:     [][]byte{{10, 0, 0, 1}},
 					},
 					{
@@ -126,11 +131,6 @@ func TestDNSConfigParsing(t *testing.T) {
 						Type:   dns.DomainMatchingType_Regex,
 						Domain: ".*\\.com",
 						Ip:     [][]byte{{8, 8, 4, 4}},
-					},
-					{
-						Type:   dns.DomainMatchingType_Full,
-						Domain: "example.com",
-						Ip:     [][]byte{{127, 0, 0, 1}},
 					},
 				},
 				ClientIp: []byte{10, 0, 0, 1},

@@ -364,6 +364,7 @@ func (s *Server) lookupIPInternal(domain string, option IPOption) ([]net.IP, err
 	if domain == "" {
 		return nil, newError("empty domain name")
 	}
+	domain = strings.ToLower(domain)
 
 	// normalize the FQDN form query
 	if domain[len(domain)-1] == '.' {

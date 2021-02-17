@@ -7,6 +7,8 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"io"
+	"reflect"
+	"strconv"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
@@ -29,6 +31,31 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 		return bytes.Equal(a.Key, account.Key)
 	}
 	return false
+}
+
+func (a *MemoryAccount) GetCipherName() string {
+	switch a.Cipher.(type) {
+	case *AesCfb:
+		keyBytes := a.Cipher.(*AesCfb).KeyBytes
+		return "AES_" + strconv.FormatInt(int64(keyBytes*8), 10) + "_CFB"
+	case *ChaCha20:
+		if a.Cipher.(*ChaCha20).IVBytes == 8 {
+			return "CHACHA20"
+		}
+		return "CHACHA20_IETF"
+	case *AEADCipher:
+		switch reflect.ValueOf(a.Cipher.(*AEADCipher).AEADAuthCreator).Pointer() {
+		case reflect.ValueOf(createAesGcm).Pointer():
+			keyBytes := a.Cipher.(*AEADCipher).KeyBytes
+			return "AES_" + strconv.FormatInt(int64(keyBytes*8), 10) + "_GCM"
+		case reflect.ValueOf(createChacha20Poly1305).Pointer():
+			return "CHACHA20_POLY1305"
+		}
+	case *NoneCipher:
+		return "NONE"
+	}
+
+	return ""
 }
 
 func createAesGcm(key []byte) cipher.AEAD {
