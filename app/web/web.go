@@ -5,7 +5,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/xtls/xray-core/app/web/client"
 	"github.com/xtls/xray-core/app/web/config"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -19,12 +18,20 @@ type WebHandler struct {
 	tag   string
 	api   Api
 	pprof bool
+	//static []Static
 }
 
 type Api struct {
 	address string
 	port    uint32
 }
+
+/*
+type Static struct {
+	filePath string
+	uri      string
+}
+*/
 
 // New
 func NewWebHandler(ctx context.Context, config *config.Config) (*WebHandler, error) {
@@ -51,8 +58,6 @@ func (r *WebHandler) Start() error {
 		buffer: make(chan net.Conn, 4),
 		done:   done.New(),
 	}
-
-	client.Client = client.NewServiceClient(r.api.address, r.api.port)
 
 	go func() {
 		if err := http.Serve(listener, Default(r)); err != nil {

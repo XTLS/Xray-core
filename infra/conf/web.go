@@ -6,12 +6,20 @@ type WebConfig struct {
 	Tag   string     `json:"tag"`
 	Api   *ApiConfig `json:"api"`
 	Pprof bool       `json:"pprof"`
+	//Static []StaticConfig `json:"static"`
 }
 
 type ApiConfig struct {
 	Address string `json:"address"`
 	Port    uint32 `json:"port"`
 }
+
+/*
+type StaticConfig struct {
+	filePath string `json:"filePath"`
+	uri      string `json:"uri"`
+}
+*/
 
 func (c *WebConfig) Build() (*config.Config, error) {
 	if c.Tag == "" {

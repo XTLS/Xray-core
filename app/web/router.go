@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/xtls/xray-core/app/web/client"
 	"github.com/xtls/xray-core/app/web/handler"
 	"github.com/xtls/xray-core/core"
 )
@@ -13,14 +14,18 @@ func Default(config *WebHandler) *httprouter.Router {
 	router := httprouter.New()
 
 	router.GET("/api/v1/xray/statssys", handler.GetSysStatsHandler)
-	router.GET("/api/v1/xray/statsquery", handler.QueryStatsHandler)
-	router.GET("/api/v1/xray/statsquery/:pattern", handler.QueryStatsHandler)
-	router.GET("/api/v1/xray/stats", handler.GetStatsHandler)
-	router.GET("/api/v1/xray/stats/:name", handler.GetStatsHandler)
-	router.DELETE("/api/v1/xray/inbounds/:tag", handler.RemoveInboundHandler)
-	router.POST("/api/v1/xray/inbounds", handler.AddInboundHandler)
-	router.DELETE("/api/v1/xray/outbounds/:tag", handler.RemoveOutboundHandler)
-	router.POST("/api/v1/xray/outbounds", handler.AddOutboundHandler)
+
+	if config.api.port != 0 {
+		client.Client = client.NewServiceClient(config.api.address, config.api.port)
+		router.GET("/api/v1/xray/statsquery", handler.QueryStatsHandler)
+		router.GET("/api/v1/xray/statsquery/:pattern", handler.QueryStatsHandler)
+		router.GET("/api/v1/xray/stats", handler.GetStatsHandler)
+		router.GET("/api/v1/xray/stats/:name", handler.GetStatsHandler)
+		router.DELETE("/api/v1/xray/inbounds/:tag", handler.RemoveInboundHandler)
+		router.POST("/api/v1/xray/inbounds", handler.AddInboundHandler)
+		router.DELETE("/api/v1/xray/outbounds/:tag", handler.RemoveOutboundHandler)
+		router.POST("/api/v1/xray/outbounds", handler.AddOutboundHandler)
+	}
 
 	if config.pprof {
 		router.Handler(http.MethodGet, "/debug/pprof/*item", http.DefaultServeMux)
