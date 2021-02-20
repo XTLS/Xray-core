@@ -10,7 +10,11 @@ option java_multiple_files = true;
 message Config {
     // Tag of the outbound handler that handles Webful API http connections.
     string tag = 1;
-    string address = 2;
-    uint32 port = 3;
-    bool pprof = 4;
+    api api = 2;
+    bool pprof = 3;
+}
+
+message api {
+    string address = 1;
+    uint32 port = 2;
 }

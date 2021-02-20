@@ -3,10 +3,14 @@ package conf
 import "github.com/xtls/xray-core/app/web/config"
 
 type WebConfig struct {
-	Tag     string `json:"tag"`
+	Tag   string     `json:"tag"`
+	Api   *ApiConfig `json:"api"`
+	Pprof bool       `json:"pprof"`
+}
+
+type ApiConfig struct {
 	Address string `json:"address"`
 	Port    uint32 `json:"port"`
-	Pprof   bool   `json:"pprof"`
 }
 
 func (c *WebConfig) Build() (*config.Config, error) {
@@ -15,9 +19,11 @@ func (c *WebConfig) Build() (*config.Config, error) {
 	}
 
 	return &config.Config{
-		Tag:     c.Tag,
-		Address: c.Address,
-		Port:    c.Port,
-		Pprof:   c.Pprof,
+		Tag: c.Tag,
+		Api: &config.Api{
+			Address: c.Api.Address,
+			Port:    c.Api.Port,
+		},
+		Pprof: c.Pprof,
 	}, nil
 }

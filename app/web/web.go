@@ -15,20 +15,26 @@ import (
 )
 
 type WebHandler struct {
-	ohm     outbound.Manager
-	tag     string
+	ohm   outbound.Manager
+	tag   string
+	api   Api
+	pprof bool
+}
+
+type Api struct {
 	address string
 	port    uint32
-	pprof   bool
 }
 
 // New
 func NewWebHandler(ctx context.Context, config *config.Config) (*WebHandler, error) {
 	c := &WebHandler{
-		tag:     config.Tag,
-		address: config.Address,
-		port:    config.Port,
-		pprof:   config.Pprof,
+		tag: config.Tag,
+		api: Api{
+			address: config.Api.Address,
+			port:    config.Api.Port,
+		},
+		pprof: config.Pprof,
 	}
 	common.Must(core.RequireFeatures(ctx, func(om outbound.Manager) {
 		c.ohm = om
@@ -46,7 +52,7 @@ func (r *WebHandler) Start() error {
 		done:   done.New(),
 	}
 
-	client.Client = client.NewServiceClient(r.address, r.port)
+	client.Client = client.NewServiceClient(r.api.address, r.api.port)
 
 	go func() {
 		if err := http.Serve(listener, Default(r)); err != nil {
