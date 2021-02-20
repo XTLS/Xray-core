@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package xray.app.web.config;
+option csharp_namespace = "Xray.App.Web.Config";
+option go_package = "github.com/xtls/xray-core/app/web/config";
+option java_package = "com.xray.app.web.config";
+option java_multiple_files = true;
+
+// Config is the settings for Web;
+message Config {
+    // Tag of the outbound handler that handles Webful API http connections.
+    string tag = 1;
+    string address = 2;
+    uint32 port = 3;
+    bool pprof = 4;
+}
