@@ -12,7 +12,7 @@ message Config {
     string tag = 1;
     api api = 2;
     bool pprof = 3;
-    repeated static static = 4;
+    //repeated static static = 4;
 }
 
 message api {
