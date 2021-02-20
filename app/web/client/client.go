@@ -30,7 +30,7 @@ func NewServiceClient(addr string, port uint32) *ServiceClient {
 	if addr == "" {
 		addr = "127.0.0.1"
 	}
-	if port == nil {
+	if port == 0 {
 		return nil
 	}
 	cmdConn, err := grpc.Dial(fmt.Sprintf("%s:%d", addr, port), grpc.WithInsecure())

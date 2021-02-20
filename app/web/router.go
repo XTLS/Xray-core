@@ -17,10 +17,10 @@ func Default(config *WebHandler) *httprouter.Router {
 	router.GET("/api/xray/statsquery/:pattern", handler.QueryStatsHandler)
 	router.GET("/api/xray/stats", handler.GetStatsHandler)
 	router.GET("/api/xray/stats/:name", handler.GetStatsHandler)
-	router.GET("/api/xray/inbound/remove/:tag", DefaultHandler)
-	router.POST("/api/xray/inbound/add", DefaultHandler)
-	router.GET("/api/xray/outbound/remove/:tag", DefaultHandler)
-	router.POST("/api/xray/outbound/add", DefaultHandler)
+	router.GET("/api/xray/inbound/remove/:tag", handler.RemoveInboundHandler)
+	router.POST("/api/xray/inbound/add", handler.AddInboundHandler)
+	router.GET("/api/xray/outbound/remove/:tag", handler.RemoveOutboundHandler)
+	router.POST("/api/xray/outbound/add", handler.AddOutboundHandler)
 
 	if config.pprof {
 		router.Handler(http.MethodGet, "/debug/pprof/*item", http.DefaultServeMux)
