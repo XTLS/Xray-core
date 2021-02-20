@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -41,8 +42,8 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 }
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []xtls.Certificate {
-	certs := make([]xtls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() []*xtls.Certificate {
+	certs := make([]*xtls.Certificate, 0, len(c.Certificate))
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -52,19 +53,62 @@ func (c *Config) BuildCertificates() []xtls.Certificate {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-		certs = append(certs, keyPair)
-		if entry.OcspStapling != 0 {
-			go func(cert *xtls.Certificate) {
-				t := time.NewTicker(time.Duration(entry.OcspStapling) * time.Second)
+		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		if err != nil {
+			newError("ignoring invalid certificate").Base(err).AtWarning().WriteToLog()
+			continue
+		}
+		certs = append(certs, &keyPair)
+		if !entry.OneTimeLoading {
+			var isOcspstapling bool
+			hotRelodaInterval := uint64(3600)
+			if entry.OcspStapling != 0 {
+				hotRelodaInterval = entry.OcspStapling
+				isOcspstapling = true
+			}
+			index := len(certs) - 1
+			go func(cert *xtls.Certificate, index int) {
+				t := time.NewTicker(time.Duration(hotRelodaInterval) * time.Second)
 				for {
-					if newData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
-						newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
-					} else if string(newData) != string(cert.OCSPStaple) {
-						cert.OCSPStaple = newData
+					if entry.CertificatePath != "" && entry.KeyPath != "" {
+						newCert, err := filesystem.ReadFile(entry.CertificatePath)
+						if err != nil {
+							newError("failed to parse certificate").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						newKey, err := filesystem.ReadFile(entry.KeyPath)
+						if err != nil {
+							newError("failed to parse key").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						if string(newCert) != string(entry.Certificate) && string(newKey) != string(entry.Key) {
+							newKeyPair, err := xtls.X509KeyPair(newCert, newKey)
+							if err != nil {
+								newError("ignoring invalid X509 key pair").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							if newKeyPair.Leaf, err = x509.ParseCertificate(newKeyPair.Certificate[0]); err != nil {
+								newError("ignoring invalid certificate").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							cert = &newKeyPair
+						}
 					}
+					if isOcspstapling {
+						if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
+							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						} else if string(newOCSPData) != string(cert.OCSPStaple) {
+							cert.OCSPStaple = newOCSPData
+						}
+					}
+					certs[index] = cert
 					<-t.C
 				}
-			}(&certs[len(certs)-1])
+			}(certs[len(certs)-1], index)
 		}
 	}
 	return certs
@@ -168,6 +212,33 @@ func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.C
 	}
 }
 
+func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+		if len(certs) == 0 {
+			return nil, newError("empty certs")
+		}
+		sni := strings.ToLower(hello.ServerName)
+		if len(certs) == 1 || sni == "" {
+			return certs[0], nil
+		}
+		gsni := "*"
+		if index := strings.IndexByte(sni, '.'); index != -1 {
+			gsni += sni[index:]
+		}
+		for _, keyPair := range certs {
+			if keyPair.Leaf.Subject.CommonName == sni || keyPair.Leaf.Subject.CommonName == gsni {
+				return keyPair, nil
+			}
+			for _, name := range keyPair.Leaf.DNSNames {
+				if name == sni || name == gsni {
+					return keyPair, nil
+				}
+			}
+		}
+		return certs[0], nil
+	}
+}
+
 func (c *Config) parseServerName() string {
 	return c.ServerName
 }
@@ -201,12 +272,11 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 		opt(config)
 	}
 
-	config.Certificates = c.BuildCertificates()
-	config.BuildNameToCertificate()
-
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
+	} else {
+		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

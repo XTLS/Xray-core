@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/xudp"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/proxy/vmess"
@@ -30,6 +31,7 @@ type Handler struct {
 	serverList    *protocol.ServerList
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
+	cone          bool
 }
 
 // New creates a new VMess outbound handler.
@@ -48,6 +50,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		serverList:    serverList,
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
 	}
 
 	return handler, nil
@@ -124,6 +127,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
+	if request.Command == protocol.RequestCommandUDP && h.cone {
+		request.Command = protocol.RequestCommandMux
+		request.Address = net.DomainAddress("v1.mux.cool")
+		request.Port = net.Port(666)
+	}
+
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
@@ -133,6 +142,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		bodyWriter := session.EncodeRequestBody(request, writer)
+		bodyWriter2 := bodyWriter
+		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+			bodyWriter = xudp.NewPacketWriter(bodyWriter, target)
+		}
 		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 			return newError("failed to write first payload").Base(err)
 		}
@@ -146,7 +159,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			if err := bodyWriter.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
+			if err := bodyWriter2.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 				return err
 			}
 		}
@@ -165,6 +178,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		h.handleCommand(rec.Destination(), header.Command)
 
 		bodyReader := session.DecodeResponseBody(request, reader)
+		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+			bodyReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
+		}
 
 		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
 	}

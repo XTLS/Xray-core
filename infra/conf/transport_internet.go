@@ -247,12 +247,13 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 }
 
 type TLSCertConfig struct {
-	CertFile     string   `json:"certificateFile"`
-	CertStr      []string `json:"certificate"`
-	KeyFile      string   `json:"keyFile"`
-	KeyStr       []string `json:"key"`
-	Usage        string   `json:"usage"`
-	OcspStapling int64    `json:"ocspStapling"`
+	CertFile       string   `json:"certificateFile"`
+	CertStr        []string `json:"certificate"`
+	KeyFile        string   `json:"keyFile"`
+	KeyStr         []string `json:"key"`
+	Usage          string   `json:"usage"`
+	OcspStapling   uint64   `json:"ocspStapling"`
+	OneTimeLoading bool     `json:"oneTimeLoading"`
 }
 
 // Build implements Buildable.
@@ -264,6 +265,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -271,6 +273,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {
@@ -283,7 +286,11 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
-
+	if certificate.KeyPath == "" && certificate.CertificatePath == "" {
+		certificate.OneTimeLoading = true
+	} else {
+		certificate.OneTimeLoading = c.OneTimeLoading
+	}
 	certificate.OcspStapling = c.OcspStapling
 
 	return certificate, nil
@@ -331,23 +338,24 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 }
 
 type XTLSCertConfig struct {
-	CertFile     string   `json:"certificateFile"`
-	CertStr      []string `json:"certificate"`
-	KeyFile      string   `json:"keyFile"`
-	KeyStr       []string `json:"key"`
-	Usage        string   `json:"usage"`
-	OcspStapling int64    `json:"ocspStapling"`
+	CertFile       string   `json:"certificateFile"`
+	CertStr        []string `json:"certificate"`
+	KeyFile        string   `json:"keyFile"`
+	KeyStr         []string `json:"key"`
+	Usage          string   `json:"usage"`
+	OcspStapling   uint64   `json:"ocspStapling"`
+	OneTimeLoading bool     `json:"oneTimeLoading"`
 }
 
 // Build implements Buildable.
 func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	certificate := new(xtls.Certificate)
-
 	cert, err := readFileOrString(c.CertFile, c.CertStr)
 	if err != nil {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -355,6 +363,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {
@@ -367,7 +376,11 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	default:
 		certificate.Usage = xtls.Certificate_ENCIPHERMENT
 	}
-
+	if certificate.KeyPath == "" && certificate.CertificatePath == "" {
+		certificate.OneTimeLoading = true
+	} else {
+		certificate.OneTimeLoading = c.OneTimeLoading
+	}
 	certificate.OcspStapling = c.OcspStapling
 
 	return certificate, nil
