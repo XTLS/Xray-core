@@ -17,14 +17,14 @@ func Default(config *WebHandler) *httprouter.Router {
 
 	if config.api.port != 0 {
 		client.Client = client.NewServiceClient(config.api.address, config.api.port)
-		router.GET("/api/v1/xray/statsquery", handler.QueryStatsHandler)
-		router.GET("/api/v1/xray/statsquery/:pattern", handler.QueryStatsHandler)
-		router.GET("/api/v1/xray/stats", handler.GetStatsHandler)
-		router.GET("/api/v1/xray/stats/:name", handler.GetStatsHandler)
-		router.DELETE("/api/v1/xray/inbounds/:tag", handler.RemoveInboundHandler)
-		router.POST("/api/v1/xray/inbounds", handler.AddInboundHandler)
-		router.DELETE("/api/v1/xray/outbounds/:tag", handler.RemoveOutboundHandler)
-		router.POST("/api/v1/xray/outbounds", handler.AddOutboundHandler)
+		router.GET("/api/v1/statsquery", handler.QueryStatsHandler)
+		router.GET("/api/v1/statsquery/:pattern", handler.QueryStatsHandler)
+		router.GET("/api/v1/stats", handler.GetStatsHandler)
+		router.GET("/api/v1/stats/:name", handler.GetStatsHandler)
+		router.DELETE("/api/v1/inbounds/:tag", handler.RemoveInboundHandler)
+		router.POST("/api/v1/inbounds", handler.AddInboundHandler)
+		router.DELETE("/api/v1/outbounds/:tag", handler.RemoveOutboundHandler)
+		router.POST("/api/v1/outbounds", handler.AddOutboundHandler)
 	}
 
 	if config.pprof {
