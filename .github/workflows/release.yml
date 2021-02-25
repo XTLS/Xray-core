@@ -126,7 +126,7 @@ jobs:
       - name: Get project dependencies
         run: go mod download
       
-      - name: Build Xray <Not Release>
+      - name: Replace Custom to Commit ID
         if: github.event_name != 'release'
         run: |
           ID=$(git rev-parse --short ${{ github.sha }})
@@ -135,11 +135,8 @@ jobs:
             ID=$(git rev-parse --short ${{ github.event.pull_request.head.sha }})
           fi
           sed -i '/build/ s/Custom/'$ID'/' ./core/core.go
-          mkdir -p build_assets
-          go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
  
-      - name: Build Xray <Released>
-        if: github.event_name == 'release'
+      - name: Build Xray
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
