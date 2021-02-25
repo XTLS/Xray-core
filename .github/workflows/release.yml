@@ -195,7 +195,7 @@ jobs:
         run: |
           mv build_assets Xray-$ASSET_NAME
 
-      - name: Upload files to Artifacts #上传文件至Action
+      - name: Upload files to Artifacts
         uses: actions/upload-artifact@v2
         with:
           name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
