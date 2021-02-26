@@ -183,9 +183,12 @@ func shouldOverride(result SniffResult, request session.SniffingRequest) bool {
 		}
 	}
 
-	protocol := result.Protocol()
+	protocolString := result.Protocol()
+	if resComp, ok := result.(SnifferResultComposite); ok {
+		protocolString = resComp.ProtocolForDomainResult()
+	}
 	for _, p := range request.OverrideDestinationForProtocol {
-		if strings.HasPrefix(protocol, p) {
+		if strings.HasPrefix(protocolString, p) {
 			return true
 		}
 	}
@@ -210,15 +213,29 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		ctx = session.ContextWithContent(ctx, content)
 	}
 	sniffingRequest := content.SniffingRequest
-	if destination.Network != net.Network_TCP || !sniffingRequest.Enabled {
+	switch {
+	case !sniffingRequest.Enabled:
 		go d.routedDispatch(ctx, outbound, destination)
-	} else {
+	case destination.Network != net.Network_TCP:
+		// Only metadata sniff will be used for non tcp connection
+		result, err := sniffer(ctx, nil, true)
+		if err == nil {
+			content.Protocol = result.Protocol()
+			if shouldOverride(result, sniffingRequest) {
+				domain := result.Domain()
+				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
+				destination.Address = net.ParseAddress(domain)
+				ob.Target = destination
+			}
+		}
+		go d.routedDispatch(ctx, outbound, destination)
+	default:
 		go func() {
 			cReader := &cachedReader{
 				reader: outbound.Reader.(*pipe.Reader),
 			}
 			outbound.Reader = cReader
-			result, err := sniffer(ctx, cReader)
+			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly)
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
@@ -234,34 +251,50 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	return inbound, nil
 }
 
-func sniffer(ctx context.Context, cReader *cachedReader) (SniffResult, error) {
+func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (SniffResult, error) {
 	payload := buf.New()
 	defer payload.Release()
 
-	sniffer := NewSniffer()
-	totalAttempt := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			totalAttempt++
-			if totalAttempt > 2 {
-				return nil, errSniffingTimeout
-			}
+	sniffer := NewSniffer(ctx)
 
-			cReader.Cache(payload)
-			if !payload.IsEmpty() {
-				result, err := sniffer.Sniff(payload.Bytes())
-				if err != common.ErrNoClue {
-					return result, err
+	metaresult, metadataErr := sniffer.SniffMetadata(ctx)
+
+	if metadataOnly {
+		return metaresult, metadataErr
+	}
+
+	contentResult, contentErr := func() (SniffResult, error) {
+		totalAttempt := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				totalAttempt++
+				if totalAttempt > 2 {
+					return nil, errSniffingTimeout
+				}
+
+				cReader.Cache(payload)
+				if !payload.IsEmpty() {
+					result, err := sniffer.Sniff(ctx, payload.Bytes())
+					if err != common.ErrNoClue {
+						return result, err
+					}
+				}
+				if payload.IsFull() {
+					return nil, errUnknownContent
 				}
 			}
-			if payload.IsFull() {
-				return nil, errUnknownContent
-			}
 		}
+	}()
+	if contentErr != nil && metadataErr == nil {
+		return metaresult, nil
 	}
+	if contentErr == nil && metadataErr == nil {
+		return CompositeResult(metaresult, contentResult), nil
+	}
+	return contentResult, contentErr
 }
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {

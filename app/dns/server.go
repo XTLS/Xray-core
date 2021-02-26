@@ -30,6 +30,7 @@ type Server struct {
 	hosts         *StaticHosts
 	clientIP      net.IP
 	clients       []Client             // clientIdx -> Client
+	ctx           context.Context
 	ipIndexMap    []*MultiGeoIPMatcher // clientIdx -> *MultiGeoIPMatcher
 	domainRules   [][]string           // clientIdx -> domainRuleIdx -> DomainRule
 	domainMatcher strmatcher.IndexMatcher
@@ -74,6 +75,7 @@ func generateRandomTag() string {
 func New(ctx context.Context, config *Config) (*Server, error) {
 	server := &Server{
 		clients: make([]Client, 0, len(config.NameServers)+len(config.NameServer)),
+		ctx:     ctx,
 		tag:     config.Tag,
 	}
 	if server.tag == "" {
@@ -142,6 +144,9 @@ func New(ctx context.Context, config *Config) (*Server, error) {
 				}
 				server.clients[idx] = c
 			}))
+
+		case address.Family().IsDomain() && address.Domain() == "fakedns":
+			server.clients = append(server.clients, NewFakeDNSServer())
 
 		default:
 			// UDP classic DNS mode
@@ -295,7 +300,7 @@ func (s *Server) Match(idx int, client Client, domain string, ips []net.IP) ([]n
 }
 
 func (s *Server) queryIPTimeout(idx int, client Client, domain string, option IPOption) ([]net.IP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
+	ctx, cancel := context.WithTimeout(s.ctx, time.Second*4)
 	if len(s.tag) > 0 {
 		ctx = session.ContextWithInbound(ctx, &session.Inbound{
 			Tag: s.tag,

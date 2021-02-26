@@ -133,6 +133,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 					address:         address,
 					port:            net.Port(port),
 					dispatcher:      h.mux,
+					sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
 					uplinkCounter:   uplinkCounter,
 					downlinkCounter: downlinkCounter,
 					stream:          mss,
