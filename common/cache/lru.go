@@ -9,6 +9,7 @@ import (
 type Lru interface {
 	Get(key interface{}) (value interface{}, ok bool)
 	GetKeyFromValue(value interface{}) (key interface{}, ok bool)
+	PeekKeyFromValue(value interface{}) (key interface{}, ok bool) // Peek means check but NOT bring to top
 	Put(key, value interface{})
 }
 
@@ -49,6 +50,14 @@ func (l lru) GetKeyFromValue(value interface{}) (key interface{}, ok bool) {
 	if k, ok := l.valueToElement.Load(value); ok {
 		element := k.(*list.Element)
 		l.doubleLinkedlist.MoveBefore(element, l.doubleLinkedlist.Front())
+		return element.Value.(lruElement).key, true
+	}
+	return nil, false
+}
+
+func (l lru) PeekKeyFromValue(value interface{}) (key interface{}, ok bool) {
+	if k, ok := l.valueToElement.Load(value); ok {
+		element := k.(*list.Element)
 		return element.Value.(lruElement).key, true
 	}
 	return nil, false

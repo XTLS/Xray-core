@@ -57,12 +57,29 @@ func TestGetKeyFromValue(t *testing.T) {
 	lru := NewLru(2)
 	lru.Put(3, 3)
 	lru.Put(2, 2)
+	lru.GetKeyFromValue(3)
 	lru.Put(1, 1)
-	v, ok := lru.GetKeyFromValue(3)
+	v, ok := lru.GetKeyFromValue(2)
 	if ok {
 		t.Error("should get nil", v)
 	}
-	v, _ = lru.GetKeyFromValue(2)
+	v, _ = lru.GetKeyFromValue(3)
+	if v != 3 {
+		t.Error("should get 3", v)
+	}
+}
+
+func TestPeekKeyFromValue(t *testing.T) {
+	lru := NewLru(2)
+	lru.Put(3, 3)
+	lru.Put(2, 2)
+	lru.PeekKeyFromValue(3)
+	lru.Put(1, 1)
+	v, ok := lru.PeekKeyFromValue(3)
+	if ok {
+		t.Error("should get nil", v)
+	}
+	v, _ = lru.PeekKeyFromValue(2)
 	if v != 2 {
 		t.Error("should get 2", v)
 	}
