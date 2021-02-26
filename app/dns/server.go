@@ -299,7 +299,7 @@ func (s *Server) Match(idx int, client Client, domain string, ips []net.IP) ([]n
 	return newIps, nil
 }
 
-func (s *Server) queryIPTimeout(idx int, client Client, domain string, option IPOption) ([]net.IP, error) {
+func (s *Server) queryIPTimeout(idx int, client Client, domain string, option dns.IPOption) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(s.ctx, time.Second*4)
 	if len(s.tag) > 0 {
 		ctx = session.ContextWithInbound(ctx, &session.Inbound{
@@ -317,31 +317,7 @@ func (s *Server) queryIPTimeout(idx int, client Client, domain string, option IP
 	return ips, err
 }
 
-// LookupIP implements dns.Client.
-func (s *Server) LookupIP(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-	})
-}
-
-// LookupIPv4 implements dns.IPv4Lookup.
-func (s *Server) LookupIPv4(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, IPOption{
-		IPv4Enable: true,
-		IPv6Enable: false,
-	})
-}
-
-// LookupIPv6 implements dns.IPv6Lookup.
-func (s *Server) LookupIPv6(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, IPOption{
-		IPv4Enable: false,
-		IPv6Enable: true,
-	})
-}
-
-func (s *Server) lookupStatic(domain string, option IPOption, depth int32) []net.Address {
+func (s *Server) lookupStatic(domain string, option dns.IPOption, depth int32) []net.Address {
 	ips := s.hosts.LookupIP(domain, option)
 	if ips == nil {
 		return nil
@@ -365,14 +341,15 @@ func toNetIP(ips []net.Address) []net.IP {
 	return netips
 }
 
-func (s *Server) lookupIPInternal(domain string, option IPOption) ([]net.IP, error) {
+// LookupIP implements dns.Client.
+func (s *Server) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	if domain == "" {
 		return nil, newError("empty domain name")
 	}
 	domain = strings.ToLower(domain)
 
 	// normalize the FQDN form query
-	if domain[len(domain)-1] == '.' {
+	if strings.HasSuffix(domain, ".") {
 		domain = domain[:len(domain)-1]
 	}
 
@@ -409,6 +386,10 @@ func (s *Server) lookupIPInternal(domain string, option IPOption) ([]net.IP, err
 		for _, idx := range indices {
 			clientIdx := int(s.matcherInfos[idx].clientIdx)
 			matchedClient = s.clients[clientIdx]
+			if !option.FakeEnable && strings.EqualFold(matchedClient.Name(), "FakeDNS") {
+				newError("skip DNS resolution for domain ", domain, " at server ", matchedClient.Name()).AtDebug().WriteToLog()
+				continue
+			}
 			ips, err := s.queryIPTimeout(clientIdx, matchedClient, domain, option)
 			if len(ips) > 0 {
 				return ips, nil
@@ -428,7 +409,10 @@ func (s *Server) lookupIPInternal(domain string, option IPOption) ([]net.IP, err
 			newError("domain ", domain, " at server ", client.Name(), " idx:", idx, " already lookup failed, just ignore").AtDebug().WriteToLog()
 			continue
 		}
-
+		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
+			newError("skip DNS resolution for domain ", domain, " at server ", client.Name()).AtDebug().WriteToLog()
+			continue
+		}
 		ips, err := s.queryIPTimeout(idx, client, domain, option)
 		if len(ips) > 0 {
 			return ips, nil
