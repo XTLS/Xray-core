@@ -87,4 +87,6 @@ message SocketConfig {
   uint32 bind_port = 6;
 
   bool accept_proxy_protocol = 7;
+
+  int32 tcp_fast_open_qlen = 8;
 }

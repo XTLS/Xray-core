@@ -452,6 +452,7 @@ func (p TransportProtocol) Build() (string, error) {
 type SocketConfig struct {
 	Mark                int32  `json:"mark"`
 	TFO                 *bool  `json:"tcpFastOpen"`
+	TFOQLen             int32  `json:"tcpFastOpenQLen"`
 	TProxy              string `json:"tproxy"`
 	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
 }
@@ -459,9 +460,14 @@ type SocketConfig struct {
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	var tfoSettings internet.SocketConfig_TCPFastOpenState
+	var tfoQLen int32
 	if c.TFO != nil {
 		if *c.TFO {
 			tfoSettings = internet.SocketConfig_Enable
+			tfoQLen = c.TFOQLen
+			if tfoQLen < 1 {
+				tfoQLen = 1
+			}
 		} else {
 			tfoSettings = internet.SocketConfig_Disable
 		}
@@ -479,6 +485,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
 		Tfo:                 tfoSettings,
+		TcpFastOpenQlen:     tfoQLen,
 		Tproxy:              tproxy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
 	}, nil
