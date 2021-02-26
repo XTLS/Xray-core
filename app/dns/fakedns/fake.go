@@ -117,7 +117,13 @@ func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
 	if k, ok := fkdns.domainToIP.GetKeyFromValue(ip); ok {
 		return k.(string)
 	}
+	newError("A fake ip request to ", ip, ", however there is no matching domain name in fake DNS").AtInfo().WriteToLog()
 	return ""
+}
+
+// GetFakeIPRange return fake IP range from configuration
+func (fkdns *Holder) GetFakeIPRange() *gonet.IPNet {
+	return fkdns.ipRange
 }
 
 func init() {
