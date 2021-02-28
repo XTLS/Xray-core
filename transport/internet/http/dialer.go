@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -79,8 +78,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			return cn, nil
 		},
 		TLSClientConfig: tlsSettings.GetTLSConfig(tls.WithDestination(dest)),
-		ReadIdleTimeout: time.Second * 5,
-		PingTimeout:     time.Second * 5,
 	}
 
 	client := &http.Client{
