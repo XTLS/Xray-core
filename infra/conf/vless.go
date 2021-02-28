@@ -186,7 +186,17 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			case "", "xtls-rprx-origin", "xtls-rprx-origin-udp443", "xtls-rprx-direct", "xtls-rprx-direct-udp443":
 			case "xtls-rprx-splice", "xtls-rprx-splice-udp443":
 				if runtime.GOOS != "linux" && runtime.GOOS != "android" {
-					return nil, newError(`VLESS users: "` + account.Flow + `" only support linux in this version`)
+					// fallback to direct on non-Linux OS
+					// return nil, newError(`VLESS users: "` + account.Flow + `" only support linux in this version`)
+					fallbackFlow := ""
+					switch account.Flow {
+					case "xtls-rprx-splice":
+						fallbackFlow = "xtls-rprx-direct"
+					case "xtls-rprx-splice-udp443":
+						fallbackFlow = "xtls-rprx-direct-udp443"
+					}
+					newError(account.Flow, " do not support on ", runtime.GOOS, ", fallback to ", fallbackFlow).AtWarning().WriteToLog()
+					account.Flow = fallbackFlow
 				}
 			default:
 				return nil, newError(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
