@@ -56,15 +56,18 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 
 			pconn, err := internet.DialSystem(dctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 
 			cn := gotls.Client(pconn, tlsConfig)
 			if err := cn.Handshake(); err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 			if !tlsConfig.InsecureSkipVerify {
 				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 					return nil, err
 				}
 			}
