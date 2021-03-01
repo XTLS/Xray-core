@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -49,17 +50,24 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			}
 			address := net.ParseAddress(rawHost)
 
-			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), sockopt)
+			dctx := context.Background()
+			dctx = session.ContextWithID(dctx, session.IDFromContext(ctx))
+			dctx = session.ContextWithOutbound(dctx, session.OutboundFromContext(ctx))
+
+			pconn, err := internet.DialSystem(dctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 
 			cn := gotls.Client(pconn, tlsConfig)
 			if err := cn.Handshake(); err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 			if !tlsConfig.InsecureSkipVerify {
 				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 					return nil, err
 				}
 			}

@@ -63,6 +63,9 @@ func (w *Writer) writeMetaOnly() error {
 
 func writeMetaWithFrame(writer buf.Writer, meta FrameMetadata, data buf.MultiBuffer) error {
 	frame := buf.New()
+	if len(data) == 1 {
+		frame.UDP = data[0].UDP
+	}
 	if err := meta.WriteTo(frame); err != nil {
 		return err
 	}

@@ -11,13 +11,11 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
@@ -83,9 +81,11 @@ func executeRun(cmd *base.Command, args []string) {
 	}
 	defer server.Close()
 
-	conf.FileCache = nil
-	conf.IPCache = nil
-	conf.SiteCache = nil
+	/*
+		conf.FileCache = nil
+		conf.IPCache = nil
+		conf.SiteCache = nil
+	*/
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
@@ -158,30 +158,25 @@ func getConfigFilePath() cmdarg.Arg {
 }
 
 func getConfigFormat() string {
-	switch strings.ToLower(*format) {
-	case "pb", "protobuf":
-		return "protobuf"
-	case "yaml", "yml":
-		return "yaml"
-	case "toml":
-		return "toml"
-	default:
-		return "json"
+	f := core.GetFormatByExtension(*format)
+	if f == "" {
+		f = "json"
 	}
+	return f
 }
 
 func startXray() (core.Server, error) {
 	configFiles := getConfigFilePath()
 
-	config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
+	//config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
 
-	//config, err := core.LoadConfigs(getConfigFormat(), configFiles)
+	c, err := core.LoadConfig(getConfigFormat(), configFiles)
 
 	if err != nil {
 		return nil, newError("failed to load config files: [", configFiles.String(), "]").Base(err)
 	}
 
-	server, err := core.New(config)
+	server, err := core.New(c)
 	if err != nil {
 		return nil, newError("failed to create server").Base(err)
 	}
