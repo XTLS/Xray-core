@@ -267,9 +267,22 @@ type OutboundDetourConfig struct {
 	MuxSettings   *MuxConfig       `json:"mux"`
 }
 
+func (c *OutboundDetourConfig) checkChainProxyConfig() error {
+	if c.StreamSetting == nil || c.ProxySettings == nil || c.StreamSetting.SocketSettings == nil {
+		return nil
+	}
+	if len(c.ProxySettings.Tag) > 0 && len(c.StreamSetting.SocketSettings.DialerProxy) > 0 {
+		return newError("proxySettings.tag is conflicted with sockopt.dialerProxy").AtWarning()
+	}
+	return nil
+}
+
 // Build implements Buildable.
 func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	senderSettings := &proxyman.SenderConfig{}
+	if err := c.checkChainProxyConfig(); err != nil {
+		return nil, err
+	}
 
 	if c.SendThrough != nil {
 		address := c.SendThrough

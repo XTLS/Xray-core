@@ -454,7 +454,8 @@ type SocketConfig struct {
 	TFO                 *bool  `json:"tcpFastOpen"`
 	TProxy              string `json:"tproxy"`
 	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
-	DomainStrategy      string `json:"domain_strategy"`
+	DomainStrategy      string `json:"domainStrategy"`
+	DialerProxy         string `json:"dialerProxy"`
 }
 
 // Build implements Buildable.
@@ -493,6 +494,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		Tproxy:              tproxy,
 		DomainStrategy:      dStrategy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		DialerProxy:         c.DialerProxy,
 	}, nil
 }
 

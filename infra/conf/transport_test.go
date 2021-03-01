@@ -8,7 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/global"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
@@ -35,13 +35,15 @@ func TestSocketConfig(t *testing.T) {
 			Input: `{
 				"mark": 1,
 				"tcpFastOpen": true,
-				"domain_strategy": "UseIP"
+				"domainStrategy": "UseIP",
+				"dialerProxy": "tag"
 			}`,
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
 				Mark:           1,
 				Tfo:            internet.SocketConfig_Enable,
 				DomainStrategy: internet.DomainStrategy_USE_IP,
+				DialerProxy:    "tag",
 			},
 		},
 	})
@@ -97,7 +99,7 @@ func TestTransportConfig(t *testing.T) {
 				}
 			}`,
 			Parser: createParser(),
-			Output: &transport.Config{
+			Output: &global.Config{
 				TransportSettings: []*internet.TransportConfig{
 					{
 						ProtocolName: "tcp",
