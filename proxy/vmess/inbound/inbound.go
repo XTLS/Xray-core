@@ -31,6 +31,7 @@ import (
 
 var (
 	aeadForced = false
+	aeadForced2022 = false
 )
 
 type userByEmail struct {
@@ -368,8 +369,17 @@ func init() {
 		return New(ctx, config.(*Config))
 	}))
 
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	var defaultFlagValue = "NOT_DEFINED_AT_ALL"
+
+	if time.Now().Year() >= 2022 {
+		defaultFlagValue = "true_by_default_2022"
+	}
 
 	isAeadForced := platform.NewEnvFlag("xray.vmess.aead.forced").GetValue(func() string { return defaultFlagValue })
 	aeadForced = (isAeadForced == "true")
+
+	if isAeadForced == "true_by_default_2022" {
+		aeadForced = true
+		aeadForced2022 = true
+	}
 }
