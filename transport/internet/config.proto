@@ -54,7 +54,10 @@ message StreamConfig {
   SocketConfig socket_settings = 6;
 }
 
-message ProxyConfig { string tag = 1; }
+message ProxyConfig {
+  string tag = 1;
+  bool transportLayerProxy = 2;
+}
 
 // SocketConfig is options to be applied on network sockets.
 message SocketConfig {

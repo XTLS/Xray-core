@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/transport/internet"
 	"log"
 	"os"
 	"strings"
@@ -307,6 +308,18 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		ps, err := c.ProxySettings.Build()
 		if err != nil {
 			return nil, newError("invalid outbound detour proxy settings.").Base(err)
+		}
+		if ps.TransportLayerProxy {
+			if senderSettings.StreamSettings != nil {
+				if senderSettings.StreamSettings.SocketSettings != nil {
+					senderSettings.StreamSettings.SocketSettings.DialerProxy = ps.Tag
+				} else {
+					senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{DialerProxy: ps.Tag}
+				}
+			} else {
+				senderSettings.StreamSettings = &internet.StreamConfig{SocketSettings: &internet.SocketConfig{DialerProxy: ps.Tag}}
+			}
+			ps = nil
 		}
 		senderSettings.ProxySettings = ps
 	}
