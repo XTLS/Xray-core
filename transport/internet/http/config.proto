@@ -13,5 +13,6 @@ message Config {
   string path = 2;
   int32 idle_timeout = 3;
   int32 health_check_timeout = 4;
+  string method = 5;
   repeated xray.transport.internet.headers.http.Header header = 6;
 }
