@@ -180,7 +180,7 @@ jobs:
             COREDGST=$CORE.dgst
             for METHOD in {"md5","sha1","sha256","sha512"}
             do
-              openssl dgst -$METHOD $CORE | sed 's/([^)]*)//g' >>$COREDGST
+              openssl dgst -$METHOD $CORE | sed 's/([^)]*)//g' | tr -d ' ' >>$COREDGST
             done
           done
           popd || exit 1
@@ -188,7 +188,7 @@ jobs:
           DGST=$FILE.dgst
           for METHOD in {"md5","sha1","sha256","sha512"}
           do
-            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
+            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' | tr -d ' ' >>$DGST
           done
 
       - name: Change the name
