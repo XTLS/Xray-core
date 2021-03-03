@@ -109,6 +109,9 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 
 	tag := handler.Tag()
 	if len(tag) > 0 {
+		if _, found := m.taggedHandler[tag]; found {
+			return newError("existing tag found: " + tag)
+		}
 		m.taggedHandler[tag] = handler
 	} else {
 		m.untaggedHandlers = append(m.untaggedHandlers, handler)

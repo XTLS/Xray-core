@@ -60,10 +60,16 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			continue
 		}
 		certs = append(certs, &keyPair)
-		if entry.OcspStapling != 0 {
+		if !entry.OneTimeLoading {
+			var isOcspstapling bool
+			hotReloadCertInterval := uint64(3600)
+			if entry.OcspStapling != 0 {
+				hotReloadCertInterval = entry.OcspStapling
+				isOcspstapling = true
+			}
 			index := len(certs) - 1
 			go func(cert *tls.Certificate, index int) {
-				t := time.NewTicker(time.Duration(entry.OcspStapling) * time.Second)
+				t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
 				for {
 					if entry.CertificatePath != "" && entry.KeyPath != "" {
 						newCert, err := filesystem.ReadFile(entry.CertificatePath)
@@ -93,10 +99,12 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 							cert = &newKeyPair
 						}
 					}
-					if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
-						newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
-					} else if string(newOCSPData) != string(cert.OCSPStaple) {
-						cert.OCSPStaple = newOCSPData
+					if isOcspstapling {
+						if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
+							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						} else if string(newOCSPData) != string(cert.OCSPStaple) {
+							cert.OCSPStaple = newOCSPData
+						}
 					}
 					certs[index] = cert
 					<-t.C
