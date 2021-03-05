@@ -14,7 +14,7 @@ message Account {
   string password = 1;
   CipherType cipher_type = 2;
 
-  bool replay_protection = 3;
+  bool iv_check = 3;
 }
 
 enum CipherType {

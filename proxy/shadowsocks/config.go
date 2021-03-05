@@ -114,7 +114,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		Cipher: Cipher,
 		Key:    passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
 		replayFilter: func() antireplay.GeneralizedReplayFilter {
-			if a.ReplayProtection {
+			if a.IvCheck {
 				return antireplay.NewReplayFilter(300)
 			}
 			return nil
