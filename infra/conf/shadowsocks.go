@@ -39,6 +39,7 @@ type ShadowsocksServerConfig struct {
 	Email       string                   `json:"email"`
 	Users       []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
+	IVCheck     bool                     `json:"ivCheck"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -50,6 +51,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 			account := &shadowsocks.Account{
 				Password:   user.Password,
 				CipherType: cipherFromString(user.Cipher),
+				IvCheck:    v.IVCheck,
 			}
 			if account.Password == "" {
 				return nil, newError("Shadowsocks password is not specified.")
@@ -68,6 +70,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		account := &shadowsocks.Account{
 			Password:   v.Password,
 			CipherType: cipherFromString(v.Cipher),
+			IvCheck:    v.IVCheck,
 		}
 		if account.Password == "" {
 			return nil, newError("Shadowsocks password is not specified.")
@@ -92,6 +95,7 @@ type ShadowsocksServerTarget struct {
 	Password string   `json:"password"`
 	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
+	IVCheck  bool     `json:"ivCheck"`
 }
 
 type ShadowsocksClientConfig struct {
@@ -123,6 +127,8 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
 			return nil, newError("unknown cipher method: ", server.Cipher)
 		}
+
+		account.IvCheck = server.IVCheck
 
 		ss := &protocol.ServerEndpoint{
 			Address: server.Address.Build(),
