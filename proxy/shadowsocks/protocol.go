@@ -71,6 +71,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	var user *protocol.MemoryUser
 	var ivLen int32
+	var iv []byte
 	var err error
 
 	count := validator.Count()
@@ -91,6 +92,9 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		user, aead, _, ivLen, err = validator.Get(bs, protocol.RequestCommandTCP)
 
 		if user != nil {
+			if ivLen > 0 {
+				iv = append([]byte(nil), bs[:ivLen]...)
+			}
 			reader = &FullReader{reader, bs[ivLen:]}
 			auth := &crypto.AEADAuthenticator{
 				AEAD:           aead,
@@ -108,7 +112,6 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		user, ivLen = validator.GetOnlyUser()
 		account := user.Account.(*MemoryAccount)
 		hashkdf.Write(account.Key)
-		var iv []byte
 		if ivLen > 0 {
 			if _, err := buffer.ReadFullFrom(reader, ivLen); err != nil {
 				readSizeRemain -= int(buffer.Len())
@@ -116,12 +119,6 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 				return nil, nil, newError("failed to read IV").Base(err)
 			}
 			iv = append([]byte(nil), buffer.BytesTo(ivLen)...)
-		}
-
-		if ivError := account.CheckIV(iv); ivError != nil {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed iv check").Base(ivError)
 		}
 
 		r, err := account.Cipher.NewDecryptionReader(account.Key, iv, reader)
@@ -158,6 +155,13 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		readSizeRemain -= int(buffer.Len())
 		DrainConnN(reader, readSizeRemain)
 		return nil, nil, newError("invalid remote address.")
+	}
+
+	account := user.Account.(*MemoryAccount)
+	if ivError := account.CheckIV(iv); ivError != nil {
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("failed iv check").Base(ivError)
 	}
 
 	return request, br, nil
