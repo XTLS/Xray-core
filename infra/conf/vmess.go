@@ -32,6 +32,8 @@ func (a *VMessAccount) Build() *vmess.Account {
 		st = protocol.SecurityType_AUTO
 	case "none":
 		st = protocol.SecurityType_NONE
+	case "zero":
+		st = protocol.SecurityType_ZERO
 	default:
 		st = protocol.SecurityType_AUTO
 	}
