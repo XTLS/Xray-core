@@ -99,8 +99,8 @@ jobs:
             goarm: 7
           # END OPENBSD ARM
       fail-fast: false
-    #配置编译环境
-    runs-on: ubuntu-20.04
+
+    runs-on: ubuntu-latest
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
@@ -173,16 +173,8 @@ jobs:
         shell: bash
         run: |
           pushd build_assets || exit 1
-          touch -mt 202101010000 *
+          touch -mt $(date +%Y01010000) *
           zip -9vr ../Xray-$ASSET_NAME.zip .
-          for CORE in $(ls xray*)
-          do
-            COREDGST=$CORE.dgst
-            for METHOD in {"md5","sha1","sha256","sha512"}
-            do
-              openssl dgst -$METHOD $CORE | sed 's/([^)]*)//g' >>$COREDGST
-            done
-          done
           popd || exit 1
           FILE=./Xray-$ASSET_NAME.zip
           DGST=$FILE.dgst
