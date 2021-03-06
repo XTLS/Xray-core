@@ -321,7 +321,7 @@ func TestRoutingRule(t *testing.T) {
 	}
 
 	for _, test := range cases {
-		cond, err := test.rule.BuildCondition()
+		cond, err := test.rule.BuildCondition(new(RulesetManager))
 		common.Must(err)
 
 		for _, subtest := range test.test {
@@ -443,4 +443,68 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = matcher.Apply(ctx)
 	}
+}
+
+func TestRuleSet(t *testing.T) {
+	type ruleTest struct {
+		input  routing.Context
+		output bool
+	}
+
+	cases := []struct {
+		rule    *RoutingRule
+		manager *RulesetManager
+		test    []ruleTest
+	}{
+		{
+			&RoutingRule{RuleSet: "ruleset1", SourcePortList: &net.PortList{Range: []*net.PortRange{{From: 1000, To: 10000}}}},
+			func() *RulesetManager {
+				r := NewRSManager()
+				r.Add("ruleset1", &RoutingRules{Rules: []*RoutingRule{
+					{InboundTag: []string{"in1"}},
+				}, Identifier: "ruleset1"})
+				return r
+			}(),
+			[]ruleTest{
+				{withInbound(&session.Inbound{Tag: "in1", Source: net.TCPDestination(net.LocalHostIP, 8972)}), true},
+				{withInbound(&session.Inbound{Tag: "in1", Source: net.TCPDestination(net.LocalHostIP, 972)}), false},
+				{withInbound(&session.Inbound{Tag: "in2", Source: net.TCPDestination(net.LocalHostIP, 8972)}), false},
+				{withInbound(&session.Inbound{Tag: "in2", Source: net.TCPDestination(net.LocalHostIP, 972)}), false},
+			},
+		},
+		{
+			&RoutingRule{RuleSet: "ruleset1", SourcePortList: &net.PortList{Range: []*net.PortRange{{From: 5000, To: 10000}}}},
+			func() *RulesetManager {
+				r := NewRSManager()
+				r.Add("ruleset1", &RoutingRules{Rules: []*RoutingRule{
+					{SourcePortList: &net.PortList{Range: []*net.PortRange{{From: 1000, To: 10000}}}, RuleSet: "ruleset2"},
+				}, Identifier: "ruleset1"})
+				r.Add("ruleset2", &RoutingRules{Rules: []*RoutingRule{
+					{InboundTag: []string{"in1"}},
+				}, Identifier: "ruleset2"})
+				return r
+			}(),
+			[]ruleTest{
+				{withInbound(&session.Inbound{Tag: "in1", Source: net.TCPDestination(net.LocalHostIP, 8972)}), true},
+				{withInbound(&session.Inbound{Tag: "in1", Source: net.TCPDestination(net.LocalHostIP, 972)}), false},
+				{withInbound(&session.Inbound{Tag: "in2", Source: net.TCPDestination(net.LocalHostIP, 8972)}), false},
+				{withInbound(&session.Inbound{Tag: "in2", Source: net.TCPDestination(net.LocalHostIP, 972)}), false},
+				{withInbound(&session.Inbound{Tag: "in1", Source: net.TCPDestination(net.LocalHostIP, 3972)}), false},
+				{withInbound(&session.Inbound{Tag: "in2", Source: net.TCPDestination(net.LocalHostIP, 3972)}), false},
+			},
+		},
+	}
+
+	for _, test := range cases {
+		cond, err := test.rule.BuildCondition(test.manager)
+		common.Must(err)
+
+		for _, subtest := range test.test {
+			actual := cond.Apply(subtest.input)
+			if actual != subtest.output {
+				t.Error("test case failed: ", subtest.input, " expected ", subtest.output, " but got ", actual)
+			}
+		}
+	}
+
 }

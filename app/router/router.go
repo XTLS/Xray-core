@@ -28,12 +28,20 @@ type Route struct {
 	outboundTag       string
 }
 
-type rsManager struct {
+type RulesetManager struct {
 	ruleSets    map[string]Condition
 	rawRuleSets map[string]*RoutingRules
 }
 
-func (m *rsManager) getRuleSet(tag string) (Condition, error) {
+func NewRSManager() *RulesetManager {
+	return &RulesetManager{make(map[string]Condition), make(map[string]*RoutingRules)}
+}
+
+func (m *RulesetManager) Add(tag string, rule *RoutingRules) {
+	m.rawRuleSets[tag] = rule
+}
+
+func (m *RulesetManager) getRuleSet(tag string) (Condition, error) {
 	if cond, found := m.ruleSets[tag]; found {
 		return cond, nil
 	}
@@ -62,10 +70,10 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 		r.balancers[rule.Tag] = balancer
 	}
 
-	var rsm = &rsManager{make(map[string]Condition), make(map[string]*RoutingRules)}
+	var rsm = NewRSManager()
 
 	for _, rs := range config.RuleSets {
-		rsm.rawRuleSets[rs.Identifier] = rs
+		rsm.Add(rs.Identifier, rs)
 	}
 
 	r.rules = make([]*Rule, 0, len(config.Rule))

@@ -63,7 +63,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition(rsm *rsManager) (*ConditionChan, error) {
+func (rr *RoutingRule) BuildCondition(rsm *RulesetManager) (*ConditionChan, error) {
 	conds := NewConditionChan()
 
 	if len(rr.Domain) > 0 {
@@ -161,7 +161,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
 	}, nil
 }
 
-func (rrs *RoutingRules) BuildCondition(rsm *rsManager) (Condition, error) {
+func (rrs *RoutingRules) BuildCondition(rsm *RulesetManager) (Condition, error) {
 	conds := NewOrConditionChan()
 
 	for _, rr := range rrs.Rules {
