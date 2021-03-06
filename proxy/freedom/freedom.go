@@ -195,11 +195,10 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
-			UDPOverride:       UDPOverride,
 		}
 	}
 	return &buf.PacketReader{Reader: conn}
@@ -208,7 +207,6 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 type PacketReader struct {
 	*internet.PacketConnWrapper
 	stats.Counter
-	UDPOverride net.Destination
 }
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -224,12 +222,6 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		Address: net.IPAddress(d.(*net.UDPAddr).IP),
 		Port:    net.Port(d.(*net.UDPAddr).Port),
 		Network: net.Network_UDP,
-	}
-	if r.UDPOverride.Address != nil {
-		b.UDP.Address = r.UDPOverride.Address
-	}
-	if r.UDPOverride.Port != 0 {
-		b.UDP.Port = r.UDPOverride.Port
 	}
 	if r.Counter != nil {
 		r.Counter.Add(int64(n))
