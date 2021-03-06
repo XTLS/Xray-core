@@ -17,7 +17,7 @@ func TestTCPFastOpen(t *testing.T) {
 			return b
 		},
 	}
-	dest, err := tcpServer.StartContext(context.Background(), &SocketConfig{Tfo: 16})
+	dest, err := tcpServer.StartContext(context.Background(), &SocketConfig{Tfo: 256})
 	common.Must(err)
 	defer tcpServer.Close()
 

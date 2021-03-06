@@ -464,7 +464,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		switch v := c.TFO.(type) {
 		case bool:
 			if v {
-				tfo = 1
+				tfo = 256
 			} else {
 				tfo = 0
 			}
