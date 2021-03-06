@@ -19,7 +19,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if tfo > 0 {
 			tfo = TCP_FASTOPEN_CLIENT
 		}
-		if config.Tfo >= 0 {
+		if tfo >= 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_FASTOPEN, int(tfo)); err != nil {
 				return err
 			}
