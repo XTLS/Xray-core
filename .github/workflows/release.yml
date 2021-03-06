@@ -99,7 +99,7 @@ jobs:
             goarm: 7
           # END OPENBSD ARM
       fail-fast: false
-    #配置编译环境
+
     runs-on: ubuntu-latest
     env:
       GOOS: ${{ matrix.goos }}
