@@ -100,7 +100,7 @@ jobs:
           # END OPENBSD ARM
       fail-fast: false
     #配置编译环境
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
