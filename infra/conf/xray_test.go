@@ -437,6 +437,12 @@ func TestConfig_Override(t *testing.T) {
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos2", Protocol: "kcp"}}},
 			"config_tail.json",
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}, {Tag: "pos2", Protocol: "kcp"}}}},
+		{"replace/router-rules",
+			&Config{RouterConfig: &RouterConfig{RuleSets: []*RuleSet{{Identifier: "1"}, {Identifier: "2"}}}},
+			&Config{RouterConfig: &RouterConfig{RuleSets: []*RuleSet{{Identifier: "1"}, {Identifier: "3"}}}},
+			"config_route_set.json",
+			&Config{RouterConfig: &RouterConfig{RuleSets: []*RuleSet{{Identifier: "1"}, {Identifier: "2"}, {Identifier: "3"}}}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

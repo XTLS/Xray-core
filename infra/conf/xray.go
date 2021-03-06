@@ -470,6 +470,9 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 
 	if o.RouterConfig != nil {
+		if c.RouterConfig == nil {
+			c.RouterConfig = &RouterConfig{}
+		}
 		if len(o.RouterConfig.Balancers) > 0 {
 			c.RouterConfig.Balancers = o.RouterConfig.Balancers
 		}
