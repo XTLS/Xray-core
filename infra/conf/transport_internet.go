@@ -455,6 +455,8 @@ type SocketConfig struct {
 	TFO                 interface{} `json:"tcpFastOpen"`
 	TProxy              string      `json:"tproxy"`
 	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
+	DomainStrategy      string      `json:"domainStrategy"`
+	DialerProxy         string      `json:"dialerProxy"`
 }
 
 // Build implements Buildable.
@@ -487,11 +489,23 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_Off
 	}
 
+	var dStrategy = internet.DomainStrategy_AS_IS
+	switch strings.ToLower(c.DomainStrategy) {
+	case "useip", "use_ip":
+		dStrategy = internet.DomainStrategy_USE_IP
+	case "useip4", "useipv4", "use_ipv4", "use_ip_v4", "use_ip4":
+		dStrategy = internet.DomainStrategy_USE_IP4
+	case "useip6", "useipv6", "use_ipv6", "use_ip_v6", "use_ip6":
+		dStrategy = internet.DomainStrategy_USE_IP6
+	}
+
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
 		Tfo:                 tfo,
 		Tproxy:              tproxy,
+		DomainStrategy:      dStrategy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		DialerProxy:         c.DialerProxy,
 	}, nil
 }
 
@@ -628,6 +642,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 
 type ProxyConfig struct {
 	Tag string `json:"tag"`
+
+	// TransportLayerProxy: For compatibility.
+	TransportLayerProxy bool `json:"transportLayer"`
 }
 
 // Build implements Buildable.
@@ -636,6 +653,7 @@ func (v *ProxyConfig) Build() (*internet.ProxyConfig, error) {
 		return nil, newError("Proxy tag is not set.")
 	}
 	return &internet.ProxyConfig{
-		Tag: v.Tag,
+		Tag:                 v.Tag,
+		TransportLayerProxy: v.TransportLayerProxy,
 	}, nil
 }

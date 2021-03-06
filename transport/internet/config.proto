@@ -17,6 +17,13 @@ enum TransportProtocol {
   DomainSocket = 5;
 }
 
+enum DomainStrategy {
+  AS_IS = 0;
+  USE_IP = 1;
+  USE_IP4 = 2;
+  USE_IP6 = 3;
+}
+
 message TransportConfig {
   // Type of network that this settings supports.
   // Deprecated. Use the string form below.
@@ -47,7 +54,10 @@ message StreamConfig {
   SocketConfig socket_settings = 6;
 }
 
-message ProxyConfig { string tag = 1; }
+message ProxyConfig {
+  string tag = 1;
+  bool transportLayerProxy = 2;
+}
 
 // SocketConfig is options to be applied on network sockets.
 message SocketConfig {
@@ -78,4 +88,7 @@ message SocketConfig {
   uint32 bind_port = 6;
 
   bool accept_proxy_protocol = 7;
+
+  DomainStrategy domain_strategy = 8;
+  string dialer_proxy = 9;
 }

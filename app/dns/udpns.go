@@ -2,12 +2,14 @@ package dns
 
 import (
 	"context"
+	"github.com/xtls/xray-core/transport/internet"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -190,8 +192,15 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			udpCtx = session.ContextWithInbound(udpCtx, inbound)
 		}
+		udpCtx = internet.ContextWithLookupDomain(udpCtx, internet.LookupDomainFromContext(ctx))
 		udpCtx = session.ContextWithContent(udpCtx, &session.Content{
 			Protocol: "dns",
+		})
+		udpCtx = log.ContextWithAccessMessage(udpCtx, &log.AccessMessage{
+			From:   "DNS",
+			To:     s.address,
+			Status: log.AccessAccepted,
+			Reason: "",
 		})
 		s.udpServer.Dispatch(udpCtx, s.address, b)
 	}
@@ -241,6 +250,7 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option I
 	ips, err := s.findIPsForDomain(fqdn, option)
 	if err != errRecordNotFound {
 		newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+		log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 		return ips, err
 	}
 
@@ -271,10 +281,12 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option I
 		close(done)
 	}()
 	s.sendQuery(ctx, fqdn, option)
+	start := time.Now()
 
 	for {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSQueried, time.Since(start), err})
 			return ips, err
 		}
 

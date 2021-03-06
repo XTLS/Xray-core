@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
@@ -47,6 +48,56 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, clientIP net.
 	s := baseDOHNameServer(url, "DOH", clientIP)
 
 	s.dispatcher = dispatcher
+	tr := &http.Transport{
+		MaxIdleConns:        30,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 30 * time.Second,
+		ForceAttemptHTTP2:   true,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dispatcherCtx := context.Background()
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				dispatcherCtx = session.ContextWithInbound(dispatcherCtx, inbound)
+			}
+			if content := session.ContentFromContext(ctx); content != nil {
+				dispatcherCtx = session.ContextWithContent(dispatcherCtx, content)
+			}
+			dispatcherCtx = internet.ContextWithLookupDomain(dispatcherCtx, internet.LookupDomainFromContext(ctx))
+
+			dest, err := net.ParseDestination(network + ":" + addr)
+			if err != nil {
+				return nil, err
+			}
+
+			dispatcherCtx = log.ContextWithAccessMessage(dispatcherCtx, &log.AccessMessage{
+				From:   "DoH",
+				To:     s.dohURL,
+				Status: log.AccessAccepted,
+				Reason: "",
+			})
+
+			link, err := s.dispatcher.Dispatch(dispatcherCtx, dest)
+			if err != nil {
+				return nil, err
+			}
+
+			cc := common.ChainedClosable{}
+			if cw, ok := link.Writer.(common.Closable); ok {
+				cc = append(cc, cw)
+			}
+			if cr, ok := link.Reader.(common.Closable); ok {
+				cc = append(cc, cr)
+			}
+			return cnc.NewConnection(
+				cnc.ConnectionInputMulti(link.Writer),
+				cnc.ConnectionOutputMulti(link.Reader),
+				cnc.ConnectionOnClose(cc),
+			), nil
+		},
+	}
+	s.httpClient = &http.Client{
+		Timeout:   time.Second * 180,
+		Transport: tr,
+	}
 
 	return s, nil
 }
@@ -64,6 +115,12 @@ func NewDoHLocalNameServer(url *url.URL, clientIP net.IP) *DoHNameServer {
 				return nil, err
 			}
 			conn, err := internet.DialSystem(ctx, dest, nil)
+			log.Record(&log.AccessMessage{
+				From:   "DoH",
+				To:     s.dohURL,
+				Status: log.AccessAccepted,
+				Detour: "local",
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -249,41 +306,6 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 
 	hc := s.httpClient
 
-	// Dispatched connection will be closed (interrupted) after each request
-	// This makes DOH inefficient without a keep-alived connection
-	// See: core/app/proxyman/outbound/handler.go:113
-	// Using mux (https request wrapped in a stream layer) improves the situation.
-	// Recommend to use NewDoHLocalNameServer (DOHL:) if xray instance is running on
-	//  a normal network eg. the server side of xray
-
-	if s.dispatcher != nil {
-		tr := &http.Transport{
-			MaxIdleConns:        30,
-			IdleConnTimeout:     90 * time.Second,
-			TLSHandshakeTimeout: 30 * time.Second,
-			ForceAttemptHTTP2:   true,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dest, err := net.ParseDestination(network + ":" + addr)
-				if err != nil {
-					return nil, err
-				}
-
-				link, err := s.dispatcher.Dispatch(ctx, dest)
-				if err != nil {
-					return nil, err
-				}
-				return cnc.NewConnection(
-					cnc.ConnectionInputMulti(link.Writer),
-					cnc.ConnectionOutputMulti(link.Reader),
-				), nil
-			},
-		}
-		hc = &http.Client{
-			Timeout:   time.Second * 180,
-			Transport: tr,
-		}
-	}
-
 	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
@@ -347,6 +369,7 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option IPOpt
 	ips, err := s.findIPsForDomain(fqdn, option)
 	if err != errRecordNotFound {
 		newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+		log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 		return ips, err
 	}
 
@@ -377,10 +400,12 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option IPOpt
 		close(done)
 	}()
 	s.sendQuery(ctx, fqdn, option)
+	start := time.Now()
 
 	for {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSQueried, time.Since(start), err})
 			return ips, err
 		}
 

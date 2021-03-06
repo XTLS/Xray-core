@@ -22,4 +22,5 @@ message Config {
 
   LogType access_log_type = 4;
   string access_log_path = 5;
+  bool enable_dns_log = 6;
 }
