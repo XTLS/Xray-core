@@ -173,7 +173,7 @@ jobs:
         shell: bash
         run: |
           pushd build_assets || exit 1
-          touch -mt 202101010000 *
+          touch -mt $(date +%Y01010000) *
           zip -9vr ../Xray-$ASSET_NAME.zip .
           popd || exit 1
           FILE=./Xray-$ASSET_NAME.zip
