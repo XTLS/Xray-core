@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -450,20 +451,30 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type SocketConfig struct {
-	Mark                int32  `json:"mark"`
-	TFO                 *bool  `json:"tcpFastOpen"`
-	TProxy              string `json:"tproxy"`
-	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+	Mark                int32       `json:"mark"`
+	TFO                 interface{} `json:"tcpFastOpen"`
+	TProxy              string      `json:"tproxy"`
+	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
 }
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
-	var tfoSettings internet.SocketConfig_TCPFastOpenState
+	tfo := int32(-1)
 	if c.TFO != nil {
-		if *c.TFO {
-			tfoSettings = internet.SocketConfig_Enable
-		} else {
-			tfoSettings = internet.SocketConfig_Disable
+		switch v := c.TFO.(type) {
+		case bool:
+			if v {
+				tfo = 256
+			} else {
+				tfo = 0
+			}
+		case float64:
+			if v < 0 {
+				return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
+			}
+			tfo = int32(math.Min(v, math.MaxInt32))
+		default:
+			return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
 		}
 	}
 	var tproxy internet.SocketConfig_TProxyMode
@@ -478,7 +489,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
-		Tfo:                 tfoSettings,
+		Tfo:                 tfo,
 		Tproxy:              tproxy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
 	}, nil
