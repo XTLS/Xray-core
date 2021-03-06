@@ -41,9 +41,33 @@ func TestSocketConfig(t *testing.T) {
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
 				Mark:           1,
-				Tfo:            internet.SocketConfig_Enable,
+				Tfo:            256,
 				DomainStrategy: internet.DomainStrategy_USE_IP,
 				DialerProxy:    "tag",
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": false
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  0,
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": 65535
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  65535,
 			},
 		},
 	})
