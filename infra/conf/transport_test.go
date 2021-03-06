@@ -39,7 +39,7 @@ func TestSocketConfig(t *testing.T) {
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
 				Mark: 1,
-				Tfo:  1,
+				Tfo:  256,
 			},
 		},
 	})
