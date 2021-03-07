@@ -30,7 +30,7 @@ type Server struct {
 	sync.Mutex
 	hosts         *StaticHosts
 	clientIP      net.IP
-	clients       []Client             // clientIdx -> Client
+	clients       []Client // clientIdx -> Client
 	ctx           context.Context
 	ipIndexMap    []*MultiGeoIPMatcher // clientIdx -> *MultiGeoIPMatcher
 	domainRules   [][]string           // clientIdx -> domainRuleIdx -> DomainRule
@@ -307,7 +307,7 @@ func (s *Server) queryIPTimeout(idx int, client Client, domain string, option dn
 			Tag: s.tag,
 		})
 	}
-	ctx = internet.ContextWithLookupDomain(ctx, Fqdn(domain))
+	ctx = internet.ContextWithLookupDomain(ctx, domain)
 	ips, err := client.QueryIP(ctx, domain, option)
 	cancel()
 
