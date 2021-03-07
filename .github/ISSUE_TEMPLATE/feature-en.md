@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-<!-- Thanks for your supporting!
+<!-- Thanks for your support!
 1. Please confirm that you are submitting a feature request.
 2. We do not recommend any inexperienced users to request a new feature. 
 3. Please check existing Issues and Discussions first and read the documentation in detail. Duplicated issues will be closed

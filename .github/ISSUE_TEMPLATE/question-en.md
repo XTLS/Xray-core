@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-<!-- Thanks for your supporting！
+<!-- Thanks for your support！
 1. Issue is **NOT** a proper place to ask a question, otherwise your issue may be closed.
 2. Please check existing Issues, Discussions and documentation in detail first. You may find the answers you want before you ask the question.
 3. If it is still not resolved, please give feedback in the our official Telegram group or Discussions.
