@@ -8,6 +8,7 @@ import (
 	. "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns"
 )
 
 func TestStaticHosts(t *testing.T) {
@@ -39,7 +40,7 @@ func TestStaticHosts(t *testing.T) {
 	common.Must(err)
 
 	{
-		ips := hosts.LookupIP("example.com", IPOption{
+		ips := hosts.LookupIP("example.com", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -52,7 +53,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.LookupIP("www.example.cn", IPOption{
+		ips := hosts.LookupIP("www.example.cn", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -65,7 +66,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.LookupIP("baidu.com", IPOption{
+		ips := hosts.LookupIP("baidu.com", dns.IPOption{
 			IPv4Enable: false,
 			IPv6Enable: true,
 		})

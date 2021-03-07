@@ -4,14 +4,9 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/dns/localdns"
 )
-
-// IPOption is an object for IP query options.
-type IPOption struct {
-	IPv4Enable bool
-	IPv6Enable bool
-}
 
 // Client is the interface for DNS client.
 type Client interface {
@@ -19,24 +14,16 @@ type Client interface {
 	Name() string
 
 	// QueryIP sends IP queries to its configured server.
-	QueryIP(ctx context.Context, domain string, option IPOption) ([]net.IP, error)
+	QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, error)
 }
 
 type LocalNameServer struct {
 	client *localdns.Client
 }
 
-func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, option IPOption) ([]net.IP, error) {
-	if option.IPv4Enable && option.IPv6Enable {
-		return s.client.LookupIP(domain)
-	}
-
-	if option.IPv4Enable {
-		return s.client.LookupIPv4(domain)
-	}
-
-	if option.IPv6Enable {
-		return s.client.LookupIPv6(domain)
+func (s *LocalNameServer) QueryIP(_ context.Context, domain string, option dns.IPOption) ([]net.IP, error) {
+	if option.IPv4Enable || option.IPv6Enable {
+		return s.client.LookupIP(domain, option)
 	}
 
 	return nil, newError("neither IPv4 nor IPv6 is enabled")

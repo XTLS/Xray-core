@@ -234,7 +234,7 @@ func (s *DoHNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }
 
-func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option IPOption) {
+func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, option dns_feature.IPOption) {
 	newError(s.name, " querying: ", domain).AtInfo().WriteToLog(session.ExportIDToError(ctx))
 
 	if s.name+"." == "DOH//"+domain {
@@ -320,7 +320,7 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 	return ioutil.ReadAll(resp.Body)
 }
 
-func (s *DoHNameServer) findIPsForDomain(domain string, option IPOption) ([]net.IP, error) {
+func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, error) {
 	s.RLock()
 	record, found := s.ips[domain]
 	s.RUnlock()
@@ -363,7 +363,7 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option IPOption) ([]net.
 }
 
 // QueryIP is called from dns.Server->queryIPTimeout
-func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option IPOption) ([]net.IP, error) {
+func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, error) { // nolint: dupl
 	fqdn := Fqdn(domain)
 
 	ips, err := s.findIPsForDomain(fqdn, option)

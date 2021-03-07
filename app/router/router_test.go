@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/testing/mocks"
@@ -115,7 +116,11 @@ func TestIPOnDemand(t *testing.T) {
 	defer mockCtl.Finish()
 
 	mockDNS := mocks.NewDNSClient(mockCtl)
-	mockDNS.EXPECT().LookupIP(gomock.Eq("example.com")).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
+	mockDNS.EXPECT().LookupIP(gomock.Eq("example.com"), dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
 	common.Must(r.Init(config, mockDNS, nil))
@@ -150,7 +155,11 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 	defer mockCtl.Finish()
 
 	mockDNS := mocks.NewDNSClient(mockCtl)
-	mockDNS.EXPECT().LookupIP(gomock.Eq("example.com")).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
+	mockDNS.EXPECT().LookupIP(gomock.Eq("example.com"), dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
 	common.Must(r.Init(config, mockDNS, nil))

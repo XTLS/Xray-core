@@ -62,6 +62,7 @@ type SniffingConfig struct {
 	Enabled         bool        `json:"enabled"`
 	DestOverride    *StringList `json:"destOverride"`
 	DomainsExcluded *StringList `json:"domainsExcluded"`
+	MetadataOnly    bool        `json:"metadataOnly"`
 }
 
 // Build implements Buildable.
@@ -74,6 +75,8 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 				p = append(p, "http")
 			case "tls", "https", "ssl":
 				p = append(p, "tls")
+			case "fakedns":
+				p = append(p, "fakedns")
 			default:
 				return nil, newError("unknown protocol: ", protocol)
 			}
@@ -91,6 +94,7 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		Enabled:             c.Enabled,
 		DestinationOverride: p,
 		DomainsExcluded:     d,
+		MetadataOnly:        c.MetadataOnly,
 	}, nil
 }
 
@@ -395,6 +399,7 @@ type Config struct {
 	API             *APIConfig             `json:"api"`
 	Stats           *StatsConfig           `json:"stats"`
 	Reverse         *ReverseConfig         `json:"reverse"`
+	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -446,6 +451,10 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Reverse != nil {
 		c.Reverse = o.Reverse
+	}
+
+	if o.FakeDNS != nil {
+		c.FakeDNS = o.FakeDNS
 	}
 
 	// deprecated attrs... keep them for now
@@ -519,6 +528,10 @@ func applyTransportConfig(s *StreamConfig, t *TransportConfig) {
 
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
+	if err := PostProcessConfigureFile(c); err != nil {
+		return nil, err
+	}
+
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dispatcher.Config{}),
@@ -579,6 +592,14 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if c.Reverse != nil {
 		r, err := c.Reverse.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.App = append(config.App, serial.ToTypedMessage(r))
+	}
+
+	if c.FakeDNS != nil {
+		r, err := c.FakeDNS.Build()
 		if err != nil {
 			return nil, err
 		}

@@ -153,6 +153,7 @@ func (h *DynamicInboundHandler) refresh() error {
 				address:         address,
 				port:            port,
 				dispatcher:      h.mux,
+				sniffingConfig:  h.receiverConfig.GetEffectiveSniffingSettings(),
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
 				stream:          h.streamSettings,
