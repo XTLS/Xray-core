@@ -25,6 +25,7 @@
 - Homebrew
   - [Repository 0](https://github.com/N4FA/homebrew-xray)
   - [Repository 1](https://github.com/xiruizhao/homebrew-xray)
+  - [Repository 2](https://github.com/morooi/homebrew-xray) with [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat)
 
 ## Usage
 
