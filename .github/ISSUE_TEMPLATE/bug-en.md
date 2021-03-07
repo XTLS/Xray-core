@@ -8,11 +8,12 @@ assignees: ''
 ---
 
 <!-- Thanks for your reporting.
-1. Please make sure you are submitting a bug of Xray-core. If you are not sure, please give feedback in our telegram group.
-2. Please check existing issues and discussions first and read the documentation in detail. If you are submitting a known issue, it will be closed
-3. Please don't report issue like "I can't use a feature". It's probably your fault.
-4. You should fully complete the following contents.
-5. Make sure the content you are submitting does not contain your private information.
+1. Please make sure you are submitting a bug of Xray-Core instead of acquiring usage or bug in third-party programs. If you are not sure, please contact us in our official Telegram group.
+2. Bug: **An error, flaw or fault in a program ** that causes it to produce an incorrect or unexpected result. (Reference: Wikipedia)
+3. Please check existing Issues and Discussions first and read the documentation in detail. Duplicated issues will be closed.
+4. Please don't report issue like "I can't use a feature". It's probably your own mistake.
+5. You should fully complete the following contents or this issue may not be handled.
+6. Please *make sure* the content you are submitting does not contain your private information.
 -->
 
 

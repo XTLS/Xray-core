@@ -8,9 +8,9 @@ assignees: ''
 ---
 
 <!-- Thanks for your supporting!
-1. Please confirm that you are submitting a feature request。
-2. We do not recommend any inexperienced users to request new feature. 
-3. Please check the existing issues, discussions and documentation in detail. Duplicated issue may be closed.
+1. Please confirm that you are submitting a feature request.
+2. We do not recommend any inexperienced users to request a new feature. 
+3. Please check existing Issues and Discussions first and read the documentation in detail. Duplicated issues will be closed
 4. To be clear: none of developers is obliged to meet your needs. In particular, features that do not make any sense.
 5. You should fully complete the following contents.
 -->
