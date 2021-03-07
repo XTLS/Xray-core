@@ -22,12 +22,12 @@ var (
 
 // InitSystemDialer: It's private method and you are NOT supposed to use this function.
 func InitSystemDialer(dc dns.Client, om outbound.Manager) {
-	effectiveSystemDialer.init(dc, om)
+	effectiveSystemDialer.Init(dc, om)
 }
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
-	init(dc dns.Client, om outbound.Manager)
+	Init(dc dns.Client, om outbound.Manager)
 }
 
 type DefaultSystemDialer struct {
@@ -192,7 +192,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
 }
 
-func (d *DefaultSystemDialer) init(dc dns.Client, om outbound.Manager) {
+func (d *DefaultSystemDialer) Init(dc dns.Client, om outbound.Manager) {
 	d.dns = dc
 	d.obm = om
 }
@@ -257,7 +257,7 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 	}
 }
 
-func (v *SimpleSystemDialer) init(_ dns.Client, _ outbound.Manager) {}
+func (v *SimpleSystemDialer) Init(_ dns.Client, _ outbound.Manager) {}
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
