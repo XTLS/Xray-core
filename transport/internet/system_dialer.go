@@ -22,12 +22,12 @@ var (
 
 // InitSystemDialer: It's private method and you are NOT supposed to use this function.
 func InitSystemDialer(dc dns.Client, om outbound.Manager) {
-	effectiveSystemDialer.init(dc, om)
+	effectiveSystemDialer.Init(dc, om)
 }
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
-	init(dc dns.Client, om outbound.Manager)
+	Init(dc dns.Client, om outbound.Manager)
 }
 
 type DefaultSystemDialer struct {
@@ -63,22 +63,30 @@ func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, l
 		return nil, nil
 	}
 
-	var lookup = d.dns.LookupIP
+	var option = dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	}
 
 	switch {
 	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		if lookupIPv4, ok := d.dns.(dns.IPv4Lookup); ok {
-			lookup = lookupIPv4.LookupIPv4
+		option = dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+			FakeEnable: false,
 		}
 	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		if lookupIPv4, ok := d.dns.(dns.IPv4Lookup); ok {
-			lookup = lookupIPv4.LookupIPv4
+		option = dns.IPOption{
+			IPv4Enable: false,
+			IPv6Enable: true,
+			FakeEnable: false,
 		}
 	case strategy == DomainStrategy_AS_IS:
 		return nil, nil
 	}
 
-	return lookup(domain)
+	return d.dns.LookupIP(domain, option)
 }
 
 func (d *DefaultSystemDialer) canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
@@ -184,7 +192,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
 }
 
-func (d *DefaultSystemDialer) init(dc dns.Client, om outbound.Manager) {
+func (d *DefaultSystemDialer) Init(dc dns.Client, om outbound.Manager) {
 	d.dns = dc
 	d.obm = om
 }
@@ -249,7 +257,7 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 	}
 }
 
-func (v *SimpleSystemDialer) init(_ dns.Client, _ outbound.Manager) {}
+func (v *SimpleSystemDialer) Init(_ dns.Client, _ outbound.Manager) {}
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
