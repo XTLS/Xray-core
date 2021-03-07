@@ -100,6 +100,7 @@ func (g *ACAutomatonMatcherGroup) AddPattern(pattern string, t Type) (uint32, er
 		}
 		g.ac.Add(pattern, t)
 	case Full, Domain:
+                pattern = strings.ToLower(pattern)
 		g.AddFullOrDomainPattern(pattern, t)
 	case Regex:
 		g.count++
