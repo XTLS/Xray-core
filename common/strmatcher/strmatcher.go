@@ -33,10 +33,13 @@ const (
 func (t Type) New(pattern string) (Matcher, error) {
 	switch t {
 	case Full:
+		pattern = strings.ToLower(pattern)
 		return fullMatcher(pattern), nil
 	case Substr:
+		pattern = strings.ToLower(pattern)
 		return substrMatcher(pattern), nil
 	case Domain:
+		pattern = strings.ToLower(pattern)
 		return domainMatcher(pattern), nil
 	case Regex:
 		r, err := regexp.Compile(pattern)
@@ -100,7 +103,7 @@ func (g *ACAutomatonMatcherGroup) AddPattern(pattern string, t Type) (uint32, er
 		}
 		g.ac.Add(pattern, t)
 	case Full, Domain:
-                pattern = strings.ToLower(pattern)
+		pattern = strings.ToLower(pattern)
 		g.AddFullOrDomainPattern(pattern, t)
 	case Regex:
 		g.count++
