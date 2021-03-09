@@ -445,6 +445,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "domainsocket", nil
 	case "quic":
 		return "quic", nil
+	case "grpc":
+		return "grpc", nil
 	default:
 		return "", newError("Config: unknown transport protocol: ", p)
 	}
