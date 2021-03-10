@@ -111,6 +111,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Option.Set(protocol.RequestOptionGlobalPadding)
 	}
 
+	if request.Security == protocol.SecurityType_ZERO {
+		request.Security = protocol.SecurityType_NONE
+		request.Option.Clear(protocol.RequestOptionChunkStream)
+		request.Option.Clear(protocol.RequestOptionChunkMasking)
+	}
+
 	input := link.Reader
 	output := link.Writer
 
@@ -125,7 +131,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
-	if request.Command == protocol.RequestCommandUDP && h.cone {
+	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)

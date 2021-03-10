@@ -9,7 +9,7 @@ package core
 import (
 	proto "github.com/golang/protobuf/proto"
 	serial "github.com/xtls/xray-core/common/serial"
-	transport "github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/global"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -48,7 +48,7 @@ type Config struct {
 	// config. Date to remove: 2020-01-13
 	//
 	// Deprecated: Do not use.
-	Transport *transport.Config `protobuf:"bytes,5,opt,name=transport,proto3" json:"transport,omitempty"`
+	Transport *global.Config `protobuf:"bytes,5,opt,name=transport,proto3" json:"transport,omitempty"`
 	// Configuration for extensions. The config may not work if corresponding
 	// extension is not loaded into Xray. Xray will ignore such config during
 	// initialization.
@@ -109,7 +109,7 @@ func (x *Config) GetApp() []*serial.TypedMessage {
 }
 
 // Deprecated: Do not use.
-func (x *Config) GetTransport() *transport.Config {
+func (x *Config) GetTransport() *global.Config {
 	if x != nil {
 		return x.Transport
 	}
@@ -356,7 +356,7 @@ var file_core_config_proto_goTypes = []interface{}{
 	(*InboundHandlerConfig)(nil),  // 1: xray.core.InboundHandlerConfig
 	(*OutboundHandlerConfig)(nil), // 2: xray.core.OutboundHandlerConfig
 	(*serial.TypedMessage)(nil),   // 3: xray.common.serial.TypedMessage
-	(*transport.Config)(nil),      // 4: xray.transport.Config
+	(*global.Config)(nil),         // 4: xray.transport.Config
 }
 var file_core_config_proto_depIdxs = []int32{
 	1, // 0: xray.core.Config.inbound:type_name -> xray.core.InboundHandlerConfig

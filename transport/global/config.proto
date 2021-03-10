@@ -1,9 +1,9 @@
 syntax = "proto3";
 
 package xray.transport;
-option csharp_namespace = "Xray.Transport";
-option go_package = "github.com/xtls/xray-core/transport";
-option java_package = "com.xray.transport";
+option csharp_namespace = "Xray.Transport.Global";
+option go_package = "github.com/xtls/xray-core/transport/global";
+option java_package = "com.xray.transport.global";
 option java_multiple_files = true;
 
 import "transport/internet/config.proto";

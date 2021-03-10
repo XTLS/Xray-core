@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // Server is an instance of Xray. At any time, there must be at most one Server instance running.
@@ -222,6 +223,14 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 			}
 		}
 	}
+
+	internet.InitSystemDialer(
+		server.GetFeature(dns.ClientType()).(dns.Client),
+		func() outbound.Manager {
+			obm, _ := server.GetFeature(outbound.ManagerType()).(outbound.Manager)
+			return obm
+		}(),
+	)
 
 	if server.featureResolutions != nil {
 		return true, newError("not all dependency are resolved.")

@@ -40,10 +40,8 @@ func (err *Error) pkgPath() string {
 		return ""
 	}
 	path := reflect.TypeOf(err.pathObj).PkgPath()
-	for i := 0; i < len(path); i++ {
-		if path[i] == '/' {
-			return path[trim:]
-		}
+	if len(path) >= trim {
+		return path[trim:]
 	}
 	return path
 }

@@ -8,14 +8,12 @@ const (
 	TCP_FASTOPEN = 15
 )
 
-func setTFO(fd syscall.Handle, settings SocketConfig_TCPFastOpenState) error {
-	switch settings {
-	case SocketConfig_Enable:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, 1); err != nil {
-			return err
-		}
-	case SocketConfig_Disable:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, 0); err != nil {
+func setTFO(fd syscall.Handle, tfo int32) error {
+	if tfo > 0 {
+		tfo = 1
+	}
+	if tfo >= 0 {
+		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, int(tfo)); err != nil {
 			return err
 		}
 	}

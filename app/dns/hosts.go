@@ -5,6 +5,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features"
+	"github.com/xtls/xray-core/features/dns"
 )
 
 // StaticHosts represents static domain-ip mapping in DNS server.
@@ -92,7 +93,7 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 	return sh, nil
 }
 
-func filterIP(ips []net.Address, option IPOption) []net.Address {
+func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 	filtered := make([]net.Address, 0, len(ips))
 	for _, ip := range ips {
 		if (ip.Family().IsIPv4() && option.IPv4Enable) || (ip.Family().IsIPv6() && option.IPv6Enable) {
@@ -106,7 +107,7 @@ func filterIP(ips []net.Address, option IPOption) []net.Address {
 }
 
 // LookupIP returns IP address for the given domain, if exists in this StaticHosts.
-func (h *StaticHosts) LookupIP(domain string, option IPOption) []net.Address {
+func (h *StaticHosts) LookupIP(domain string, option dns.IPOption) []net.Address {
 	indices := h.matchers.Match(domain)
 	if len(indices) == 0 {
 		return nil

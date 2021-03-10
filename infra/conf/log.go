@@ -19,6 +19,7 @@ type LogConfig struct {
 	AccessLog string `json:"access"`
 	ErrorLog  string `json:"error"`
 	LogLevel  string `json:"loglevel"`
+	DNSLog    bool   `json:"dnsLog"`
 }
 
 func (v *LogConfig) Build() *log.Config {
@@ -28,6 +29,7 @@ func (v *LogConfig) Build() *log.Config {
 	config := &log.Config{
 		ErrorLogType:  log.LogType_Console,
 		AccessLogType: log.LogType_Console,
+		EnableDnsLog:  v.DNSLog,
 	}
 
 	if v.AccessLog == "none" {

@@ -8,7 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/global"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
@@ -34,12 +34,40 @@ func TestSocketConfig(t *testing.T) {
 		{
 			Input: `{
 				"mark": 1,
-				"tcpFastOpen": true
+				"tcpFastOpen": true,
+				"domainStrategy": "UseIP",
+				"dialerProxy": "tag"
 			}`,
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
-				Mark: 1,
-				Tfo:  internet.SocketConfig_Enable,
+				Mark:           1,
+				Tfo:            256,
+				DomainStrategy: internet.DomainStrategy_USE_IP,
+				DialerProxy:    "tag",
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": false
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  0,
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": 65535
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  65535,
 			},
 		},
 	})
@@ -95,7 +123,7 @@ func TestTransportConfig(t *testing.T) {
 				}
 			}`,
 			Parser: createParser(),
-			Output: &transport.Config{
+			Output: &global.Config{
 				TransportSettings: []*internet.TransportConfig{
 					{
 						ProtocolName: "tcp",

@@ -59,19 +59,26 @@ func (h *Handler) policy() policy.Session {
 }
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	var lookupFunc func(string) ([]net.IP, error) = h.dns.LookupIP
-
+	var option dns.IPOption = dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	}
 	if h.config.DomainStrategy == Config_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()) {
-		if lookupIPv4, ok := h.dns.(dns.IPv4Lookup); ok {
-			lookupFunc = lookupIPv4.LookupIPv4
+		option = dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+			FakeEnable: false,
 		}
 	} else if h.config.DomainStrategy == Config_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()) {
-		if lookupIPv6, ok := h.dns.(dns.IPv6Lookup); ok {
-			lookupFunc = lookupIPv6.LookupIPv6
+		option = dns.IPOption{
+			IPv4Enable: false,
+			IPv6Enable: true,
+			FakeEnable: false,
 		}
 	}
 
-	ips, err := lookupFunc(domain)
+	ips, err := h.dns.LookupIP(domain, option)
 	if err != nil {
 		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
@@ -125,7 +132,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					Address: ip,
 					Port:    dialDest.Port,
 				}
-				newError("dialing to to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
+				newError("dialing to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 
@@ -169,7 +176,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn)
+			reader = NewPacketReader(conn, UDPOverride)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to process response").Base(err)
@@ -185,7 +192,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func NewPacketReader(conn net.Conn) buf.Reader {
+func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
@@ -195,7 +202,7 @@ func NewPacketReader(conn net.Conn) buf.Reader {
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
