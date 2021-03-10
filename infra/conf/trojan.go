@@ -104,7 +104,7 @@ type TrojanUserConfig struct {
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
 	Clients   []*TrojanUserConfig      `json:"clients"`
-	Fallback  json.RawMessage          `json:"fallback"`
+	Fallback  *TrojanInboundFallback   `json:"fallback"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
 }
 
