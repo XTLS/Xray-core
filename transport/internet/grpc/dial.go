@@ -60,7 +60,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
-	return encoding.NewClientConn(grpcservice), nil
+	return encoding.NewHunkConn(grpcservice, nil), nil
 }
 
 func getGrpcClient(dest net.Destination, dialOption grpc.DialOption) (*grpc.ClientConn, error) {
