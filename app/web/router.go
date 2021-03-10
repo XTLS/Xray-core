@@ -13,7 +13,7 @@ import (
 func Default(config *WebHandler) *httprouter.Router {
 	router := httprouter.New()
 
-	router.GET("/api/v1/xray/statssys", handler.GetSysStatsHandler)
+	router.GET("/api/v1/statssys", handler.GetSysStatsHandler)
 
 	if config.api.port != 0 {
 		client.Client = client.NewServiceClient(config.api.address, config.api.port)
