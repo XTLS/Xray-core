@@ -2,6 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/transport/internet/grpc"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
@@ -120,6 +121,9 @@ func TestTransportConfig(t *testing.T) {
 					"header": {
 						"type": "dtls"
 					}
+				},
+				"grpcSettings": {
+					"serviceName": "name"
 				}
 			}`,
 			Parser: createParser(),
@@ -188,6 +192,30 @@ func TestTransportConfig(t *testing.T) {
 								Type: protocol.SecurityType_NONE,
 							},
 							Header: serial.ToTypedMessage(&tls.PacketConfig{}),
+						}),
+					},
+					{
+						ProtocolName: "grpc",
+						Settings: serial.ToTypedMessage(&grpc.Config{
+							ServiceName: "name",
+						}),
+					},
+				},
+			},
+		},
+		{
+			Input: `{
+				"gunSettings": {
+					"serviceName": "name"
+				}
+			}`,
+			Parser: createParser(),
+			Output: &global.Config{
+				TransportSettings: []*internet.TransportConfig{
+					{
+						ProtocolName: "grpc",
+						Settings: serial.ToTypedMessage(&grpc.Config{
+							ServiceName: "name",
 						}),
 					},
 				},

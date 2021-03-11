@@ -76,7 +76,7 @@ func getGrpcClient(dest net.Destination, dialOption grpc.DialOption) (*grpc.Clie
 	}
 
 	conn, err := grpc.Dial(
-		dest.Address.String()+":"+dest.Port.String(),
+		gonet.JoinHostPort(dest.Address.String(), dest.Port.String()),
 		dialOption,
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
