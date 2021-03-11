@@ -23,7 +23,7 @@ type HunkReaderWriter struct {
 	hc     HunkConn
 	cancel context.CancelFunc
 
-	buf   []byte // use buf per conn to avoid unnecessary alloc. **cap(buf) >= 2 * buf.Size**
+	buf   []byte
 	index int
 }
 
@@ -58,7 +58,7 @@ func (h *HunkReaderWriter) forceFetch() error {
 }
 
 func (h *HunkReaderWriter) Read(buf []byte) (int, error) {
-	if h.buf == nil {
+	if h.index >= len(h.buf) {
 		if err := h.forceFetch(); err != nil {
 			return 0, err
 		}
@@ -66,9 +66,6 @@ func (h *HunkReaderWriter) Read(buf []byte) (int, error) {
 	n := copy(buf, h.buf[h.index:])
 	h.index += n
 
-	if h.index >= len(h.buf) {
-		h.buf = nil
-	}
 	return n, nil
 }
 
