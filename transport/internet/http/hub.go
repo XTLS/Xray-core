@@ -51,7 +51,7 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 	}
 
 	n, err = fw.w.Write(p)
-	if f, ok := fw.w.(http.Flusher); ok {
+	if f, ok := fw.w.(http.Flusher); ok && err == nil {
 		f.Flush()
 	}
 	return
