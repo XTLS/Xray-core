@@ -1,5 +1,3 @@
-// +build !confonly
-
 package fakedns
 
 import (
@@ -17,7 +15,7 @@ import (
 
 type Holder struct {
 	domainToIP cache.Lru
-	ipRange *gonet.IPNet
+	ipRange    *gonet.IPNet
 
 	config *FakeDnsPool
 }

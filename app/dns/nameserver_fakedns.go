@@ -1,12 +1,10 @@
-// +build !confonly
-
 package dns
 
 import (
 	"context"
 
-	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 )
 
