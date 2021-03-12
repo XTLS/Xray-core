@@ -2,7 +2,6 @@ package conf_test
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/transport/internet/grpc"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
@@ -11,6 +10,7 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/global"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/grpc"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"github.com/xtls/xray-core/transport/internet/headers/tls"

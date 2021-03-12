@@ -2,10 +2,11 @@ package encoding
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net/cnc"
 	"io"
 	"net"
+
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net/cnc"
 )
 
 type HunkConn interface {

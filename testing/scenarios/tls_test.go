@@ -2,7 +2,6 @@ package scenarios
 
 import (
 	"crypto/x509"
-	"github.com/xtls/xray-core/transport/internet/grpc"
 	"runtime"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/grpc"
 	"github.com/xtls/xray-core/transport/internet/http"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
