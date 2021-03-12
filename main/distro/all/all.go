@@ -22,6 +22,7 @@ import (
 	_ "github.com/xtls/xray-core/app/reverse"
 	_ "github.com/xtls/xray-core/app/router"
 	_ "github.com/xtls/xray-core/app/stats"
+	_ "github.com/xtls/xray-core/app/web"
 
 	// Inbound and outbound proxies.
 	_ "github.com/xtls/xray-core/proxy/blackhole"
