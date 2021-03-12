@@ -458,7 +458,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 						if k == '\r' || k == '\n' { // avoid logging \r or \n
 							break
 						}
-						if k == ' ' {
+						if k == '?' || k == ' ' {
 							path = string(firstBytes[i:j])
 							newError("realPath = " + path).AtInfo().WriteToLog(sid)
 							if pfb[path] == nil {
