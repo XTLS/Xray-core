@@ -28,8 +28,8 @@ type HunkReaderWriter struct {
 	index int
 }
 
-func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) io.ReadWriteCloser {
-	return &HunkReaderWriter{hc, cancel, make([]byte, 0, 2*buf.Size), 0}
+func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) *HunkReaderWriter {
+	return &HunkReaderWriter{hc, cancel, nil, 0}
 }
 
 func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
@@ -44,6 +44,10 @@ func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
 func (h *HunkReaderWriter) forceFetch() error {
 	hunk, err := h.hc.Recv()
 	if err != nil {
+		if err == io.EOF {
+			return err
+		}
+
 		return newError("failed to fetch hunk from gRPC tunnel").Base(err)
 	}
 

@@ -54,6 +54,15 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
 	client := encoding.NewGRPCServiceClient(conn)
+	if grpcSettings.MultiMode {
+		newError("using gRPC multi mode").AtDebug().WriteToLog()
+		grpcservice, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.ServiceName)
+		if err != nil {
+			return nil, newError("Cannot dial gRPC").Base(err)
+		}
+		return encoding.NewMultiHunkConn(grpcservice, nil), nil
+	}
+
 	grpcservice, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.ServiceName)
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)

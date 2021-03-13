@@ -8,8 +8,9 @@ import (
 
 type GRPCConfig struct {
 	ServiceName string `json:"serviceName"`
+	MultiMode   bool   `json:"multiMode"`
 }
 
 func (g GRPCConfig) Build() (proto.Message, error) {
-	return &grpc.Config{ServiceName: g.ServiceName}, nil
+	return &grpc.Config{ServiceName: g.ServiceName, MultiMode: g.MultiMode}, nil
 }

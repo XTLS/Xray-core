@@ -7,6 +7,11 @@ message Hunk {
   bytes data = 1;
 }
 
+message MultiHunk {
+   repeated bytes data = 1;
+}
+
 service GRPCService {
   rpc Tun (stream Hunk) returns (stream Hunk);
+  rpc TunMulti (stream MultiHunk) returns (stream MultiHunk);
 }

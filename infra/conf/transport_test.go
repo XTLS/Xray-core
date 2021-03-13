@@ -123,7 +123,8 @@ func TestTransportConfig(t *testing.T) {
 					}
 				},
 				"grpcSettings": {
-					"serviceName": "name"
+					"serviceName": "name",
+					"multiMode": true
 				}
 			}`,
 			Parser: createParser(),
@@ -198,6 +199,7 @@ func TestTransportConfig(t *testing.T) {
 						ProtocolName: "grpc",
 						Settings: serial.ToTypedMessage(&grpc.Config{
 							ServiceName: "name",
+							MultiMode:   true,
 						}),
 					},
 				},

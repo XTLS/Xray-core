@@ -32,6 +32,13 @@ func (l Listener) Tun(server encoding.GRPCService_TunServer) error {
 	return nil
 }
 
+func (l Listener) TunMulti(server encoding.GRPCService_TunMultiServer) error {
+	tunCtx, cancel := context.WithCancel(l.ctx)
+	l.handler(encoding.NewMultiHunkConn(server, cancel))
+	<-tunCtx.Done()
+	return nil
+}
+
 func (l Listener) Close() error {
 	l.s.Stop()
 	return nil

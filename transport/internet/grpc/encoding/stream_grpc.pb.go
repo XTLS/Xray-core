@@ -19,6 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GRPCServiceClient interface {
 	Tun(ctx context.Context, opts ...grpc.CallOption) (GRPCService_TunClient, error)
+	TunMulti(ctx context.Context, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error)
 }
 
 type gRPCServiceClient struct {
@@ -60,11 +61,43 @@ func (x *gRPCServiceTunClient) Recv() (*Hunk, error) {
 	return m, nil
 }
 
+func (c *gRPCServiceClient) TunMulti(ctx context.Context, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error) {
+	stream, err := c.cc.NewStream(ctx, &GRPCService_ServiceDesc.Streams[1], "/xray.transport.internet.grpc.encoding.GRPCService/TunMulti", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &gRPCServiceTunMultiClient{stream}
+	return x, nil
+}
+
+type GRPCService_TunMultiClient interface {
+	Send(*MultiHunk) error
+	Recv() (*MultiHunk, error)
+	grpc.ClientStream
+}
+
+type gRPCServiceTunMultiClient struct {
+	grpc.ClientStream
+}
+
+func (x *gRPCServiceTunMultiClient) Send(m *MultiHunk) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *gRPCServiceTunMultiClient) Recv() (*MultiHunk, error) {
+	m := new(MultiHunk)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // GRPCServiceServer is the server API for GRPCService service.
 // All implementations must embed UnimplementedGRPCServiceServer
 // for forward compatibility
 type GRPCServiceServer interface {
 	Tun(GRPCService_TunServer) error
+	TunMulti(GRPCService_TunMultiServer) error
 	mustEmbedUnimplementedGRPCServiceServer()
 }
 
@@ -74,6 +107,9 @@ type UnimplementedGRPCServiceServer struct {
 
 func (UnimplementedGRPCServiceServer) Tun(GRPCService_TunServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tun not implemented")
+}
+func (UnimplementedGRPCServiceServer) TunMulti(GRPCService_TunMultiServer) error {
+	return status.Errorf(codes.Unimplemented, "method TunMulti not implemented")
 }
 func (UnimplementedGRPCServiceServer) mustEmbedUnimplementedGRPCServiceServer() {}
 
@@ -114,6 +150,32 @@ func (x *gRPCServiceTunServer) Recv() (*Hunk, error) {
 	return m, nil
 }
 
+func _GRPCService_TunMulti_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GRPCServiceServer).TunMulti(&gRPCServiceTunMultiServer{stream})
+}
+
+type GRPCService_TunMultiServer interface {
+	Send(*MultiHunk) error
+	Recv() (*MultiHunk, error)
+	grpc.ServerStream
+}
+
+type gRPCServiceTunMultiServer struct {
+	grpc.ServerStream
+}
+
+func (x *gRPCServiceTunMultiServer) Send(m *MultiHunk) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *gRPCServiceTunMultiServer) Recv() (*MultiHunk, error) {
+	m := new(MultiHunk)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // GRPCService_ServiceDesc is the grpc.ServiceDesc for GRPCService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -125,6 +187,12 @@ var GRPCService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Tun",
 			Handler:       _GRPCService_Tun_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "TunMulti",
+			Handler:       _GRPCService_TunMulti_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
