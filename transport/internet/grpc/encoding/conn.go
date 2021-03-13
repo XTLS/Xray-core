@@ -42,18 +42,13 @@ func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
 }
 
 func (h *HunkReaderWriter) forceFetch() error {
-	// clean up buffer, safety first!
-	h.buf = h.buf[:0]
-	h.index = 0
-
-	hunk := new(Hunk)
-	hunk.Data = h.buf
-	err := h.hc.RecvMsg(hunk)
+	hunk, err := h.hc.Recv()
 	if err != nil {
 		return newError("failed to fetch hunk from gRPC tunnel").Base(err)
 	}
 
 	h.buf = hunk.Data
+	h.index = 0
 
 	return nil
 }
@@ -68,6 +63,27 @@ func (h *HunkReaderWriter) Read(buf []byte) (int, error) {
 	h.index += n
 
 	return n, nil
+}
+
+func (h *HunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if h.index >= len(h.buf) {
+		if err := h.forceFetch(); err != nil {
+			return nil, err
+		}
+	}
+
+	if cap(h.buf) == buf.Size {
+		b := h.buf
+		h.index = len(h.buf)
+		return buf.MultiBuffer{buf.NewExisted(b)}, nil
+	}
+
+	b := buf.New()
+	_, err := b.ReadFrom(h)
+	if err != nil {
+		return nil, err
+	}
+	return buf.MultiBuffer{b}, nil
 }
 
 func (h *HunkReaderWriter) Write(buf []byte) (int, error) {
