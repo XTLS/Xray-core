@@ -22,10 +22,11 @@ type connection struct {
 	remoteAddr net.Addr
 }
 
-func newConnection(conn *websocket.Conn, remoteAddr net.Addr) *connection {
+func newConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
 	return &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
+		reader:     extraReader,
 	}
 }
 
