@@ -1,9 +1,13 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +55,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
-	h.ln.addConn(newConnection(conn, remoteAddr))
+	var extraReader io.Reader
+	if len(request.Header["Sec-WebSocket-Protocol"]) > 0 {
+		decoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(request.Header["Sec-WebSocket-Protocol"][0]))
+		if ed, err := io.ReadAll(decoder); err == nil && len(ed) > 0 {
+			extraReader = bytes.NewReader(ed)
+		}
+	}
+	h.ln.addConn(newConnection(conn, remoteAddr, extraReader))
 }
 
 type Listener struct {
