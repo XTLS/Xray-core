@@ -8,6 +8,11 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/features/dns"
+)
+
+var (
+	ipPrefix = "198.18."
 )
 
 func TestNewFakeDnsHolder(_ *testing.T) {
@@ -20,7 +25,7 @@ func TestFakeDnsHolderCreateMapping(t *testing.T) {
 	common.Must(err)
 
 	addr := fkdns.GetFakeIPForDomain("fakednstest.example.com")
-	assert.Equal(t, "240.", addr[0].IP().String()[0:4])
+	assert.Equal(t, ipPrefix, addr[0].IP().String()[0:len(ipPrefix)])
 }
 
 func TestFakeDnsHolderCreateMappingMany(t *testing.T) {
@@ -28,10 +33,10 @@ func TestFakeDnsHolderCreateMappingMany(t *testing.T) {
 	common.Must(err)
 
 	addr := fkdns.GetFakeIPForDomain("fakednstest.example.com")
-	assert.Equal(t, "240.", addr[0].IP().String()[0:4])
+	assert.Equal(t, ipPrefix, addr[0].IP().String()[0:len(ipPrefix)])
 
 	addr2 := fkdns.GetFakeIPForDomain("fakednstest2.example.com")
-	assert.Equal(t, "240.", addr2[0].IP().String()[0:4])
+	assert.Equal(t, ipPrefix, addr2[0].IP().String()[0:len(ipPrefix)])
 	assert.NotEqual(t, addr[0].IP().String(), addr2[0].IP().String())
 }
 
@@ -64,7 +69,7 @@ func TestFakeDnsHolderCreateMappingManySingleDomain(t *testing.T) {
 
 func TestFakeDnsHolderCreateMappingAndRollOver(t *testing.T) {
 	fkdns, err := NewFakeDNSHolderConfigOnly(&FakeDnsPool{
-		IpPool:  "240.0.0.0/12",
+		IpPool:  dns.FakeIPPool,
 		LruSize: 256,
 	})
 	common.Must(err)
