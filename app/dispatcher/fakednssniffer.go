@@ -1,14 +1,12 @@
-// +build !confonly
-
 package dispatcher
 
 import (
 	"context"
 
-	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 )
 
