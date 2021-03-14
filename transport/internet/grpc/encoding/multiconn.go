@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"context"
+	"github.com/xtls/xray-core/common/signal/done"
 	"io"
 	"net"
 
@@ -19,13 +20,13 @@ type MultiHunkConn interface {
 type MultiHunkReaderWriter struct {
 	hc     MultiHunkConn
 	cancel context.CancelFunc
+	done   *done.Instance
 
-	buf    [][]byte
-	closed bool
+	buf [][]byte
 }
 
 func NewMultiHunkReadWriter(hc MultiHunkConn, cancel context.CancelFunc) *MultiHunkReaderWriter {
-	return &MultiHunkReaderWriter{hc, cancel, nil, false}
+	return &MultiHunkReaderWriter{hc, cancel, done.New(), nil}
 }
 
 func NewMultiHunkConn(hc MultiHunkConn, cancel context.CancelFunc) net.Conn {
@@ -53,7 +54,7 @@ func (h *MultiHunkReaderWriter) forceFetch() error {
 }
 
 func (h *MultiHunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if h.closed {
+	if h.done.Done() {
 		return nil, io.EOF
 	}
 
@@ -79,7 +80,7 @@ func (h *MultiHunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 func (h *MultiHunkReaderWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
-	if h.closed {
+	if h.done.Done() {
 		return io.ErrClosedPipe
 	}
 
@@ -103,5 +104,5 @@ func (h *MultiHunkReaderWriter) Close() error {
 		return sc.CloseSend()
 	}
 
-	return nil
+	return h.done.Close()
 }

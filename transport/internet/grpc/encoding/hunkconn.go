@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"context"
+	"github.com/xtls/xray-core/common/signal/done"
 	"io"
 	"net"
 
@@ -23,13 +24,14 @@ type StreamCloser interface {
 type HunkReaderWriter struct {
 	hc     HunkConn
 	cancel context.CancelFunc
+	done   *done.Instance
 
 	buf   []byte
 	index int
 }
 
 func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) *HunkReaderWriter {
-	return &HunkReaderWriter{hc, cancel, nil, 0}
+	return &HunkReaderWriter{hc, cancel, done.New(), nil, 0}
 }
 
 func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
@@ -58,6 +60,10 @@ func (h *HunkReaderWriter) forceFetch() error {
 }
 
 func (h *HunkReaderWriter) Read(buf []byte) (int, error) {
+	if h.done.Done() {
+		return 0, io.EOF
+	}
+
 	if h.index >= len(h.buf) {
 		if err := h.forceFetch(); err != nil {
 			return 0, err
@@ -70,6 +76,9 @@ func (h *HunkReaderWriter) Read(buf []byte) (int, error) {
 }
 
 func (h *HunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if h.done.Done() {
+		return nil, io.EOF
+	}
 	if h.index >= len(h.buf) {
 		if err := h.forceFetch(); err != nil {
 			return nil, err
@@ -91,6 +100,10 @@ func (h *HunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 func (h *HunkReaderWriter) Write(buf []byte) (int, error) {
+	if h.done.Done() {
+		return 0, io.ErrClosedPipe
+	}
+
 	err := h.hc.Send(&Hunk{Data: buf[:]})
 	if err != nil {
 		return 0, newError("failed to send data over gRPC tunnel").Base(err)
@@ -106,5 +119,5 @@ func (h *HunkReaderWriter) Close() error {
 		return sc.CloseSend()
 	}
 
-	return nil
+	return h.done.Close()
 }
