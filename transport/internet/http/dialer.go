@@ -18,8 +18,13 @@ import (
 	"golang.org/x/net/http2"
 )
 
+type dialerConf struct {
+	net.Destination
+	*internet.SocketConfig
+}
+
 var (
-	globalDialerMap    map[net.Destination]*http.Client
+	globalDialerMap    map[dialerConf]*http.Client
 	globalDialerAccess sync.Mutex
 )
 
@@ -28,10 +33,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[net.Destination]*http.Client)
+		globalDialerMap = make(map[dialerConf]*http.Client)
 	}
 
-	if client, found := globalDialerMap[dest]; found {
+	if client, found := globalDialerMap[dialerConf{dest, sockopt}]; found {
 		return client, nil
 	}
 
@@ -87,7 +92,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 		Transport: transport,
 	}
 
-	globalDialerMap[dest] = client
+	globalDialerMap[dialerConf{dest, sockopt}] = client
 	return client, nil
 }
 

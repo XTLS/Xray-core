@@ -458,6 +458,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "domainsocket", nil
 	case "quic":
 		return "quic", nil
+	case "grpc", "gun":
+		return "grpc", nil
 	default:
 		return "", newError("Config: unknown transport protocol: ", p)
 	}
@@ -534,6 +536,8 @@ type StreamConfig struct {
 	DSSettings     *DomainSocketConfig `json:"dsSettings"`
 	QUICSettings   *QUICConfig         `json:"quicSettings"`
 	SocketSettings *SocketConfig       `json:"sockopt"`
+	GRPCConfig     *GRPCConfig         `json:"grpcSettings"`
+	GUNConfig      *GRPCConfig         `json:"gunSettings"`
 }
 
 // Build implements Buildable.
@@ -641,6 +645,19 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "quic",
 			Settings:     serial.ToTypedMessage(qs),
+		})
+	}
+	if c.GRPCConfig == nil {
+		c.GRPCConfig = c.GUNConfig
+	}
+	if c.GRPCConfig != nil {
+		gs, err := c.GRPCConfig.Build()
+		if err != nil {
+			return nil, newError("Failed to build gRPC config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "grpc",
+			Settings:     serial.ToTypedMessage(gs),
 		})
 	}
 	if c.SocketSettings != nil {
