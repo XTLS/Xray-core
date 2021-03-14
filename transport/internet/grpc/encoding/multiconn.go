@@ -2,12 +2,12 @@ package encoding
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/signal/done"
 	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/signal/done"
 )
 
 type MultiHunkConn interface {
