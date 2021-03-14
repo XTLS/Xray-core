@@ -2,14 +2,13 @@ package grpc
 
 import (
 	"context"
-	gonet "net"
-	"sync"
-	"time"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
+	gonet "net"
+	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -33,8 +32,13 @@ func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
 }
 
+type dialerConf struct {
+	net.Destination
+	*internet.SocketConfig
+}
+
 var (
-	globalDialerMap    map[net.Destination]*grpc.ClientConn
+	globalDialerMap    map[dialerConf]*grpc.ClientConn
 	globalDialerAccess sync.Mutex
 )
 
@@ -48,7 +52,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(config.GetTLSConfig()))
 	}
 
-	conn, err := getGrpcClient(dest, dialOption)
+	conn, err := getGrpcClient(ctx, dest, dialOption, streamSettings.SocketSettings)
 
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
@@ -56,29 +60,30 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	client := encoding.NewGRPCServiceClient(conn)
 	if grpcSettings.MultiMode {
 		newError("using gRPC multi mode").AtDebug().WriteToLog()
-		grpcservice, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.ServiceName)
+		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.ServiceName)
 		if err != nil {
 			return nil, newError("Cannot dial gRPC").Base(err)
 		}
-		return encoding.NewMultiHunkConn(grpcservice, nil), nil
+		return encoding.NewMultiHunkConn(grpcService, nil), nil
 	}
 
-	grpcservice, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.ServiceName)
+	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.ServiceName)
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
-	return encoding.NewHunkConn(grpcservice, nil), nil
+
+	return encoding.NewHunkConn(grpcService, nil), nil
 }
 
-func getGrpcClient(dest net.Destination, dialOption grpc.DialOption) (*grpc.ClientConn, error) {
+func getGrpcClient(ctx context.Context, dest net.Destination, dialOption grpc.DialOption, sockopt *internet.SocketConfig) (*grpc.ClientConn, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[net.Destination]*grpc.ClientConn)
+		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
 	}
 
-	if client, found := globalDialerMap[dest]; found && client.GetState() != connectivity.Shutdown {
+	if client, found := globalDialerMap[dialerConf{dest, sockopt}]; found && client.GetState() != connectivity.Shutdown {
 		return client, nil
 	}
 
@@ -90,12 +95,21 @@ func getGrpcClient(dest net.Destination, dialOption grpc.DialOption) (*grpc.Clie
 				BaseDelay:  500 * time.Millisecond,
 				Multiplier: 1.5,
 				Jitter:     0.2,
-				MaxDelay:   19 * time.Millisecond,
+				MaxDelay:   19 * time.Second,
 			},
 			MinConnectTimeout: 5 * time.Second,
 		}),
-		grpc.WithContextDialer(func(ctx context.Context, s string) (gonet.Conn, error) {
+		grpc.WithContextDialer(func(gctx context.Context, s string) (gonet.Conn, error) {
+			gctx = session.ContextWithID(gctx, session.IDFromContext(ctx))
+			gctx = session.ContextWithOutbound(gctx, session.OutboundFromContext(ctx))
+
 			rawHost, rawPort, err := net.SplitHostPort(s)
+			select {
+			case <-gctx.Done():
+				return nil, gctx.Err()
+			default:
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -107,9 +121,9 @@ func getGrpcClient(dest net.Destination, dialOption grpc.DialOption) (*grpc.Clie
 				return nil, err
 			}
 			address := net.ParseAddress(rawHost)
-			return internet.DialSystem(ctx, net.TCPDestination(address, port), nil)
+			return internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
 		}),
 	)
-	globalDialerMap[dest] = conn
+	globalDialerMap[dialerConf{dest, sockopt}] = conn
 	return conn, err
 }
