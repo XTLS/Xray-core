@@ -13,3 +13,5 @@ type FakeDNSEngine interface {
 	GetDomainFromFakeDNS(ip net.Address) string
 	GetFakeIPRange() *gonet.IPNet
 }
+
+var FakeIPPool = "198.18.0.0/16"

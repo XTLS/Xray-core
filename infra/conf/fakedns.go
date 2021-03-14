@@ -3,6 +3,7 @@ package conf
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/app/dns/fakedns"
+	"github.com/xtls/xray-core/features/dns"
 )
 
 type FakeDNSConfig struct {
@@ -36,7 +37,7 @@ func (FakeDNSPostProcessingStage) Process(conf *Config) error {
 		if conf.FakeDNS == nil {
 			// Add a Fake DNS Config if there is none
 			conf.FakeDNS = &FakeDNSConfig{
-				IPPool:  "240.0.0.0/8",
+				IPPool:  dns.FakeIPPool,
 				LruSize: 65535,
 			}
 		}
