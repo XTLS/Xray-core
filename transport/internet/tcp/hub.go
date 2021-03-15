@@ -73,10 +73,10 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	l.listener = listener
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.tlsConfig = config.GetTLSConfig(tls.WithNextProto("h2"))
+		l.tlsConfig = config.GetTLSConfig()
 	}
 	if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.xtlsConfig = config.GetXTLSConfig(xtls.WithNextProto("h2"))
+		l.xtlsConfig = config.GetXTLSConfig()
 	}
 
 	if tcpSettings.HeaderSettings != nil {

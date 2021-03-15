@@ -22,33 +22,44 @@ import (
 
 type Server struct {
 	config        *ServerConfig
-	users         []*protocol.MemoryUser
+	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
 }
 
 // NewServer create a new Shadowsocks server.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	if config.Users == nil {
-		return nil, newError("empty users")
+	validator := new(Validator)
+	for _, user := range config.Users {
+		u, err := user.ToMemoryUser()
+		if err != nil {
+			return nil, newError("failed to get shadowsocks user").Base(err).AtError()
+		}
+
+		if err := validator.Add(u); err != nil {
+			return nil, newError("failed to add user").Base(err).AtError()
+		}
 	}
 
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
+		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
 
-	for _, user := range config.Users {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, newError("failed to parse user account").Base(err)
-		}
-		s.users = append(s.users, u)
-	}
-
 	return s, nil
+}
+
+// AddUser implements proxy.UserManager.AddUser().
+func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	return s.validator.Add(u)
+}
+
+// RemoveUser implements proxy.UserManager.RemoveUser().
+func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	return s.validator.Del(e)
 }
 
 func (s *Server) Network() []net.Network {
@@ -64,13 +75,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	case net.Network_TCP:
 		return s.handleConnection(ctx, conn, dispatcher)
 	case net.Network_UDP:
-		return s.handlerUDPPayload(ctx, conn, dispatcher)
+		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
 		return newError("unknown network: ", network)
 	}
 }
 
-func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		request := protocol.RequestHeaderFromContext(ctx)
 		if request == nil {
@@ -102,8 +113,9 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
-	if len(s.users) == 1 {
-		inbound.User = s.users[0]
+
+	if s.validator.Count() == 1 {
+		inbound.User, _ = s.validator.GetOnlyUser()
 	}
 
 	var dest *net.Destination
@@ -121,9 +133,11 @@ func (s *Server) handlerUDPPayload(ctx context.Context, conn internet.Connection
 			var err error
 
 			if inbound.User != nil {
-				request, data, err = DecodeUDPPacket([]*protocol.MemoryUser{inbound.User}, payload)
+				validator := new(Validator)
+				validator.Add(inbound.User)
+				request, data, err = DecodeUDPPacket(validator, payload)
 			} else {
-				request, data, err = DecodeUDPPacket(s.users, payload)
+				request, data, err = DecodeUDPPacket(s.validator, payload)
 				if err == nil {
 					inbound.User = request.User
 				}
@@ -178,7 +192,7 @@ func (s *Server) handleConnection(ctx context.Context, conn internet.Connection,
 	}
 
 	bufferedReader := buf.BufferedReader{Reader: buf.NewReader(conn)}
-	request, bodyReader, err := ReadTCPSession(s.users, &bufferedReader)
+	request, bodyReader, err := ReadTCPSession(s.validator, &bufferedReader)
 	if err != nil {
 		log.Record(&log.AccessMessage{
 			From:   conn.RemoteAddr(),

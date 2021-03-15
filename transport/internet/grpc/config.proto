@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package xray.transport.internet.grpc.encoding;
+option go_package = "github.com/xtls/xray-core/transport/internet/grpc";
+
+message Config {
+  string host = 1;
+  string service_name = 2;
+  bool multi_mode = 3;
+}

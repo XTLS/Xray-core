@@ -20,4 +20,6 @@ message Config {
   repeated Header header = 3;
 
   bool accept_proxy_protocol = 4;
+
+  uint32 ed = 5;
 }

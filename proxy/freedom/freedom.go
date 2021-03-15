@@ -59,19 +59,26 @@ func (h *Handler) policy() policy.Session {
 }
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	var lookupFunc func(string) ([]net.IP, error) = h.dns.LookupIP
-
+	var option dns.IPOption = dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	}
 	if h.config.DomainStrategy == Config_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()) {
-		if lookupIPv4, ok := h.dns.(dns.IPv4Lookup); ok {
-			lookupFunc = lookupIPv4.LookupIPv4
+		option = dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+			FakeEnable: false,
 		}
 	} else if h.config.DomainStrategy == Config_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()) {
-		if lookupIPv6, ok := h.dns.(dns.IPv6Lookup); ok {
-			lookupFunc = lookupIPv6.LookupIPv6
+		option = dns.IPOption{
+			IPv4Enable: false,
+			IPv6Enable: true,
+			FakeEnable: false,
 		}
 	}
 
-	ips, err := lookupFunc(domain)
+	ips, err := h.dns.LookupIP(domain, option)
 	if err != nil {
 		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
@@ -97,13 +104,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return newError("target not specified.")
 	}
 	destination := outbound.Target
+	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {
 		server := h.config.DestinationOverride.Server
 		if isValidAddress(server.Address) {
 			destination.Address = server.Address.AsAddress()
+			UDPOverride.Address = destination.Address
 		}
 		if server.Port != 0 {
 			destination.Port = net.Port(server.Port)
+			UDPOverride.Port = destination.Port
 		}
 	}
 	newError("opening connection to ", destination).WriteToLog(session.ExportIDToError(ctx))
@@ -122,7 +132,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					Address: ip,
 					Port:    dialDest.Port,
 				}
-				newError("dialing to to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
+				newError("dialing to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 
@@ -149,7 +159,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			writer = buf.NewWriter(conn)
 		} else {
-			writer = NewPacketWriter(conn, h, ctx)
+			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 		}
 
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
@@ -166,7 +176,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn)
+			reader = NewPacketReader(conn, UDPOverride)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to process response").Base(err)
@@ -182,7 +192,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func NewPacketReader(conn net.Conn) buf.Reader {
+func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
@@ -192,7 +202,7 @@ func NewPacketReader(conn net.Conn) buf.Reader {
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
@@ -226,7 +236,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*internet.StatCouterConnection)
 	if ok {
@@ -242,6 +252,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context) buf.Writer 
 			Counter:           counter,
 			Handler:           h,
 			Context:           ctx,
+			UDPOverride:       UDPOverride,
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
@@ -252,6 +263,7 @@ type PacketWriter struct {
 	stats.Counter
 	*Handler
 	context.Context
+	UDPOverride net.Destination
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -264,6 +276,12 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		var n int
 		var err error
 		if b.UDP != nil {
+			if w.UDPOverride.Address != nil {
+				b.UDP.Address = w.UDPOverride.Address
+			}
+			if w.UDPOverride.Port != 0 {
+				b.UDP.Port = w.UDPOverride.Port
+			}
 			if w.Handler.config.useIP() && b.UDP.Address.Family().IsDomain() {
 				ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
 				if ip != nil {

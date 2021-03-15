@@ -2,14 +2,10 @@ package core
 
 import (
 	"context"
+	"os"
 	"reflect"
-	"runtime/debug"
-	"strings"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
-
-	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
@@ -20,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // Server is an instance of Xray. At any time, there must be at most one Server instance running.
@@ -184,32 +181,7 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
-	cone := true
-	v, t := false, false
-	for _, outbound := range config.Outbound {
-		s := strings.ToLower(outbound.ProxySettings.Type)
-		l := len(s)
-		if l >= 16 && s[11:16] == "vless" || l >= 16 && s[11:16] == "vmess" {
-			v = true
-			continue
-		}
-		if l >= 17 && s[11:17] == "trojan" || l >= 22 && s[11:22] == "shadowsocks" {
-			t = true
-			if outbound.SenderSettings != nil {
-				var m proxyman.SenderConfig
-				proto.Unmarshal(outbound.SenderSettings.Value, &m)
-				if m.MultiplexSettings != nil && m.MultiplexSettings.Enabled {
-					cone = false
-					break
-				}
-			}
-		}
-	}
-	if v && !t {
-		cone = false
-	}
-	server.ctx = context.WithValue(server.ctx, "cone", cone)
-	defer debug.FreeOSMemory()
+	server.ctx = context.WithValue(server.ctx, "cone", os.Getenv("XRAY_CONE_DISABLED") != "true")
 
 	if config.Transport != nil {
 		features.PrintDeprecatedFeatureWarning("global transport settings")
@@ -251,6 +223,14 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 			}
 		}
 	}
+
+	internet.InitSystemDialer(
+		server.GetFeature(dns.ClientType()).(dns.Client),
+		func() outbound.Manager {
+			obm, _ := server.GetFeature(outbound.ManagerType()).(outbound.Manager)
+			return obm
+		}(),
+	)
 
 	if server.featureResolutions != nil {
 		return true, newError("not all dependency are resolved.")

@@ -8,8 +8,9 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/global"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/grpc"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"github.com/xtls/xray-core/transport/internet/headers/tls"
@@ -34,12 +35,40 @@ func TestSocketConfig(t *testing.T) {
 		{
 			Input: `{
 				"mark": 1,
-				"tcpFastOpen": true
+				"tcpFastOpen": true,
+				"domainStrategy": "UseIP",
+				"dialerProxy": "tag"
 			}`,
 			Parser: createParser(),
 			Output: &internet.SocketConfig{
-				Mark: 1,
-				Tfo:  internet.SocketConfig_Enable,
+				Mark:           1,
+				Tfo:            256,
+				DomainStrategy: internet.DomainStrategy_USE_IP,
+				DialerProxy:    "tag",
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": false
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  0,
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": 65535
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  65535,
 			},
 		},
 	})
@@ -92,10 +121,14 @@ func TestTransportConfig(t *testing.T) {
 					"header": {
 						"type": "dtls"
 					}
+				},
+				"grpcSettings": {
+					"serviceName": "name",
+					"multiMode": true
 				}
 			}`,
 			Parser: createParser(),
-			Output: &transport.Config{
+			Output: &global.Config{
 				TransportSettings: []*internet.TransportConfig{
 					{
 						ProtocolName: "tcp",
@@ -160,6 +193,31 @@ func TestTransportConfig(t *testing.T) {
 								Type: protocol.SecurityType_NONE,
 							},
 							Header: serial.ToTypedMessage(&tls.PacketConfig{}),
+						}),
+					},
+					{
+						ProtocolName: "grpc",
+						Settings: serial.ToTypedMessage(&grpc.Config{
+							ServiceName: "name",
+							MultiMode:   true,
+						}),
+					},
+				},
+			},
+		},
+		{
+			Input: `{
+				"gunSettings": {
+					"serviceName": "name"
+				}
+			}`,
+			Parser: createParser(),
+			Output: &global.Config{
+				TransportSettings: []*internet.TransportConfig{
+					{
+						ProtocolName: "grpc",
+						Settings: serial.ToTypedMessage(&grpc.Config{
+							ServiceName: "name",
 						}),
 					},
 				},

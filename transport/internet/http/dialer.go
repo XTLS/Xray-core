@@ -11,26 +11,32 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
 	"golang.org/x/net/http2"
 )
 
+type dialerConf struct {
+	net.Destination
+	*internet.SocketConfig
+}
+
 var (
-	globalDialerMap    map[net.Destination]*http.Client
+	globalDialerMap    map[dialerConf]*http.Client
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config) (*http.Client, error) {
+func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config, sockopt *internet.SocketConfig) (*http.Client, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[net.Destination]*http.Client)
+		globalDialerMap = make(map[dialerConf]*http.Client)
 	}
 
-	if client, found := globalDialerMap[dest]; found {
+	if client, found := globalDialerMap[dialerConf{dest, sockopt}]; found {
 		return client, nil
 	}
 
@@ -49,17 +55,24 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			}
 			address := net.ParseAddress(rawHost)
 
-			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), nil)
+			dctx := context.Background()
+			dctx = session.ContextWithID(dctx, session.IDFromContext(ctx))
+			dctx = session.ContextWithOutbound(dctx, session.OutboundFromContext(ctx))
+
+			pconn, err := internet.DialSystem(dctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 
 			cn := gotls.Client(pconn, tlsConfig)
 			if err := cn.Handshake(); err != nil {
+				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 			if !tlsConfig.InsecureSkipVerify {
 				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 					return nil, err
 				}
 			}
@@ -79,7 +92,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 		Transport: transport,
 	}
 
-	globalDialerMap[dest] = client
+	globalDialerMap[dialerConf{dest, sockopt}] = client
 	return client, nil
 }
 
@@ -90,7 +103,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if tlsConfig == nil {
 		return nil, newError("TLS must be enabled for http transport.").AtWarning()
 	}
-	client, err := getHTTPClient(ctx, dest, tlsConfig)
+	client, err := getHTTPClient(ctx, dest, tlsConfig, streamSettings.SocketSettings)
 	if err != nil {
 		return nil, err
 	}

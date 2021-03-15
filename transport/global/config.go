@@ -1,4 +1,4 @@
-package transport
+package global
 
 import (
 	"github.com/xtls/xray-core/transport/internet"

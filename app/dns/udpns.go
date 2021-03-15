@@ -2,12 +2,14 @@ package dns
 
 import (
 	"context"
+	"github.com/xtls/xray-core/transport/internet"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -52,7 +54,7 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		Execute:  s.Cleanup,
 	}
 	s.udpServer = udp.NewDispatcher(dispatcher, s.HandleResponse)
-	newError("DNS: created udp client inited for ", address.NetAddr()).AtInfo().WriteToLog()
+	newError("DNS: created UDP client initialized for ", address.NetAddr()).AtInfo().WriteToLog()
 	return s
 }
 
@@ -178,7 +180,7 @@ func (s *ClassicNameServer) addPendingRequest(req *dnsRequest) {
 	s.requests[id] = *req
 }
 
-func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option IPOption) {
+func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option dns_feature.IPOption) {
 	newError(s.name, " querying DNS for: ", domain).AtDebug().WriteToLog(session.ExportIDToError(ctx))
 
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP))
@@ -190,14 +192,21 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			udpCtx = session.ContextWithInbound(udpCtx, inbound)
 		}
+		udpCtx = internet.ContextWithLookupDomain(udpCtx, internet.LookupDomainFromContext(ctx))
 		udpCtx = session.ContextWithContent(udpCtx, &session.Content{
 			Protocol: "dns",
+		})
+		udpCtx = log.ContextWithAccessMessage(udpCtx, &log.AccessMessage{
+			From:   "DNS",
+			To:     s.address,
+			Status: log.AccessAccepted,
+			Reason: "",
 		})
 		s.udpServer.Dispatch(udpCtx, s.address, b)
 	}
 }
 
-func (s *ClassicNameServer) findIPsForDomain(domain string, option IPOption) ([]net.IP, error) {
+func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, error) {
 	s.RLock()
 	record, found := s.ips[domain]
 	s.RUnlock()
@@ -235,12 +244,14 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option IPOption) ([]
 	return nil, dns_feature.ErrEmptyResponse
 }
 
-func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option IPOption) ([]net.IP, error) {
+// QueryIP implements Server.
+func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, error) {
 	fqdn := Fqdn(domain)
 
 	ips, err := s.findIPsForDomain(fqdn, option)
 	if err != errRecordNotFound {
 		newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+		log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 		return ips, err
 	}
 
@@ -271,10 +282,12 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option I
 		close(done)
 	}()
 	s.sendQuery(ctx, fqdn, option)
+	start := time.Now()
 
 	for {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSQueried, time.Since(start), err})
 			return ips, err
 		}
 

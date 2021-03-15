@@ -2,6 +2,9 @@ package conf
 
 import (
 	"encoding/json"
+	"math"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -154,9 +157,20 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 			Value: value,
 		})
 	}
+	var ed uint32
+	if u, err := url.Parse(path); err == nil {
+		if q := u.Query(); q.Get("ed") != "" {
+			Ed, _ := strconv.Atoi(q.Get("ed"))
+			ed = uint32(Ed)
+			q.Del("ed")
+			u.RawQuery = q.Encode()
+			path = u.String()
+		}
+	}
 	config := &websocket.Config{
 		Path:   path,
 		Header: header,
+		Ed:     ed,
 	}
 	if c.AcceptProxyProtocol {
 		config.AcceptProxyProtocol = c.AcceptProxyProtocol
@@ -247,12 +261,13 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 }
 
 type TLSCertConfig struct {
-	CertFile     string   `json:"certificateFile"`
-	CertStr      []string `json:"certificate"`
-	KeyFile      string   `json:"keyFile"`
-	KeyStr       []string `json:"key"`
-	Usage        string   `json:"usage"`
-	OcspStapling int64    `json:"ocspStapling"`
+	CertFile       string   `json:"certificateFile"`
+	CertStr        []string `json:"certificate"`
+	KeyFile        string   `json:"keyFile"`
+	KeyStr         []string `json:"key"`
+	Usage          string   `json:"usage"`
+	OcspStapling   uint64   `json:"ocspStapling"`
+	OneTimeLoading bool     `json:"oneTimeLoading"`
 }
 
 // Build implements Buildable.
@@ -264,6 +279,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -271,6 +287,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {
@@ -283,7 +300,11 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
-
+	if certificate.KeyPath == "" && certificate.CertificatePath == "" {
+		certificate.OneTimeLoading = true
+	} else {
+		certificate.OneTimeLoading = c.OneTimeLoading
+	}
 	certificate.OcspStapling = c.OcspStapling
 
 	return certificate, nil
@@ -331,23 +352,24 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 }
 
 type XTLSCertConfig struct {
-	CertFile     string   `json:"certificateFile"`
-	CertStr      []string `json:"certificate"`
-	KeyFile      string   `json:"keyFile"`
-	KeyStr       []string `json:"key"`
-	Usage        string   `json:"usage"`
-	OcspStapling int64    `json:"ocspStapling"`
+	CertFile       string   `json:"certificateFile"`
+	CertStr        []string `json:"certificate"`
+	KeyFile        string   `json:"keyFile"`
+	KeyStr         []string `json:"key"`
+	Usage          string   `json:"usage"`
+	OcspStapling   uint64   `json:"ocspStapling"`
+	OneTimeLoading bool     `json:"oneTimeLoading"`
 }
 
 // Build implements Buildable.
 func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	certificate := new(xtls.Certificate)
-
 	cert, err := readFileOrString(c.CertFile, c.CertStr)
 	if err != nil {
 		return nil, newError("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
+	certificate.CertificatePath = c.CertFile
 
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
@@ -355,6 +377,7 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 			return nil, newError("failed to parse key").Base(err)
 		}
 		certificate.Key = key
+		certificate.KeyPath = c.KeyFile
 	}
 
 	switch strings.ToLower(c.Usage) {
@@ -367,7 +390,11 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 	default:
 		certificate.Usage = xtls.Certificate_ENCIPHERMENT
 	}
-
+	if certificate.KeyPath == "" && certificate.CertificatePath == "" {
+		certificate.OneTimeLoading = true
+	} else {
+		certificate.OneTimeLoading = c.OneTimeLoading
+	}
 	certificate.OcspStapling = c.OcspStapling
 
 	return certificate, nil
@@ -431,26 +458,40 @@ func (p TransportProtocol) Build() (string, error) {
 		return "domainsocket", nil
 	case "quic":
 		return "quic", nil
+	case "grpc", "gun":
+		return "grpc", nil
 	default:
 		return "", newError("Config: unknown transport protocol: ", p)
 	}
 }
 
 type SocketConfig struct {
-	Mark                int32  `json:"mark"`
-	TFO                 *bool  `json:"tcpFastOpen"`
-	TProxy              string `json:"tproxy"`
-	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+	Mark                int32       `json:"mark"`
+	TFO                 interface{} `json:"tcpFastOpen"`
+	TProxy              string      `json:"tproxy"`
+	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
+	DomainStrategy      string      `json:"domainStrategy"`
+	DialerProxy         string      `json:"dialerProxy"`
 }
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
-	var tfoSettings internet.SocketConfig_TCPFastOpenState
+	tfo := int32(-1)
 	if c.TFO != nil {
-		if *c.TFO {
-			tfoSettings = internet.SocketConfig_Enable
-		} else {
-			tfoSettings = internet.SocketConfig_Disable
+		switch v := c.TFO.(type) {
+		case bool:
+			if v {
+				tfo = 256
+			} else {
+				tfo = 0
+			}
+		case float64:
+			if v < 0 {
+				return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
+			}
+			tfo = int32(math.Min(v, math.MaxInt32))
+		default:
+			return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
 		}
 	}
 	var tproxy internet.SocketConfig_TProxyMode
@@ -463,11 +504,23 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_Off
 	}
 
+	var dStrategy = internet.DomainStrategy_AS_IS
+	switch strings.ToLower(c.DomainStrategy) {
+	case "useip", "use_ip":
+		dStrategy = internet.DomainStrategy_USE_IP
+	case "useip4", "useipv4", "use_ipv4", "use_ip_v4", "use_ip4":
+		dStrategy = internet.DomainStrategy_USE_IP4
+	case "useip6", "useipv6", "use_ipv6", "use_ip_v6", "use_ip6":
+		dStrategy = internet.DomainStrategy_USE_IP6
+	}
+
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
-		Tfo:                 tfoSettings,
+		Tfo:                 tfo,
 		Tproxy:              tproxy,
+		DomainStrategy:      dStrategy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		DialerProxy:         c.DialerProxy,
 	}, nil
 }
 
@@ -483,6 +536,8 @@ type StreamConfig struct {
 	DSSettings     *DomainSocketConfig `json:"dsSettings"`
 	QUICSettings   *QUICConfig         `json:"quicSettings"`
 	SocketSettings *SocketConfig       `json:"sockopt"`
+	GRPCConfig     *GRPCConfig         `json:"grpcSettings"`
+	GUNConfig      *GRPCConfig         `json:"gunSettings"`
 }
 
 // Build implements Buildable.
@@ -592,6 +647,19 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			Settings:     serial.ToTypedMessage(qs),
 		})
 	}
+	if c.GRPCConfig == nil {
+		c.GRPCConfig = c.GUNConfig
+	}
+	if c.GRPCConfig != nil {
+		gs, err := c.GRPCConfig.Build()
+		if err != nil {
+			return nil, newError("Failed to build gRPC config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "grpc",
+			Settings:     serial.ToTypedMessage(gs),
+		})
+	}
 	if c.SocketSettings != nil {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
@@ -604,6 +672,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 
 type ProxyConfig struct {
 	Tag string `json:"tag"`
+
+	// TransportLayerProxy: For compatibility.
+	TransportLayerProxy bool `json:"transportLayer"`
 }
 
 // Build implements Buildable.
@@ -612,6 +683,7 @@ func (v *ProxyConfig) Build() (*internet.ProxyConfig, error) {
 		return nil, newError("Proxy tag is not set.")
 	}
 	return &internet.ProxyConfig{
-		Tag: v.Tag,
+		Tag:                 v.Tag,
+		TransportLayerProxy: v.TransportLayerProxy,
 	}, nil
 }
