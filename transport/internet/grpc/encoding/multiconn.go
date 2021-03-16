@@ -8,9 +8,11 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
+	"google.golang.org/grpc/peer"
 )
 
 type MultiHunkConn interface {
+	Context() context.Context
 	Send(*MultiHunk) error
 	Recv() (*MultiHunk, error)
 	SendMsg(m interface{}) error
@@ -30,11 +32,23 @@ func NewMultiHunkReadWriter(hc MultiHunkConn, cancel context.CancelFunc) *MultiH
 }
 
 func NewMultiHunkConn(hc MultiHunkConn, cancel context.CancelFunc) net.Conn {
+	var rAddr net.Addr
+	pr, ok := peer.FromContext(hc.Context())
+	if ok {
+		rAddr = pr.Addr
+	} else {
+		rAddr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: 0,
+		}
+	}
+
 	wrc := NewMultiHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(
 		cnc.ConnectionInputMulti(wrc),
 		cnc.ConnectionOutputMulti(wrc),
 		cnc.ConnectionOnClose(wrc),
+		cnc.ConnectionRemoteAddr(rAddr),
 	)
 }
 
