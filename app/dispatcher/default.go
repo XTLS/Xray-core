@@ -196,7 +196,7 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 			return true
 		}
 		if fakeDNSEngine != nil && protocolString != "bittorrent" && p == "fakedns" &&
-			fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
+			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
 			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
 			return true
 		}
