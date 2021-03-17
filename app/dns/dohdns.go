@@ -61,7 +61,8 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, clientIP net.
 				return nil, err
 			}
 
-			dispatcherCtx = session.ContextWithContent(dispatcherCtx, &session.Content{Protocol: "tls"})
+			dispatcherCtx = session.ContextWithContent(dispatcherCtx, session.ContentFromContext(ctx))
+			dispatcherCtx = session.ContextWithInbound(dispatcherCtx, session.InboundFromContext(ctx))
 			dispatcherCtx = log.ContextWithAccessMessage(dispatcherCtx, &log.AccessMessage{
 				From:   "DoH",
 				To:     s.dohURL,
