@@ -5,10 +5,11 @@ import (
 	"io"
 	"net"
 
+	"google.golang.org/grpc/peer"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
-	"google.golang.org/grpc/peer"
 )
 
 type MultiHunkConn interface {
