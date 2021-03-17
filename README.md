@@ -23,6 +23,7 @@
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
+  - `brew install xray`
   - [Repository 0](https://github.com/N4FA/homebrew-xray)
   - [Repository 1](https://github.com/xiruizhao/homebrew-xray)
 
