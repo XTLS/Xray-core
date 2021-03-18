@@ -2,11 +2,12 @@ package dns
 
 import (
 	"context"
-	"github.com/xtls/xray-core/transport/internet"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/xtls/xray-core/transport/internet"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
@@ -32,10 +33,10 @@ type ClassicNameServer struct {
 	udpServer *udp.Dispatcher
 	cleanup   *task.Periodic
 	reqID     uint32
-	clientIP  net.IP
 }
 
-func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, clientIP net.IP) *ClassicNameServer {
+// NewClassicNameServer creates udp server object for remote resolving.
+func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher) *ClassicNameServer {
 	// default to 53 if unspecific
 	if address.Port == 0 {
 		address.Port = net.Port(53)
@@ -45,7 +46,6 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		address:  address,
 		ips:      make(map[string]record),
 		requests: make(map[uint16]dnsRequest),
-		clientIP: clientIP,
 		pub:      pubsub.NewService(),
 		name:     strings.ToUpper(address.String()),
 	}
@@ -58,10 +58,12 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 	return s
 }
 
+// Name implements Server.
 func (s *ClassicNameServer) Name() string {
 	return s.name
 }
 
+// Cleanup clears expired items from cache
 func (s *ClassicNameServer) Cleanup() error {
 	now := time.Now()
 	s.Lock()
@@ -103,6 +105,7 @@ func (s *ClassicNameServer) Cleanup() error {
 	return nil
 }
 
+// HandleResponse handles udp response packet from remote DNS server.
 func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_proto.Packet) {
 	ipRec, err := parseResponse(packet.Payload.Bytes())
 	if err != nil {
@@ -180,10 +183,10 @@ func (s *ClassicNameServer) addPendingRequest(req *dnsRequest) {
 	s.requests[id] = *req
 }
 
-func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option dns_feature.IPOption) {
+func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
 	newError(s.name, " querying DNS for: ", domain).AtDebug().WriteToLog(session.ExportIDToError(ctx))
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
 
 	for _, req := range reqs {
 		s.addPendingRequest(req)
@@ -234,7 +237,7 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 	}
 
 	if len(ips) > 0 {
-		return toNetIP(ips), nil
+		return toNetIP(ips)
 	}
 
 	if lastErr != nil {
@@ -245,14 +248,17 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 }
 
 // QueryIP implements Server.
-func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, error) {
+func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) {
 	fqdn := Fqdn(domain)
 
-	ips, err := s.findIPsForDomain(fqdn, option)
-	if err != errRecordNotFound {
-		newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
-		log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
-		return ips, err
+	if disableCache {
+		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
+	} else {
+		ips, err := s.findIPsForDomain(fqdn, option)
+		if err != errRecordNotFound {
+			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			return ips, err
+		}
 	}
 
 	// ipv4 and ipv6 belong to different subscription groups
@@ -281,7 +287,7 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option d
 		}
 		close(done)
 	}()
-	s.sendQuery(ctx, fqdn, option)
+	s.sendQuery(ctx, fqdn, clientIP, option)
 	start := time.Now()
 
 	for {
