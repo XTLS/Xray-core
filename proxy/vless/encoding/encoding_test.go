@@ -52,7 +52,11 @@ func TestRequestSerialization(t *testing.T) {
 	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {
 		t.Error(r)
 	}
-	if r := cmp.Diff(actualAddons, expectedAddons); r != "" {
+
+	addonsComparer := func(x, y *Addons) bool {
+		return (x.Flow == y.Flow) && (cmp.Equal(x.Seed, y.Seed))
+	}
+	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
 		t.Error(r)
 	}
 }
@@ -120,7 +124,11 @@ func TestMuxRequest(t *testing.T) {
 	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {
 		t.Error(r)
 	}
-	if r := cmp.Diff(actualAddons, expectedAddons); r != "" {
+
+	addonsComparer := func(x, y *Addons) bool {
+		return (x.Flow == y.Flow) && (cmp.Equal(x.Seed, y.Seed))
+	}
+	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
 		t.Error(r)
 	}
 }
