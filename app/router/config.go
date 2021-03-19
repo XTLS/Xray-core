@@ -73,7 +73,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			if err != nil {
 				return nil, newError("failed to build domain condition with MphDomainMatcher").Base(err)
 			}
-			newError("MphDomainMatcher is enabled for ", len(rr.Domain), "domain rules(s)").AtDebug().WriteToLog()
+			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
 			conds.Add(matcher)
 		case "linear":
 			fallthrough
