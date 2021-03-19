@@ -94,6 +94,10 @@ func (g *MphMatcherGroup) Build() {
 		g.ac.Build()
 	}
 	keyLen := len(*g.ruleMap)
+	if keyLen == 0 {
+		keyLen = 1
+		(*g.ruleMap)["empty___"] = RollingHash("empty___")
+	}
 	g.level0 = make([]uint32, nextPow2(keyLen/4))
 	g.level0Mask = len(g.level0) - 1
 	g.level1 = make([]uint32, nextPow2(keyLen))
