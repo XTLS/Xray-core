@@ -37,12 +37,27 @@ type ownLinkVerifier interface {
 
 type Handler struct {
 	client          dns.Client
+	ipv4Lookup      dns.IPv4Lookup
+	ipv6Lookup      dns.IPv6Lookup
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client) error {
 	h.client = dnsClient
+
+	if ipv4lookup, ok := dnsClient.(dns.IPv4Lookup); ok {
+		h.ipv4Lookup = ipv4lookup
+	} else {
+		return newError("dns.Client doesn't implement IPv4Lookup")
+	}
+
+	if ipv6lookup, ok := dnsClient.(dns.IPv6Lookup); ok {
+		h.ipv6Lookup = ipv6lookup
+	} else {
+		return newError("dns.Client doesn't implement IPv6Lookup")
+	}
+
 	if v, ok := dnsClient.(ownLinkVerifier); ok {
 		h.ownLinkVerifier = v
 	}
@@ -199,19 +214,18 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 
 	var ttl uint32 = 600
 
+	// Do NOT skip FakeDNS
+	if c, ok := h.client.(dns.ClientWithIPOption); ok {
+		c.SetFakeDNSOption(true)
+	} else {
+		newError("dns.Client doesn't implement ClientWithIPOption")
+	}
+
 	switch qType {
 	case dnsmessage.TypeA:
-		ips, err = h.client.LookupIP(domain, dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: true,
-		})
+		ips, err = h.ipv4Lookup.LookupIPv4(domain)
 	case dnsmessage.TypeAAAA:
-		ips, err = h.client.LookupIP(domain, dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: true,
-		})
+		ips, err = h.ipv6Lookup.LookupIPv6(domain)
 	}
 
 	rcode := dns.RCodeFromError(err)

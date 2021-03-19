@@ -24,6 +24,7 @@ type DNS struct {
 	sync.Mutex
 	tag           string
 	disableCache  bool
+	ipOption      *dns.IPOption
 	hosts         *StaticHosts
 	clients       []*Client
 	ctx           context.Context
@@ -52,6 +53,28 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		clientIP = net.IP(config.ClientIp)
 	default:
 		return nil, newError("unexpected client IP length ", len(config.ClientIp))
+	}
+
+	var ipOption *dns.IPOption
+	switch config.QueryStrategy {
+	case QueryStrategy_USE_IP:
+		ipOption = &dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: true,
+			FakeEnable: false,
+		}
+	case QueryStrategy_USE_IP4:
+		ipOption = &dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+			FakeEnable: false,
+		}
+	case QueryStrategy_USE_IP6:
+		ipOption = &dns.IPOption{
+			IPv4Enable: false,
+			IPv6Enable: true,
+			FakeEnable: false,
+		}
 	}
 
 	hosts, err := NewStaticHosts(config.StaticHosts, config.Hosts)
@@ -110,6 +133,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	return &DNS{
 		tag:           tag,
 		hosts:         hosts,
+		ipOption:      ipOption,
 		clients:       clients,
 		ctx:           ctx,
 		domainMatcher: domainMatcher,
@@ -140,7 +164,33 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 }
 
 // LookupIP implements dns.Client.
-func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
+func (s *DNS) LookupIP(domain string) ([]net.IP, error) {
+	return s.lookupIPInternal(domain, dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+		FakeEnable: false,
+	})
+}
+
+// LookupIPv4 implements dns.IPv4Lookup.
+func (s *DNS) LookupIPv4(domain string) ([]net.IP, error) {
+	return s.lookupIPInternal(domain, dns.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: false,
+		FakeEnable: false,
+	})
+}
+
+// LookupIPv6 implements dns.IPv6Lookup.
+func (s *DNS) LookupIPv6(domain string) ([]net.IP, error) {
+	return s.lookupIPInternal(domain, dns.IPOption{
+		IPv4Enable: false,
+		IPv6Enable: true,
+		FakeEnable: false,
+	})
+}
+
+func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, error) {
 	if domain == "" {
 		return nil, newError("empty domain name")
 	}
@@ -186,6 +236,22 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	}
 
 	return nil, newError("returning nil for domain ", domain).Base(errors.Combine(errs...))
+}
+
+// GetIPOption implements ClientWithIPOption.
+func (s *DNS) GetIPOption() *dns.IPOption {
+	return s.ipOption
+}
+
+// SetQueryOption implements ClientWithIPOption.
+func (s *DNS) SetQueryOption(isIPv4Enable, isIPv6Enable bool) {
+	s.ipOption.IPv4Enable = isIPv4Enable
+	s.ipOption.IPv6Enable = isIPv6Enable
+}
+
+// SetFakeDNSOption implements ClientWithIPOption.
+func (s *DNS) SetFakeDNSOption(isFakeEnable bool) {
+	s.ipOption.FakeEnable = isFakeEnable
 }
 
 func (s *DNS) sortClients(domain string) []*Client {

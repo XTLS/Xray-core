@@ -15,11 +15,23 @@ type LocalNameServer struct {
 
 // QueryIP implements Server.
 func (s *LocalNameServer) QueryIP(_ context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) ([]net.IP, error) {
-	if option.IPv4Enable || option.IPv6Enable {
-		return s.client.LookupIP(domain, option)
+	var ips []net.IP
+	var err error
+
+	switch {
+	case option.IPv4Enable && option.IPv6Enable:
+		ips, err = s.client.LookupIP(domain)
+	case option.IPv4Enable:
+		ips, err = s.client.LookupIPv4(domain)
+	case option.IPv6Enable:
+		ips, err = s.client.LookupIPv6(domain)
 	}
 
-	return nil, newError("neither IPv4 nor IPv6 is enabled")
+	if len(ips) > 0 {
+		newError("Localhost got answer: ", domain, " -> ", ips).AtInfo().WriteToLog()
+	}
+
+	return ips, err
 }
 
 // Name implements Server.

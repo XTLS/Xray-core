@@ -63,30 +63,27 @@ func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, l
 		return nil, nil
 	}
 
-	var option = dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
+	if c, ok := d.dns.(dns.ClientWithIPOption); ok {
+		c.SetFakeDNSOption(false) // Skip FakeDNS
+	} else {
+		newError("DNS client doesn't implement ClientWithIPOption")
 	}
 
+	var lookupFunc func(string) ([]net.IP, error) = d.dns.LookupIP
 	switch {
 	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
+		if lookupIPv4, ok := d.dns.(dns.IPv4Lookup); ok {
+			lookupFunc = lookupIPv4.LookupIPv4
 		}
 	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
+		if lookupIPv6, ok := d.dns.(dns.IPv6Lookup); ok {
+			lookupFunc = lookupIPv6.LookupIPv6
 		}
 	case strategy == DomainStrategy_AS_IS:
 		return nil, nil
 	}
 
-	return d.dns.LookupIP(domain, option)
+	return lookupFunc(domain)
 }
 
 func (d *DefaultSystemDialer) doLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {

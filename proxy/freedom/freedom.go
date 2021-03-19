@@ -59,26 +59,24 @@ func (h *Handler) policy() policy.Session {
 }
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	var option dns.IPOption = dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
+	if c, ok := h.dns.(dns.ClientWithIPOption); ok {
+		c.SetFakeDNSOption(false) // Skip FakeDNS
+	} else {
+		newError("DNS client doesn't implement ClientWithIPOption")
 	}
+
+	var lookupFunc func(string) ([]net.IP, error) = h.dns.LookupIP
 	if h.config.DomainStrategy == Config_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()) {
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
+		if lookupIPv4, ok := h.dns.(dns.IPv4Lookup); ok {
+			lookupFunc = lookupIPv4.LookupIPv4
 		}
 	} else if h.config.DomainStrategy == Config_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()) {
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
+		if lookupIPv6, ok := h.dns.(dns.IPv6Lookup); ok {
+			lookupFunc = lookupIPv6.LookupIPv6
 		}
 	}
 
-	ips, err := h.dns.LookupIP(domain, option)
+	ips, err := lookupFunc(domain)
 	if err != nil {
 		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}

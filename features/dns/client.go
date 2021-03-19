@@ -21,7 +21,35 @@ type Client interface {
 	features.Feature
 
 	// LookupIP returns IP address for the given domain. IPs may contain IPv4 and/or IPv6 addresses.
-	LookupIP(domain string, option IPOption) ([]net.IP, error)
+	LookupIP(domain string) ([]net.IP, error)
+}
+
+// IPv4Lookup is an optional feature for querying IPv4 addresses only.
+//
+// xray:api:beta
+type IPv4Lookup interface {
+	LookupIPv4(domain string) ([]net.IP, error)
+}
+
+// IPv6Lookup is an optional feature for querying IPv6 addresses only.
+//
+// xray:api:beta
+type IPv6Lookup interface {
+	LookupIPv6(domain string) ([]net.IP, error)
+}
+
+// ClientWithIPOption is an optional feature for querying DNS information.
+//
+// xray:api:beta
+type ClientWithIPOption interface {
+	// GetIPOption returns IPOption for the DNS client.
+	GetIPOption() *IPOption
+
+	// SetQueryOption sets IPv4Enable and IPv6Enable for the DNS client.
+	SetQueryOption(isIPv4Enable, isIPv6Enable bool)
+
+	// SetFakeDNSOption sets FakeEnable option for DNS client.
+	SetFakeDNSOption(isFakeEnable bool)
 }
 
 // ClientType returns the type of Client interface. Can be used for implementing common.HasType.

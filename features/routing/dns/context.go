@@ -26,11 +26,35 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 	}
 
 	if domain := ctx.GetTargetDomain(); len(domain) != 0 {
-		ips, err := ctx.dnsClient.LookupIP(domain, dns.IPOption{
+		var lookupFunc func(string) ([]net.IP, error) = ctx.dnsClient.LookupIP
+		ipOption := &dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
-			FakeEnable: false,
-		})
+		}
+
+		if c, ok := ctx.dnsClient.(dns.ClientWithIPOption); ok {
+			ipOption = c.GetIPOption()
+			c.SetFakeDNSOption(false) // Skip FakeDNS.
+		} else {
+			newError("ctx.dnsClient doesn't implement ClientWithIPOption").AtDebug().WriteToLog()
+		}
+
+		switch {
+		case ipOption.IPv4Enable && !ipOption.IPv6Enable:
+			if lookupIPv4, ok := ctx.dnsClient.(dns.IPv4Lookup); ok {
+				lookupFunc = lookupIPv4.LookupIPv4
+			} else {
+				newError("ctx.dnsClient doesn't implement IPv4Lookup. Use LookupIP instead.").AtDebug().WriteToLog()
+			}
+		case !ipOption.IPv4Enable && ipOption.IPv6Enable:
+			if lookupIPv6, ok := ctx.dnsClient.(dns.IPv6Lookup); ok {
+				lookupFunc = lookupIPv6.LookupIPv6
+			} else {
+				newError("ctx.dnsClient doesn't implement IPv6Lookup. Use LookupIP instead.").AtDebug().WriteToLog()
+			}
+		}
+
+		ips, err := lookupFunc(domain)
 		if err == nil {
 			ctx.resolvedIPs = ips
 			return ips
