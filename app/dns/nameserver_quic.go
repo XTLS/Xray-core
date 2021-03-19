@@ -20,7 +20,6 @@ import (
 	"github.com/xtls/xray-core/common/signal/pubsub"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -175,7 +174,6 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 			if inbound := session.InboundFromContext(ctx); inbound != nil {
 				dnsCtx = session.ContextWithInbound(dnsCtx, inbound)
 			}
-			dnsCtx = internet.ContextWithLookupDomain(dnsCtx, internet.LookupDomainFromContext(ctx))
 			dnsCtx = session.ContextWithContent(dnsCtx, &session.Content{
 				Protocol:       "quic",
 				SkipDNSResolve: true,

@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -195,7 +193,6 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, client
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			udpCtx = session.ContextWithInbound(udpCtx, inbound)
 		}
-		udpCtx = internet.ContextWithLookupDomain(udpCtx, internet.LookupDomainFromContext(ctx))
 		udpCtx = session.ContextWithContent(udpCtx, &session.Content{
 			Protocol: "dns",
 		})
@@ -257,6 +254,7 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
 			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 			return ips, err
 		}
 	}

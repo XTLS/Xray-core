@@ -80,6 +80,12 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher) (*DoHNameServ
 			if err != nil {
 				return nil, err
 			}
+			log.Record(&log.AccessMessage{
+				From:   "DoH",
+				To:     s.dohURL,
+				Status: log.AccessAccepted,
+				Detour: "local",
+			})
 
 			cc := common.ChainedClosable{}
 			if cw, ok := link.Writer.(common.Closable); ok {
@@ -372,6 +378,7 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
 			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 			return ips, err
 		}
 	}
