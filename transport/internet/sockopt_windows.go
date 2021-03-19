@@ -21,7 +21,7 @@ func setTFO(fd syscall.Handle, tfo int32) error {
 }
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		if err := setTFO(syscall.Handle(fd), config.Tfo); err != nil {
 			return err
 		}
@@ -32,7 +32,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 }
 
 func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig) error {
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		if err := setTFO(syscall.Handle(fd), config.Tfo); err != nil {
 			return err
 		}

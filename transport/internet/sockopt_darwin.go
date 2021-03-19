@@ -14,7 +14,7 @@ const (
 )
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		tfo := config.Tfo
 		if tfo > 0 {
 			tfo = TCP_FASTOPEN_CLIENT
@@ -30,7 +30,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 }
 
 func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig) error {
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		tfo := config.Tfo
 		if tfo > 0 {
 			tfo = TCP_FASTOPEN_SERVER

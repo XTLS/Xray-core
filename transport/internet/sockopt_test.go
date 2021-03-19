@@ -17,14 +17,15 @@ func TestTCPFastOpen(t *testing.T) {
 			return b
 		},
 	}
-	dest, err := tcpServer.StartContext(context.Background(), &SocketConfig{Tfo: 256})
+	dest, err := tcpServer.StartContext(context.Background(), &SocketConfig{Tfo: 256, SetTfo: true})
 	common.Must(err)
 	defer tcpServer.Close()
 
 	ctx := context.Background()
 	dialer := DefaultSystemDialer{}
 	conn, err := dialer.Dial(ctx, nil, dest, &SocketConfig{
-		Tfo: 1,
+		Tfo:    1,
+		SetTfo: true,
 	})
 	common.Must(err)
 	defer conn.Close()

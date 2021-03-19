@@ -66,6 +66,7 @@ message SocketConfig {
 
   // TFO is the state of TFO settings.
   int32 tfo = 2;
+  bool set_tfo = 10;
 
   enum TProxyMode {
     // TProxy is off.

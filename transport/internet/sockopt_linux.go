@@ -47,7 +47,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		}
 	}
 
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		tfo := int(config.Tfo)
 		if tfo > 0 {
 			tfo = 1
@@ -74,7 +74,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			return newError("failed to set SO_MARK").Base(err)
 		}
 	}
-	if isTCPSocket(network) {
+	if config.SetTfo && isTCPSocket(network) {
 		if config.Tfo >= 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.SOL_TCP, TCP_FASTOPEN, int(config.Tfo)); err != nil {
 				return newError("failed to set TCP_FASTOPEN=", config.Tfo).Base(err)

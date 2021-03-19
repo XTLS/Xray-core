@@ -517,6 +517,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	return &internet.SocketConfig{
 		Mark:                c.Mark,
 		Tfo:                 tfo,
+		SetTfo:              tfo >= 0,
 		Tproxy:              tproxy,
 		DomainStrategy:      dStrategy,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
