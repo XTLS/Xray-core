@@ -13,12 +13,14 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/pubsub"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -173,10 +175,16 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 			if inbound := session.InboundFromContext(ctx); inbound != nil {
 				dnsCtx = session.ContextWithInbound(dnsCtx, inbound)
 			}
-
+			dnsCtx = internet.ContextWithLookupDomain(dnsCtx, internet.LookupDomainFromContext(ctx))
 			dnsCtx = session.ContextWithContent(dnsCtx, &session.Content{
 				Protocol:       "quic",
 				SkipDNSResolve: true,
+			})
+			dnsCtx = log.ContextWithAccessMessage(dnsCtx, &log.AccessMessage{
+				From:   "DoQ",
+				To:     s.name,
+				Status: log.AccessAccepted,
+				Reason: "",
 			})
 
 			var cancel context.CancelFunc
@@ -273,6 +281,7 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
 			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
 			return ips, err
 		}
 	}
@@ -304,10 +313,12 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		close(done)
 	}()
 	s.sendQuery(ctx, fqdn, clientIP, option)
+	start := time.Now()
 
 	for {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
+			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSQueried, time.Since(start), err})
 			return ips, err
 		}
 
