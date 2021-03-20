@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/cmdarg"
@@ -112,7 +113,7 @@ func dirExists(file string) bool {
 }
 
 func getRegepxByFormat() string {
-	switch *format {
+	switch strings.ToLower(*format) {
 	case "json":
 		return `^.+\.(json)$`
 	case "toml":
