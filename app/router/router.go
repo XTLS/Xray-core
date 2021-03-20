@@ -135,7 +135,7 @@ func (r *Router) AddRoutingRule(ctx context.Context, routingRule interface{}) er
 	defer r.access.Unlock()
 
 	r.rules[rule.Tag] = rule
-	newError("Rule has been added through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("RoutingRule has been added through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
@@ -157,7 +157,7 @@ func (r *Router) AlterRoutingRule(ctx context.Context, tag string, routingRule i
 
 	rule.Tag = tag
 	r.rules[tag] = rule
-	newError("The rules have been modified through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("The RoutingRule have been modified through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
@@ -170,7 +170,7 @@ func (r *Router) RemoveRoutingRule(ctx context.Context, tag string) error {
 	defer r.access.Unlock()
 
 	delete(r.rules, tag)
-	newError("The rule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("The RoutingRule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
@@ -185,7 +185,7 @@ func (r *Router) AddBalancingRule(ctx context.Context, balancingRule interface{}
 	defer r.access.Unlock()
 
 	r.balancers[br.Tag] = balancer
-	newError("Rule has been added through the API. [", br.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("BalancingRule has been added through the API. [", br.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
@@ -203,8 +203,15 @@ func (r *Router) AlterBalancingRule(ctx context.Context, tag string, balancingRu
 	r.access.Lock()
 	defer r.access.Unlock()
 
+	// Update RoutingRle bind Balancing
+	for _, v := range r.rules {
+		if v.Balancer == r.balancers[tag] {
+			v.Balancer = balancer
+		}
+	}
+
 	r.balancers[tag] = balancer
-	newError("The rules have been modified through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("The BalancingRule have been modified through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
@@ -216,8 +223,15 @@ func (r *Router) RemoveBalancingRule(ctx context.Context, tag string) error {
 	r.access.Lock()
 	defer r.access.Unlock()
 
+	// Update RoutingRle bind Balancing
+	for _, v := range r.rules {
+		if v.Balancer == r.balancers[tag] {
+			v.Balancer = nil
+		}
+	}
+
 	delete(r.balancers, tag)
-	newError("The rule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	newError("The BalancingRule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
