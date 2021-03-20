@@ -115,9 +115,9 @@ func dirExists(file string) bool {
 func getRegepxByFormat() string {
 	switch strings.ToLower(*format) {
 	case "json":
-		return `^.+\.(json)$`
+		return `^.+\.json$`
 	case "toml":
-		return `^.+\.(toml)$`
+		return `^.+\.toml$`
 	case "yaml", "yml":
 		return `^.+\.(yaml|yml)$`
 	default:
