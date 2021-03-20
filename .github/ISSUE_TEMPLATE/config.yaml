@@ -1,13 +1,9 @@
 contact_links:
   - name: 加入 Telegram 群组 / Join Telegram Group
     url: https://t.me/projectXray
-    about: 使用问题请加入群组讨论 / For usage problems please chat in the group
   - name: 官方文档 / Official Document
     url: https://xtls.github.io/
-    about: 配置问题请查阅文档 / For configuration problems please the document
   - name: 安装脚本 / Installing Script
     url: https://github.com/XTLS/Xray-install
-    about: 用于安装 Xray 的脚本 /  Script for installing Xray in operating system
   - name: 示例配置 / Example Config
     url: https://github.com/XTLS/Xray-examples
-    about: Xray 的一些使用示例 / Some examples of uses for Xray-core
