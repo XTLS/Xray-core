@@ -2,7 +2,6 @@ package router_test
 
 import (
 	"context"
-	"github.com/xtls/xray-core/core"
 	"testing"
 
 	"github.com/golang/mock/gomock"
