@@ -7,6 +7,7 @@ option java_package = "com.xray.app.router.command";
 option java_multiple_files = true;
 
 import "common/net/network.proto";
+import "app/router/config.proto";
 
 // RoutingContext is the context with information relative to routing process.
 // It conforms to the structure of xray.features.routing.Context and
@@ -24,6 +25,7 @@ message RoutingContext {
   map<string, string> Attributes = 10;
   repeated string OutboundGroupTags = 11;
   string OutboundTag = 12;
+  string Tag = 13;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
@@ -60,10 +62,49 @@ message TestRouteRequest {
   bool PublishResult = 3;
 }
 
+message AddRoutingRuleRequest{
+  xray.app.router.RoutingRule routingRule = 1;
+}
+
+message AddRoutingRuleResponse {}
+
+message AlterRoutingRuleRequest{
+  string tag = 1;
+  xray.app.router.RoutingRule routingRule = 2;
+}
+message AlterRoutingRuleResponse {}
+
+message RemoveRoutingRuleRequest{
+  string tag = 1;
+}
+message RemoveRoutingRuleResponse {}
+
+message AddBalancingRuleRequest{
+  xray.app.router.BalancingRule balancing = 1;
+}
+
+message AddBalancingRuleResponse {}
+
+message AlterBalancingRuleRequest{
+  string tag = 1;
+  xray.app.router.BalancingRule balancing = 2;
+}
+message AlterBalancingRuleResponse {}
+
+message RemoveBalancingRuleRequest{
+  string tag = 1;
+}
+message RemoveBalancingRuleResponse {}
+
 service RoutingService {
-  rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
-      returns (stream RoutingContext) {}
+  rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest) returns (stream RoutingContext) {}
   rpc TestRoute(TestRouteRequest) returns (RoutingContext) {}
+  rpc AddRoutingRule(AddRoutingRuleRequest) returns (AddRoutingRuleResponse){}
+  rpc AlterRoutingRule(AlterRoutingRuleRequest) returns (AlterRoutingRuleResponse){}
+  rpc RemoveRoutingRule(RemoveRoutingRuleRequest) returns (RemoveRoutingRuleResponse){}
+  rpc AddBalancingRule(AddBalancingRuleRequest) returns (AddBalancingRuleResponse){}
+  rpc AlterBalancingRule(AlterBalancingRuleRequest) returns (AlterBalancingRuleResponse){}
+  rpc RemoveBalancingRule(RemoveBalancingRuleRequest) returns (RemoveBalancingRuleResponse){}
 }
 
 message Config {}

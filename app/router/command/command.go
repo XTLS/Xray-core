@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	"github.com/xtls/xray-core/features/outbound"
 	"time"
 
 	"google.golang.org/grpc"
@@ -16,6 +17,8 @@ import (
 
 // routingServer is an implementation of RoutingService.
 type routingServer struct {
+	s            *core.Instance
+	ohm          outbound.Manager
 	router       routing.Router
 	routingStats stats.Channel
 }
@@ -41,6 +44,82 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 		s.routingStats.Publish(ctx, route)
 	}
 	return AsProtobufMessage(request.FieldSelectors)(route), nil
+}
+
+func (s *routingServer) AddRoutingRule(ctx context.Context, request *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
+	if request.RoutingRule == nil {
+		return nil, newError("Invalid RoutingRule request.")
+	}
+	err := s.router.AddRoutingRule(ctx, request.RoutingRule)
+	if err != nil {
+		return nil, err
+	}
+	return &AddRoutingRuleResponse{}, nil
+}
+
+func (s *routingServer) AlterRoutingRule(ctx context.Context, request *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
+	if request.RoutingRule == nil {
+		return nil, newError("Invalid RoutingRule request.")
+	}
+
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+
+	err := s.router.AlterRoutingRule(ctx, request.Tag, request.RoutingRule)
+	if err != nil {
+		return nil, err
+	}
+	return &AlterRoutingRuleResponse{}, nil
+}
+
+func (s *routingServer) RemoveRoutingRule(ctx context.Context, request *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.RemoveRoutingRule(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &RemoveRoutingRuleResponse{}, nil
+}
+
+func (s *routingServer) AddBalancingRule(ctx context.Context, request *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
+	if request.Balancing == nil {
+		return nil, newError("Invalid Balancing request.")
+	}
+
+	err := s.router.AddBalancingRule(ctx, request.Balancing, s.ohm)
+	if err != nil {
+		return nil, err
+	}
+	return &AddBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) AlterBalancingRule(ctx context.Context, request *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
+	if request.Balancing == nil {
+		return nil, newError("Invalid Balancing request.")
+	}
+
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.AlterBalancingRule(ctx, request.Tag, request.Balancing, s.ohm)
+	if err != nil {
+		return nil, err
+	}
+	return &AlterBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) RemoveBalancingRule(ctx context.Context, request *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.RemoveBalancingRule(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &RemoveBalancingRuleResponse{}, nil
 }
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {
@@ -80,15 +159,23 @@ type service struct {
 }
 
 func (s *service) Register(server *grpc.Server) {
-	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		rs := NewRoutingServer(router, nil)
-		RegisterRoutingServiceServer(server, rs)
+	rs := &routingServer{
+		s:            s.v,
+		ohm:          nil,
+		router:       nil,
+		routingStats: nil,
+	}
 
-		// For compatibility purposes
-		vCoreDesc := RoutingService_ServiceDesc
-		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
-		server.RegisterService(&vCoreDesc, rs)
+	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager, om outbound.Manager) {
+		rs.ohm = om
+		rs.router = router
 	}))
+
+	RegisterRoutingServiceServer(server, rs)
+	// For compatibility purposes
+	vCoreDesc := RoutingService_ServiceDesc
+	vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
+	server.RegisterService(&vCoreDesc, rs)
 }
 
 func init() {

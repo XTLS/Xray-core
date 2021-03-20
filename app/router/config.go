@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -47,15 +48,16 @@ func (l *CIDRList) Swap(i int, j int) {
 
 type Rule struct {
 	Tag       string
+	TargetTag string
 	Balancer  *Balancer
 	Condition Condition
 }
 
-func (r *Rule) GetTag() (string, error) {
+func (r *Rule) GetTargetTag() (string, error) {
 	if r.Balancer != nil {
 		return r.Balancer.PickOutbound()
 	}
-	return r.Tag, nil
+	return r.TargetTag, nil
 }
 
 // Apply checks rule matching of current routing context.
@@ -143,6 +145,42 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	return conds, nil
+}
+
+// Build RoutingRule translates into Rule.
+func (rr *RoutingRule) Build(r *Router) (*Rule, error) {
+	tag := rr.Tag
+	rule := &Rule{
+		Tag: tag,
+	}
+
+	if len(rule.Tag) > 0 {
+		if _, found := r.rules[tag]; found {
+			return nil, newError("existing tag found: " + tag)
+		}
+	} else {
+		u := uuid.New()
+		rule.Tag = u.String()
+	}
+
+	btag := rr.GetBalancingTag()
+	if len(btag) > 0 {
+		brule, found := r.balancers[btag]
+		if !found {
+			return nil, newError("balancer ", btag, " not found")
+		}
+		rule.Balancer = brule
+	} else {
+		rule.TargetTag = rr.GetTargetTag().(*RoutingRule_OutboundTag).OutboundTag
+	}
+
+	cond, err := rr.BuildCondition()
+	if err != nil {
+		return nil, err
+	}
+
+	rule.Condition = cond
+	return rule, nil
 }
 
 func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
