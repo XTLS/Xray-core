@@ -4,13 +4,13 @@ package command
 
 import (
 	"context"
-	"github.com/xtls/xray-core/features/outbound"
 	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 )

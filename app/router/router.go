@@ -4,6 +4,8 @@ package router
 
 import (
 	"context"
+	"sync"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/uuid"
@@ -12,14 +14,13 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	routing_dns "github.com/xtls/xray-core/features/routing/dns"
-	"sync"
 )
 
 // Router is an implementation of routing.Router.
 type Router struct {
 	access         sync.RWMutex
 	domainStrategy Config_DomainStrategy
-	rules          map[string]*Rule
+	rules          []*Rule
 	balancers      map[string]*Balancer
 	dns            dns.Client
 	Tag            string
@@ -48,7 +49,7 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 		r.balancers[rule.Tag] = balancer
 	}
 
-	r.rules = make(map[string]*Rule)
+	r.rules = make([]*Rule, 0, len(config.Rule))
 	for _, rule := range config.Rule {
 		cond, err := rule.BuildCondition()
 		if err != nil {
@@ -75,7 +76,7 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 			rr.Tag = u.String()
 		}
 
-		r.rules[rr.Tag] = rr
+		r.rules = append(r.rules, rr)
 	}
 
 	return nil
@@ -124,9 +125,29 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	return nil, ctx, common.ErrNoClue
 }
 
+// FindRule
+func (r *Router) FindRule(tag string) (idx int, rule *Rule) {
+	idx = -1
+	for k, v := range r.rules {
+		if v.Tag == tag {
+			idx = k
+			rule = v
+		}
+	}
+	return
+}
+
 // AddRoutingRule implement the manager interface.
 func (r *Router) AddRoutingRule(ctx context.Context, routingRule interface{}) error {
 	rr := routingRule.(*RoutingRule)
+
+	if len(rr.Tag) > 0 {
+		idx, _ := r.FindRule(rr.Tag)
+		if idx != -1 {
+			return newError("existing tag found: " + rr.Tag)
+		}
+	}
+
 	rule, err := rr.Build(r)
 	if err != nil {
 		return err
@@ -134,14 +155,15 @@ func (r *Router) AddRoutingRule(ctx context.Context, routingRule interface{}) er
 	r.access.Lock()
 	defer r.access.Unlock()
 
-	r.rules[rule.Tag] = rule
+	r.rules = append(r.rules, rule)
 	newError("RoutingRule has been added through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
 // AlterRoutingRule implement the manager interface.
 func (r *Router) AlterRoutingRule(ctx context.Context, tag string, routingRule interface{}) error {
-	if _, found := r.rules[tag]; !found {
+	idx, rule := r.FindRule(tag)
+	if idx == -1 {
 		return newError("tag not found: " + tag)
 	}
 
@@ -156,27 +178,33 @@ func (r *Router) AlterRoutingRule(ctx context.Context, tag string, routingRule i
 	defer r.access.Unlock()
 
 	rule.Tag = tag
-	r.rules[tag] = rule
+	r.rules[idx] = rule
 	newError("The RoutingRule have been modified through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
 // RemoveRoutingRule implement the manager interface.
 func (r *Router) RemoveRoutingRule(ctx context.Context, tag string) error {
-	if _, found := r.rules[tag]; !found {
+	idx, rule := r.FindRule(tag)
+	if idx == -1 {
 		return newError("tag not found: " + tag)
 	}
 	r.access.Lock()
 	defer r.access.Unlock()
 
-	delete(r.rules, tag)
-	newError("The RoutingRule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	// remove rule
+	r.rules = append(r.rules[:idx], r.rules[idx+1:]...)
+	newError("The RoutingRule has been removed through the API. [", rule.Tag, "] ").WriteToLog(session.ExportIDToError(ctx))
 	return nil
 }
 
 // AddBalancingRule implement the manager interface.
 func (r *Router) AddBalancingRule(ctx context.Context, balancingRule interface{}, om outbound.Manager) error {
 	br := balancingRule.(*BalancingRule)
+	if _, found := r.balancers[br.Tag]; found {
+		return newError("existing tag found: " + br.Tag)
+	}
+
 	balancer, err := br.Build(om)
 	if err != nil {
 		return err

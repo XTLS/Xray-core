@@ -150,17 +150,12 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 // Build RoutingRule translates into Rule.
 func (rr *RoutingRule) Build(r *Router) (*Rule, error) {
 	tag := rr.Tag
+	if len(tag) == 0 {
+		u := uuid.New()
+		tag = u.String()
+	}
 	rule := &Rule{
 		Tag: tag,
-	}
-
-	if len(rule.Tag) > 0 {
-		if _, found := r.rules[tag]; found {
-			return nil, newError("existing tag found: " + tag)
-		}
-	} else {
-		u := uuid.New()
-		rule.Tag = u.String()
 	}
 
 	btag := rr.GetBalancingTag()
