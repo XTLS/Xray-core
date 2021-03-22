@@ -178,6 +178,13 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
+
+	// Do NOT override domains with space or '*' or without any dot, eg "Mijia Cloud"
+	if strings.Contains(domain, " ") || strings.Contains(domain, "*") || !strings.Contains(domain, ".") {
+		newError("destination override ignores invalid domain [", domain, "]").WriteToLog(session.ExportIDToError(ctx))
+		return false
+	}
+
 	for _, d := range request.ExcludeForDomain {
 		if domain == d {
 			return false
