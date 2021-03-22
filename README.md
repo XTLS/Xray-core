@@ -22,9 +22,9 @@
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
-- Homebrew
-  - `brew install xray`
-  - [(Tap) Repository 0](https://github.com/xiruizhao/homebrew-xray)
+- Homebrew: `brew install xray`
+- Ansible
+  - [ansible-xray](https://github.com/xiruizhao/ansible-xray)
 
 ## Usage
 
