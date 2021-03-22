@@ -46,18 +46,20 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 	return AsProtobufMessage(request.FieldSelectors)(route), nil
 }
 
-func (s *routingServer) AddRoutingRule(ctx context.Context, request *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
+func (s *routingServer) AddRule(ctx context.Context, request *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
+	resp := new(AddRoutingRuleResponse)
 	if request.RoutingRule == nil {
-		return nil, newError("Invalid RoutingRule request.")
+		return resp, newError("Invalid RoutingRule request.")
 	}
-	err := s.router.AddRoutingRule(ctx, request.RoutingRule)
+
+	err := s.router.AddRule(ctx, request.Index, request.RoutingRule)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
-	return &AddRoutingRuleResponse{}, nil
+	return resp, nil
 }
 
-func (s *routingServer) AlterRoutingRule(ctx context.Context, request *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
+func (s *routingServer) AlterRule(ctx context.Context, request *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
 	if request.RoutingRule == nil {
 		return nil, newError("Invalid RoutingRule request.")
 	}
@@ -66,37 +68,49 @@ func (s *routingServer) AlterRoutingRule(ctx context.Context, request *AlterRout
 		return nil, newError("Invalid Tag.")
 	}
 
-	err := s.router.AlterRoutingRule(ctx, request.Tag, request.RoutingRule)
+	err := s.router.AlterRule(ctx, request.Tag, request.RoutingRule)
 	if err != nil {
 		return nil, err
 	}
 	return &AlterRoutingRuleResponse{}, nil
 }
 
-func (s *routingServer) RemoveRoutingRule(ctx context.Context, request *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
+func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
 	if len(request.Tag) == 0 {
 		return nil, newError("Invalid Tag.")
 	}
-	err := s.router.RemoveRoutingRule(ctx, request.Tag)
+	err := s.router.RemoveRule(ctx, request.Tag)
 	if err != nil {
 		return nil, err
 	}
 	return &RemoveRoutingRuleResponse{}, nil
 }
 
-func (s *routingServer) AddBalancingRule(ctx context.Context, request *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
+func (s *routingServer) SetRules(ctx context.Context, rules *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error) {
+	return nil, newError("not implement.")
+}
+
+func (s *routingServer) GetRules(ctx context.Context, request *GetRoutingRulesRequest) (*GetRoutingRulesResponse, error) {
+	return nil, newError("not implement.")
+}
+
+func (s *routingServer) GetRule(ctx context.Context, request *GetRoutingRuleRequest) (*GetRoutingRuleResponse, error) {
+	return nil, newError("not implement.")
+}
+
+func (s *routingServer) AddBalancer(ctx context.Context, request *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
 	if request.Balancing == nil {
 		return nil, newError("Invalid Balancing request.")
 	}
 
-	err := s.router.AddBalancingRule(ctx, request.Balancing, s.ohm)
+	err := s.router.AddBalancer(ctx, request.Balancing, s.ohm)
 	if err != nil {
 		return nil, err
 	}
 	return &AddBalancingRuleResponse{}, nil
 }
 
-func (s *routingServer) AlterBalancingRule(ctx context.Context, request *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
+func (s *routingServer) AlterBalancer(ctx context.Context, request *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
 	if request.Balancing == nil {
 		return nil, newError("Invalid Balancing request.")
 	}
@@ -104,22 +118,26 @@ func (s *routingServer) AlterBalancingRule(ctx context.Context, request *AlterBa
 	if len(request.Tag) == 0 {
 		return nil, newError("Invalid Tag.")
 	}
-	err := s.router.AlterBalancingRule(ctx, request.Tag, request.Balancing, s.ohm)
+	err := s.router.AlterBalancer(ctx, request.Tag, request.Balancing, s.ohm)
 	if err != nil {
 		return nil, err
 	}
 	return &AlterBalancingRuleResponse{}, nil
 }
 
-func (s *routingServer) RemoveBalancingRule(ctx context.Context, request *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
+func (s *routingServer) RemoveBalancer(ctx context.Context, request *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
 	if len(request.Tag) == 0 {
 		return nil, newError("Invalid Tag.")
 	}
-	err := s.router.RemoveBalancingRule(ctx, request.Tag)
+	err := s.router.RemoveBalancer(ctx, request.Tag)
 	if err != nil {
 		return nil, err
 	}
 	return &RemoveBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) GetBalancers(ctx context.Context, request *GetBalancerRequest) (*GetBalancerResponse, error) {
+	return nil, newError("not implement.")
 }
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {

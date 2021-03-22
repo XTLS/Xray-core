@@ -23,12 +23,18 @@ const _ = grpc.SupportPackageIsVersion6
 type RoutingServiceClient interface {
 	SubscribeRoutingStats(ctx context.Context, in *SubscribeRoutingStatsRequest, opts ...grpc.CallOption) (RoutingService_SubscribeRoutingStatsClient, error)
 	TestRoute(ctx context.Context, in *TestRouteRequest, opts ...grpc.CallOption) (*RoutingContext, error)
-	AddRoutingRule(ctx context.Context, in *AddRoutingRuleRequest, opts ...grpc.CallOption) (*AddRoutingRuleResponse, error)
-	AlterRoutingRule(ctx context.Context, in *AlterRoutingRuleRequest, opts ...grpc.CallOption) (*AlterRoutingRuleResponse, error)
-	RemoveRoutingRule(ctx context.Context, in *RemoveRoutingRuleRequest, opts ...grpc.CallOption) (*RemoveRoutingRuleResponse, error)
-	AddBalancingRule(ctx context.Context, in *AddBalancingRuleRequest, opts ...grpc.CallOption) (*AddBalancingRuleResponse, error)
-	AlterBalancingRule(ctx context.Context, in *AlterBalancingRuleRequest, opts ...grpc.CallOption) (*AlterBalancingRuleResponse, error)
-	RemoveBalancingRule(ctx context.Context, in *RemoveBalancingRuleRequest, opts ...grpc.CallOption) (*RemoveBalancingRuleResponse, error)
+	// AddRule When adding a routing rule, make sure that the new rule does not conflict with the API route, otherwise the API will not work properly
+	AddRule(ctx context.Context, in *AddRoutingRuleRequest, opts ...grpc.CallOption) (*AddRoutingRuleResponse, error)
+	AlterRule(ctx context.Context, in *AlterRoutingRuleRequest, opts ...grpc.CallOption) (*AlterRoutingRuleResponse, error)
+	RemoveRule(ctx context.Context, in *RemoveRoutingRuleRequest, opts ...grpc.CallOption) (*RemoveRoutingRuleResponse, error)
+	// SetRules Routing rules must be set to ensure that the API route must exist, otherwise the API will not work properly
+	SetRules(ctx context.Context, in *SetRoutingRulesRequest, opts ...grpc.CallOption) (*SetRoutingRulesResponse, error)
+	GetRules(ctx context.Context, in *GetRoutingRulesRequest, opts ...grpc.CallOption) (*GetRoutingRulesResponse, error)
+	GetRule(ctx context.Context, in *GetRoutingRuleRequest, opts ...grpc.CallOption) (*GetRoutingRuleResponse, error)
+	AddBalancer(ctx context.Context, in *AddBalancingRuleRequest, opts ...grpc.CallOption) (*AddBalancingRuleResponse, error)
+	AlterBalancer(ctx context.Context, in *AlterBalancingRuleRequest, opts ...grpc.CallOption) (*AlterBalancingRuleResponse, error)
+	RemoveBalancer(ctx context.Context, in *RemoveBalancingRuleRequest, opts ...grpc.CallOption) (*RemoveBalancingRuleResponse, error)
+	GetBalancers(ctx context.Context, in *GetBalancerRequest, opts ...grpc.CallOption) (*GetBalancerResponse, error)
 }
 
 type routingServiceClient struct {
@@ -80,54 +86,90 @@ func (c *routingServiceClient) TestRoute(ctx context.Context, in *TestRouteReque
 	return out, nil
 }
 
-func (c *routingServiceClient) AddRoutingRule(ctx context.Context, in *AddRoutingRuleRequest, opts ...grpc.CallOption) (*AddRoutingRuleResponse, error) {
+func (c *routingServiceClient) AddRule(ctx context.Context, in *AddRoutingRuleRequest, opts ...grpc.CallOption) (*AddRoutingRuleResponse, error) {
 	out := new(AddRoutingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AddRoutingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AddRule", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *routingServiceClient) AlterRoutingRule(ctx context.Context, in *AlterRoutingRuleRequest, opts ...grpc.CallOption) (*AlterRoutingRuleResponse, error) {
+func (c *routingServiceClient) AlterRule(ctx context.Context, in *AlterRoutingRuleRequest, opts ...grpc.CallOption) (*AlterRoutingRuleResponse, error) {
 	out := new(AlterRoutingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AlterRoutingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AlterRule", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *routingServiceClient) RemoveRoutingRule(ctx context.Context, in *RemoveRoutingRuleRequest, opts ...grpc.CallOption) (*RemoveRoutingRuleResponse, error) {
+func (c *routingServiceClient) RemoveRule(ctx context.Context, in *RemoveRoutingRuleRequest, opts ...grpc.CallOption) (*RemoveRoutingRuleResponse, error) {
 	out := new(RemoveRoutingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/RemoveRoutingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/RemoveRule", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *routingServiceClient) AddBalancingRule(ctx context.Context, in *AddBalancingRuleRequest, opts ...grpc.CallOption) (*AddBalancingRuleResponse, error) {
+func (c *routingServiceClient) SetRules(ctx context.Context, in *SetRoutingRulesRequest, opts ...grpc.CallOption) (*SetRoutingRulesResponse, error) {
+	out := new(SetRoutingRulesResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/SetRules", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) GetRules(ctx context.Context, in *GetRoutingRulesRequest, opts ...grpc.CallOption) (*GetRoutingRulesResponse, error) {
+	out := new(GetRoutingRulesResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/GetRules", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) GetRule(ctx context.Context, in *GetRoutingRuleRequest, opts ...grpc.CallOption) (*GetRoutingRuleResponse, error) {
+	out := new(GetRoutingRuleResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/GetRule", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) AddBalancer(ctx context.Context, in *AddBalancingRuleRequest, opts ...grpc.CallOption) (*AddBalancingRuleResponse, error) {
 	out := new(AddBalancingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AddBalancingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AddBalancer", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *routingServiceClient) AlterBalancingRule(ctx context.Context, in *AlterBalancingRuleRequest, opts ...grpc.CallOption) (*AlterBalancingRuleResponse, error) {
+func (c *routingServiceClient) AlterBalancer(ctx context.Context, in *AlterBalancingRuleRequest, opts ...grpc.CallOption) (*AlterBalancingRuleResponse, error) {
 	out := new(AlterBalancingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AlterBalancingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/AlterBalancer", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *routingServiceClient) RemoveBalancingRule(ctx context.Context, in *RemoveBalancingRuleRequest, opts ...grpc.CallOption) (*RemoveBalancingRuleResponse, error) {
+func (c *routingServiceClient) RemoveBalancer(ctx context.Context, in *RemoveBalancingRuleRequest, opts ...grpc.CallOption) (*RemoveBalancingRuleResponse, error) {
 	out := new(RemoveBalancingRuleResponse)
-	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/RemoveBalancingRule", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/RemoveBalancer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) GetBalancers(ctx context.Context, in *GetBalancerRequest, opts ...grpc.CallOption) (*GetBalancerResponse, error) {
+	out := new(GetBalancerResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.router.command.RoutingService/GetBalancers", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +180,18 @@ func (c *routingServiceClient) RemoveBalancingRule(ctx context.Context, in *Remo
 type RoutingServiceServer interface {
 	SubscribeRoutingStats(*SubscribeRoutingStatsRequest, RoutingService_SubscribeRoutingStatsServer) error
 	TestRoute(context.Context, *TestRouteRequest) (*RoutingContext, error)
-	AddRoutingRule(context.Context, *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error)
-	AlterRoutingRule(context.Context, *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error)
-	RemoveRoutingRule(context.Context, *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error)
-	AddBalancingRule(context.Context, *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error)
-	AlterBalancingRule(context.Context, *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error)
-	RemoveBalancingRule(context.Context, *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error)
+	// AddRule When adding a routing rule, make sure that the new rule does not conflict with the API route, otherwise the API will not work properly
+	AddRule(context.Context, *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error)
+	AlterRule(context.Context, *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error)
+	RemoveRule(context.Context, *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error)
+	// SetRules Routing rules must be set to ensure that the API route must exist, otherwise the API will not work properly
+	SetRules(context.Context, *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error)
+	GetRules(context.Context, *GetRoutingRulesRequest) (*GetRoutingRulesResponse, error)
+	GetRule(context.Context, *GetRoutingRuleRequest) (*GetRoutingRuleResponse, error)
+	AddBalancer(context.Context, *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error)
+	AlterBalancer(context.Context, *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error)
+	RemoveBalancer(context.Context, *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error)
+	GetBalancers(context.Context, *GetBalancerRequest) (*GetBalancerResponse, error)
 }
 
 // UnimplementedRoutingServiceServer can be embedded to have forward compatible implementations.
@@ -156,23 +204,35 @@ func (*UnimplementedRoutingServiceServer) SubscribeRoutingStats(*SubscribeRoutin
 func (*UnimplementedRoutingServiceServer) TestRoute(context.Context, *TestRouteRequest) (*RoutingContext, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestRoute not implemented")
 }
-func (*UnimplementedRoutingServiceServer) AddRoutingRule(context.Context, *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddRoutingRule not implemented")
+func (*UnimplementedRoutingServiceServer) AddRule(context.Context, *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddRule not implemented")
 }
-func (*UnimplementedRoutingServiceServer) AlterRoutingRule(context.Context, *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AlterRoutingRule not implemented")
+func (*UnimplementedRoutingServiceServer) AlterRule(context.Context, *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AlterRule not implemented")
 }
-func (*UnimplementedRoutingServiceServer) RemoveRoutingRule(context.Context, *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveRoutingRule not implemented")
+func (*UnimplementedRoutingServiceServer) RemoveRule(context.Context, *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveRule not implemented")
 }
-func (*UnimplementedRoutingServiceServer) AddBalancingRule(context.Context, *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddBalancingRule not implemented")
+func (*UnimplementedRoutingServiceServer) SetRules(context.Context, *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetRules not implemented")
 }
-func (*UnimplementedRoutingServiceServer) AlterBalancingRule(context.Context, *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AlterBalancingRule not implemented")
+func (*UnimplementedRoutingServiceServer) GetRules(context.Context, *GetRoutingRulesRequest) (*GetRoutingRulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRules not implemented")
 }
-func (*UnimplementedRoutingServiceServer) RemoveBalancingRule(context.Context, *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveBalancingRule not implemented")
+func (*UnimplementedRoutingServiceServer) GetRule(context.Context, *GetRoutingRuleRequest) (*GetRoutingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRule not implemented")
+}
+func (*UnimplementedRoutingServiceServer) AddBalancer(context.Context, *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddBalancer not implemented")
+}
+func (*UnimplementedRoutingServiceServer) AlterBalancer(context.Context, *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AlterBalancer not implemented")
+}
+func (*UnimplementedRoutingServiceServer) RemoveBalancer(context.Context, *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveBalancer not implemented")
+}
+func (*UnimplementedRoutingServiceServer) GetBalancers(context.Context, *GetBalancerRequest) (*GetBalancerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBalancers not implemented")
 }
 
 func RegisterRoutingServiceServer(s *grpc.Server, srv RoutingServiceServer) {
@@ -218,110 +278,182 @@ func _RoutingService_TestRoute_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_AddRoutingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_AddRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddRoutingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).AddRoutingRule(ctx, in)
+		return srv.(RoutingServiceServer).AddRule(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/AddRoutingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/AddRule",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).AddRoutingRule(ctx, req.(*AddRoutingRuleRequest))
+		return srv.(RoutingServiceServer).AddRule(ctx, req.(*AddRoutingRuleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_AlterRoutingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_AlterRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AlterRoutingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).AlterRoutingRule(ctx, in)
+		return srv.(RoutingServiceServer).AlterRule(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/AlterRoutingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/AlterRule",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).AlterRoutingRule(ctx, req.(*AlterRoutingRuleRequest))
+		return srv.(RoutingServiceServer).AlterRule(ctx, req.(*AlterRoutingRuleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_RemoveRoutingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_RemoveRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RemoveRoutingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).RemoveRoutingRule(ctx, in)
+		return srv.(RoutingServiceServer).RemoveRule(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/RemoveRoutingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/RemoveRule",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).RemoveRoutingRule(ctx, req.(*RemoveRoutingRuleRequest))
+		return srv.(RoutingServiceServer).RemoveRule(ctx, req.(*RemoveRoutingRuleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_AddBalancingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_SetRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetRoutingRulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).SetRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.router.command.RoutingService/SetRules",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).SetRules(ctx, req.(*SetRoutingRulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_GetRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingRulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).GetRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.router.command.RoutingService/GetRules",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).GetRules(ctx, req.(*GetRoutingRulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_GetRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRoutingRuleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).GetRule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.router.command.RoutingService/GetRule",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).GetRule(ctx, req.(*GetRoutingRuleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_AddBalancer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddBalancingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).AddBalancingRule(ctx, in)
+		return srv.(RoutingServiceServer).AddBalancer(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/AddBalancingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/AddBalancer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).AddBalancingRule(ctx, req.(*AddBalancingRuleRequest))
+		return srv.(RoutingServiceServer).AddBalancer(ctx, req.(*AddBalancingRuleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_AlterBalancingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_AlterBalancer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AlterBalancingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).AlterBalancingRule(ctx, in)
+		return srv.(RoutingServiceServer).AlterBalancer(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/AlterBalancingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/AlterBalancer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).AlterBalancingRule(ctx, req.(*AlterBalancingRuleRequest))
+		return srv.(RoutingServiceServer).AlterBalancer(ctx, req.(*AlterBalancingRuleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RoutingService_RemoveBalancingRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RoutingService_RemoveBalancer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RemoveBalancingRuleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RoutingServiceServer).RemoveBalancingRule(ctx, in)
+		return srv.(RoutingServiceServer).RemoveBalancer(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/xray.app.router.command.RoutingService/RemoveBalancingRule",
+		FullMethod: "/xray.app.router.command.RoutingService/RemoveBalancer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RoutingServiceServer).RemoveBalancingRule(ctx, req.(*RemoveBalancingRuleRequest))
+		return srv.(RoutingServiceServer).RemoveBalancer(ctx, req.(*RemoveBalancingRuleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_GetBalancers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBalancerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).GetBalancers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.router.command.RoutingService/GetBalancers",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).GetBalancers(ctx, req.(*GetBalancerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -335,28 +467,44 @@ var RoutingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RoutingService_TestRoute_Handler,
 		},
 		{
-			MethodName: "AddRoutingRule",
-			Handler:    _RoutingService_AddRoutingRule_Handler,
+			MethodName: "AddRule",
+			Handler:    _RoutingService_AddRule_Handler,
 		},
 		{
-			MethodName: "AlterRoutingRule",
-			Handler:    _RoutingService_AlterRoutingRule_Handler,
+			MethodName: "AlterRule",
+			Handler:    _RoutingService_AlterRule_Handler,
 		},
 		{
-			MethodName: "RemoveRoutingRule",
-			Handler:    _RoutingService_RemoveRoutingRule_Handler,
+			MethodName: "RemoveRule",
+			Handler:    _RoutingService_RemoveRule_Handler,
 		},
 		{
-			MethodName: "AddBalancingRule",
-			Handler:    _RoutingService_AddBalancingRule_Handler,
+			MethodName: "SetRules",
+			Handler:    _RoutingService_SetRules_Handler,
 		},
 		{
-			MethodName: "AlterBalancingRule",
-			Handler:    _RoutingService_AlterBalancingRule_Handler,
+			MethodName: "GetRules",
+			Handler:    _RoutingService_GetRules_Handler,
 		},
 		{
-			MethodName: "RemoveBalancingRule",
-			Handler:    _RoutingService_RemoveBalancingRule_Handler,
+			MethodName: "GetRule",
+			Handler:    _RoutingService_GetRule_Handler,
+		},
+		{
+			MethodName: "AddBalancer",
+			Handler:    _RoutingService_AddBalancer_Handler,
+		},
+		{
+			MethodName: "AlterBalancer",
+			Handler:    _RoutingService_AlterBalancer_Handler,
+		},
+		{
+			MethodName: "RemoveBalancer",
+			Handler:    _RoutingService_RemoveBalancer_Handler,
+		},
+		{
+			MethodName: "GetBalancers",
+			Handler:    _RoutingService_GetBalancers_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

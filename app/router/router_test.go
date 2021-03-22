@@ -223,7 +223,7 @@ func TestRouter_AddRoutingRule(t *testing.T) {
 	}))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
-	err := r.AddRoutingRule(ctx, &RoutingRule{
+	err := r.AddRule(ctx, -1, &RoutingRule{
 		TargetTag: &RoutingRule_OutboundTag{
 			OutboundTag: "test",
 		},
@@ -270,7 +270,7 @@ func TestRouter_AlterRoutingRule(t *testing.T) {
 	}))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
-	err := r.AlterRoutingRule(ctx, "test", &RoutingRule{
+	err := r.AlterRule(ctx, "test", &RoutingRule{
 		TargetTag: &RoutingRule_OutboundTag{
 			OutboundTag: "test",
 		},
@@ -329,7 +329,7 @@ func TestRouter_RemoveRoutingRule(t *testing.T) {
 	}))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
-	err := r.RemoveRoutingRule(ctx, "example")
+	err := r.RemoveRule(ctx, "example")
 	common.Must(err)
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)

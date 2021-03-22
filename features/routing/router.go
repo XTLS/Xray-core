@@ -52,34 +52,54 @@ func (DefaultRouter) PickRoute(ctx Context) (Route, error) {
 	return nil, common.ErrNoClue
 }
 
-// AddRoutingRule implements Router.
-func (DefaultRouter) AddRoutingRule(ctx context.Context, routingRule interface{}) error {
+// AddRule implements Router.
+func (DefaultRouter) AddRule(ctx context.Context, index int32, routingRule interface{}) error {
 	return common.ErrNoClue
 }
 
-// AlterRoutingRule implements Router.
-func (DefaultRouter) AlterRoutingRule(ctx context.Context, tag string, routingRule interface{}) error {
+// AlterRule implements Router.
+func (DefaultRouter) AlterRule(ctx context.Context, tag string, routingRule interface{}) error {
 	return common.ErrNoClue
 }
 
-// RemoveRoutingRule implements Router.
-func (DefaultRouter) RemoveRoutingRule(ctx context.Context, tag string) error {
+// RemoveRule implements Router.
+func (DefaultRouter) RemoveRule(ctx context.Context, tag string) error {
 	return common.ErrNoClue
 }
 
-// AddBalancingRule implements Router.
-func (DefaultRouter) AddBalancingRule(ctx context.Context, balancingRule interface{}, handler outbound.Manager) error {
+// SetRules implements Router.
+func (DefaultRouter) SetRules(ctx context.Context, rules interface{}) error {
 	return common.ErrNoClue
 }
 
-// AlterBalancingRule implements Router.
-func (DefaultRouter) AlterBalancingRule(ctx context.Context, tag string, balancingRule interface{}, handler outbound.Manager) error {
+// GetRules implements Router.
+func (DefaultRouter) GetRules(ctx context.Context) (interface{}, error) {
+	return nil, common.ErrNoClue
+}
+
+// GetRule implements Router.
+func (DefaultRouter) GetRule(ctx context.Context, tag string) (interface{}, error) {
+	return nil, common.ErrNoClue
+}
+
+// AddBalancer implements Router.
+func (DefaultRouter) AddBalancer(ctx context.Context, balancingRule interface{}, handler outbound.Manager) error {
 	return common.ErrNoClue
 }
 
-// RemoveBalancingRule implements Router.
-func (DefaultRouter) RemoveBalancingRule(ctx context.Context, tag string) error {
+// AlterBalancer implements Router.
+func (DefaultRouter) AlterBalancer(ctx context.Context, tag string, balancingRule interface{}, handler outbound.Manager) error {
 	return common.ErrNoClue
+}
+
+// RemoveBalancer implements Router.
+func (DefaultRouter) RemoveBalancer(ctx context.Context, tag string) error {
+	return common.ErrNoClue
+}
+
+// GetBalancers implements Router.
+func (DefaultRouter) GetBalancers(ctx context.Context) (interface{}, error) {
+	return nil, common.ErrNoClue
 }
 
 // Start implements common.Runnable.
@@ -97,16 +117,25 @@ func (DefaultRouter) Close() error {
 // xray:api:alpha
 type Manager interface {
 	features.Feature
-	// AddRoutingRule adds the given routing rule into this Manager.
-	AddRoutingRule(ctx context.Context, routingRule interface{}) error
-	// AlterRoutingRule Modifies the specified routing rule
-	AlterRoutingRule(ctx context.Context, tag string, routingRule interface{}) error
-	// RemoveRoutingRule Remove the specified routing rule
-	RemoveRoutingRule(ctx context.Context, tag string) error
-	// AddBalancingRule adds the given balancing rules to this manager.
-	AddBalancingRule(ctx context.Context, balancingRule interface{}, handler outbound.Manager) error
-	// AlterBalancingRule Modifies the specified balancing rule
-	AlterBalancingRule(ctx context.Context, tag string, balancingRule interface{}, handler outbound.Manager) error
-	// RemoveBalancingRule Remove the specified balancing rule
-	RemoveBalancingRule(ctx context.Context, tag string) error
+	// AddRule adds the given routing rule into this Manager.
+	AddRule(ctx context.Context, index int32, routingRule interface{}) error
+	// AlterRule Modifies the specified routing rule
+	AlterRule(ctx context.Context, tag string, routingRule interface{}) error
+	// RemoveRule Remove the specified routing rule
+	RemoveRule(ctx context.Context, tag string) error
+	// SetRules
+	SetRules(ctx context.Context, rules interface{}) error
+	// GetRules
+	GetRules(ctx context.Context) (interface{}, error)
+	// GetRule
+	GetRule(ctx context.Context, tag string) (interface{}, error)
+
+	// Balancer adds the given balancing rules to this manager.
+	AddBalancer(ctx context.Context, balancingRule interface{}, handler outbound.Manager) error
+	// AlterBalancer Modifies the specified balancing rule
+	AlterBalancer(ctx context.Context, tag string, balancingRule interface{}, handler outbound.Manager) error
+	// RemoveBalancer Remove the specified balancing rule
+	RemoveBalancer(ctx context.Context, tag string) error
+	// GetBalancers
+	GetBalancers(ctx context.Context) (interface{}, error)
 }

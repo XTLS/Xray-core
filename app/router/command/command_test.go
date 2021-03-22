@@ -221,9 +221,8 @@ func TestServiceTestRoute(t *testing.T) {
 				TargetTag:  &router.RoutingRule_OutboundTag{OutboundTag: "out"},
 			},
 			{
-				Networks:  []net.Network{net.Network_UDP, net.Network_TCP},
-				Protocol:  []string{"bittorrent"},
 				TargetTag: &router.RoutingRule_OutboundTag{OutboundTag: "blocked"},
+				Protocol:  []string{"bittorrent"},
 			},
 			{
 				PortList:  &net.PortList{Range: []*net.PortRange{{From: 8080, To: 8080}}},
@@ -246,7 +245,7 @@ func TestServiceTestRoute(t *testing.T) {
 				TargetTag: &router.RoutingRule_OutboundTag{OutboundTag: "out"},
 			},
 			{
-				Networks:  []net.Network{net.Network_TCP},
+				Networks:  []net.Network{net.Network_UDP, net.Network_TCP},
 				TargetTag: &router.RoutingRule_OutboundTag{OutboundTag: "out"},
 			},
 		},
@@ -440,7 +439,7 @@ func TestServiceAddRoutingRule(t *testing.T) {
 		// Test add rule
 		testAddRule := func() error {
 			for _, tc := range testAddRuleCases {
-				_, err := client.AddRoutingRule(context.Background(), &AddRoutingRuleRequest{RoutingRule: tc})
+				_, err := client.AddRule(context.Background(), &AddRoutingRuleRequest{RoutingRule: tc})
 				if err != nil {
 					return err
 				}
@@ -682,7 +681,7 @@ func TestServiceAlterRoutingRule(t *testing.T) {
 		// Test alter rule
 		testAlterRule := func() error {
 			for _, tc := range testAlterRuleCases {
-				_, err := client.AlterRoutingRule(context.Background(), tc)
+				_, err := client.AlterRule(context.Background(), tc)
 				if err != nil {
 					return err
 				}
@@ -876,7 +875,7 @@ func TestServiceRemoveRoutingRule(t *testing.T) {
 		// Test alter rule
 		testRemoveRule := func() error {
 			for _, tc := range testRemoveRuleCases {
-				_, err := client.RemoveRoutingRule(context.Background(), &RemoveRoutingRuleRequest{Tag: tc})
+				_, err := client.RemoveRule(context.Background(), &RemoveRoutingRuleRequest{Tag: tc})
 				if err != nil {
 					return err
 				}
@@ -924,4 +923,3 @@ func TestServiceRemoveRoutingRule(t *testing.T) {
 		}
 	}
 }
-
