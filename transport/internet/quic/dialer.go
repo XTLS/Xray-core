@@ -147,9 +147,9 @@ func (s *clientSessions) openConnection(destAddr net.Addr, config *Config, tlsCo
 	}
 
 	quicConfig := &quic.Config{
-		ConnectionIDLength: 12,
-		HandshakeTimeout:   time.Second * 8,
-		MaxIdleTimeout:     time.Second * 30,
+		ConnectionIDLength:   12,
+		HandshakeIdleTimeout: time.Second * 8,
+		MaxIdleTimeout:       time.Second * 30,
 	}
 
 	conn, err := wrapSysConn(rawConn, config)
