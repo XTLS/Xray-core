@@ -25,7 +25,7 @@ var conns chan *websocket.Conn
 
 func init() {
 	if addr := os.Getenv("XRAY_BROWSER_DIALER"); addr != "" {
-		conns = make(chan *websocket.Conn, 1024)
+		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/websocket" {
 				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
