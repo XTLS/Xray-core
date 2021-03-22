@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ type requestHandler struct {
 	path string
 	ln   *Listener
 }
+
+var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   4 * 1024,
@@ -43,20 +46,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	var extraReader io.Reader
 	var responseHeader = http.Header{}
 	if str := request.Header.Get("Sec-WebSocket-Protocol"); str != "" {
-		new := []byte(str)
-	f:
-		for i, b := range new {
-			switch b {
-			case '+':
-				new[i] = '-'
-			case '/':
-				new[i] = '_'
-			case '=':
-				new = new[:i]
-				break f
-			}
-		}
-		if ed, err := base64.RawURLEncoding.DecodeString(string(new)); err == nil && len(ed) > 0 {
+		if ed, err := base64.RawURLEncoding.DecodeString(replacer.Replace(str)); err == nil && len(ed) > 0 {
 			extraReader = bytes.NewReader(ed)
 			responseHeader.Set("Sec-WebSocket-Protocol", str)
 		}
