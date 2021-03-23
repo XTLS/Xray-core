@@ -2,8 +2,12 @@ package websocket
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
+	"fmt"
 	"io"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -14,6 +18,27 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
+
+//go:embed dialer.html
+var webpage []byte
+var conns chan *websocket.Conn
+
+func init() {
+	if addr := os.Getenv("XRAY_BROWSER_DIALER"); addr != "" {
+		conns = make(chan *websocket.Conn, 256)
+		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/websocket" {
+				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+					conns <- conn
+				} else {
+					fmt.Println("unexpected error")
+				}
+			} else {
+				w.Write(webpage)
+			}
+		}))
+	}
+}
 
 // Dial dials a WebSocket connection to the given destination.
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (internet.Connection, error) {
@@ -65,6 +90,30 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		host = dest.Address.String()
 	}
 	uri := protocol + "://" + host + wsSettings.GetNormalizedPath()
+
+	if conns != nil {
+		data := []byte(uri)
+		if ed != nil {
+			data = append(data, " "+base64.RawURLEncoding.EncodeToString(ed)...)
+		}
+		var conn *websocket.Conn
+		for {
+			conn = <-conns
+			if conn.WriteMessage(websocket.TextMessage, data) != nil {
+				conn.Close()
+			} else {
+				break
+			}
+		}
+		if _, p, err := conn.ReadMessage(); err != nil {
+			conn.Close()
+			return nil, err
+		} else if s := string(p); s != "ok" {
+			conn.Close()
+			return nil, newError(s)
+		}
+		return newConnection(conn, conn.RemoteAddr(), nil), nil
+	}
 
 	header := wsSettings.GetRequestHeader()
 	if ed != nil {
