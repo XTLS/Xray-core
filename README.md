@@ -33,6 +33,7 @@
 ## GUI Clients
 
 - OpenWrt
+  - [Bypass](https://github.com/garypang13/luci-app-bypass)
   - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
   - [Hello World](https://github.com/jerrykuku/luci-app-vssr)
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
