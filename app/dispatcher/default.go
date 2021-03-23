@@ -176,20 +176,35 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	return inboundLink, outboundLink
 }
 
-func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
-	domain := result.Domain()
-
-	// Do NOT override domains with space or '*' or without any dot, eg "Mijia Cloud"
-	if strings.Contains(domain, " ") || strings.Contains(domain, "*") || !strings.Contains(domain, ".") {
-		newError("destination override ignores invalid domain [", domain, "]").WriteToLog(session.ExportIDToError(ctx))
-		return false
-	}
-
-	for _, d := range request.ExcludeForDomain {
+func shouldOverrideByDomain(domain string, domainsExcluded []string) bool {
+	for _, d := range domainsExcluded {
 		if domain == d {
 			return false
 		}
 	}
+
+	return true
+}
+
+func shouldOverrideByProtocol(protocol string, overrideProtocol []string, fakeDNSEngine dns.FakeDNSEngine, destination net.Destination, ctx context.Context) bool {
+	for _, p := range overrideProtocol {
+		if strings.HasPrefix(protocol, p) {
+			return true
+		}
+
+		if fakeDNSEngine != nil && protocol != "bittorrent" && p == "fakedns" &&
+			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
+			newError("Using sniffer ", protocol, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
+			return true
+		}
+	}
+
+	return false
+}
+
+func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
+	domain := result.Domain()
+
 	var fakeDNSEngine dns.FakeDNSEngine
 	core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
 		fakeDNSEngine = fdns
@@ -198,18 +213,19 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 	if resComp, ok := result.(SnifferResultComposite); ok {
 		protocolString = resComp.ProtocolForDomainResult()
 	}
-	for _, p := range request.OverrideDestinationForProtocol {
-		if strings.HasPrefix(protocolString, p) {
-			return true
-		}
-		if fakeDNSEngine != nil && protocolString != "bittorrent" && p == "fakedns" &&
-			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
-			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
-			return true
-		}
-	}
 
-	return false
+	switch {
+	case strings.Contains(domain, " "), strings.Contains(domain, "*"), !strings.Contains(domain, "."):
+		// Do NOT override domains with space or '*' or without any dot, eg "Mijia Cloud"
+		newError("destination override ignores invalid domain [", domain, "]").WriteToLog(session.ExportIDToError(ctx))
+		return false
+	case !shouldOverrideByDomain(domain, request.ExcludeForDomain):
+		return false
+	case shouldOverrideByProtocol(protocolString, request.OverrideDestinationForProtocol, fakeDNSEngine, destination, ctx):
+		return true
+	default:
+		return false
+	}
 }
 
 // Dispatch implements routing.Dispatcher.
