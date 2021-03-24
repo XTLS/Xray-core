@@ -8,8 +8,9 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -30,12 +31,12 @@ func init() {
 	common.Must(err)
 	defer geositeFile.Close()
 
-	list := &router.GeoSiteList{
-		Entry: []*router.GeoSite{
+	list := &geosite.GeoSiteList{
+		Entry: []*geosite.GeoSite{
 			{
 				CountryCode: "TEST",
-				Domain: []*router.Domain{
-					{Type: router.Domain_Full, Value: "example.com"},
+				Domain: []*geosite.Domain{
+					{Type: domain.MatchingType_Full, Value: "example.com"},
 				},
 			},
 		},
@@ -94,10 +95,10 @@ func TestDNSConfigParsing(t *testing.T) {
 							Network: net.Network_UDP,
 							Port:    5353,
 						},
-						PrioritizedDomain: []*dns.NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   dns.DomainMatchingType_Subdomain,
-								Domain: "example.com",
+								Type:  domain.MatchingType_Subdomain,
+								Value: "example.com",
 							},
 						},
 						OriginalRules: []*dns.NameServer_OriginalRule{
@@ -110,27 +111,27 @@ func TestDNSConfigParsing(t *testing.T) {
 				},
 				StaticHosts: []*dns.Config_HostMapping{
 					{
-						Type:          dns.DomainMatchingType_Subdomain,
+						Type:          domain.MatchingType_Subdomain,
 						Domain:        "example.com",
 						ProxiedDomain: "google.com",
 					},
 					{
-						Type:   dns.DomainMatchingType_Full,
+						Type:   domain.MatchingType_Full,
 						Domain: "example.com",
 						Ip:     [][]byte{{127, 0, 0, 1}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Full,
+						Type:   domain.MatchingType_Full,
 						Domain: "example.com",
 						Ip:     [][]byte{{10, 0, 0, 1}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Keyword,
+						Type:   domain.MatchingType_Keyword,
 						Domain: "google",
 						Ip:     [][]byte{{8, 8, 8, 8}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Regex,
+						Type:   domain.MatchingType_Regex,
 						Domain: ".*\\.com",
 						Ip:     [][]byte{{8, 8, 4, 4}},
 					},

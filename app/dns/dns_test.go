@@ -12,8 +12,9 @@ import (
 	"github.com/xtls/xray-core/app/policy"
 	"github.com/xtls/xray-core/app/proxyman"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
@@ -303,10 +304,10 @@ func TestPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   DomainMatchingType_Full,
-								Domain: "google.com",
+								Type:  domain.MatchingType_Full,
+								Value: "google.com",
 							},
 						},
 					},
@@ -432,7 +433,7 @@ func TestStaticHostDomain(t *testing.T) {
 				},
 				StaticHosts: []*Config_HostMapping{
 					{
-						Type:          DomainMatchingType_Full,
+						Type:          domain.MatchingType_Full,
 						Domain:        "example.com",
 						ProxiedDomain: "google.com",
 					},
@@ -496,10 +497,10 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{
 								CountryCode: "local",
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										// inner ip, will not match
 										Ip:     []byte{192, 168, 11, 1},
@@ -520,10 +521,10 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{
 								CountryCode: "test",
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										Ip:     []byte{8, 8, 8, 8},
 										Prefix: 32,
@@ -532,7 +533,7 @@ func TestIPMatch(t *testing.T) {
 							},
 							{
 								CountryCode: "test",
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										Ip:     []byte{8, 8, 8, 4},
 										Prefix: 32,
@@ -616,14 +617,14 @@ func TestLocalDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							// Equivalent of dotless:localhost
-							{Type: DomainMatchingType_Regex, Domain: "^[^.]*localhost[^.]*$"},
+							{Type: domain.MatchingType_Regex, Value: "^[^.]*localhost[^.]*$"},
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{ // Will match localhost, localhost-a and localhost-b,
 								CountryCode: "local",
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{Ip: []byte{127, 0, 0, 2}, Prefix: 32},
 									{Ip: []byte{127, 0, 0, 3}, Prefix: 32},
 									{Ip: []byte{127, 0, 0, 4}, Prefix: 32},
@@ -641,22 +642,22 @@ func TestLocalDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							// Equivalent of dotless: and domain:local
-							{Type: DomainMatchingType_Regex, Domain: "^[^.]*$"},
-							{Type: DomainMatchingType_Subdomain, Domain: "local"},
-							{Type: DomainMatchingType_Subdomain, Domain: "localdomain"},
+							{Type: domain.MatchingType_Regex, Value: "^[^.]*$"},
+							{Type: domain.MatchingType_Subdomain, Value: "local"},
+							{Type: domain.MatchingType_Subdomain, Value: "localdomain"},
 						},
 					},
 				},
 				StaticHosts: []*Config_HostMapping{
 					{
-						Type:   DomainMatchingType_Full,
+						Type:   domain.MatchingType_Full,
 						Domain: "hostnamestatic",
 						Ip:     [][]byte{{127, 0, 0, 53}},
 					},
 					{
-						Type:          DomainMatchingType_Full,
+						Type:          domain.MatchingType_Full,
 						Domain:        "hostnamealias",
 						ProxiedDomain: "hostname.localdomain",
 					},
@@ -812,15 +813,15 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "google.com",
+								Type:  domain.MatchingType_Subdomain,
+								Value: "google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{ // Will only match 8.8.8.8 and 8.8.4.4
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
 									{Ip: []byte{8, 8, 4, 4}, Prefix: 32},
 								},
@@ -837,15 +838,15 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "google.com",
+								Type:  domain.MatchingType_Subdomain,
+								Value: "google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{ // Will match 8.8.8.8 and 8.8.8.7, etc
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{Ip: []byte{8, 8, 8, 7}, Prefix: 24},
 								},
 							},
@@ -861,15 +862,15 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "api.google.com",
+								Type:  domain.MatchingType_Subdomain,
+								Value: "api.google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{ // Will only match 8.8.7.7 (api.google.com)
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{Ip: []byte{8, 8, 7, 7}, Prefix: 32},
 								},
 							},
@@ -885,15 +886,15 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						PrioritizedDomain: []*domain.Domain{
 							{
-								Type:   DomainMatchingType_Full,
-								Domain: "v2.api.google.com",
+								Type:  domain.MatchingType_Full,
+								Value: "v2.api.google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{ // Will only match 8.8.7.8 (v2.api.google.com)
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{Ip: []byte{8, 8, 7, 8}, Prefix: 32},
 								},
 							},

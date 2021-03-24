@@ -7,6 +7,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/outbound"
@@ -101,7 +102,7 @@ func TestIPOnDemand(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Cidr: []*CIDR{
+				Cidr: []*geoip.CIDR{
 					{
 						Ip:     []byte{192, 168, 0, 0},
 						Prefix: 16,
@@ -136,7 +137,7 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Cidr: []*CIDR{
+				Cidr: []*geoip.CIDR{
 					{
 						Ip:     []byte{192, 168, 0, 0},
 						Prefix: 16,
@@ -171,7 +172,7 @@ func TestIPIfNonMatchIP(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Cidr: []*CIDR{
+				Cidr: []*geoip.CIDR{
 					{
 						Ip:     []byte{127, 0, 0, 0},
 						Prefix: 8,

@@ -1,11 +1,11 @@
-package strmatcher_test
+package str_test
 
 import (
 	"strconv"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/matcher/str"
 )
 
 func BenchmarkDomainMatcherGroup(b *testing.B) {

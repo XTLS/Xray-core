@@ -7,6 +7,7 @@ import (
 
 	. "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/domain"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 )
@@ -14,21 +15,21 @@ import (
 func TestStaticHosts(t *testing.T) {
 	pb := []*Config_HostMapping{
 		{
-			Type:   DomainMatchingType_Full,
+			Type:   domain.MatchingType_Full,
 			Domain: "example.com",
 			Ip: [][]byte{
 				{1, 1, 1, 1},
 			},
 		},
 		{
-			Type:   DomainMatchingType_Subdomain,
+			Type:   domain.MatchingType_Subdomain,
 			Domain: "example.cn",
 			Ip: [][]byte{
 				{2, 2, 2, 2},
 			},
 		},
 		{
-			Type:   DomainMatchingType_Subdomain,
+			Type:   domain.MatchingType_Subdomain,
 			Domain: "baidu.com",
 			Ip: [][]byte{
 				{127, 0, 0, 1},

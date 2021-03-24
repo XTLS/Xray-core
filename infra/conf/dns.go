@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common/matcher/conf"
+	dm "github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -41,39 +43,24 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	return newError("failed to parse name server: ", string(data))
 }
 
-func toDomainMatchingType(t router.Domain_Type) dns.DomainMatchingType {
-	switch t {
-	case router.Domain_Domain:
-		return dns.DomainMatchingType_Subdomain
-	case router.Domain_Full:
-		return dns.DomainMatchingType_Full
-	case router.Domain_Plain:
-		return dns.DomainMatchingType_Keyword
-	case router.Domain_Regex:
-		return dns.DomainMatchingType_Regex
-	default:
-		panic("unknown domain type")
-	}
-}
-
 func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	if c.Address == nil {
 		return nil, newError("NameServer address is not specified.")
 	}
 
-	var domains []*dns.NameServer_PriorityDomain
+	var domains []*dm.Domain
 	var originalRules []*dns.NameServer_OriginalRule
 
 	for _, rule := range c.Domains {
-		parsedDomain, err := parseDomainRule(rule)
+		parsedDomain, err := conf.ParaseDomainRule(rule)
 		if err != nil {
 			return nil, newError("invalid domain rule: ", rule).Base(err)
 		}
 
 		for _, pd := range parsedDomain {
-			domains = append(domains, &dns.NameServer_PriorityDomain{
-				Type:   toDomainMatchingType(pd.Type),
-				Domain: pd.Value,
+			domains = append(domains, &dm.Domain{
+				Type:  pd.Type,
+				Value: pd.Value,
 			})
 		}
 		originalRules = append(originalRules, &dns.NameServer_OriginalRule{
@@ -97,13 +84,6 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		Geoip:             geoipList,
 		OriginalRules:     originalRules,
 	}, nil
-}
-
-var typeMap = map[router.Domain_Type]dns.DomainMatchingType{
-	router.Domain_Full:   dns.DomainMatchingType_Full,
-	router.Domain_Domain: dns.DomainMatchingType_Subdomain,
-	router.Domain_Plain:  dns.DomainMatchingType_Keyword,
-	router.Domain_Regex:  dns.DomainMatchingType_Regex,
 }
 
 // DNSConfig is a JSON serializable object for dns.Config.
@@ -177,7 +157,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 					return nil, newError("empty domain type of rule: ", domain)
 				}
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Subdomain
+				mapping.Type = dm.MatchingType_Subdomain
 				mapping.Domain = domainName
 				mappings = append(mappings, mapping)
 
@@ -186,13 +166,13 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 				if len(listName) == 0 {
 					return nil, newError("empty geosite rule: ", domain)
 				}
-				domains, err := loadGeositeWithAttr("geosite.dat", listName)
+				domains, err := geosite.LoadGeositeWithAttr("geosite.dat", listName)
 				if err != nil {
 					return nil, newError("failed to load geosite: ", listName).Base(err)
 				}
 				for _, d := range domains {
 					mapping := getHostMapping(addr)
-					mapping.Type = typeMap[d.Type]
+					mapping.Type = d.Type
 					mapping.Domain = d.Value
 					mappings = append(mappings, mapping)
 				}
@@ -203,7 +183,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 					return nil, newError("empty regexp type of rule: ", domain)
 				}
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Regex
+				mapping.Type = dm.MatchingType_Regex
 				mapping.Domain = regexpVal
 				mappings = append(mappings, mapping)
 
@@ -213,7 +193,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 					return nil, newError("empty keyword type of rule: ", domain)
 				}
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Keyword
+				mapping.Type = dm.MatchingType_Keyword
 				mapping.Domain = keywordVal
 				mappings = append(mappings, mapping)
 
@@ -223,13 +203,13 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 					return nil, newError("empty full domain type of rule: ", domain)
 				}
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Full
+				mapping.Type = dm.MatchingType_Full
 				mapping.Domain = fullVal
 				mappings = append(mappings, mapping)
 
 			case strings.HasPrefix(domain, "dotless:"):
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Regex
+				mapping.Type = dm.MatchingType_Regex
 				switch substr := domain[8:]; {
 				case substr == "":
 					mapping.Domain = "^[^.]*$"
@@ -247,20 +227,20 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 				}
 				filename := kv[0]
 				list := kv[1]
-				domains, err := loadGeositeWithAttr(filename, list)
+				domains, err := geosite.LoadGeositeWithAttr(filename, list)
 				if err != nil {
 					return nil, newError("failed to load domain list: ", list, " from ", filename).Base(err)
 				}
 				for _, d := range domains {
 					mapping := getHostMapping(addr)
-					mapping.Type = typeMap[d.Type]
+					mapping.Type = d.Type
 					mapping.Domain = d.Value
 					mappings = append(mappings, mapping)
 				}
 
 			default:
 				mapping := getHostMapping(addr)
-				mapping.Type = dns.DomainMatchingType_Full
+				mapping.Type = dm.MatchingType_Full
 				mapping.Domain = domain
 				mappings = append(mappings, mapping)
 			}

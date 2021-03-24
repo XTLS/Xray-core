@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	clog "github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/matcher/domain"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -53,8 +54,8 @@ func TestReverseProxy(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{Type: router.Domain_Full, Value: "test.example.com"},
+						Domain: []*domain.Domain{
+							{Type: domain.MatchingType_Full, Value: "test.example.com"},
 						},
 						TargetTag: &router.RoutingRule_Tag{
 							Tag: "portal",
@@ -122,8 +123,8 @@ func TestReverseProxy(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{Type: router.Domain_Full, Value: "test.example.com"},
+						Domain: []*domain.Domain{
+							{Type: domain.MatchingType_Full, Value: "test.example.com"},
 						},
 						TargetTag: &router.RoutingRule_Tag{
 							Tag: "reverse",
@@ -238,8 +239,8 @@ func TestReverseProxyLongRunning(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{Type: router.Domain_Full, Value: "test.example.com"},
+						Domain: []*domain.Domain{
+							{Type: domain.MatchingType_Full, Value: "test.example.com"},
 						},
 						TargetTag: &router.RoutingRule_Tag{
 							Tag: "portal",
@@ -321,8 +322,8 @@ func TestReverseProxyLongRunning(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{Type: router.Domain_Full, Value: "test.example.com"},
+						Domain: []*domain.Domain{
+							{Type: domain.MatchingType_Full, Value: "test.example.com"},
 						},
 						TargetTag: &router.RoutingRule_Tag{
 							Tag: "reverse",

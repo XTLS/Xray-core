@@ -2,8 +2,8 @@ package dns
 
 import (
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 )
@@ -11,12 +11,12 @@ import (
 // StaticHosts represents static domain-ip mapping in DNS server.
 type StaticHosts struct {
 	ips      [][]net.Address
-	matchers *strmatcher.MatcherGroup
+	matchers *str.MatcherGroup
 }
 
 // NewStaticHosts creates a new StaticHosts instance.
 func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDomain) (*StaticHosts, error) {
-	g := new(strmatcher.MatcherGroup)
+	g := new(str.MatcherGroup)
 	sh := &StaticHosts{
 		ips:      make([][]net.Address, len(hosts)+len(legacy)+16),
 		matchers: g,
@@ -26,7 +26,7 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 		features.PrintDeprecatedFeatureWarning("simple host mapping")
 
 		for domain, ip := range legacy {
-			matcher, err := strmatcher.Full.New(domain)
+			matcher, err := str.Full.New(domain)
 			common.Must(err)
 			id := g.Add(matcher)
 

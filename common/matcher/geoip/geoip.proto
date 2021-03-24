@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package xray.common.matcher.geoip;
+option csharp_namespace = "Xray.Common.Matcher.GeoIP";
+option go_package = "github.com/xtls/xray-core/common/matcher/geoip";
+option java_package = "com.xray.common.matcher.geoip";
+option java_multiple_files = true;
+
+// IP for routing decision, in CIDR form.
+message CIDR {
+  // IP address, should be either 4 or 16 bytes.
+  bytes ip = 1;
+
+  // Number of leading ones in the network mask.
+  uint32 prefix = 2;
+}
+
+message GeoIP {
+  string country_code = 1;
+  repeated CIDR cidr = 2;
+}
+
+message GeoIPList {
+  repeated GeoIP entry = 1;
+}

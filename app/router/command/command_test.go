@@ -12,6 +12,8 @@ import (
 	. "github.com/xtls/xray-core/app/router/command"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/testing/mocks"
@@ -231,11 +233,11 @@ func TestSerivceTestRoute(t *testing.T) {
 				TargetTag:      &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				Domain:    []*router.Domain{{Type: router.Domain_Domain, Value: "com"}},
+				Domain:    []*domain.Domain{{Type: domain.MatchingType_Subdomain, Value: "com"}},
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				SourceGeoip: []*router.GeoIP{{CountryCode: "private", Cidr: []*router.CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
+				SourceGeoip: []*geoip.GeoIP{{CountryCode: "private", Cidr: []*geoip.CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
 				TargetTag:   &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{

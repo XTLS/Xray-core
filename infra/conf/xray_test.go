@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	clog "github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -154,9 +155,9 @@ func TestXrayConfig(t *testing.T) {
 						DomainStrategy: router.Config_AsIs,
 						Rule: []*router.RoutingRule{
 							{
-								Geoip: []*router.GeoIP{
+								Geoip: []*geoip.GeoIP{
 									{
-										Cidr: []*router.CIDR{
+										Cidr: []*geoip.CIDR{
 											{
 												Ip:     []byte{10, 0, 0, 0},
 												Prefix: 8,

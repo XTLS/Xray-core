@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/matcher/geoip"
+	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 )
@@ -28,7 +28,7 @@ type DNS struct {
 	hosts         *StaticHosts
 	clients       []*Client
 	ctx           context.Context
-	domainMatcher strmatcher.IndexMatcher
+	domainMatcher str.IndexMatcher
 	matcherInfos  []DomainMatcherInfo
 }
 
@@ -90,8 +90,8 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 
 	// MatcherInfos is ensured to cover the maximum index domainMatcher could return, where matcher's index starts from 1
 	matcherInfos := make([]DomainMatcherInfo, domainRuleCount+1)
-	domainMatcher := &strmatcher.MatcherGroup{}
-	geoipContainer := router.GeoIPMatcherContainer{}
+	domainMatcher := &str.MatcherGroup{}
+	geoipContainer := geoip.GeoIPMatcherContainer{}
 
 	for _, endpoint := range config.NameServers {
 		features.PrintDeprecatedFeatureWarning("simple DNS server")
@@ -104,7 +104,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 
 	for _, ns := range config.NameServer {
 		clientIdx := len(clients)
-		updateDomain := func(domainRule strmatcher.Matcher, originalRuleIdx int, matcherInfos []DomainMatcherInfo) error {
+		updateDomain := func(domainRule str.Matcher, originalRuleIdx int, matcherInfos []DomainMatcherInfo) error {
 			midx := domainMatcher.Add(domainRule)
 			matcherInfos[midx] = DomainMatcherInfo{
 				clientIdx:     uint16(clientIdx),

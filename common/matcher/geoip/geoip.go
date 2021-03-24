@@ -1,4 +1,4 @@
-package router
+package geoip
 
 import (
 	"encoding/binary"
@@ -6,6 +6,8 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 )
+
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 type ipv6 struct {
 	a uint64
@@ -187,5 +189,5 @@ func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 }
 
 var (
-	globalGeoIPContainer GeoIPMatcherContainer
+	GlobalGeoIPContainer GeoIPMatcherContainer
 )

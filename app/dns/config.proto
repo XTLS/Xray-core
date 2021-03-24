@@ -8,32 +8,21 @@ option java_multiple_files = true;
 
 import "common/net/address.proto";
 import "common/net/destination.proto";
-import "app/router/config.proto";
+import "common/matcher/domain/domain.proto";
+import "common/matcher/geoip/geoip.proto";
 
 message NameServer {
   xray.common.net.Endpoint address = 1;
   bytes client_ip = 5;
-
-  message PriorityDomain {
-    DomainMatchingType type = 1;
-    string domain = 2;
-  }
 
   message OriginalRule {
     string rule = 1;
     uint32 size = 2;
   }
 
-  repeated PriorityDomain prioritized_domain = 2;
-  repeated xray.app.router.GeoIP geoip = 3;
+  repeated xray.common.matcher.domain.Domain prioritized_domain = 2;
+  repeated xray.common.matcher.geoip.GeoIP geoip = 3;
   repeated OriginalRule original_rules = 4;
-}
-
-enum DomainMatchingType {
-  Full = 0;
-  Subdomain = 1;
-  Keyword = 2;
-  Regex = 3;
 }
 
 enum QueryStrategy {
@@ -60,7 +49,7 @@ message Config {
   bytes client_ip = 3;
 
   message HostMapping {
-    DomainMatchingType type = 1;
+    xray.common.matcher.domain.MatchingType type = 1;
     string domain = 2;
 
     repeated bytes ip = 3;

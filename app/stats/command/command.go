@@ -11,7 +11,7 @@ import (
 
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/strmatcher"
+	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
 )
@@ -49,7 +49,7 @@ func (s *statsServer) GetStats(ctx context.Context, request *GetStatsRequest) (*
 }
 
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
-	matcher, err := strmatcher.Substr.New(request.Pattern)
+	matcher, err := str.Substr.New(request.Pattern)
 	if err != nil {
 		return nil, err
 	}

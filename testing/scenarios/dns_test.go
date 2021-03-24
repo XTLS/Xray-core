@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
@@ -39,7 +40,7 @@ func TestResolveIP(t *testing.T) {
 				DomainStrategy: router.Config_IpIfNonMatch,
 				Rule: []*router.RoutingRule{
 					{
-						Cidr: []*router.CIDR{
+						Cidr: []*geoip.CIDR{
 							{
 								Ip:     []byte{127, 0, 0, 0},
 								Prefix: 8,
