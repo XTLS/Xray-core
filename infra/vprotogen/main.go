@@ -4,11 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"go/build"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -80,7 +84,62 @@ func GetGOBIN() string {
 	return GOBIN
 }
 
+func getProjectProtocVersion(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("can not get the version of protobuf used in xray project")
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("can not read from body")
+	}
+	versionRegexp := regexp.MustCompile(`\/\/\s*protoc\s*v(\d+\.\d+\.\d+)`)
+	matched := versionRegexp.FindStringSubmatch(string(body))
+	return matched[1], nil
+}
+
+func getInstalledProtocVersion(protocPath string) (string, error) {
+	cmd := exec.Command(protocPath, "--version")
+	cmd.Env = append(cmd.Env, os.Environ()...)
+	output, cmdErr := cmd.CombinedOutput()
+	if cmdErr != nil {
+		return "", cmdErr
+	}
+	versionRegexp := regexp.MustCompile(`protoc\s*(\d+\.\d+\.\d+)`)
+	matched := versionRegexp.FindStringSubmatch(string(output))
+	return matched[1], nil
+}
+
+func parseVersion(s string, width int) int64 {
+	strList := strings.Split(s, ".")
+	format := fmt.Sprintf("%%s%%0%ds", width)
+	v := ""
+	for _, value := range strList {
+		v = fmt.Sprintf(format, v, value)
+	}
+	var result int64
+	var err error
+	if result, err = strconv.ParseInt(v, 10, 64); err != nil {
+		return 0
+	}
+	return result
+}
+
+func needToUpdate(targetedVersion, installedVersion string) bool {
+	vt := parseVersion(targetedVersion, 4)
+	vi := parseVersion(installedVersion, 4)
+
+	return vt > vi
+}
+
 func main() {
+	targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/xtls/xray-core/HEAD/core/config.pb.go")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of vprotogen:\n")
 		flag.PrintDefaults()
@@ -114,6 +173,24 @@ func main() {
 		os.Exit(1)
 	} else {
 		protoc = path
+	}
+
+	installedVersion, err := getInstalledProtocVersion(protoc)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if needToUpdate(targetedVersion, installedVersion) {
+		fmt.Printf(`
+You are using an old protobuf version. Please update to v%s or later.
+Download it from https://github.com/protocolbuffers/protobuf/releases
+
+    * Protobuf version used in xray project: v%s
+    * Protobuf version you have installed: v%s
+
+`, targetedVersion, targetedVersion, installedVersion)
+		os.Exit(1)
 	}
 
 	protoFilesMap := make(map[string][]string)
