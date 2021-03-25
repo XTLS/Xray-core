@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package xray.app.reverse.command;
+option csharp_namespace = "Xray.App.Reverse.Command";
+option go_package = "github.com/xtls/xray-core/app/reverse/command";
+option java_package = "com.xray.app.reverse.command";
+option java_multiple_files = true;
+
+import "app/reverse/config.proto";
+
+message AddBridgeRequest {
+  xray.app.reverse.BridgeConfig config = 1;
+}
+message AddBridgeResponse {}
+
+message RemoveBridgeRequest {
+  string tag = 1;
+}
+message RemoveBridgeResponse {}
+
+message AddPortalRequest {
+  xray.app.reverse.PortalConfig config = 1;
+}
+message AddPortalResponse {}
+
+message RemovePortalRequest {
+  string tag = 1;
+}
+message RemovePortalResponse {}
+
+service ReverseService {
+
+  rpc AddBridge(AddBridgeRequest) returns (AddBridgeResponse){}
+
+  rpc RemoveBridge(RemoveBridgeRequest) returns (RemoveBridgeResponse){}
+
+  rpc AddPortal(AddPortalRequest) returns (AddPortalResponse){}
+
+  rpc RemovePortal(RemovePortalRequest) returns (RemovePortalResponse){}
+}
+
+message Config {}
