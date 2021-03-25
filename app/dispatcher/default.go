@@ -151,6 +151,20 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		user = sessionInbound.User
 	}
 
+	if user.InboundLimiter != nil {
+		inboundLink.Writer = &Bucket{
+			Writer:  inboundLink.Writer,
+			Limiter: user.InboundLimiter,
+		}
+	}
+
+	if user.OutboundLimiter != nil {
+		outboundLink.Writer = &Bucket{
+			Writer:  outboundLink.Writer,
+			Limiter: user.OutboundLimiter,
+		}
+	}
+
 	if user != nil && len(user.Email) > 0 {
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {

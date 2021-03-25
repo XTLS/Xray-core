@@ -27,6 +27,10 @@ func defaultPolicy() *Policy {
 		Buffer: &Policy_Buffer{
 			Connection: p.Buffer.PerConnection,
 		},
+		Speed: &Policy_Speed{
+			Inbound:  p.Speed.Inbound,
+			Outbound: p.Speed.Outbound,
+		},
 	}
 }
 
@@ -58,6 +62,13 @@ func (p *Policy) overrideWith(another *Policy) {
 			Connection: another.Buffer.Connection,
 		}
 	}
+
+	if another.Speed != nil {
+		p.Speed = &Policy_Speed{
+			Inbound:  another.Speed.Inbound,
+			Outbound: another.Speed.Outbound,
+		}
+	}
 }
 
 // ToCorePolicy converts this Policy to policy.Session.
@@ -76,6 +87,10 @@ func (p *Policy) ToCorePolicy() policy.Session {
 	}
 	if p.Buffer != nil {
 		cp.Buffer.PerConnection = p.Buffer.Connection
+	}
+	if p.Speed != nil {
+		cp.Speed.Inbound = p.Speed.Inbound
+		cp.Speed.Outbound = p.Speed.Outbound
 	}
 	return cp
 }

@@ -158,6 +158,7 @@ func (h *Handler) Close() error {
 
 // AddUser implements proxy.UserManager.AddUser().
 func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	u.SetLimiter(h.policyManager)
 	return h.validator.Add(u)
 }
 

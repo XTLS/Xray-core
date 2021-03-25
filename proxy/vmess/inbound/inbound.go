@@ -163,6 +163,7 @@ func (h *Handler) GetUser(email string) *protocol.MemoryUser {
 }
 
 func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
+	user.SetLimiter(h.policyManager)
 	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
 		return newError("User ", user.Email, " already exists.")
 	}

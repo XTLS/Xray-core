@@ -29,9 +29,15 @@ message Policy {
     int32 connection = 1;
   }
 
+  message Speed {
+    uint64 inbound = 1;
+    uint64 outbound = 2;
+  }
+
   Timeout timeout = 1;
   Stats stats = 2;
   Buffer buffer = 3;
+  Speed speed = 4;
 }
 
 message SystemPolicy {

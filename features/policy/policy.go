@@ -35,6 +35,12 @@ type Buffer struct {
 	PerConnection int32
 }
 
+// Speed limit inbound and outbound
+type Speed struct {
+	Inbound  uint64
+	Outbound uint64
+}
+
 // SystemStats contains stat policy settings on system level.
 type SystemStats struct {
 	// Whether or not to enable stat counter for uplink traffic in inbound handlers.
@@ -58,6 +64,7 @@ type Session struct {
 	Timeouts Timeout // Timeout settings
 	Stats    Stats
 	Buffer   Buffer
+	Speed    Speed
 }
 
 // Manager is a feature that provides Policy for the given user by its id or level.
@@ -129,6 +136,10 @@ func SessionDefault() Session {
 			UserDownlink: false,
 		},
 		Buffer: defaultBufferPolicy(),
+		Speed: Speed{
+			Inbound:  0,
+			Outbound: 0,
+		},
 	}
 }
 

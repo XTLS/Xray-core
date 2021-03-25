@@ -29,24 +29,23 @@ type Server struct {
 
 // NewServer create a new Shadowsocks server.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	validator := new(Validator)
+	v := core.MustFromContext(ctx)
+	s := &Server{
+		config:        config,
+		validator:     new(Validator),
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
+	}
+
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
 			return nil, newError("failed to get shadowsocks user").Base(err).AtError()
 		}
 
-		if err := validator.Add(u); err != nil {
+		if err := s.AddUser(ctx, u); err != nil {
 			return nil, newError("failed to add user").Base(err).AtError()
 		}
-	}
-
-	v := core.MustFromContext(ctx)
-	s := &Server{
-		config:        config,
-		validator:     validator,
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	return s, nil
@@ -54,6 +53,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 
 // AddUser implements proxy.UserManager.AddUser().
 func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	u.SetLimiter(s.policyManager)
 	return s.validator.Add(u)
 }
 

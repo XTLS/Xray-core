@@ -53,23 +53,22 @@ type Server struct {
 
 // NewServer creates a new trojan inbound handler.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	validator := new(Validator)
+	v := core.MustFromContext(ctx)
+	server := &Server{
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		validator:     new(Validator),
+		cone:          ctx.Value("cone").(bool),
+	}
+
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
 			return nil, newError("failed to get trojan user").Base(err).AtError()
 		}
 
-		if err := validator.Add(u); err != nil {
+		if err := server.AddUser(ctx, u); err != nil {
 			return nil, newError("failed to add user").Base(err).AtError()
 		}
-	}
-
-	v := core.MustFromContext(ctx)
-	server := &Server{
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:     validator,
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	if config.Fallbacks != nil {
@@ -127,6 +126,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 
 // AddUser implements proxy.UserManager.AddUser().
 func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	u.SetLimiter(s.policyManager)
 	return s.validator.Add(u)
 }
 
