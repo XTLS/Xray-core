@@ -321,6 +321,7 @@ type TLSConfig struct {
 	MaxVersion               string           `json:"maxVersion"`
 	CipherSuites             string           `json:"cipherSuites"`
 	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
+	Fingerprint              string           `json:"fingerprint"`
 }
 
 // Build implements Buildable.
@@ -348,6 +349,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MaxVersion = c.MaxVersion
 	config.CipherSuites = c.CipherSuites
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
+	config.Fingerprint = strings.ToLower(c.Fingerprint)
 	return config, nil
 }
 
