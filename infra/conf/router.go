@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common/matcher/conf"
+	"github.com/xtls/xray-core/common/matcher/domain/conf"
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"

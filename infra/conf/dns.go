@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/common/matcher/conf"
 	dm "github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/domain/conf"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
 )
