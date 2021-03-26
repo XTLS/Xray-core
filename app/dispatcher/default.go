@@ -150,38 +150,39 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	if sessionInbound != nil {
 		user = sessionInbound.User
 	}
-
-	if user.InboundLimiter != nil {
-		inboundLink.Writer = &Bucket{
-			Writer:  inboundLink.Writer,
-			Limiter: user.InboundLimiter,
-		}
-	}
-
-	if user.OutboundLimiter != nil {
-		outboundLink.Writer = &Bucket{
-			Writer:  outboundLink.Writer,
-			Limiter: user.OutboundLimiter,
-		}
-	}
-
-	if user != nil && len(user.Email) > 0 {
-		p := d.policy.ForLevel(user.Level)
-		if p.Stats.UserUplink {
-			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
-				inboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  inboundLink.Writer,
-				}
+	if user != nil {
+		if user.InboundLimiter != nil {
+			inboundLink.Writer = &Bucket{
+				Writer:  inboundLink.Writer,
+				Limiter: user.InboundLimiter,
 			}
 		}
-		if p.Stats.UserDownlink {
-			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
-				outboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  outboundLink.Writer,
+
+		if user.OutboundLimiter != nil {
+			outboundLink.Writer = &Bucket{
+				Writer:  outboundLink.Writer,
+				Limiter: user.OutboundLimiter,
+			}
+		}
+
+		if len(user.Email) > 0 {
+			p := d.policy.ForLevel(user.Level)
+			if p.Stats.UserUplink {
+				name := "user>>>" + user.Email + ">>>traffic>>>uplink"
+				if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+					inboundLink.Writer = &SizeStatWriter{
+						Counter: c,
+						Writer:  inboundLink.Writer,
+					}
+				}
+			}
+			if p.Stats.UserDownlink {
+				name := "user>>>" + user.Email + ">>>traffic>>>downlink"
+				if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+					outboundLink.Writer = &SizeStatWriter{
+						Counter: c,
+						Writer:  outboundLink.Writer,
+					}
 				}
 			}
 		}
