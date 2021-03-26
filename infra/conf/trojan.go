@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -16,12 +17,12 @@ import (
 
 // TrojanServerTarget is configuration of a single trojan server
 type TrojanServerTarget struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
-	Level    byte     `json:"level"`
-	Flow     string   `json:"flow"`
+	Address  *common.Address `json:"address"`
+	Port     uint16          `json:"port"`
+	Password string          `json:"password"`
+	Email    string          `json:"email"`
+	Level    byte            `json:"level"`
+	Flow     string          `json:"flow"`
 }
 
 // TrojanClientConfig is configuration of trojan servers

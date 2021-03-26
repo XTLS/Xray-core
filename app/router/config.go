@@ -1,6 +1,7 @@
 package router
 
 import (
+	dm "github.com/xtls/xray-core/common/matcher/domain"
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/outbound"
@@ -29,7 +30,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	conds := NewConditionChan()
 
 	if len(rr.Domain) > 0 {
-		matcher, err := NewDomainMatcher(rr.Domain)
+		matcher, err := dm.NewDomainMatcher(rr.Domain)
 		if err != nil {
 			return nil, newError("failed to build domain condition").Base(err)
 		}

@@ -1,4 +1,4 @@
-package conf
+package common
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 )
+
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 type StringList []string
 

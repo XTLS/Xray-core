@@ -39,6 +39,7 @@ type tcpWorker struct {
 	tag             string
 	dispatcher      routing.Dispatcher
 	sniffingConfig  *proxyman.SniffingConfig
+	sniffingMatcher *proxyman.SniffingMatcher
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
@@ -97,7 +98,8 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
+		content.SniffingRequest.ExcludedDomainMatcher = w.sniffingMatcher.ExDomain
+		content.SniffingRequest.ExcludedIPMatcher = w.sniffingMatcher.ExIP
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)
@@ -428,6 +430,7 @@ type dsWorker struct {
 	tag             string
 	dispatcher      routing.Dispatcher
 	sniffingConfig  *proxyman.SniffingConfig
+	sniffingMatcher *proxyman.SniffingMatcher
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
@@ -459,7 +462,8 @@ func (w *dsWorker) callback(conn internet.Connection) {
 	if w.sniffingConfig != nil {
 		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
+		content.SniffingRequest.ExcludedDomainMatcher = w.sniffingMatcher.ExDomain
+		content.SniffingRequest.ExcludedIPMatcher = w.sniffingMatcher.ExIP
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)

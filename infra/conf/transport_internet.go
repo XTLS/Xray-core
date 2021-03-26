@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"math"
 	"net/url"
 	"strconv"
@@ -179,8 +180,8 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 }
 
 type HTTPConfig struct {
-	Host *StringList `json:"host"`
-	Path string      `json:"path"`
+	Host *common.StringList `json:"host"`
+	Path string             `json:"path"`
 }
 
 // Build implements Buildable.
@@ -311,16 +312,16 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                 bool             `json:"allowInsecure"`
-	Certs                    []*TLSCertConfig `json:"certificates"`
-	ServerName               string           `json:"serverName"`
-	ALPN                     *StringList      `json:"alpn"`
-	EnableSessionResumption  bool             `json:"enableSessionResumption"`
-	DisableSystemRoot        bool             `json:"disableSystemRoot"`
-	MinVersion               string           `json:"minVersion"`
-	MaxVersion               string           `json:"maxVersion"`
-	CipherSuites             string           `json:"cipherSuites"`
-	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
+	Insecure                 bool               `json:"allowInsecure"`
+	Certs                    []*TLSCertConfig   `json:"certificates"`
+	ServerName               string             `json:"serverName"`
+	ALPN                     *common.StringList `json:"alpn"`
+	EnableSessionResumption  bool               `json:"enableSessionResumption"`
+	DisableSystemRoot        bool               `json:"disableSystemRoot"`
+	MinVersion               string             `json:"minVersion"`
+	MaxVersion               string             `json:"maxVersion"`
+	CipherSuites             string             `json:"cipherSuites"`
+	PreferServerCipherSuites bool               `json:"preferServerCipherSuites"`
 }
 
 // Build implements Buildable.
@@ -401,16 +402,16 @@ func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
 }
 
 type XTLSConfig struct {
-	Insecure                 bool              `json:"allowInsecure"`
-	Certs                    []*XTLSCertConfig `json:"certificates"`
-	ServerName               string            `json:"serverName"`
-	ALPN                     *StringList       `json:"alpn"`
-	EnableSessionResumption  bool              `json:"enableSessionResumption"`
-	DisableSystemRoot        bool              `json:"disableSystemRoot"`
-	MinVersion               string            `json:"minVersion"`
-	MaxVersion               string            `json:"maxVersion"`
-	CipherSuites             string            `json:"cipherSuites"`
-	PreferServerCipherSuites bool              `json:"preferServerCipherSuites"`
+	Insecure                 bool               `json:"allowInsecure"`
+	Certs                    []*XTLSCertConfig  `json:"certificates"`
+	ServerName               string             `json:"serverName"`
+	ALPN                     *common.StringList `json:"alpn"`
+	EnableSessionResumption  bool               `json:"enableSessionResumption"`
+	DisableSystemRoot        bool               `json:"disableSystemRoot"`
+	MinVersion               string             `json:"minVersion"`
+	MaxVersion               string             `json:"maxVersion"`
+	CipherSuites             string             `json:"cipherSuites"`
+	PreferServerCipherSuites bool               `json:"preferServerCipherSuites"`
 }
 
 // Build implements Buildable.

@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -137,7 +138,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VLessOutboundVnext struct {
-	Address *Address          `json:"address"`
+	Address *common.Address   `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }

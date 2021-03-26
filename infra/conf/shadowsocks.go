@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"github.com/xtls/xray-core/infra/conf/common"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -46,7 +47,7 @@ type ShadowsocksServerConfig struct {
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
 	Users       []*ShadowsocksUserConfig `json:"clients"`
-	NetworkList *NetworkList             `json:"network"`
+	NetworkList *common.NetworkList      `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -93,12 +94,12 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 }
 
 type ShadowsocksServerTarget struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Cipher   string   `json:"method"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
-	Level    byte     `json:"level"`
+	Address  *common.Address `json:"address"`
+	Port     uint16          `json:"port"`
+	Cipher   string          `json:"method"`
+	Password string          `json:"password"`
+	Email    string          `json:"email"`
+	Level    byte            `json:"level"`
 }
 
 type ShadowsocksClientConfig struct {

@@ -3,6 +3,8 @@ package session // import "github.com/xtls/xray-core/common/session"
 
 import (
 	"context"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"math/rand"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -60,7 +62,8 @@ type Outbound struct {
 
 // SniffingRequest controls the behavior of content sniffing.
 type SniffingRequest struct {
-	ExcludeForDomain               []string
+	ExcludedDomainMatcher          *domain.DomainMatcher
+	ExcludedIPMatcher              *geoip.MultiGeoIPMatcher
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool

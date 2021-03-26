@@ -7,7 +7,7 @@ import (
 	"github.com/xtls/xray-core/common/matcher/geosite"
 )
 
-func ParaseDomainRule(domain string) ([]*dm.Domain, error) {
+func ParseDomainRule(domain string) ([]*dm.Domain, error) {
 	if strings.HasPrefix(domain, "geosite:") {
 		country := strings.ToUpper(domain[8:])
 		domains, err := geosite.LoadGeositeWithAttr("geosite.dat", country)

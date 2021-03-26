@@ -45,3 +45,13 @@ func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
 	}
 	return false
 }
+
+// MatchIP match given ip.
+func (m *MultiGeoIPMatcher) MatchIP(ip net.IP) bool {
+	for _, matcher := range m.matchers {
+		if matcher.Match(ip) {
+			return true
+		}
+	}
+	return false
+}

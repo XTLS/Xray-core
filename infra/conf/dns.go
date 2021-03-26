@@ -2,6 +2,8 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/common/matcher/geoip"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"sort"
 	"strings"
 
@@ -13,24 +15,24 @@ import (
 )
 
 type NameServerConfig struct {
-	Address   *Address
+	Address   *common.Address
 	Port      uint16
 	Domains   []string
-	ExpectIPs StringList
+	ExpectIPs common.StringList
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
-	var address Address
+	var address common.Address
 	if err := json.Unmarshal(data, &address); err == nil {
 		c.Address = &address
 		return nil
 	}
 
 	var advanced struct {
-		Address   *Address   `json:"address"`
-		Port      uint16     `json:"port"`
-		Domains   []string   `json:"domains"`
-		ExpectIPs StringList `json:"expectIps"`
+		Address   *common.Address   `json:"address"`
+		Port      uint16            `json:"port"`
+		Domains   []string          `json:"domains"`
+		ExpectIPs common.StringList `json:"expectIps"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -52,7 +54,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	var originalRules []*dns.NameServer_OriginalRule
 
 	for _, rule := range c.Domains {
-		parsedDomain, err := conf.ParaseDomainRule(rule)
+		parsedDomain, err := conf.ParseDomainRule(rule)
 		if err != nil {
 			return nil, newError("invalid domain rule: ", rule).Base(err)
 		}
@@ -69,7 +71,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	geoipList, err := toCidrList(c.ExpectIPs)
+	geoipList, err := geoip.ParaseIPList(c.ExpectIPs)
 	if err != nil {
 		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}
@@ -88,15 +90,15 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers       []*NameServerConfig `json:"servers"`
-	Hosts         map[string]*Address `json:"hosts"`
-	ClientIP      *Address            `json:"clientIp"`
-	Tag           string              `json:"tag"`
-	QueryStrategy string              `json:"queryStrategy"`
-	DisableCache  bool                `json:"disableCache"`
+	Servers       []*NameServerConfig        `json:"servers"`
+	Hosts         map[string]*common.Address `json:"hosts"`
+	ClientIP      *common.Address            `json:"clientIp"`
+	Tag           string                     `json:"tag"`
+	QueryStrategy string                     `json:"queryStrategy"`
+	DisableCache  bool                       `json:"disableCache"`
 }
 
-func getHostMapping(addr *Address) *dns.Config_HostMapping {
+func getHostMapping(addr *common.Address) *dns.Config_HostMapping {
 	if addr.Family().IsIP() {
 		return &dns.Config_HostMapping{
 			Ip: [][]byte{[]byte(addr.IP())},

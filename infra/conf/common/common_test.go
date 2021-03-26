@@ -1,4 +1,4 @@
-package conf_test
+package common_test
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	. "github.com/xtls/xray-core/infra/conf"
+	. "github.com/xtls/xray-core/infra/conf/common"
 )
 
 func TestStringListUnmarshalError(t *testing.T) {

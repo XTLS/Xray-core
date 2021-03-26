@@ -2,6 +2,10 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/domain/conf"
+	"github.com/xtls/xray-core/common/matcher/geoip"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/transport/internet"
 	"log"
 	"os"
@@ -59,10 +63,11 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled         bool        `json:"enabled"`
-	DestOverride    *StringList `json:"destOverride"`
-	DomainsExcluded *StringList `json:"domainsExcluded"`
-	MetadataOnly    bool        `json:"metadataOnly"`
+	Enabled         bool               `json:"enabled"`
+	DestOverride    *common.StringList `json:"destOverride"`
+	DomainsExcluded *common.StringList `json:"domainsExcluded"`
+	IPsExcluded     *common.StringList `json:"ipsExcluded"`
+	MetadataOnly    bool               `json:"metadataOnly"`
 }
 
 // Build implements Buildable.
@@ -83,17 +88,31 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		}
 	}
 
-	var d []string
+	var exDomain []*domain.Domain
 	if c.DomainsExcluded != nil {
-		for _, domain := range *c.DomainsExcluded {
-			d = append(d, strings.ToLower(domain))
+		for _, dmr := range *c.DomainsExcluded {
+			if dm, err := conf.ParseDomainRule(dmr); err == nil {
+				exDomain = append(exDomain, dm...)
+			} else {
+				return nil, newError("failed to parse excluded domain").Base(err)
+			}
 		}
+	}
+
+	var exIP []*geoip.GeoIP
+	if c.IPsExcluded != nil {
+		exip, err := geoip.ParaseIPList(*c.IPsExcluded)
+		if err != nil {
+			return nil, newError("failed to parse excluded ip").Base(err)
+		}
+		exIP = exip
 	}
 
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: p,
-		DomainsExcluded:     d,
+		DomainsExcluded:     exDomain,
+		IpsExcluded:         exIP,
 		MetadataOnly:        c.MetadataOnly,
 	}, nil
 }
@@ -156,13 +175,13 @@ func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, e
 
 type InboundDetourConfig struct {
 	Protocol       string                         `json:"protocol"`
-	PortRange      *PortRange                     `json:"port"`
-	ListenOn       *Address                       `json:"listen"`
+	PortRange      *common.PortRange              `json:"port"`
+	ListenOn       *common.Address                `json:"listen"`
 	Settings       *json.RawMessage               `json:"settings"`
 	Tag            string                         `json:"tag"`
 	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
-	DomainOverride *StringList                    `json:"domainOverride"`
+	DomainOverride *common.StringList             `json:"domainOverride"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
 }
 
@@ -264,7 +283,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 
 type OutboundDetourConfig struct {
 	Protocol      string           `json:"protocol"`
-	SendThrough   *Address         `json:"sendThrough"`
+	SendThrough   *common.Address  `json:"sendThrough"`
 	Tag           string           `json:"tag"`
 	Settings      *json.RawMessage `json:"settings"`
 	StreamSetting *StreamConfig    `json:"streamSettings"`
@@ -622,7 +641,7 @@ func (c *Config) Build() (*core.Config, error) {
 
 	// Backward compatibility.
 	if len(inbounds) > 0 && inbounds[0].PortRange == nil && c.Port > 0 {
-		inbounds[0].PortRange = &PortRange{
+		inbounds[0].PortRange = &common.PortRange{
 			From: uint32(c.Port),
 			To:   uint32(c.Port),
 		}

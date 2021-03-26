@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"strconv"
 	"strings"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 )
 
 type RouterRulesConfig struct {
@@ -19,8 +19,8 @@ type RouterRulesConfig struct {
 }
 
 type BalancingRule struct {
-	Tag       string     `json:"tag"`
-	Selectors StringList `json:"selector"`
+	Tag       string            `json:"tag"`
+	Selectors common.StringList `json:"selector"`
 }
 
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
@@ -148,108 +148,20 @@ func ParseIP(s string) (*geoip.CIDR, error) {
 	}
 }
 
-var (
-	FileCache = make(map[string][]byte)
-	IPCache   = make(map[string]*geoip.GeoIP)
-)
-
-func loadFile(file string) ([]byte, error) {
-	if FileCache[file] == nil {
-		bs, err := filesystem.ReadAsset(file)
-		if err != nil {
-			return nil, newError("failed to open file: ", file).Base(err)
-		}
-		if len(bs) == 0 {
-			return nil, newError("empty file: ", file)
-		}
-		// Do not cache file, may save RAM when there
-		// are many files, but consume CPU each time.
-		return bs, nil
-		FileCache[file] = bs
-	}
-	return FileCache[file], nil
-}
-
-func toCidrList(ips StringList) ([]*geoip.GeoIP, error) {
-	var geoipList []*geoip.GeoIP
-	var customCidrs []*geoip.CIDR
-
-	for _, ip := range ips {
-		if strings.HasPrefix(ip, "geoip:") {
-			country := ip[6:]
-			geoipc, err := geoip.LoadGeoIP(strings.ToUpper(country))
-			if err != nil {
-				return nil, newError("failed to load GeoIP: ", country).Base(err)
-			}
-
-			geoipList = append(geoipList, &geoip.GeoIP{
-				CountryCode: strings.ToUpper(country),
-				Cidr:        geoipc,
-			})
-			continue
-		}
-		var isExtDatFile = 0
-		{
-			const prefix = "ext:"
-			if strings.HasPrefix(ip, prefix) {
-				isExtDatFile = len(prefix)
-			}
-			const prefixQualified = "ext-ip:"
-			if strings.HasPrefix(ip, prefixQualified) {
-				isExtDatFile = len(prefixQualified)
-			}
-		}
-		if isExtDatFile != 0 {
-			kv := strings.Split(ip[isExtDatFile:], ":")
-			if len(kv) != 2 {
-				return nil, newError("invalid external resource: ", ip)
-			}
-
-			filename := kv[0]
-			country := kv[1]
-			geoipc, err := geoip.LoadIPFile(filename, strings.ToUpper(country))
-			if err != nil {
-				return nil, newError("failed to load IPs: ", country, " from ", filename).Base(err)
-			}
-
-			geoipList = append(geoipList, &geoip.GeoIP{
-				CountryCode: strings.ToUpper(filename + "_" + country),
-				Cidr:        geoipc,
-			})
-
-			continue
-		}
-
-		ipRule, err := ParseIP(ip)
-		if err != nil {
-			return nil, newError("invalid IP: ", ip).Base(err)
-		}
-		customCidrs = append(customCidrs, ipRule)
-	}
-
-	if len(customCidrs) > 0 {
-		geoipList = append(geoipList, &geoip.GeoIP{
-			Cidr: customCidrs,
-		})
-	}
-
-	return geoipList, nil
-}
-
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList  `json:"domain"`
-		Domains    *StringList  `json:"domains"`
-		IP         *StringList  `json:"ip"`
-		Port       *PortList    `json:"port"`
-		Network    *NetworkList `json:"network"`
-		SourceIP   *StringList  `json:"source"`
-		SourcePort *PortList    `json:"sourcePort"`
-		User       *StringList  `json:"user"`
-		InboundTag *StringList  `json:"inboundTag"`
-		Protocols  *StringList  `json:"protocol"`
-		Attributes string       `json:"attrs"`
+		Domain     *common.StringList  `json:"domain"`
+		Domains    *common.StringList  `json:"domains"`
+		IP         *common.StringList  `json:"ip"`
+		Port       *common.PortList    `json:"port"`
+		Network    *common.NetworkList `json:"network"`
+		SourceIP   *common.StringList  `json:"source"`
+		SourcePort *common.PortList    `json:"sourcePort"`
+		User       *common.StringList  `json:"user"`
+		InboundTag *common.StringList  `json:"inboundTag"`
+		Protocols  *common.StringList  `json:"protocol"`
+		Attributes string              `json:"attrs"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -273,7 +185,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Domain != nil {
 		for _, domain := range *rawFieldRule.Domain {
-			rules, err := conf.ParaseDomainRule(domain)
+			rules, err := conf.ParseDomainRule(domain)
 			if err != nil {
 				return nil, newError("failed to parse domain rule: ", domain).Base(err)
 			}
@@ -283,7 +195,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Domains != nil {
 		for _, domain := range *rawFieldRule.Domains {
-			rules, err := conf.ParaseDomainRule(domain)
+			rules, err := conf.ParseDomainRule(domain)
 			if err != nil {
 				return nil, newError("failed to parse domain rule: ", domain).Base(err)
 			}
@@ -292,7 +204,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.IP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.IP)
+		geoipList, err := geoip.ParaseIPList(*rawFieldRule.IP)
 		if err != nil {
 			return nil, err
 		}
@@ -308,7 +220,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.SourceIP)
+		geoipList, err := geoip.ParaseIPList(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}

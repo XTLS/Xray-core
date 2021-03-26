@@ -91,13 +91,20 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		if net.HasNetwork(nl, net.Network_UNIX) {
 			newError("creating unix domain socket worker on ", address).AtDebug().WriteToLog()
 
+			sc := receiverConfig.GetEffectiveSniffingSettings()
+			sm, err := proxyman.NewSniffingMatcher(sc)
+			if err != nil {
+				return nil, err
+			}
+
 			worker := &dsWorker{
 				address:         address,
 				proxy:           p,
 				stream:          mss,
 				tag:             tag,
 				dispatcher:      h.mux,
-				sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
+				sniffingConfig:  sc,
+				sniffingMatcher: sm,
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
 				ctx:             ctx,
@@ -110,6 +117,12 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 			if net.HasNetwork(nl, net.Network_TCP) {
 				newError("creating stream worker on ", address, ":", port).AtDebug().WriteToLog()
 
+				sc := receiverConfig.GetEffectiveSniffingSettings()
+				sm, err := proxyman.NewSniffingMatcher(sc)
+				if err != nil {
+					return nil, err
+				}
+
 				worker := &tcpWorker{
 					address:         address,
 					port:            net.Port(port),
@@ -118,7 +131,8 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 					recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
 					tag:             tag,
 					dispatcher:      h.mux,
-					sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
+					sniffingConfig:  sc,
+					sniffingMatcher: sm,
 					uplinkCounter:   uplinkCounter,
 					downlinkCounter: downlinkCounter,
 					ctx:             ctx,

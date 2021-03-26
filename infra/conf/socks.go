@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf/common"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/protocol"
@@ -30,7 +31,7 @@ type SocksServerConfig struct {
 	AuthMethod string          `json:"auth"`
 	Accounts   []*SocksAccount `json:"accounts"`
 	UDP        bool            `json:"udp"`
-	Host       *Address        `json:"ip"`
+	Host       *common.Address `json:"ip"`
 	Timeout    uint32          `json:"timeout"`
 	UserLevel  uint32          `json:"userLevel"`
 }
@@ -65,7 +66,7 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 }
 
 type SocksRemoteConfig struct {
-	Address *Address          `json:"address"`
+	Address *common.Address   `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }
