@@ -2,11 +2,11 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/infra/conf/common"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/http"
 )
 

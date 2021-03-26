@@ -1,13 +1,12 @@
 package geoip
 
 import (
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 )
 
@@ -93,7 +92,7 @@ func find(data, code []byte) []byte {
 	}
 }
 
-func ParaseIPList(ips common.StringList) ([]*GeoIP, error) {
+func ParaseIPList(ips []string) ([]*GeoIP, error) {
 	var geoipList []*GeoIP
 	var customCidrs []*CIDR
 

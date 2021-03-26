@@ -1,11 +1,11 @@
 package conf
 
 import (
-	"github.com/xtls/xray-core/infra/conf/common"
 	"sort"
 
 	"github.com/golang/protobuf/proto"
 
+	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"github.com/xtls/xray-core/transport/internet/headers/srtp"

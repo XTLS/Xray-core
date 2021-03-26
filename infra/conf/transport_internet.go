@@ -2,7 +2,6 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"math"
 	"net/url"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/domainsocket"
 	"github.com/xtls/xray-core/transport/internet/http"

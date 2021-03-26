@@ -3,11 +3,11 @@ package session // import "github.com/xtls/xray-core/common/session"
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/matcher/domain"
-	"github.com/xtls/xray-core/common/matcher/geoip"
 	"math/rand"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal"

@@ -1,9 +1,10 @@
 package domain
 
 import (
+	"strings"
+
 	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/features/routing"
-	"strings"
 )
 
 var matcherTypeMap = map[MatchingType]str.Type{

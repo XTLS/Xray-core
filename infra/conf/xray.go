@@ -2,11 +2,7 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/common/matcher/domain"
-	"github.com/xtls/xray-core/common/matcher/domain/conf"
-	"github.com/xtls/xray-core/common/matcher/geoip"
-	"github.com/xtls/xray-core/infra/conf/common"
-	"github.com/xtls/xray-core/transport/internet"
+
 	"log"
 	"os"
 	"strings"
@@ -14,8 +10,13 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/domain/conf"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf/common"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 

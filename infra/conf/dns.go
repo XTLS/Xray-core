@@ -2,16 +2,17 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/common/matcher/geoip"
-	"github.com/xtls/xray-core/infra/conf/common"
+
 	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
 	dm "github.com/xtls/xray-core/common/matcher/domain"
 	"github.com/xtls/xray-core/common/matcher/domain/conf"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/infra/conf/common"
 )
 
 type NameServerConfig struct {
