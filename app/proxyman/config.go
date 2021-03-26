@@ -53,6 +53,10 @@ type SniffingMatcher struct {
 func NewSniffingMatcher(sc *SniffingConfig) (*SniffingMatcher, error) {
 	m := new(SniffingMatcher)
 
+	if sc == nil {
+		return m, nil
+	}
+
 	if sc.DomainsExcluded != nil {
 		exDomain, err := domain.NewDomainMatcher(sc.DomainsExcluded)
 		if err != nil {

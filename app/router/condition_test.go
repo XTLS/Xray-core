@@ -359,7 +359,7 @@ func TestChinaSites(t *testing.T) {
 	domains, err := loadGeoSite("CN")
 	common.Must(err)
 
-	matcher, err := NewDomainMatcher(domains)
+	matcher, err := domain.NewDomainMatcher(domains)
 	common.Must(err)
 
 	type TestCase struct {
