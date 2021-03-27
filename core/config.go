@@ -80,21 +80,23 @@ func getFormat(filename string) string {
 func LoadConfig(formatName string, input interface{}) (*Config, error) {
 	switch v := input.(type) {
 	case cmdarg.Arg:
-
 		formats := make([]string, len(v))
 		hasProtobuf := false
 		for i, file := range v {
 			var f string
 
 			if formatName == "auto" {
-				f = getFormat(file)
-				if f == "" {
-					return nil, newError("Unable to get format of", formatName).AtWarning()
+				if file != "stdin:" {
+					f = getFormat(file)
+				} else {
+					f = "json"
 				}
+			} else {
+				f = formatName
 			}
 
 			if f == "" {
-				f = formatName
+				return nil, newError("Failed to get format of ", file).AtWarning()
 			}
 
 			if f == "protobuf" {
