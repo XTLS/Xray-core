@@ -53,6 +53,6 @@ func (u *MemoryUser) SetLimiter(pm policy.Manager) {
 	}
 
 	if p.Speed.Outbound != 0 {
-		u.OutboundLimiter = rate.NewLimiter(rate.Limit(p.Speed.Outbound/4), int(p.Speed.Inbound/4))
+		u.OutboundLimiter = rate.NewLimiter(rate.Limit(p.Speed.Outbound/4), int(p.Speed.Outbound/4))
 	}
 }
