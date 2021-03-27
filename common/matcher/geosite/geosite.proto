@@ -6,11 +6,19 @@ option go_package = "github.com/xtls/xray-core/common/matcher/geosite";
 option java_package = "com.xray.common.matcher.geosite";
 option java_multiple_files = true;
 
-import "common/matcher/domain/domain.proto";
-
 message Domain {
+  enum Type {
+    // The value is used as is.
+    Plain = 0;
+    // The value is used as a regular expression.
+    Regex = 1;
+    // The value is a root domain.
+    Domain = 2;
+    // The value is a domain.
+    Full = 3;
+  }
   // Domain matching type.
-  xray.common.matcher.domain.MatchingType type = 1;
+  Type type = 1;
 
   // Domain value.
   string value = 2;
