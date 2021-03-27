@@ -37,8 +37,8 @@ type Buffer struct {
 
 // Speed limit inbound and outbound
 type Speed struct {
-	Inbound  uint64
-	Outbound uint64
+	UplinkSpeed   uint64
+	DownlinkSpeed uint64
 }
 
 // SystemStats contains stat policy settings on system level.
@@ -137,8 +137,8 @@ func SessionDefault() Session {
 		},
 		Buffer: defaultBufferPolicy(),
 		Speed: Speed{
-			Inbound:  0,
-			Outbound: 0,
+			UplinkSpeed:   0,
+			DownlinkSpeed: 0,
 		},
 	}
 }

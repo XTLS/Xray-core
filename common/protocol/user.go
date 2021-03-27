@@ -42,17 +42,17 @@ type MemoryUser struct {
 	Account         Account
 	Email           string
 	Level           uint32
-	InboundLimiter  *rate.Limiter
-	OutboundLimiter *rate.Limiter
+	UplinkLimiter   *rate.Limiter
+	DownlinkLimiter *rate.Limiter
 }
 
 func (u *MemoryUser) SetLimiter(pm policy.Manager) {
 	p := pm.ForLevel(u.Level)
-	if p.Speed.Inbound != 0 {
-		u.InboundLimiter = rate.NewLimiter(rate.Limit(p.Speed.Inbound/4), int(p.Speed.Inbound/4))
+	if p.Speed.UplinkSpeed != 0 {
+		u.UplinkLimiter = rate.NewLimiter(rate.Limit(p.Speed.UplinkSpeed/4), int(p.Speed.UplinkSpeed/4))
 	}
 
-	if p.Speed.Outbound != 0 {
-		u.OutboundLimiter = rate.NewLimiter(rate.Limit(p.Speed.Outbound/4), int(p.Speed.Outbound/4))
+	if p.Speed.DownlinkSpeed != 0 {
+		u.DownlinkLimiter = rate.NewLimiter(rate.Limit(p.Speed.DownlinkSpeed/4), int(p.Speed.DownlinkSpeed/4))
 	}
 }

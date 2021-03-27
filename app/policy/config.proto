@@ -30,8 +30,8 @@ message Policy {
   }
 
   message Speed {
-    uint64 inbound = 1;
-    uint64 outbound = 2;
+    uint64 uplink_speed = 1;
+    uint64 downlink_speed = 2;
   }
 
   Timeout timeout = 1;

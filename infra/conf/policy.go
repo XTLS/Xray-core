@@ -14,8 +14,8 @@ type Policy struct {
 	StatsUserUplink   bool    `json:"statsUserUplink"`
 	StatsUserDownlink bool    `json:"statsUserDownlink"`
 	BufferSize        *int32  `json:"bufferSize"`
-	InboundSpeed      string  `json:"inboundSpeed"`
-	OutboundSpeed     string  `json:"outboundSpeed"`
+	UplinkSpeed       string  `json:"uplinkSpeed"`
+	DownlinkSpeed     string  `json:"downlinkSpeed"`
 }
 
 func (t *Policy) Build() (*policy.Policy, error) {
@@ -52,20 +52,20 @@ func (t *Policy) Build() (*policy.Policy, error) {
 	}
 
 	var err error
-	var inboundSpeed uint64
-	if t.InboundSpeed != "" {
-		inboundSpeed, err = bytes.ToBytes(t.InboundSpeed)
+	var uplinkSpeed, downlinkSpeed uint64
+	if t.UplinkSpeed != "" {
+		uplinkSpeed, err = bytes.ToBytes(t.UplinkSpeed)
 		common.Must(err)
 	}
 
-	var outboundSpeed uint64
-	if t.OutboundSpeed != "" {
-		outboundSpeed, err = bytes.ToBytes(t.OutboundSpeed)
+	if t.DownlinkSpeed != "" {
+		downlinkSpeed, err = bytes.ToBytes(t.DownlinkSpeed)
 		common.Must(err)
 	}
+
 	p.Speed = &policy.Policy_Speed{
-		Inbound:  inboundSpeed,
-		Outbound: outboundSpeed,
+		UplinkSpeed:   uplinkSpeed,
+		DownlinkSpeed: downlinkSpeed,
 	}
 
 	return p, nil

@@ -151,17 +151,17 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		user = sessionInbound.User
 	}
 	if user != nil {
-		if user.InboundLimiter != nil {
+		if user.UplinkLimiter != nil {
 			inboundLink.Writer = &Bucket{
 				Writer:  inboundLink.Writer,
-				Limiter: user.InboundLimiter,
+				Limiter: user.UplinkLimiter,
 			}
 		}
 
-		if user.OutboundLimiter != nil {
+		if user.DownlinkLimiter != nil {
 			outboundLink.Writer = &Bucket{
 				Writer:  outboundLink.Writer,
-				Limiter: user.OutboundLimiter,
+				Limiter: user.DownlinkLimiter,
 			}
 		}
 
