@@ -36,7 +36,7 @@ func init() {
 			{
 				CountryCode: "TEST",
 				Domain: []*geosite.Domain{
-					{Type: domain.MatchingType_Full, Value: "example.com"},
+					{Type: geosite.Domain_Full, Value: "example.com"},
 				},
 			},
 		},
