@@ -12,28 +12,27 @@ import (
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/infra/conf/common"
 )
 
 type NameServerConfig struct {
-	Address   *common.Address
+	Address   *Address
 	Port      uint16
 	Domains   []string
-	ExpectIPs common.StringList
+	ExpectIPs StringList
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
-	var address common.Address
+	var address Address
 	if err := json.Unmarshal(data, &address); err == nil {
 		c.Address = &address
 		return nil
 	}
 
 	var advanced struct {
-		Address   *common.Address   `json:"address"`
-		Port      uint16            `json:"port"`
-		Domains   []string          `json:"domains"`
-		ExpectIPs common.StringList `json:"expectIps"`
+		Address   *Address   `json:"address"`
+		Port      uint16     `json:"port"`
+		Domains   []string   `json:"domains"`
+		ExpectIPs StringList `json:"expectIps"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -91,15 +90,15 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers       []*NameServerConfig        `json:"servers"`
-	Hosts         map[string]*common.Address `json:"hosts"`
-	ClientIP      *common.Address            `json:"clientIp"`
-	Tag           string                     `json:"tag"`
-	QueryStrategy string                     `json:"queryStrategy"`
-	DisableCache  bool                       `json:"disableCache"`
+	Servers       []*NameServerConfig `json:"servers"`
+	Hosts         map[string]*Address `json:"hosts"`
+	ClientIP      *Address            `json:"clientIp"`
+	Tag           string              `json:"tag"`
+	QueryStrategy string              `json:"queryStrategy"`
+	DisableCache  bool                `json:"disableCache"`
 }
 
-func getHostMapping(addr *common.Address) *dns.Config_HostMapping {
+func getHostMapping(addr *Address) *dns.Config_HostMapping {
 	if addr.Family().IsIP() {
 		return &dns.Config_HostMapping{
 			Ip: [][]byte{[]byte(addr.IP())},

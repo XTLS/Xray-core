@@ -3,14 +3,13 @@ package conf
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/dns"
 )
 
 type DNSOutboundConfig struct {
-	Network common.Network  `json:"network"`
-	Address *common.Address `json:"address"`
-	Port    uint16          `json:"port"`
+	Network Network  `json:"network"`
+	Address *Address `json:"address"`
+	Port    uint16   `json:"port"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {

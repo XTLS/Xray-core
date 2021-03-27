@@ -15,7 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
@@ -64,11 +63,11 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled         bool               `json:"enabled"`
-	DestOverride    *common.StringList `json:"destOverride"`
-	DomainsExcluded *common.StringList `json:"domainsExcluded"`
-	IPsExcluded     *common.StringList `json:"ipsExcluded"`
-	MetadataOnly    bool               `json:"metadataOnly"`
+	Enabled         bool        `json:"enabled"`
+	DestOverride    *StringList `json:"destOverride"`
+	DomainsExcluded *StringList `json:"domainsExcluded"`
+	IPsExcluded     *StringList `json:"ipsExcluded"`
+	MetadataOnly    bool        `json:"metadataOnly"`
 }
 
 // Build implements Buildable.
@@ -176,13 +175,13 @@ func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, e
 
 type InboundDetourConfig struct {
 	Protocol       string                         `json:"protocol"`
-	PortRange      *common.PortRange              `json:"port"`
-	ListenOn       *common.Address                `json:"listen"`
+	PortRange      *PortRange                     `json:"port"`
+	ListenOn       *Address                       `json:"listen"`
 	Settings       *json.RawMessage               `json:"settings"`
 	Tag            string                         `json:"tag"`
 	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
-	DomainOverride *common.StringList             `json:"domainOverride"`
+	DomainOverride *StringList                    `json:"domainOverride"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
 }
 
@@ -284,7 +283,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 
 type OutboundDetourConfig struct {
 	Protocol      string           `json:"protocol"`
-	SendThrough   *common.Address  `json:"sendThrough"`
+	SendThrough   *Address         `json:"sendThrough"`
 	Tag           string           `json:"tag"`
 	Settings      *json.RawMessage `json:"settings"`
 	StreamSetting *StreamConfig    `json:"streamSettings"`
@@ -642,7 +641,7 @@ func (c *Config) Build() (*core.Config, error) {
 
 	// Backward compatibility.
 	if len(inbounds) > 0 && inbounds[0].PortRange == nil && c.Port > 0 {
-		inbounds[0].PortRange = &common.PortRange{
+		inbounds[0].PortRange = &PortRange{
 			From: uint32(c.Port),
 			To:   uint32(c.Port),
 		}

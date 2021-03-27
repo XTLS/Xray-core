@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/matcher/geosite"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/infra/conf/common"
 )
 
 type RouterRulesConfig struct {
@@ -19,8 +18,8 @@ type RouterRulesConfig struct {
 }
 
 type BalancingRule struct {
-	Tag       string            `json:"tag"`
-	Selectors common.StringList `json:"selector"`
+	Tag       string     `json:"tag"`
+	Selectors StringList `json:"selector"`
 }
 
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
@@ -151,17 +150,17 @@ func ParseIP(s string) (*geoip.CIDR, error) {
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *common.StringList  `json:"domain"`
-		Domains    *common.StringList  `json:"domains"`
-		IP         *common.StringList  `json:"ip"`
-		Port       *common.PortList    `json:"port"`
-		Network    *common.NetworkList `json:"network"`
-		SourceIP   *common.StringList  `json:"source"`
-		SourcePort *common.PortList    `json:"sourcePort"`
-		User       *common.StringList  `json:"user"`
-		InboundTag *common.StringList  `json:"inboundTag"`
-		Protocols  *common.StringList  `json:"protocol"`
-		Attributes string              `json:"attrs"`
+		Domain     *StringList  `json:"domain"`
+		Domains    *StringList  `json:"domains"`
+		IP         *StringList  `json:"ip"`
+		Port       *PortList    `json:"port"`
+		Network    *NetworkList `json:"network"`
+		SourceIP   *StringList  `json:"source"`
+		SourcePort *PortList    `json:"sourcePort"`
+		User       *StringList  `json:"user"`
+		InboundTag *StringList  `json:"inboundTag"`
+		Protocols  *StringList  `json:"protocol"`
+		Attributes string       `json:"attrs"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)

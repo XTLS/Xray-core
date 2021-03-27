@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
@@ -124,7 +123,7 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VMessOutboundTarget struct {
-	Address *common.Address   `json:"address"`
+	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }

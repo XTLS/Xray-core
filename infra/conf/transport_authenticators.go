@@ -5,7 +5,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"github.com/xtls/xray-core/transport/internet/headers/srtp"
@@ -58,13 +57,13 @@ func (DTLSAuthenticator) Build() (proto.Message, error) {
 }
 
 type AuthenticatorRequest struct {
-	Version string                        `json:"version"`
-	Method  string                        `json:"method"`
-	Path    common.StringList             `json:"path"`
-	Headers map[string]*common.StringList `json:"headers"`
+	Version string                 `json:"version"`
+	Method  string                 `json:"method"`
+	Path    StringList             `json:"path"`
+	Headers map[string]*StringList `json:"headers"`
 }
 
-func sortMapKeys(m map[string]*common.StringList) []string {
+func sortMapKeys(m map[string]*StringList) []string {
 	var keys []string
 	for key := range m {
 		keys = append(keys, key)
@@ -134,10 +133,10 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 }
 
 type AuthenticatorResponse struct {
-	Version string                        `json:"version"`
-	Status  string                        `json:"status"`
-	Reason  string                        `json:"reason"`
-	Headers map[string]*common.StringList `json:"headers"`
+	Version string                 `json:"version"`
+	Status  string                 `json:"status"`
+	Reason  string                 `json:"reason"`
+	Headers map[string]*StringList `json:"headers"`
 }
 
 func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {

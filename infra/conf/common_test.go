@@ -1,7 +1,8 @@
-package common_test
+package conf_test
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/infra/conf"
 	"os"
 	"testing"
 
@@ -11,12 +12,11 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	. "github.com/xtls/xray-core/infra/conf/common"
 )
 
 func TestStringListUnmarshalError(t *testing.T) {
 	rawJSON := `1234`
-	list := new(StringList)
+	list := new(conf.StringList)
 	err := json.Unmarshal([]byte(rawJSON), list)
 	if err == nil {
 		t.Error("expected error, but got nil")
@@ -25,7 +25,7 @@ func TestStringListUnmarshalError(t *testing.T) {
 
 func TestStringListLen(t *testing.T) {
 	rawJSON := `"a, b, c, d"`
-	var list StringList
+	var list conf.StringList
 	err := json.Unmarshal([]byte(rawJSON), &list)
 	common.Must(err)
 	if r := cmp.Diff([]string(list), []string{"a", " b", " c", " d"}); r != "" {
@@ -35,7 +35,7 @@ func TestStringListLen(t *testing.T) {
 
 func TestIPParsing(t *testing.T) {
 	rawJSON := "\"8.8.8.8\""
-	var address Address
+	var address conf.Address
 	err := json.Unmarshal([]byte(rawJSON), &address)
 	common.Must(err)
 	if r := cmp.Diff(address.IP(), net.IP{8, 8, 8, 8}); r != "" {
@@ -45,7 +45,7 @@ func TestIPParsing(t *testing.T) {
 
 func TestDomainParsing(t *testing.T) {
 	rawJSON := "\"example.com\""
-	var address Address
+	var address conf.Address
 	common.Must(json.Unmarshal([]byte(rawJSON), &address))
 	if address.Domain() != "example.com" {
 		t.Error("domain: ", address.Domain())
@@ -55,7 +55,7 @@ func TestDomainParsing(t *testing.T) {
 func TestURLParsing(t *testing.T) {
 	{
 		rawJSON := "\"https://dns.google/dns-query\""
-		var address Address
+		var address conf.Address
 		common.Must(json.Unmarshal([]byte(rawJSON), &address))
 		if address.Domain() != "https://dns.google/dns-query" {
 			t.Error("URL: ", address.Domain())
@@ -63,7 +63,7 @@ func TestURLParsing(t *testing.T) {
 	}
 	{
 		rawJSON := "\"https+local://dns.google/dns-query\""
-		var address Address
+		var address conf.Address
 		common.Must(json.Unmarshal([]byte(rawJSON), &address))
 		if address.Domain() != "https+local://dns.google/dns-query" {
 			t.Error("URL: ", address.Domain())
@@ -73,7 +73,7 @@ func TestURLParsing(t *testing.T) {
 
 func TestInvalidAddressJson(t *testing.T) {
 	rawJSON := "1234"
-	var address Address
+	var address conf.Address
 	err := json.Unmarshal([]byte(rawJSON), &address)
 	if err == nil {
 		t.Error("nil error")
@@ -81,7 +81,7 @@ func TestInvalidAddressJson(t *testing.T) {
 }
 
 func TestStringNetwork(t *testing.T) {
-	var network Network
+	var network conf.Network
 	common.Must(json.Unmarshal([]byte(`"tcp"`), &network))
 	if v := network.Build(); v != net.Network_TCP {
 		t.Error("network: ", v)
@@ -89,7 +89,7 @@ func TestStringNetwork(t *testing.T) {
 }
 
 func TestArrayNetworkList(t *testing.T) {
-	var list NetworkList
+	var list conf.NetworkList
 	common.Must(json.Unmarshal([]byte("[\"Tcp\"]"), &list))
 
 	nlist := list.Build()
@@ -102,7 +102,7 @@ func TestArrayNetworkList(t *testing.T) {
 }
 
 func TestStringNetworkList(t *testing.T) {
-	var list NetworkList
+	var list conf.NetworkList
 	common.Must(json.Unmarshal([]byte("\"TCP, ip\""), &list))
 
 	nlist := list.Build()
@@ -115,7 +115,7 @@ func TestStringNetworkList(t *testing.T) {
 }
 
 func TestInvalidNetworkJson(t *testing.T) {
-	var list NetworkList
+	var list conf.NetworkList
 	err := json.Unmarshal([]byte("0"), &list)
 	if err == nil {
 		t.Error("nil error")
@@ -123,10 +123,10 @@ func TestInvalidNetworkJson(t *testing.T) {
 }
 
 func TestIntPort(t *testing.T) {
-	var portRange PortRange
+	var portRange conf.PortRange
 	common.Must(json.Unmarshal([]byte("1234"), &portRange))
 
-	if r := cmp.Diff(portRange, PortRange{
+	if r := cmp.Diff(portRange, conf.PortRange{
 		From: 1234, To: 1234,
 	}); r != "" {
 		t.Error(r)
@@ -134,7 +134,7 @@ func TestIntPort(t *testing.T) {
 }
 
 func TestOverRangeIntPort(t *testing.T) {
-	var portRange PortRange
+	var portRange conf.PortRange
 	err := json.Unmarshal([]byte("70000"), &portRange)
 	if err == nil {
 		t.Error("nil error")
@@ -149,10 +149,10 @@ func TestOverRangeIntPort(t *testing.T) {
 func TestEnvPort(t *testing.T) {
 	common.Must(os.Setenv("PORT", "1234"))
 
-	var portRange PortRange
+	var portRange conf.PortRange
 	common.Must(json.Unmarshal([]byte("\"env:PORT\""), &portRange))
 
-	if r := cmp.Diff(portRange, PortRange{
+	if r := cmp.Diff(portRange, conf.PortRange{
 		From: 1234, To: 1234,
 	}); r != "" {
 		t.Error(r)
@@ -160,10 +160,10 @@ func TestEnvPort(t *testing.T) {
 }
 
 func TestSingleStringPort(t *testing.T) {
-	var portRange PortRange
+	var portRange conf.PortRange
 	common.Must(json.Unmarshal([]byte("\"1234\""), &portRange))
 
-	if r := cmp.Diff(portRange, PortRange{
+	if r := cmp.Diff(portRange, conf.PortRange{
 		From: 1234, To: 1234,
 	}); r != "" {
 		t.Error(r)
@@ -171,10 +171,10 @@ func TestSingleStringPort(t *testing.T) {
 }
 
 func TestStringPairPort(t *testing.T) {
-	var portRange PortRange
+	var portRange conf.PortRange
 	common.Must(json.Unmarshal([]byte("\"1234-5678\""), &portRange))
 
-	if r := cmp.Diff(portRange, PortRange{
+	if r := cmp.Diff(portRange, conf.PortRange{
 		From: 1234, To: 5678,
 	}); r != "" {
 		t.Error(r)
@@ -182,7 +182,7 @@ func TestStringPairPort(t *testing.T) {
 }
 
 func TestOverRangeStringPort(t *testing.T) {
-	var portRange PortRange
+	var portRange conf.PortRange
 	err := json.Unmarshal([]byte("\"65536\""), &portRange)
 	if err == nil {
 		t.Error("nil error")
@@ -205,7 +205,7 @@ func TestOverRangeStringPort(t *testing.T) {
 }
 
 func TestUserParsing(t *testing.T) {
-	user := new(User)
+	user := new(conf.User)
 	common.Must(json.Unmarshal([]byte(`{
     "id": "96edb838-6d68-42ef-a933-25f7ac3a9d09",
     "email": "love@example.com",
@@ -223,7 +223,7 @@ func TestUserParsing(t *testing.T) {
 }
 
 func TestInvalidUserJson(t *testing.T) {
-	user := new(User)
+	user := new(conf.User)
 	err := json.Unmarshal([]byte(`{"email": 1234}`), user)
 	if err == nil {
 		t.Error("nil error")

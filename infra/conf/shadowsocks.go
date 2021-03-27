@@ -7,7 +7,6 @@ import (
 
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 )
 
@@ -47,7 +46,7 @@ type ShadowsocksServerConfig struct {
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
 	Users       []*ShadowsocksUserConfig `json:"clients"`
-	NetworkList *common.NetworkList      `json:"network"`
+	NetworkList *NetworkList             `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -94,12 +93,12 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 }
 
 type ShadowsocksServerTarget struct {
-	Address  *common.Address `json:"address"`
-	Port     uint16          `json:"port"`
-	Cipher   string          `json:"method"`
-	Password string          `json:"password"`
-	Email    string          `json:"email"`
-	Level    byte            `json:"level"`
+	Address  *Address `json:"address"`
+	Port     uint16   `json:"port"`
+	Cipher   string   `json:"method"`
+	Password string   `json:"password"`
+	Email    string   `json:"email"`
+	Level    byte     `json:"level"`
 }
 
 type ShadowsocksClientConfig struct {

@@ -2,17 +2,16 @@ package conf
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 )
 
 type DokodemoConfig struct {
-	Host         *common.Address     `json:"address"`
-	PortValue    uint16              `json:"port"`
-	NetworkList  *common.NetworkList `json:"network"`
-	TimeoutValue uint32              `json:"timeout"`
-	Redirect     bool                `json:"followRedirect"`
-	UserLevel    uint32              `json:"userLevel"`
+	Host         *Address     `json:"address"`
+	PortValue    uint16       `json:"port"`
+	NetworkList  *NetworkList `json:"network"`
+	TimeoutValue uint32       `json:"timeout"`
+	Redirect     bool         `json:"followRedirect"`
+	UserLevel    uint32       `json:"userLevel"`
 }
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {

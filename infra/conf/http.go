@@ -6,7 +6,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/http"
 )
 
@@ -47,7 +46,7 @@ func (c *HTTPServerConfig) Build() (proto.Message, error) {
 }
 
 type HTTPRemoteConfig struct {
-	Address *common.Address   `json:"address"`
+	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }

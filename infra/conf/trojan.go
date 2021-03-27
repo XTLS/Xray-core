@@ -11,18 +11,17 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/infra/conf/common"
 	"github.com/xtls/xray-core/proxy/trojan"
 )
 
 // TrojanServerTarget is configuration of a single trojan server
 type TrojanServerTarget struct {
-	Address  *common.Address `json:"address"`
-	Port     uint16          `json:"port"`
-	Password string          `json:"password"`
-	Email    string          `json:"email"`
-	Level    byte            `json:"level"`
-	Flow     string          `json:"flow"`
+	Address  *Address `json:"address"`
+	Port     uint16   `json:"port"`
+	Password string   `json:"password"`
+	Email    string   `json:"email"`
+	Level    byte     `json:"level"`
+	Flow     string   `json:"flow"`
 }
 
 // TrojanClientConfig is configuration of trojan servers
