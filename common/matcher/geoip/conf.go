@@ -16,7 +16,7 @@ var (
 )
 
 func LoadGeoIP(code string) ([]*CIDR, error) {
-	return LoadIPFile("dat", code)
+	return LoadIPFile("geoip.dat", code)
 }
 
 func LoadIPFile(file, code string) ([]*CIDR, error) {
