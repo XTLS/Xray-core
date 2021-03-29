@@ -13,7 +13,7 @@ func setTFO(fd syscall.Handle, tfo int) error {
 		tfo = 1
 	}
 	if tfo >= 0 {
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, int(tfo)); err != nil {
+		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, tfo); err != nil {
 			return err
 		}
 	}
