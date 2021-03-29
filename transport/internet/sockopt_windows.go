@@ -8,7 +8,7 @@ const (
 	TCP_FASTOPEN = 15
 )
 
-func setTFO(fd syscall.Handle, tfo int32) error {
+func setTFO(fd syscall.Handle, tfo int) error {
 	if tfo > 0 {
 		tfo = 1
 	}
