@@ -202,6 +202,10 @@ func shouldOverrideByProtocol(protocol string, overrideProtocol []string, fakeDN
 	return false
 }
 
+func isInvalidDomain(domain string) bool {
+	return strings.Contains(domain, " ") || strings.Contains(domain, "*") || !strings.Contains(domain, ".")
+}
+
 func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
 
@@ -215,7 +219,7 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 	}
 
 	switch {
-	case strings.Contains(domain, " "), strings.Contains(domain, "*"), !strings.Contains(domain, "."):
+	case isInvalidDomain(domain):
 		// Do NOT override domains with space or '*' or without any dot, eg "Mijia Cloud"
 		newError("destination override ignores invalid domain [", domain, "]").WriteToLog(session.ExportIDToError(ctx))
 		return false
