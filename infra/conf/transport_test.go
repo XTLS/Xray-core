@@ -72,6 +72,28 @@ func TestSocketConfig(t *testing.T) {
 			},
 		},
 	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": -65535
+			}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  -1,
+			},
+		},
+	})
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  `{}`,
+			Parser: createParser(),
+			Output: &internet.SocketConfig{
+				Mark: 0,
+				Tfo:  0,
+			},
+		},
+	})
 }
 
 func TestTransportConfig(t *testing.T) {

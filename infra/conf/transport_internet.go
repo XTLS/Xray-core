@@ -488,12 +488,12 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 				tfo = -1 // TFO need to be disabled
 			}
 		case float64:
-			if v < 0 {
-				return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
-			}
 			tfo = int32(math.Min(v, math.MaxInt32))
+			if tfo < 0 {
+				tfo = -1
+			}
 		default:
-			return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
+			return nil, newError("tcpFastOpen: only boolean and integer value is acceptable")
 		}
 	}
 	var tproxy internet.SocketConfig_TProxyMode
