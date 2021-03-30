@@ -29,7 +29,7 @@ func IsValidTLSVersion(major, minor byte) bool {
 
 // ReadClientHello returns server name (if any) from TLS client hello message.
 // https://github.com/golang/go/blob/master/src/crypto/tls/handshake_messages.go#L300
-func ReadClientHello(shouldSniffDomain bool, data []byte, h *SniffHeader) error {
+func ReadClientHello(data []byte, h *SniffHeader) error {
 	if len(data) < 42 {
 		return common.ErrNoClue
 	}
@@ -142,7 +142,12 @@ func SniffTLS(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
 	}
 
 	h := &SniffHeader{}
-	err := ReadClientHello(shouldSniffDomain, b[5:5+headerLen], h)
+
+	if !shouldSniffDomain {
+		return h, nil
+	}
+
+	err := ReadClientHello(b[5:5+headerLen], h)
 	if err == nil {
 		return h, nil
 	}
