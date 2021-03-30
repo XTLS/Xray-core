@@ -12,7 +12,7 @@ const XrayKey XrayKey = 1
 
 // FromContext returns an Instance from the given context, or nil if the context doesn't contain one.
 func FromContext(ctx context.Context) *Instance {
-	if s, ok := ctx.Value(xrayKey).(*Instance); ok {
+	if s, ok := ctx.Value(XrayKey).(*Instance); ok {
 		return s
 	}
 	return nil
