@@ -70,10 +70,6 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 		return errNotClientHello
 	}
 
-	if !shouldSniffDomain {
-		return nil
-	}
-
 	for len(data) != 0 {
 		if len(data) < 4 {
 			return errNotClientHello
