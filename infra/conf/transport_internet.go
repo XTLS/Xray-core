@@ -478,22 +478,19 @@ type SocketConfig struct {
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
-	tfo := int32(-1)
+	tfo := int32(0) // don't invoke setsockopt() for TFO
 	if c.TFO != nil {
 		switch v := c.TFO.(type) {
 		case bool:
 			if v {
 				tfo = 256
 			} else {
-				tfo = 0
+				tfo = -1 // TFO need to be disabled
 			}
 		case float64:
-			if v < 0 {
-				return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
-			}
 			tfo = int32(math.Min(v, math.MaxInt32))
 		default:
-			return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
+			return nil, newError("tcpFastOpen: only boolean and integer value is acceptable")
 		}
 	}
 	var tproxy internet.SocketConfig_TProxyMode
