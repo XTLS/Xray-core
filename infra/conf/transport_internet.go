@@ -492,10 +492,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 				return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
 			}
 			tfo = int32(math.Min(v, math.MaxInt32))
-			// User input 0 means TFO need to be disabled, convert to -1
-			if tfo == 0 {
-				tfo = -1
-			}
 		default:
 			return nil, newError("tcpFastOpen: only boolean and non-negative integer value is acceptable")
 		}
