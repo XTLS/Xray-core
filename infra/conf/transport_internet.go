@@ -489,9 +489,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 			}
 		case float64:
 			tfo = int32(math.Min(v, math.MaxInt32))
-			if tfo < 0 {
-				tfo = -1
-			}
 		default:
 			return nil, newError("tcpFastOpen: only boolean and integer value is acceptable")
 		}

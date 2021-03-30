@@ -23,7 +23,7 @@ func (v *SocketConfig) ParseTFOValue() int {
 		return -1
 	}
 	tfo := int(v.Tfo)
-	if tfo == -1 {
+	if tfo < 0 {
 		tfo = 0
 	}
 	return tfo
