@@ -22,10 +22,6 @@ var errNotBittorrent = errors.New("not bittorrent header")
 func SniffBittorrent(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
 	h := &SniffHeader{}
 
-	if !shouldSniffDomain {
-		return h, nil
-	}
-
 	if len(b) < 20 {
 		return nil, common.ErrNoClue
 	}
