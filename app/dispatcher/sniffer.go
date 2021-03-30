@@ -14,7 +14,7 @@ type SniffResult interface {
 	Domain() string
 }
 
-type protocolSniffer func(context.Context, []byte) (SniffResult, error)
+type protocolSniffer func(context.Context, []byte, bool) (SniffResult, error)
 
 type protocolSnifferWithMetadata struct {
 	protocolSniffer protocolSniffer
@@ -31,9 +31,9 @@ type Sniffer struct {
 func NewSniffer(ctx context.Context) *Sniffer {
 	ret := &Sniffer{
 		sniffer: []protocolSnifferWithMetadata{
-			{func(c context.Context, b []byte) (SniffResult, error) { return http.SniffHTTP(b) }, false},
-			{func(c context.Context, b []byte) (SniffResult, error) { return tls.SniffTLS(b) }, false},
-			{func(c context.Context, b []byte) (SniffResult, error) { return bittorrent.SniffBittorrent(b) }, false},
+			{func(c context.Context, b []byte, s bool) (SniffResult, error) { return http.SniffHTTP(b, s) }, false},
+			{func(c context.Context, b []byte, s bool) (SniffResult, error) { return tls.SniffTLS(b, s) }, false},
+			{func(c context.Context, b []byte, s bool) (SniffResult, error) { return bittorrent.SniffBittorrent(b, s) }, false},
 		},
 	}
 	if sniffer, err := newFakeDNSSniffer(ctx); err == nil {
@@ -44,14 +44,14 @@ func NewSniffer(ctx context.Context) *Sniffer {
 
 var errUnknownContent = newError("unknown content")
 
-func (s *Sniffer) Sniff(c context.Context, payload []byte) (SniffResult, error) {
+func (s *Sniffer) Sniff(c context.Context, payload []byte, shouldSniffDomain bool) (SniffResult, error) {
 	var pendingSniffer []protocolSnifferWithMetadata
 	for _, si := range s.sniffer {
 		s := si.protocolSniffer
 		if si.metadataSniffer {
 			continue
 		}
-		result, err := s(c, payload)
+		result, err := s(c, payload, shouldSniffDomain)
 		if err == common.ErrNoClue {
 			pendingSniffer = append(pendingSniffer, si)
 			continue
@@ -78,7 +78,7 @@ func (s *Sniffer) SniffMetadata(c context.Context) (SniffResult, error) {
 			pendingSniffer = append(pendingSniffer, si)
 			continue
 		}
-		result, err := s(c, nil)
+		result, err := s(c, nil, true)
 		if err == common.ErrNoClue {
 			pendingSniffer = append(pendingSniffer, si)
 			continue

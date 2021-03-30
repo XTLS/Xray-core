@@ -19,7 +19,7 @@ func (h *SniffHeader) Domain() string {
 
 var errNotBittorrent = errors.New("not bittorrent header")
 
-func SniffBittorrent(b []byte) (*SniffHeader, error) {
+func SniffBittorrent(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
 	if len(b) < 20 {
 		return nil, common.ErrNoClue
 	}
