@@ -65,30 +65,32 @@ func SniffHTTP(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
 		version: HTTP1,
 	}
 
-	if shouldSniffDomain {
-		headers := bytes.Split(b, []byte{'\n'})
-		for i := 1; i < len(headers); i++ {
-			header := headers[i]
-			if len(header) == 0 {
-				break
+	if !shouldSniffDomain {
+		return sh, nil
+	}
+
+	headers := bytes.Split(b, []byte{'\n'})
+	for i := 1; i < len(headers); i++ {
+		header := headers[i]
+		if len(header) == 0 {
+			break
+		}
+		parts := bytes.SplitN(header, []byte{':'}, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.ToLower(string(parts[0]))
+		if key == "host" {
+			rawHost := strings.ToLower(string(bytes.TrimSpace(parts[1])))
+			dest, err := ParseHost(rawHost, net.Port(80))
+			if err != nil {
+				return nil, err
 			}
-			parts := bytes.SplitN(header, []byte{':'}, 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.ToLower(string(parts[0]))
-			if key == "host" {
-				rawHost := strings.ToLower(string(bytes.TrimSpace(parts[1])))
-				dest, err := ParseHost(rawHost, net.Port(80))
-				if err != nil {
-					return nil, err
-				}
-				sh.host = dest.Address.String()
-			}
+			sh.host = dest.Address.String()
 		}
 	}
 
-	if !shouldSniffDomain || len(sh.host) > 0 {
+	if len(sh.host) > 0 {
 		return sh, nil
 	}
 
