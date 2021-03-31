@@ -397,6 +397,7 @@ type Config struct {
 	Transport       *TransportConfig       `json:"transport"`
 	Policy          *PolicyConfig          `json:"policy"`
 	API             *APIConfig             `json:"api"`
+	Web             *WebConfig             `json:"web"`
 	Stats           *StatsConfig           `json:"stats"`
 	Reverse         *ReverseConfig         `json:"reverse"`
 	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
@@ -445,6 +446,9 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.API != nil {
 		c.API = o.API
+	}
+	if o.Web != nil {
+		c.Web = o.Web
 	}
 	if o.Stats != nil {
 		c.Stats = o.Stats
@@ -546,6 +550,14 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, err
 		}
 		config.App = append(config.App, serial.ToTypedMessage(apiConf))
+	}
+
+	if c.Web != nil {
+		WebConf, err := c.Web.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.App = append(config.App, serial.ToTypedMessage(WebConf))
 	}
 
 	if c.Stats != nil {
