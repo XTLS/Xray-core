@@ -56,7 +56,7 @@ func beginWithHTTPMethod(b []byte) error {
 	return errNotHTTPMethod
 }
 
-func SniffHTTP(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
+func SniffProtocolHTTP(b []byte) (*SniffHeader, error) {
 	if err := beginWithHTTPMethod(b); err != nil {
 		return nil, err
 	}
@@ -65,8 +65,13 @@ func SniffHTTP(b []byte, shouldSniffDomain bool) (*SniffHeader, error) {
 		version: HTTP1,
 	}
 
-	if !shouldSniffDomain {
-		return sh, nil
+	return sh, nil
+}
+
+func SniffDomainHTTP(b []byte) (*SniffHeader, error) {
+	sh, err := SniffProtocolHTTP(b)
+	if err != nil {
+		return nil, err
 	}
 
 	headers := bytes.Split(b, []byte{'\n'})

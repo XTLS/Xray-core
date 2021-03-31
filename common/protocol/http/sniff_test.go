@@ -88,7 +88,7 @@ first_name=John&last_name=Doe&action=Submit`,
 	}
 
 	for _, test := range cases {
-		header, err := SniffHTTP([]byte(test.input))
+		header, err := SniffDomainHTTP([]byte(test.input))
 		if test.err {
 			if err == nil {
 				t.Errorf("Expect error but nil, in test: %v", test)

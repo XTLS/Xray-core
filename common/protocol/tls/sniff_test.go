@@ -144,7 +144,7 @@ func TestTLSHeaders(t *testing.T) {
 	}
 
 	for _, test := range cases {
-		header, err := SniffTLS(test.input)
+		header, err := SniffDomainTLS(test.input)
 		if test.err {
 			if err == nil {
 				t.Errorf("Exepct error but nil in test %v", test)
