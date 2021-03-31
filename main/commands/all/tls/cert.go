@@ -26,6 +26,9 @@ Arguments:
 	-domain=domain_name 
 		The domain name for the certificate.
 
+	-name=common_name 
+		The common name for the certificate.
+
 	-org=organization 
 		The organization name for the certificate.
 
