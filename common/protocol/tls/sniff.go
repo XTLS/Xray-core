@@ -148,6 +148,7 @@ func SniffDomainTLS(b []byte) (*SniffHeader, error) {
 		return nil, err
 	}
 
+	headerLen := int(binary.BigEndian.Uint16(b[3:5]))
 	err = ReadClientHello(b[5:5+headerLen], h)
 	if err != nil {
 		return nil, err
