@@ -7,12 +7,11 @@ import (
 // XrayKey is the key type of Instance in Context, exported for test.
 type XrayKey int
 
-// XrayKeyValue const is the key value of Instance in Context, exported for test.
-const XrayKeyValue XrayKey = 1
+const xrayKey XrayKey = 1
 
 // FromContext returns an Instance from the given context, or nil if the context doesn't contain one.
 func FromContext(ctx context.Context) *Instance {
-	if s, ok := ctx.Value(XrayKeyValue).(*Instance); ok {
+	if s, ok := ctx.Value(xrayKey).(*Instance); ok {
 		return s
 	}
 	return nil
