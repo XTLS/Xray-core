@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
-	"github.com/xtls/xray-core/common/antireplay"
 	"io"
 	"reflect"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/protocol"

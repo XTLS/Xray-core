@@ -1,8 +1,9 @@
 package antireplay
 
 import (
-	ss_bloomring "github.com/v2fly/ss-bloomring"
 	"sync"
+
+	ss_bloomring "github.com/v2fly/ss-bloomring"
 )
 
 type BloomRing struct {
