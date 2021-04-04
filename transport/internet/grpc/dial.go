@@ -90,8 +90,14 @@ func getGrpcClient(ctx context.Context, dest net.Destination, tlsConfig *tls.Con
 		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig.GetTLSConfig()))
 	}
 
+	var grpcDestHost string
+	if dest.Address.Family().IsDomain() {
+		grpcDestHost = dest.Address.Domain()
+	} else {
+		grpcDestHost = dest.Address.IP().String()
+	}
 	conn, err := grpc.Dial(
-		gonet.JoinHostPort(dest.Address.String(), dest.Port.String()),
+		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOption,
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
