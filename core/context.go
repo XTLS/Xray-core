@@ -29,7 +29,7 @@ func MustFromContext(ctx context.Context) *Instance {
 // ToContext returns ctx from the given context, or creates an Instance if the context doesn't find that.
 func ToContext(ctx context.Context, v *Instance) context.Context {
 	if FromContext(ctx) != v {
-		ctx = context.WithValue(ctx, v2rayKey, v)
+		ctx = context.WithValue(ctx, xrayKey, v)
 	}
 	return ctx
 }
