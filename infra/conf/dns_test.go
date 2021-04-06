@@ -6,14 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
-	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/infra/conf"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/runtime/protoiface"
 )
 
 func init() {
@@ -52,9 +53,9 @@ func TestDNSConfigParsing(t *testing.T) {
 		os.Unsetenv("xray.location.asset")
 	}()
 
-	parserCreator := func() func(string) (proto.Message, error) {
-		return func(s string) (proto.Message, error) {
-			config := new(DNSConfig)
+	parserCreator := func() func(string) (protoiface.MessageV1, error) {
+		return func(s string) (protoiface.MessageV1, error) {
+			config := new(conf.DNSConfig)
 			if err := json.Unmarshal([]byte(s), config); err != nil {
 				return nil, err
 			}
