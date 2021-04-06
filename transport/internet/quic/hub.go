@@ -103,10 +103,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	quicConfig := &quic.Config{
 		ConnectionIDLength:    12,
-		MaxIdleTimeout:        time.Second * 45,
+		KeepAlive:             true,
 		MaxIncomingStreams:    32,
 		MaxIncomingUniStreams: -1,
-		KeepAlive:             true,
 	}
 
 	conn, err := wrapSysConn(rawConn, config)
