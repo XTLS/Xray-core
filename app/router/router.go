@@ -28,6 +28,34 @@ type Route struct {
 	outboundTag       string
 }
 
+type RulesetManager struct {
+	ruleSets    map[string]Condition
+	rawRuleSets map[string]*RoutingRules
+}
+
+func NewRSManager() *RulesetManager {
+	return &RulesetManager{make(map[string]Condition), make(map[string]*RoutingRules)}
+}
+
+func (m *RulesetManager) Add(tag string, rule *RoutingRules) {
+	m.rawRuleSets[tag] = rule
+}
+
+func (m *RulesetManager) getRuleSet(tag string) (Condition, error) {
+	if cond, found := m.ruleSets[tag]; found {
+		return cond, nil
+	}
+	if rCond, found := m.rawRuleSets[tag]; found {
+		cond, err := rCond.BuildCondition(m)
+		if err != nil {
+			return nil, err
+		}
+		m.ruleSets[tag] = cond
+		return cond, nil
+	}
+	return nil, newError("ruleset not exist: " + tag)
+}
+
 // Init initializes the Router.
 func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error {
 	r.domainStrategy = config.DomainStrategy
@@ -42,12 +70,19 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 		r.balancers[rule.Tag] = balancer
 	}
 
+	var rsm = NewRSManager()
+
+	for _, rs := range config.RuleSets {
+		rsm.Add(rs.Identifier, rs)
+	}
+
 	r.rules = make([]*Rule, 0, len(config.Rule))
 	for _, rule := range config.Rule {
-		cond, err := rule.BuildCondition()
+		cond, err := rule.BuildCondition(rsm)
 		if err != nil {
 			return err
 		}
+
 		rr := &Rule{
 			Condition: cond,
 			Tag:       rule.GetTag(),
