@@ -3,8 +3,6 @@ package tcp
 import (
 	"context"
 
-	utls "github.com/refraction-networking/utls"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -24,7 +22,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
 		if fingerprint, ok := tls.Fingerprints[config.Fingerprint]; ok {
-			conn = utls.UClient(conn, tls.CopyConfig(tlsConfig), fingerprint)
+			conn = tls.UClient(conn, tlsConfig, fingerprint)
+			if err := conn.(*tls.UConn).Handshake(); err != nil {
+				return nil, err
+			}
 		} else {
 			conn = tls.Client(conn, tlsConfig)
 		}

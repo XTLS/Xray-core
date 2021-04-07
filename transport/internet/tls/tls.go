@@ -43,26 +43,43 @@ func Client(c net.Conn, config *tls.Config) net.Conn {
 	return &Conn{Conn: tlsConn}
 }
 
-var Fingerprints = map[string]utls.ClientHelloID{
-	"chrome":     utls.HelloChrome_Auto,
-	"firefox":    utls.HelloFirefox_Auto,
-	"safari":     utls.HelloIOS_Auto,
-	"randomized": utls.HelloRandomized,
-}
-
-func CopyConfig(c *tls.Config) *utls.Config {
-	return &utls.Config{
-		RootCAs:            c.RootCAs,
-		NextProtos:         c.NextProtos,
-		ServerName:         c.ServerName,
-		InsecureSkipVerify: c.InsecureSkipVerify,
-		MinVersion:         c.MinVersion,
-		MaxVersion:         c.MaxVersion,
-	}
-}
-
 // Server initiates a TLS server handshake on the given connection.
 func Server(c net.Conn, config *tls.Config) net.Conn {
 	tlsConn := tls.Server(c, config)
 	return &Conn{Conn: tlsConn}
+}
+
+type UConn struct {
+	*utls.UConn
+}
+
+func (c *UConn) HandshakeAddress() net.Address {
+	if err := c.Handshake(); err != nil {
+		return nil
+	}
+	state := c.ConnectionState()
+	if state.ServerName == "" {
+		return nil
+	}
+	return net.ParseAddress(state.ServerName)
+}
+
+func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
+	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
+	return &UConn{UConn: utlsConn}
+}
+
+func copyConfig(c *tls.Config) *utls.Config {
+	return &utls.Config{
+		RootCAs:            c.RootCAs,
+		ServerName:         c.ServerName,
+		InsecureSkipVerify: c.InsecureSkipVerify,
+	}
+}
+
+var Fingerprints = map[string]*utls.ClientHelloID{
+	"chrome":     &utls.HelloChrome_Auto,
+	"firefox":    &utls.HelloFirefox_Auto,
+	"safari":     &utls.HelloIOS_Auto,
+	"randomized": &utls.HelloRandomized,
 }
