@@ -242,7 +242,6 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 		RecursionAvailable: true,
 		RecursionDesired:   true,
 		Response:           true,
-		Authoritative:      true,
 	})
 	builder.EnableCompression()
 	common.Must(builder.StartQuestions())
