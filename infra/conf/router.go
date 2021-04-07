@@ -52,11 +52,11 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 	}
 
 	switch strings.ToLower(ds) {
-	case "alwaysip":
+	case "alwaysip", "always_ip", "always-ip":
 		return router.Config_UseIp
-	case "ipifnonmatch":
+	case "ipifnonmatch", "ip_if_non_match", "ip-if-non-match":
 		return router.Config_IpIfNonMatch
-	case "ipondemand":
+	case "ipondemand", "ip_on_demand", "ip-on-demand":
 		return router.Config_IpOnDemand
 	default:
 		return router.Config_AsIs
