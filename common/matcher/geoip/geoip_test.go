@@ -25,6 +25,27 @@ func init() {
 	}
 }
 
+func TestParaseIPList(t *testing.T) {
+	t.Log(os.Getenv("xray.location.asset"))
+
+	common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), platform.GetAssetLocation("geoip.dat")))
+
+	ips := []string{
+		"geoip:us",
+		"geoip:cn",
+		"geoip:!cn",
+		"ext:geoiptestrouter.dat:!cn",
+		"ext:geoiptestrouter.dat:ca",
+		"ext-ip:geoiptestrouter.dat:!cn",
+		"ext-ip:geoiptestrouter.dat:!ca",
+	}
+
+	_, err := ParaseIPList(ips)
+	if err != nil {
+		t.Fatalf("Failed to parse geoip list, got %s", err)
+	}
+}
+
 func TestGeoIPMatcherContainer(t *testing.T) {
 	container := &GeoIPMatcherContainer{}
 
@@ -123,18 +144,6 @@ func TestGeoIPMatcher(t *testing.T) {
 	}
 }
 
-func TestGeoIPMatcher4CN(t *testing.T) {
-	ips, err := loadGeoIP("CN")
-	common.Must(err)
-
-	matcher := &GeoIPMatcher{}
-	common.Must(matcher.Init(ips))
-
-	if matcher.Match([]byte{8, 8, 8, 8}) {
-		t.Error("expect CN geoip doesn't contain 8.8.8.8, but actually does")
-	}
-}
-
 func TestGeoIPReverseMatcher(t *testing.T) {
 	cidrList := CIDRList{
 		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
@@ -168,6 +177,18 @@ func TestGeoIPReverseMatcher(t *testing.T) {
 		if actual != testCase.Output {
 			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
 		}
+	}
+}
+
+func TestGeoIPMatcher4CN(t *testing.T) {
+	ips, err := loadGeoIP("CN")
+	common.Must(err)
+
+	matcher := &GeoIPMatcher{}
+	common.Must(matcher.Init(ips))
+
+	if matcher.Match([]byte{8, 8, 8, 8}) {
+		t.Error("expect CN geoip doesn't contain 8.8.8.8, but actually does")
 	}
 }
 
