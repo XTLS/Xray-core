@@ -74,7 +74,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	geoipList, err := geoip.ParaseIPList(c.ExpectIPs)
+	geoipList, err := geoip.ParseIPList(c.ExpectIPs)
 	if err != nil {
 		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}

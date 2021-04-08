@@ -92,7 +92,7 @@ func find(data, code []byte) []byte {
 	}
 }
 
-func ParaseIPList(ips []string) ([]*GeoIP, error) {
+func ParseIPList(ips []string) ([]*GeoIP, error) {
 	var geoipList []*GeoIP
 	var customCidrs []*CIDR
 

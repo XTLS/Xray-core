@@ -203,7 +203,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.IP != nil {
-		geoipList, err := geoip.ParaseIPList(*rawFieldRule.IP)
+		geoipList, err := geoip.ParseIPList(*rawFieldRule.IP)
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +219,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
-		geoipList, err := geoip.ParaseIPList(*rawFieldRule.SourceIP)
+		geoipList, err := geoip.ParseIPList(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}

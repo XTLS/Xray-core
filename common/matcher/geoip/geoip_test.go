@@ -25,7 +25,7 @@ func init() {
 	}
 }
 
-func TestParaseIPList(t *testing.T) {
+func TestParseIPList(t *testing.T) {
 	t.Log(os.Getenv("xray.location.asset"))
 
 	common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), platform.GetAssetLocation("geoip.dat")))
@@ -40,7 +40,7 @@ func TestParaseIPList(t *testing.T) {
 		"ext-ip:geoiptestrouter.dat:!ca",
 	}
 
-	_, err := ParaseIPList(ips)
+	_, err := ParseIPList(ips)
 	if err != nil {
 		t.Fatalf("Failed to parse geoip list, got %s", err)
 	}
