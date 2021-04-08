@@ -36,7 +36,7 @@ func LoadIPFile(file, code string) ([]*CIDR, error) {
 		}
 		defer runtime.GC()        // or debug.FreeOSMemory()
 		return geoipdat.Cidr, nil // do not cache geoip
-		IPCache[index] = &geoipdat
+		// IPCache[index] = &geoipdat
 	}
 	return IPCache[index].Cidr, nil
 }
@@ -53,7 +53,7 @@ func loadFile(file string) ([]byte, error) {
 		// Do not cache file, may save RAM when there
 		// are many files, but consume CPU each time.
 		return bs, nil
-		FileCache[file] = bs
+		// FileCache[file] = bs
 	}
 	return FileCache[file], nil
 }
