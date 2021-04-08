@@ -399,21 +399,30 @@ func parseDomainRule(domain string) ([]*router.Domain, error) {
 	return []*router.Domain{domainRule}, nil
 }
 
-func toCidrList(ips StringList) ([]*router.GeoIP, error) {
+func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 	var geoipList []*router.GeoIP
 	var customCidrs []*router.CIDR
 
 	for _, ip := range ips {
 		if strings.HasPrefix(ip, "geoip:") {
 			country := ip[6:]
+			isReverseMatch := false
+			if strings.HasPrefix(ip, "geoip:!") {
+				country = ip[7:]
+				isReverseMatch = true
+			}
+			if len(country) == 0 {
+				return nil, newError("empty country name in rule")
+			}
 			geoip, err := loadGeoIP(strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load GeoIP: ", country).Base(err)
 			}
 
 			geoipList = append(geoipList, &router.GeoIP{
-				CountryCode: strings.ToUpper(country),
-				Cidr:        geoip,
+				CountryCode:  strings.ToUpper(country),
+				Cidr:         geoip,
+				ReverseMatch: isReverseMatch,
 			})
 			continue
 		}
@@ -436,14 +445,24 @@ func toCidrList(ips StringList) ([]*router.GeoIP, error) {
 
 			filename := kv[0]
 			country := kv[1]
+			if len(filename) == 0 || len(country) == 0 {
+				return nil, newError("empty filename or empty country in rule")
+			}
+
+			isReverseMatch := false
+			if strings.HasPrefix(country, "!") {
+				country = country[1:]
+				isReverseMatch = true
+			}
 			geoip, err := loadIP(filename, strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load IPs: ", country, " from ", filename).Base(err)
 			}
 
 			geoipList = append(geoipList, &router.GeoIP{
-				CountryCode: strings.ToUpper(filename + "_" + country),
-				Cidr:        geoip,
+				CountryCode:  strings.ToUpper(filename + "_" + country),
+				Cidr:         geoip,
+				ReverseMatch: isReverseMatch,
 			})
 
 			continue
@@ -525,7 +544,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.IP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.IP)
+		geoipList, err := ToCidrList(*rawFieldRule.IP)
 		if err != nil {
 			return nil, err
 		}
@@ -541,7 +560,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.SourceIP)
+		geoipList, err := ToCidrList(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}
@@ -583,21 +602,21 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	if err != nil {
 		return nil, newError("invalid router rule").Base(err)
 	}
-	if rawRule.Type == "field" {
+	if strings.EqualFold(rawRule.Type, "field") {
 		fieldrule, err := parseFieldRule(msg)
 		if err != nil {
 			return nil, newError("invalid field rule").Base(err)
 		}
 		return fieldrule, nil
 	}
-	if rawRule.Type == "chinaip" {
+	if strings.EqualFold(rawRule.Type, "chinaip") {
 		chinaiprule, err := parseChinaIPRule(msg)
 		if err != nil {
 			return nil, newError("invalid chinaip rule").Base(err)
 		}
 		return chinaiprule, nil
 	}
-	if rawRule.Type == "chinasites" {
+	if strings.EqualFold(rawRule.Type, "chinasites") {
 		chinasitesrule, err := parseChinaSitesRule(msg)
 		if err != nil {
 			return nil, newError("invalid chinasites rule").Base(err)

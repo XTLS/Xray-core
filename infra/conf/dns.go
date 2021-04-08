@@ -88,7 +88,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	geoipList, err := toCidrList(c.ExpectIPs)
+	geoipList, err := ToCidrList(c.ExpectIPs)
 	if err != nil {
 		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}
