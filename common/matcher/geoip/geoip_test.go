@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common"
 	. "github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -20,16 +20,15 @@ func init() {
 	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
 		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geoip.dat")))
 	}
+	if _, err := os.Stat(platform.GetAssetLocation("geoiptestrouter.dat")); err != nil && os.IsNotExist(err) {
+		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geoip.dat")))
+	}
 	if _, err := os.Stat(platform.GetAssetLocation("geosite.dat")); err != nil && os.IsNotExist(err) {
 		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geosite.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geosite.dat")))
 	}
 }
 
 func TestParseIPList(t *testing.T) {
-	t.Log(os.Getenv("xray.location.asset"))
-
-	common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), platform.GetAssetLocation("geoip.dat")))
-
 	ips := []string{
 		"geoip:us",
 		"geoip:cn",
