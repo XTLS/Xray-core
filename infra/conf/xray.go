@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/xtls/xray-core/transport/internet"
-
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/transport/internet"
+
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
@@ -405,6 +405,7 @@ type Config struct {
 	Stats           *StatsConfig           `json:"stats"`
 	Reverse         *ReverseConfig         `json:"reverse"`
 	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
+	Observatory     *ObservatoryConfig     `json:"observatory"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -605,6 +606,14 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if c.FakeDNS != nil {
 		r, err := c.FakeDNS.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.App = append(config.App, serial.ToTypedMessage(r))
+	}
+
+	if c.Observatory != nil {
+		r, err := c.Observatory.Build()
 		if err != nil {
 			return nil, err
 		}

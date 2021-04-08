@@ -127,6 +127,7 @@ message RoutingRule {
 message BalancingRule {
   string tag = 1;
   repeated string outbound_selector = 2;
+  string strategy = 3;
 }
 
 message Config {

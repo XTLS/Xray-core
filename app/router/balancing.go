@@ -1,7 +1,10 @@
 package router
 
 import (
+	"context"
+
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 )
 
@@ -40,4 +43,9 @@ func (b *Balancer) PickOutbound() (string, error) {
 		return "", newError("balancing strategy returns empty tag")
 	}
 	return tag, nil
+}
+func (b *Balancer) InjectContext(ctx context.Context) {
+	if contextReceiver, ok := b.strategy.(extension.ContextReceiver); ok {
+		contextReceiver.InjectContext(ctx)
+	}
 }
