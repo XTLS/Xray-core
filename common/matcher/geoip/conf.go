@@ -100,6 +100,11 @@ func ParaseIPList(ips []string) ([]*GeoIP, error) {
 		if strings.HasPrefix(ip, "geoip:") {
 			country := ip[6:]
 			isReverseMatch := false
+			if strings.HasPrefix(country, "!") {
+				country = country[1:]
+				isReverseMatch = true
+			}
+
 			geoipc, err := LoadGeoIP(strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load GeoIP: ", country).Base(err)
