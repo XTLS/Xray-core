@@ -124,6 +124,7 @@ type DNSConfig struct {
 	ClientIP      *Address            `json:"clientIp"`
 	Tag           string              `json:"tag"`
 	QueryStrategy string              `json:"queryStrategy"`
+	CacheStrategy string              `json:"cacheStrategy"`
 	DisableCache  bool                `json:"disableCache"`
 }
 
@@ -142,8 +143,12 @@ func getHostMapping(addr *Address) *dns.Config_HostMapping {
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
 	config := &dns.Config{
-		Tag:          c.Tag,
-		DisableCache: c.DisableCache,
+		Tag:           c.Tag,
+		CacheStrategy: dns.CacheStrategy_Cache_ALL,
+	}
+
+	if c.DisableCache {
+		config.CacheStrategy = dns.CacheStrategy_Cache_DISABLE
 	}
 
 	if c.ClientIP != nil {
@@ -161,6 +166,15 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		config.QueryStrategy = dns.QueryStrategy_USE_IP4
 	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
 		config.QueryStrategy = dns.QueryStrategy_USE_IP6
+	}
+
+	switch strings.ToLower(c.CacheStrategy) {
+	case "noerror":
+		config.CacheStrategy = dns.CacheStrategy_Cache_NOERROR
+	case "all":
+		config.CacheStrategy = dns.CacheStrategy_Cache_ALL
+	case "disable", "none":
+		config.CacheStrategy = dns.CacheStrategy_Cache_DISABLE
 	}
 
 	for _, server := range c.Servers {

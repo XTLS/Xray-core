@@ -22,6 +22,9 @@ type Client interface {
 
 	// LookupIP returns IP address for the given domain. IPs may contain IPv4 and/or IPv6 addresses.
 	LookupIP(domain string) ([]net.IP, error)
+
+	// LookupOptions query IP address for domain with IPOption.
+	LookupOptions(domain string, opt IPOption) ([]net.IP, error)
 }
 
 // IPv4Lookup is an optional feature for querying IPv4 addresses only.
@@ -36,20 +39,6 @@ type IPv4Lookup interface {
 // xray:api:beta
 type IPv6Lookup interface {
 	LookupIPv6(domain string) ([]net.IP, error)
-}
-
-// ClientWithIPOption is an optional feature for querying DNS information.
-//
-// xray:api:beta
-type ClientWithIPOption interface {
-	// GetIPOption returns IPOption for the DNS client.
-	GetIPOption() *IPOption
-
-	// SetQueryOption sets IPv4Enable and IPv6Enable for the DNS client.
-	SetQueryOption(isIPv4Enable, isIPv6Enable bool)
-
-	// SetFakeDNSOption sets FakeEnable option for DNS client.
-	SetFakeDNSOption(isFakeEnable bool)
 }
 
 // ClientType returns the type of Client interface. Can be used for implementing common.HasType.
@@ -78,3 +67,11 @@ func RCodeFromError(err error) uint16 {
 	}
 	return 0
 }
+
+var (
+	LookupIPv4 = IPOption{IPv4Enable: true}
+	LookupIPv6 = IPOption{IPv6Enable: true}
+	LookupIP   = IPOption{IPv4Enable: true, IPv6Enable: true}
+	LookupFake = IPOption{FakeEnable: true}
+	LookupAll  = IPOption{true, true, true}
+)

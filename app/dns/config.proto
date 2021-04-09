@@ -42,6 +42,12 @@ enum QueryStrategy {
   USE_IP6 = 2;
 }
 
+enum CacheStrategy {
+  Cache_ALL = 0;
+  Cache_NOERROR = 1;
+  Cache_DISABLE = 2;
+}
+
 message Config {
   // Nameservers used by this DNS. Only traditional UDP servers are support at
   // the moment. A special value 'localhost' as a domain address can be set to
@@ -79,7 +85,7 @@ message Config {
   reserved 7;
 
   // DisableCache Disable DNS cache
-  bool disableCache = 8;
+  CacheStrategy cache_strategy = 8;
 
   QueryStrategy query_strategy = 9;
 }
