@@ -11,11 +11,12 @@ import (
 )
 
 type NameServerConfig struct {
-	Address   *Address
-	ClientIP  *Address
-	Port      uint16
-	Domains   []string
-	ExpectIPs StringList
+	Address      *Address
+	ClientIP     *Address
+	Port         uint16
+	SkipFallback bool
+	Domains      []string
+	ExpectIPs    StringList
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
@@ -26,16 +27,18 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address   *Address   `json:"address"`
-		ClientIP  *Address   `json:"clientIp"`
-		Port      uint16     `json:"port"`
-		Domains   []string   `json:"domains"`
-		ExpectIPs StringList `json:"expectIps"`
+		Address      *Address   `json:"address"`
+		ClientIP     *Address   `json:"clientIp"`
+		Port         uint16     `json:"port"`
+		SkipFallback bool       `json:"skipFallback"`
+		Domains      []string   `json:"domains"`
+		ExpectIPs    StringList `json:"expectIps"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
 		c.ClientIP = advanced.ClientIP
 		c.Port = advanced.Port
+		c.SkipFallback = advanced.SkipFallback
 		c.Domains = advanced.Domains
 		c.ExpectIPs = advanced.ExpectIPs
 		return nil
@@ -104,6 +107,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 			Port:    uint32(c.Port),
 		},
 		ClientIp:          myClientIP,
+		SkipFallback:      c.SkipFallback,
 		PrioritizedDomain: domains,
 		Geoip:             geoipList,
 		OriginalRules:     originalRules,
@@ -119,13 +123,14 @@ var typeMap = map[router.Domain_Type]dns.DomainMatchingType{
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers       []*NameServerConfig `json:"servers"`
-	Hosts         map[string]*Address `json:"hosts"`
-	ClientIP      *Address            `json:"clientIp"`
-	Tag           string              `json:"tag"`
-	QueryStrategy string              `json:"queryStrategy"`
-	CacheStrategy string              `json:"cacheStrategy"`
-	DisableCache  bool                `json:"disableCache"`
+	Servers         []*NameServerConfig `json:"servers"`
+	Hosts           map[string]*Address `json:"hosts"`
+	ClientIP        *Address            `json:"clientIp"`
+	Tag             string              `json:"tag"`
+	QueryStrategy   string              `json:"queryStrategy"`
+	CacheStrategy   string              `json:"cacheStrategy"`
+	DisableCache    bool                `json:"disableCache"`
+	DisableFallback bool                `json:"disableFallback"`
 }
 
 func getHostMapping(addr *Address) *dns.Config_HostMapping {
@@ -143,8 +148,9 @@ func getHostMapping(addr *Address) *dns.Config_HostMapping {
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
 	config := &dns.Config{
-		Tag:           c.Tag,
-		CacheStrategy: dns.CacheStrategy_Cache_ALL,
+		Tag:             c.Tag,
+		CacheStrategy:   dns.CacheStrategy_Cache_ALL,
+		DisableFallback: c.DisableFallback,
 	}
 
 	if c.DisableCache {

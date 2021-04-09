@@ -22,14 +22,15 @@ import (
 // DNS is a DNS rely server.
 type DNS struct {
 	sync.Mutex
-	tag           string
-	cs            CacheStrategy
-	ipOption      *dns.IPOption
-	hosts         *StaticHosts
-	clients       []*Client
-	ctx           context.Context
-	domainMatcher strmatcher.IndexMatcher
-	matcherInfos  []DomainMatcherInfo
+	tag             string
+	cs              CacheStrategy
+	disableFallback bool
+	ipOption        *dns.IPOption
+	hosts           *StaticHosts
+	clients         []*Client
+	ctx             context.Context
+	domainMatcher   strmatcher.IndexMatcher
+	matcherInfos    []DomainMatcherInfo
 }
 
 // DomainMatcherInfo contains information attached to index returned by Server.domainMatcher
@@ -131,14 +132,15 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	}
 
 	return &DNS{
-		tag:           tag,
-		hosts:         hosts,
-		ipOption:      ipOption,
-		clients:       clients,
-		ctx:           ctx,
-		domainMatcher: domainMatcher,
-		matcherInfos:  matcherInfos,
-		cs:            config.CacheStrategy,
+		tag:             tag,
+		hosts:           hosts,
+		ipOption:        ipOption,
+		clients:         clients,
+		ctx:             ctx,
+		domainMatcher:   domainMatcher,
+		matcherInfos:    matcherInfos,
+		cs:              config.CacheStrategy,
+		disableFallback: config.DisableFallback,
 	}, nil
 }
 
@@ -254,6 +256,11 @@ func (s *DNS) sortClients(domain string, option dns.IPOption) []*Client {
 		if len(clientNames) > 0 {
 			newError("domain ", domain, " will use DNS in order: ", clientNames).AtDebug().WriteToLog()
 		}
+		if len(clients) == 0 {
+			clients = append(clients, s.clients[0])
+			clientNames = append(clientNames, s.clients[0].Name())
+			newError("domain ", domain, " will use the first DNS: ", clientNames).AtDebug().WriteToLog()
+		}
 	}()
 
 	// Priority domain matching
@@ -265,7 +272,6 @@ func (s *DNS) sortClients(domain string, option dns.IPOption) []*Client {
 			newError("skipping the client " + client.Name()).AtDebug().WriteToLog()
 			continue
 		}
-
 		domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
 		if clientUsed[info.clientIdx] {
 			continue
@@ -275,18 +281,22 @@ func (s *DNS) sortClients(domain string, option dns.IPOption) []*Client {
 		clientNames = append(clientNames, client.Name())
 	}
 
-	// Default round-robin query
-	for idx, client := range s.clients {
-		if clientUsed[idx] {
-			continue
+	if !s.disableFallback {
+		// Default round-robin query
+		for idx, client := range s.clients {
+			if clientUsed[idx] || client.skipFallback {
+				continue
+			}
+
+			if !canQueryOnClient(option, client) {
+				newError("skipping the client " + client.Name()).AtDebug().WriteToLog()
+				continue
+			}
+
+			clientUsed[idx] = true
+			clients = append(clients, client)
+			clientNames = append(clientNames, client.Name())
 		}
-		if !canQueryOnClient(option, client) {
-			newError("skipping the client " + client.Name()).AtDebug().WriteToLog()
-			continue
-		}
-		clientUsed[idx] = true
-		clients = append(clients, client)
-		clientNames = append(clientNames, client.Name())
 	}
 
 	return clients
