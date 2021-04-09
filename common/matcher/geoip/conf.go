@@ -92,21 +92,28 @@ func find(data, code []byte) []byte {
 	}
 }
 
-func ParaseIPList(ips []string) ([]*GeoIP, error) {
+func ParseIPList(ips []string) ([]*GeoIP, error) {
 	var geoipList []*GeoIP
 	var customCidrs []*CIDR
 
 	for _, ip := range ips {
 		if strings.HasPrefix(ip, "geoip:") {
 			country := ip[6:]
+			isReverseMatch := false
+			if strings.HasPrefix(country, "!") {
+				country = country[1:]
+				isReverseMatch = true
+			}
+
 			geoipc, err := LoadGeoIP(strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load GeoIP: ", country).Base(err)
 			}
 
 			geoipList = append(geoipList, &GeoIP{
-				CountryCode: strings.ToUpper(country),
-				Cidr:        geoipc,
+				CountryCode:  strings.ToUpper(country),
+				Cidr:         geoipc,
+				ReverseMatch: isReverseMatch,
 			})
 			continue
 		}
@@ -129,14 +136,24 @@ func ParaseIPList(ips []string) ([]*GeoIP, error) {
 
 			filename := kv[0]
 			country := kv[1]
+			if len(filename) == 0 || len(country) == 0 {
+				return nil, newError("empty filename or empty country in rule")
+			}
+
+			isReverseMatch := false
+			if strings.HasPrefix(country, "!") {
+				country = country[1:]
+				isReverseMatch = true
+			}
 			geoipc, err := LoadIPFile(filename, strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load IPs: ", country, " from ", filename).Base(err)
 			}
 
 			geoipList = append(geoipList, &GeoIP{
-				CountryCode: strings.ToUpper(filename + "_" + country),
-				Cidr:        geoipc,
+				CountryCode:  strings.ToUpper(filename + "_" + country),
+				Cidr:         geoipc,
+				ReverseMatch: isReverseMatch,
 			})
 
 			continue

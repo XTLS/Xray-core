@@ -101,7 +101,7 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 
 	var exIP []*geoip.GeoIP
 	if c.IPsExcluded != nil {
-		exip, err := geoip.ParaseIPList(*c.IPsExcluded)
+		exip, err := geoip.ParseIPList(*c.IPsExcluded)
 		if err != nil {
 			return nil, newError("failed to parse excluded ip").Base(err)
 		}

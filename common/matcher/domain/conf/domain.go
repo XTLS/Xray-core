@@ -44,20 +44,36 @@ func ParseDomainRule(domain string) ([]*dm.Domain, error) {
 	domainRule := new(dm.Domain)
 	switch {
 	case strings.HasPrefix(domain, "regexp:"):
+		regexpVal := domain[7:]
+		if len(regexpVal) == 0 {
+			return nil, newError("empty regexp type of rule: ", domain)
+		}
 		domainRule.Type = dm.MatchingType_Regex
-		domainRule.Value = domain[7:]
+		domainRule.Value = regexpVal
 
 	case strings.HasPrefix(domain, "domain:"):
+		domainName := domain[7:]
+		if len(domainName) == 0 {
+			return nil, newError("empty domain type of rule: ", domain)
+		}
 		domainRule.Type = dm.MatchingType_Subdomain
-		domainRule.Value = domain[7:]
+		domainRule.Value = domainName
 
 	case strings.HasPrefix(domain, "full:"):
+		fullVal := domain[5:]
+		if len(fullVal) == 0 {
+			return nil, newError("empty full domain type of rule: ", domain)
+		}
 		domainRule.Type = dm.MatchingType_Full
-		domainRule.Value = domain[5:]
+		domainRule.Value = fullVal
 
 	case strings.HasPrefix(domain, "keyword:"):
+		keywordVal := domain[8:]
+		if len(keywordVal) == 0 {
+			return nil, newError("empty keyword type of rule: ", domain)
+		}
 		domainRule.Type = dm.MatchingType_Keyword
-		domainRule.Value = domain[8:]
+		domainRule.Value = keywordVal
 
 	case strings.HasPrefix(domain, "dotless:"):
 		domainRule.Type = dm.MatchingType_Regex

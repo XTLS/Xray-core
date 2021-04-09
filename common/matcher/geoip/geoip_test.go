@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common"
 	. "github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -20,8 +20,28 @@ func init() {
 	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
 		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geoip.dat")))
 	}
+	if _, err := os.Stat(platform.GetAssetLocation("geoiptestrouter.dat")); err != nil && os.IsNotExist(err) {
+		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geoip.dat")))
+	}
 	if _, err := os.Stat(platform.GetAssetLocation("geosite.dat")); err != nil && os.IsNotExist(err) {
 		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geosite.dat"), filepath.Join(wd, "..", "..", "..", "resources", "geosite.dat")))
+	}
+}
+
+func TestParseIPList(t *testing.T) {
+	ips := []string{
+		"geoip:us",
+		"geoip:cn",
+		"geoip:!cn",
+		"ext:geoiptestrouter.dat:!cn",
+		"ext:geoiptestrouter.dat:ca",
+		"ext-ip:geoiptestrouter.dat:!cn",
+		"ext-ip:geoiptestrouter.dat:!ca",
+	}
+
+	_, err := ParseIPList(ips)
+	if err != nil {
+		t.Fatalf("Failed to parse geoip list, got %s", err)
 	}
 }
 
@@ -111,6 +131,42 @@ func TestGeoIPMatcher(t *testing.T) {
 		{
 			Input:  "91.108.255.254",
 			Output: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		ip := net.ParseAddress(testCase.Input).IP()
+		actual := matcher.Match(ip)
+		if actual != testCase.Output {
+			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
+		}
+	}
+}
+
+func TestGeoIPReverseMatcher(t *testing.T) {
+	cidrList := CIDRList{
+		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
+		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
+	}
+	matcher := &GeoIPMatcher{}
+	matcher.SetReverseMatch(true) // Reverse match
+	common.Must(matcher.Init(cidrList))
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "8.8.8.8",
+			Output: false,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
+			Output: true,
+		},
+		{
+			Input:  "91.108.255.254",
+			Output: false,
 		},
 	}
 

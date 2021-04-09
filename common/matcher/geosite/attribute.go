@@ -1,5 +1,7 @@
 package geosite
 
+import "strings"
+
 type AttributeList struct {
 	matcher []AttributeMatcher
 }
@@ -25,7 +27,7 @@ type BooleanMatcher string
 
 func (m BooleanMatcher) Match(domain *Domain) bool {
 	for _, attr := range domain.Attribute {
-		if attr.Key == string(m) {
+		if strings.EqualFold(attr.GetKey(), string(m)) {
 			return true
 		}
 	}
