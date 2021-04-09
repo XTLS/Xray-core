@@ -142,7 +142,7 @@ func TestDNSConfigParsing(t *testing.T) {
 				},
 				ClientIp:        []byte{10, 0, 0, 1},
 				QueryStrategy:   dns.QueryStrategy_USE_IP4,
-				DisableCache:    true,
+				CacheStrategy:   dns.CacheStrategy_Cache_DISABLE,
 				DisableFallback: true,
 			},
 		},

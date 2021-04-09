@@ -17,7 +17,7 @@ func TestLocalNameServer(t *testing.T) {
 	ips, err := s.QueryIP(ctx, "google.com", net.IP{}, dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
-	}, false)
+	}, CacheStrategy_Cache_ALL)
 	cancel()
 	common.Must(err)
 	if len(ips) == 0 {

@@ -14,7 +14,7 @@ type LocalNameServer struct {
 }
 
 // QueryIP implements Server.
-func (s *LocalNameServer) QueryIP(_ context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) ([]net.IP, error) {
+func (s *LocalNameServer) QueryIP(_ context.Context, domain string, _ net.IP, option dns.IPOption, _ CacheStrategy) ([]net.IP, error) {
 	var ips []net.IP
 	var err error
 

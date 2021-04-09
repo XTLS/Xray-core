@@ -23,7 +23,7 @@ func TestDOHNameServer(t *testing.T) {
 	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
-	}, false)
+	}, CacheStrategy_Cache_ALL)
 	cancel()
 	common.Must(err)
 	if len(ips) == 0 {
@@ -40,7 +40,7 @@ func TestDOHNameServerWithCache(t *testing.T) {
 	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
-	}, false)
+	}, CacheStrategy_Cache_ALL)
 	cancel()
 	common.Must(err)
 	if len(ips) == 0 {
@@ -51,7 +51,7 @@ func TestDOHNameServerWithCache(t *testing.T) {
 	ips2, err := s.QueryIP(ctx2, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
-	}, true)
+	}, CacheStrategy_Cache_ALL)
 	cancel()
 	common.Must(err)
 	if r := cmp.Diff(ips2, ips); r != "" {
