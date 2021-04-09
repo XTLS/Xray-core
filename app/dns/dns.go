@@ -198,7 +198,7 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 		return nil, newError("empty domain name")
 	}
 	if isQuery(option) {
-		return nil, newError("empty option: I'm pretty sure it shouldn't happened.")
+		return nil, newError("empty option: Impossible.").AtWarning()
 	}
 
 	// Normalize the FQDN form query
@@ -215,9 +215,10 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Domain replacement
 		newError("domain replaced: ", domain, " -> ", addrs[0].Domain()).WriteToLog()
 		domain = addrs[0].Domain()
-	default: // Successfully found ip records in static host
+	default:
+		// Successfully found ip records in static host.
+		// Skip hosts mapping result in FakeDNS query.
 		if isIPQuery(option) {
-			// maybe our client prefer to query fake dns -_-
 			newError("returning ", len(addrs), " IPs for domain ", domain).WriteToLog()
 			return toNetIP(addrs)
 		}
