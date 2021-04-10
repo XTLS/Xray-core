@@ -59,15 +59,14 @@ func (h *Handler) policy() policy.Session {
 }
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	var opt = dns.LookupIP
+	var opt dns.Option
 	if h.config.DomainStrategy == Config_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()) {
-		opt = dns.LookupIPv4
+		opt = dns.LookupIPv4Only
 	} else if h.config.DomainStrategy == Config_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()) {
-		opt = dns.LookupIPv6
+		opt = dns.LookupIPv6Only
 	}
-	opt.FakeEnable = true
 
-	ips, err := h.dns.LookupOptions(domain, opt)
+	ips, err := h.dns.LookupOptions(domain, opt, dns.LookupNoFake)
 	if err != nil {
 		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}

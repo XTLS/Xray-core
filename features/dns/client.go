@@ -14,6 +14,12 @@ type IPOption struct {
 	FakeEnable bool
 }
 
+func (p *IPOption) Copy() *IPOption {
+	return &IPOption{p.IPv4Enable, p.IPv6Enable, p.FakeEnable}
+}
+
+type Option func(dopt *IPOption) *IPOption
+
 // Client is a Xray feature for querying DNS information.
 //
 // xray:api:stable
@@ -23,8 +29,8 @@ type Client interface {
 	// LookupIP returns IP address for the given domain. IPs may contain IPv4 and/or IPv6 addresses.
 	LookupIP(domain string) ([]net.IP, error)
 
-	// LookupOptions query IP address for domain with IPOption.
-	LookupOptions(domain string, opt IPOption) ([]net.IP, error)
+	// LookupOptions query IP address for domain with *IPOption.
+	LookupOptions(domain string, opt ...Option) ([]net.IP, error)
 }
 
 // IPv4Lookup is an optional feature for querying IPv4 addresses only.
@@ -69,9 +75,33 @@ func RCodeFromError(err error) uint16 {
 }
 
 var (
-	LookupIPv4 = IPOption{IPv4Enable: true}
-	LookupIPv6 = IPOption{IPv6Enable: true}
-	LookupIP   = IPOption{IPv4Enable: true, IPv6Enable: true}
-	LookupFake = IPOption{FakeEnable: true}
-	LookupAll  = IPOption{true, true, true}
+	LookupIPv4Only = func(d *IPOption) *IPOption {
+		d.IPv4Enable = true
+		d.IPv6Enable = false
+		return d
+	}
+	LookupIPv6Only = func(d *IPOption) *IPOption {
+		d.IPv4Enable = false
+		d.IPv6Enable = true
+		return d
+	}
+	LookupIP = func(d *IPOption) *IPOption {
+		d.IPv4Enable = true
+		d.IPv6Enable = true
+		return d
+	}
+	LookupFake = func(d *IPOption) *IPOption {
+		d.FakeEnable = true
+		return d
+	}
+	LookupNoFake = func(d *IPOption) *IPOption {
+		d.FakeEnable = false
+		return d
+	}
+
+	LookupAll = func(d *IPOption) *IPOption {
+		LookupIP(d)
+		LookupFake(d)
+		return d
+	}
 )

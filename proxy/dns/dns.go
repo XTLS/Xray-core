@@ -199,18 +199,16 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	var err error
 
 	var ttl uint32 = 600
-	var opt = dns.LookupIP
+	var opt dns.Option
 
 	switch qType {
 	case dnsmessage.TypeA:
-		opt = dns.LookupIPv4
+		opt = dns.LookupIPv4Only
 	case dnsmessage.TypeAAAA:
-		opt = dns.LookupIPv6
+		opt = dns.LookupIPv6Only
 	}
 
-	opt.FakeEnable = true
-
-	ips, err = h.client.LookupOptions(domain, opt)
+	ips, err = h.client.LookupOptions(domain, opt, dns.LookupFake)
 	rcode := dns.RCodeFromError(err)
 	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
 		newError("ip query").Base(err).WriteToLog()

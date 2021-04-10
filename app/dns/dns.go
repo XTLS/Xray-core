@@ -167,33 +167,36 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, *s.ipOption)
+	return s.lookupIPInternal(domain, s.ipOption.Copy())
 }
 
 // LookupOptions implements dns.Client.
-func (s *DNS) LookupOptions(domain string, opt dns.IPOption) ([]net.IP, error) {
+func (s *DNS) LookupOptions(domain string, opts ...dns.Option) ([]net.IP, error) {
+	opt := s.ipOption.Copy()
+	for _, o := range opts {
+		if o != nil {
+			o(opt)
+		}
+	}
+
 	return s.lookupIPInternal(domain, opt)
 }
 
 // LookupIPv4 implements dns.IPv4Lookup.
 func (s *DNS) LookupIPv4(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, dns.IPOption{
+	return s.lookupIPInternal(domain, &dns.IPOption{
 		IPv4Enable: true,
-		IPv6Enable: false,
-		FakeEnable: false,
 	})
 }
 
 // LookupIPv6 implements dns.IPv6Lookup.
 func (s *DNS) LookupIPv6(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, dns.IPOption{
-		IPv4Enable: false,
+	return s.lookupIPInternal(domain, &dns.IPOption{
 		IPv6Enable: true,
-		FakeEnable: false,
 	})
 }
 
-func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, error) {
+func (s *DNS) lookupIPInternal(domain string, option *dns.IPOption) ([]net.IP, error) {
 	if domain == "" {
 		return nil, newError("empty domain name")
 	}
@@ -228,7 +231,7 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 	errs := []error{}
 	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
 	for _, client := range s.sortClients(domain, option) {
-		ips, err := client.QueryIP(ctx, domain, option, s.cs)
+		ips, err := client.QueryIP(ctx, domain, *option, s.cs)
 		if len(ips) > 0 {
 			return ips, nil
 		}
@@ -244,7 +247,7 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 	return nil, newError("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
-func (s *DNS) sortClients(domain string, option dns.IPOption) []*Client {
+func (s *DNS) sortClients(domain string, option *dns.IPOption) []*Client {
 	clients := make([]*Client, 0, len(s.clients))
 	clientUsed := make([]bool, len(s.clients))
 	clientNames := make([]string, 0, len(s.clients))

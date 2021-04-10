@@ -63,17 +63,17 @@ func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, l
 		return nil, nil
 	}
 
-	var opt = dns.LookupIP
+	var opt dns.Option
 	switch {
 	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		opt = dns.LookupIPv4
+		opt = dns.LookupIPv4Only
 	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		opt = dns.LookupIPv6
+		opt = dns.LookupIPv6Only
 	case strategy == DomainStrategy_AS_IS:
 		return nil, nil
 	}
 
-	return d.dns.LookupOptions(domain, opt)
+	return d.dns.LookupOptions(domain, opt, dns.LookupNoFake)
 }
 
 func (d *DefaultSystemDialer) canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {

@@ -65,18 +65,23 @@ func (mr *DNSClientMockRecorder) LookupIP(arg0 interface{}) *gomock.Call {
 }
 
 // LookupOptions mocks base method.
-func (m *DNSClient) LookupOptions(arg0 string, arg1 dns.IPOption) ([]net.IP, error) {
+func (m *DNSClient) LookupOptions(arg0 string, arg1 ...dns.Option) ([]net.IP, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LookupOptions", arg0, arg1)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "LookupOptions", varargs...)
 	ret0, _ := ret[0].([]net.IP)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LookupOptions indicates an expected call of LookupOptions.
-func (mr *DNSClientMockRecorder) LookupOptions(arg0, arg1 interface{}) *gomock.Call {
+func (mr *DNSClientMockRecorder) LookupOptions(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookupOptions", reflect.TypeOf((*DNSClient)(nil).LookupOptions), arg0, arg1)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookupOptions", reflect.TypeOf((*DNSClient)(nil).LookupOptions), varargs...)
 }
 
 // Start mocks base method.

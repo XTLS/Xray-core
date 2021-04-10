@@ -39,7 +39,7 @@ func (*Client) LookupIP(host string) ([]net.IP, error) {
 }
 
 // LookupOptions implements Client.
-func (c *Client) LookupOptions(host string, _ dns.IPOption) ([]net.IP, error) {
+func (c *Client) LookupOptions(host string, _ ...dns.Option) ([]net.IP, error) {
 	return c.LookupIP(host)
 }
 
