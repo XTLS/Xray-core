@@ -81,7 +81,7 @@ func TestDNSConfigParsing(t *testing.T) {
 				},
 				"clientIp": "10.0.0.1",
 				"queryStrategy": "UseIPv4",
-				"disableCache": true,
+				"cacheStrategy": "disable",
 				"disableFallback": true
 			}`,
 			Parser: parserCreator(),
