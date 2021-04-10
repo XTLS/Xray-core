@@ -70,6 +70,7 @@ func TestDNSConfigParsing(t *testing.T) {
 					"address": "8.8.8.8",
 					"clientIp": "10.0.0.1",
 					"port": 5353,
+					"skipFallback": true,
 					"domains": ["domain:example.com"]
 				}],
 				"hosts": {
@@ -81,7 +82,8 @@ func TestDNSConfigParsing(t *testing.T) {
 				},
 				"clientIp": "10.0.0.1",
 				"queryStrategy": "UseIPv4",
-				"disableCache": true
+				"disableCache": true,
+				"disableFallback": true
 			}`,
 			Parser: parserCreator(),
 			Output: &dns.Config{
@@ -96,7 +98,8 @@ func TestDNSConfigParsing(t *testing.T) {
 							Network: net.Network_UDP,
 							Port:    5353,
 						},
-						ClientIp: []byte{10, 0, 0, 1},
+						ClientIp:     []byte{10, 0, 0, 1},
+						SkipFallback: true,
 						PrioritizedDomain: []*domain.Domain{
 							{
 								Type:  domain.MatchingType_Subdomain,
@@ -138,9 +141,10 @@ func TestDNSConfigParsing(t *testing.T) {
 						Ip:     [][]byte{{8, 8, 4, 4}},
 					},
 				},
-				ClientIp:      []byte{10, 0, 0, 1},
-				QueryStrategy: dns.QueryStrategy_USE_IP4,
-				DisableCache:  true,
+				ClientIp:        []byte{10, 0, 0, 1},
+				QueryStrategy:   dns.QueryStrategy_USE_IP4,
+				CacheStrategy:   dns.CacheStrategy_Cache_DISABLE,
+				DisableFallback: true,
 			},
 		},
 	})

@@ -38,6 +38,11 @@ func (*Client) LookupIP(host string) ([]net.IP, error) {
 	return parsedIPs, nil
 }
 
+// LookupOptions implements Client.
+func (c *Client) LookupOptions(host string, _ ...dns.Option) ([]net.IP, error) {
+	return c.LookupIP(host)
+}
+
 // LookupIPv4 implements IPv4Lookup.
 func (c *Client) LookupIPv4(host string) ([]net.IP, error) {
 	ips, err := c.LookupIP(host)

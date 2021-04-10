@@ -14,6 +14,7 @@ import "common/matcher/geoip/geoip.proto";
 message NameServer {
   xray.common.net.Endpoint address = 1;
   bytes client_ip = 5;
+  bool skipFallback = 6;
 
   message OriginalRule {
     string rule = 1;
@@ -29,6 +30,12 @@ enum QueryStrategy {
   USE_IP = 0;
   USE_IP4 = 1;
   USE_IP6 = 2;
+}
+
+enum CacheStrategy {
+  Cache_ALL = 0;
+  Cache_NOERROR = 1;
+  Cache_DISABLE = 2;
 }
 
 message Config {
@@ -67,8 +74,10 @@ message Config {
 
   reserved 7;
 
-  // DisableCache Disable DNS cache
-  bool disableCache = 8;
+  // DisableCache disables DNS cache
+  CacheStrategy cache_strategy = 8;
 
   QueryStrategy query_strategy = 9;
+
+  bool disableFallback = 10;
 }

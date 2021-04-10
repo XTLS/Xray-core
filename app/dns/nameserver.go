@@ -20,15 +20,16 @@ type Server interface {
 	// Name of the Client.
 	Name() string
 	// QueryIP sends IP queries to its configured server.
-	QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns.IPOption, disableCache bool) ([]net.IP, error)
+	QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns.IPOption, cs CacheStrategy) ([]net.IP, error)
 }
 
 // Client is the interface for DNS client.
 type Client struct {
-	server    Server
-	clientIP  net.IP
-	domains   []string
-	expectIPs []*geoip.GeoIPMatcher
+	server       Server
+	clientIP     net.IP
+	skipFallback bool
+	domains      []string
+	expectIPs    []*geoip.GeoIPMatcher
 }
 
 var errExpectedIPNonMatch = errors.New("expectIPs not match")
@@ -65,6 +66,7 @@ func NewServer(dest net.Destination, dispatcher routing.Dispatcher) (Server, err
 // NewClient creates a DNS client managing a name server with client IP, domain rules and expected IPs.
 func NewClient(ctx context.Context, ns *NameServer, clientIP net.IP, container geoip.GeoIPMatcherContainer, matcherInfos *[]DomainMatcherInfo, updateDomainRule func(str.Matcher, int, []DomainMatcherInfo) error) (*Client, error) {
 	client := &Client{}
+
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
 		server, err := NewServer(ns.Address.AsDestination(), dispatcher)
@@ -177,9 +179,9 @@ func (c *Client) Name() string {
 }
 
 // QueryIP send DNS query to the name server with the client's IP.
-func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption, disableCache bool) ([]net.IP, error) {
+func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption, cs CacheStrategy) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	ips, err := c.server.QueryIP(ctx, domain, c.clientIP, option, disableCache)
+	ips, err := c.server.QueryIP(ctx, domain, c.clientIP, option, cs)
 	cancel()
 
 	if err != nil {

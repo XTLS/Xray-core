@@ -41,7 +41,7 @@ func TestStaticHosts(t *testing.T) {
 	common.Must(err)
 
 	{
-		ips := hosts.Lookup("example.com", dns.IPOption{
+		ips := hosts.Lookup("example.com", &dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -54,7 +54,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.Lookup("www.example.cn", dns.IPOption{
+		ips := hosts.Lookup("www.example.cn", &dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -67,7 +67,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.Lookup("baidu.com", dns.IPOption{
+		ips := hosts.Lookup("baidu.com", &dns.IPOption{
 			IPv4Enable: false,
 			IPv6Enable: true,
 		})

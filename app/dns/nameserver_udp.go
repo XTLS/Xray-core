@@ -245,17 +245,19 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 }
 
 // QueryIP implements Server.
-func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) {
+func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, cs CacheStrategy) ([]net.IP, error) {
 	fqdn := Fqdn(domain)
 
-	if disableCache {
+	if cs == CacheStrategy_Cache_DISABLE {
 		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
-			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
-			log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
-			return ips, err
+			if cs == CacheStrategy_Cache_NOERROR && err == nil {
+				newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+				log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
+				return ips, err
+			}
 		}
 	}
 

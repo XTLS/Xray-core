@@ -74,7 +74,7 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 	return sh, nil
 }
 
-func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
+func filterIP(ips []net.Address, option *dns.IPOption) []net.Address {
 	filtered := make([]net.Address, 0, len(ips))
 	for _, ip := range ips {
 		if (ip.Family().IsIPv4() && option.IPv4Enable) || (ip.Family().IsIPv6() && option.IPv6Enable) {
@@ -95,7 +95,7 @@ func (h *StaticHosts) lookupInternal(domain string) []net.Address {
 	return ips
 }
 
-func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) []net.Address {
+func (h *StaticHosts) lookup(domain string, option *dns.IPOption, maxDepth int) []net.Address {
 	switch addrs := h.lookupInternal(domain); {
 	case len(addrs) == 0: // Not recorded in static hosts, return nil
 		return nil
@@ -113,6 +113,6 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) [
 }
 
 // Lookup returns IP addresses or proxied domain for the given domain, if exists in this StaticHosts.
-func (h *StaticHosts) Lookup(domain string, option dns.IPOption) []net.Address {
+func (h *StaticHosts) Lookup(domain string, option *dns.IPOption) []net.Address {
 	return h.lookup(domain, option, 5)
 }

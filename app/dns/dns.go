@@ -22,14 +22,15 @@ import (
 // DNS is a DNS rely server.
 type DNS struct {
 	sync.Mutex
-	tag           string
-	disableCache  bool
-	ipOption      *dns.IPOption
-	hosts         *StaticHosts
-	clients       []*Client
-	ctx           context.Context
-	domainMatcher str.IndexMatcher
-	matcherInfos  []DomainMatcherInfo
+	tag             string
+	cs              CacheStrategy
+	disableFallback bool
+	ipOption        *dns.IPOption
+	hosts           *StaticHosts
+	clients         []*Client
+	ctx             context.Context
+	domainMatcher   str.IndexMatcher
+	matcherInfos    []DomainMatcherInfo
 }
 
 // DomainMatcherInfo contains information attached to index returned by Server.domainMatcher
@@ -131,14 +132,15 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	}
 
 	return &DNS{
-		tag:           tag,
-		hosts:         hosts,
-		ipOption:      ipOption,
-		clients:       clients,
-		ctx:           ctx,
-		domainMatcher: domainMatcher,
-		matcherInfos:  matcherInfos,
-		disableCache:  config.DisableCache,
+		tag:             tag,
+		hosts:           hosts,
+		ipOption:        ipOption,
+		clients:         clients,
+		ctx:             ctx,
+		domainMatcher:   domainMatcher,
+		matcherInfos:    matcherInfos,
+		cs:              config.CacheStrategy,
+		disableFallback: config.DisableFallback,
 	}, nil
 }
 
@@ -165,34 +167,41 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
-	})
+	return s.lookupIPInternal(domain, s.ipOption.Copy())
+}
+
+// LookupOptions implements dns.Client.
+func (s *DNS) LookupOptions(domain string, opts ...dns.Option) ([]net.IP, error) {
+	opt := s.ipOption.Copy()
+	for _, o := range opts {
+		if o != nil {
+			o(opt)
+		}
+	}
+
+	return s.lookupIPInternal(domain, opt)
 }
 
 // LookupIPv4 implements dns.IPv4Lookup.
 func (s *DNS) LookupIPv4(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, dns.IPOption{
+	return s.lookupIPInternal(domain, &dns.IPOption{
 		IPv4Enable: true,
-		IPv6Enable: false,
-		FakeEnable: false,
 	})
 }
 
 // LookupIPv6 implements dns.IPv6Lookup.
 func (s *DNS) LookupIPv6(domain string) ([]net.IP, error) {
-	return s.lookupIPInternal(domain, dns.IPOption{
-		IPv4Enable: false,
+	return s.lookupIPInternal(domain, &dns.IPOption{
 		IPv6Enable: true,
-		FakeEnable: false,
 	})
 }
 
-func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, error) {
+func (s *DNS) lookupIPInternal(domain string, option *dns.IPOption) ([]net.IP, error) {
 	if domain == "" {
 		return nil, newError("empty domain name")
+	}
+	if isQuery(option) {
+		return nil, newError("empty option: Impossible.").AtWarning()
 	}
 
 	// Normalize the FQDN form query
@@ -209,20 +218,20 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Domain replacement
 		newError("domain replaced: ", domain, " -> ", addrs[0].Domain()).WriteToLog()
 		domain = addrs[0].Domain()
-	default: // Successfully found ip records in static host
-		newError("returning ", len(addrs), " IPs for domain ", domain).WriteToLog()
-		return toNetIP(addrs)
+	default:
+		// Successfully found ip records in static host.
+		// Skip hosts mapping result in FakeDNS query.
+		if isIPQuery(option) {
+			newError("returning ", len(addrs), " IPs for domain ", domain).WriteToLog()
+			return toNetIP(addrs)
+		}
 	}
 
 	// Name servers lookup
 	errs := []error{}
 	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
-	for _, client := range s.sortClients(domain) {
-		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
-			newError("skip DNS resolution for domain ", domain, " at server ", client.Name()).AtDebug().WriteToLog()
-			continue
-		}
-		ips, err := client.QueryIP(ctx, domain, option, s.disableCache)
+	for _, client := range s.sortClients(domain, option) {
+		ips, err := client.QueryIP(ctx, domain, *option, s.cs)
 		if len(ips) > 0 {
 			return ips, nil
 		}
@@ -238,33 +247,35 @@ func (s *DNS) lookupIPInternal(domain string, option dns.IPOption) ([]net.IP, er
 	return nil, newError("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
-// GetIPOption implements ClientWithIPOption.
-func (s *DNS) GetIPOption() *dns.IPOption {
-	return s.ipOption
-}
-
-// SetQueryOption implements ClientWithIPOption.
-func (s *DNS) SetQueryOption(isIPv4Enable, isIPv6Enable bool) {
-	s.ipOption.IPv4Enable = isIPv4Enable
-	s.ipOption.IPv6Enable = isIPv6Enable
-}
-
-// SetFakeDNSOption implements ClientWithIPOption.
-func (s *DNS) SetFakeDNSOption(isFakeEnable bool) {
-	s.ipOption.FakeEnable = isFakeEnable
-}
-
-func (s *DNS) sortClients(domain string) []*Client {
+func (s *DNS) sortClients(domain string, option *dns.IPOption) []*Client {
 	clients := make([]*Client, 0, len(s.clients))
 	clientUsed := make([]bool, len(s.clients))
 	clientNames := make([]string, 0, len(s.clients))
 	domainRules := []string{}
+
+	defer func() {
+		if len(domainRules) > 0 {
+			newError("domain ", domain, " matches following rules: ", domainRules).AtDebug().WriteToLog()
+		}
+		if len(clientNames) > 0 {
+			newError("domain ", domain, " will use DNS in order: ", clientNames).AtDebug().WriteToLog()
+		}
+		if len(clients) == 0 {
+			clients = append(clients, s.clients[0])
+			clientNames = append(clientNames, s.clients[0].Name())
+			newError("domain ", domain, " will use the first DNS: ", clientNames).AtDebug().WriteToLog()
+		}
+	}()
 
 	// Priority domain matching
 	for _, match := range s.domainMatcher.Match(domain) {
 		info := s.matcherInfos[match]
 		client := s.clients[info.clientIdx]
 		domainRule := client.domains[info.domainRuleIdx]
+		if !canQueryOnClient(option, client) {
+			newError("skipping the client " + client.Name()).AtDebug().WriteToLog()
+			continue
+		}
 		domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
 		if clientUsed[info.clientIdx] {
 			continue
@@ -274,22 +285,24 @@ func (s *DNS) sortClients(domain string) []*Client {
 		clientNames = append(clientNames, client.Name())
 	}
 
-	// Default round-robin query
-	for idx, client := range s.clients {
-		if clientUsed[idx] {
-			continue
+	if !s.disableFallback {
+		// Default round-robin query
+		for idx, client := range s.clients {
+			if clientUsed[idx] || client.skipFallback {
+				continue
+			}
+
+			if !canQueryOnClient(option, client) {
+				newError("skipping the client " + client.Name()).AtDebug().WriteToLog()
+				continue
+			}
+
+			clientUsed[idx] = true
+			clients = append(clients, client)
+			clientNames = append(clientNames, client.Name())
 		}
-		clientUsed[idx] = true
-		clients = append(clients, client)
-		clientNames = append(clientNames, client.Name())
 	}
 
-	if len(domainRules) > 0 {
-		newError("domain ", domain, " matches following rules: ", domainRules).AtDebug().WriteToLog()
-	}
-	if len(clientNames) > 0 {
-		newError("domain ", domain, " will use DNS in order: ", clientNames).AtDebug().WriteToLog()
-	}
 	return clients
 }
 
