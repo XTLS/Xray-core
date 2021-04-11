@@ -23,7 +23,7 @@ import (
 type DNS struct {
 	sync.Mutex
 	tag             string
-	cs              CacheStrategy
+	cacheStrategy   CacheStrategy
 	disableFallback bool
 	ipOption        *dns.IPOption
 	hosts           *StaticHosts
@@ -139,7 +139,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		ctx:             ctx,
 		domainMatcher:   domainMatcher,
 		matcherInfos:    matcherInfos,
-		cs:              config.CacheStrategy,
+		cacheStrategy:   config.CacheStrategy,
 		disableFallback: config.DisableFallback,
 	}, nil
 }
@@ -231,7 +231,7 @@ func (s *DNS) lookupIPInternal(domain string, option *dns.IPOption) ([]net.IP, e
 	errs := []error{}
 	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
 	for _, client := range s.sortClients(domain, option) {
-		ips, err := client.QueryIP(ctx, domain, *option, s.cs)
+		ips, err := client.QueryIP(ctx, domain, *option, s.cacheStrategy)
 		if len(ips) > 0 {
 			return ips, nil
 		}
