@@ -123,25 +123,59 @@ var typeMap = map[router.Domain_Type]dns.DomainMatchingType{
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers         []*NameServerConfig `json:"servers"`
-	Hosts           map[string]*Address `json:"hosts"`
-	ClientIP        *Address            `json:"clientIp"`
-	Tag             string              `json:"tag"`
-	QueryStrategy   string              `json:"queryStrategy"`
-	CacheStrategy   string              `json:"cacheStrategy"`
-	DisableCache    bool                `json:"disableCache"`
-	DisableFallback bool                `json:"disableFallback"`
+	Servers         []*NameServerConfig     `json:"servers"`
+	Hosts           map[string]*HostAddress `json:"hosts"`
+	ClientIP        *Address                `json:"clientIp"`
+	Tag             string                  `json:"tag"`
+	QueryStrategy   string                  `json:"queryStrategy"`
+	CacheStrategy   string                  `json:"cacheStrategy"`
+	DisableCache    bool                    `json:"disableCache"`
+	DisableFallback bool                    `json:"disableFallback"`
 }
 
-func getHostMapping(addr *Address) *dns.Config_HostMapping {
-	if addr.Family().IsIP() {
-		return &dns.Config_HostMapping{
-			Ip: [][]byte{[]byte(addr.IP())},
+type HostAddress struct {
+	addr  *Address
+	addrs []*Address
+}
+
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
+func (h *HostAddress) UnmarshalJSON(data []byte) error {
+	addr := new(Address)
+	var addrs []*Address
+	switch {
+	case json.Unmarshal(data, &addr) == nil:
+		h.addr = addr
+	case json.Unmarshal(data, &addrs) == nil:
+		h.addrs = addrs
+	default:
+		return newError("invalid address")
+	}
+	return nil
+}
+
+func getHostMapping(ha *HostAddress) *dns.Config_HostMapping {
+	if ha.addr != nil {
+		if ha.addr.Family().IsDomain() {
+			return &dns.Config_HostMapping{
+				ProxiedDomain: ha.addr.Domain(),
+			}
 		}
-	} else {
 		return &dns.Config_HostMapping{
-			ProxiedDomain: addr.Domain(),
+			Ip: [][]byte{ha.addr.IP()},
 		}
+	}
+
+	ips := make([][]byte, 0, len(ha.addrs))
+	for _, addr := range ha.addrs {
+		if addr.Family().IsDomain() {
+			return &dns.Config_HostMapping{
+				ProxiedDomain: addr.Domain(),
+			}
+		}
+		ips = append(ips, []byte(addr.IP()))
+	}
+	return &dns.Config_HostMapping{
+		Ip: ips,
 	}
 }
 

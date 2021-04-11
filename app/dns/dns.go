@@ -222,7 +222,7 @@ func (s *DNS) lookupIPInternal(domain string, option *dns.IPOption) ([]net.IP, e
 		// Successfully found ip records in static host.
 		// Skip hosts mapping result in FakeDNS query.
 		if isIPQuery(option) {
-			newError("returning ", len(addrs), " IPs for domain ", domain).WriteToLog()
+			newError("returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs).WriteToLog()
 			return toNetIP(addrs)
 		}
 	}
