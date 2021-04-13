@@ -14,12 +14,12 @@ type Writer struct {
 }
 
 type RateLimiter struct {
-	ctx         context.Context
+	ctx         *context.Context
 	sendLimiter *rate.Limiter
 	recvLimiter *rate.Limiter
 }
 
-func NewRateLimiter(cpCtx context.Context, d *DefaultDispatcher, user *protocol.MemoryUser) *RateLimiter {
+func NewRateLimiter(cpCtx *context.Context, d *DefaultDispatcher, user *protocol.MemoryUser) *RateLimiter {
 	if d.bucket[user.Email] == nil {
 		fmt.Println("为空")
 		var limitInt = 1024 * 1024 * user.Level
@@ -27,19 +27,19 @@ func NewRateLimiter(cpCtx context.Context, d *DefaultDispatcher, user *protocol.
 	} else {
 		fmt.Println("不为空")
 	}
+	bucket := d.bucket[user.Email]
 	return &RateLimiter{
 		ctx:         cpCtx,
-		sendLimiter: d.bucket[user.Email],
-		recvLimiter: d.bucket[user.Email],
+		sendLimiter: bucket,
+		recvLimiter: bucket,
 	}
 }
 
 func (l *RateLimiter) RateWait(count int64) {
-
 	if l.sendLimiter != nil && count != 0 {
-		l.sendLimiter.WaitN(l.ctx, int(count))
+		_ = l.sendLimiter.WaitN(*l.ctx, int(count))
 	} else if l.recvLimiter != nil && count != 0 {
-		l.recvLimiter.WaitN(l.ctx, int(count))
+		_ = l.recvLimiter.WaitN(*l.ctx, int(count))
 	}
 }
 
