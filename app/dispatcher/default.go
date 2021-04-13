@@ -4,6 +4,7 @@ package dispatcher
 
 import (
 	"context"
+	"golang.org/x/time/rate"
 	"strings"
 	"sync"
 	"time"
@@ -94,6 +95,7 @@ type DefaultDispatcher struct {
 	router routing.Router
 	policy policy.Manager
 	stats  stats.Manager
+	bucket map[string]*rate.Limiter
 }
 
 func init() {
@@ -114,6 +116,7 @@ func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router rou
 	d.router = router
 	d.policy = pm
 	d.stats = sm
+	d.bucket = make(map[string]*rate.Limiter, 20)
 	return nil
 }
 
@@ -152,6 +155,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	}
 
 	if user != nil && len(user.Email) > 0 {
+
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
@@ -171,6 +175,12 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 				}
 			}
 		}
+
+		var bucket *RateLimiter
+		bucket = NewRateLimiter(ctx, d, user)
+		inboundLink.Writer = RateWriter(inboundLink.Writer, bucket)
+		outboundLink.Writer = RateWriter(outboundLink.Writer, bucket)
+
 	}
 
 	return inboundLink, outboundLink
@@ -331,6 +341,13 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 			newError("default route for ", destination).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}
+
+	addNet := session.OutboundFromContext(ctx).Target.NetAddr()
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+		Status: log.AccessAccepted,
+		Reason: "",
+		Email:  session.InboundFromContext(ctx).User.Email + " " + addNet + " " + session.InboundFromContext(ctx).Source.NetAddr() + " " + session.InboundFromContext(ctx).Source.String(),
+	})
 
 	if handler == nil {
 		handler = d.ohm.GetDefaultHandler()

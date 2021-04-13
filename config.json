@@ -1,0 +1,49 @@
+{
+    "log":{
+        "access":"D:\\temp\\v2ray_acc.log",
+        "error": "D:\\temp\\v2ray_err.log",
+        "loglevel":"info"
+    },
+    "inbounds":[
+        {
+            "port":36271,
+            #"listen":"127.0.0.1",
+            "protocol":"vless",
+            "settings":{
+                "decryption":"none",
+                "clients":[
+                    {
+                        "email":"dingwd",
+			            "id":"bbe4d6bb-d32e-49e7-a095-58f0d58aa75f",
+                        "level":0
+                    }
+                ]
+            },
+            "streamSettings":{
+                "network":"ws",
+                "wsSettings":{
+		            "path":"/ws",
+                    "headers":{
+                        "Host":"192.168.130.67"
+                    }
+                }
+            }
+        }
+    ],
+    "outbounds":[
+        {
+            "protocol":"freedom",
+            "settings":{
+
+            }
+        },
+        {
+            "protocol":"blackhole",
+            "settings":{
+
+            },
+            "tag":"blocked"
+        }
+    ]
+}
+
