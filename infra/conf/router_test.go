@@ -107,6 +107,7 @@ func TestRouterConfig(t *testing.T) {
 					{
 						Tag:              "b1",
 						OutboundSelector: []string{"test"},
+						Strategy:         "random",
 					},
 				},
 				Rule: []*router.RoutingRule{
