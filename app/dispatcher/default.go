@@ -177,7 +177,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 
 		var bucket *RateLimiter
-		bucket = NewRateLimiter(ctx, d, user)
+		bucket = NewRateLimiter(&ctx, d, user)
 		inboundLink.Writer = RateWriter(inboundLink.Writer, bucket)
 		outboundLink.Writer = RateWriter(outboundLink.Writer, bucket)
 
