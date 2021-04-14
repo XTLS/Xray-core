@@ -1,0 +1,34 @@
+name: Linter
+
+on:
+  push:
+    branches:
+      - main
+      - rkt*
+    paths:
+      - "**/*.go"
+      - ".github/workflows/linter.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.go"
+      - ".github/workflows/linter.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "^1.16.2"
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: latest
+          args: --config=.github/linters/_golangci.yml
+          only-new-issues: true
