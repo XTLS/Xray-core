@@ -8,11 +8,13 @@ on:
     paths:
       - "**/*.go"
       - ".github/workflows/linter.yml"
+      - ".github/linters/_golangci.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - "**/*.go"
       - ".github/workflows/linter.yml"
+      - ".github/linters/_golangci.yml"
 
 jobs:
   lint:
