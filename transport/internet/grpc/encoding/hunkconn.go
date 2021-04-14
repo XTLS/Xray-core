@@ -5,12 +5,15 @@ import (
 	"io"
 	"net"
 
+	"google.golang.org/grpc/peer"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
 )
 
 type HunkConn interface {
+	Context() context.Context
 	Send(*Hunk) error
 	Recv() (*Hunk, error)
 	SendMsg(m interface{}) error
@@ -35,11 +38,23 @@ func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) *HunkReaderWriter
 }
 
 func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
+	var rAddr net.Addr
+	pr, ok := peer.FromContext(hc.Context())
+	if ok {
+		rAddr = pr.Addr
+	} else {
+		rAddr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: 0,
+		}
+	}
+
 	wrc := NewHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(
 		cnc.ConnectionInput(wrc),
 		cnc.ConnectionOutput(wrc),
 		cnc.ConnectionOnClose(wrc),
+		cnc.ConnectionRemoteAddr(rAddr),
 	)
 }
 
@@ -85,7 +100,7 @@ func (h *HunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		}
 	}
 
-	if cap(h.buf) == buf.Size {
+	if cap(h.buf) >= buf.Size {
 		b := h.buf
 		h.index = len(h.buf)
 		return buf.MultiBuffer{buf.NewExisted(b)}, nil

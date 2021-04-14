@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/cmdarg"
@@ -31,7 +32,7 @@ Xray. Multiple assign is accepted.
 The -confdir=dir flag sets a dir with multiple json config
 
 The -format=json flag sets the format of config files. 
-Default "json".
+Default "auto".
 
 The -test flag tells Xray to test config files only, 
 without launching the server
@@ -46,7 +47,7 @@ var (
 	configFiles cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
 	configDir   string
 	test        = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
-	format      = cmdRun.Flag.String("format", "json", "Format of input file.")
+	format      = cmdRun.Flag.String("format", "auto", "Format of input file.")
 
 	/* We have to do this here because Golang's Test will also need to parse flag, before
 	 * main func in this file is run.
@@ -111,13 +112,26 @@ func dirExists(file string) bool {
 	return err == nil && info.IsDir()
 }
 
+func getRegepxByFormat() string {
+	switch strings.ToLower(*format) {
+	case "json":
+		return `^.+\.json$`
+	case "toml":
+		return `^.+\.toml$`
+	case "yaml", "yml":
+		return `^.+\.(yaml|yml)$`
+	default:
+		return `^.+\.(json|toml|yaml|yml)$`
+	}
+}
+
 func readConfDir(dirPath string) {
 	confs, err := ioutil.ReadDir(dirPath)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	for _, f := range confs {
-		matched, err := regexp.MatchString(`^.+\.(json|toml|yaml|yml)$`, f.Name())
+		matched, err := regexp.MatchString(getRegepxByFormat(), f.Name())
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -160,7 +174,7 @@ func getConfigFilePath() cmdarg.Arg {
 func getConfigFormat() string {
 	f := core.GetFormatByExtension(*format)
 	if f == "" {
-		f = "json"
+		f = "auto"
 	}
 	return f
 }

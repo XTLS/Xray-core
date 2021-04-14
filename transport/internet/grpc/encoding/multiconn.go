@@ -5,12 +5,15 @@ import (
 	"io"
 	"net"
 
+	"google.golang.org/grpc/peer"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
 )
 
 type MultiHunkConn interface {
+	Context() context.Context
 	Send(*MultiHunk) error
 	Recv() (*MultiHunk, error)
 	SendMsg(m interface{}) error
@@ -30,11 +33,23 @@ func NewMultiHunkReadWriter(hc MultiHunkConn, cancel context.CancelFunc) *MultiH
 }
 
 func NewMultiHunkConn(hc MultiHunkConn, cancel context.CancelFunc) net.Conn {
+	var rAddr net.Addr
+	pr, ok := peer.FromContext(hc.Context())
+	if ok {
+		rAddr = pr.Addr
+	} else {
+		rAddr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: 0,
+		}
+	}
+
 	wrc := NewMultiHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(
 		cnc.ConnectionInputMulti(wrc),
 		cnc.ConnectionOutputMulti(wrc),
 		cnc.ConnectionOnClose(wrc),
+		cnc.ConnectionRemoteAddr(rAddr),
 	)
 }
 
@@ -64,16 +79,20 @@ func (h *MultiHunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 	var mb = make(buf.MultiBuffer, 0, len(h.buf))
 	for _, b := range h.buf {
-		if cap(b) >= buf.Size {
-			mb = append(mb, buf.NewExisted(b))
+		if len(b) == 0 {
 			continue
 		}
 
-		nb := buf.New()
-		nb.Extend(int32(len(b)))
-		copy(nb.Bytes(), b)
+		if cap(b) >= buf.Size {
+			mb = append(mb, buf.NewExisted(b))
+		} else {
+			nb := buf.New()
+			nb.Extend(int32(len(b)))
+			copy(nb.Bytes(), b)
 
-		mb = append(mb, nb)
+			mb = append(mb, nb)
+		}
+
 	}
 	return mb, nil
 }
@@ -84,12 +103,15 @@ func (h *MultiHunkReaderWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		return io.ErrClosedPipe
 	}
 
-	hunk := &MultiHunk{Data: make([][]byte, len(mb))}
+	hunks := make([][]byte, 0, len(mb))
+
 	for _, b := range mb {
-		hunk.Data = append(hunk.Data, b.Bytes())
+		if b.Len() > 0 {
+			hunks = append(hunks, b.Bytes())
+		}
 	}
 
-	err := h.hc.Send(hunk)
+	err := h.hc.Send(&MultiHunk{Data: hunks})
 	if err != nil {
 		return err
 	}

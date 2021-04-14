@@ -11,10 +11,12 @@ import (
 )
 
 type NameServerConfig struct {
-	Address   *Address
-	Port      uint16
-	Domains   []string
-	ExpectIPs StringList
+	Address      *Address
+	ClientIP     *Address
+	Port         uint16
+	SkipFallback bool
+	Domains      []string
+	ExpectIPs    StringList
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
@@ -25,14 +27,18 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address   *Address   `json:"address"`
-		Port      uint16     `json:"port"`
-		Domains   []string   `json:"domains"`
-		ExpectIPs StringList `json:"expectIps"`
+		Address      *Address   `json:"address"`
+		ClientIP     *Address   `json:"clientIp"`
+		Port         uint16     `json:"port"`
+		SkipFallback bool       `json:"skipFallback"`
+		Domains      []string   `json:"domains"`
+		ExpectIPs    StringList `json:"expectIps"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
+		c.ClientIP = advanced.ClientIP
 		c.Port = advanced.Port
+		c.SkipFallback = advanced.SkipFallback
 		c.Domains = advanced.Domains
 		c.ExpectIPs = advanced.ExpectIPs
 		return nil
@@ -87,12 +93,21 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}
 
+	var myClientIP []byte
+	if c.ClientIP != nil {
+		if !c.ClientIP.Family().IsIP() {
+			return nil, newError("not an IP address:", c.ClientIP.String())
+		}
+		myClientIP = []byte(c.ClientIP.IP())
+	}
 	return &dns.NameServer{
 		Address: &net.Endpoint{
 			Network: net.Network_UDP,
 			Address: c.Address.Build(),
 			Port:    uint32(c.Port),
 		},
+		ClientIp:          myClientIP,
+		SkipFallback:      c.SkipFallback,
 		PrioritizedDomain: domains,
 		Geoip:             geoipList,
 		OriginalRules:     originalRules,
@@ -108,28 +123,72 @@ var typeMap = map[router.Domain_Type]dns.DomainMatchingType{
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers  []*NameServerConfig `json:"servers"`
-	Hosts    map[string]*Address `json:"hosts"`
-	ClientIP *Address            `json:"clientIp"`
-	Tag      string              `json:"tag"`
+	Servers         []*NameServerConfig     `json:"servers"`
+	Hosts           map[string]*HostAddress `json:"hosts"`
+	ClientIP        *Address                `json:"clientIp"`
+	Tag             string                  `json:"tag"`
+	QueryStrategy   string                  `json:"queryStrategy"`
+	CacheStrategy   string                  `json:"cacheStrategy"`
+	DisableCache    bool                    `json:"disableCache"`
+	DisableFallback bool                    `json:"disableFallback"`
 }
 
-func getHostMapping(addr *Address) *dns.Config_HostMapping {
-	if addr.Family().IsIP() {
-		return &dns.Config_HostMapping{
-			Ip: [][]byte{[]byte(addr.IP())},
+type HostAddress struct {
+	addr  *Address
+	addrs []*Address
+}
+
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
+func (h *HostAddress) UnmarshalJSON(data []byte) error {
+	addr := new(Address)
+	var addrs []*Address
+	switch {
+	case json.Unmarshal(data, &addr) == nil:
+		h.addr = addr
+	case json.Unmarshal(data, &addrs) == nil:
+		h.addrs = addrs
+	default:
+		return newError("invalid address")
+	}
+	return nil
+}
+
+func getHostMapping(ha *HostAddress) *dns.Config_HostMapping {
+	if ha.addr != nil {
+		if ha.addr.Family().IsDomain() {
+			return &dns.Config_HostMapping{
+				ProxiedDomain: ha.addr.Domain(),
+			}
 		}
-	} else {
 		return &dns.Config_HostMapping{
-			ProxiedDomain: addr.Domain(),
+			Ip: [][]byte{ha.addr.IP()},
 		}
+	}
+
+	ips := make([][]byte, 0, len(ha.addrs))
+	for _, addr := range ha.addrs {
+		if addr.Family().IsDomain() {
+			return &dns.Config_HostMapping{
+				ProxiedDomain: addr.Domain(),
+			}
+		}
+		ips = append(ips, []byte(addr.IP()))
+	}
+	return &dns.Config_HostMapping{
+		Ip: ips,
 	}
 }
 
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
 	config := &dns.Config{
-		Tag: c.Tag,
+		Tag:             c.Tag,
+		CacheStrategy:   dns.CacheStrategy_Cache_ALL,
+		DisableFallback: c.DisableFallback,
+	}
+
+	if c.DisableCache {
+		config.CacheStrategy = dns.CacheStrategy_Cache_DISABLE
 	}
 
 	if c.ClientIP != nil {
@@ -137,6 +196,25 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 			return nil, newError("not an IP address:", c.ClientIP.String())
 		}
 		config.ClientIp = []byte(c.ClientIP.IP())
+	}
+
+	config.QueryStrategy = dns.QueryStrategy_USE_IP
+	switch strings.ToLower(c.QueryStrategy) {
+	case "useip", "use_ip", "use-ip":
+		config.QueryStrategy = dns.QueryStrategy_USE_IP
+	case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
+		config.QueryStrategy = dns.QueryStrategy_USE_IP4
+	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
+		config.QueryStrategy = dns.QueryStrategy_USE_IP6
+	}
+
+	switch strings.ToLower(c.CacheStrategy) {
+	case "noerror":
+		config.CacheStrategy = dns.CacheStrategy_Cache_NOERROR
+	case "all":
+		config.CacheStrategy = dns.CacheStrategy_Cache_ALL
+	case "disable", "none":
+		config.CacheStrategy = dns.CacheStrategy_Cache_DISABLE
 	}
 
 	for _, server := range c.Servers {

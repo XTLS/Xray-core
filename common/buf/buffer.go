@@ -38,7 +38,7 @@ func NewExisted(b []byte) *Buffer {
 
 	oLen := len(b)
 	if oLen < Size {
-		b = append(b, make([]byte, Size-oLen)...)
+		b = b[:Size]
 	}
 
 	return &Buffer{

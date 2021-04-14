@@ -16,11 +16,13 @@ func NewFakeDNSServer() *FakeDNSServer {
 	return &FakeDNSServer{}
 }
 
+const FakeDNSName = "FakeDNS"
+
 func (FakeDNSServer) Name() string {
-	return "FakeDNS"
+	return FakeDNSName
 }
 
-func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ dns.IPOption) ([]net.IP, error) {
+func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ net.IP, _ dns.IPOption, _ CacheStrategy) ([]net.IP, error) {
 	if f.fakeDNSEngine == nil {
 		if err := core.RequireFeatures(ctx, func(fd dns.FakeDNSEngine) {
 			f.fakeDNSEngine = fd
@@ -30,9 +32,9 @@ func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ dns.IPOpti
 	}
 	ips := f.fakeDNSEngine.GetFakeIPForDomain(domain)
 
-	netIP := toNetIP(ips)
-	if netIP == nil {
-		return nil, newError("Unable to convert IP to net ip").AtError()
+	netIP, err := toNetIP(ips)
+	if err != nil {
+		return nil, newError("Unable to convert IP to net ip").Base(err).AtError()
 	}
 
 	newError(f.Name(), " got answer: ", domain, " -> ", ips).AtInfo().WriteToLog()

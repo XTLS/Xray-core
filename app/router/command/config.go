@@ -28,6 +28,12 @@ func (c routingContext) GetTargetPort() net.Port {
 	return net.Port(c.RoutingContext.GetTargetPort())
 }
 
+// GetSkipDNSResolve is a mock implementation here to match the interface,
+// SkipDNSResolve is set from dns module, no use if coming from a protobuf object?
+func (c routingContext) GetSkipDNSResolve() bool {
+	return false
+}
+
 // AsRoutingContext converts a protobuf RoutingContext into an implementation of routing.Context.
 func AsRoutingContext(r *RoutingContext) routing.Context {
 	return routingContext{r}

@@ -14,25 +14,6 @@ type StaticHosts struct {
 	matchers *strmatcher.MatcherGroup
 }
 
-var typeMap = map[DomainMatchingType]strmatcher.Type{
-	DomainMatchingType_Full:      strmatcher.Full,
-	DomainMatchingType_Subdomain: strmatcher.Domain,
-	DomainMatchingType_Keyword:   strmatcher.Substr,
-	DomainMatchingType_Regex:     strmatcher.Regex,
-}
-
-func toStrMatcher(t DomainMatchingType, domain string) (strmatcher.Matcher, error) {
-	strMType, f := typeMap[t]
-	if !f {
-		return nil, newError("unknown mapping type", t).AtWarning()
-	}
-	matcher, err := strMType.New(domain)
-	if err != nil {
-		return nil, newError("failed to create str matcher").Base(err)
-	}
-	return matcher, nil
-}
-
 // NewStaticHosts creates a new StaticHosts instance.
 func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDomain) (*StaticHosts, error) {
 	g := new(strmatcher.MatcherGroup)
@@ -66,6 +47,9 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 		id := g.Add(matcher)
 		ips := make([]net.Address, 0, len(mapping.Ip)+1)
 		switch {
+		case len(mapping.ProxiedDomain) > 0:
+			ips = append(ips, net.DomainAddress(mapping.ProxiedDomain))
+
 		case len(mapping.Ip) > 0:
 			for _, ip := range mapping.Ip {
 				addr := net.IPAddress(ip)
@@ -75,16 +59,8 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 				ips = append(ips, addr)
 			}
 
-		case len(mapping.ProxiedDomain) > 0:
-			ips = append(ips, net.DomainAddress(mapping.ProxiedDomain))
-
 		default:
 			return nil, newError("neither IP address nor proxied domain specified for domain: ", mapping.Domain).AtWarning()
-		}
-
-		// Special handling for localhost IPv6. This is a dirty workaround as JSON config supports only single IP mapping.
-		if len(ips) == 1 && ips[0] == net.LocalHostIP {
-			ips = append(ips, net.LocalHostIPv6)
 		}
 
 		sh.ips[id] = ips
@@ -93,31 +69,46 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 	return sh, nil
 }
 
-func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
+func filterIP(ips []net.Address, option *dns.IPOption) []net.Address {
 	filtered := make([]net.Address, 0, len(ips))
 	for _, ip := range ips {
 		if (ip.Family().IsIPv4() && option.IPv4Enable) || (ip.Family().IsIPv6() && option.IPv6Enable) {
 			filtered = append(filtered, ip)
 		}
 	}
-	if len(filtered) == 0 {
-		return nil
-	}
 	return filtered
 }
 
-// LookupIP returns IP address for the given domain, if exists in this StaticHosts.
-func (h *StaticHosts) LookupIP(domain string, option dns.IPOption) []net.Address {
-	indices := h.matchers.Match(domain)
-	if len(indices) == 0 {
-		return nil
-	}
-	ips := []net.Address{}
-	for _, id := range indices {
+func (h *StaticHosts) lookupInternal(domain string) []net.Address {
+	var ips []net.Address
+	for _, id := range h.matchers.Match(domain) {
 		ips = append(ips, h.ips[id]...)
 	}
 	if len(ips) == 1 && ips[0].Family().IsDomain() {
 		return ips
 	}
-	return filterIP(ips, option)
+	return ips
+}
+
+func (h *StaticHosts) lookup(domain string, option *dns.IPOption, maxDepth int) []net.Address {
+	switch addrs := h.lookupInternal(domain); {
+	case len(addrs) == 0: // Not recorded in static hosts, return nil
+		return nil
+	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Try to unwrap domain
+		newError("found replaced domain: ", domain, " -> ", addrs[0].Domain(), ". Try to unwrap it").AtDebug().WriteToLog()
+		if maxDepth > 0 {
+			unwrapped := h.lookup(addrs[0].Domain(), option, maxDepth-1)
+			if unwrapped != nil {
+				return unwrapped
+			}
+		}
+		return addrs
+	default: // IP record found, return a non-nil IP array
+		return filterIP(addrs, option)
+	}
+}
+
+// Lookup returns IP addresses or proxied domain for the given domain, if exists in this StaticHosts.
+func (h *StaticHosts) Lookup(domain string, option *dns.IPOption) []net.Address {
+	return h.lookup(domain, option, 5)
 }

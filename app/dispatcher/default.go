@@ -196,7 +196,7 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 			return true
 		}
 		if fakeDNSEngine != nil && protocolString != "bittorrent" && p == "fakedns" &&
-			fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
+			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
 			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
 			return true
 		}
@@ -309,15 +309,10 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (Sni
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
 	var handler outbound.Handler
 
-	skipRoutePick := false
-	if content := session.ContentFromContext(ctx); content != nil {
-		skipRoutePick = content.SkipRoutePick
-	}
-
 	routingLink := routing_session.AsRoutingContext(ctx)
 	inTag := routingLink.GetInboundTag()
 	isPickRoute := false
-	if d.router != nil && !skipRoutePick {
+	if d.router != nil {
 		if route, err := d.router.PickRoute(routingLink); err == nil {
 			outTag := route.GetOutboundTag()
 			isPickRoute = true
