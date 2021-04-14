@@ -36,6 +36,7 @@ func init() {
 type dialerConf struct {
 	net.Destination
 	*internet.SocketConfig
+	*tls.Config
 }
 
 var (
@@ -46,14 +47,9 @@ var (
 func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	config := tls.ConfigFromStreamSettings(streamSettings)
-	var dialOption = grpc.WithInsecure()
+	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
-	if config != nil {
-		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(config.GetTLSConfig()))
-	}
-
-	conn, err := getGrpcClient(ctx, dest, dialOption, streamSettings.SocketSettings)
+	conn, err := getGrpcClient(ctx, dest, tlsConfig, streamSettings.SocketSettings)
 
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
@@ -76,7 +72,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	return encoding.NewHunkConn(grpcService, nil), nil
 }
 
-func getGrpcClient(ctx context.Context, dest net.Destination, dialOption grpc.DialOption, sockopt *internet.SocketConfig) (*grpc.ClientConn, error) {
+func getGrpcClient(ctx context.Context, dest net.Destination, tlsConfig *tls.Config, sockopt *internet.SocketConfig) (*grpc.ClientConn, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -84,12 +80,24 @@ func getGrpcClient(ctx context.Context, dest net.Destination, dialOption grpc.Di
 		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
 	}
 
-	if client, found := globalDialerMap[dialerConf{dest, sockopt}]; found && client.GetState() != connectivity.Shutdown {
+	if client, found := globalDialerMap[dialerConf{dest, sockopt, tlsConfig}]; found && client.GetState() != connectivity.Shutdown {
 		return client, nil
 	}
 
+	dialOption := grpc.WithInsecure()
+
+	if tlsConfig != nil {
+		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig.GetTLSConfig()))
+	}
+
+	var grpcDestHost string
+	if dest.Address.Family().IsDomain() {
+		grpcDestHost = dest.Address.Domain()
+	} else {
+		grpcDestHost = dest.Address.IP().String()
+	}
 	conn, err := grpc.Dial(
-		gonet.JoinHostPort(dest.Address.String(), dest.Port.String()),
+		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOption,
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
@@ -125,6 +133,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, dialOption grpc.Di
 			return internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
 		}),
 	)
-	globalDialerMap[dialerConf{dest, sockopt}] = conn
+	globalDialerMap[dialerConf{dest, sockopt, tlsConfig}] = conn
 	return conn, err
 }

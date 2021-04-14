@@ -31,6 +31,13 @@ func TestSocketConfig(t *testing.T) {
 		}
 	}
 
+	// test "tcpFastOpen": true, queue length 256 is expected. other parameters are tested here too
+	expectedOutput := &internet.SocketConfig{
+		Mark:           1,
+		Tfo:            256,
+		DomainStrategy: internet.DomainStrategy_USE_IP,
+		DialerProxy:    "tag",
+	}
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
@@ -40,38 +47,118 @@ func TestSocketConfig(t *testing.T) {
 				"dialerProxy": "tag"
 			}`,
 			Parser: createParser(),
-			Output: &internet.SocketConfig{
-				Mark:           1,
-				Tfo:            256,
-				DomainStrategy: internet.DomainStrategy_USE_IP,
-				DialerProxy:    "tag",
-			},
+			Output: expectedOutput,
 		},
 	})
+	if expectedOutput.ParseTFOValue() != 256 {
+		t.Fatalf("unexpected parsed TFO value, which should be 256")
+	}
+
+	// test "tcpFastOpen": false, disabled TFO is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  -1,
+	}
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
 				"tcpFastOpen": false
 			}`,
 			Parser: createParser(),
-			Output: &internet.SocketConfig{
-				Mark: 0,
-				Tfo:  0,
-			},
+			Output: expectedOutput,
 		},
 	})
+	if expectedOutput.ParseTFOValue() != 0 {
+		t.Fatalf("unexpected parsed TFO value, which should be 0")
+	}
+
+	// test "tcpFastOpen": 65535, queue length 65535 is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  65535,
+	}
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
 				"tcpFastOpen": 65535
 			}`,
 			Parser: createParser(),
-			Output: &internet.SocketConfig{
-				Mark: 0,
-				Tfo:  65535,
-			},
+			Output: expectedOutput,
 		},
 	})
+	if expectedOutput.ParseTFOValue() != 65535 {
+		t.Fatalf("unexpected parsed TFO value, which should be 65535")
+	}
+
+	// test "tcpFastOpen": -65535, disable TFO is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  -65535,
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": -65535
+			}`,
+			Parser: createParser(),
+			Output: expectedOutput,
+		},
+	})
+	if expectedOutput.ParseTFOValue() != 0 {
+		t.Fatalf("unexpected parsed TFO value, which should be 0")
+	}
+
+	// test "tcpFastOpen": 0, no operation is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  0,
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": 0
+			}`,
+			Parser: createParser(),
+			Output: expectedOutput,
+		},
+	})
+	if expectedOutput.ParseTFOValue() != -1 {
+		t.Fatalf("unexpected parsed TFO value, which should be -1")
+	}
+
+	// test omit "tcpFastOpen", no operation is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  0,
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  `{}`,
+			Parser: createParser(),
+			Output: expectedOutput,
+		},
+	})
+	if expectedOutput.ParseTFOValue() != -1 {
+		t.Fatalf("unexpected parsed TFO value, which should be -1")
+	}
+
+	// test "tcpFastOpen": null, no operation is expected
+	expectedOutput = &internet.SocketConfig{
+		Mark: 0,
+		Tfo:  0,
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"tcpFastOpen": null
+			}`,
+			Parser: createParser(),
+			Output: expectedOutput,
+		},
+	})
+	if expectedOutput.ParseTFOValue() != -1 {
+		t.Fatalf("unexpected parsed TFO value, which should be -1")
+	}
 }
 
 func TestTransportConfig(t *testing.T) {

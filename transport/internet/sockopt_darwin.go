@@ -15,12 +15,12 @@ const (
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
 	if isTCPSocket(network) {
-		tfo := config.Tfo
+		tfo := config.ParseTFOValue()
 		if tfo > 0 {
 			tfo = TCP_FASTOPEN_CLIENT
 		}
 		if tfo >= 0 {
-			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_FASTOPEN, int(tfo)); err != nil {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_FASTOPEN, tfo); err != nil {
 				return err
 			}
 		}
@@ -31,12 +31,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig) error {
 	if isTCPSocket(network) {
-		tfo := config.Tfo
+		tfo := config.ParseTFOValue()
 		if tfo > 0 {
 			tfo = TCP_FASTOPEN_SERVER
 		}
 		if tfo >= 0 {
-			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_FASTOPEN, int(tfo)); err != nil {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_FASTOPEN, tfo); err != nil {
 				return err
 			}
 		}
