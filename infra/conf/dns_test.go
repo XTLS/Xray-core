@@ -75,14 +75,15 @@ func TestDNSConfigParsing(t *testing.T) {
 				}],
 				"hosts": {
 					"example.com": "127.0.0.1",
+					"xtls.github.io": ["1.2.3.4", "5.6.7.8"],
 					"domain:example.com": "google.com",
-					"geosite:test": "10.0.0.1",
-					"keyword:google": "8.8.8.8",
+					"geosite:test": ["127.0.0.1", "127.0.0.2"],
+					"keyword:google": ["8.8.8.8", "8.8.4.4"],
 					"regexp:.*\\.com": "8.8.4.4"
 				},
 				"clientIp": "10.0.0.1",
 				"queryStrategy": "UseIPv4",
-				"disableCache": true,
+				"cacheStrategy": "disable",
 				"disableFallback": true
 			}`,
 			Parser: parserCreator(),
@@ -128,17 +129,22 @@ func TestDNSConfigParsing(t *testing.T) {
 					{
 						Type:   domain.MatchingType_Full,
 						Domain: "example.com",
-						Ip:     [][]byte{{10, 0, 0, 1}},
+						Ip:     [][]byte{{127, 0, 0, 1}, {127, 0, 0, 2}},
 					},
 					{
 						Type:   domain.MatchingType_Keyword,
 						Domain: "google",
-						Ip:     [][]byte{{8, 8, 8, 8}},
+						Ip:     [][]byte{{8, 8, 8, 8}, {8, 8, 4, 4}},
 					},
 					{
 						Type:   domain.MatchingType_Regex,
 						Domain: ".*\\.com",
 						Ip:     [][]byte{{8, 8, 4, 4}},
+					},
+					{
+						Type:   domain.MatchingType_Full,
+						Domain: "xtls.github.io",
+						Ip:     [][]byte{{1, 2, 3, 4}, {5, 6, 7, 8}},
 					},
 				},
 				ClientIp:        []byte{10, 0, 0, 1},
