@@ -3,15 +3,12 @@ name: Coverage
 on:
   push:
     branches:
-      - mainx
-      - rktx*
+      - main
+      - rkt*
     paths:
       - "**/*.go"
   pull_request:
     types: [opened, synchronize, reopened]
-    branches:
-      - mainx
-      - rktx*
     paths:
       - "**/*.go"
 
@@ -24,7 +21,7 @@ jobs:
         with:
           go-version: "^1.16.2"
 
-      - name: Checkout codebase
+      - name: Checkout
         uses: actions/checkout@v2
 
       - name: Get dependencies
@@ -33,8 +30,8 @@ jobs:
 
       - name: Run coverage
         run: |
-          chmod u+x ./testing/coverage/coverall.sh
-          ./testing/coverage/coverall.sh
+          chmod u+x ./testing/coverage/coverall2
+          bash ./testing/coverage/coverall2
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
