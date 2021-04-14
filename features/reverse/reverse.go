@@ -25,8 +25,10 @@ type Manager interface {
 
 	AddBridge(ctx context.Context, bridge Handler) error
 	RemoveBridge(ctx context.Context, tag string) error
+	GetBridges(ctx context.Context) (interface{}, error)
 	AddPortal(ctx context.Context, portal Handler) error
 	RemovePortal(ctx context.Context, tag string) error
+	GetPortals(ctx context.Context) (interface{}, error)
 }
 
 // ManagerType returns the type of Manager interface. Can be used for implementing common.HasType.
@@ -54,6 +56,10 @@ func (NoopManager) AddBridge(ctx context.Context, bridge Handler) error { return
 
 func (NoopManager) RemoveBridge(ctx context.Context, tag string) error { return nil }
 
+func (NoopManager) GetBridges(ctx context.Context) (interface{}, error) { return nil, nil }
+
 func (NoopManager) AddPortal(ctx context.Context, portal Handler) error { return nil }
 
 func (NoopManager) RemovePortal(ctx context.Context, tag string) error { return nil }
+
+func (NoopManager) GetPortals(ctx context.Context) (interface{}, error) { return nil, nil }

@@ -4,6 +4,7 @@ package command
 
 import (
 	"context"
+	reverse2 "github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/reverse"
@@ -26,6 +27,17 @@ func (s *reverseServer) RemoveBridge(ctx context.Context, request *RemoveBridgeR
 	return &RemoveBridgeResponse{}, err
 }
 
+func (s *reverseServer) GetBridges(ctx context.Context, request *GetBridgesRequest) (*GetBridgesResponse, error) {
+	resp := &GetBridgesResponse{}
+	bridges, err := s.reverse.GetBridges(ctx)
+	if err != nil {
+		return resp, err
+	}
+
+	resp.Configs = bridges.([]*reverse2.BridgeConfig)
+	return resp, nil
+}
+
 func (s *reverseServer) AddPortal(ctx context.Context, request *AddPortalRequest) (*AddPortalResponse, error) {
 	err := s.reverse.AddPortal(ctx, request.Config)
 	return &AddPortalResponse{}, err
@@ -34,6 +46,17 @@ func (s *reverseServer) AddPortal(ctx context.Context, request *AddPortalRequest
 func (s *reverseServer) RemovePortal(ctx context.Context, request *RemovePortalRequest) (*RemovePortalResponse, error) {
 	err := s.reverse.RemovePortal(ctx, request.Tag)
 	return &RemovePortalResponse{}, err
+}
+
+func (s *reverseServer) GetPortals(ctx context.Context, request *GetPortalsRequest) (*GetPortalsResponse, error) {
+	resp := &GetPortalsResponse{}
+	portals, err := s.reverse.GetPortals(ctx)
+	if err != nil {
+		return resp, err
+	}
+
+	resp.Configs = portals.([]*reverse2.PortalConfig)
+	return resp, nil
 }
 
 func (s *reverseServer) mustEmbedUnimplementedReverseServiceServer() {}

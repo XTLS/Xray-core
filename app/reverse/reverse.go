@@ -8,7 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/reverse"
 	"github.com/xtls/xray-core/features/routing"
@@ -206,6 +206,24 @@ func (r *Reverse) RemoveBridge(ctx context.Context, tag string) error {
 	return nil
 }
 
+// GetBridges Implement the Manager interface.
+func (r *Reverse) GetBridges(ctx context.Context) (interface{}, error) {
+	if len(r.bridges) == 0 {
+		err := newError("This bridges has no elements")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+	configs := make([]*BridgeConfig, 0)
+	for _, bridge := range r.bridges {
+		configs = append(configs, &BridgeConfig{
+			Tag:    bridge.tag,
+			Domain: bridge.domain,
+		})
+	}
+
+	return configs, nil
+}
+
 // AddPortal Implement the Manager interface.
 func (r *Reverse) AddPortal(ctx context.Context, portal reverse.Handler) error {
 	tag := portal.GetTag()
@@ -237,6 +255,24 @@ func (r *Reverse) RemovePortal(ctx context.Context, tag string) error {
 	r.portals = append(r.portals[:idx], r.portals[idx+1:]...)
 	newError("The bridge has been removed through the API. [", tag, "] ").WriteToLog(session.ExportIDToError(ctx))
 	return nil
+}
+
+// GetPortals Implement the Manager interface.
+func (r *Reverse) GetPortals(ctx context.Context) (interface{}, error) {
+	if len(r.portals) == 0 {
+		err := newError("This bridges has no elements")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+	configs := make([]*PortalConfig, 0)
+	for _, portal := range r.portals {
+		configs = append(configs, &PortalConfig{
+			Tag:    portal.tag,
+			Domain: portal.domain,
+		})
+	}
+
+	return configs, nil
 }
 
 func init() {
