@@ -3,14 +3,14 @@ name: Coverage
 on:
   push:
     branches:
-      - masterx
+      - mainx
       - rktx*
     paths:
       - "**/*.go"
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
-      - masterx
+      - mainx
       - rktx*
     paths:
       - "**/*.go"
