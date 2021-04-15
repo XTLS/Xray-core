@@ -1,12 +1,14 @@
 package tls
 
 import (
-	"crypto/tls"
+	gotls "crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"net"
 
 	"github.com/xtls/xray-core/main/commands/base"
+	. "github.com/xtls/xray-core/transport/internet/tls"
 )
 
 // cmdPing is the tls ping command
@@ -62,11 +64,12 @@ func executePing(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
-		tlsConn := tls.Client(tcpConn, &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
-			MaxVersion:         tls.VersionTLS12,
-			MinVersion:         tls.VersionTLS12,
+		tlsConn := gotls.Client(tcpConn, &gotls.Config{
+			InsecureSkipVerify:    true,
+			NextProtos:            []string{"http/1.1"},
+			MaxVersion:            gotls.VersionTLS12,
+			MinVersion:            gotls.VersionTLS12,
+			VerifyPeerCertificate: showCert(),
 		})
 		err = tlsConn.Handshake()
 		if err != nil {
@@ -85,11 +88,12 @@ func executePing(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
-		tlsConn := tls.Client(tcpConn, &tls.Config{
-			ServerName: domain,
-			NextProtos: []string{"http/1.1"},
-			MaxVersion: tls.VersionTLS12,
-			MinVersion: tls.VersionTLS12,
+		tlsConn := gotls.Client(tcpConn, &gotls.Config{
+			ServerName:            domain,
+			NextProtos:            []string{"http/1.1"},
+			MaxVersion:            gotls.VersionTLS12,
+			MinVersion:            gotls.VersionTLS12,
+			VerifyPeerCertificate: showCert(),
 		})
 		err = tlsConn.Handshake()
 		if err != nil {
@@ -110,5 +114,13 @@ func printCertificates(certs []*x509.Certificate) {
 			continue
 		}
 		fmt.Println("Allowed domains: ", cert.DNSNames)
+	}
+}
+
+func showCert() func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		hash := GenerateCertChainHash(rawCerts)
+		fmt.Println("Certificate Chain Hash: ", base64.StdEncoding.EncodeToString(hash))
+		return nil
 	}
 }

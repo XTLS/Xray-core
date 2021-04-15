@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
+	"encoding/base64"
 	"strings"
 	"sync"
 	"time"
@@ -267,7 +267,7 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 				return nil
 			}
 		}
-		return newError("peer cert is unrecognized: ", hex.EncodeToString(hashValue))
+		return newError("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
 	}
 	return nil
 }
