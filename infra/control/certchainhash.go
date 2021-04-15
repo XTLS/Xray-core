@@ -5,9 +5,10 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io/ioutil"
+
 	"github.com/v2fly/v2ray-core/v4/common"
 	v2tls "github.com/v2fly/v2ray-core/v4/transport/internet/tls"
-	"io/ioutil"
 )
 
 type CertificateChainHashCommand struct {
