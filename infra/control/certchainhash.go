@@ -1,8 +1,6 @@
 package control
 
 import (
-	"encoding/base64"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -38,17 +36,7 @@ func (c CertificateChainHashCommand) Execute(args []string) error {
 	if err != nil {
 		return err
 	}
-	var certChain [][]byte
-	for {
-		block, remain := pem.Decode(certContent)
-		if block == nil {
-			break
-		}
-		certChain = append(certChain, block.Bytes)
-		certContent = remain
-	}
-	certChainHash := v2tls.GenerateCertChainHash(certChain)
-	certChainHashB64 := base64.StdEncoding.EncodeToString(certChainHash)
+	certChainHashB64 := v2tls.CalculatePEMCertChainSHA256Hash(certContent)
 	fmt.Println(certChainHashB64)
 	return nil
 }
