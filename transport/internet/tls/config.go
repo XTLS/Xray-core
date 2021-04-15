@@ -261,16 +261,7 @@ func (c *Config) parseServerName() string {
 
 func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	if c.PinnedPeerCertificateChainSha256 != nil {
-		var hashValue []byte
-		for _, certValue := range rawCerts {
-			out := sha256.Sum256(certValue)
-			if hashValue == nil {
-				hashValue = out[:]
-			} else {
-				newHashValue := sha256.Sum256(append(hashValue, out[:]...))
-				hashValue = newHashValue[:]
-			}
-		}
+		hashValue := GenerateCertChainHash(rawCerts)
 		for _, v := range c.PinnedPeerCertificateChainSha256 {
 			if hmac.Equal(hashValue, v) {
 				return nil
@@ -279,6 +270,20 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 		return newError("peer cert is unrecognized: ", hex.EncodeToString(hashValue))
 	}
 	return nil
+}
+
+func GenerateCertChainHash(rawCerts [][]byte) []byte {
+	var hashValue []byte
+	for _, certValue := range rawCerts {
+		out := sha256.Sum256(certValue)
+		if hashValue == nil {
+			hashValue = out[:]
+		} else {
+			newHashValue := sha256.Sum256(append(hashValue, out[:]...))
+			hashValue = newHashValue[:]
+		}
+	}
+	return hashValue
 }
 
 // GetTLSConfig converts this Config into tls.Config.
