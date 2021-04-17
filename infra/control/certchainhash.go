@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/v2fly/v2ray-core/v4/common"
 	v2tls "github.com/v2fly/v2ray-core/v4/transport/internet/tls"
 )
 
@@ -42,5 +41,6 @@ func (c CertificateChainHashCommand) Execute(args []string) error {
 }
 
 func init() {
-	common.Must(RegisterCommand(&CertificateChainHashCommand{}))
+	// Do not release tool before v5's refactor
+	// common.Must(RegisterCommand(&CertificateChainHashCommand{}))
 }
