@@ -359,6 +359,9 @@ func TestChinaSites(t *testing.T) {
 	matcher, err := NewDomainMatcher(domains)
 	common.Must(err)
 
+	acMatcher, err := NewMphMatcherGroup(domains)
+	common.Must(err)
+
 	type TestCase struct {
 		Domain string
 		Output bool
@@ -387,9 +390,96 @@ func TestChinaSites(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		r := matcher.ApplyDomain(testCase.Domain)
-		if r != testCase.Output {
-			t.Error("expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r)
+		r1 := matcher.ApplyDomain(testCase.Domain)
+		r2 := acMatcher.ApplyDomain(testCase.Domain)
+		if r1 != testCase.Output {
+			t.Error("DomainMatcher expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r1)
+		} else if r2 != testCase.Output {
+			t.Error("ACDomainMatcher expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r2)
+		}
+	}
+}
+
+func BenchmarkMphDomainMatcher(b *testing.B) {
+	domains, err := loadGeoSite("CN")
+	common.Must(err)
+
+	matcher, err := NewMphMatcherGroup(domains)
+	common.Must(err)
+
+	type TestCase struct {
+		Domain string
+		Output bool
+	}
+	testCases := []TestCase{
+		{
+			Domain: "163.com",
+			Output: true,
+		},
+		{
+			Domain: "163.com",
+			Output: true,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+	}
+
+	for i := 0; i < 1024; i++ {
+		testCases = append(testCases, TestCase{Domain: strconv.Itoa(i) + ".not-exists.com", Output: false})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, testCase := range testCases {
+			_ = matcher.ApplyDomain(testCase.Domain)
+		}
+	}
+}
+
+func BenchmarkDomainMatcher(b *testing.B) {
+	domains, err := loadGeoSite("CN")
+	common.Must(err)
+
+	matcher, err := NewDomainMatcher(domains)
+	common.Must(err)
+
+	type TestCase struct {
+		Domain string
+		Output bool
+	}
+	testCases := []TestCase{
+		{
+			Domain: "163.com",
+			Output: true,
+		},
+		{
+			Domain: "163.com",
+			Output: true,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+	}
+
+	for i := 0; i < 1024; i++ {
+		testCases = append(testCases, TestCase{Domain: strconv.Itoa(i) + ".not-exists.com", Output: false})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, testCase := range testCases {
+			_ = matcher.ApplyDomain(testCase.Domain)
 		}
 	}
 }
