@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	. "github.com/xtls/xray-core/v1/common/protocol"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	. "github.com/xtls/xray-core/common/protocol"
 )
 
 func TestAddressReading(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAddressReading(t *testing.T) {
 		},
 		{
 			Options: []AddressOption{AddressFamilyByte(0x03, net.AddressFamilyDomain)},
-			Input:   []byte{3, 9, 118, 50, 114, 97, 121, 46, 99, 111, 109, 0, 80},
+			Input:   []byte{3, 11, 101, 120, 97, 109, 112, 108, 101, 46, 99, 111, 109, 0, 80},
 			Address: net.DomainAddress("example.com"),
 			Port:    net.Port(80),
 		},
@@ -84,8 +84,9 @@ func TestAddressReading(t *testing.T) {
 	}
 
 	for _, tc := range data {
-		b := buf.New()
 		parser := NewAddressParser(tc.Options...)
+
+		b := buf.New()
 		addr, port, err := parser.ReadAddressPort(b, bytes.NewReader(tc.Input))
 		b.Release()
 		if tc.Error {

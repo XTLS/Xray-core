@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.proxyman.command;
 option csharp_namespace = "Xray.App.Proxyman.Command";
-option go_package = "github.com/xtls/xray-core/v1/app/proxyman/command";
+option go_package = "github.com/xtls/xray-core/app/proxyman/command";
 option java_package = "com.xray.app.proxyman.command";
 option java_multiple_files = true;
 

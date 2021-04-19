@@ -8,20 +8,20 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/xtls/xray-core/v1/app/log"
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	clog "github.com/xtls/xray-core/v1/common/log"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/proxy/dokodemo"
-	"github.com/xtls/xray-core/v1/proxy/freedom"
-	"github.com/xtls/xray-core/v1/proxy/shadowsocks"
-	"github.com/xtls/xray-core/v1/testing/servers/tcp"
-	"github.com/xtls/xray-core/v1/testing/servers/udp"
+	"github.com/xtls/xray-core/app/log"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	clog "github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/dokodemo"
+	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/proxy/shadowsocks"
+	"github.com/xtls/xray-core/testing/servers/tcp"
+	"github.com/xtls/xray-core/testing/servers/udp"
 )
 
 func TestShadowsocksAES256TCP(t *testing.T) {
@@ -52,10 +52,10 @@ func TestShadowsocksAES256TCP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -150,10 +150,10 @@ func TestShadowsocksAES128UDP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_UDP},
 				}),
 			},
@@ -276,10 +276,10 @@ func TestShadowsocksChacha20TCP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -369,10 +369,10 @@ func TestShadowsocksChacha20Poly1305TCP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -461,10 +461,10 @@ func TestShadowsocksAES256GCMTCP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -560,10 +560,10 @@ func TestShadowsocksAES128GCMUDP(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_UDP},
 				}),
 			},
@@ -658,10 +658,10 @@ func TestShadowsocksAES128GCMUDPMux(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -757,10 +757,10 @@ func TestShadowsocksNone(t *testing.T) {
 					Listen:    net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&shadowsocks.ServerConfig{
-					User: &protocol.User{
+					Users: []*protocol.User{{
 						Account: account,
 						Level:   1,
-					},
+					}},
 					Network: []net.Network{net.Network_TCP},
 				}),
 			},

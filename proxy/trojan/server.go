@@ -1,5 +1,3 @@
-// +build !confonly
-
 package trojan
 
 import (
@@ -7,28 +5,29 @@ import (
 	"crypto/tls"
 	"io"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/log"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/platform"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	udp_proto "github.com/xtls/xray-core/v1/common/protocol/udp"
-	"github.com/xtls/xray-core/v1/common/retry"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/common/task"
-	core "github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/policy"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/udp"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/protocol"
+	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
+	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
+	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/udp"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 func init() {
@@ -40,7 +39,7 @@ func init() {
 
 	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
 	if xtlsShow == "true" {
-		trojanXTLSShow = true
+		xtls_show = true
 	}
 }
 
@@ -48,7 +47,8 @@ func init() {
 type Server struct {
 	policyManager policy.Manager
 	validator     *Validator
-	fallbacks     map[string]map[string]*Fallback // or nil
+	fallbacks     map[string]map[string]map[string]*Fallback // or nil
+	cone          bool
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -69,22 +69,52 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	server := &Server{
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
+		cone:          ctx.Value("cone").(bool),
 	}
 
 	if config.Fallbacks != nil {
-		server.fallbacks = make(map[string]map[string]*Fallback)
+		server.fallbacks = make(map[string]map[string]map[string]*Fallback)
 		for _, fb := range config.Fallbacks {
-			if server.fallbacks[fb.Alpn] == nil {
-				server.fallbacks[fb.Alpn] = make(map[string]*Fallback)
+			if server.fallbacks[fb.Name] == nil {
+				server.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
 			}
-			server.fallbacks[fb.Alpn][fb.Path] = fb
+			if server.fallbacks[fb.Name][fb.Alpn] == nil {
+				server.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
+			}
+			server.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
 		}
 		if server.fallbacks[""] != nil {
-			for alpn, pfb := range server.fallbacks {
-				if alpn != "" { // && alpn != "h2" {
-					for path, fb := range server.fallbacks[""] {
-						if pfb[path] == nil {
-							pfb[path] = fb
+			for name, apfb := range server.fallbacks {
+				if name != "" {
+					for alpn := range server.fallbacks[""] {
+						if apfb[alpn] == nil {
+							apfb[alpn] = make(map[string]*Fallback)
+						}
+					}
+				}
+			}
+		}
+		for _, apfb := range server.fallbacks {
+			if apfb[""] != nil {
+				for alpn, pfb := range apfb {
+					if alpn != "" { // && alpn != "h2" {
+						for path, fb := range apfb[""] {
+							if pfb[path] == nil {
+								pfb[path] = fb
+							}
+						}
+					}
+				}
+			}
+		}
+		if server.fallbacks[""] != nil {
+			for name, apfb := range server.fallbacks {
+				if name != "" {
+					for alpn, pfb := range server.fallbacks[""] {
+						for path, fb := range pfb {
+							if apfb[alpn][path] == nil {
+								apfb[alpn][path] = fb
+							}
 						}
 					}
 				}
@@ -141,8 +171,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 
 	var user *protocol.MemoryUser
 
-	apfb := s.fallbacks
-	isfb := apfb != nil
+	napfb := s.fallbacks
+	isfb := napfb != nil
 
 	shouldFallback := false
 	if firstLen < 58 || first.Byte(56) != '\r' {
@@ -173,7 +203,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	}
 
 	if isfb && shouldFallback {
-		return s.fallback(ctx, sid, err, sessionPolicy, conn, iConn, apfb, first, firstLen, bufferedReader)
+		return s.fallback(ctx, sid, err, sessionPolicy, conn, iConn, napfb, first, firstLen, bufferedReader)
 	} else if shouldFallback {
 		return newError("invalid protocol or invalid user")
 	}
@@ -221,7 +251,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 			}
 			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
-				xtlsConn.SHOW = trojanXTLSShow
+				xtlsConn.SHOW = xtls_show
+				xtlsConn.MARK = "XTLS"
 				if clientReader.Flow == XRD {
 					xtlsConn.DirectMode = true
 					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
@@ -232,11 +263,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 				return newError(`failed to use ` + clientReader.Flow + `, maybe "security" is not "xtls"`).AtWarning()
 			}
 		} else {
-			return newError("unable to use ", clientReader.Flow).AtWarning()
+			return newError(account.Password + " is not able to use " + clientReader.Flow).AtWarning()
 		}
 	case "":
-	default:
-		return newError("unsupported flow " + account.Flow).AtWarning()
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -253,18 +282,27 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
-		common.Must(clientWriter.WriteMultiBufferWithMetadata(buf.MultiBuffer{packet.Payload}, packet.Source))
+		udpPayload := packet.Payload
+		if udpPayload.UDP == nil {
+			udpPayload.UDP = &packet.Source
+		}
+
+		if err := clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}); err != nil {
+			newError("failed to write response").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		}
 	})
 
 	inbound := session.InboundFromContext(ctx)
 	user := inbound.User
+
+	var dest *net.Destination
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			p, err := clientReader.ReadMultiBufferWithMetadata()
+			mb, err := clientReader.ReadMultiBuffer()
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					return newError("unexpected EOF").Base(err)
@@ -272,17 +310,31 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 				return nil
 			}
 
-			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-				From:   inbound.Source,
-				To:     p.Target,
-				Status: log.AccessAccepted,
-				Reason: "",
-				Email:  user.Email,
-			})
-			newError("tunnelling request to ", p.Target).WriteToLog(session.ExportIDToError(ctx))
+			mb2, b := buf.SplitFirst(mb)
+			if b == nil {
+				continue
+			}
+			destination := *b.UDP
 
-			for _, b := range p.Buffer {
-				udpServer.Dispatch(ctx, p.Target, b)
+			currentPacketCtx := ctx
+			if inbound.Source.IsValid() {
+				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+					From:   inbound.Source,
+					To:     destination,
+					Status: log.AccessAccepted,
+					Reason: "",
+					Email:  user.Email,
+				})
+			}
+			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(ctx))
+
+			if !s.cone || dest == nil {
+				dest = &destination
+			}
+
+			udpServer.Dispatch(currentPacketCtx, *dest, b) // first packet
+			for _, payload := range mb2 {
+				udpServer.Dispatch(currentPacketCtx, *dest, payload)
 			}
 		}
 	}
@@ -310,7 +362,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter)
+			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
 		} else {
 			err = buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer))
 		}
@@ -339,24 +391,52 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 	return nil
 }
 
-func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection internet.Connection, iConn internet.Connection, apfb map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
+func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection internet.Connection, iConn internet.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
 	}
 	newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
 
+	name := ""
 	alpn := ""
-	if len(apfb) > 1 || apfb[""] == nil {
-		if tlsConn, ok := iConn.(*tls.Conn); ok {
-			alpn = tlsConn.ConnectionState().NegotiatedProtocol
-			newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-		} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-			alpn = xtlsConn.ConnectionState().NegotiatedProtocol
-			newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+	if tlsConn, ok := iConn.(*tls.Conn); ok {
+		cs := tlsConn.ConnectionState()
+		name = cs.ServerName
+		alpn = cs.NegotiatedProtocol
+		newError("realName = " + name).AtInfo().WriteToLog(sid)
+		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+	} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+		cs := xtlsConn.ConnectionState()
+		name = cs.ServerName
+		alpn = cs.NegotiatedProtocol
+		newError("realName = " + name).AtInfo().WriteToLog(sid)
+		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+	}
+	name = strings.ToLower(name)
+	alpn = strings.ToLower(alpn)
+
+	if len(napfb) > 1 || napfb[""] == nil {
+		if name != "" && napfb[name] == nil {
+			match := ""
+			for n := range napfb {
+				if n != "" && strings.Contains(name, n) && len(n) > len(match) {
+					match = n
+				}
+			}
+			name = match
 		}
-		if apfb[alpn] == nil {
-			alpn = ""
-		}
+	}
+
+	if napfb[name] == nil {
+		name = ""
+	}
+	apfb := napfb[name]
+	if apfb == nil {
+		return newError(`failed to find the default "name" config`).AtWarning()
+	}
+
+	if apfb[alpn] == nil {
+		alpn = ""
 	}
 	pfb := apfb[alpn]
 	if pfb == nil {
@@ -378,7 +458,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 						if k == '\r' || k == '\n' { // avoid logging \r or \n
 							break
 						}
-						if k == ' ' {
+						if k == '?' || k == ' ' {
 							path = string(firstBytes[i:j])
 							newError("realPath = " + path).AtInfo().WriteToLog(sid)
 							if pfb[path] == nil {
@@ -420,38 +500,48 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 		if fb.Xver != 0 {
+			ipType := 4
 			remoteAddr, remotePort, err := net.SplitHostPort(connection.RemoteAddr().String())
 			if err != nil {
-				return err
+				ipType = 0
 			}
 			localAddr, localPort, err := net.SplitHostPort(connection.LocalAddr().String())
 			if err != nil {
-				return err
+				ipType = 0
 			}
-			ipv4 := true
-			for i := 0; i < len(remoteAddr); i++ {
-				if remoteAddr[i] == ':' {
-					ipv4 = false
-					break
+			if ipType == 4 {
+				for i := 0; i < len(remoteAddr); i++ {
+					if remoteAddr[i] == ':' {
+						ipType = 6
+						break
+					}
 				}
 			}
 			pro := buf.New()
 			defer pro.Release()
 			switch fb.Xver {
 			case 1:
-				if ipv4 {
+				if ipType == 0 {
+					common.Must2(pro.Write([]byte("PROXY UNKNOWN\r\n")))
+					break
+				}
+				if ipType == 4 {
 					common.Must2(pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				} else {
 					common.Must2(pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n")))
 				}
 			case 2:
-				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21"))) // signature + v2 + PROXY
-				if ipv4 {
-					common.Must2(pro.Write([]byte("\x11\x00\x0C"))) // AF_INET + STREAM + 12 bytes
+				common.Must2(pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"))) // signature
+				if ipType == 0 {
+					common.Must2(pro.Write([]byte("\x20\x00\x00\x00"))) // v2 + LOCAL + UNSPEC + UNSPEC + 0 bytes
+					break
+				}
+				if ipType == 4 {
+					common.Must2(pro.Write([]byte("\x21\x11\x00\x0C"))) // v2 + PROXY + AF_INET + STREAM + 12 bytes
 					common.Must2(pro.Write(net.ParseIP(remoteAddr).To4()))
 					common.Must2(pro.Write(net.ParseIP(localAddr).To4()))
 				} else {
-					common.Must2(pro.Write([]byte("\x21\x00\x24"))) // AF_INET6 + STREAM + 36 bytes
+					common.Must2(pro.Write([]byte("\x21\x21\x00\x24"))) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
 					common.Must2(pro.Write(net.ParseIP(remoteAddr).To16()))
 					common.Must2(pro.Write(net.ParseIP(localAddr).To16()))
 				}

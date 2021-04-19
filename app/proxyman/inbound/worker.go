@@ -6,21 +6,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal/done"
-	"github.com/xtls/xray-core/v1/common/task"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/proxy"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/tcp"
-	"github.com/xtls/xray-core/v1/transport/internet/udp"
-	"github.com/xtls/xray-core/v1/transport/pipe"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tcp"
+	"github.com/xtls/xray-core/transport/internet/udp"
+	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type worker interface {
@@ -78,17 +78,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 			})
 		}
 	}
-	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
-		Gateway: net.TCPDestination(w.address, w.port),
-		Tag:     w.tag,
-	})
-	content := new(session.Content)
-	if w.sniffingConfig != nil {
-		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
-		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-	}
-	ctx = session.ContextWithContent(ctx, content)
+
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
 		conn = &internet.StatCouterConnection{
 			Connection:   conn,
@@ -96,6 +86,22 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 			WriteCounter: w.downlinkCounter,
 		}
 	}
+	ctx = session.ContextWithInbound(ctx, &session.Inbound{
+		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		Gateway: net.TCPDestination(w.address, w.port),
+		Tag:     w.tag,
+		Conn:    conn,
+	})
+
+	content := new(session.Content)
+	if w.sniffingConfig != nil {
+		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
+		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
+		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+	}
+	ctx = session.ContextWithContent(ctx, content)
+
 	if err := w.proxy.Process(ctx, net.Network_TCP, conn, w.dispatcher); err != nil {
 		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
@@ -230,11 +236,15 @@ type udpWorker struct {
 	tag             string
 	stream          *internet.MemoryStreamConfig
 	dispatcher      routing.Dispatcher
+	sniffingConfig  *proxyman.SniffingConfig
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
 	checker    *task.Periodic
 	activeConn map[connID]*udpConn
+
+	ctx  context.Context
+	cone bool
 }
 
 func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
@@ -275,7 +285,10 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		src: source,
 	}
 	if originalDest.IsValid() {
-		id.dest = originalDest
+		if !w.cone {
+			id.dest = originalDest
+		}
+		b.UDP = &originalDest
 	}
 	conn, existing := w.getConnection(id)
 
@@ -286,7 +299,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		common.Must(w.checker.Start())
 
 		go func() {
-			ctx := context.Background()
+			ctx := w.ctx
 			sid := session.NewID()
 			ctx = session.ContextWithID(ctx, sid)
 
@@ -300,6 +313,13 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				Gateway: net.UDPDestination(w.address, w.port),
 				Tag:     w.tag,
 			})
+			content := new(session.Content)
+			if w.sniffingConfig != nil {
+				content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
+				content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+				content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+			}
+			ctx = session.ContextWithContent(ctx, content)
 			if err := w.proxy.Process(ctx, net.Network_UDP, conn, w.dispatcher); err != nil {
 				newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
@@ -332,7 +352,7 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 8 { // TODO Timeout too small
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 300 {
 			delete(w.activeConn, addr)
 			conn.Close()
 		}
@@ -353,8 +373,10 @@ func (w *udpWorker) Start() error {
 		return err
 	}
 
+	w.cone = w.ctx.Value("cone").(bool)
+
 	w.checker = &task.Periodic{
-		Interval: time.Second * 16,
+		Interval: time.Minute,
 		Execute:  w.clean,
 	}
 
@@ -419,17 +441,6 @@ func (w *dsWorker) callback(conn internet.Connection) {
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
 
-	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
-		Gateway: net.UnixDestination(w.address),
-		Tag:     w.tag,
-	})
-	content := new(session.Content)
-	if w.sniffingConfig != nil {
-		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
-		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
-	}
-	ctx = session.ContextWithContent(ctx, content)
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
 		conn = &internet.StatCouterConnection{
 			Connection:   conn,
@@ -437,6 +448,22 @@ func (w *dsWorker) callback(conn internet.Connection) {
 			WriteCounter: w.downlinkCounter,
 		}
 	}
+	ctx = session.ContextWithInbound(ctx, &session.Inbound{
+		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		Gateway: net.UnixDestination(w.address),
+		Tag:     w.tag,
+		Conn:    conn,
+	})
+
+	content := new(session.Content)
+	if w.sniffingConfig != nil {
+		content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
+		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
+		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+	}
+	ctx = session.ContextWithContent(ctx, content)
+
 	if err := w.proxy.Process(ctx, net.Network_UNIX, conn, w.dispatcher); err != nil {
 		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}

@@ -1,15 +1,14 @@
-// +build !confonly
-
 package core
 
 import (
 	"bytes"
 	"context"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/transport/internet/udp"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
 // CreateObject creates a new object based on the given Xray instance and config. The Xray instance may be nil.
@@ -26,7 +25,7 @@ func CreateObject(v *Instance, config interface{}) (interface{}, error) {
 //
 // xray:api:stable
 func StartInstance(configFormat string, configBytes []byte) (*Instance, error) {
-	config, err := LoadConfig(configFormat, "", bytes.NewReader(configBytes))
+	config, err := LoadConfig(configFormat, bytes.NewReader(configBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -55,13 +54,13 @@ func Dial(ctx context.Context, v *Instance, dest net.Destination) (net.Conn, err
 	if err != nil {
 		return nil, err
 	}
-	var readerOpt net.ConnectionOption
+	var readerOpt cnc.ConnectionOption
 	if dest.Network == net.Network_TCP {
-		readerOpt = net.ConnectionOutputMulti(r.Reader)
+		readerOpt = cnc.ConnectionOutputMulti(r.Reader)
 	} else {
-		readerOpt = net.ConnectionOutputMultiUDP(r.Reader)
+		readerOpt = cnc.ConnectionOutputMultiUDP(r.Reader)
 	}
-	return net.NewConnection(net.ConnectionInputMulti(r.Writer), readerOpt), nil
+	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt), nil
 }
 
 // DialUDP provides a way to exchange UDP packets through Xray instance to remote servers.

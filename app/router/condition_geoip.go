@@ -1,12 +1,10 @@
-// +build !confonly
-
 package router
 
 import (
 	"encoding/binary"
 	"sort"
 
-	"github.com/xtls/xray-core/v1/common/net"
+	"github.com/xtls/xray-core/common/net"
 )
 
 type ipv6 struct {

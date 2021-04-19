@@ -1,8 +1,6 @@
-// +build !confonly
-
 package command
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
@@ -11,11 +9,11 @@ import (
 
 	grpc "google.golang.org/grpc"
 
-	"github.com/xtls/xray-core/v1/app/stats"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/strmatcher"
-	"github.com/xtls/xray-core/v1/core"
-	feature_stats "github.com/xtls/xray-core/v1/features/stats"
+	"github.com/xtls/xray-core/app/stats"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/strmatcher"
+	"github.com/xtls/xray-core/core"
+	feature_stats "github.com/xtls/xray-core/features/stats"
 )
 
 // statsServer is an implementation of StatsService.
@@ -111,7 +109,13 @@ type service struct {
 }
 
 func (s *service) Register(server *grpc.Server) {
-	RegisterStatsServiceServer(server, NewStatsServer(s.statsManager))
+	ss := NewStatsServer(s.statsManager)
+	RegisterStatsServiceServer(server, ss)
+
+	// For compatibility purposes
+	vCoreDesc := StatsService_ServiceDesc
+	vCoreDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
+	server.RegisterService(&vCoreDesc, ss)
 }
 
 func init() {

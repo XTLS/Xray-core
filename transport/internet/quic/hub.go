@@ -1,5 +1,3 @@
-// +build !confonly
-
 package quic
 
 import (
@@ -7,12 +5,12 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol/tls/cert"
-	"github.com/xtls/xray-core/v1/common/signal/done"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/tls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 // Listener is an internet.Listener that listens for TCP connections.
@@ -105,8 +103,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	quicConfig := &quic.Config{
 		ConnectionIDLength:    12,
-		HandshakeTimeout:      time.Second * 8,
-		MaxIdleTimeout:        time.Second * 45,
+		KeepAlive:             true,
 		MaxIncomingStreams:    32,
 		MaxIncomingUniStreams: -1,
 	}

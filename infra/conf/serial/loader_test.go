@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xtls/xray-core/v1/infra/conf/serial"
+	"github.com/xtls/xray-core/infra/conf/serial"
 )
 
 func TestLoaderError(t *testing.T) {

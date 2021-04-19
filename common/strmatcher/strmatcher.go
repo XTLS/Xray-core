@@ -27,6 +27,7 @@ const (
 
 // New creates a new Matcher based on the given pattern.
 func (t Type) New(pattern string) (Matcher, error) {
+	// 1. regex matching is case-sensitive
 	switch t {
 	case Full:
 		return fullMatcher(pattern), nil

@@ -1,21 +1,20 @@
-// +build !confonly
-
 package dns
 
 import (
 	"encoding/binary"
+	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	dns_feature "github.com/xtls/xray-core/v1/features/dns"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
 // Fqdn normalize domain make sure it ends with '.'
 func Fqdn(domain string) string {
-	if len(domain) > 0 && domain[len(domain)-1] == '.' {
+	if len(domain) > 0 && strings.HasSuffix(domain, ".") {
 		return domain
 	}
 	return domain + "."
@@ -114,7 +113,7 @@ func genEDNS0Options(clientIP net.IP) *dnsmessage.Resource {
 	return opt
 }
 
-func buildReqMsgs(domain string, option IPOption, reqIDGen func() uint16, reqOpts *dnsmessage.Resource) []*dnsRequest {
+func buildReqMsgs(domain string, option dns_feature.IPOption, reqIDGen func() uint16, reqOpts *dnsmessage.Resource) []*dnsRequest {
 	qA := dnsmessage.Question{
 		Name:  dnsmessage.MustNewName(domain),
 		Type:  dnsmessage.TypeA,

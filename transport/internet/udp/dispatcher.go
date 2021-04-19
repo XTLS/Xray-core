@@ -6,16 +6,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common/signal/done"
+	"github.com/xtls/xray-core/common/signal/done"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol/udp"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/transport"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol/udp"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport"
 )
 
 type ResponseCallback func(ctx context.Context, packet *udp.Packet)
@@ -66,7 +66,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) *c
 		cancel()
 		v.RemoveRay(dest)
 	}
-	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Second*4)
+	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Minute)
 	link, _ := v.dispatcher.Dispatch(ctx, dest)
 	entry := &connEntry{
 		link:   link,

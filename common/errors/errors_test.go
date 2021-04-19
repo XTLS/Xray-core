@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	. "github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/log"
+	. "github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 )
 
 func TestError(t *testing.T) {
@@ -46,11 +46,11 @@ func TestErrorMessage(t *testing.T) {
 	}{
 		{
 			err: New("a").Base(New("b")).WithPathObj(e{}),
-			msg: "github.com/xtls/xray-core/v1/common/errors_test: a > b",
+			msg: "common/errors_test: a > b",
 		},
 		{
 			err: New("a").Base(New("b").WithPathObj(e{})),
-			msg: "a > github.com/xtls/xray-core/v1/common/errors_test: b",
+			msg: "a > common/errors_test: b",
 		},
 	}
 

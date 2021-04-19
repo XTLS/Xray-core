@@ -6,11 +6,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	. "github.com/xtls/xray-core/v1/proxy/socks"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	. "github.com/xtls/xray-core/proxy/socks"
 )
 
 func TestUDPEncoding(t *testing.T) {
@@ -20,14 +20,14 @@ func TestUDPEncoding(t *testing.T) {
 		Address: net.IPAddress([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6}),
 		Port:    1024,
 	}
-	writer := &buf.SequentialWriter{Writer: NewUDPWriter(request, b)}
+	writer := &UDPWriter{Writer: b, Request: request}
 
 	content := []byte{'a'}
 	payload := buf.New()
 	payload.Write(content)
 	common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{payload}))
 
-	reader := NewUDPReader(b)
+	reader := &UDPReader{Reader: b}
 
 	decodedPayload, err := reader.ReadMultiBuffer()
 	common.Must(err)

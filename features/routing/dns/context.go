@@ -1,11 +1,11 @@
 package dns
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/features/dns"
-	"github.com/xtls/xray-core/v1/features/routing"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/routing"
 )
 
 // ResolvableContext is an implementation of routing.Context, with domain resolving capability.
@@ -26,7 +26,11 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 	}
 
 	if domain := ctx.GetTargetDomain(); len(domain) != 0 {
-		ips, err := ctx.dnsClient.LookupIP(domain)
+		ips, err := ctx.dnsClient.LookupIP(domain, dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: true,
+			FakeEnable: false,
+		})
 		if err == nil {
 			ctx.resolvedIPs = ips
 			return ips

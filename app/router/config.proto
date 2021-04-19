@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.router;
 option csharp_namespace = "Xray.App.Router";
-option go_package = "github.com/xtls/xray-core/v1/app/router";
+option go_package = "github.com/xtls/xray-core/app/router";
 option java_package = "com.xray.app.router";
 option java_multiple_files = true;
 
@@ -119,6 +119,8 @@ message RoutingRule {
   repeated string protocol = 9;
 
   string attributes = 15;
+
+  string domain_matcher = 17;
 }
 
 message BalancingRule {

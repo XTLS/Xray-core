@@ -5,14 +5,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common/dice"
-	"github.com/xtls/xray-core/v1/common/mux"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/task"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/proxy"
-	"github.com/xtls/xray-core/v1/transport/internet"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/mux"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 type DynamicInboundHandler struct {
@@ -153,9 +153,11 @@ func (h *DynamicInboundHandler) refresh() error {
 				address:         address,
 				port:            port,
 				dispatcher:      h.mux,
+				sniffingConfig:  h.receiverConfig.GetEffectiveSniffingSettings(),
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
 				stream:          h.streamSettings,
+				ctx:             h.ctx,
 			}
 			if err := worker.Start(); err != nil {
 				newError("failed to create UDP worker").Base(err).AtWarning().WriteToLog()

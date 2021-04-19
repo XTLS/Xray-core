@@ -1,9 +1,9 @@
-package log // import "github.com/xtls/xray-core/v1/common/log"
+package log // import "github.com/xtls/xray-core/common/log"
 
 import (
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common/serial"
+	"github.com/xtls/xray-core/common/serial"
 )
 
 // Message is the interface for all log messages.

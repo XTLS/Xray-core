@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.stats.command;
 option csharp_namespace = "Xray.App.Stats.Command";
-option go_package = "github.com/xtls/xray-core/v1/app/stats/command";
+option go_package = "github.com/xtls/xray-core/app/stats/command";
 option java_package = "com.xray.app.stats.command";
 option java_multiple_files = true;
 

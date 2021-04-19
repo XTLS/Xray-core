@@ -8,14 +8,12 @@ const (
 	TCP_FASTOPEN = 15
 )
 
-func setTFO(fd syscall.Handle, settings SocketConfig_TCPFastOpenState) error {
-	switch settings {
-	case SocketConfig_Enable:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, 1); err != nil {
-			return err
-		}
-	case SocketConfig_Disable:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, 0); err != nil {
+func setTFO(fd syscall.Handle, tfo int) error {
+	if tfo > 0 {
+		tfo = 1
+	}
+	if tfo >= 0 {
+		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, TCP_FASTOPEN, tfo); err != nil {
 			return err
 		}
 	}
@@ -24,7 +22,7 @@ func setTFO(fd syscall.Handle, settings SocketConfig_TCPFastOpenState) error {
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
 	if isTCPSocket(network) {
-		if err := setTFO(syscall.Handle(fd), config.Tfo); err != nil {
+		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
 
@@ -35,7 +33,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig) error {
 	if isTCPSocket(network) {
-		if err := setTFO(syscall.Handle(fd), config.Tfo); err != nil {
+		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
 	}

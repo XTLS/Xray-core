@@ -6,13 +6,13 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/uuid"
-	"github.com/xtls/xray-core/v1/proxy/vmess"
-	. "github.com/xtls/xray-core/v1/proxy/vmess/encoding"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/proxy/vmess"
+	. "github.com/xtls/xray-core/proxy/vmess/encoding"
 )
 
 func toAccount(a *vmess.Account) protocol.Account {
@@ -57,14 +57,14 @@ func TestRequestSerialization(t *testing.T) {
 	defer common.Close(userValidator)
 
 	server := NewServerSession(userValidator, sessionHistory)
-	actualRequest, err := server.DecodeRequestHeader(buffer)
+	actualRequest, err := server.DecodeRequestHeader(buffer, false)
 	common.Must(err)
 
 	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {
 		t.Error(r)
 	}
 
-	_, err = server.DecodeRequestHeader(buffer2)
+	_, err = server.DecodeRequestHeader(buffer2, false)
 	// anti replay attack
 	if err == nil {
 		t.Error("nil error")
@@ -107,7 +107,7 @@ func TestInvalidRequest(t *testing.T) {
 	defer common.Close(userValidator)
 
 	server := NewServerSession(userValidator, sessionHistory)
-	_, err := server.DecodeRequestHeader(buffer)
+	_, err := server.DecodeRequestHeader(buffer, false)
 	if err == nil {
 		t.Error("nil error")
 	}
@@ -148,7 +148,7 @@ func TestMuxRequest(t *testing.T) {
 	defer common.Close(userValidator)
 
 	server := NewServerSession(userValidator, sessionHistory)
-	actualRequest, err := server.DecodeRequestHeader(buffer)
+	actualRequest, err := server.DecodeRequestHeader(buffer, false)
 	common.Must(err)
 
 	if r := cmp.Diff(actualRequest, expectedRequest, cmp.AllowUnexported(protocol.ID{})); r != "" {

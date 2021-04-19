@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.log;
 option csharp_namespace = "Xray.App.Log";
-option go_package = "github.com/xtls/xray-core/v1/app/log";
+option go_package = "github.com/xtls/xray-core/app/log";
 option java_package = "com.xray.app.log";
 option java_multiple_files = true;
 
@@ -22,4 +22,5 @@ message Config {
 
   LogType access_log_type = 4;
   string access_log_path = 5;
+  bool enable_dns_log = 6;
 }

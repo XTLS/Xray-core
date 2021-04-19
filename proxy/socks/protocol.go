@@ -1,15 +1,13 @@
-// +build !confonly
-
 package socks
 
 import (
 	"encoding/binary"
 	"io"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 )
 
 const (
@@ -18,7 +16,7 @@ const (
 
 	cmdTCPConnect    = 0x01
 	cmdTCPBind       = 0x02
-	cmdUDPPort       = 0x03
+	cmdUDPAssociate  = 0x03
 	cmdTorResolve    = 0xF0
 	cmdTorResolvePTR = 0xF1
 
@@ -41,8 +39,10 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config *ServerConfig
-	port   net.Port
+	config       *ServerConfig
+	address      net.Address
+	port         net.Port
+	localAddress net.Address
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -164,7 +164,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 	case cmdTCPConnect, cmdTorResolve, cmdTorResolvePTR:
 		// We don't have a solution for Tor case now. Simply treat it as connect command.
 		request.Command = protocol.RequestCommandTCP
-	case cmdUDPPort:
+	case cmdUDPAssociate:
 		if !s.config.UdpEnabled {
 			writeSocks5Response(writer, statusCmdNotSupport, net.AnyIP, net.Port(0))
 			return nil, newError("UDP is not enabled.")
@@ -187,15 +187,17 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 	request.Address = addr
 	request.Port = port
 
-	responseAddress := net.AnyIP
-	responsePort := net.Port(1717)
+	responseAddress := s.address
+	responsePort := s.port
+	//nolint:gocritic // Use if else chain for clarity
 	if request.Command == protocol.RequestCommandUDP {
-		addr := s.config.Address.AsAddress()
-		if addr == nil {
-			addr = net.LocalHostIP
+		if s.config.Address != nil {
+			// Use configured IP as remote address in the response to UDP Associate
+			responseAddress = s.config.Address.AsAddress()
+		} else {
+			// Use conn.LocalAddr() IP as remote address in the response by default
+			responseAddress = s.localAddress
 		}
-		responseAddress = addr
-		responsePort = s.port
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
 		return nil, err
@@ -355,47 +357,59 @@ func EncodeUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer,
 }
 
 type UDPReader struct {
-	reader io.Reader
-}
-
-func NewUDPReader(reader io.Reader) *UDPReader {
-	return &UDPReader{reader: reader}
+	Reader io.Reader
 }
 
 func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	b := buf.New()
-	if _, err := b.ReadFrom(r.reader); err != nil {
+	buffer := buf.New()
+	_, err := buffer.ReadFrom(r.Reader)
+	if err != nil {
+		buffer.Release()
 		return nil, err
 	}
-	if _, err := DecodeUDPPacket(b); err != nil {
+	u, err := DecodeUDPPacket(buffer)
+	if err != nil {
+		buffer.Release()
 		return nil, err
 	}
-	return buf.MultiBuffer{b}, nil
+	dest := u.Destination()
+	buffer.UDP = &dest
+	return buf.MultiBuffer{buffer}, nil
 }
 
 type UDPWriter struct {
-	request *protocol.RequestHeader
-	writer  io.Writer
+	Writer  io.Writer
+	Request *protocol.RequestHeader
 }
 
-func NewUDPWriter(request *protocol.RequestHeader, writer io.Writer) *UDPWriter {
-	return &UDPWriter{
-		request: request,
-		writer:  writer,
+func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		request := w.Request
+		if b.UDP != nil {
+			request = &protocol.RequestHeader{
+				Address: b.UDP.Address,
+				Port:    b.UDP.Port,
+			}
+		}
+		packet, err := EncodeUDPPacket(request, b.Bytes())
+		b.Release()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
+		_, err = w.Writer.Write(packet.Bytes())
+		packet.Release()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
 	}
-}
-
-// Write implements io.Writer.
-func (w *UDPWriter) Write(b []byte) (int, error) {
-	eb, err := EncodeUDPPacket(w.request, b)
-	if err != nil {
-		return 0, err
-	}
-	defer eb.Release()
-	if _, err := w.writer.Write(eb.Bytes()); err != nil {
-		return 0, err
-	}
-	return len(b), nil
+	return nil
 }
 
 func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -408,16 +422,6 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 	defer b.Release()
 
 	common.Must2(b.Write([]byte{socks5Version, 0x01, authByte}))
-	if authByte == authPassword {
-		account := request.User.Account.(*Account)
-
-		common.Must(b.WriteByte(0x01))
-		common.Must(b.WriteByte(byte(len(account.Username))))
-		common.Must2(b.WriteString(account.Username))
-		common.Must(b.WriteByte(byte(len(account.Password))))
-		common.Must2(b.WriteString(account.Password))
-	}
-
 	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
 		return nil, err
 	}
@@ -436,6 +440,17 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 
 	if authByte == authPassword {
 		b.Clear()
+		account := request.User.Account.(*Account)
+		common.Must(b.WriteByte(0x01))
+		common.Must(b.WriteByte(byte(len(account.Username))))
+		common.Must2(b.WriteString(account.Username))
+		common.Must(b.WriteByte(byte(len(account.Password))))
+		common.Must2(b.WriteString(account.Password))
+		if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
+			return nil, err
+		}
+
+		b.Clear()
 		if _, err := b.ReadFullFrom(reader, 2); err != nil {
 			return nil, err
 		}
@@ -448,11 +463,15 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 
 	command := byte(cmdTCPConnect)
 	if request.Command == protocol.RequestCommandUDP {
-		command = byte(cmdUDPPort)
+		command = byte(cmdUDPAssociate)
 	}
 	common.Must2(b.Write([]byte{socks5Version, command, 0x00 /* reserved */}))
-	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
-		return nil, err
+	if request.Command == protocol.RequestCommandUDP {
+		common.Must2(b.Write([]byte{1, 0, 0, 0, 0, 0, 0 /* RFC 1928 */}))
+	} else {
+		if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {

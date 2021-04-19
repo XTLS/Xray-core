@@ -1,18 +1,22 @@
 package trojan
 
 import (
+	"context"
 	"encoding/binary"
 	fmt "fmt"
 	"io"
+	"runtime"
 	"syscall"
 
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/features/stats"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (
@@ -24,11 +28,13 @@ var (
 		protocol.AddressFamilyByte(0x03, net.AddressFamilyDomain),
 	)
 
-	trojanXTLSShow = false
+	xtls_show = false
 )
 
 const (
 	maxLength = 8192
+	// XRS is constant for XTLS splice mode
+	XRS = "xtls-rprx-splice"
 	// XRD is constant for XTLS direct mode
 	XRD = "xtls-rprx-direct"
 	// XRO is constant for XTLS origin mode
@@ -84,10 +90,10 @@ func (c *ConnWriter) writeHeader() error {
 	command := commandTCP
 	if c.Target.Network == net.Network_UDP {
 		command = commandUDP
-	} else if c.Flow == XRO {
-		command = commandXRO
 	} else if c.Flow == XRD {
 		command = commandXRD
+	} else if c.Flow == XRO {
+		command = commandXRO
 	}
 
 	if _, err := buffer.Write(c.Account.Key); err != nil {
@@ -122,31 +128,21 @@ type PacketWriter struct {
 
 // WriteMultiBuffer implements buf.Writer
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	b := make([]byte, maxLength)
-	for !mb.IsEmpty() {
-		var length int
-		mb, length = buf.SplitBytes(mb, b)
-		if _, err := w.writePacket(b[:length], w.Target); err != nil {
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		target := &w.Target
+		if b.UDP != nil {
+			target = b.UDP
+		}
+		if _, err := w.writePacket(b.Bytes(), *target); err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
 	}
-
-	return nil
-}
-
-// WriteMultiBufferWithMetadata writes udp packet with destination specified
-func (w *PacketWriter) WriteMultiBufferWithMetadata(mb buf.MultiBuffer, dest net.Destination) error {
-	b := make([]byte, maxLength)
-	for !mb.IsEmpty() {
-		var length int
-		mb, length = buf.SplitBytes(mb, b)
-		if _, err := w.writePacket(b[:length], dest); err != nil {
-			buf.ReleaseMulti(mb)
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -205,10 +201,10 @@ func (c *ConnReader) ParseHeader() error {
 	network := net.Network_TCP
 	if command[0] == commandUDP {
 		network = net.Network_UDP
-	} else if command[0] == commandXRO {
-		c.Flow = XRO
 	} else if command[0] == commandXRD {
 		c.Flow = XRD
+	} else if command[0] == commandXRO {
+		c.Flow = XRO
 	}
 
 	addr, port, err := addrParser.ReadAddressPort(nil, c.Reader)
@@ -243,12 +239,6 @@ func (c *ConnReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, err
 }
 
-// PacketPayload combines udp payload and destination
-type PacketPayload struct {
-	Target net.Destination
-	Buffer buf.MultiBuffer
-}
-
 // PacketReader is UDP Connection Reader Wrapper for trojan protocol
 type PacketReader struct {
 	io.Reader
@@ -256,15 +246,6 @@ type PacketReader struct {
 
 // ReadMultiBuffer implements buf.Reader
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	p, err := r.ReadMultiBufferWithMetadata()
-	if p != nil {
-		return p.Buffer, err
-	}
-	return nil, err
-}
-
-// ReadMultiBufferWithMetadata reads udp packet with destination
-func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 	addr, port, err := addrParser.ReadAddressPort(nil, r)
 	if err != nil {
 		return nil, newError("failed to read address and port").Base(err)
@@ -294,6 +275,7 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 		}
 
 		b := buf.New()
+		b.UDP = &dest
 		mb = append(mb, b)
 		n, err := b.ReadFullFrom(r, int32(length))
 		if err != nil {
@@ -304,15 +286,45 @@ func (r *PacketReader) ReadMultiBufferWithMetadata() (*PacketPayload, error) {
 		remain -= int(n)
 	}
 
-	return &PacketPayload{Target: dest, Buffer: mb}, nil
+	return mb, nil
 }
 
-func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter) error {
+func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
 	err := func() error {
 		var ct stats.Counter
 		for {
 			if conn.DirectIn {
 				conn.DirectIn = false
+				if sctx != nil {
+					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
+						iConn := inbound.Conn
+						statConn, ok := iConn.(*internet.StatCouterConnection)
+						if ok {
+							iConn = statConn.Connection
+						}
+						if xc, ok := iConn.(*xtls.Conn); ok {
+							iConn = xc.Connection
+						}
+						if tc, ok := iConn.(*net.TCPConn); ok {
+							if conn.SHOW {
+								fmt.Println(conn.MARK, "Splice")
+							}
+							runtime.Gosched() // necessary
+							w, err := tc.ReadFrom(conn.Connection)
+							if counter != nil {
+								counter.Add(w)
+							}
+							if statConn != nil && statConn.WriteCounter != nil {
+								statConn.WriteCounter.Add(w)
+							}
+							return err
+						} else {
+							panic("XTLS Splice: not TCP inbound")
+						}
+					} else {
+						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
+					}
+				}
 				reader = buf.NewReadVReader(conn.Connection, rawConn)
 				ct = counter
 				if conn.SHOW {

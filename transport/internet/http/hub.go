@@ -1,27 +1,24 @@
-// +build !confonly
-
 package http
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
-	http_proto "github.com/xtls/xray-core/v1/common/protocol/http"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal/done"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/tls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
+	http_proto "github.com/xtls/xray-core/common/protocol/http"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type Listener struct {
@@ -38,7 +35,6 @@ func (l *Listener) Addr() net.Addr {
 
 func (l *Listener) Close() error {
 	if l.locker != nil {
-		fmt.Fprintln(os.Stderr, "RELEASE LOCK")
 		l.locker.Release()
 	}
 	return l.server.Close()
@@ -55,7 +51,7 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 	}
 
 	n, err = fw.w.Write(p)
-	if f, ok := fw.w.(http.Flusher); ok {
+	if f, ok := fw.w.(http.Flusher); ok && err == nil {
 		f.Flush()
 	}
 	return
@@ -90,21 +86,21 @@ func (l *Listener) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		}
 	}
 
-	forwardedAddrs := http_proto.ParseXForwardedFor(request.Header)
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
+	forwardedAddress := http_proto.ParseXForwardedFor(request.Header)
+	if len(forwardedAddress) > 0 && forwardedAddress[0].Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
-			Port: int(0),
+			IP:   forwardedAddress[0].IP(),
+			Port: 0,
 		}
 	}
 
 	done := done.New()
-	conn := net.NewConnection(
-		net.ConnectionOutput(request.Body),
-		net.ConnectionInput(flushWriter{w: writer, d: done}),
-		net.ConnectionOnClose(common.ChainedClosable{done, request.Body}),
-		net.ConnectionLocalAddr(l.Addr()),
-		net.ConnectionRemoteAddr(remoteAddr),
+	conn := cnc.NewConnection(
+		cnc.ConnectionOutput(request.Body),
+		cnc.ConnectionInput(flushWriter{w: writer, d: done}),
+		cnc.ConnectionOnClose(common.ChainedClosable{done, request.Body}),
+		cnc.ConnectionLocalAddr(l.Addr()),
+		cnc.ConnectionRemoteAddr(remoteAddr),
 	)
 	l.handler(conn)
 	<-done.Wait()
@@ -166,7 +162,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 				Net:  "unix",
 			}, streamSettings.SocketSettings)
 			if err != nil {
-				newError("failed to listen on ", address).Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("failed to listen on ", address).Base(err).AtError().WriteToLog(session.ExportIDToError(ctx))
 				return
 			}
 			locker := ctx.Value(address.Domain())
@@ -179,7 +175,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 				Port: int(port),
 			}, streamSettings.SocketSettings)
 			if err != nil {
-				newError("failed to listen on ", address, ":", port).Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("failed to listen on ", address, ":", port).Base(err).AtError().WriteToLog(session.ExportIDToError(ctx))
 				return
 			}
 		}
@@ -187,12 +183,12 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		if config == nil {
 			err = server.Serve(streamListener)
 			if err != nil {
-				newError("stoping serving H2C").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("stopping serving H2C").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
 		} else {
 			err = server.ServeTLS(streamListener, "", "")
 			if err != nil {
-				newError("stoping serving TLS").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("stopping serving TLS").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 	}()

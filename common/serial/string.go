@@ -8,7 +8,7 @@ import (
 // ToString serialize an arbitrary value into string.
 func ToString(v interface{}) string {
 	if v == nil {
-		return " "
+		return ""
 	}
 
 	switch value := v.(type) {

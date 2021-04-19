@@ -1,23 +1,21 @@
-// +build !confonly
-
 package socks
 
 import (
 	"context"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/retry"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/common/task"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/policy"
-	"github.com/xtls/xray-core/v1/transport"
-	"github.com/xtls/xray-core/v1/transport/internet"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // Client is a Socks5 client.
@@ -53,14 +51,19 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	// Destination of the inner request.
 	destination := outbound.Target
 
+	// Outbound server.
 	var server *protocol.ServerSpec
+	// Outbound server's destination.
+	var dest net.Destination
+	// Connection to the outbound server.
 	var conn internet.Connection
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
 		server = c.serverPicker.PickServer()
-		dest := server.Destination()
+		dest = server.Destination()
 		rawConn, err := dialer.Dial(ctx, dest)
 		if err != nil {
 			return err
@@ -103,6 +106,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if err != nil {
 		return newError("failed to establish connection to server").AtWarning().Base(err)
 	}
+	if udpRequest != nil {
+		if udpRequest.Address == net.AnyIP || udpRequest.Address == net.AnyIPv6 {
+			udpRequest.Address = dest.Address
+		}
+	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		newError("failed to clear deadline after handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
@@ -130,11 +138,12 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		defer udpConn.Close()
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			return buf.Copy(link.Reader, &buf.SequentialWriter{Writer: NewUDPWriter(request, udpConn)}, buf.UpdateActivity(timer))
+			writer := &UDPWriter{Writer: udpConn, Request: request}
+			return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 		}
 		responseFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-			reader := &UDPReader{reader: udpConn}
+			reader := &UDPReader{Reader: udpConn}
 			return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
 		}
 	}

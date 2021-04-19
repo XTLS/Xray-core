@@ -1,17 +1,17 @@
 package inbound
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/serial"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/inbound"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/inbound"
 )
 
 // Manager is to manage all inbound handlers.
@@ -42,6 +42,9 @@ func (m *Manager) AddHandler(ctx context.Context, handler inbound.Handler) error
 
 	tag := handler.Tag()
 	if len(tag) > 0 {
+		if _, found := m.taggedHandlers[tag]; found {
+			return newError("existing tag found: " + tag)
+		}
 		m.taggedHandlers[tag] = handler
 	} else {
 		m.untaggedHandler = append(m.untaggedHandler, handler)

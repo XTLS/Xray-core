@@ -1,17 +1,18 @@
-// +build !confonly
-
 package xtls
 
 import (
 	"crypto/x509"
+	"strings"
 	"sync"
 	"time"
 
 	xtls "github.com/xtls/go"
 
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol/tls/cert"
-	"github.com/xtls/xray-core/v1/transport/internet"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/ocsp"
+	"github.com/xtls/xray-core/common/platform/filesystem"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 var (
@@ -41,8 +42,8 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 }
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []xtls.Certificate {
-	certs := make([]xtls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() []*xtls.Certificate {
+	certs := make([]*xtls.Certificate, 0, len(c.Certificate))
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -52,7 +53,63 @@ func (c *Config) BuildCertificates() []xtls.Certificate {
 			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-		certs = append(certs, keyPair)
+		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+		if err != nil {
+			newError("ignoring invalid certificate").Base(err).AtWarning().WriteToLog()
+			continue
+		}
+		certs = append(certs, &keyPair)
+		if !entry.OneTimeLoading {
+			var isOcspstapling bool
+			hotRelodaInterval := uint64(3600)
+			if entry.OcspStapling != 0 {
+				hotRelodaInterval = entry.OcspStapling
+				isOcspstapling = true
+			}
+			index := len(certs) - 1
+			go func(cert *xtls.Certificate, index int) {
+				t := time.NewTicker(time.Duration(hotRelodaInterval) * time.Second)
+				for {
+					if entry.CertificatePath != "" && entry.KeyPath != "" {
+						newCert, err := filesystem.ReadFile(entry.CertificatePath)
+						if err != nil {
+							newError("failed to parse certificate").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						newKey, err := filesystem.ReadFile(entry.KeyPath)
+						if err != nil {
+							newError("failed to parse key").Base(err).AtError().WriteToLog()
+							<-t.C
+							continue
+						}
+						if string(newCert) != string(entry.Certificate) && string(newKey) != string(entry.Key) {
+							newKeyPair, err := xtls.X509KeyPair(newCert, newKey)
+							if err != nil {
+								newError("ignoring invalid X509 key pair").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							if newKeyPair.Leaf, err = x509.ParseCertificate(newKeyPair.Certificate[0]); err != nil {
+								newError("ignoring invalid certificate").Base(err).AtError().WriteToLog()
+								<-t.C
+								continue
+							}
+							cert = &newKeyPair
+						}
+					}
+					if isOcspstapling {
+						if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
+							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+						} else if string(newOCSPData) != string(cert.OCSPStaple) {
+							cert.OCSPStaple = newOCSPData
+						}
+					}
+					certs[index] = cert
+					<-t.C
+				}
+			}(certs[len(certs)-1], index)
+		}
 	}
 	return certs
 }
@@ -155,6 +212,33 @@ func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.C
 	}
 }
 
+func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+		if len(certs) == 0 {
+			return nil, newError("empty certs")
+		}
+		sni := strings.ToLower(hello.ServerName)
+		if len(certs) == 1 || sni == "" {
+			return certs[0], nil
+		}
+		gsni := "*"
+		if index := strings.IndexByte(sni, '.'); index != -1 {
+			gsni += sni[index:]
+		}
+		for _, keyPair := range certs {
+			if keyPair.Leaf.Subject.CommonName == sni || keyPair.Leaf.Subject.CommonName == gsni {
+				return keyPair, nil
+			}
+			for _, name := range keyPair.Leaf.DNSNames {
+				if name == sni || name == gsni {
+					return keyPair, nil
+				}
+			}
+		}
+		return certs[0], nil
+	}
+}
+
 func (c *Config) parseServerName() string {
 	return c.ServerName
 }
@@ -172,7 +256,7 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 			RootCAs:                root,
 			InsecureSkipVerify:     false,
 			NextProtos:             nil,
-			SessionTicketsDisabled: false,
+			SessionTicketsDisabled: true,
 		}
 	}
 
@@ -181,19 +265,18 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 		RootCAs:                root,
 		InsecureSkipVerify:     c.AllowInsecure,
 		NextProtos:             c.NextProtocol,
-		SessionTicketsDisabled: c.DisableSessionResumption,
+		SessionTicketsDisabled: !c.EnableSessionResumption,
 	}
 
 	for _, opt := range opts {
 		opt(config)
 	}
 
-	config.Certificates = c.BuildCertificates()
-	config.BuildNameToCertificate()
-
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
+	} else {
+		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
@@ -203,6 +286,42 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	if len(config.NextProtos) == 0 {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
+
+	switch c.MinVersion {
+	case "1.0":
+		config.MinVersion = xtls.VersionTLS10
+	case "1.1":
+		config.MinVersion = xtls.VersionTLS11
+	case "1.2":
+		config.MinVersion = xtls.VersionTLS12
+	case "1.3":
+		config.MinVersion = xtls.VersionTLS13
+	}
+
+	switch c.MaxVersion {
+	case "1.0":
+		config.MaxVersion = xtls.VersionTLS10
+	case "1.1":
+		config.MaxVersion = xtls.VersionTLS11
+	case "1.2":
+		config.MaxVersion = xtls.VersionTLS12
+	case "1.3":
+		config.MaxVersion = xtls.VersionTLS13
+	}
+
+	if len(c.CipherSuites) > 0 {
+		id := make(map[string]uint16)
+		for _, s := range xtls.CipherSuites() {
+			id[s.Name] = s.ID
+		}
+		for _, n := range strings.Split(c.CipherSuites, ":") {
+			if id[n] != 0 {
+				config.CipherSuites = append(config.CipherSuites, id[n])
+			}
+		}
+	}
+
+	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 
 	return config
 }

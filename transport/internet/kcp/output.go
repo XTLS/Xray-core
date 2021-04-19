@@ -1,14 +1,12 @@
-// +build !confonly
-
 package kcp
 
 import (
 	"io"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common/retry"
+	"github.com/xtls/xray-core/common/retry"
 
-	"github.com/xtls/xray-core/v1/common/buf"
+	"github.com/xtls/xray-core/common/buf"
 )
 
 type SegmentWriter interface {

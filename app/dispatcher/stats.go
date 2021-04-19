@@ -1,11 +1,9 @@
-// +build !confonly
-
 package dispatcher
 
 import (
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/features/stats"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 type SizeStatWriter struct {

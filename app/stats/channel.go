@@ -1,12 +1,10 @@
-// +build !confonly
-
 package stats
 
 import (
 	"context"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common"
+	"github.com/xtls/xray-core/common"
 )
 
 // Channel is an implementation of stats.Channel.

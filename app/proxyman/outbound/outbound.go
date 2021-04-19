@@ -1,17 +1,17 @@
 package outbound
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/app/proxyman"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/outbound"
+	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/outbound"
 )
 
 // Manager is to manage all outbound handlers.
@@ -109,6 +109,9 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 
 	tag := handler.Tag()
 	if len(tag) > 0 {
+		if _, found := m.taggedHandler[tag]; found {
+			return newError("existing tag found: " + tag)
+		}
 		m.taggedHandler[tag] = handler
 	} else {
 		m.untaggedHandlers = append(m.untaggedHandlers, handler)

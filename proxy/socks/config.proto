@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.socks;
 option csharp_namespace = "Xray.Proxy.Socks";
-option go_package = "github.com/xtls/xray-core/v1/proxy/socks";
+option go_package = "github.com/xtls/xray-core/proxy/socks";
 option java_package = "com.xray.proxy.socks";
 option java_multiple_files = true;
 

@@ -1,12 +1,10 @@
-// +build !confonly
-
 package kcp
 
 import (
 	"crypto/cipher"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/transport/internet"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 const protocolName = "mkcp"

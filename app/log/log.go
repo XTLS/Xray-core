@@ -1,15 +1,13 @@
-// +build !confonly
-
 package log
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/log"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 )
 
 // Instance is a log.Handler that handles logs.
@@ -19,6 +17,7 @@ type Instance struct {
 	accessLogger log.Handler
 	errorLogger  log.Handler
 	active       bool
+	dns          bool
 }
 
 // New creates a new log.Instance based on the given config.
@@ -26,6 +25,7 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	g := &Instance{
 		config: config,
 		active: false,
+		dns:    config.EnableDnsLog,
 	}
 	log.RegisterHandler(g)
 
@@ -103,6 +103,10 @@ func (g *Instance) Handle(msg log.Message) {
 	switch msg := msg.(type) {
 	case *log.AccessMessage:
 		if g.accessLogger != nil {
+			g.accessLogger.Handle(msg)
+		}
+	case *log.DNSLog:
+		if g.dns && g.accessLogger != nil {
 			g.accessLogger.Handle(msg)
 		}
 	case *log.GeneralMessage:

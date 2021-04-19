@@ -1,8 +1,6 @@
-// +build !confonly
-
 package command
 
-//go:generate go run github.com/xtls/xray-core/v1/common/errors/errorgen
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
 	"context"
@@ -10,10 +8,10 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/features/stats"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 // routingServer is an implementation of RoutingService.
@@ -83,7 +81,13 @@ type service struct {
 
 func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		RegisterRoutingServiceServer(server, NewRoutingServer(router, nil))
+		rs := NewRoutingServer(router, nil)
+		RegisterRoutingServiceServer(server, rs)
+
+		// For compatibility purposes
+		vCoreDesc := RoutingService_ServiceDesc
+		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
+		server.RegisterService(&vCoreDesc, rs)
 	}))
 }
 

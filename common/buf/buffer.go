@@ -3,7 +3,8 @@ package buf
 import (
 	"io"
 
-	"github.com/xtls/xray-core/v1/common/bytespool"
+	"github.com/xtls/xray-core/common/bytespool"
+	"github.com/xtls/xray-core/common/net"
 )
 
 const (
@@ -20,12 +21,29 @@ type Buffer struct {
 	v     []byte
 	start int32
 	end   int32
+	UDP   *net.Destination
 }
 
 // New creates a Buffer with 0 length and 2K capacity.
 func New() *Buffer {
 	return &Buffer{
 		v: pool.Get().([]byte),
+	}
+}
+
+func NewExisted(b []byte) *Buffer {
+	if cap(b) < Size {
+		panic("Invalid buffer")
+	}
+
+	oLen := len(b)
+	if oLen < Size {
+		b = b[:Size]
+	}
+
+	return &Buffer{
+		v:   b,
+		end: int32(oLen),
 	}
 }
 
@@ -47,6 +65,7 @@ func (b *Buffer) Release() {
 	b.v = nil
 	b.Clear()
 	pool.Put(p)
+	b.UDP = nil
 }
 
 // Clear clears the content of the buffer, results an empty buffer with
@@ -106,6 +125,9 @@ func (b *Buffer) BytesFrom(from int32) []byte {
 func (b *Buffer) BytesTo(to int32) []byte {
 	if to < 0 {
 		to += b.Len()
+	}
+	if to < 0 {
+		to = 0
 	}
 	return b.v[b.start : b.start+to]
 }

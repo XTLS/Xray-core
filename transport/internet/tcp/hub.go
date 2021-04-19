@@ -1,5 +1,3 @@
-// +build !confonly
-
 package tcp
 
 import (
@@ -10,12 +8,12 @@ import (
 
 	goxtls "github.com/xtls/go"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/tls"
-	"github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 // Listener is an internet.Listener that listens for TCP connections.
@@ -40,7 +38,8 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
 		}
-		streamSettings.SocketSettings.AcceptProxyProtocol = l.config.AcceptProxyProtocol
+		streamSettings.SocketSettings.AcceptProxyProtocol =
+			l.config.AcceptProxyProtocol || streamSettings.SocketSettings.AcceptProxyProtocol
 	}
 	var listener net.Listener
 	var err error
@@ -50,7 +49,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen Unix Doman Socket on ", address).Base(err)
+			return nil, newError("failed to listen Unix Domain Socket on ", address).Base(err)
 		}
 		newError("listening Unix Domain Socket on ", address).WriteToLog(session.ExportIDToError(ctx))
 		locker := ctx.Value(address.Domain())
@@ -75,10 +74,10 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	l.listener = listener
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.tlsConfig = config.GetTLSConfig(tls.WithNextProto("h2"))
+		l.tlsConfig = config.GetTLSConfig()
 	}
 	if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.xtlsConfig = config.GetXTLSConfig(xtls.WithNextProto("h2"))
+		l.xtlsConfig = config.GetXTLSConfig()
 	}
 
 	if tcpSettings.HeaderSettings != nil {

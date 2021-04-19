@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/protocol/tls/cert"
-	. "github.com/xtls/xray-core/v1/transport/internet/tls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	. "github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func TestCertificateIssuing(t *testing.T) {
@@ -64,9 +64,7 @@ func TestExpiredCertificate(t *testing.T) {
 }
 
 func TestInsecureCertificates(t *testing.T) {
-	c := &Config{
-		AllowInsecureCiphers: true,
-	}
+	c := &Config{}
 
 	tlsConfig := c.GetTLSConfig()
 	if len(tlsConfig.CipherSuites) > 0 {

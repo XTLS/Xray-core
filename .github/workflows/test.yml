@@ -1,0 +1,48 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/*.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/*.yml"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - name: Checkout codebase
+        uses: actions/checkout@v2
+
+      - name: Prepare geo*dat
+        if: ${{ matrix.os != 'windows-latest' }}
+        run: |
+          mkdir resources
+          wget -O ./resources/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+          wget -O ./resources/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+      - name: Prepare geo*dat for Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          mkdir resources
+          Invoke-WebRequest -Uri "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" -OutFile "./resources/geoip.dat"
+          Invoke-WebRequest -Uri "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat" -OutFile "./resources/geosite.dat"
+      - name: Test
+        run: go test -timeout 1h -v ./...

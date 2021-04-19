@@ -1,5 +1,3 @@
-// +build !confonly
-
 package websocket
 
 import (
@@ -8,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/errors"
-	"github.com/xtls/xray-core/v1/common/serial"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/serial"
 )
 
 var (
@@ -24,10 +22,11 @@ type connection struct {
 	remoteAddr net.Addr
 }
 
-func newConnection(conn *websocket.Conn, remoteAddr net.Addr) *connection {
+func newConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
 	return &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
+		reader:     extraReader,
 	}
 }
 

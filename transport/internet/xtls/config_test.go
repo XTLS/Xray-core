@@ -7,9 +7,9 @@ import (
 
 	xtls "github.com/xtls/go"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/protocol/tls/cert"
-	. "github.com/xtls/xray-core/v1/transport/internet/xtls"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	. "github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 func TestCertificateIssuing(t *testing.T) {
@@ -65,9 +65,7 @@ func TestExpiredCertificate(t *testing.T) {
 }
 
 func TestInsecureCertificates(t *testing.T) {
-	c := &Config{
-		AllowInsecureCiphers: true,
-	}
+	c := &Config{}
 
 	xtlsConfig := c.GetXTLSConfig()
 	if len(xtlsConfig.CipherSuites) > 0 {

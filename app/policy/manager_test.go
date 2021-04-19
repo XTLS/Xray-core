@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/xtls/xray-core/v1/app/policy"
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/features/policy"
+	. "github.com/xtls/xray-core/app/policy"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/features/policy"
 )
 
 func TestPolicy(t *testing.T) {

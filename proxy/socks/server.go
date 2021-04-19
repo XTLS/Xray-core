@@ -1,5 +1,3 @@
-// +build !confonly
-
 package socks
 
 import (
@@ -7,27 +5,28 @@ import (
 	"io"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/log"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	udp_proto "github.com/xtls/xray-core/v1/common/protocol/udp"
-	"github.com/xtls/xray-core/v1/common/session"
-	"github.com/xtls/xray-core/v1/common/signal"
-	"github.com/xtls/xray-core/v1/common/task"
-	"github.com/xtls/xray-core/v1/core"
-	"github.com/xtls/xray-core/v1/features"
-	"github.com/xtls/xray-core/v1/features/policy"
-	"github.com/xtls/xray-core/v1/features/routing"
-	"github.com/xtls/xray-core/v1/transport/internet"
-	"github.com/xtls/xray-core/v1/transport/internet/udp"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features"
+	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
 // Server is a SOCKS 5 proxy server
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	cone          bool
 }
 
 // NewServer creates a new Server object.
@@ -36,6 +35,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		cone:          ctx.Value("cone").(bool),
 	}
 	return s, nil
 }
@@ -91,8 +91,10 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 	}
 
 	svrSession := &ServerSession{
-		config: s.config,
-		port:   inbound.Gateway.Port,
+		config:       s.config,
+		address:      inbound.Gateway.Address,
+		port:         inbound.Gateway.Port,
+		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
 	}
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
@@ -128,7 +130,7 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 			})
 		}
 
-		return s.transport(ctx, reader, conn, dest, dispatcher)
+		return s.transport(ctx, reader, conn, dest, dispatcher, inbound)
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
@@ -144,9 +146,13 @@ func (*Server) handleUDP(c io.Reader) error {
 	return common.Error2(io.Copy(buf.DiscardBytes, c))
 }
 
-func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher) error {
+func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, s.policy().Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
 
 	plcy := s.policy()
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
@@ -194,6 +200,15 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		if request == nil {
 			return
 		}
+
+		if payload.UDP != nil {
+			request = &protocol.RequestHeader{
+				User:    request.User,
+				Address: payload.UDP.Address,
+				Port:    payload.UDP.Port,
+			}
+		}
+
 		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
 		payload.Release()
 
@@ -205,9 +220,12 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 		conn.Write(udpMessage.Bytes())
 	})
 
-	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil && inbound.Source.IsValid() {
 		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
 	}
+
+	var dest *net.Destination
 
 	reader := buf.NewPacketReader(conn)
 	for {
@@ -229,19 +247,28 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 				payload.Release()
 				continue
 			}
+
+			destination := request.Destination()
+
 			currentPacketCtx := ctx
-			newError("send packet to ", request.Destination(), " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+			newError("send packet to ", destination, " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
+			if inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
-					To:     request.Destination(),
+					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
 				})
 			}
 
+			payload.UDP = &destination
+
+			if !s.cone || dest == nil {
+				dest = &destination
+			}
+
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, request.Destination(), payload)
+			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
 }

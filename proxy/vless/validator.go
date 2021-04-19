@@ -1,13 +1,11 @@
-// +build !confonly
-
 package vless
 
 import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/uuid"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 // Validator stores valid VLESS users.

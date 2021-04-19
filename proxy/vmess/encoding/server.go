@@ -13,16 +13,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/v1/common"
-	"github.com/xtls/xray-core/v1/common/bitmask"
-	"github.com/xtls/xray-core/v1/common/buf"
-	"github.com/xtls/xray-core/v1/common/crypto"
-	"github.com/xtls/xray-core/v1/common/dice"
-	"github.com/xtls/xray-core/v1/common/net"
-	"github.com/xtls/xray-core/v1/common/protocol"
-	"github.com/xtls/xray-core/v1/common/task"
-	"github.com/xtls/xray-core/v1/proxy/vmess"
-	vmessaead "github.com/xtls/xray-core/v1/proxy/vmess/aead"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bitmask"
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/proxy/vmess"
+	vmessaead "github.com/xtls/xray-core/proxy/vmess/aead"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -118,6 +118,11 @@ func NewServerSession(validator *vmess.TimedUserValidator, sessionHistory *Sessi
 	}
 }
 
+// SetAEADForced sets isAEADForced for a ServerSession.
+func (s *ServerSession) SetAEADForced(isAEADForced bool) {
+	s.isAEADForced = isAEADForced
+}
+
 func parseSecurityType(b byte) protocol.SecurityType {
 	if _, f := protocol.SecurityType_name[int32(b)]; f {
 		st := protocol.SecurityType(b)
@@ -131,7 +136,7 @@ func parseSecurityType(b byte) protocol.SecurityType {
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func (s *ServerSession) DecodeRequestHeader(reader io.Reader) (*protocol.RequestHeader, error) {
+func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*protocol.RequestHeader, error) {
 	buffer := buf.New()
 	behaviorRand := dice.NewDeterministicDice(int64(s.userValidator.GetBehaviorSeed()))
 	BaseDrainSize := behaviorRand.Roll(3266)
@@ -143,7 +148,7 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader) (*protocol.Request
 	drainConnection := func(e error) error {
 		// We read a deterministic generated length of data before closing the connection to offset padding read pattern
 		readSizeRemain -= int(buffer.Len())
-		if readSizeRemain > 0 {
+		if readSizeRemain > 0 && isDrain {
 			err := s.DrainConnN(reader, readSizeRemain)
 			if err != nil {
 				return newError("failed to drain connection DrainSize = ", BaseDrainSize, " ", RandDrainMax, " ", RandDrainRolled).Base(err).Base(e)
