@@ -19,6 +19,7 @@ type LogConfig struct {
 	AccessLog string `json:"access"`
 	ErrorLog  string `json:"error"`
 	LogLevel  string `json:"loglevel"`
+	Level     string `json:"level"`
 	DNSLog    bool   `json:"dnsLog"`
 }
 
@@ -45,8 +46,11 @@ func (v *LogConfig) Build() *log.Config {
 		config.ErrorLogType = log.LogType_File
 	}
 
-	level := strings.ToLower(v.LogLevel)
-	switch level {
+	level := v.Level
+	if v.LogLevel != "" {
+		level = v.LogLevel
+	}
+	switch strings.ToLower(level) {
 	case "debug":
 		config.ErrorLogLevel = clog.Severity_Debug
 	case "info":
