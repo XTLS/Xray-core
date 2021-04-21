@@ -78,8 +78,8 @@ func (DefaultRouter) GetRules(ctx context.Context) (interface{}, error) {
 }
 
 // GetRule implements Router.
-func (DefaultRouter) GetRule(ctx context.Context, tag string) (interface{}, error) {
-	return nil, common.ErrNoClue
+func (DefaultRouter) GetRule(ctx context.Context, tag string) (int, interface{}, error) {
+	return -1, nil, common.ErrNoClue
 }
 
 // AddBalancer implements Router.
@@ -123,14 +123,14 @@ type Manager interface {
 	AlterRule(ctx context.Context, tag string, routingRule interface{}) error
 	// RemoveRule Remove the specified routing rule
 	RemoveRule(ctx context.Context, tag string) error
-	// SetRules
+	// SetRules  .
 	SetRules(ctx context.Context, rules interface{}) error
-	// GetRules
+	// GetRules .
 	GetRules(ctx context.Context) (interface{}, error)
-	// GetRule
-	GetRule(ctx context.Context, tag string) (interface{}, error)
+	// GetRule .
+	GetRule(ctx context.Context, tag string) (int, interface{}, error)
 
-	// Balancer adds the given balancing rules to this manager.
+	// AddBalancer Balancer adds the given balancing rules to this manager.
 	AddBalancer(ctx context.Context, balancingRule interface{}, handler outbound.Manager) error
 	// AlterBalancer Modifies the specified balancing rule
 	AlterBalancer(ctx context.Context, tag string, balancingRule interface{}, handler outbound.Manager) error

@@ -4,15 +4,16 @@ package command
 
 import (
 	"context"
+	"os"
 	"time"
 
-	"google.golang.org/grpc"
-
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"google.golang.org/grpc"
 )
 
 // routingServer is an implementation of RoutingService.
@@ -86,16 +87,49 @@ func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRoutingRu
 	return &RemoveRoutingRuleResponse{}, nil
 }
 
-func (s *routingServer) SetRules(ctx context.Context, rules *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error) {
-	return nil, newError("not implement.")
+func (s *routingServer) SetRules(ctx context.Context, request *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error) {
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+
+	if len(request.Rules) == 0 {
+		return nil, newError("Rules is empty.")
+	}
+	err := s.router.SetRules(ctx, request.Rules)
+	if err != nil {
+		return nil, err
+	}
+	return &SetRoutingRulesResponse{}, nil
 }
 
 func (s *routingServer) GetRules(ctx context.Context, request *GetRoutingRulesRequest) (*GetRoutingRulesResponse, error) {
-	return nil, newError("not implement.")
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+	rules, err := s.router.GetRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &GetRoutingRulesResponse{
+		Rules: rules.([]*router.RoutingRule),
+	}, nil
 }
 
 func (s *routingServer) GetRule(ctx context.Context, request *GetRoutingRuleRequest) (*GetRoutingRuleResponse, error) {
-	return nil, newError("not implement.")
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+	idx, rules, err := s.router.GetRule(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &GetRoutingRuleResponse{
+		Rule: rules.(*router.RoutingRule),
+		Idx:  int32(idx),
+	}, nil
 }
 
 func (s *routingServer) AddBalancer(ctx context.Context, request *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
@@ -137,7 +171,13 @@ func (s *routingServer) RemoveBalancer(ctx context.Context, request *RemoveBalan
 }
 
 func (s *routingServer) GetBalancers(ctx context.Context, request *GetBalancerRequest) (*GetBalancerResponse, error) {
-	return nil, newError("not implement.")
+	balancers, err := s.router.GetBalancers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &GetBalancerResponse{
+		Balancing: balancers.([]*router.BalancingRule),
+	}, nil
 }
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {

@@ -23,3 +23,17 @@ func (g *FullMatcherGroup) Match(str string) []uint32 {
 
 	return g.matchers[str]
 }
+
+func (g *FullMatcherGroup) Restore() map[uint32]*RestoreDomain {
+	if g.matchers == nil {
+		return nil
+	}
+	m := make(map[uint32]*RestoreDomain)
+	for domain, idx := range g.matchers {
+		m[idx[0]] = &RestoreDomain{
+			Value:      domain,
+			DomainType: RestoreDomainTypeFull,
+		}
+	}
+	return m
+}

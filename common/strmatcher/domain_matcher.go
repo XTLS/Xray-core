@@ -96,3 +96,33 @@ func (g *DomainMatcherGroup) Match(domain string) []uint32 {
 		return result
 	}
 }
+
+func (g *DomainMatcherGroup) Restore() map[uint32]*RestoreDomain {
+	if g.root == nil {
+		return nil
+	}
+	domains := make(map[uint32]*RestoreDomain)
+	recursive(g.root, "", domains)
+	return domains
+}
+
+func recursive(n *node, postfix string, domains map[uint32]*RestoreDomain) {
+	if len(n.values) > 0 {
+		domains[n.values[0]] = &RestoreDomain{
+			Value:      postfix,
+			DomainType: RestoreDomainTypeDomain,
+		}
+
+		if len(n.sub) == 0 {
+			return
+		}
+	}
+
+	for key, subNode := range n.sub {
+		subDomain := key
+		if postfix != "" {
+			subDomain = key + postfix
+		}
+		recursive(subNode, subDomain, domains)
+	}
+}

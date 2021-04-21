@@ -95,10 +95,12 @@ message GetRoutingRulesResponse{
 }
 
 message GetRoutingRuleRequest{
+  string tag = 1;
 }
 
 message GetRoutingRuleResponse{
   xray.app.router.RoutingRule rule = 1;
+  int32 idx = 2;
 }
 
 message AddBalancingRuleRequest{
@@ -122,7 +124,7 @@ message GetBalancerRequest{
 }
 
 message GetBalancerResponse {
-  repeated xray.app.router.BalancingRule balancing = 2;
+  repeated xray.app.router.BalancingRule balancing = 1;
 }
 
 service RoutingService {

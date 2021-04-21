@@ -65,6 +65,23 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
+// RestoreRoutingRule Restore implements Condition.
+func (r *Rule) RestoreRoutingRule() interface{} {
+	rule := r.Condition.RestoreRoutingRule().(*RoutingRule)
+	rule.Tag = r.Tag
+	if r.Balancer != nil {
+		rule.TargetTag = &RoutingRule_BalancingTag{
+			BalancingTag: rule.Tag,
+		}
+	} else {
+		rule.TargetTag = &RoutingRule_OutboundTag{
+			OutboundTag: rule.Tag,
+		}
+	}
+
+	return rule
+}
+
 func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	conds := NewConditionChan()
 

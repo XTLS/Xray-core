@@ -125,7 +125,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	return nil, ctx, common.ErrNoClue
 }
 
-// FindRule
+// FindRule Find the corresponding rule based on Tag
 func (r *Router) FindRule(tag string) (idx int, rule *Rule) {
 	idx = -1
 	for k, v := range r.rules {
@@ -210,7 +210,7 @@ func (r *Router) RemoveRule(ctx context.Context, tag string) error {
 	return nil
 }
 
-// SetRules not implement .
+// SetRules .
 func (r *Router) SetRules(ctx context.Context, rules interface{}) error {
 	rrs := rules.([]*RoutingRule)
 
@@ -235,14 +235,30 @@ func (r *Router) SetRules(ctx context.Context, rules interface{}) error {
 	return nil
 }
 
-// GetRules not implement .
+// GetRules .
 func (r *Router) GetRules(ctx context.Context) (interface{}, error) {
-	return nil, newError("not implement.")
+	rules := make([]*RoutingRule, 0, len(r.rules))
+	for _, rr := range r.rules {
+		rule := rr.RestoreRoutingRule().(*RoutingRule)
+		rules = append(rules, rule)
+	}
+
+	newError("[", len(rules), "] rules were retrieved through the API").WriteToLog(session.ExportIDToError(ctx))
+	return rules, nil
 }
 
 // GetRule implement the manager interface.
-func (r *Router) GetRule(ctx context.Context, tag string) (interface{}, error) {
-	return nil, newError("not implement.")
+func (r *Router) GetRule(ctx context.Context, tag string) (int, interface{}, error) {
+	idx, rr := r.FindRule(tag)
+	if idx == -1 {
+		err := newError("This [", tag, "] routing rule does not exist")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return -1, nil, err
+	}
+
+	rule := rr.RestoreRoutingRule()
+	newError("Get [", tag, "] routing rule through the API").WriteToLog(session.ExportIDToError(ctx))
+	return idx, rule, nil
 }
 
 // AddBalancer implement the manager interface.
@@ -310,9 +326,17 @@ func (r *Router) RemoveBalancer(ctx context.Context, tag string) error {
 	return nil
 }
 
-// GetBalancers not implement.
+// GetBalancers .
 func (r *Router) GetBalancers(ctx context.Context) (interface{}, error) {
-	return nil, newError("not implement.")
+	balancers := make([]*BalancingRule, 0, len(r.balancers))
+	for tag, balancer := range r.balancers {
+		balancers = append(balancers, &BalancingRule{
+			Tag:              tag,
+			OutboundSelector: balancer.selectors,
+		})
+	}
+	newError("[", len(balancers), "] rules were retrieved through the API").WriteToLog(session.ExportIDToError(ctx))
+	return balancers, nil
 }
 
 // Start implements common.Runnable.

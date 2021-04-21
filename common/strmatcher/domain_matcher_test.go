@@ -2,6 +2,7 @@ package strmatcher_test
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 
 	. "github.com/xtls/xray-core/common/strmatcher"
@@ -72,5 +73,19 @@ func TestEmptyDomainMatcherGroup(t *testing.T) {
 	r := g.Match("example.com")
 	if len(r) != 0 {
 		t.Error("Expect [], but ", r)
+	}
+}
+
+func TestRestoreDomainMatcher(t *testing.T) {
+	g := new(DomainMatcherGroup)
+
+	for i := 1; i <= 20; i++ {
+		g.Add(strconv.Itoa(i)+".example.com", uint32(i))
+	}
+
+	m := g.Restore()
+
+	if len(m) != 10 {
+		t.Error("Restore Domain failed.")
 	}
 }

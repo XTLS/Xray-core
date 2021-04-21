@@ -9,6 +9,7 @@ type Matcher interface {
 	// Match returns true if the given string matches a predefined pattern.
 	Match(string) bool
 	String() string
+	Restore() *RestoreDomain
 }
 
 // Type is the type of the matcher.
@@ -51,6 +52,8 @@ func (t Type) New(pattern string) (Matcher, error) {
 type IndexMatcher interface {
 	// Match returns the index of a matcher that matches the input. It returns empty array if no such matcher exists.
 	Match(input string) []uint32
+	// Restore Returns the domain
+	Restore() map[uint32]*RestoreDomain
 }
 
 type matcherEntry struct {
@@ -65,6 +68,34 @@ type MatcherGroup struct {
 	fullMatcher   FullMatcherGroup
 	domainMatcher DomainMatcherGroup
 	otherMatchers []matcherEntry
+}
+
+type RestoreDomain struct {
+	Value      string
+	DomainType RestoreDomainType
+}
+
+func (g *MatcherGroup) Restore() map[uint32]*RestoreDomain {
+	if g.count == 0 {
+		return nil
+	}
+	m := make(map[uint32]*RestoreDomain)
+	fullMatchers := g.fullMatcher.Restore()
+	mergeMap(m, fullMatchers)
+	domainMatchers := g.domainMatcher.Restore()
+	mergeMap(m, domainMatchers)
+
+	for _, matcher := range g.otherMatchers {
+		m[matcher.id] = matcher.m.Restore()
+	}
+
+	return m
+}
+
+func mergeMap(dst, src map[uint32]*RestoreDomain) {
+	for idx, domain := range src {
+		dst[idx] = domain
+	}
 }
 
 // Add adds a new Matcher into the MatcherGroup, and returns its index. The index will never be 0.
