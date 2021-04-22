@@ -636,7 +636,7 @@ func TestDomainSniffing(t *testing.T) {
 			Transport: transport,
 		}
 
-		resp, err := client.Get("https://www.github.com/")
+		resp, err := client.Get("https://apple.com/")
 		common.Must(err)
 		if resp.StatusCode != 200 {
 			t.Error("unexpected status code: ", resp.StatusCode)
