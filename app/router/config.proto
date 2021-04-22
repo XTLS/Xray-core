@@ -119,6 +119,8 @@ message RoutingRule {
   repeated string protocol = 9;
 
   string attributes = 15;
+
+  string domain_matcher = 17;
 }
 
 message BalancingRule {
