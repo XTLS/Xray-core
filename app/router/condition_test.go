@@ -536,6 +536,7 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 }
 
 func TestConditionChan_RestoreCondition(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
 	rule := &RoutingRule{
 		TargetTag: &RoutingRule_OutboundTag{OutboundTag: "test"},
 		Domain: []*Domain{

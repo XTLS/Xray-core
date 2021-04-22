@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -379,6 +380,7 @@ func TestRouter_SetRules(t *testing.T) {
 }
 
 func TestRouter_GetRules(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
 	config := &Config{}
 
 	mockCtl := gomock.NewController(t)
@@ -420,6 +422,7 @@ func TestRouter_GetRules(t *testing.T) {
 }
 
 func TestRouter_GetRule(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
 	config := &Config{}
 
 	mockCtl := gomock.NewController(t)

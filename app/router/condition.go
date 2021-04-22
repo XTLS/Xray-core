@@ -119,6 +119,8 @@ func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
 
 type DomainMatcher struct {
 	matchers strmatcher.IndexMatcher
+	// domains routing API requires this backup.
+	domains []*Domain
 }
 
 func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
@@ -134,9 +136,14 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 		}
 	}
 	g.Build()
-	return &DomainMatcher{
+	matcher := &DomainMatcher{
 		matchers: g,
-	}, nil
+	}
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable == "1" {
+		matcher.domains = domains
+	}
+	return matcher, nil
 }
 
 func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
@@ -169,19 +176,7 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 
 // RestoreRoutingRule Restore implements Condition.
 func (m *DomainMatcher) RestoreRoutingRule() interface{} {
-	domains := make([]*Domain, 0)
-	group := m.matchers.(*strmatcher.MatcherGroup)
-	restoreDomains := group.Restore()
-	for i := 1; i <= len(restoreDomains); i++ {
-		if rd, ok := restoreDomains[uint32(i)]; ok {
-			domains = append(domains, &Domain{
-				Type:  Domain_Type(rd.DomainType),
-				Value: rd.Value,
-			})
-		}
-	}
-
-	return domains
+	return m.domains
 }
 
 type MultiGeoIPMatcher struct {

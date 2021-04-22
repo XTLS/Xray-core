@@ -47,10 +47,11 @@ func (l *CIDRList) Swap(i int, j int) {
 }
 
 type Rule struct {
-	Tag       string
-	TargetTag string
-	Balancer  *Balancer
-	Condition Condition
+	Tag           string
+	TargetTag     string
+	DomainMatcher string
+	Balancer      *Balancer
+	Condition     Condition
 }
 
 func (r *Rule) GetTargetTag() (string, error) {
@@ -69,6 +70,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 func (r *Rule) RestoreRoutingRule() interface{} {
 	rule := r.Condition.RestoreRoutingRule().(*RoutingRule)
 	rule.Tag = r.Tag
+	rule.DomainMatcher = r.DomainMatcher
 	if r.Balancer != nil {
 		rule.TargetTag = &RoutingRule_BalancingTag{
 			BalancingTag: rule.Tag,
@@ -103,7 +105,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
 			conds.Add(matcher)
 		}
-
 	}
 
 	if len(rr.UserEmail) > 0 {
@@ -185,7 +186,8 @@ func (rr *RoutingRule) Build(r *Router) (*Rule, error) {
 		tag = u.String()
 	}
 	rule := &Rule{
-		Tag: tag,
+		Tag:           tag,
+		DomainMatcher: rr.DomainMatcher,
 	}
 
 	btag := rr.GetBalancingTag()

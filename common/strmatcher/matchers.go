@@ -15,13 +15,6 @@ func (m fullMatcher) String() string {
 	return "full:" + string(m)
 }
 
-func (m fullMatcher) Restore() *RestoreDomain {
-	return &RestoreDomain{
-		Value:      string(m),
-		DomainType: RestoreDomainTypePlain,
-	}
-}
-
 type substrMatcher string
 
 func (m substrMatcher) Match(s string) bool {
@@ -30,13 +23,6 @@ func (m substrMatcher) Match(s string) bool {
 
 func (m substrMatcher) String() string {
 	return "keyword:" + string(m)
-}
-
-func (m substrMatcher) Restore() *RestoreDomain {
-	return &RestoreDomain{
-		Value:      string(m),
-		DomainType: RestoreDomainTypePlain,
-	}
 }
 
 type domainMatcher string
@@ -53,13 +39,6 @@ func (m domainMatcher) String() string {
 	return "domain:" + string(m)
 }
 
-func (m domainMatcher) Restore() *RestoreDomain {
-	return &RestoreDomain{
-		Value:      string(m),
-		DomainType: RestoreDomainTypeDomain,
-	}
-}
-
 type regexMatcher struct {
 	pattern *regexp.Regexp
 }
@@ -70,11 +49,4 @@ func (m *regexMatcher) Match(s string) bool {
 
 func (m *regexMatcher) String() string {
 	return "regexp:" + m.pattern.String()
-}
-
-func (m *regexMatcher) Restore() *RestoreDomain {
-	return &RestoreDomain{
-		Value:      m.pattern.String(),
-		DomainType: RestoreDomainTypeRegex,
-	}
 }
