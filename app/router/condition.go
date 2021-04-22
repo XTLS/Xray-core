@@ -416,7 +416,7 @@ func NewAttributeMatcher(code string) (*AttributeMatcher, error) {
 		program: p,
 	}
 	// The routing API requires a backup content
-	if addr := os.Getenv("XRAY_ROUTER_API_GETSET"); addr != "" {
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "" {
 		attr.code = code
 	}
 	return attr, nil
