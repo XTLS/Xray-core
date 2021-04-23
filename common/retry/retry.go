@@ -24,8 +24,8 @@ type retryer struct {
 // On implements Strategy.On.
 func (r *retryer) On(method func() error) error {
 	attempt := 0
-	accumulatedError := make([]error, 0, r.totalAttempt)
-	for attempt < r.totalAttempt {
+	accumulatedError := make([]error, 0, 1)
+	for attempt < 1 {
 		err := method()
 		if err == nil {
 			return nil
