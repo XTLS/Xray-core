@@ -224,6 +224,30 @@ func (r *Reverse) GetBridges(ctx context.Context) (interface{}, error) {
 	return configs, nil
 }
 
+// GetBridge Implement the Manager interface.
+func (r *Reverse) GetBridge(ctx context.Context, tag string) (interface{}, error) {
+	if len(r.bridges) == 0 {
+		err := newError("This bridges has no elements")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+	bridge := &BridgeConfig{}
+	handler, idx, err := r.findHandler(tag, bridge)
+	if err != nil {
+		return nil, err
+	}
+	if idx < 0 {
+		err := newError("This tag does not exist. [", tag, "]")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+
+	bridge.Tag = handler.GetTag()
+	bridge.Domain = handler.GetDomain()
+
+	return bridge, nil
+}
+
 // AddPortal Implement the Manager interface.
 func (r *Reverse) AddPortal(ctx context.Context, portal reverse.Handler) error {
 	tag := portal.GetTag()
@@ -273,6 +297,30 @@ func (r *Reverse) GetPortals(ctx context.Context) (interface{}, error) {
 	}
 
 	return configs, nil
+}
+
+// GetPortal Implement the Manager interface.
+func (r *Reverse) GetPortal(ctx context.Context, tag string) (interface{}, error) {
+	if len(r.portals) == 0 {
+		err := newError("This portals has no elements")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+	portal := &PortalConfig{}
+	handler, idx, err := r.findHandler(tag, portal)
+	if err != nil {
+		return nil, err
+	}
+	if idx < 0 {
+		err := newError("This tag does not exist. [", tag, "]")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return nil, err
+	}
+
+	portal.Tag = handler.GetTag()
+	portal.Domain = handler.GetDomain()
+
+	return portal, nil
 }
 
 func init() {

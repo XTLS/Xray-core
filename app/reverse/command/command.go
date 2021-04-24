@@ -38,6 +38,16 @@ func (s *reverseServer) GetBridges(ctx context.Context, request *GetBridgesReque
 	return resp, nil
 }
 
+func (s *reverseServer) GetBridge(ctx context.Context, request *GetBridgeRequest) (*GetBridgeResponse, error) {
+	resp := &GetBridgeResponse{}
+	bridge, err := s.reverse.GetBridge(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	resp.Config = bridge.(*reverse2.BridgeConfig)
+	return resp, nil
+}
+
 func (s *reverseServer) AddPortal(ctx context.Context, request *AddPortalRequest) (*AddPortalResponse, error) {
 	err := s.reverse.AddPortal(ctx, request.Config)
 	return &AddPortalResponse{}, err
@@ -56,6 +66,16 @@ func (s *reverseServer) GetPortals(ctx context.Context, request *GetPortalsReque
 	}
 
 	resp.Configs = portals.([]*reverse2.PortalConfig)
+	return resp, nil
+}
+
+func (s *reverseServer) GetPortal(ctx context.Context, request *GetPortalRequest) (*GetPortalResponse, error) {
+	resp := &GetPortalResponse{}
+	portal, err := s.reverse.GetPortal(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	resp.Config = portal.(*reverse2.PortalConfig)
 	return resp, nil
 }
 

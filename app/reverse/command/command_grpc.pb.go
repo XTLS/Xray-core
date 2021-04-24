@@ -22,9 +22,11 @@ type ReverseServiceClient interface {
 	AddBridge(ctx context.Context, in *AddBridgeRequest, opts ...grpc.CallOption) (*AddBridgeResponse, error)
 	RemoveBridge(ctx context.Context, in *RemoveBridgeRequest, opts ...grpc.CallOption) (*RemoveBridgeResponse, error)
 	GetBridges(ctx context.Context, in *GetBridgesRequest, opts ...grpc.CallOption) (*GetBridgesResponse, error)
+	GetBridge(ctx context.Context, in *GetBridgeRequest, opts ...grpc.CallOption) (*GetBridgeResponse, error)
 	AddPortal(ctx context.Context, in *AddPortalRequest, opts ...grpc.CallOption) (*AddPortalResponse, error)
 	RemovePortal(ctx context.Context, in *RemovePortalRequest, opts ...grpc.CallOption) (*RemovePortalResponse, error)
 	GetPortals(ctx context.Context, in *GetPortalsRequest, opts ...grpc.CallOption) (*GetPortalsResponse, error)
+	GetPortal(ctx context.Context, in *GetPortalRequest, opts ...grpc.CallOption) (*GetPortalResponse, error)
 }
 
 type reverseServiceClient struct {
@@ -62,6 +64,15 @@ func (c *reverseServiceClient) GetBridges(ctx context.Context, in *GetBridgesReq
 	return out, nil
 }
 
+func (c *reverseServiceClient) GetBridge(ctx context.Context, in *GetBridgeRequest, opts ...grpc.CallOption) (*GetBridgeResponse, error) {
+	out := new(GetBridgeResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.reverse.command.ReverseService/GetBridge", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *reverseServiceClient) AddPortal(ctx context.Context, in *AddPortalRequest, opts ...grpc.CallOption) (*AddPortalResponse, error) {
 	out := new(AddPortalResponse)
 	err := c.cc.Invoke(ctx, "/xray.app.reverse.command.ReverseService/AddPortal", in, out, opts...)
@@ -89,14 +100,25 @@ func (c *reverseServiceClient) GetPortals(ctx context.Context, in *GetPortalsReq
 	return out, nil
 }
 
+func (c *reverseServiceClient) GetPortal(ctx context.Context, in *GetPortalRequest, opts ...grpc.CallOption) (*GetPortalResponse, error) {
+	out := new(GetPortalResponse)
+	err := c.cc.Invoke(ctx, "/xray.app.reverse.command.ReverseService/GetPortal", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReverseServiceServer is the server API for ReverseService service.
 type ReverseServiceServer interface {
 	AddBridge(context.Context, *AddBridgeRequest) (*AddBridgeResponse, error)
 	RemoveBridge(context.Context, *RemoveBridgeRequest) (*RemoveBridgeResponse, error)
 	GetBridges(context.Context, *GetBridgesRequest) (*GetBridgesResponse, error)
+	GetBridge(context.Context, *GetBridgeRequest) (*GetBridgeResponse, error)
 	AddPortal(context.Context, *AddPortalRequest) (*AddPortalResponse, error)
 	RemovePortal(context.Context, *RemovePortalRequest) (*RemovePortalResponse, error)
 	GetPortals(context.Context, *GetPortalsRequest) (*GetPortalsResponse, error)
+	GetPortal(context.Context, *GetPortalRequest) (*GetPortalResponse, error)
 }
 
 // UnimplementedReverseServiceServer can be embedded to have forward compatible implementations.
@@ -112,6 +134,9 @@ func (*UnimplementedReverseServiceServer) RemoveBridge(context.Context, *RemoveB
 func (*UnimplementedReverseServiceServer) GetBridges(context.Context, *GetBridgesRequest) (*GetBridgesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBridges not implemented")
 }
+func (*UnimplementedReverseServiceServer) GetBridge(context.Context, *GetBridgeRequest) (*GetBridgeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBridge not implemented")
+}
 func (*UnimplementedReverseServiceServer) AddPortal(context.Context, *AddPortalRequest) (*AddPortalResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddPortal not implemented")
 }
@@ -120,6 +145,9 @@ func (*UnimplementedReverseServiceServer) RemovePortal(context.Context, *RemoveP
 }
 func (*UnimplementedReverseServiceServer) GetPortals(context.Context, *GetPortalsRequest) (*GetPortalsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPortals not implemented")
+}
+func (*UnimplementedReverseServiceServer) GetPortal(context.Context, *GetPortalRequest) (*GetPortalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPortal not implemented")
 }
 
 func RegisterReverseServiceServer(s *grpc.Server, srv ReverseServiceServer) {
@@ -180,6 +208,24 @@ func _ReverseService_GetBridges_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReverseService_GetBridge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBridgeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReverseServiceServer).GetBridge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.reverse.command.ReverseService/GetBridge",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReverseServiceServer).GetBridge(ctx, req.(*GetBridgeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ReverseService_AddPortal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddPortalRequest)
 	if err := dec(in); err != nil {
@@ -234,6 +280,24 @@ func _ReverseService_GetPortals_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReverseService_GetPortal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPortalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReverseServiceServer).GetPortal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/xray.app.reverse.command.ReverseService/GetPortal",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReverseServiceServer).GetPortal(ctx, req.(*GetPortalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var ReverseService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "xray.app.reverse.command.ReverseService",
 	HandlerType: (*ReverseServiceServer)(nil),
@@ -251,6 +315,10 @@ var ReverseService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ReverseService_GetBridges_Handler,
 		},
 		{
+			MethodName: "GetBridge",
+			Handler:    _ReverseService_GetBridge_Handler,
+		},
+		{
 			MethodName: "AddPortal",
 			Handler:    _ReverseService_AddPortal_Handler,
 		},
@@ -261,6 +329,10 @@ var ReverseService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPortals",
 			Handler:    _ReverseService_GetPortals_Handler,
+		},
+		{
+			MethodName: "GetPortal",
+			Handler:    _ReverseService_GetPortal_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

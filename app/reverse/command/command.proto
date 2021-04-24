@@ -24,6 +24,14 @@ message GetBridgesResponse{
   repeated xray.app.reverse.BridgeConfig configs = 1;
 }
 
+message GetBridgeRequest{
+  string tag = 1;
+}
+
+message GetBridgeResponse{
+  xray.app.reverse.BridgeConfig config = 1;
+}
+
 message AddPortalRequest {
   xray.app.reverse.PortalConfig config = 1;
 }
@@ -40,6 +48,14 @@ message GetPortalsResponse{
   repeated xray.app.reverse.PortalConfig configs = 1;
 }
 
+message GetPortalRequest{
+  string tag = 1;
+}
+
+message GetPortalResponse{
+  xray.app.reverse.PortalConfig config = 1;
+}
+
 service ReverseService {
 
   rpc AddBridge(AddBridgeRequest) returns (AddBridgeResponse){}
@@ -48,11 +64,15 @@ service ReverseService {
 
   rpc GetBridges(GetBridgesRequest) returns (GetBridgesResponse){}
 
+  rpc GetBridge(GetBridgeRequest) returns (GetBridgeResponse){}
+
   rpc AddPortal(AddPortalRequest) returns (AddPortalResponse){}
 
   rpc RemovePortal(RemovePortalRequest) returns (RemovePortalResponse){}
 
   rpc GetPortals(GetPortalsRequest) returns (GetPortalsResponse){}
+
+  rpc GetPortal(GetPortalRequest) returns (GetPortalResponse){}
 }
 
 message Config {}
