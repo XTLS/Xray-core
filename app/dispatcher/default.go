@@ -176,14 +176,27 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 			}
 		}
 
-		var bucket *RateLimiter
-		bucket = NewRateLimiter(&ctx, d, user)
-		inboundLink.Writer = RateWriter(inboundLink.Writer, bucket)
-		outboundLink.Writer = RateWriter(outboundLink.Writer, bucket)
+		//var bucket *RateLimiter
+		//bucket = NewRateLimiter(&ctx, d, user)
+		//inboundLink.Writer = RateWriter(inboundLink.Writer, bucket)
+		//outboundLink.Writer = RateWriter(outboundLink.Writer, bucket)
 
 	}
 
 	return inboundLink, outboundLink
+}
+
+func (d *DefaultDispatcher) rateLimiter(ctx context.Context, in *transport.Link, out *transport.Link) (*transport.Link, *transport.Link) {
+	sessionInbound := session.InboundFromContext(ctx)
+	var user *protocol.MemoryUser
+	if sessionInbound != nil {
+		user = sessionInbound.User
+		var bucket *RateLimiter
+		bucket = NewRateLimiter(&ctx, d, user)
+		in.Writer = RateWriter(in.Writer, bucket)
+		out.Writer = RateWriter(out.Writer, bucket)
+	}
+	return in, out
 }
 
 func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
@@ -226,6 +239,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	ctx = session.ContextWithOutbound(ctx, ob)
 
 	inbound, outbound := d.getLink(ctx)
+	inbound, outbound = d.rateLimiter(ctx, inbound, outbound)
 	content := session.ContentFromContext(ctx)
 	if content == nil {
 		content = new(session.Content)
@@ -348,6 +362,9 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		Reason: "",
 		Email:  session.InboundFromContext(ctx).User.Email + " " + addNet + " " + session.InboundFromContext(ctx).Source.NetAddr() + " " + session.InboundFromContext(ctx).Source.String(),
 	})
+
+	//todo 删除
+	//fmt.Println(session.InboundFromContext(ctx).User.Email + " " + addNet + " " + session.InboundFromContext(ctx).Source.NetAddr() + " " + session.InboundFromContext(ctx).Source.String())
 
 	if handler == nil {
 		handler = d.ohm.GetDefaultHandler()
