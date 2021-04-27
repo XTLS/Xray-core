@@ -1,12 +1,35 @@
 {
+    "stats": {},
     "log":{
         "access":"D:\\temp\\v2ray_acc.log",
         "error": "D:\\temp\\v2ray_err.log",
         "loglevel":"info"
     },
+    "api": {
+        "tag": "api",
+        "services": [
+            "HandlerService",
+            "StatsService"
+        ]
+    },
+    "policy": {
+        "levels": {
+            "1": {
+                "statsUserUplink": true,
+                "statsUserDownlink": true
+            }
+        },
+        "system": {
+            "statsInboundUplink": true,
+            "statsInboundDownlink": true,
+            "statsOutboundUplink": true,
+            "statsOutboundDownlink": true
+        }
+    },
     "inbounds":[
         {
-            "port":36271,
+            "tag": "proxy",
+            "port":36272,
             #"listen":"127.0.0.1",
             "protocol":"vless",
             "settings":{
@@ -15,7 +38,7 @@
                     {
                         "email":"dingwd",
 			            "id":"bbe4d6bb-d32e-49e7-a095-58f0d58aa75f",
-                        "level":0
+                        "level":1
                     }
                 ]
             },
@@ -28,10 +51,20 @@
                     }
                 }
             }
+        },
+        {
+            "listen": "127.0.0.1",
+            "port": 10085,
+            "protocol": "dokodemo-door",
+            "settings": {
+                "address": "127.0.0.1"
+            },
+            "tag": "api"
         }
     ],
     "outbounds":[
         {
+            "tag": "direct",
             "protocol":"freedom",
             "settings":{
 
@@ -44,6 +77,20 @@
             },
             "tag":"blocked"
         }
-    ]
+    ],
+    "routing": {
+        "settings": {
+            "rules": [
+                {
+                    "inboundTag": [
+                        "api"
+                    ],
+                    "outboundTag": "api",
+                    "type": "field"
+                }
+            ]
+        },
+        "strategy": "rules"
+    }
 }
 

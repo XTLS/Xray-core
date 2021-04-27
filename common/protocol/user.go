@@ -36,4 +36,5 @@ type MemoryUser struct {
 	Account Account
 	Email   string
 	Level   uint32
+	Count   int32
 }

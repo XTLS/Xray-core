@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/serial"
@@ -27,6 +28,7 @@ type AccessMessage struct {
 	Reason interface{}
 	Email  string
 	Detour string
+	Count  int32
 }
 
 func (m *AccessMessage) String() string {
@@ -51,6 +53,11 @@ func (m *AccessMessage) String() string {
 	if len(m.Email) > 0 {
 		builder.WriteString(" email: ")
 		builder.WriteString(m.Email)
+	}
+
+	if m.Count >= 0 {
+		builder.WriteString(" count: ")
+		builder.WriteString(strconv.Itoa(int(m.Count)))
 	}
 
 	return builder.String()
