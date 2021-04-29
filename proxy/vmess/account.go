@@ -18,6 +18,7 @@ type MemoryAccount struct {
 	Security protocol.SecurityType
 
 	AuthenticatedLengthExperiment bool
+	NoTerminationSignal           bool
 }
 
 // AnyValidID returns an ID that is either the main ID or one of the alternative IDs if any.
@@ -45,14 +46,18 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		return nil, newError("failed to parse ID").Base(err).AtError()
 	}
 	protoID := protocol.NewID(id)
-	var AuthenticatedLength bool
+	var AuthenticatedLength, NoTerminationSignal bool
 	if strings.Contains(a.TestsEnabled, "AuthenticatedLength") {
 		AuthenticatedLength = true
+	}
+	if strings.Contains(a.TestsEnabled, "NoTerminationSignal") {
+		NoTerminationSignal = true
 	}
 	return &MemoryAccount{
 		ID:                            protoID,
 		AlterIDs:                      protocol.NewAlterIDs(protoID, uint16(a.AlterId)),
 		Security:                      a.SecuritySettings.GetSecurityType(),
 		AuthenticatedLengthExperiment: AuthenticatedLength,
+		NoTerminationSignal:           NoTerminationSignal,
 	}, nil
 }
