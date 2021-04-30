@@ -1,13 +1,16 @@
 package shadowsocks
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"hash/crc32"
 	"io"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 )
@@ -51,21 +54,19 @@ func (r *FullReader) Read(p []byte) (n int, err error) {
 // ReadTCPSession reads a Shadowsocks TCP session from the given reader, returns its header and remaining parts.
 func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
 	behaviorSeed := validator.GetBehaviorSeed()
-	behaviorRand := dice.NewDeterministicDice(int64(behaviorSeed))
-	BaseDrainSize := behaviorRand.Roll(3266)
-	RandDrainMax := behaviorRand.Roll(64) + 1
-	RandDrainRolled := dice.Roll(RandDrainMax)
-	DrainSize := BaseDrainSize + 16 + 38 + RandDrainRolled
-	readSizeRemain := DrainSize
+	drainer, errDrain := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
+
+	if errDrain != nil {
+		return nil, nil, newError("failed to initialize drainer").Base(errDrain)
+	}
 
 	var r buf.Reader
 	buffer := buf.New()
 	defer buffer.Release()
 
 	if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed to read 50 bytes").Base(err)
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to read 50 bytes").Base(err))
 	}
 
 	bs := buffer.Bytes()
@@ -73,16 +74,14 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	switch err {
 	case ErrNotFound:
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed to match an user").Base(err)
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to match an user").Base(err))
 	case ErrIVNotUnique:
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed iv check").Base(err)
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed iv check").Base(err))
 	default:
 		reader = &FullReader{reader, bs[ivLen:]}
-		readSizeRemain -= int(ivLen)
+		drainer.AcknowledgeReceive(int(ivLen))
 
 		if aead != nil {
 			auth := &crypto.AEADAuthenticator{
@@ -97,8 +96,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 			iv := append([]byte(nil), buffer.BytesTo(ivLen)...)
 			r, err = account.Cipher.NewDecryptionReader(account.Key, iv, reader)
 			if err != nil {
-				DrainConnN(reader, readSizeRemain)
-				return nil, nil, newError("failed to initialize decoding stream").Base(err).AtError()
+				return nil, nil, drain.WithError(drainer, reader, newError("failed to initialize decoding stream").Base(err).AtError())
 			}
 		}
 	}
@@ -115,26 +113,19 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	addr, port, err := addrParser.ReadAddressPort(buffer, br)
 	if err != nil {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed to read address").Base(err)
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to read address").Base(err))
 	}
 
 	request.Address = addr
 	request.Port = port
 
 	if request.Address == nil {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("invalid remote address.")
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("invalid remote address."))
 	}
 
 	return request, br, nil
-}
-
-func DrainConnN(reader io.Reader, n int) error {
-	_, err := io.CopyN(io.Discard, reader, int64(n))
-	return err
 }
 
 // WriteTCPRequest writes Shadowsocks request into the given writer, and returns a writer for body.
@@ -175,16 +166,29 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 func ReadTCPResponse(user *protocol.MemoryUser, reader io.Reader) (buf.Reader, error) {
 	account := user.Account.(*MemoryAccount)
 
+	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
+	hashkdf.Write(account.Key)
+
+	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))
+
+	drainer, err := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
+
+	if err != nil {
+		return nil, newError("failed to initialize drainer").Base(err)
+	}
+
 	var iv []byte
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
-		if _, err := io.ReadFull(reader, iv); err != nil {
+		if n, err := io.ReadFull(reader, iv); err != nil {
 			return nil, newError("failed to read IV").Base(err)
+		} else { // nolint: golint
+			drainer.AcknowledgeReceive(n)
 		}
 	}
 
 	if ivError := account.CheckIV(iv); ivError != nil {
-		return nil, newError("failed iv check").Base(ivError)
+		return nil, drain.WithError(drainer, reader, newError("failed iv check").Base(ivError))
 	}
 
 	return account.Cipher.NewDecryptionReader(account.Key, iv, reader)
