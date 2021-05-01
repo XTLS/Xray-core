@@ -94,10 +94,9 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 }
 
 type RouterRule struct {
-	Type        string `json:"type"`
-	OutboundTag string `json:"outboundTag"`
-	BalancerTag string `json:"balancerTag"`
-
+	Type          string `json:"type"`
+	OutboundTag   string `json:"outboundTag"`
+	BalancerTag   string `json:"balancerTag"`
 	DomainMatcher string `json:"domainMatcher"`
 }
 
