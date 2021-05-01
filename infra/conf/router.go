@@ -97,6 +97,8 @@ type RouterRule struct {
 	Type        string `json:"type"`
 	OutboundTag string `json:"outboundTag"`
 	BalancerTag string `json:"balancerTag"`
+
+	DomainMatcher string `json:"domainMatcher"`
 }
 
 func ParseIP(s string) (*geoip.CIDR, error) {
@@ -180,6 +182,10 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		}
 	default:
 		return nil, newError("neither outboundTag nor balancerTag is specified in routing rule")
+	}
+
+	if rawFieldRule.DomainMatcher != "" {
+		rule.DomainMatcher = rawFieldRule.DomainMatcher
 	}
 
 	if rawFieldRule.Domain != nil {
