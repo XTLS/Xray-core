@@ -39,6 +39,7 @@ type Handler struct {
 	client          dns.Client
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
+	DomainStrategy  Config_DomainStrategy
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client) error {
@@ -199,16 +200,24 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	var err error
 
 	var ttl uint32 = 600
-	var opt dns.Option
+	var opt []dns.Option
 
-	switch qType {
-	case dnsmessage.TypeA:
-		opt = dns.LookupIPv4Only
-	case dnsmessage.TypeAAAA:
-		opt = dns.LookupIPv6Only
+	if h.DomainStrategy == Config_USE_FAKE {
+		opt = append(opt, dns.LookupFakeOnly)
+	} else {
+		switch qType {
+		case dnsmessage.TypeA:
+			opt = append(opt, dns.LookupIPv4Only)
+		case dnsmessage.TypeAAAA:
+			opt = append(opt, dns.LookupIPv6Only)
+		}
 	}
 
-	ips, err = h.client.LookupOptions(domain, opt, dns.LookupFake)
+	if h.DomainStrategy == Config_USE_ALL {
+		opt = append(opt, dns.LookupFake)
+	}
+
+	ips, err = h.client.LookupOptions(domain, opt...)
 	rcode := dns.RCodeFromError(err)
 	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
 		newError("ip query").Base(err).WriteToLog()

@@ -94,6 +94,12 @@ var (
 		d.FakeEnable = true
 		return d
 	}
+	LookupFakeOnly = func(d *IPOption) *IPOption {
+		d.FakeEnable = true
+		d.IPv4Enable = false
+		d.IPv6Enable = false
+		return d
+	}
 	LookupNoFake = func(d *IPOption) *IPOption {
 		d.FakeEnable = false
 		return d
