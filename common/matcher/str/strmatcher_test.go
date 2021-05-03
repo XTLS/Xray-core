@@ -91,3 +91,172 @@ func TestMatcherGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestACAutomaton(t *testing.T) {
+	cases1 := []struct {
+		pattern string
+		mType   Type
+		input   string
+		output  bool
+	}{
+		{
+			pattern: "xtls.github.io",
+			mType:   Domain,
+			input:   "www.xtls.github.io",
+			output:  true,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Domain,
+			input:   "xtls.github.io",
+			output:  true,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Domain,
+			input:   "www.xtis.github.io",
+			output:  false,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Domain,
+			input:   "tls.github.io",
+			output:  false,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Domain,
+			input:   "xxtls.github.io",
+			output:  false,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Full,
+			input:   "xtls.github.io",
+			output:  true,
+		},
+		{
+			pattern: "xtls.github.io",
+			mType:   Full,
+			input:   "xxtls.github.io",
+			output:  false,
+		},
+	}
+	for _, test := range cases1 {
+		var ac = NewACAutomaton()
+		ac.Add(test.pattern, test.mType)
+		ac.Build()
+		if m := ac.Match(test.input); m != test.output {
+			t.Error("unexpected output: ", m, " for test case ", test)
+		}
+	}
+	{
+		cases2Input := []struct {
+			pattern string
+			mType   Type
+		}{
+			{
+				pattern: "163.com",
+				mType:   Domain,
+			},
+			{
+				pattern: "m.126.com",
+				mType:   Full,
+			},
+			{
+				pattern: "3.com",
+				mType:   Full,
+			},
+			{
+				pattern: "google.com",
+				mType:   Substr,
+			},
+			{
+				pattern: "vgoogle.com",
+				mType:   Substr,
+			},
+		}
+		var ac = NewACAutomaton()
+		for _, test := range cases2Input {
+			ac.Add(test.pattern, test.mType)
+		}
+		ac.Build()
+		cases2Output := []struct {
+			pattern string
+			res     bool
+		}{
+			{
+				pattern: "126.com",
+				res:     false,
+			},
+			{
+				pattern: "m.163.com",
+				res:     true,
+			},
+			{
+				pattern: "mm163.com",
+				res:     false,
+			},
+			{
+				pattern: "m.126.com",
+				res:     true,
+			},
+			{
+				pattern: "163.com",
+				res:     true,
+			},
+			{
+				pattern: "63.com",
+				res:     false,
+			},
+			{
+				pattern: "oogle.com",
+				res:     false,
+			},
+			{
+				pattern: "vvgoogle.com",
+				res:     true,
+			},
+		}
+		for _, test := range cases2Output {
+			if m := ac.Match(test.pattern); m != test.res {
+				t.Error("unexpected output: ", m, " for test case ", test)
+			}
+		}
+	}
+
+	{
+		cases3Input := []struct {
+			pattern string
+			mType   Type
+		}{
+			{
+				pattern: "video.google.com",
+				mType:   Domain,
+			},
+			{
+				pattern: "gle.com",
+				mType:   Domain,
+			},
+		}
+		var ac = NewACAutomaton()
+		for _, test := range cases3Input {
+			ac.Add(test.pattern, test.mType)
+		}
+		ac.Build()
+		cases3Output := []struct {
+			pattern string
+			res     bool
+		}{
+			{
+				pattern: "google.com",
+				res:     false,
+			},
+		}
+		for _, test := range cases3Output {
+			if m := ac.Match(test.pattern); m != test.res {
+				t.Error("unexpected output: ", m, " for test case ", test)
+			}
+		}
+	}
+}

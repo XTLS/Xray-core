@@ -8,6 +8,19 @@ import (
 	. "github.com/xtls/xray-core/common/matcher/str"
 )
 
+func BenchmarkACAutomaton(b *testing.B) {
+	ac := NewACAutomaton()
+	for i := 1; i <= 1024; i++ {
+		ac.Add(strconv.Itoa(i)+".xray.com", Domain)
+	}
+	ac.Build()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ac.Match("0.xray.com")
+	}
+}
+
 func BenchmarkDomainMatcherGroup(b *testing.B) {
 	g := new(DomainMatcherGroup)
 
