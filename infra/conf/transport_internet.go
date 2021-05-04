@@ -490,7 +490,7 @@ type SocketConfig struct {
 	DomainStrategy      string      `json:"domainStrategy"`
 	DialerProxy         string      `json:"dialerProxy"`
 
-	TcpKeepAliveInterval uint32 `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveInterval uint32 `json:"tcpKeepAliveInterval"`
 }
 
 // Build implements Buildable.
@@ -537,7 +537,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		DomainStrategy:       dStrategy,
 		AcceptProxyProtocol:  c.AcceptProxyProtocol,
 		DialerProxy:          c.DialerProxy,
-		TcpKeepAliveInterval: c.TcpKeepAliveInterval,
+		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 	}, nil
 }
 
