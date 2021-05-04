@@ -58,8 +58,8 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 
-		if config.KeepAliveDuration != 0 {
-			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, int(config.KeepAliveDuration)); err != nil {
+		if config.TcpKeepAliveInterval != 0 {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
 				return newError("failed to set TCP_KEEPINTVL", err)
 			}
 		}
@@ -85,6 +85,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if tfo >= 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.SOL_TCP, TCP_FASTOPEN, tfo); err != nil {
 				return newError("failed to set TCP_FASTOPEN=", tfo).Base(err)
+			}
+		}
+
+		if config.TcpKeepAliveInterval != 0 {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
+				return newError("failed to set TCP_KEEPINTVL", err)
 			}
 		}
 	}

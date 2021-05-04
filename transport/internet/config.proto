@@ -92,6 +92,6 @@ message SocketConfig {
   DomainStrategy domain_strategy = 8;
 
   string dialer_proxy = 9;
-  
-  uint32 keep_alive_duration = 10;
+
+  uint32 tcp_keep_alive_interval = 10;
 }
