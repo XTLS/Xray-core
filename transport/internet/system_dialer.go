@@ -269,7 +269,7 @@ func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net
 // xray:api:stable
 func UseAlternativeSystemDialer(dialer SystemDialer) {
 	if dialer == nil {
-		effectiveSystemDialer = &DefaultSystemDialer{}
+		dialer = &DefaultSystemDialer{}
 	}
 	effectiveSystemDialer = dialer
 }
