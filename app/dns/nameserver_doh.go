@@ -80,12 +80,6 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher) (*DoHNameServ
 			if err != nil {
 				return nil, err
 			}
-			log.Record(&log.AccessMessage{
-				From:   "DoH",
-				To:     s.dohURL,
-				Status: log.AccessAccepted,
-				Detour: "local",
-			})
 
 			cc := common.ChainedClosable{}
 			if cw, ok := link.Writer.(common.Closable); ok {
