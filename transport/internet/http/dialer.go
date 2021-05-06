@@ -21,6 +21,7 @@ import (
 type dialerConf struct {
 	net.Destination
 	*internet.SocketConfig
+	*tls.Config
 }
 
 var (
@@ -36,7 +37,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 		globalDialerMap = make(map[dialerConf]*http.Client)
 	}
 
-	if client, found := globalDialerMap[dialerConf{dest, sockopt}]; found {
+	if client, found := globalDialerMap[dialerConf{dest, sockopt, tlsSettings}]; found {
 		return client, nil
 	}
 
@@ -92,7 +93,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 		Transport: transport,
 	}
 
-	globalDialerMap[dialerConf{dest, sockopt}] = client
+	globalDialerMap[dialerConf{dest, sockopt, tlsSettings}] = client
 	return client, nil
 }
 
