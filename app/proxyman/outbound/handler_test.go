@@ -20,8 +20,6 @@ func TestInterfaces(t *testing.T) {
 	_ = (outbound.Manager)(new(Manager))
 }
 
-const xrayKey core.XrayKey = 1
-
 func TestOutboundWithoutStatCounter(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
@@ -38,7 +36,7 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
-	ctx := context.WithValue(context.Background(), xrayKey, v)
+	ctx := core.ToContext(context.Background(), v)
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
@@ -67,7 +65,7 @@ func TestOutboundWithStatCounter(t *testing.T) {
 
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
-	ctx := context.WithValue(context.Background(), xrayKey, v)
+	ctx := core.ToContext(context.Background(), v)
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
