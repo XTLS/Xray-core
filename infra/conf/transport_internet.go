@@ -490,7 +490,7 @@ type SocketConfig struct {
 	DomainStrategy      string      `json:"domainStrategy"`
 	DialerProxy         string      `json:"dialerProxy"`
 
-	TCPKeepAliveInterval uint32 `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveInterval int32 `json:"tcpKeepAliveInterval"`
 }
 
 // Build implements Buildable.
