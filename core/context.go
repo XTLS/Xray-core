@@ -4,10 +4,10 @@ import (
 	"context"
 )
 
-// XrayKey is the key type of Instance in Context, exported for test.
-type XrayKey int
+// xrayKeyType is the key type of Instance in Context.
+type xrayKeyType int
 
-const xrayKey XrayKey = 1
+const xrayKey xrayKeyType = 1
 
 // FromContext returns an Instance from the given context, or nil if the context doesn't contain one.
 func FromContext(ctx context.Context) *Instance {
