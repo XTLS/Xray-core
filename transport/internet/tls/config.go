@@ -235,7 +235,7 @@ func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) f
 			}
 		}
 		if rejectUnknownSNI {
-			return nil, newError("reject unknown sni")
+			return nil, errNoCertificates
 		}
 		return certs[0], nil
 	}
