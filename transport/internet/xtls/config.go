@@ -215,10 +215,10 @@ func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.C
 func getNewGetCertificateFunc(certs []*xtls.Certificate, rejectUnknownSNI bool) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 		if len(certs) == 0 {
-			return nil, newError("empty certs")
+			return nil, errNoCertificates
 		}
 		sni := strings.ToLower(hello.ServerName)
-		if len(certs) == 1 || sni == "" {
+		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
 			return certs[0], nil
 		}
 		gsni := "*"
