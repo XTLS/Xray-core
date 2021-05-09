@@ -2,5 +2,5 @@ package xtls
 
 import _ "unsafe"
 
-//go:linkname errNoCertificates crypto/tls.errNoCertificates
+//go:linkname errNoCertificates github.com/xtls/go.errNoCertificates
 var errNoCertificates error
