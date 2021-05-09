@@ -212,7 +212,7 @@ func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.C
 	}
 }
 
-func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+func getNewGetCertificateFunc(certs []*xtls.Certificate, rejectUnknownSNI bool) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 		if len(certs) == 0 {
 			return nil, newError("empty certs")
@@ -234,6 +234,9 @@ func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientH
 					return keyPair, nil
 				}
 			}
+		}
+		if rejectUnknownSNI {
+			return nil, newError("reject unknown sni")
 		}
 		return certs[0], nil
 	}
@@ -276,7 +279,7 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
+		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

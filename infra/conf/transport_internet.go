@@ -322,6 +322,7 @@ type TLSConfig struct {
 	CipherSuites             string           `json:"cipherSuites"`
 	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
 	Fingerprint              string           `json:"fingerprint"`
+	RejectUnknownSNI         bool             `json:"rejectUnknownSni"`
 }
 
 // Build implements Buildable.
@@ -350,6 +351,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.CipherSuites = c.CipherSuites
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
+	config.RejectUnknownSni = c.RejectUnknownSNI
 	return config, nil
 }
 
@@ -413,6 +415,7 @@ type XTLSConfig struct {
 	MaxVersion               string            `json:"maxVersion"`
 	CipherSuites             string            `json:"cipherSuites"`
 	PreferServerCipherSuites bool              `json:"preferServerCipherSuites"`
+	RejectUnknownSNI         bool              `json:"rejectUnknownSni"`
 }
 
 // Build implements Buildable.
@@ -440,6 +443,7 @@ func (c *XTLSConfig) Build() (proto.Message, error) {
 	config.MaxVersion = c.MaxVersion
 	config.CipherSuites = c.CipherSuites
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
+	config.RejectUnknownSni = c.RejectUnknownSNI
 	return config, nil
 }
 

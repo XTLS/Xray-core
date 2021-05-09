@@ -64,4 +64,7 @@ message Config {
 
   // Whether the server selects its most preferred ciphersuite.
   bool prefer_server_cipher_suites = 10;
+
+
+  bool reject_unknown_sni = 12;
 }

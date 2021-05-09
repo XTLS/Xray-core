@@ -67,4 +67,6 @@ message Config {
 
   // TLS Client Hello fingerprint (uTLS).
   string fingerprint = 11;
+
+  bool reject_unknown_sni = 12;
 }
