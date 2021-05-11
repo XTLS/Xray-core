@@ -95,8 +95,8 @@ func Run(binary string, args []string) (string, error) {
 func RunMany(binary string, args, files []string) {
 	fmt.Println("Processing...")
 	for _, file := range files {
-		args2 := append(args, file)
-		output, err := Run(binary, args2)
+		args := append(args, file)
+		output, err := Run(binary, args)
 		if err != nil {
 			fmt.Println(err)
 			continue
