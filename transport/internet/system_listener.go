@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime"
 	"syscall"
+	"os"
 
 	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common/net"
@@ -45,6 +46,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	var l net.Listener
 	var err error
 	var network, address string
+	var ds bool
 	switch addr := addr.(type) {
 	case *net.TCPAddr:
 		network = addr.Network()
@@ -72,6 +74,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				return nil, err
 			}
 			ctx = context.WithValue(ctx, address, locker)
+			ds = true
 		}
 	}
 
@@ -79,6 +82,11 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
+	}
+	if err == nil && ds {
+		if e := os.Chmod(address, 0777); e != nil {
+			newError("failed to set file mode of ", address, "to 0777").Base(e).AtWarning().WriteToLog()
+		}
 	}
 	return l, err
 }
