@@ -84,8 +84,8 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
 	}
 	if err == nil && ds {
-		if e := os.Chmod(address, 0777); e != nil {
-			newError("failed to set file mode of ", address, "to 0777").Base(e).AtWarning().WriteToLog()
+		if e := os.Chmod(address, 0666); e != nil {
+			newError("failed to set file mode of ", address, "to 0666").Base(e).AtWarning().WriteToLog()
 		}
 	}
 	return l, err
