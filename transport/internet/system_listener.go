@@ -46,7 +46,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	var l net.Listener
 	var err error
 	var network, address string
-	var ds bool
 	switch addr := addr.(type) {
 	case *net.TCPAddr:
 		network = addr.Network()
@@ -65,6 +64,10 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				address = string(fullAddr)
 			}
 		} else {
+			// unix files needs a chmod
+			if err := os.Chmod(address, 0666); err != nil {
+				return nil, err
+			}
 			// normal unix domain socket needs lock
 			locker := &FileLocker{
 				path: address + ".lock",
@@ -74,7 +77,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				return nil, err
 			}
 			ctx = context.WithValue(ctx, address, locker)
-			ds = true
 		}
 	}
 
@@ -82,11 +84,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
-	}
-	if err == nil && ds {
-		if e := os.Chmod(address, 0666); e != nil {
-			newError("failed to set file mode of ", address, "to 0666").Base(e).AtWarning().WriteToLog()
-		}
 	}
 	return l, err
 }
