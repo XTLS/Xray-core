@@ -276,9 +276,9 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
-			if cs == CacheStrategy_Cache_NOERROR && err == nil {
+			if cs == CacheStrategy_Cache_ALL || (cs == CacheStrategy_Cache_NOERROR && err == nil) {
 				newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
-				log.Record(&log.DNSLog{s.name, domain, ips, log.DNSCacheHit, 0, err})
+				log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Error: err})
 				return ips, err
 			}
 		}
