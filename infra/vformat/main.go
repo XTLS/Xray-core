@@ -52,7 +52,7 @@ func GetRuntimeEnv(key string) (string, error) {
 	for _, envItem := range envStrings {
 		envItem = strings.TrimSuffix(envItem, "\r")
 		envKeyValue := strings.Split(envItem, "=")
-		if strings.EqualFold(strings.TrimSpace(envKeyValue[0]), key) {
+		if len(envKeyValue) == 2 && strings.TrimSpace(envKeyValue[0]) == key {
 			runtimeEnv = strings.TrimSpace(envKeyValue[1])
 		}
 	}
@@ -135,7 +135,7 @@ func main() {
 		suffix = ".exe"
 	}
 	gofmt := "gofmt" + suffix
-	goimports := "goimports" + suffix
+	goimports := "gci" + suffix
 
 	if gofmtPath, err := exec.LookPath(gofmt); err != nil {
 		fmt.Println("Can not find", gofmt, "in system path or current working directory.")
@@ -166,7 +166,8 @@ func main() {
 		filename := filepath.Base(path)
 		if strings.HasSuffix(filename, ".go") &&
 			!strings.HasSuffix(filename, ".pb.go") &&
-			!strings.Contains(dir, filepath.Join("testing", "mocks")) {
+			!strings.Contains(dir, filepath.Join("testing", "mocks")) &&
+			!strings.Contains(path, filepath.Join("main", "distro", "all", "all.go")) {
 			rawFilesSlice = append(rawFilesSlice, path)
 		}
 
