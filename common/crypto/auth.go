@@ -43,6 +43,14 @@ func GenerateInitialAEADNonce() BytesGenerator {
 	return GenerateIncreasingNonce([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
 }
 
+func GenerateAEADNonceWithSize(nonceSize int) BytesGenerator {
+	c := make([]byte, nonceSize)
+	for i := 0; i < nonceSize; i++ {
+		c[i] = 0xFF
+	}
+	return GenerateIncreasingNonce(c)
+}
+
 type Authenticator interface {
 	NonceSize() int
 	Overhead() int
