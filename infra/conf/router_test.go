@@ -106,9 +106,9 @@ func TestRouterConfig(t *testing.T) {
 							"type": "leastload",
 							"settings": {
 								"healthCheck": {
-									"interval": 300,
+									"interval": "5m0s",
 									"sampling": 2,
-									"timeout": 3,
+									"timeout": "5s",
 									"destination": "dest",
 									"connectivity": "conn"
 								},
@@ -119,9 +119,9 @@ func TestRouterConfig(t *testing.T) {
 										"value": 5
 									}
 								],
-								"baselines": [400, 600],
+								"baselines": ["400ms", "600ms"],
 								"expected": 6,
-								"maxRTT": 1000,
+								"maxRTT": "1000ms",
 								"tolerance": 0.5
 							}
 						},
@@ -144,9 +144,9 @@ func TestRouterConfig(t *testing.T) {
 						Strategy:         "leastload",
 						StrategySettings: serial.ToTypedMessage(&router.StrategyLeastLoadConfig{
 							HealthCheck: &router.HealthPingConfig{
-								Interval:      int64(time.Duration(300) * time.Second),
+								Interval:      int64(time.Duration(5) * time.Minute),
 								SamplingCount: 2,
-								Timeout:       int64(time.Duration(3) * time.Second),
+								Timeout:       int64(time.Duration(5) * time.Second),
 								Destination:   "dest",
 								Connectivity:  "conn",
 							},
