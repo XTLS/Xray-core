@@ -132,6 +132,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, tlsConfig *tls.Con
 		}),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
+		grpc.WithDisableRetry(),
 	)
 	globalDialerMap[dialerConf{dest, sockopt, tlsConfig}] = conn
 	return conn, err
