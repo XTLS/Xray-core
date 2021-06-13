@@ -52,7 +52,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	conn, err := getGrpcClient(ctx, dest, tlsConfig, streamSettings.SocketSettings)
 
 	if err != nil {
-		return nil, newError("Cannot dial gRPC").Base(err)
+		return nil, newError("failed to dial gRPC").Base(err)
 	}
 	client := encoding.NewGRPCServiceClient(conn)
 	if grpcSettings.MultiMode {
@@ -113,12 +113,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, tlsConfig *tls.Con
 			gctx = session.ContextWithOutbound(gctx, session.OutboundFromContext(ctx))
 
 			rawHost, rawPort, err := net.SplitHostPort(s)
-			select {
-			case <-gctx.Done():
-				return nil, gctx.Err()
-			default:
-			}
-
 			if err != nil {
 				return nil, err
 			}
@@ -130,8 +124,14 @@ func getGrpcClient(ctx context.Context, dest net.Destination, tlsConfig *tls.Con
 				return nil, err
 			}
 			address := net.ParseAddress(rawHost)
-			return internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
+			conn, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
+			if err != nil {
+				newError("failed to dial connection for gRPC").Base(err).WriteToLog()
+			}
+			return conn, err
 		}),
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(),
 	)
 	globalDialerMap[dialerConf{dest, sockopt, tlsConfig}] = conn
 	return conn, err
