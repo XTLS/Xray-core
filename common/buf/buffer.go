@@ -27,7 +27,7 @@ type Buffer struct {
 // New creates a Buffer with 0 length and 2K capacity.
 func New() *Buffer {
 	return &Buffer{
-		v: pool.Get().([]byte),
+		v: buf,
 	}
 }
 
@@ -64,7 +64,10 @@ func (b *Buffer) Release() {
 	p := b.v
 	b.v = nil
 	b.Clear()
-	pool.Put(p)
+
+	if cap(p) >= Size {
+		pool.Put(p)
+	}
 	b.UDP = nil
 }
 
