@@ -26,6 +26,13 @@ type Buffer struct {
 
 // New creates a Buffer with 0 length and 2K capacity.
 func New() *Buffer {
+	buf := pool.Get().([]byte)
+	if cap(buf) >= Size {
+		buf = buf[:Size]
+	} else {
+		buf = make([]byte, Size)
+	}
+
 	return &Buffer{
 		v: buf,
 	}
