@@ -410,6 +410,7 @@ type Config struct {
 	Reverse         *ReverseConfig         `json:"reverse"`
 	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
 	Observatory     *ObservatoryConfig     `json:"observatory"`
+	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -633,6 +634,14 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if c.Observatory != nil {
 		r, err := c.Observatory.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.App = append(config.App, serial.ToTypedMessage(r))
+	}
+
+	if c.BurstObservatory != nil {
+		r, err := c.BurstObservatory.Build()
 		if err != nil {
 			return nil, err
 		}
