@@ -10,6 +10,15 @@ message ObservationResult {
   repeated OutboundStatus status = 1;
 }
 
+message HealthPingMeasurementResult {
+  int64 all = 1;
+  int64 fail = 2;
+  int64 deviation = 3;
+  int64 average = 4;
+  int64 max = 5;
+  int64 min = 6;
+}
+
 message OutboundStatus{
   /* @Document Whether this outbound is usable
      @Restriction ReadOnlyForUser
@@ -36,6 +45,8 @@ message OutboundStatus{
    @Type id.outboundTag
 */
   int64 last_try_time = 6;
+
+  HealthPingMeasurementResult health_ping = 7;
 }
 
 message ProbeResult{

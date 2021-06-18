@@ -1,13 +1,13 @@
-package router
+package burst
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	sync "sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/features/routing"
 )
 
 // HealthPingSettings holds settings for health Checker
@@ -21,16 +21,16 @@ type HealthPingSettings struct {
 
 // HealthPing is the health checker for balancers
 type HealthPing struct {
-	access     sync.Mutex
-	ticker     *time.Ticker
-	dispatcher routing.Dispatcher
+	ctx    context.Context
+	access sync.Mutex
+	ticker *time.Ticker
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
 }
 
 // NewHealthPing creates a new HealthPing with settings
-func NewHealthPing(config *HealthPingConfig, dispatcher routing.Dispatcher) *HealthPing {
+func NewHealthPing(ctx context.Context, config *HealthPingConfig) *HealthPing {
 	settings := &HealthPingSettings{}
 	if config != nil {
 		settings = &HealthPingSettings{
@@ -59,9 +59,9 @@ func NewHealthPing(config *HealthPingConfig, dispatcher routing.Dispatcher) *Hea
 		settings.Timeout = time.Duration(5) * time.Second
 	}
 	return &HealthPing{
-		dispatcher: dispatcher,
-		Settings:   settings,
-		Results:    nil,
+		ctx:      ctx,
+		Settings: settings,
+		Results:  nil,
 	}
 }
 
@@ -121,14 +121,14 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 		return
 	}
 	ch := make(chan *rtt, count)
-	// rtts := make(map[string][]time.Duration)
+
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
+			h.ctx,
 			h.Settings.Destination,
 			h.Settings.Timeout,
 			handler,
-			h.dispatcher,
 		)
 		for i := 0; i < rounds; i++ {
 			delay := time.Duration(0)

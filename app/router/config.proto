@@ -140,7 +140,6 @@ message StrategyWeight {
 }
 
 message StrategyLeastLoadConfig {
-  HealthPingConfig healthCheck = 1;
   // weight settings
   repeated StrategyWeight costs = 2;
   // RTT baselines for selecting, int64 values of time.Duration
@@ -151,20 +150,6 @@ message StrategyLeastLoadConfig {
   int64 maxRTT = 5;
   // acceptable failure rate
   float tolerance = 6;
-}
-
-message HealthPingConfig {
-  // destination url, need 204 for success return
-  // default http://www.google.com/gen_204
-  string destination = 1;
-  // connectivity check url
-  string connectivity = 2;
-  // health check interval, int64 values of time.Duration
-  int64 interval = 3;
-  // samplingcount is the amount of recent ping results which are kept for calculation
-  int32 samplingCount = 4;
-  // ping timeout, int64 values of time.Duration
-  int64 timeout = 5;
 }
 
 message Config {

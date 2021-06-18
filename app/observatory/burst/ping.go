@@ -1,4 +1,4 @@
-package router
+package burst
 
 import (
 	"context"
@@ -6,9 +6,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet/tagged"
 )
 
 type pingClient struct {
@@ -16,10 +14,10 @@ type pingClient struct {
 	httpClient  *http.Client
 }
 
-func newPingClient(destination string, timeout time.Duration, handler string, dispatcher routing.Dispatcher) *pingClient {
+func newPingClient(ctx context.Context, destination string, timeout time.Duration, handler string) *pingClient {
 	return &pingClient{
 		destination: destination,
-		httpClient:  newHTTPClient(handler, dispatcher, timeout),
+		httpClient:  newHTTPClient(ctx, handler, timeout),
 	}
 }
 
@@ -30,7 +28,7 @@ func newDirectPingClient(destination string, timeout time.Duration) *pingClient 
 	}
 }
 
-func newHTTPClient(handler string, dispatcher routing.Dispatcher, timeout time.Duration) *http.Client {
+func newHTTPClient(ctxv context.Context, handler string, timeout time.Duration) *http.Client {
 	tr := &http.Transport{
 		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -38,18 +36,7 @@ func newHTTPClient(handler string, dispatcher routing.Dispatcher, timeout time.D
 			if err != nil {
 				return nil, err
 			}
-			h := &session.Handler{
-				Tag: handler,
-			}
-			ctx = session.ContextWithHandler(ctx, h)
-			link, err := dispatcher.Dispatch(ctx, dest)
-			if err != nil {
-				return nil, err
-			}
-			return cnc.NewConnection(
-				cnc.ConnectionInputMulti(link.Writer),
-				cnc.ConnectionOutputMulti(link.Reader),
-			), nil
+			return tagged.Dialer(ctxv, dest, handler)
 		},
 	}
 	return &http.Client{

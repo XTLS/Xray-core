@@ -1,4 +1,4 @@
-package router_test
+package burst_test
 
 import (
 	"math"
@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/app/observatory/burst"
 )
 
 func TestHealthPingResults(t *testing.T) {
 	rtts := []int64{60, 140, 60, 140, 60, 60, 140, 60, 140}
-	hr := router.NewHealthPingResult(4, time.Hour)
+	hr := burst.NewHealthPingResult(4, time.Hour)
 	for _, rtt := range rtts {
 		hr.Put(time.Duration(rtt))
 	}
 	rttFailed := time.Duration(math.MaxInt64)
-	expected := &router.HealthPingStats{
+	expected := &burst.HealthPingStats{
 		All:       4,
 		Fail:      0,
 		Deviation: 40,
@@ -37,7 +37,7 @@ func TestHealthPingResults(t *testing.T) {
 	}
 	hr.Put(rttFailed)
 	hr.Put(rttFailed)
-	expected = &router.HealthPingStats{
+	expected = &burst.HealthPingStats{
 		All:       4,
 		Fail:      4,
 		Deviation: 0,
@@ -53,7 +53,7 @@ func TestHealthPingResults(t *testing.T) {
 
 func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 	rtts := []int64{60, 140, 60, 140}
-	hr := router.NewHealthPingResult(4, time.Duration(10)*time.Millisecond)
+	hr := burst.NewHealthPingResult(4, time.Duration(10)*time.Millisecond)
 	for i, rtt := range rtts {
 		if i == 2 {
 			// wait for previous 2 outdated
@@ -62,7 +62,7 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		hr.Put(time.Duration(rtt))
 	}
 	hr.Get()
-	expected := &router.HealthPingStats{
+	expected := &burst.HealthPingStats{
 		All:       2,
 		Fail:      0,
 		Deviation: 40,
@@ -76,7 +76,7 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 	}
 	// wait for all outdated
 	time.Sleep(time.Duration(10) * time.Millisecond)
-	expected = &router.HealthPingStats{
+	expected = &burst.HealthPingStats{
 		All:       0,
 		Fail:      0,
 		Deviation: 0,
@@ -90,7 +90,7 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 	}
 
 	hr.Put(time.Duration(60))
-	expected = &router.HealthPingStats{
+	expected = &burst.HealthPingStats{
 		All:  1,
 		Fail: 0,
 		// 1 sample, std=0.5rtt
