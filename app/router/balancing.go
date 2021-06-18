@@ -6,11 +6,14 @@ import (
 
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
 )
 
 type BalancingStrategy interface {
 	PickOutbound([]string) string
+}
+
+type BalancingPrincipleTarget interface {
+	GetPrincipleTarget([]string) []string
 }
 
 type RoundRobinStrategy struct {
@@ -33,11 +36,11 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 
 type Balancer struct {
 	selectors   []string
-	strategy    routing.BalancingStrategy
+	strategy    BalancingStrategy
 	ohm         outbound.Manager
 	fallbackTag string
 
-	override overridden
+	override override
 }
 
 // PickOutbound picks the tag of a outbound
@@ -51,10 +54,10 @@ func (b *Balancer) PickOutbound() (string, error) {
 		return "", err
 	}
 	var tag string
-	if o := b.override.Get(); o != nil {
-		tag = b.strategy.Pick(o.selects)
+	if o := b.override.Get(); o != "" {
+		tag = o
 	} else {
-		tag = b.strategy.SelectAndPick(candidates)
+		tag = b.strategy.PickOutbound(candidates)
 	}
 	if tag == "" {
 		if b.fallbackTag != "" {
@@ -81,4 +84,36 @@ func (b *Balancer) SelectOutbounds() ([]string, error) {
 	}
 	tags := hs.Select(b.selectors)
 	return tags, nil
+}
+
+// GetPrincipleTarget implements routing.BalancerPrincipleTarget
+func (r *Router) GetPrincipleTarget(tag string) ([]string, error) {
+	if b, ok := r.balancers[tag]; ok {
+		if s, ok := b.strategy.(BalancingPrincipleTarget); ok {
+			candidates, err := b.SelectOutbounds()
+			if err != nil {
+				return nil, newError("unable to select outbounds").Base(err)
+			}
+			return s.GetPrincipleTarget(candidates), nil
+		}
+		return nil, newError("unsupported GetPrincipleTarget")
+	}
+	return nil, newError("cannot find tag")
+}
+
+// SetOverrideTarget implements routing.BalancerOverrider
+func (r *Router) SetOverrideTarget(tag, target string) error {
+	if b, ok := r.balancers[tag]; ok {
+		b.override.Put(target)
+		return nil
+	}
+	return newError("cannot find tag")
+}
+
+// GetOverrideTarget implements routing.BalancerOverrider
+func (r *Router) GetOverrideTarget(tag string) (string, error) {
+	if b, ok := r.balancers[tag]; ok {
+		return b.override.Get(), nil
+	}
+	return "", newError("cannot find tag")
 }

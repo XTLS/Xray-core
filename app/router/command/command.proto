@@ -64,51 +64,41 @@ message GetBalancersRequest {
   repeated string balancerTags = 1;
 }
 
-message OutboundMsg {
-  string tag = 1;
-  repeated string values = 2;
+message PrincipleTargetInfo {
+  repeated string tag = 1;
 }
 
-message OverrideSelectingMsg {
-  string until = 1;
-  repeated string selects = 2;
+message OverrideInfo {
+  string target = 2;
 }
 
 message BalancerMsg {
+  OverrideInfo override = 5;
+  PrincipleTargetInfo principle_target = 6;
+}
+
+message GetBalancerInfoRequest {
   string tag = 1;
-  repeated string strategySettings = 2;
-  repeated string titles = 4;
-  OverrideSelectingMsg override = 5;
-  repeated OutboundMsg selects = 6;
-  repeated OutboundMsg others = 7;
 }
 
-message GetBalancersResponse {
-  repeated BalancerMsg balancers = 1;
+message GetBalancerInfoResponse {
+  BalancerMsg balancer = 1;
 }
 
-message CheckBalancersRequest {
-  repeated string balancerTags = 1;
-}
-
-message CheckBalancersResponse {}
-
-
-message OverrideSelectingRequest {
+message OverrideBalancerTargetRequest {
   string balancerTag = 1;
-  repeated string selectors = 2;
-  int64 validity = 3;
+  string target = 2;
 }
 
-message OverrideSelectingResponse {}
+message OverrideBalancerTargetResponse {}
 
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
   rpc TestRoute(TestRouteRequest) returns (RoutingContext) {}
-  rpc GetBalancers(GetBalancersRequest) returns (GetBalancersResponse) {}
-  rpc CheckBalancers(CheckBalancersRequest) returns (CheckBalancersResponse) {}
-  rpc OverrideSelecting(OverrideSelectingRequest) returns (OverrideSelectingResponse) {}
+
+  rpc GetBalancerInfo(GetBalancerInfoRequest) returns (GetBalancerInfoResponse){}
+  rpc OverrideBalancerTarget(OverrideBalancerTargetRequest) returns (OverrideBalancerTargetResponse) {}
 }
 
 message Config {}

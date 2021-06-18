@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"github.com/xtls/xray-core/features/routing"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
@@ -13,20 +12,6 @@ import (
 type LeastPingStrategy struct {
 	ctx         context.Context
 	observatory extension.Observatory
-}
-
-// TODO Fix PlaceHolder
-
-func (l *LeastPingStrategy) Pick(candidates []string) string {
-	panic("implement me")
-}
-
-func (l *LeastPingStrategy) SelectAndPick(candidates []string) string {
-	panic("implement me")
-}
-
-func (l *LeastPingStrategy) GetInformation(tags []string) *routing.StrategyInfo {
-	panic("implement me")
 }
 
 func (l *LeastPingStrategy) InjectContext(ctx context.Context) {
