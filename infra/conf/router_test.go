@@ -143,13 +143,6 @@ func TestRouterConfig(t *testing.T) {
 						OutboundSelector: []string{"test"},
 						Strategy:         "leastload",
 						StrategySettings: serial.ToTypedMessage(&router.StrategyLeastLoadConfig{
-							HealthCheck: &router.HealthPingConfig{
-								Interval:      int64(time.Duration(5) * time.Minute),
-								SamplingCount: 2,
-								Timeout:       int64(time.Duration(5) * time.Second),
-								Destination:   "dest",
-								Connectivity:  "conn",
-							},
 							Costs: []*router.StrategyWeight{
 								{
 									Regexp: true,
