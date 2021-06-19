@@ -139,7 +139,8 @@ func (s *LeastLoadStrategy) selectLeastLoad(nodes []*node) []*node {
 func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) []*node {
 	observeResult, err := s.observer.GetObservation(s.ctx)
 	if err != nil {
-		newError("cannot get observation").Base(err)
+		newError("cannot get observation").Base(err).WriteToLog()
+		return make([]*node, 0)
 	}
 
 	results := observeResult.(*observatory.ObservationResult)
