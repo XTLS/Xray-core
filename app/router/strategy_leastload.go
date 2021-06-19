@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/extension"
 )
 
 // LeastLoadStrategy represents a least load balancing strategy
@@ -17,7 +18,7 @@ type LeastLoadStrategy struct {
 	settings *StrategyLeastLoadConfig
 	costs    *WeightManager
 
-	observer *observatory.Observer
+	observer extension.Observatory
 
 	ctx context.Context
 }
@@ -58,10 +59,6 @@ type node struct {
 
 func (l *LeastLoadStrategy) InjectContext(ctx context.Context) {
 	l.ctx = ctx
-
-	common.Must(core.RequireFeatures(ctx, func(observerInstance *observatory.Observer) {
-		l.observer = observerInstance
-	}))
 }
 
 func (s *LeastLoadStrategy) PickOutbound(candidates []string) string {
@@ -137,6 +134,12 @@ func (s *LeastLoadStrategy) selectLeastLoad(nodes []*node) []*node {
 }
 
 func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) []*node {
+	if s.observer == nil {
+		common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
+			s.observer = observatory
+			return nil
+		}))
+	}
 	observeResult, err := s.observer.GetObservation(s.ctx)
 	if err != nil {
 		newError("cannot get observation").Base(err).WriteToLog()
@@ -150,7 +153,7 @@ func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) 
 	var ret []*node
 
 	for _, v := range results.Status {
-		if v.Alive && v.Delay < maxRTT.Milliseconds() && outboundlist.contains(v.OutboundTag) {
+		if v.Alive && (v.Delay < maxRTT.Milliseconds() || maxRTT == 0) && outboundlist.contains(v.OutboundTag) {
 			record := &node{
 				Tag:              v.OutboundTag,
 				CountAll:         1,
