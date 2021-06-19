@@ -231,15 +231,10 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		ctx = session.ContextWithContent(ctx, content)
 	}
 
-	handler := session.HandlerFromContext(ctx)
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx)
 	if !sniffingRequest.Enabled {
-		if handler != nil {
-			go d.targetedDispatch(ctx, outbound, handler.Tag)
-		} else {
-			go d.routedDispatch(ctx, outbound, destination)
-		}
+		go d.routedDispatch(ctx, outbound, destination)
 	} else {
 		go func() {
 			cReader := &cachedReader{
@@ -268,11 +263,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 					ob.Target = destination
 				}
 			}
-			if handler != nil {
-				d.targetedDispatch(ctx, outbound, handler.Tag)
-			} else {
-				d.routedDispatch(ctx, outbound, destination)
-			}
+			d.routedDispatch(ctx, outbound, destination)
 		}()
 	}
 	return inbound, nil
@@ -376,26 +367,6 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	}
 	return contentResult, contentErr
 }
-
-//TODO Pending removal for tagged connection
-func (d *DefaultDispatcher) targetedDispatch(ctx context.Context, link *transport.Link, tag string) {
-	handler := d.ohm.GetHandler(tag)
-	if handler == nil {
-		newError("outbound handler [", tag, "] not exist").AtError().WriteToLog(session.ExportIDToError(ctx))
-		common.Close(link.Writer)
-		common.Interrupt(link.Reader)
-		return
-	}
-	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
-		if tag := handler.Tag(); tag != "" {
-			accessMessage.Detour = tag
-		}
-		log.Record(accessMessage)
-	}
-
-	handler.Dispatch(ctx, link)
-}
-
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
 	ob := session.OutboundFromContext(ctx)
 	if hosts, ok := d.dns.(dns.HostsLookup); ok && destination.Address.Family().IsDomain() {
