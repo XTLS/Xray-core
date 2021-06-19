@@ -60,10 +60,6 @@ message TestRouteRequest {
   bool PublishResult = 3;
 }
 
-message GetBalancersRequest {
-  repeated string balancerTags = 1;
-}
-
 message PrincipleTargetInfo {
   repeated string tag = 1;
 }
