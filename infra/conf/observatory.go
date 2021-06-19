@@ -26,7 +26,7 @@ type BurstObservatoryConfig struct {
 }
 
 func (b BurstObservatoryConfig) Build() (proto.Message, error) {
-	if result, err := b.HealthCheck.Build(); err != nil {
+	if result, err := b.HealthCheck.Build(); err == nil {
 		return &burst.Config{SubjectSelector: b.SubjectSelector, PingConfig: result.(*burst.HealthPingConfig)}, nil
 	} else {
 		return nil, err

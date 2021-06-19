@@ -2,6 +2,7 @@ package burst
 
 import (
 	"context"
+	
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
@@ -34,7 +35,7 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 	defer o.hp.access.Unlock()
 	for name, value := range o.hp.Results {
 		status := observatory.OutboundStatus{
-			Alive:           value.getStatistics().All == value.getStatistics().Fail,
+			Alive:           value.getStatistics().All != value.getStatistics().Fail,
 			Delay:           value.getStatistics().Average.Milliseconds(),
 			LastErrorReason: "",
 			OutboundTag:     name,
