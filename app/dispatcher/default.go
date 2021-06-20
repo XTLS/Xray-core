@@ -4,9 +4,12 @@ package dispatcher
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xtls/xray-core/common/dice"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -92,14 +95,15 @@ type DefaultDispatcher struct {
 	router routing.Router
 	policy policy.Manager
 	stats  stats.Manager
-	hosts  dns.HostsLookup
+	dns    dns.Client
+	fdns   dns.FakeDNSEngine
 }
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
-		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
-			return d.Init(config.(*Config), om, router, pm, sm, dc)
+		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dns dns.Client, fdns dns.FakeDNSEngine) error {
+			return d.Init(config.(*Config), om, router, pm, sm, dns, fdns)
 		}); err != nil {
 			return nil, err
 		}
@@ -108,14 +112,13 @@ func init() {
 }
 
 // Init initializes DefaultDispatcher.
-func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
+func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dns dns.Client, fdns dns.FakeDNSEngine) error {
 	d.ohm = om
 	d.router = router
 	d.policy = pm
 	d.stats = sm
-	if hosts, ok := dc.(dns.HostsLookup); ok {
-		d.hosts = hosts
-	}
+	d.dns = dns
+	d.fdns = fdns
 	return nil
 }
 
@@ -132,10 +135,77 @@ func (*DefaultDispatcher) Start() error {
 // Close implements common.Closable.
 func (*DefaultDispatcher) Close() error { return nil }
 
-func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *transport.Link) {
-	opt := pipe.OptionsFromContext(ctx)
-	uplinkReader, uplinkWriter := pipe.New(opt...)
-	downlinkReader, downlinkWriter := pipe.New(opt...)
+func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sniffing session.SniffingRequest) (*transport.Link, *transport.Link) {
+	downOpt := pipe.OptionsFromContext(ctx)
+	upOpt := downOpt
+
+	IP2Fake := new(sync.Map) // net.IP.String() => net.IP
+	if network == net.Network_UDP {
+		upOpt = append(upOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+			mb2 := make(buf.MultiBuffer, 0, len(mb))
+			for _, buffer := range mb {
+				if buffer.UDP == nil {
+					mb2 = append(mb2, buffer)
+					continue
+				}
+				addr := buffer.UDP.Address
+				var originIP net.IP
+				if sniffing.Enabled && addr.Family().IsIP() {
+					// if !d.fdns.GetFakeIPRange().Contains(addr.IP()) {
+					// 	mb2 = append(mb2, buffer)
+					// 	continue
+					// }
+					originIP = addr.IP()
+					domain := d.fdns.GetDomainFromFakeDNS(addr)
+					if len(domain) > 0 {
+						newError("override buffer.UDP: " + domain).WriteToLog(session.ExportIDToError(ctx))
+						addr = net.DomainAddress(domain)
+					} else {
+						// drop buffer without a valid Fake IP
+						continue
+					}
+				}
+
+				// addr is DomainAddress
+				domain := addr.Domain()
+				fmt.Println(domain)
+				if len(domain) > 0 {
+					ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
+					if err != nil {
+						newError("failed to look up IP for " + domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
+						continue
+					}
+					overrideIP := ips[dice.Roll(len(ips))]
+					buffer.UDP.Address = net.IPAddress(overrideIP)
+					newError("override buffer.UDP: " + buffer.UDP.Address.String()).WriteToLog(session.ExportIDToError(ctx))
+
+					if originIP != nil {
+						IP2Fake.Store(overrideIP.String(), originIP)
+					}
+					mb2 = append(mb2, buffer)
+				}
+			}
+
+			return mb2
+		}))
+	}
+
+	if network == net.Network_UDP && sniffing.Enabled {
+		downOpt = append(downOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+			for _, buffer := range mb {
+				if buffer.UDP != nil &&
+					buffer.UDP.Address.Family().IsIP() {
+					if originIP, found := IP2Fake.Load(buffer.UDP.Address.IP().String()); found {
+						buffer.UDP.Address = net.IPAddress(originIP.(net.IP))
+						newError("restore FakeIP: " + originIP.(net.IP).String()).WriteToLog(session.ExportIDToError(ctx))
+					}
+				}
+			}
+			return mb
+		}))
+	}
+	uplinkReader, uplinkWriter := pipe.New(upOpt...)
+	downlinkReader, downlinkWriter := pipe.New(downOpt...)
 
 	inboundLink := &transport.Link{
 		Reader: downlinkReader,
@@ -221,14 +291,14 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		Target: destination,
 	}
 	ctx = session.ContextWithOutbound(ctx, ob)
-
-	inbound, outbound := d.getLink(ctx)
 	content := session.ContentFromContext(ctx)
 	if content == nil {
 		content = new(session.Content)
 		ctx = session.ContextWithContent(ctx, content)
 	}
+
 	sniffingRequest := content.SniffingRequest
+	inbound, outbound := d.getLink(ctx, destination.Network, sniffingRequest)
 	switch {
 	case !sniffingRequest.Enabled:
 		go d.routedDispatch(ctx, outbound, destination)
@@ -384,8 +454,8 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (Sni
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
 	ob := session.OutboundFromContext(ctx)
-	if d.hosts != nil && destination.Address.Family().IsDomain() {
-		proxied := d.hosts.LookupHosts(ob.Target.String())
+	if hosts, ok := d.dns.(dns.HostsLookup); ok && destination.Address.Family().IsDomain() {
+		proxied := hosts.LookupHosts(ob.Target.String())
 		if proxied != nil {
 			ro := ob.RouteTarget == destination
 			destination.Address = *proxied
