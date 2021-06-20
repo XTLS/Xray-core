@@ -44,6 +44,7 @@
   - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
+  - [AnXray](https://github.com/XTLS/AnXray)
   - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
 - iOS / Mac
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
