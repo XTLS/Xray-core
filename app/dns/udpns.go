@@ -2,7 +2,6 @@ package dns
 
 import (
 	"context"
-	"github.com/xtls/xray-core/transport/internet"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -192,7 +191,7 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, option
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			udpCtx = session.ContextWithInbound(udpCtx, inbound)
 		}
-		udpCtx = internet.ContextWithLookupDomain(udpCtx, internet.LookupDomainFromContext(ctx))
+
 		udpCtx = session.ContextWithContent(udpCtx, &session.Content{
 			Protocol: "dns",
 		})
