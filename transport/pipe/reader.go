@@ -25,3 +25,8 @@ func (r *Reader) ReadMultiBufferTimeout(d time.Duration) (buf.MultiBuffer, error
 func (r *Reader) Interrupt() {
 	r.pipe.Interrupt()
 }
+
+// Close implements io.Closer. After the pipe is closed, writing to the pipe will return io.ErrClosedPipe, while reading will return io.EOF.
+func (r *Reader) Close() error {
+	return r.pipe.Close()
+}
