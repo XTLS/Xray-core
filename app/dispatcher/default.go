@@ -4,15 +4,13 @@ package dispatcher
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/dice"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -168,7 +166,6 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 
 				// addr is DomainAddress
 				domain := addr.Domain()
-				fmt.Println(domain)
 				if len(domain) > 0 {
 					ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
 					if err != nil {
