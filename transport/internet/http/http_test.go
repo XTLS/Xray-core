@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/xtls/xray-core/common"
@@ -28,7 +30,7 @@ func TestHTTPConnection(t *testing.T) {
 		SecuritySettings: &tls.Config{
 			Certificate: []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("www.example.com")))},
 		},
-	}, func(conn internet.Connection) {
+	}, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
 

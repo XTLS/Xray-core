@@ -293,7 +293,7 @@ func hasAuthMethod(expectedAuth byte, authCandidates []byte) bool {
 }
 
 func writeSocks5AuthenticationResponse(writer io.Writer, version byte, auth byte) error {
-	return buf.WriteAllBytes(writer, []byte{version, auth})
+	return buf.WriteAllBytes(writer, []byte{version, auth}, nil)
 }
 
 func writeSocks5Response(writer io.Writer, errCode byte, address net.Address, port net.Port) error {
@@ -305,7 +305,7 @@ func writeSocks5Response(writer io.Writer, errCode byte, address net.Address, po
 		return err
 	}
 
-	return buf.WriteAllBytes(writer, buffer.Bytes())
+	return buf.WriteAllBytes(writer, buffer.Bytes(), nil)
 }
 
 func writeSocks4Response(writer io.Writer, errCode byte, address net.Address, port net.Port) error {
@@ -317,7 +317,7 @@ func writeSocks4Response(writer io.Writer, errCode byte, address net.Address, po
 	portBytes := buffer.Extend(2)
 	binary.BigEndian.PutUint16(portBytes, port.Value())
 	common.Must2(buffer.Write(address.IP()))
-	return buf.WriteAllBytes(writer, buffer.Bytes())
+	return buf.WriteAllBytes(writer, buffer.Bytes(), nil)
 }
 
 func DecodeUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
@@ -422,7 +422,7 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 	defer b.Release()
 
 	common.Must2(b.Write([]byte{socks5Version, 0x01, authByte}))
-	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
+	if err := buf.WriteAllBytes(writer, b.Bytes(), nil); err != nil {
 		return nil, err
 	}
 
@@ -446,7 +446,7 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 		common.Must2(b.WriteString(account.Username))
 		common.Must(b.WriteByte(byte(len(account.Password))))
 		common.Must2(b.WriteString(account.Password))
-		if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
+		if err := buf.WriteAllBytes(writer, b.Bytes(), nil); err != nil {
 			return nil, err
 		}
 
@@ -474,7 +474,7 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 		}
 	}
 
-	if err := buf.WriteAllBytes(writer, b.Bytes()); err != nil {
+	if err := buf.WriteAllBytes(writer, b.Bytes(), nil); err != nil {
 		return nil, err
 	}
 

@@ -151,7 +151,7 @@ func (w *HeaderWriter) Write(writer io.Writer) error {
 	if w.header == nil {
 		return nil
 	}
-	err := buf.WriteAllBytes(writer, w.header.Bytes())
+	err := buf.WriteAllBytes(writer, w.header.Bytes(), nil)
 	w.header.Release()
 	w.header = nil
 	return err

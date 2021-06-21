@@ -6,12 +6,14 @@ package mocks
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	net "github.com/xtls/xray-core/common/net"
 	routing "github.com/xtls/xray-core/features/routing"
 	transport "github.com/xtls/xray-core/transport"
 	internet "github.com/xtls/xray-core/transport/internet"
-	reflect "reflect"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // ProxyInbound is a mock of Inbound interface
@@ -52,7 +54,7 @@ func (mr *ProxyInboundMockRecorder) Network() *gomock.Call {
 }
 
 // Process mocks base method
-func (m *ProxyInbound) Process(arg0 context.Context, arg1 net.Network, arg2 internet.Connection, arg3 routing.Dispatcher) error {
+func (m *ProxyInbound) Process(arg0 context.Context, arg1 net.Network, arg2 stat.Connection, arg3 routing.Dispatcher) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Process", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)

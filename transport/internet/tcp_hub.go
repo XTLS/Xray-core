@@ -3,6 +3,8 @@ package internet
 import (
 	"context"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -18,7 +20,7 @@ func RegisterTransportListener(protocol string, listener ListenFunc) error {
 	return nil
 }
 
-type ConnHandler func(Connection)
+type ConnHandler func(stat.Connection)
 
 type ListenFunc func(ctx context.Context, address net.Address, port net.Port, settings *MemoryStreamConfig, handler ConnHandler) (Listener, error)
 

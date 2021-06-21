@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/xtls/xray-core/features/stats"
+
 	"github.com/xtls/xray-core/common/platform"
 )
 
@@ -54,17 +56,19 @@ type ReadVReader struct {
 	rawConn syscall.RawConn
 	mr      multiReader
 	alloc   allocStrategy
+	counter stats.Counter
 }
 
 // NewReadVReader creates a new ReadVReader.
-func NewReadVReader(reader io.Reader, rawConn syscall.RawConn) *ReadVReader {
+func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) *ReadVReader {
 	return &ReadVReader{
 		Reader:  reader,
 		rawConn: rawConn,
 		alloc: allocStrategy{
 			current: 1,
 		},
-		mr: newMultiReader(),
+		mr:      newMultiReader(),
+		counter: counter,
 	}
 }
 
@@ -123,10 +127,16 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 		if b.IsFull() {
 			r.alloc.Adjust(1)
 		}
+		if r.counter != nil && b != nil {
+			r.counter.Add(int64(b.Len()))
+		}
 		return MultiBuffer{b}, err
 	}
 
 	mb, err := r.readMulti()
+	if r.counter != nil && mb != nil {
+		r.counter.Add(int64(mb.Len()))
+	}
 	if err != nil {
 		return nil, err
 	}
