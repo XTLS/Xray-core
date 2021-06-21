@@ -12,4 +12,10 @@ message Config {
   // Server is the DNS server address. If specified, this address overrides the
   // original one.
   xray.common.net.Endpoint server = 1;
+  enum DomainStrategy {
+    USE_ALL = 0;
+    USE_IP = 1;
+    USE_FAKE = 2;
+  }
+  DomainStrategy domain_strategy = 2;
 }

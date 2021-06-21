@@ -21,6 +21,20 @@ func TestStaticHosts(t *testing.T) {
 			},
 		},
 		{
+			Type:   DomainMatchingType_Full,
+			Domain: "proxy.example.com",
+			Ip: [][]byte{
+				{1, 2, 3, 4},
+				{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+			},
+			ProxiedDomain: "another-proxy.example.com",
+		},
+		{
+			Type:          DomainMatchingType_Full,
+			Domain:        "proxy2.example.com",
+			ProxiedDomain: "proxy.example.com",
+		},
+		{
 			Type:   DomainMatchingType_Subdomain,
 			Domain: "example.cn",
 			Ip: [][]byte{
@@ -32,6 +46,7 @@ func TestStaticHosts(t *testing.T) {
 			Domain: "baidu.com",
 			Ip: [][]byte{
 				{127, 0, 0, 1},
+				{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 			},
 		},
 	}
@@ -40,7 +55,7 @@ func TestStaticHosts(t *testing.T) {
 	common.Must(err)
 
 	{
-		ips := hosts.LookupIP("example.com", dns.IPOption{
+		ips := hosts.Lookup("example.com", &dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -53,7 +68,33 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.LookupIP("www.example.cn", dns.IPOption{
+		domain := hosts.Lookup("proxy.example.com", &dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+		})
+		if len(domain) != 1 {
+			t.Error("expect 1 domain, but got ", len(domain))
+		}
+		if diff := cmp.Diff(domain[0].Domain(), "another-proxy.example.com"); diff != "" {
+			t.Error(diff)
+		}
+	}
+
+	{
+		domain := hosts.Lookup("proxy2.example.com", &dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: false,
+		})
+		if len(domain) != 1 {
+			t.Error("expect 1 domain, but got ", len(domain))
+		}
+		if diff := cmp.Diff(domain[0].Domain(), "another-proxy.example.com"); diff != "" {
+			t.Error(diff)
+		}
+	}
+
+	{
+		ips := hosts.Lookup("www.example.cn", &dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -66,7 +107,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.LookupIP("baidu.com", dns.IPOption{
+		ips := hosts.Lookup("baidu.com", &dns.IPOption{
 			IPv4Enable: false,
 			IPv6Enable: true,
 		})

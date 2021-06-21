@@ -5,35 +5,36 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	mux "github.com/xtls/xray-core/common/mux"
-	reflect "reflect"
 )
 
-// MuxClientWorkerFactory is a mock of ClientWorkerFactory interface
+// MuxClientWorkerFactory is a mock of ClientWorkerFactory interface.
 type MuxClientWorkerFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MuxClientWorkerFactoryMockRecorder
 }
 
-// MuxClientWorkerFactoryMockRecorder is the mock recorder for MuxClientWorkerFactory
+// MuxClientWorkerFactoryMockRecorder is the mock recorder for MuxClientWorkerFactory.
 type MuxClientWorkerFactoryMockRecorder struct {
 	mock *MuxClientWorkerFactory
 }
 
-// NewMuxClientWorkerFactory creates a new mock instance
+// NewMuxClientWorkerFactory creates a new mock instance.
 func NewMuxClientWorkerFactory(ctrl *gomock.Controller) *MuxClientWorkerFactory {
 	mock := &MuxClientWorkerFactory{ctrl: ctrl}
 	mock.recorder = &MuxClientWorkerFactoryMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MuxClientWorkerFactory) EXPECT() *MuxClientWorkerFactoryMockRecorder {
 	return m.recorder
 }
 
-// Create mocks base method
+// Create mocks base method.
 func (m *MuxClientWorkerFactory) Create() (*mux.ClientWorker, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create")
@@ -42,7 +43,7 @@ func (m *MuxClientWorkerFactory) Create() (*mux.ClientWorker, error) {
 	return ret0, ret1
 }
 
-// Create indicates an expected call of Create
+// Create indicates an expected call of Create.
 func (mr *MuxClientWorkerFactoryMockRecorder) Create() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MuxClientWorkerFactory)(nil).Create))

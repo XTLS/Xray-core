@@ -63,38 +63,21 @@ func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, l
 		return nil, nil
 	}
 
-	var option = dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
-	}
-
+	var opt dns.Option
 	switch {
 	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
-		}
+		opt = dns.LookupIPv4Only
 	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
-		}
+		opt = dns.LookupIPv6Only
 	case strategy == DomainStrategy_AS_IS:
 		return nil, nil
 	}
 
-	return d.dns.LookupIP(domain, option)
+	return d.dns.LookupOptions(domain, opt, dns.LookupNoFake)
 }
 
 func (d *DefaultSystemDialer) canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
 	if sockopt == nil || dst.Address.Family().IsIP() || d.dns == nil {
-		return false
-	}
-	if dst.Address.Domain() == LookupDomainFromContext(ctx) {
-		newError("infinite loop detected").AtError().WriteToLog(session.ExportIDToError(ctx))
 		return false
 	}
 	return sockopt.DomainStrategy != DomainStrategy_AS_IS
