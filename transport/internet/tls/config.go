@@ -211,13 +211,13 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		if len(certs) == 0 {
-			return nil, newError("empty certs")
+			return nil, errNoCertificates
 		}
 		sni := strings.ToLower(hello.ServerName)
-		if len(certs) == 1 || sni == "" {
+		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
 			return certs[0], nil
 		}
 		gsni := "*"
@@ -233,6 +233,9 @@ func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHel
 					return keyPair, nil
 				}
 			}
+		}
+		if rejectUnknownSNI {
+			return nil, errNoCertificates
 		}
 		return certs[0], nil
 	}
@@ -275,7 +278,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
+		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
