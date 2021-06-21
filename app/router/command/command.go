@@ -4,18 +4,22 @@ package command
 
 import (
 	"context"
+	"os"
 	"time"
 
-	"google.golang.org/grpc"
-
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"google.golang.org/grpc"
 )
 
 // routingServer is an implementation of RoutingService.
 type routingServer struct {
+	s            *core.Instance
+	ohm          outbound.Manager
 	router       routing.Router
 	routingStats stats.Channel
 }
@@ -41,6 +45,139 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 		s.routingStats.Publish(ctx, route)
 	}
 	return AsProtobufMessage(request.FieldSelectors)(route), nil
+}
+
+func (s *routingServer) AddRule(ctx context.Context, request *AddRoutingRuleRequest) (*AddRoutingRuleResponse, error) {
+	resp := new(AddRoutingRuleResponse)
+	if request.RoutingRule == nil {
+		return resp, newError("Invalid RoutingRule request.")
+	}
+
+	err := s.router.AddRule(ctx, request.Index, request.RoutingRule)
+	if err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+func (s *routingServer) AlterRule(ctx context.Context, request *AlterRoutingRuleRequest) (*AlterRoutingRuleResponse, error) {
+	if request.RoutingRule == nil {
+		return nil, newError("Invalid RoutingRule request.")
+	}
+
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+
+	err := s.router.AlterRule(ctx, request.Tag, request.RoutingRule)
+	if err != nil {
+		return nil, err
+	}
+	return &AlterRoutingRuleResponse{}, nil
+}
+
+func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRoutingRuleRequest) (*RemoveRoutingRuleResponse, error) {
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.RemoveRule(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &RemoveRoutingRuleResponse{}, nil
+}
+
+func (s *routingServer) SetRules(ctx context.Context, request *SetRoutingRulesRequest) (*SetRoutingRulesResponse, error) {
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+
+	if len(request.Rules) == 0 {
+		return nil, newError("Rules is empty.")
+	}
+	err := s.router.SetRules(ctx, request.Rules)
+	if err != nil {
+		return nil, err
+	}
+	return &SetRoutingRulesResponse{}, nil
+}
+
+func (s *routingServer) GetRules(ctx context.Context, request *GetRoutingRulesRequest) (*GetRoutingRulesResponse, error) {
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+	rules, err := s.router.GetRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &GetRoutingRulesResponse{
+		Rules: rules.([]*router.RoutingRule),
+	}, nil
+}
+
+func (s *routingServer) GetRule(ctx context.Context, request *GetRoutingRuleRequest) (*GetRoutingRuleResponse, error) {
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "1" {
+		return nil, newError("The environment variable XRAY_ROUTER_API_GETSET is not set to 1.")
+	}
+	idx, rules, err := s.router.GetRule(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &GetRoutingRuleResponse{
+		Rule: rules.(*router.RoutingRule),
+		Idx:  int32(idx),
+	}, nil
+}
+
+func (s *routingServer) AddBalancer(ctx context.Context, request *AddBalancingRuleRequest) (*AddBalancingRuleResponse, error) {
+	if request.Balancing == nil {
+		return nil, newError("Invalid Balancing request.")
+	}
+
+	err := s.router.AddBalancer(ctx, request.Balancing, s.ohm)
+	if err != nil {
+		return nil, err
+	}
+	return &AddBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) AlterBalancer(ctx context.Context, request *AlterBalancingRuleRequest) (*AlterBalancingRuleResponse, error) {
+	if request.Balancing == nil {
+		return nil, newError("Invalid Balancing request.")
+	}
+
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.AlterBalancer(ctx, request.Tag, request.Balancing, s.ohm)
+	if err != nil {
+		return nil, err
+	}
+	return &AlterBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) RemoveBalancer(ctx context.Context, request *RemoveBalancingRuleRequest) (*RemoveBalancingRuleResponse, error) {
+	if len(request.Tag) == 0 {
+		return nil, newError("Invalid Tag.")
+	}
+	err := s.router.RemoveBalancer(ctx, request.Tag)
+	if err != nil {
+		return nil, err
+	}
+	return &RemoveBalancingRuleResponse{}, nil
+}
+
+func (s *routingServer) GetBalancers(ctx context.Context, request *GetBalancerRequest) (*GetBalancerResponse, error) {
+	balancers, err := s.router.GetBalancers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &GetBalancerResponse{
+		Balancing: balancers.([]*router.BalancingRule),
+	}, nil
 }
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {
@@ -80,15 +217,23 @@ type service struct {
 }
 
 func (s *service) Register(server *grpc.Server) {
-	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		rs := NewRoutingServer(router, nil)
-		RegisterRoutingServiceServer(server, rs)
+	rs := &routingServer{
+		s:            s.v,
+		ohm:          nil,
+		router:       nil,
+		routingStats: nil,
+	}
 
-		// For compatibility purposes
-		vCoreDesc := RoutingService_ServiceDesc
-		vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
-		server.RegisterService(&vCoreDesc, rs)
+	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager, om outbound.Manager) {
+		rs.ohm = om
+		rs.router = router
 	}))
+
+	RegisterRoutingServiceServer(server, rs)
+	// For compatibility purposes
+	vCoreDesc := RoutingService_ServiceDesc
+	vCoreDesc.ServiceName = "v2ray.core.app.router.command.RoutingService"
+	server.RegisterService(&vCoreDesc, rs)
 }
 
 func init() {

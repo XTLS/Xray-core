@@ -7,6 +7,7 @@ option java_package = "com.xray.app.router.command";
 option java_multiple_files = true;
 
 import "common/net/network.proto";
+import "app/router/config.proto";
 
 // RoutingContext is the context with information relative to routing process.
 // It conforms to the structure of xray.features.routing.Context and
@@ -24,6 +25,7 @@ message RoutingContext {
   map<string, string> Attributes = 10;
   repeated string OutboundGroupTags = 11;
   string OutboundTag = 12;
+  string Tag = 13;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
@@ -60,10 +62,87 @@ message TestRouteRequest {
   bool PublishResult = 3;
 }
 
+message AddRoutingRuleRequest{
+  xray.app.router.RoutingRule routingRule = 1;
+  int32 index = 2;
+}
+
+message AddRoutingRuleResponse {}
+
+message AlterRoutingRuleRequest{
+  string tag = 1;
+  xray.app.router.RoutingRule routingRule = 2;
+}
+message AlterRoutingRuleResponse {}
+
+message RemoveRoutingRuleRequest{
+  string tag = 1;
+}
+message RemoveRoutingRuleResponse {}
+
+message SetRoutingRulesRequest{
+  repeated  xray.app.router.RoutingRule rules = 1;
+}
+
+message SetRoutingRulesResponse{
+}
+
+message GetRoutingRulesRequest{
+}
+
+message GetRoutingRulesResponse{
+  repeated  xray.app.router.RoutingRule rules = 1;
+}
+
+message GetRoutingRuleRequest{
+  string tag = 1;
+}
+
+message GetRoutingRuleResponse{
+  xray.app.router.RoutingRule rule = 1;
+  int32 idx = 2;
+}
+
+message AddBalancingRuleRequest{
+  xray.app.router.BalancingRule balancing = 1;
+}
+
+message AddBalancingRuleResponse {}
+
+message AlterBalancingRuleRequest{
+  string tag = 1;
+  xray.app.router.BalancingRule balancing = 2;
+}
+message AlterBalancingRuleResponse {}
+
+message RemoveBalancingRuleRequest{
+  string tag = 1;
+}
+message RemoveBalancingRuleResponse {}
+
+message GetBalancerRequest{
+}
+
+message GetBalancerResponse {
+  repeated xray.app.router.BalancingRule balancing = 1;
+}
+
 service RoutingService {
-  rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
-      returns (stream RoutingContext) {}
+  rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest) returns (stream RoutingContext) {}
   rpc TestRoute(TestRouteRequest) returns (RoutingContext) {}
+  // AddRule When adding a routing rule, make sure that the new rule does not conflict with the API route, otherwise the API will not work properly
+  rpc AddRule(AddRoutingRuleRequest) returns (AddRoutingRuleResponse){}
+  rpc AlterRule(AlterRoutingRuleRequest) returns (AlterRoutingRuleResponse){}
+  rpc RemoveRule(RemoveRoutingRuleRequest) returns (RemoveRoutingRuleResponse){}
+  // SetRules Routing rules must be set to ensure that the API route must exist, otherwise the API will not work properly
+  rpc SetRules(SetRoutingRulesRequest)returns(SetRoutingRulesResponse){}
+  rpc GetRules(GetRoutingRulesRequest)returns(GetRoutingRulesResponse){}
+  rpc GetRule(GetRoutingRuleRequest)returns(GetRoutingRuleResponse){}
+
+  rpc AddBalancer(AddBalancingRuleRequest) returns (AddBalancingRuleResponse){}
+  rpc AlterBalancer(AlterBalancingRuleRequest) returns (AlterBalancingRuleResponse){}
+  rpc RemoveBalancer(RemoveBalancingRuleRequest) returns (RemoveBalancingRuleResponse){}
+  rpc GetBalancers(GetBalancerRequest) returns (GetBalancerResponse){}
 }
 
 message Config {}

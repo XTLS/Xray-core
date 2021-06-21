@@ -15,6 +15,10 @@ type Context struct {
 	Content  *session.Content
 }
 
+func (ctx *Context) GetTag() string {
+	return ""
+}
+
 // GetInboundTag implements routing.Context.
 func (ctx *Context) GetInboundTag() string {
 	if ctx.Inbound == nil {

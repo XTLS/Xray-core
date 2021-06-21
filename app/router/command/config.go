@@ -51,6 +51,7 @@ var fieldMap = map[string]func(*RoutingContext, routing.Route){
 	"attributes":     func(s *RoutingContext, r routing.Route) { s.Attributes = r.GetAttributes() },
 	"outbound_group": func(s *RoutingContext, r routing.Route) { s.OutboundGroupTags = r.GetOutboundGroupTags() },
 	"outbound":       func(s *RoutingContext, r routing.Route) { s.OutboundTag = r.GetOutboundTag() },
+	"tag":            func(s *RoutingContext, r routing.Route) { s.Tag = r.GetTag() },
 }
 
 // AsProtobufMessage takes selectors of fields and returns a function to convert routing.Route to protobuf RoutingContext.

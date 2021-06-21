@@ -93,3 +93,11 @@ func (mpl MemoryPortList) Contains(port Port) bool {
 	}
 	return false
 }
+
+func (mpl MemoryPortList) RestorePortList() *PortList {
+	list := &PortList{}
+	for _, pr := range mpl {
+		list.Range = append(list.Range, &PortRange{From: uint32(pr.From), To: uint32(pr.To)})
+	}
+	return list
+}

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"os"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -13,6 +14,7 @@ import (
 
 type Condition interface {
 	Apply(ctx routing.Context) bool
+	RestoreRoutingRule() interface{}
 }
 
 type ConditionChan []Condition
@@ -35,6 +37,59 @@ func (v *ConditionChan) Apply(ctx routing.Context) bool {
 		}
 	}
 	return true
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (v *ConditionChan) RestoreRoutingRule() interface{} {
+	rule := &RoutingRule{}
+	for _, condition := range *v {
+		cond := condition.RestoreRoutingRule()
+		switch condition.(type) {
+		case *AttributeMatcher:
+			{
+				rule.Attributes = cond.(string)
+			}
+		case *DomainMatcher:
+			{
+				rule.Domain = cond.([]*Domain)
+			}
+		case *InboundTagMatcher:
+			{
+				rule.InboundTag = cond.([]string)
+			}
+		case *MultiGeoIPMatcher:
+			{
+				if condition.(*MultiGeoIPMatcher).onSource {
+					rule.SourceGeoip = cond.([]*GeoIP)
+				} else {
+					rule.Geoip = cond.([]*GeoIP)
+				}
+			}
+		case NetworkMatcher:
+			{
+				rule.Networks = cond.([]net.Network)
+			}
+		case *PortMatcher:
+			{
+				if condition.(*PortMatcher).onSource {
+					rule.SourcePortList = cond.(*net.PortList)
+				} else {
+					rule.PortList = cond.(*net.PortList)
+				}
+			}
+		case *ProtocolMatcher:
+			{
+				rule.Protocol = cond.([]string)
+			}
+		case *UserMatcher:
+			{
+				rule.UserEmail = cond.([]string)
+			}
+		}
+		// fmt.Printf("%#v:={%#v}\n", condition, cond)
+	}
+
+	return rule
 }
 
 func (v *ConditionChan) Len() int {
@@ -64,6 +119,8 @@ func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
 
 type DomainMatcher struct {
 	matchers strmatcher.IndexMatcher
+	// domains routing API requires this backup.
+	domains []*Domain
 }
 
 func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
@@ -79,9 +136,14 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 		}
 	}
 	g.Build()
-	return &DomainMatcher{
+	matcher := &DomainMatcher{
 		matchers: g,
-	}, nil
+	}
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable == "1" {
+		matcher.domains = domains
+	}
+	return matcher, nil
 }
 
 func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
@@ -112,9 +174,16 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
+// RestoreRoutingRule Restore implements Condition.
+func (m *DomainMatcher) RestoreRoutingRule() interface{} {
+	return m.domains
+}
+
 type MultiGeoIPMatcher struct {
 	matchers []*GeoIPMatcher
 	onSource bool
+	// geoips routing API requires this backup.
+	geoips []*GeoIP
 }
 
 func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
@@ -130,6 +199,11 @@ func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, e
 	matcher := &MultiGeoIPMatcher{
 		matchers: matchers,
 		onSource: onSource,
+	}
+
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable == "1" {
+		matcher.geoips = geoips
 	}
 
 	return matcher, nil
@@ -151,6 +225,11 @@ func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
 		}
 	}
 	return false
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (m *MultiGeoIPMatcher) RestoreRoutingRule() interface{} {
+	return m.geoips
 }
 
 type PortMatcher struct {
@@ -175,8 +254,15 @@ func (v *PortMatcher) Apply(ctx routing.Context) bool {
 	}
 }
 
+// RestoreRoutingRule Restore implements Condition.
+func (v *PortMatcher) RestoreRoutingRule() interface{} {
+	return v.port.RestorePortList()
+}
+
 type NetworkMatcher struct {
 	list [8]bool
+	// network routing API requires this backup.
+	network []net.Network
 }
 
 func NewNetworkMatcher(network []net.Network) NetworkMatcher {
@@ -184,12 +270,21 @@ func NewNetworkMatcher(network []net.Network) NetworkMatcher {
 	for _, n := range network {
 		matcher.list[int(n)] = true
 	}
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable == "1" {
+		matcher.network = network
+	}
 	return matcher
 }
 
 // Apply implements Condition.
 func (v NetworkMatcher) Apply(ctx routing.Context) bool {
 	return v.list[int(ctx.GetNetwork())]
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (v NetworkMatcher) RestoreRoutingRule() interface{} {
+	return v.network
 }
 
 type UserMatcher struct {
@@ -222,6 +317,11 @@ func (v *UserMatcher) Apply(ctx routing.Context) bool {
 	return false
 }
 
+// RestoreRoutingRule Restore implements Condition.
+func (v *UserMatcher) RestoreRoutingRule() interface{} {
+	return v.user
+}
+
 type InboundTagMatcher struct {
 	tags []string
 }
@@ -250,6 +350,11 @@ func (v *InboundTagMatcher) Apply(ctx routing.Context) bool {
 		}
 	}
 	return false
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (v *InboundTagMatcher) RestoreRoutingRule() interface{} {
+	return v.tags
 }
 
 type ProtocolMatcher struct {
@@ -284,8 +389,15 @@ func (m *ProtocolMatcher) Apply(ctx routing.Context) bool {
 	return false
 }
 
+// RestoreRoutingRule Restore implements Condition.
+func (m *ProtocolMatcher) RestoreRoutingRule() interface{} {
+	return m.protocols
+}
+
 type AttributeMatcher struct {
 	program *starlark.Program
+	// code routing API requires this backup.
+	code string
 }
 
 func NewAttributeMatcher(code string) (*AttributeMatcher, error) {
@@ -299,9 +411,15 @@ func NewAttributeMatcher(code string) (*AttributeMatcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AttributeMatcher{
+
+	attr := &AttributeMatcher{
 		program: p,
-	}, nil
+	}
+	// The routing API requires a backup content
+	if enable := os.Getenv("XRAY_ROUTER_API_GETSET"); enable != "" {
+		attr.code = code
+	}
+	return attr, nil
 }
 
 // Match implements attributes matching.
@@ -332,4 +450,9 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 	return m.Match(attributes)
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (m *AttributeMatcher) RestoreRoutingRule() interface{} {
+	return m.code
 }

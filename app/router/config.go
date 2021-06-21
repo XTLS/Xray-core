@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -46,21 +47,41 @@ func (l *CIDRList) Swap(i int, j int) {
 }
 
 type Rule struct {
-	Tag       string
-	Balancer  *Balancer
-	Condition Condition
+	Tag           string
+	TargetTag     string
+	DomainMatcher string
+	Balancer      *Balancer
+	Condition     Condition
 }
 
-func (r *Rule) GetTag() (string, error) {
+func (r *Rule) GetTargetTag() (string, error) {
 	if r.Balancer != nil {
 		return r.Balancer.PickOutbound()
 	}
-	return r.Tag, nil
+	return r.TargetTag, nil
 }
 
 // Apply checks rule matching of current routing context.
 func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
+}
+
+// RestoreRoutingRule Restore implements Condition.
+func (r *Rule) RestoreRoutingRule() interface{} {
+	rule := r.Condition.RestoreRoutingRule().(*RoutingRule)
+	rule.Tag = r.Tag
+	rule.DomainMatcher = r.DomainMatcher
+	if r.Balancer != nil {
+		rule.TargetTag = &RoutingRule_BalancingTag{
+			BalancingTag: rule.Tag,
+		}
+	} else {
+		rule.TargetTag = &RoutingRule_OutboundTag{
+			OutboundTag: rule.Tag,
+		}
+	}
+
+	return rule
 }
 
 func (rr *RoutingRule) BuildCondition() (Condition, error) {
@@ -84,7 +105,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
 			conds.Add(matcher)
 		}
-
 	}
 
 	if len(rr.UserEmail) > 0 {
@@ -156,6 +176,38 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	return conds, nil
+}
+
+// Build RoutingRule translates into Rule.
+func (rr *RoutingRule) Build(r *Router) (*Rule, error) {
+	tag := rr.Tag
+	if len(tag) == 0 {
+		u := uuid.New()
+		tag = u.String()
+	}
+	rule := &Rule{
+		Tag:           tag,
+		DomainMatcher: rr.DomainMatcher,
+	}
+
+	btag := rr.GetBalancingTag()
+	if len(btag) > 0 {
+		brule, found := r.balancers[btag]
+		if !found {
+			return nil, newError("balancer ", btag, " not found")
+		}
+		rule.Balancer = brule
+	} else {
+		rule.TargetTag = rr.GetTargetTag().(*RoutingRule_OutboundTag).OutboundTag
+	}
+
+	cond, err := rr.BuildCondition()
+	if err != nil {
+		return nil, err
+	}
+
+	rule.Condition = cond
+	return rule, nil
 }
 
 func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {

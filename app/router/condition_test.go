@@ -534,3 +534,114 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 		_ = matcher.Apply(ctx)
 	}
 }
+
+func TestConditionChan_RestoreCondition(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
+	rule := &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{OutboundTag: "test"},
+		Domain: []*Domain{
+			{
+				Value: "example.com",
+				Type:  Domain_Plain,
+			},
+			{
+				Value: "google.com",
+				Type:  Domain_Domain,
+			},
+			{
+				Value: "^facebook\\.com$",
+				Type:  Domain_Regex,
+			},
+		},
+		Geoip: []*GeoIP{
+			{
+				Cidr: []*CIDR{
+					{
+						Ip:     []byte{8, 8, 8, 8},
+						Prefix: 32,
+					},
+					{
+						Ip:     []byte{8, 8, 8, 8},
+						Prefix: 32,
+					},
+					{
+						Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
+						Prefix: 128,
+					},
+				},
+			},
+		},
+		PortList: &net.PortList{
+			Range: []*net.PortRange{
+				{From: 443, To: 443},
+				{From: 1000, To: 1100},
+			},
+		},
+		Networks:       []net.Network{net.Network_TCP},
+		SourceGeoip:    []*GeoIP{{CountryCode: "private", Cidr: []*CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
+		SourcePortList: &net.PortList{Range: []*net.PortRange{{From: 9999, To: 9999}}},
+		UserEmail:      []string{"love@xray.com"},
+		InboundTag:     []string{"tag-vmess"},
+		Protocol:       []string{"http", "tls", "bittorrent"},
+		Attributes:     "attrs[':method'] == 'GET'",
+		Tag:            "test",
+	}
+
+	condition, err := rule.BuildCondition()
+	if err != nil {
+		common.Must(err)
+		return
+	}
+
+	rr := condition.RestoreRoutingRule().(*RoutingRule)
+
+	if len(rule.Domain) != len(rr.Domain) {
+		t.Fatal("The Domain are different")
+		return
+	}
+
+	if len(rule.Geoip) != len(rr.Geoip) {
+		t.Fatal("The Geoip are different")
+		return
+	}
+
+	if len(rule.PortList.Range) != len(rr.PortList.Range) {
+		t.Fatal("The Geoip are different")
+		return
+	}
+
+	if len(rule.Networks) != len(rr.Networks) {
+		t.Fatal("The Networks are different")
+		return
+	}
+
+	if len(rule.SourceGeoip) != len(rr.SourceGeoip) {
+		t.Fatal("The SourceGeoip are different")
+		return
+	}
+
+	if len(rule.SourcePortList.Range) != len(rr.SourcePortList.Range) {
+		t.Fatal("The SourcePortList are different")
+		return
+	}
+
+	if len(rule.UserEmail) != len(rr.UserEmail) {
+		t.Fatal("The UserEmail are different")
+		return
+	}
+
+	if len(rule.InboundTag) != len(rr.InboundTag) {
+		t.Fatal("The InboundTag are different")
+		return
+	}
+
+	if len(rule.Protocol) != len(rr.Protocol) {
+		t.Fatal("The Protocol are different")
+		return
+	}
+
+	if rule.Attributes != rr.Attributes {
+		t.Fatal("The Attributes are different")
+		return
+	}
+}
