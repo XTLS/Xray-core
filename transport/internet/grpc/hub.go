@@ -114,7 +114,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 			}
 		}
 
-		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.ServiceName)
+		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.getNormalizedName())
 
 		if err = s.Serve(streamListener); err != nil {
 			newError("Listener for gRPC ended").Base(err).WriteToLog()
