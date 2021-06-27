@@ -39,7 +39,7 @@ func (c *gRPCServiceClient) TunCustomName(ctx context.Context, name string, opts
 }
 
 func (c *gRPCServiceClient) TunMultiCustomName(ctx context.Context, name string, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error) {
-	stream, err := c.cc.NewStream(ctx, &ServerDesc(name).Streams[0], "/"+name+"/TunMulti", opts...)
+	stream, err := c.cc.NewStream(ctx, &ServerDesc(name).Streams[1], "/"+name+"/TunMulti", opts...)
 	if err != nil {
 		return nil, err
 	}
