@@ -2,9 +2,10 @@ package duration_test
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
 )
 
 type testWithDuration struct {
