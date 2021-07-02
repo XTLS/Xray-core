@@ -228,7 +228,7 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 
 	if user != nil {
 		account := user.Account.(*MemoryAccount)
-		if account.Cipher.IsAEAD() {
+		if _, isAEAD := account.Cipher.(*AEADCipher); isAEAD {
 			payload.Clear()
 			payload.Write(d)
 		} else {
