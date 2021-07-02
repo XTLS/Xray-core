@@ -27,7 +27,7 @@ func (v *Validator) Add(u *protocol.MemoryUser) error {
 	defer v.Unlock()
 
 	account := u.Account.(*MemoryAccount)
-	if _, isAEAD := account.Cipher.(*AEADCipher); !isAEAD && len(v.users) > 0 {
+	if !account.Cipher.IsAEAD() && len(v.users) > 0 {
 		return newError("The cipher is not support Single-port Multi-user")
 	}
 	v.users = append(v.users, u)
@@ -77,8 +77,7 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 	defer v.RUnlock()
 
 	for _, user := range v.users {
-		account := user.Account.(*MemoryAccount)
-		if _, isAEAD := account.Cipher.(*AEADCipher); isAEAD {
+		if account := user.Account.(*MemoryAccount); account.Cipher.IsAEAD() {
 			aeadCipher := account.Cipher.(*AEADCipher)
 			ivLen = aeadCipher.IVSize()
 			subkey := make([]byte, 32)
