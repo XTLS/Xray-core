@@ -267,7 +267,7 @@ type NoneCipher struct{}
 func (NoneCipher) KeySize() int32 { return 0 }
 func (NoneCipher) IVSize() int32  { return 0 }
 func (NoneCipher) IsAEAD() bool {
-	return true // to avoid OTA
+	return false
 }
 
 func (NoneCipher) NewDecryptionReader(key []byte, iv []byte, reader io.Reader) (buf.Reader, error) {
