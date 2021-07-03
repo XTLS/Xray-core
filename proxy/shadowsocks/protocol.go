@@ -74,6 +74,8 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	if user != nil {
 		reader = &FullReader{reader, bs[ivLen:]}
+		readSizeRemain -= int(ivLen)
+
 		if aead != nil {
 			auth := &crypto.AEADAuthenticator{
 				AEAD:           aead,
@@ -87,7 +89,6 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 			iv := append([]byte(nil), buffer.BytesTo(ivLen)...)
 			r, err = account.Cipher.NewDecryptionReader(account.Key, iv, reader)
 			if err != nil {
-				readSizeRemain -= int(buffer.Len())
 				DrainConnN(reader, readSizeRemain)
 				return nil, nil, newError("failed to initialize decoding stream").Base(err).AtError()
 			}
@@ -106,7 +107,6 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		Command: protocol.RequestCommandTCP,
 	}
 
-	readSizeRemain -= int(buffer.Len())
 	buffer.Clear()
 
 	addr, port, err := addrParser.ReadAddressPort(buffer, br)
