@@ -127,10 +127,11 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions = append(dialOptions, grpc.WithInsecure())
 	}
 
-	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 {
+	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 || grpcSettings.PermitWithoutStream {
 		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:    time.Second * time.Duration(grpcSettings.IdleTimeout),
-			Timeout: time.Second * time.Duration(grpcSettings.HealthCheckTimeout),
+			Time:                time.Second * time.Duration(grpcSettings.IdleTimeout),
+			Timeout:             time.Second * time.Duration(grpcSettings.HealthCheckTimeout),
+			PermitWithoutStream: grpcSettings.PermitWithoutStream,
 		}))
 	}
 

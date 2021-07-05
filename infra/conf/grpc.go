@@ -7,10 +7,11 @@ import (
 )
 
 type GRPCConfig struct {
-	ServiceName        string `json:"serviceName" `
-	MultiMode          bool   `json:"multiMode"`
-	IdleTimeout        int32  `json:"idle_timeout"`
-	HealthCheckTimeout int32  `json:"health_check_timeout"`
+	ServiceName         string `json:"serviceName" `
+	MultiMode           bool   `json:"multiMode"`
+	IdleTimeout         int32  `json:"idle_timeout"`
+	HealthCheckTimeout  int32  `json:"health_check_timeout"`
+	PermitWithoutStream bool   `json:"permit_without_stream"`
 }
 
 func (g *GRPCConfig) Build() (proto.Message, error) {
@@ -21,9 +22,10 @@ func (g *GRPCConfig) Build() (proto.Message, error) {
 		g.HealthCheckTimeout = 0
 	}
 	return &grpc.Config{
-		ServiceName:        g.ServiceName,
-		MultiMode:          g.MultiMode,
-		IdleTimeout:        g.IdleTimeout,
-		HealthCheckTimeout: g.HealthCheckTimeout,
+		ServiceName:         g.ServiceName,
+		MultiMode:           g.MultiMode,
+		IdleTimeout:         g.IdleTimeout,
+		HealthCheckTimeout:  g.HealthCheckTimeout,
+		PermitWithoutStream: g.PermitWithoutStream,
 	}, nil
 }

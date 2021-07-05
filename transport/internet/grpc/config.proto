@@ -9,4 +9,5 @@ message Config {
   bool multi_mode = 3;
   int32 idle_timeout = 4;
   int32 health_check_timeout = 5;
+  bool permit_without_stream = 6;
 }
