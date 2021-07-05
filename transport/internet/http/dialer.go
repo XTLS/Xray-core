@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -20,8 +21,7 @@ import (
 
 type dialerConf struct {
 	net.Destination
-	*internet.SocketConfig
-	*tls.Config
+	*internet.MemoryStreamConfig
 }
 
 var (
@@ -29,7 +29,7 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config, sockopt *internet.SocketConfig) (*http.Client, error) {
+func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*http.Client, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -37,7 +37,14 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 		globalDialerMap = make(map[dialerConf]*http.Client)
 	}
 
-	if client, found := globalDialerMap[dialerConf{dest, sockopt, tlsSettings}]; found {
+	httpSettings := streamSettings.ProtocolSettings.(*Config)
+	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	if tlsConfig == nil {
+		return nil, newError("TLS must be enabled for http transport.").AtWarning()
+	}
+	sockopt := streamSettings.SocketSettings
+
+	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
 		return client, nil
 	}
 
@@ -86,25 +93,26 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			}
 			return cn, nil
 		},
-		TLSClientConfig: tlsSettings.GetTLSConfig(tls.WithDestination(dest)),
+		TLSClientConfig: tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
+	}
+
+	if httpSettings.IdleTimeout > 0 || httpSettings.HealthCheckTimeout > 0 {
+		transport.ReadIdleTimeout = time.Second * time.Duration(httpSettings.IdleTimeout)
+		transport.PingTimeout = time.Second * time.Duration(httpSettings.HealthCheckTimeout)
 	}
 
 	client := &http.Client{
 		Transport: transport,
 	}
 
-	globalDialerMap[dialerConf{dest, sockopt, tlsSettings}] = client
+	globalDialerMap[dialerConf{dest, streamSettings}] = client
 	return client, nil
 }
 
 // Dial dials a new TCP connection to the given destination.
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (internet.Connection, error) {
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
-	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	if tlsConfig == nil {
-		return nil, newError("TLS must be enabled for http transport.").AtWarning()
-	}
-	client, err := getHTTPClient(ctx, dest, tlsConfig, streamSettings.SocketSettings)
+	client, err := getHTTPClient(ctx, dest, streamSettings)
 	if err != nil {
 		return nil, err
 	}

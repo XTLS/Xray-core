@@ -2,9 +2,11 @@ package grpc
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -75,12 +77,19 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 
 	config := tls.ConfigFromStreamSettings(settings)
 
+	var options []grpc.ServerOption
 	var s *grpc.Server
-	if config == nil {
-		s = grpc.NewServer()
-	} else {
-		s = grpc.NewServer(grpc.Creds(credentials.NewTLS(config.GetTLSConfig(tls.WithNextProto("h2")))))
+	if config != nil {
+		options = append(options, grpc.Creds(credentials.NewTLS(config.GetTLSConfig(tls.WithNextProto("h2")))))
 	}
+	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 {
+		options = append(options, grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    time.Second * time.Duration(grpcSettings.IdleTimeout),
+			Timeout: time.Second * time.Duration(grpcSettings.HealthCheckTimeout),
+		}))
+	}
+
+	s = grpc.NewServer(options...)
 	listener.s = s
 
 	if settings.SocketSettings != nil && settings.SocketSettings.AcceptProxyProtocol {

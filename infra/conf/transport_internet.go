@@ -179,14 +179,24 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 }
 
 type HTTPConfig struct {
-	Host *StringList `json:"host"`
-	Path string      `json:"path"`
+	Host               *StringList `json:"host"`
+	Path               string      `json:"path"`
+	ReadIdleTimeout    int32       `json:"read_idle_timeout"`
+	HealthCheckTimeout int32       `json:"health_check_timeout"`
 }
 
 // Build implements Buildable.
 func (c *HTTPConfig) Build() (proto.Message, error) {
+	if c.ReadIdleTimeout <= 0 {
+		c.ReadIdleTimeout = 0
+	}
+	if c.HealthCheckTimeout <= 0 {
+		c.HealthCheckTimeout = 0
+	}
 	config := &http.Config{
-		Path: c.Path,
+		Path:               c.Path,
+		IdleTimeout:        c.ReadIdleTimeout,
+		HealthCheckTimeout: c.HealthCheckTimeout,
 	}
 	if c.Host != nil {
 		config.Host = []string(*c.Host)
