@@ -2,6 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/common/matcher/domain"
 	"reflect"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	clog "github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -154,9 +156,9 @@ func TestXrayConfig(t *testing.T) {
 						DomainStrategy: router.Config_AsIs,
 						Rule: []*router.RoutingRule{
 							{
-								Geoip: []*router.GeoIP{
+								Geoip: []*geoip.GeoIP{
 									{
-										Cidr: []*router.CIDR{
+										Cidr: []*geoip.CIDR{
 											{
 												Ip:     []byte{10, 0, 0, 0},
 												Prefix: 8,
@@ -366,6 +368,52 @@ func TestMuxConfig_Build(t *testing.T) {
 			common.Must(json.Unmarshal([]byte(tt.fields), m))
 			if got := m.Build(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSniffingConfig_Build(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields string
+		want   *proxyman.SniffingConfig
+	}{
+		{"default", `
+{
+	"enabled": true, 
+	"destOverride": ["tls"],
+	"domainsExcluded": ["domain:google.com"],
+	"ipsExcluded": ["8.8.8.8"]
+}`, &proxyman.SniffingConfig{
+			Enabled:             true,
+			DestinationOverride: []string{"tls"},
+			DomainsExcluded: []*domain.Domain{
+				{
+					Type:  domain.MatchingType_Subdomain,
+					Value: "google.com",
+				},
+			},
+			IpsExcluded: []*geoip.GeoIP{
+				{
+					Cidr: []*geoip.CIDR{{Ip: []byte{8, 8, 8, 8}, Prefix: 32}},
+				},
+			},
+		}},
+		{"empty def", `{}`, &proxyman.SniffingConfig{
+			Enabled: false,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &SniffingConfig{}
+			common.Must(json.Unmarshal([]byte(tt.fields), m))
+			got, err := m.Build()
+			if err != nil {
+				t.Errorf("%v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("SniffingConfig.Build() = %v, want %v", got, tt.want)
 			}
 		})
 	}

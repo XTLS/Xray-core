@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/matcher/geoip"
+	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
@@ -25,11 +25,23 @@ type Server interface {
 
 // Client is the interface for DNS client.
 type Client struct {
-	server       Server
-	clientIP     net.IP
-	skipFallback bool
-	domains      []string
-	expectIPs    []*router.GeoIPMatcher
+	server        Server
+	clientIP      net.IP
+	skipFallback  bool
+	expectIPs     []*geoip.GeoIPMatcher
+	domainMatcher str.MatcherGroup
+	originRules   []*NameServer_OriginalRule
+}
+
+func (c Client) findRule(idx uint32) string {
+	for _, r := range c.originRules {
+		if idx <= r.Size {
+			return r.Rule
+		}
+		idx -= r.Size
+	}
+
+	return "unknown rule"
 }
 
 var errExpectedIPNonMatch = errors.New("expectIPs not match")
@@ -64,7 +76,7 @@ func NewServer(dest net.Destination, dispatcher routing.Dispatcher) (Server, err
 }
 
 // NewClient creates a DNS client managing a name server with client IP, domain rules and expected IPs.
-func NewClient(ctx context.Context, ns *NameServer, clientIP net.IP, container router.GeoIPMatcherContainer, matcherInfos *[]DomainMatcherInfo, updateDomainRule func(strmatcher.Matcher, int, []DomainMatcherInfo) error) (*Client, error) {
+func NewClient(ctx context.Context, ns *NameServer, clientIP net.IP, container geoip.GeoIPMatcherContainer) (*Client, error) {
 	client := &Client{}
 
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
@@ -79,55 +91,38 @@ func NewClient(ctx context.Context, ns *NameServer, clientIP net.IP, container r
 			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
 			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)
 			// The following lines is a solution to avoid core panics（rule index out of range） when setting `localhost` DNS client in config.
-			// Because the `localhost` DNS client will apend len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
+			// Because the `localhost` DNS client will append len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
 			// But `matcherInfos` has no enough length to add rules, which leads to core panics (rule index out of range).
 			// To avoid this, the length of `matcherInfos` must be equal to the expected, so manually append it with Golang default zero value first for later modification.
-			for i := 0; i < len(localTLDsAndDotlessDomains); i++ {
-				*matcherInfos = append(*matcherInfos, DomainMatcherInfo{
-					clientIdx:     uint16(0),
-					domainRuleIdx: uint16(0),
-				})
-			}
+			// ;)
+			/*
+				for i := 0; i < len(localTLDsAndDotlessDomains); i++ {
+					*matcherInfos = append(*matcherInfos, DomainMatcherInfo{
+						clientIdx:     uint16(0),
+						domainRuleIdx: uint16(0),
+					})
+				}
+			*/
 		}
 
 		// Establish domain rules
-		var rules []string
-		ruleCurr := 0
-		ruleIter := 0
+		var domainMatcher = str.MatcherGroup{}
 		for _, domain := range ns.PrioritizedDomain {
-			domainRule, err := toStrMatcher(domain.Type, domain.Domain)
+			domainRule, err := toStrMatcher(domain.Type, domain.Value)
 			if err != nil {
 				return newError("failed to create prioritized domain").Base(err).AtWarning()
 			}
-			originalRuleIdx := ruleCurr
-			if ruleCurr < len(ns.OriginalRules) {
-				rule := ns.OriginalRules[ruleCurr]
-				if ruleCurr >= len(rules) {
-					rules = append(rules, rule.Rule)
-				}
-				ruleIter++
-				if ruleIter >= int(rule.Size) {
-					ruleIter = 0
-					ruleCurr++
-				}
-			} else { // No original rule, generate one according to current domain matcher (majorly for compatibility with tests)
-				rules = append(rules, domainRule.String())
-				ruleCurr++
-			}
-			err = updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
-			if err != nil {
-				return newError("failed to create prioritized domain").Base(err).AtWarning()
-			}
+			domainMatcher.Add(domainRule)
 		}
 
 		// Establish expected IPs
-		var matchers []*router.GeoIPMatcher
+		var ipMatchers []*geoip.GeoIPMatcher
 		for _, geoip := range ns.Geoip {
 			matcher, err := container.Add(geoip)
 			if err != nil {
 				return newError("failed to create ip matcher").Base(err).AtWarning()
 			}
-			matchers = append(matchers, matcher)
+			ipMatchers = append(ipMatchers, matcher)
 		}
 
 		if len(clientIP) > 0 {
@@ -141,8 +136,9 @@ func NewClient(ctx context.Context, ns *NameServer, clientIP net.IP, container r
 
 		client.server = server
 		client.clientIP = clientIP
-		client.domains = rules
-		client.expectIPs = matchers
+		client.expectIPs = ipMatchers
+		client.originRules = ns.OriginalRules
+		client.domainMatcher = domainMatcher
 		return nil
 	})
 	return client, err

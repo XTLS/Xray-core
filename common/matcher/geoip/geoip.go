@@ -1,4 +1,4 @@
-package router
+package geoip
 
 import (
 	"encoding/binary"
@@ -7,17 +7,24 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+
 type ipv6 struct {
 	a uint64
 	b uint64
 }
 
 type GeoIPMatcher struct {
-	countryCode string
-	ip4         []uint32
-	prefix4     []uint8
-	ip6         []ipv6
-	prefix6     []uint8
+	countryCode  string
+	reverseMatch bool
+	ip4          []uint32
+	prefix4      []uint8
+	ip6          []ipv6
+	prefix6      []uint8
+}
+
+func (m *GeoIPMatcher) SetReverseMatch(isReverseMatch bool) {
+	m.reverseMatch = isReverseMatch
 }
 
 func normalize4(ip uint32, prefix uint8) uint32 {
@@ -147,8 +154,17 @@ func (m *GeoIPMatcher) match6(ip ipv6) bool {
 func (m *GeoIPMatcher) Match(ip net.IP) bool {
 	switch len(ip) {
 	case 4:
+		if m.reverseMatch {
+			return !m.match4(binary.BigEndian.Uint32(ip))
+		}
 		return m.match4(binary.BigEndian.Uint32(ip))
 	case 16:
+		if m.reverseMatch {
+			return !m.match6(ipv6{
+				a: binary.BigEndian.Uint64(ip[0:8]),
+				b: binary.BigEndian.Uint64(ip[8:16]),
+			})
+		}
 		return m.match6(ipv6{
 			a: binary.BigEndian.Uint64(ip[0:8]),
 			b: binary.BigEndian.Uint64(ip[8:16]),
@@ -168,14 +184,15 @@ type GeoIPMatcherContainer struct {
 func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 	if len(geoip.CountryCode) > 0 {
 		for _, m := range c.matchers {
-			if m.countryCode == geoip.CountryCode {
+			if m.countryCode == geoip.CountryCode && m.reverseMatch == geoip.ReverseMatch {
 				return m, nil
 			}
 		}
 	}
 
 	m := &GeoIPMatcher{
-		countryCode: geoip.CountryCode,
+		countryCode:  geoip.CountryCode,
+		reverseMatch: geoip.ReverseMatch,
 	}
 	if err := m.Init(geoip.Cidr); err != nil {
 		return nil, err
@@ -187,5 +204,5 @@ func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 }
 
 var (
-	globalGeoIPContainer GeoIPMatcherContainer
+	GlobalGeoIPContainer GeoIPMatcherContainer
 )

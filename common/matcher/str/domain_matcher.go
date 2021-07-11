@@ -1,4 +1,4 @@
-package strmatcher
+package str
 
 import "strings"
 

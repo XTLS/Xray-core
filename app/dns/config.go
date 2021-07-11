@@ -1,31 +1,32 @@
 package dns
 
 import (
+	dm "github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/str"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/common/uuid"
 )
 
-var typeMap = map[DomainMatchingType]strmatcher.Type{
-	DomainMatchingType_Full:      strmatcher.Full,
-	DomainMatchingType_Subdomain: strmatcher.Domain,
-	DomainMatchingType_Keyword:   strmatcher.Substr,
-	DomainMatchingType_Regex:     strmatcher.Regex,
+var typeMap = map[dm.MatchingType]str.Type{
+	dm.MatchingType_Keyword:   str.Substr,
+	dm.MatchingType_Regex:     str.Regex,
+	dm.MatchingType_Subdomain: str.Domain,
+	dm.MatchingType_Full:      str.Full,
 }
 
 // References:
 // https://www.iana.org/assignments/special-use-domain-names/special-use-domain-names.xhtml
 // https://unix.stackexchange.com/questions/92441/whats-the-difference-between-local-home-and-lan
-var localTLDsAndDotlessDomains = []*NameServer_PriorityDomain{
-	{Type: DomainMatchingType_Regex, Domain: "^[^.]+$"}, // This will only match domains without any dot
-	{Type: DomainMatchingType_Subdomain, Domain: "local"},
-	{Type: DomainMatchingType_Subdomain, Domain: "localdomain"},
-	{Type: DomainMatchingType_Subdomain, Domain: "localhost"},
-	{Type: DomainMatchingType_Subdomain, Domain: "lan"},
-	{Type: DomainMatchingType_Subdomain, Domain: "home.arpa"},
-	{Type: DomainMatchingType_Subdomain, Domain: "example"},
-	{Type: DomainMatchingType_Subdomain, Domain: "invalid"},
-	{Type: DomainMatchingType_Subdomain, Domain: "test"},
+var localTLDsAndDotlessDomains = []*dm.Domain{
+	{Type: dm.MatchingType_Regex, Value: "^[^.]+$"}, // This will only match domains without any dot
+	{Type: dm.MatchingType_Subdomain, Value: "local"},
+	{Type: dm.MatchingType_Subdomain, Value: "localdomain"},
+	{Type: dm.MatchingType_Subdomain, Value: "localhost"},
+	{Type: dm.MatchingType_Subdomain, Value: "lan"},
+	{Type: dm.MatchingType_Subdomain, Value: "home.arpa"},
+	{Type: dm.MatchingType_Subdomain, Value: "example"},
+	{Type: dm.MatchingType_Subdomain, Value: "invalid"},
+	{Type: dm.MatchingType_Subdomain, Value: "test"},
 }
 
 var localTLDsAndDotlessDomainsRule = &NameServer_OriginalRule{
@@ -33,7 +34,7 @@ var localTLDsAndDotlessDomainsRule = &NameServer_OriginalRule{
 	Size: uint32(len(localTLDsAndDotlessDomains)),
 }
 
-func toStrMatcher(t DomainMatchingType, domain string) (strmatcher.Matcher, error) {
+func toStrMatcher(t dm.MatchingType, domain string) (str.Matcher, error) {
 	strMType, f := typeMap[t]
 	if !f {
 		return nil, newError("unknown mapping type", t).AtWarning()

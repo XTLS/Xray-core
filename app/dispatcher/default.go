@@ -178,8 +178,8 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
-	for _, d := range request.ExcludeForDomain {
-		if strings.ToLower(domain) == d {
+	if request.ExcludedDomainMatcher != nil {
+		if request.ExcludedDomainMatcher.ApplyDomain(domain) {
 			return false
 		}
 	}
@@ -205,6 +205,16 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 	return false
 }
 
+func canSniff(ctx context.Context, req session.SniffingRequest, destination net.Destination) bool {
+	if destination.Address.Family().IsIP() && req.ExcludedIPMatcher != nil {
+		if req.ExcludedIPMatcher.MatchIP(destination.Address.IP()) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Dispatch implements routing.Dispatcher.
 func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destination) (*transport.Link, error) {
 	if !destination.IsValid() {
@@ -222,6 +232,12 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		ctx = session.ContextWithContent(ctx, content)
 	}
 	sniffingRequest := content.SniffingRequest
+
+	if !canSniff(ctx, sniffingRequest, destination) {
+		newError("skip sniffing for ip ", destination.Address.String()).AtDebug().WriteToLog()
+		sniffingRequest.Enabled = false
+	}
+
 	switch {
 	case !sniffingRequest.Enabled:
 		go d.routedDispatch(ctx, outbound, destination)

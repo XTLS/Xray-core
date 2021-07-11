@@ -6,6 +6,8 @@ import (
 	"math/rand"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal"
@@ -60,7 +62,8 @@ type Outbound struct {
 
 // SniffingRequest controls the behavior of content sniffing.
 type SniffingRequest struct {
-	ExcludeForDomain               []string
+	ExcludedDomainMatcher          *domain.DomainMatcher
+	ExcludedIPMatcher              *geoip.MultiGeoIPMatcher
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool

@@ -7,6 +7,8 @@ import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/infra/conf"
 )
@@ -73,13 +75,13 @@ func TestRouterConfig(t *testing.T) {
 				},
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
+						Domain: []*domain.Domain{
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "baidu.com",
 							},
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "qq.com",
 							},
 						},
@@ -88,9 +90,9 @@ func TestRouterConfig(t *testing.T) {
 						},
 					},
 					{
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										Ip:     []byte{10, 0, 0, 0},
 										Prefix: 8,
@@ -161,13 +163,13 @@ func TestRouterConfig(t *testing.T) {
 				DomainStrategy: router.Config_IpIfNonMatch,
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
+						Domain: []*domain.Domain{
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "baidu.com",
 							},
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "qq.com",
 							},
 						},
@@ -176,9 +178,9 @@ func TestRouterConfig(t *testing.T) {
 						},
 					},
 					{
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										Ip:     []byte{10, 0, 0, 0},
 										Prefix: 8,
@@ -224,13 +226,13 @@ func TestRouterConfig(t *testing.T) {
 				DomainStrategy: router.Config_AsIs,
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
+						Domain: []*domain.Domain{
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "baidu.com",
 							},
 							{
-								Type:  router.Domain_Plain,
+								Type:  domain.MatchingType_Keyword,
 								Value: "qq.com",
 							},
 						},
@@ -239,9 +241,9 @@ func TestRouterConfig(t *testing.T) {
 						},
 					},
 					{
-						Geoip: []*router.GeoIP{
+						Geoip: []*geoip.GeoIP{
 							{
-								Cidr: []*router.CIDR{
+								Cidr: []*geoip.CIDR{
 									{
 										Ip:     []byte{10, 0, 0, 0},
 										Prefix: 8,

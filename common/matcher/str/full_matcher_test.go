@@ -1,10 +1,10 @@
-package strmatcher_test
+package str_test
 
 import (
 	"reflect"
 	"testing"
 
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/matcher/str"
 )
 
 func TestFullMatcherGroup(t *testing.T) {

@@ -2,7 +2,7 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/transport/internet"
+
 	"log"
 	"os"
 	"strings"
@@ -10,8 +10,12 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
+	"github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/domain/conf"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
@@ -62,6 +66,7 @@ type SniffingConfig struct {
 	Enabled         bool        `json:"enabled"`
 	DestOverride    *StringList `json:"destOverride"`
 	DomainsExcluded *StringList `json:"domainsExcluded"`
+	IPsExcluded     *StringList `json:"ipsExcluded"`
 	MetadataOnly    bool        `json:"metadataOnly"`
 }
 
@@ -83,17 +88,31 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		}
 	}
 
-	var d []string
+	var exDomain []*domain.Domain
 	if c.DomainsExcluded != nil {
-		for _, domain := range *c.DomainsExcluded {
-			d = append(d, strings.ToLower(domain))
+		for _, dmr := range *c.DomainsExcluded {
+			if dm, err := conf.ParseDomainRule(dmr); err == nil {
+				exDomain = append(exDomain, dm...)
+			} else {
+				return nil, newError("failed to parse excluded domain").Base(err)
+			}
 		}
+	}
+
+	var exIP []*geoip.GeoIP
+	if c.IPsExcluded != nil {
+		exip, err := geoip.ParseIPList(*c.IPsExcluded)
+		if err != nil {
+			return nil, newError("failed to parse excluded ip").Base(err)
+		}
+		exIP = exip
 	}
 
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: p,
-		DomainsExcluded:     d,
+		DomainsExcluded:     exDomain,
+		IpsExcluded:         exIP,
 		MetadataOnly:        c.MetadataOnly,
 	}, nil
 }

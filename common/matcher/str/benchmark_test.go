@@ -1,23 +1,23 @@
-package strmatcher_test
+package str_test
 
 import (
 	"strconv"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/matcher/str"
 )
 
 func BenchmarkACAutomaton(b *testing.B) {
 	ac := NewACAutomaton()
 	for i := 1; i <= 1024; i++ {
-		ac.Add(strconv.Itoa(i)+".v2ray.com", Domain)
+		ac.Add(strconv.Itoa(i)+".xray.com", Domain)
 	}
 	ac.Build()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = ac.Match("0.v2ray.com")
+		_ = ac.Match("0.xray.com")
 	}
 }
 

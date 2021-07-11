@@ -1,49 +1,12 @@
 package router
 
 import (
+	dm "github.com/xtls/xray-core/common/matcher/domain"
+	"github.com/xtls/xray-core/common/matcher/geoip"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
-
-// CIDRList is an alias of []*CIDR to provide sort.Interface.
-type CIDRList []*CIDR
-
-// Len implements sort.Interface.
-func (l *CIDRList) Len() int {
-	return len(*l)
-}
-
-// Less implements sort.Interface.
-func (l *CIDRList) Less(i int, j int) bool {
-	ci := (*l)[i]
-	cj := (*l)[j]
-
-	if len(ci.Ip) < len(cj.Ip) {
-		return true
-	}
-
-	if len(ci.Ip) > len(cj.Ip) {
-		return false
-	}
-
-	for k := 0; k < len(ci.Ip); k++ {
-		if ci.Ip[k] < cj.Ip[k] {
-			return true
-		}
-
-		if ci.Ip[k] > cj.Ip[k] {
-			return false
-		}
-	}
-
-	return ci.Prefix < cj.Prefix
-}
-
-// Swap implements sort.Interface.
-func (l *CIDRList) Swap(i int, j int) {
-	(*l)[i], (*l)[j] = (*l)[j], (*l)[i]
-}
 
 type Rule struct {
 	Tag       string
@@ -69,7 +32,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	if len(rr.Domain) > 0 {
 		switch rr.DomainMatcher {
 		case "linear":
-			matcher, err := NewDomainMatcher(rr.Domain)
+			matcher, err := dm.NewDomainMatcher(rr.Domain)
 			if err != nil {
 				return nil, newError("failed to build domain condition").Base(err)
 			}
@@ -77,7 +40,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		case "mph", "hybrid":
 			fallthrough
 		default:
-			matcher, err := NewMphMatcherGroup(rr.Domain)
+			matcher, err := dm.NewMphMatcherGroup(rr.Domain)
 			if err != nil {
 				return nil, newError("failed to build domain condition with MphDomainMatcher").Base(err)
 			}
@@ -112,13 +75,13 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Geoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.Geoip, false)
+		cond, err := geoip.NewMultiGeoIPMatcher(rr.Geoip, false)
 		if err != nil {
 			return nil, err
 		}
 		conds.Add(cond)
 	} else if len(rr.Cidr) > 0 {
-		cond, err := NewMultiGeoIPMatcher([]*GeoIP{{Cidr: rr.Cidr}}, false)
+		cond, err := geoip.NewMultiGeoIPMatcher([]*geoip.GeoIP{{Cidr: rr.Cidr}}, false)
 		if err != nil {
 			return nil, err
 		}
@@ -126,13 +89,13 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.SourceGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, true)
+		cond, err := geoip.NewMultiGeoIPMatcher(rr.SourceGeoip, true)
 		if err != nil {
 			return nil, err
 		}
 		conds.Add(cond)
 	} else if len(rr.SourceCidr) > 0 {
-		cond, err := NewMultiGeoIPMatcher([]*GeoIP{{Cidr: rr.SourceCidr}}, true)
+		cond, err := geoip.NewMultiGeoIPMatcher([]*geoip.GeoIP{{Cidr: rr.SourceCidr}}, true)
 		if err != nil {
 			return nil, err
 		}

@@ -7,7 +7,6 @@ import (
 	"go.starlark.net/syntax"
 
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -39,118 +38,6 @@ func (v *ConditionChan) Apply(ctx routing.Context) bool {
 
 func (v *ConditionChan) Len() int {
 	return len(*v)
-}
-
-var matcherTypeMap = map[Domain_Type]strmatcher.Type{
-	Domain_Plain:  strmatcher.Substr,
-	Domain_Regex:  strmatcher.Regex,
-	Domain_Domain: strmatcher.Domain,
-	Domain_Full:   strmatcher.Full,
-}
-
-func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
-	matcherType, f := matcherTypeMap[domain.Type]
-	if !f {
-		return nil, newError("unsupported domain type", domain.Type)
-	}
-
-	matcher, err := matcherType.New(domain.Value)
-	if err != nil {
-		return nil, newError("failed to create domain matcher").Base(err)
-	}
-
-	return matcher, nil
-}
-
-type DomainMatcher struct {
-	matchers strmatcher.IndexMatcher
-}
-
-func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
-	g := strmatcher.NewMphMatcherGroup()
-	for _, d := range domains {
-		matcherType, f := matcherTypeMap[d.Type]
-		if !f {
-			return nil, newError("unsupported domain type", d.Type)
-		}
-		_, err := g.AddPattern(d.Value, matcherType)
-		if err != nil {
-			return nil, err
-		}
-	}
-	g.Build()
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
-}
-
-func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
-	g := new(strmatcher.MatcherGroup)
-	for _, d := range domains {
-		m, err := domainToMatcher(d)
-		if err != nil {
-			return nil, err
-		}
-		g.Add(m)
-	}
-
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
-}
-
-func (m *DomainMatcher) ApplyDomain(domain string) bool {
-	return len(m.matchers.Match(strings.ToLower(domain))) > 0
-}
-
-// Apply implements Condition.
-func (m *DomainMatcher) Apply(ctx routing.Context) bool {
-	domain := ctx.GetTargetDomain()
-	if len(domain) == 0 {
-		return false
-	}
-	return m.ApplyDomain(domain)
-}
-
-type MultiGeoIPMatcher struct {
-	matchers []*GeoIPMatcher
-	onSource bool
-}
-
-func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
-	var matchers []*GeoIPMatcher
-	for _, geoip := range geoips {
-		matcher, err := globalGeoIPContainer.Add(geoip)
-		if err != nil {
-			return nil, err
-		}
-		matchers = append(matchers, matcher)
-	}
-
-	matcher := &MultiGeoIPMatcher{
-		matchers: matchers,
-		onSource: onSource,
-	}
-
-	return matcher, nil
-}
-
-// Apply implements Condition.
-func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
-	var ips []net.IP
-	if m.onSource {
-		ips = ctx.GetSourceIPs()
-	} else {
-		ips = ctx.GetTargetIPs()
-	}
-	for _, ip := range ips {
-		for _, matcher := range m.matchers {
-			if matcher.Match(ip) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 type PortMatcher struct {

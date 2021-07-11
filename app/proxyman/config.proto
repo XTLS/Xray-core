@@ -6,6 +6,8 @@ option go_package = "github.com/xtls/xray-core/app/proxyman";
 option java_package = "com.xray.app.proxyman";
 option java_multiple_files = true;
 
+import "common/matcher/domain/domain.proto";
+import "common/matcher/geoip/geoip.proto";
 import "common/net/address.proto";
 import "common/net/port.proto";
 import "transport/internet/config.proto";
@@ -56,7 +58,9 @@ message SniffingConfig {
   // Override target destination if sniff'ed protocol is in the given list.
   // Supported values are "http", "tls", "fakedns".
   repeated string destination_override = 2;
-  repeated string domains_excluded = 3;
+
+  repeated xray.common.matcher.domain.Domain domains_excluded = 3;
+  repeated xray.common.matcher.geoip.GeoIP ips_excluded = 5;
   
   // Whether should only try to sniff metadata without waiting for client input.
   // Can be used to support SMTP like protocol where server send the first message.

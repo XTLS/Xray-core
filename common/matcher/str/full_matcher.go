@@ -1,4 +1,4 @@
-package strmatcher
+package str
 
 type FullMatcherGroup struct {
 	matchers map[string][]uint32
