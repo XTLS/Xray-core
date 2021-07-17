@@ -12,7 +12,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.21.2
 	github.com/miekg/dns v1.1.43
 	github.com/pelletier/go-toml v1.9.3
-	github.com/pires/go-proxyproto v0.5.0
+	github.com/pires/go-proxyproto v0.6.0
 	github.com/refraction-networking/utls v0.0.0-20201210053706-2179f286686b
 	github.com/seiflotfy/cuckoofilter v0.0.0-20201222105146-bc6005554a0c
 	github.com/stretchr/testify v1.7.0
