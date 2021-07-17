@@ -9,7 +9,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/gorilla/websocket v1.4.2
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/lucas-clemente/quic-go v0.21.1
+	github.com/lucas-clemente/quic-go v0.21.2
 	github.com/miekg/dns v1.1.43
 	github.com/pelletier/go-toml v1.9.3
 	github.com/pires/go-proxyproto v0.5.0
@@ -19,7 +19,7 @@ require (
 	github.com/xtls/go v0.0.0-20201118062508-3632bf3b7499
 	go.starlark.net v0.0.0-20210312235212-74c10e2c17dc
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
-	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
+	golang.org/x/net v0.0.0-20210428140749-89ef3d95e781
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 	google.golang.org/grpc v1.39.0
