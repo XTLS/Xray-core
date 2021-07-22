@@ -58,7 +58,7 @@ func (m *GeoIPMatcher) Init(cidrs []*CIDR) error {
 	m.ip6 = make([]ipv6, 0, ip6Count)
 	m.prefix6 = make([]uint8, 0, ip6Count)
 
-	for _, cidr := range cidrs {
+	for _, cidr := range cidrList {
 		ip := cidr.Ip
 		prefix := uint8(cidr.Prefix)
 		switch len(ip) {
