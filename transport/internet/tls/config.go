@@ -43,7 +43,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 // BuildCertificates builds a list of TLS certificates from proto definition.
 func (c *Config) BuildCertificates() []*tls.Certificate {
 	certs := make([]*tls.Certificate, 0, len(c.Certificate))
-	for _, entry := range c.Certificate {
+	for index, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
@@ -65,8 +65,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 				hotReloadCertInterval = entry.OcspStapling
 				isOcspstapling = true
 			}
-			index := len(certs) - 1
-			go func(cert *tls.Certificate, index int) {
+			go func(entry *Certificate, cert *tls.Certificate, index int) {
 				t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
 				for {
 					if entry.CertificatePath != "" && entry.KeyPath != "" {
@@ -107,7 +106,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 					certs[index] = cert
 					<-t.C
 				}
-			}(certs[len(certs)-1], index)
+			}(entry, certs[index], index)
 		}
 	}
 	return certs
