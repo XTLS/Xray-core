@@ -4,7 +4,6 @@ package buf
 
 import (
 	"io"
-	"runtime"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/platform"
@@ -134,17 +133,13 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return mb, nil
 }
 
-var useReadv = true
+var useReadv bool
 
 func init() {
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
 	value := platform.NewEnvFlag("xray.buf.readv").GetValue(func() string { return defaultFlagValue })
 	switch value {
-	case defaultFlagValue, "auto":
-		if (runtime.GOARCH == "386" || runtime.GOARCH == "amd64" || runtime.GOARCH == "s390x") && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows") {
-			useReadv = true
-		}
-	case "enable":
+	case defaultFlagValue, "auto", "enable":
 		useReadv = true
 	}
 }
