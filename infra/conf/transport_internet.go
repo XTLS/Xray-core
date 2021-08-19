@@ -141,7 +141,6 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 
 type WebSocketConfig struct {
 	Path                string            `json:"path"`
-	Path2               string            `json:"Path"` // The key was misspelled. For backward compatibility, we have to keep track the old key.
 	Headers             map[string]string `json:"headers"`
 	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
 }
@@ -149,9 +148,6 @@ type WebSocketConfig struct {
 // Build implements Buildable.
 func (c *WebSocketConfig) Build() (proto.Message, error) {
 	path := c.Path
-	if path == "" && c.Path2 != "" {
-		path = c.Path2
-	}
 	header := make([]*websocket.Header, 0, 32)
 	for key, value := range c.Headers {
 		header = append(header, &websocket.Header{
@@ -503,14 +499,13 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type SocketConfig struct {
-	Mark                int32       `json:"mark"`
-	TFO                 interface{} `json:"tcpFastOpen"`
-	TProxy              string      `json:"tproxy"`
-	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
-	DomainStrategy      string      `json:"domainStrategy"`
-	DialerProxy         string      `json:"dialerProxy"`
-
-	TCPKeepAliveInterval int32 `json:"tcpKeepAliveInterval"`
+	Mark                 int32       `json:"mark"`
+	TFO                  interface{} `json:"tcpFastOpen"`
+	TProxy               string      `json:"tproxy"`
+	AcceptProxyProtocol  bool        `json:"acceptProxyProtocol"`
+	DomainStrategy       string      `json:"domainStrategy"`
+	DialerProxy          string      `json:"dialerProxy"`
+	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
 }
 
 // Build implements Buildable.
