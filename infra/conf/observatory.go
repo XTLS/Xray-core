@@ -10,7 +10,7 @@ import (
 type ObservatoryConfig struct {
 	SubjectSelector []string          `json:"subjectSelector"`
 	ProbeURL        string            `json:"probeURL"`
-	ProbeInterval   duration.Duration `json:"ProbeInterval"`
+	ProbeInterval   duration.Duration `json:"probeInterval"`
 }
 
 func (o *ObservatoryConfig) Build() (proto.Message, error) {
