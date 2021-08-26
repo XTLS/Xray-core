@@ -66,22 +66,45 @@ func (o *Observer) background() {
 		}
 
 		outbounds := hs.Select(o.config.SubjectSelector)
-		sort.Strings(outbounds)
 
 		o.updateStatus(outbounds)
 
+		sleepTime := time.Second * 10
+		if o.config.ProbeInterval != 0 {
+			sleepTime = time.Duration(o.config.ProbeInterval)
+		}
+
+		if !o.config.EnableConcurrency {
+			sort.Strings(outbounds)
+			for _, v := range outbounds {
+				result := o.probe(v)
+				o.updateStatusForResult(v, &result)
+				if o.finished.Done() {
+					return
+				}
+				time.Sleep(sleepTime)
+			}
+			continue
+		}
+
+		ch := make(chan struct{}, len(outbounds))
+
 		for _, v := range outbounds {
-			result := o.probe(v)
-			o.updateStatusForResult(v, &result)
-			if o.finished.Done() {
+			go func(v string) {
+				result := o.probe(v)
+				o.updateStatusForResult(v, &result)
+				ch <- struct{}{}
+			}(v)
+		}
+
+		for range outbounds {
+			select {
+			case <-ch:
+			case <-o.finished.Wait():
 				return
 			}
-			sleepTime := time.Second * 10
-			if o.config.ProbeInterval != 0 {
-				sleepTime = time.Duration(o.config.ProbeInterval)
-			}
-			time.Sleep(sleepTime)
 		}
+		time.Sleep(sleepTime)
 	}
 }
 
