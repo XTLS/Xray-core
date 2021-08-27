@@ -333,3 +333,49 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 	}
 	return m.Match(attributes)
 }
+
+type UidMatcher struct {
+	uidList map[uint32]bool
+}
+
+func NewUidMatcher(list *net.UidList) *UidMatcher {
+	m := UidMatcher{uidList: map[uint32]bool{}}
+	for _, uid := range list.Uid {
+		m.uidList[uid] = true
+	}
+	return &m
+}
+
+func (u UidMatcher) Apply(ctx routing.Context) bool {
+	return u.uidList[ctx.GetUid()]
+}
+
+type AppStatusMatcher struct {
+	appStatus map[string]bool
+}
+
+func NewAppStatusMatcher(appStatus []string) *AppStatusMatcher {
+	m := &AppStatusMatcher{
+		appStatus: map[string]bool{},
+	}
+
+	for _, status := range appStatus {
+		m.appStatus[status] = true
+	}
+
+	return m
+}
+
+// Apply implements Condition.
+func (m *AppStatusMatcher) Apply(ctx routing.Context) bool {
+	status := ctx.GetAppStatus()
+	if len(status) == 0 {
+		return false
+	}
+	for _, s := range status {
+		if !m.appStatus[s] {
+			return false
+		}
+	}
+	return true
+}

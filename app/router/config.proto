@@ -8,6 +8,7 @@ option java_multiple_files = true;
 
 import "common/net/port.proto";
 import "common/net/network.proto";
+import "common/net/uid.proto";
 
 // Domain for routing decision.
 message Domain {
@@ -122,6 +123,10 @@ message RoutingRule {
   string attributes = 15;
 
   string domain_matcher = 17;
+
+  xray.common.net.UidList uid_list = 18;
+  repeated string app_status = 19;
+
 }
 
 message BalancingRule {
