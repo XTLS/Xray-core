@@ -172,7 +172,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
+	//ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.ConnectionIdle)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
 	clientReader := link.Reader // .(*pipe.Reader)

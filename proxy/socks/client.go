@@ -116,7 +116,8 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		newError("failed to clear deadline after handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	//ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, p.Timeouts.ConnectionIdle)
 	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
 
 	var requestFunc func() error

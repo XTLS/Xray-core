@@ -120,7 +120,7 @@ func SessionDefault() Session {
 			// Align Handshake timeout with nginx client_header_timeout
 			// So that this value will not indicate server identity
 			Handshake:      time.Second * 60,
-			ConnectionIdle: time.Second * 300,
+			ConnectionIdle: time.Second * 72000,
 			UplinkOnly:     time.Second * 1,
 			DownlinkOnly:   time.Second * 1,
 		},

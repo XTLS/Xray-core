@@ -312,7 +312,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				return newError(`failed to find the default "path" config`).AtWarning()
 			}
 
-			ctx, cancel := context.WithCancel(ctx)
+			//ctx, cancel := context.WithCancel(ctx)
+			ctx, cancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.ConnectionIdle)
 			timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 			ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
@@ -485,7 +486,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	}
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
+	//ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.ConnectionIdle)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
