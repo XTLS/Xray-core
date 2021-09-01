@@ -114,7 +114,7 @@ func NewDoHLocalNameServer(url *url.URL) *DoHNameServer {
 			if err != nil {
 				return nil, err
 			}
-			conn, err := internet.DialSystem(ctx, dest, nil)
+			conn, err := internet.DialSystemDNS(ctx, dest, nil)
 			log.Record(&log.AccessMessage{
 				From:   "DoH",
 				To:     s.dohURL,

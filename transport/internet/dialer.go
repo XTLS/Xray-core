@@ -161,6 +161,35 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
 }
 
+func DialSystemDNS(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+	var src net.Address
+	if outbound := session.OutboundFromContext(ctx); outbound != nil {
+		src = outbound.Gateway
+	}
+	if sockopt == nil {
+		return effectiveSystemDNSDialer.Dial(ctx, src, dest, sockopt)
+	}
+
+	if canLookupIP(ctx, dest, sockopt) {
+		ips, err := lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
+		if err == nil && len(ips) > 0 {
+			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			newError("replace destination with " + dest.String()).AtInfo().WriteToLog()
+		} else if err != nil {
+			newError("failed to resolve ip").Base(err).AtWarning().WriteToLog()
+		}
+	}
+
+	if obm != nil && len(sockopt.DialerProxy) > 0 {
+		nc := redirect(ctx, dest, sockopt.DialerProxy)
+		if nc != nil {
+			return nc, nil
+		}
+	}
+
+	return effectiveSystemDNSDialer.Dial(ctx, src, dest, sockopt)
+}
+
 func InitSystemDialer(dc dns.Client, om outbound.Manager) {
 	dnsClient = dc
 	obm = om
