@@ -32,6 +32,8 @@ type Observer struct {
 	finished *done.Instance
 
 	ohm outbound.Manager
+
+	StatusUpdate func(result *OutboundStatus)
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
@@ -182,6 +184,10 @@ func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {
 	} else {
 		status.LastErrorReason = result.LastErrorReason
 		status.Delay = 99999999
+	}
+
+	if o.StatusUpdate != nil {
+		o.StatusUpdate(status)
 	}
 }
 
