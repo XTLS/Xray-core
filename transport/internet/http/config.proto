@@ -9,4 +9,6 @@ option java_multiple_files = true;
 message Config {
   repeated string host = 1;
   string path = 2;
+  int32 idle_timeout = 3;
+  int32 health_check_timeout = 4;
 }
