@@ -1,27 +1,48 @@
 module github.com/xtls/xray-core
 
-go 1.16
+go 1.17
 
 require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
-	github.com/golang/mock v1.5.0
+	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.5
+	github.com/google/go-cmp v0.5.6
 	github.com/gorilla/websocket v1.4.2
-	github.com/lucas-clemente/quic-go v0.20.0
-	github.com/miekg/dns v1.1.41
-	github.com/pelletier/go-toml v1.8.1
-	github.com/pires/go-proxyproto v0.5.0
-	github.com/refraction-networking/utls v0.0.0-20201210053706-2179f286686b
+	github.com/lucas-clemente/quic-go v0.23.0
+	github.com/miekg/dns v1.1.43
+	github.com/pelletier/go-toml v1.9.4
+	github.com/pires/go-proxyproto v0.6.0
+	github.com/refraction-networking/utls v0.0.0-20210713165636-0b2885c8c0d4
 	github.com/seiflotfy/cuckoofilter v0.0.0-20201222105146-bc6005554a0c
 	github.com/stretchr/testify v1.7.0
 	github.com/xtls/go v0.0.0-20201118062508-3632bf3b7499
-	go.starlark.net v0.0.0-20210312235212-74c10e2c17dc
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
-	golang.org/x/net v0.0.0-20210330230544-e57232859fb2
+	go.starlark.net v0.0.0-20210901212718-87f333178d59
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
+	golang.org/x/net v0.0.0-20210903162142-ad29c8ab022f
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210330210617-4fbd30eecc44
-	google.golang.org/grpc v1.36.1
-	google.golang.org/protobuf v1.26.0
-	h12.io/socks v1.0.2
+	golang.org/x/sys v0.0.0-20210906170528-6f6e22806c34
+	google.golang.org/grpc v1.40.0
+	google.golang.org/protobuf v1.27.1
+	h12.io/socks v1.0.3
+)
+
+require (
+	github.com/cheekybits/genny v1.0.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
+	github.com/fsnotify/fsnotify v1.5.1 // indirect
+	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
+	github.com/marten-seemann/qtls-go1-16 v0.1.4 // indirect
+	github.com/marten-seemann/qtls-go1-17 v0.1.0 // indirect
+	github.com/nxadm/tail v1.4.8 // indirect
+	github.com/onsi/ginkgo v1.16.4 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/mod v0.5.0 // indirect
+	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.5 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	google.golang.org/genproto v0.0.0-20210903162649-d08c68adba83 // indirect
+	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
