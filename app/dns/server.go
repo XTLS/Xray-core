@@ -22,7 +22,6 @@ import (
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport/internet"
 )
 
 // Server is a DNS rely server.
@@ -307,7 +306,7 @@ func (s *Server) queryIPTimeout(idx int, client Client, domain string, option dn
 			Tag: s.tag,
 		})
 	}
-	ctx = internet.ContextWithLookupDomain(ctx, domain)
+
 	ips, err := client.QueryIP(ctx, domain, option)
 	cancel()
 
