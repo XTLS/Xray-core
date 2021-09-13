@@ -69,6 +69,64 @@ func (KnownProtocols) EnumDescriptor() ([]byte, []int) {
 	return file_app_proxyman_config_proto_rawDescGZIP(), []int{0}
 }
 
+type DomainStrategy int32
+
+const (
+	DomainStrategy_AS_IS      DomainStrategy = 0
+	DomainStrategy_USE_IP     DomainStrategy = 1
+	DomainStrategy_USE_IP4    DomainStrategy = 2
+	DomainStrategy_USE_IP6    DomainStrategy = 3
+	DomainStrategy_PREFER_IP4 DomainStrategy = 4
+	DomainStrategy_PREFER_IP6 DomainStrategy = 5
+)
+
+// Enum value maps for DomainStrategy.
+var (
+	DomainStrategy_name = map[int32]string{
+		0: "AS_IS",
+		1: "USE_IP",
+		2: "USE_IP4",
+		3: "USE_IP6",
+		4: "PREFER_IP4",
+		5: "PREFER_IP6",
+	}
+	DomainStrategy_value = map[string]int32{
+		"AS_IS":      0,
+		"USE_IP":     1,
+		"USE_IP4":    2,
+		"USE_IP6":    3,
+		"PREFER_IP4": 4,
+		"PREFER_IP6": 5,
+	}
+)
+
+func (x DomainStrategy) Enum() *DomainStrategy {
+	p := new(DomainStrategy)
+	*p = x
+	return p
+}
+
+func (x DomainStrategy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DomainStrategy) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_proxyman_config_proto_enumTypes[1].Descriptor()
+}
+
+func (DomainStrategy) Type() protoreflect.EnumType {
+	return &file_app_proxyman_config_proto_enumTypes[1]
+}
+
+func (x DomainStrategy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DomainStrategy.Descriptor instead.
+func (DomainStrategy) EnumDescriptor() ([]byte, []int) {
+	return file_app_proxyman_config_proto_rawDescGZIP(), []int{1}
+}
+
 type AllocationStrategy_Type int32
 
 const (
@@ -105,11 +163,11 @@ func (x AllocationStrategy_Type) String() string {
 }
 
 func (AllocationStrategy_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_proxyman_config_proto_enumTypes[1].Descriptor()
+	return file_app_proxyman_config_proto_enumTypes[2].Descriptor()
 }
 
 func (AllocationStrategy_Type) Type() protoreflect.EnumType {
-	return &file_app_proxyman_config_proto_enumTypes[1]
+	return &file_app_proxyman_config_proto_enumTypes[2]
 }
 
 func (x AllocationStrategy_Type) Number() protoreflect.EnumNumber {
@@ -523,6 +581,7 @@ type SenderConfig struct {
 	StreamSettings    *internet.StreamConfig `protobuf:"bytes,2,opt,name=stream_settings,json=streamSettings,proto3" json:"stream_settings,omitempty"`
 	ProxySettings     *internet.ProxyConfig  `protobuf:"bytes,3,opt,name=proxy_settings,json=proxySettings,proto3" json:"proxy_settings,omitempty"`
 	MultiplexSettings *MultiplexingConfig    `protobuf:"bytes,4,opt,name=multiplex_settings,json=multiplexSettings,proto3" json:"multiplex_settings,omitempty"`
+	DomainStrategy    DomainStrategy         `protobuf:"varint,5,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.app.proxyman.DomainStrategy" json:"domain_strategy,omitempty"`
 }
 
 func (x *SenderConfig) Reset() {
@@ -583,6 +642,13 @@ func (x *SenderConfig) GetMultiplexSettings() *MultiplexingConfig {
 		return x.MultiplexSettings
 	}
 	return nil
+}
+
+func (x *SenderConfig) GetDomainStrategy() DomainStrategy {
+	if x != nil {
+		return x.DomainStrategy
+	}
+	return DomainStrategy_AS_IS
 }
 
 type MultiplexingConfig struct {
@@ -836,7 +902,7 @@ var file_app_proxyman_config_proto_rawDesc = []byte{
 	0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x73, 0x65, 0x72, 0x69, 0x61, 0x6c, 0x2e, 0x54,
 	0x79, 0x70, 0x65, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x0d, 0x70, 0x72, 0x6f,
 	0x78, 0x79, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0x10, 0x0a, 0x0e, 0x4f, 0x75,
-	0x74, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xb0, 0x02, 0x0a,
+	0x74, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xfc, 0x02, 0x0a,
 	0x0c, 0x53, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x2d, 0x0a,
 	0x03, 0x76, 0x69, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x78, 0x72, 0x61,
 	0x79, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x6e, 0x65, 0x74, 0x2e, 0x49, 0x50, 0x4f,
@@ -855,21 +921,32 @@ var file_app_proxyman_config_proto_rawDesc = []byte{
 	0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x25, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x61, 0x70, 0x70,
 	0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x2e, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x70,
 	0x6c, 0x65, 0x78, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x11, 0x6d, 0x75,
-	0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22,
-	0x50, 0x0a, 0x12, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x69, 0x6e, 0x67, 0x43,
-	0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12,
-	0x20, 0x0a, 0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63,
-	0x79, 0x2a, 0x23, 0x0a, 0x0e, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x63,
-	0x6f, 0x6c, 0x73, 0x12, 0x08, 0x0a, 0x04, 0x48, 0x54, 0x54, 0x50, 0x10, 0x00, 0x12, 0x07, 0x0a,
-	0x03, 0x54, 0x4c, 0x53, 0x10, 0x01, 0x42, 0x55, 0x0a, 0x15, 0x63, 0x6f, 0x6d, 0x2e, 0x78, 0x72,
-	0x61, 0x79, 0x2e, 0x61, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x50,
-	0x01, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x78, 0x74,
-	0x6c, 0x73, 0x2f, 0x78, 0x72, 0x61, 0x79, 0x2d, 0x63, 0x6f, 0x72, 0x65, 0x2f, 0x61, 0x70, 0x70,
-	0x2f, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0xaa, 0x02, 0x11, 0x58, 0x72, 0x61, 0x79,
-	0x2e, 0x41, 0x70, 0x70, 0x2e, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x62, 0x06, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x12,
+	0x4a, 0x0a, 0x0f, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x5f, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x21, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e,
+	0x61, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x2e, 0x44, 0x6f, 0x6d,
+	0x61, 0x69, 0x6e, 0x53, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x52, 0x0e, 0x64, 0x6f, 0x6d,
+	0x61, 0x69, 0x6e, 0x53, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x22, 0x50, 0x0a, 0x12, 0x4d,
+	0x75, 0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x20, 0x0a, 0x0b, 0x63,
+	0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d,
+	0x52, 0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x2a, 0x23, 0x0a,
+	0x0e, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x73, 0x12,
+	0x08, 0x0a, 0x04, 0x48, 0x54, 0x54, 0x50, 0x10, 0x00, 0x12, 0x07, 0x0a, 0x03, 0x54, 0x4c, 0x53,
+	0x10, 0x01, 0x2a, 0x61, 0x0a, 0x0e, 0x44, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x53, 0x74, 0x72, 0x61,
+	0x74, 0x65, 0x67, 0x79, 0x12, 0x09, 0x0a, 0x05, 0x41, 0x53, 0x5f, 0x49, 0x53, 0x10, 0x00, 0x12,
+	0x0a, 0x0a, 0x06, 0x55, 0x53, 0x45, 0x5f, 0x49, 0x50, 0x10, 0x01, 0x12, 0x0b, 0x0a, 0x07, 0x55,
+	0x53, 0x45, 0x5f, 0x49, 0x50, 0x34, 0x10, 0x02, 0x12, 0x0b, 0x0a, 0x07, 0x55, 0x53, 0x45, 0x5f,
+	0x49, 0x50, 0x36, 0x10, 0x03, 0x12, 0x0e, 0x0a, 0x0a, 0x50, 0x52, 0x45, 0x46, 0x45, 0x52, 0x5f,
+	0x49, 0x50, 0x34, 0x10, 0x04, 0x12, 0x0e, 0x0a, 0x0a, 0x50, 0x52, 0x45, 0x46, 0x45, 0x52, 0x5f,
+	0x49, 0x50, 0x36, 0x10, 0x05, 0x42, 0x55, 0x0a, 0x15, 0x63, 0x6f, 0x6d, 0x2e, 0x78, 0x72, 0x61,
+	0x79, 0x2e, 0x61, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x50, 0x01,
+	0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x78, 0x74, 0x6c,
+	0x73, 0x2f, 0x78, 0x72, 0x61, 0x79, 0x2d, 0x63, 0x6f, 0x72, 0x65, 0x2f, 0x61, 0x70, 0x70, 0x2f,
+	0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0xaa, 0x02, 0x11, 0x58, 0x72, 0x61, 0x79, 0x2e,
+	0x41, 0x70, 0x70, 0x2e, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -884,48 +961,50 @@ func file_app_proxyman_config_proto_rawDescGZIP() []byte {
 	return file_app_proxyman_config_proto_rawDescData
 }
 
-var file_app_proxyman_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_app_proxyman_config_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_app_proxyman_config_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_app_proxyman_config_proto_goTypes = []interface{}{
 	(KnownProtocols)(0),                                      // 0: xray.app.proxyman.KnownProtocols
-	(AllocationStrategy_Type)(0),                             // 1: xray.app.proxyman.AllocationStrategy.Type
-	(*InboundConfig)(nil),                                    // 2: xray.app.proxyman.InboundConfig
-	(*AllocationStrategy)(nil),                               // 3: xray.app.proxyman.AllocationStrategy
-	(*SniffingConfig)(nil),                                   // 4: xray.app.proxyman.SniffingConfig
-	(*ReceiverConfig)(nil),                                   // 5: xray.app.proxyman.ReceiverConfig
-	(*InboundHandlerConfig)(nil),                             // 6: xray.app.proxyman.InboundHandlerConfig
-	(*OutboundConfig)(nil),                                   // 7: xray.app.proxyman.OutboundConfig
-	(*SenderConfig)(nil),                                     // 8: xray.app.proxyman.SenderConfig
-	(*MultiplexingConfig)(nil),                               // 9: xray.app.proxyman.MultiplexingConfig
-	(*AllocationStrategy_AllocationStrategyConcurrency)(nil), // 10: xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
-	(*AllocationStrategy_AllocationStrategyRefresh)(nil),     // 11: xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
-	(*net.PortRange)(nil),                                    // 12: xray.common.net.PortRange
-	(*net.IPOrDomain)(nil),                                   // 13: xray.common.net.IPOrDomain
-	(*internet.StreamConfig)(nil),                            // 14: xray.transport.internet.StreamConfig
-	(*serial.TypedMessage)(nil),                              // 15: xray.common.serial.TypedMessage
-	(*internet.ProxyConfig)(nil),                             // 16: xray.transport.internet.ProxyConfig
+	(DomainStrategy)(0),                                      // 1: xray.app.proxyman.DomainStrategy
+	(AllocationStrategy_Type)(0),                             // 2: xray.app.proxyman.AllocationStrategy.Type
+	(*InboundConfig)(nil),                                    // 3: xray.app.proxyman.InboundConfig
+	(*AllocationStrategy)(nil),                               // 4: xray.app.proxyman.AllocationStrategy
+	(*SniffingConfig)(nil),                                   // 5: xray.app.proxyman.SniffingConfig
+	(*ReceiverConfig)(nil),                                   // 6: xray.app.proxyman.ReceiverConfig
+	(*InboundHandlerConfig)(nil),                             // 7: xray.app.proxyman.InboundHandlerConfig
+	(*OutboundConfig)(nil),                                   // 8: xray.app.proxyman.OutboundConfig
+	(*SenderConfig)(nil),                                     // 9: xray.app.proxyman.SenderConfig
+	(*MultiplexingConfig)(nil),                               // 10: xray.app.proxyman.MultiplexingConfig
+	(*AllocationStrategy_AllocationStrategyConcurrency)(nil), // 11: xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
+	(*AllocationStrategy_AllocationStrategyRefresh)(nil),     // 12: xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
+	(*net.PortRange)(nil),                                    // 13: xray.common.net.PortRange
+	(*net.IPOrDomain)(nil),                                   // 14: xray.common.net.IPOrDomain
+	(*internet.StreamConfig)(nil),                            // 15: xray.transport.internet.StreamConfig
+	(*serial.TypedMessage)(nil),                              // 16: xray.common.serial.TypedMessage
+	(*internet.ProxyConfig)(nil),                             // 17: xray.transport.internet.ProxyConfig
 }
 var file_app_proxyman_config_proto_depIdxs = []int32{
-	1,  // 0: xray.app.proxyman.AllocationStrategy.type:type_name -> xray.app.proxyman.AllocationStrategy.Type
-	10, // 1: xray.app.proxyman.AllocationStrategy.concurrency:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
-	11, // 2: xray.app.proxyman.AllocationStrategy.refresh:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
-	12, // 3: xray.app.proxyman.ReceiverConfig.port_range:type_name -> xray.common.net.PortRange
-	13, // 4: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
-	3,  // 5: xray.app.proxyman.ReceiverConfig.allocation_strategy:type_name -> xray.app.proxyman.AllocationStrategy
-	14, // 6: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	2,  // 0: xray.app.proxyman.AllocationStrategy.type:type_name -> xray.app.proxyman.AllocationStrategy.Type
+	11, // 1: xray.app.proxyman.AllocationStrategy.concurrency:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
+	12, // 2: xray.app.proxyman.AllocationStrategy.refresh:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
+	13, // 3: xray.app.proxyman.ReceiverConfig.port_range:type_name -> xray.common.net.PortRange
+	14, // 4: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
+	4,  // 5: xray.app.proxyman.ReceiverConfig.allocation_strategy:type_name -> xray.app.proxyman.AllocationStrategy
+	15, // 6: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
 	0,  // 7: xray.app.proxyman.ReceiverConfig.domain_override:type_name -> xray.app.proxyman.KnownProtocols
-	4,  // 8: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
-	15, // 9: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
-	15, // 10: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
-	13, // 11: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
-	14, // 12: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	16, // 13: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
-	9,  // 14: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	5,  // 8: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
+	16, // 9: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
+	16, // 10: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
+	14, // 11: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
+	15, // 12: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	17, // 13: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
+	10, // 14: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
+	1,  // 15: xray.app.proxyman.SenderConfig.domain_strategy:type_name -> xray.app.proxyman.DomainStrategy
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_config_proto_init() }
@@ -1060,7 +1139,7 @@ func file_app_proxyman_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_app_proxyman_config_proto_rawDesc,
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,

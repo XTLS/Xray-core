@@ -2,7 +2,7 @@ package outbound
 
 import (
 	"context"
-
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet/stat"
 
 	"github.com/xtls/xray-core/app/proxyman"
@@ -54,6 +54,7 @@ type Handler struct {
 	streamSettings  *internet.MemoryStreamConfig
 	proxy           proxy.Outbound
 	outboundManager outbound.Manager
+	dnsClient       dns.Client
 	mux             *mux.ClientManager
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
@@ -66,6 +67,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	h := &Handler{
 		tag:             config.Tag,
 		outboundManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
+		dnsClient:       v.GetFeature(dns.ClientType()).(dns.Client),
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
 	}
@@ -140,7 +142,47 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			common.Interrupt(link.Writer)
 		}
 	} else {
-		if err := h.proxy.Process(ctx, link, h); err != nil {
+		outbound := session.OutboundFromContext(ctx)
+		destination := outbound.Target
+		var domainString string
+		if destination.Address.Family().IsDomain() {
+			domainString = destination.Address.Domain()
+		} else if outbound.RouteTarget.Address != nil && outbound.RouteTarget.Address.Family().IsDomain() {
+			domainString = outbound.RouteTarget.Address.Domain()
+		} else {
+			domainString = ""
+		}
+
+		if h.senderSettings != nil && h.senderSettings.DomainStrategy != proxyman.DomainStrategy_AS_IS && domainString != "" {
+			var ips []net.IP
+			var err error
+
+			option := dns.IPOption{
+				IPv4Enable: true,
+				IPv6Enable: true,
+				FakeEnable: false,
+			}
+
+			switch h.senderSettings.DomainStrategy {
+			case proxyman.DomainStrategy_USE_IP4:
+				option.IPv6Enable = false
+			case proxyman.DomainStrategy_USE_IP6:
+				option.IPv4Enable = false
+			}
+			ips, err = h.dnsClient.LookupIP(domainString, option)
+			if err == nil {
+				switch h.senderSettings.DomainStrategy {
+				case proxyman.DomainStrategy_PREFER_IP4:
+					ips = reorderAddresses(ips, false)
+				case proxyman.DomainStrategy_PREFER_IP6:
+					ips = reorderAddresses(ips, true)
+				}
+				destination.Address = net.IPAddress(ips[0])
+				outbound.Target = destination
+			}
+		}
+		err := h.proxy.Process(ctx, link, h)
+		if err != nil {
 			// Ensure outbound ray is properly closed.
 			newError("failed to process outbound traffic").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
@@ -149,6 +191,18 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		}
 		common.Interrupt(link.Reader)
 	}
+}
+
+func reorderAddresses(ips []net.IP, preferIPv6 bool) []net.IP {
+	var result []net.IP
+	for i := 0; i < 2; i++ {
+		for _, ip := range ips {
+			if (preferIPv6 == (i == 0)) == (ip.To4() == nil) {
+				result = append(result, ip)
+			}
+		}
+	}
+	return result
 }
 
 // Address implements internet.Dialer.

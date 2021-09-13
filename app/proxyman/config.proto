@@ -88,12 +88,22 @@ message InboundHandlerConfig {
 
 message OutboundConfig {}
 
+enum DomainStrategy {
+  AS_IS = 0;
+  USE_IP = 1;
+  USE_IP4 = 2;
+  USE_IP6 = 3;
+  PREFER_IP4 = 4;
+  PREFER_IP6 = 5;
+}
+
 message SenderConfig {
   // Send traffic through the given IP. Only IP is allowed.
   xray.common.net.IPOrDomain via = 1;
   xray.transport.internet.StreamConfig stream_settings = 2;
   xray.transport.internet.ProxyConfig proxy_settings = 3;
   MultiplexingConfig multiplex_settings = 4;
+  DomainStrategy domain_strategy = 5;
 }
 
 message MultiplexingConfig {
