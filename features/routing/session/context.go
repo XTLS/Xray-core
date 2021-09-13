@@ -137,6 +137,13 @@ func (ctx *Context) GetAppStatus() []string {
 	return ctx.Inbound.AppStatus
 }
 
+func (ctx Context) GetSkipFakeDNS() bool {
+	if ctx.Inbound == nil {
+		return false
+	}
+	return ctx.Inbound.SkipFakeDNS
+}
+
 // AsRoutingContext creates a context from context.context with session info.
 func AsRoutingContext(ctx context.Context) routing.Context {
 	return &Context{

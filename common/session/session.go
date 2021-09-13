@@ -53,6 +53,8 @@ type Inbound struct {
 	Uid uint32
 	// SagerNet private: AppStatus is the android app's status for the inbound connection
 	AppStatus []string
+	// SagerNet private
+	SkipFakeDNS bool
 }
 
 // Outbound is the metadata of an outbound connection.
