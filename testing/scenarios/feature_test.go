@@ -427,8 +427,8 @@ func TestBlackhole(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "blocked",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "blocked",
 						},
 						PortRange: net.SinglePortRange(dest2.Port),
 					},
@@ -602,13 +602,13 @@ func TestDomainSniffing(t *testing.T) {
 			serial.ToTypedMessage(&router.Config{
 				Rule: []*router.RoutingRule{
 					{
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "direct",
 						},
 						InboundTag: []string{"snif"},
 					}, {
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "redir",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "redir",
 						},
 						InboundTag: []string{"http"},
 					},
@@ -636,7 +636,7 @@ func TestDomainSniffing(t *testing.T) {
 			Transport: transport,
 		}
 
-		resp, err := client.Get("https://www.github.com/")
+		resp, err := client.Get("https://apple.com/")
 		common.Must(err)
 		if resp.StatusCode != 200 {
 			t.Error("unexpected status code: ", resp.StatusCode)

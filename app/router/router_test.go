@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -24,8 +25,8 @@ func TestSimpleRouter(t *testing.T) {
 	config := &Config{
 		Rule: []*RoutingRule{
 			{
-				TargetTag: &RoutingRule_Tag{
-					Tag: "test",
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "test",
 				},
 				Networks: []net.Network{net.Network_TCP},
 			},
@@ -99,8 +100,8 @@ func TestIPOnDemand(t *testing.T) {
 		DomainStrategy: Config_IpOnDemand,
 		Rule: []*RoutingRule{
 			{
-				TargetTag: &RoutingRule_Tag{
-					Tag: "test",
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "test",
 				},
 				Cidr: []*CIDR{
 					{
@@ -138,8 +139,8 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 		DomainStrategy: Config_IpIfNonMatch,
 		Rule: []*RoutingRule{
 			{
-				TargetTag: &RoutingRule_Tag{
-					Tag: "test",
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "test",
 				},
 				Cidr: []*CIDR{
 					{
@@ -177,8 +178,8 @@ func TestIPIfNonMatchIP(t *testing.T) {
 		DomainStrategy: Config_IpIfNonMatch,
 		Rule: []*RoutingRule{
 			{
-				TargetTag: &RoutingRule_Tag{
-					Tag: "test",
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "test",
 				},
 				Cidr: []*CIDR{
 					{
@@ -202,6 +203,262 @@ func TestIPIfNonMatchIP(t *testing.T) {
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_AddRoutingRule(t *testing.T) {
+	config := &Config{}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	err := r.AddRule(ctx, -1, &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{
+			OutboundTag: "test",
+		},
+		Domain: []*Domain{
+			{
+				Type:  Domain_Domain,
+				Value: "example.com",
+			},
+		},
+	})
+	common.Must(err)
+
+	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
+	common.Must(err)
+	if tag := route.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_AlterRoutingRule(t *testing.T) {
+	config := &Config{
+		Rule: []*RoutingRule{
+			{
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "example",
+				},
+				Networks: []net.Network{net.Network_TCP},
+				Tag:      "test",
+			},
+		},
+	}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	err := r.AlterRule(ctx, "test", &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{
+			OutboundTag: "test",
+		},
+		Domain: []*Domain{
+			{
+				Type:  Domain_Domain,
+				Value: "example.com",
+			},
+		},
+		Tag: "test",
+	})
+	common.Must(err)
+	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
+	common.Must(err)
+	if tag := route.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_RemoveRoutingRule(t *testing.T) {
+	config := &Config{
+		Rule: []*RoutingRule{
+			{
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "example",
+				},
+				Domain: []*Domain{
+					{
+						Type:  Domain_Domain,
+						Value: "example.com",
+					},
+				},
+				Tag: "example",
+			},
+			{
+				TargetTag: &RoutingRule_OutboundTag{
+					OutboundTag: "test",
+				},
+				Networks: []net.Network{net.Network_TCP},
+				Tag:      "test",
+			},
+		},
+	}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	err := r.RemoveRule(ctx, "example")
+	common.Must(err)
+	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
+	common.Must(err)
+	if tag := route.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_SetRules(t *testing.T) {
+	config := &Config{}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	rules := make([]*RoutingRule, 0, 2)
+	rules = append(rules, &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{
+			OutboundTag: "test",
+		},
+		Domain: []*Domain{
+			{
+				Type:  Domain_Domain,
+				Value: "example.com",
+			},
+		},
+		Tag: "test",
+	})
+	err := r.SetRules(ctx, rules)
+	common.Must(err)
+
+	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
+	common.Must(err)
+	if tag := route.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_GetRules(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
+	config := &Config{}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	rules := make([]*RoutingRule, 0, 2)
+	rules = append(rules, &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{
+			OutboundTag: "test",
+		},
+		Domain: []*Domain{
+			{
+				Type:  Domain_Domain,
+				Value: "example.com",
+			},
+		},
+		Tag: "test",
+	})
+	err := r.SetRules(ctx, rules)
+	common.Must(err)
+
+	getRules, err := r.GetRules(ctx)
+	common.Must(err)
+	rr := getRules.([]*RoutingRule)[0]
+	if tag := rr.GetOutboundTag(); tag != "test" {
+		t.Error("expect tag 'test', bug actually ", tag)
+	}
+}
+
+func TestRouter_GetRule(t *testing.T) {
+	_ = os.Setenv("XRAY_ROUTER_API_GETSET", "1")
+	config := &Config{}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	r := new(Router)
+	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}))
+
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	rules := make([]*RoutingRule, 0, 2)
+	rules = append(rules, &RoutingRule{
+		TargetTag: &RoutingRule_OutboundTag{
+			OutboundTag: "test",
+		},
+		Domain: []*Domain{
+			{
+				Type:  Domain_Domain,
+				Value: "example.com",
+			},
+		},
+		Tag: "test",
+	})
+	err := r.SetRules(ctx, rules)
+	common.Must(err)
+
+	_, getRules, err := r.GetRule(ctx, "test")
+	common.Must(err)
+	rr := getRules.(*RoutingRule)
+	if tag := rr.GetOutboundTag(); tag != "test" {
 		t.Error("expect tag 'test', bug actually ", tag)
 	}
 }

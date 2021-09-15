@@ -164,8 +164,8 @@ func TestXrayConfig(t *testing.T) {
 										},
 									},
 								},
-								TargetTag: &router.RoutingRule_Tag{
-									Tag: "blocked",
+								TargetTag: &router.RoutingRule_OutboundTag{
+									OutboundTag: "blocked",
 								},
 							},
 						},

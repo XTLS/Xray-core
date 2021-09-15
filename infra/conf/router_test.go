@@ -83,8 +83,8 @@ func TestRouterConfig(t *testing.T) {
 								Value: "qq.com",
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "direct",
 						},
 					},
 					{
@@ -102,8 +102,8 @@ func TestRouterConfig(t *testing.T) {
 								},
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "test",
 						},
 					},
 					{
@@ -114,8 +114,8 @@ func TestRouterConfig(t *testing.T) {
 								{From: 1000, To: 2000},
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "test",
 						},
 					},
 					{
@@ -124,8 +124,8 @@ func TestRouterConfig(t *testing.T) {
 								{From: 123, To: 123},
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "test",
 						},
 					},
 				},
@@ -171,8 +171,8 @@ func TestRouterConfig(t *testing.T) {
 								Value: "qq.com",
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "direct",
 						},
 					},
 					{
@@ -190,8 +190,8 @@ func TestRouterConfig(t *testing.T) {
 								},
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "test",
 						},
 					},
 				},
@@ -234,8 +234,8 @@ func TestRouterConfig(t *testing.T) {
 								Value: "qq.com",
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "direct",
 						},
 					},
 					{
@@ -253,8 +253,8 @@ func TestRouterConfig(t *testing.T) {
 								},
 							},
 						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
+						TargetTag: &router.RoutingRule_OutboundTag{
+							OutboundTag: "test",
 						},
 					},
 				},

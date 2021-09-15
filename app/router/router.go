@@ -4,8 +4,11 @@ package router
 
 import (
 	"context"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
@@ -15,10 +18,12 @@ import (
 
 // Router is an implementation of routing.Router.
 type Router struct {
+	access         sync.RWMutex
 	domainStrategy Config_DomainStrategy
 	rules          []*Rule
 	balancers      map[string]*Balancer
 	dns            dns.Client
+	Tag            string
 }
 
 // Route is an implementation of routing.Route.
@@ -33,7 +38,9 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 	r.domainStrategy = config.DomainStrategy
 	r.dns = d
 
-	r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
+	r.access.Lock()
+	defer r.access.Unlock()
+	r.balancers = make(map[string]*Balancer)
 	for _, rule := range config.BalancingRule {
 		balancer, err := rule.Build(ohm)
 		if err != nil {
@@ -59,7 +66,16 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 				return newError("balancer ", btag, " not found")
 			}
 			rr.Balancer = brule
+			rr.TargetTag = btag
+		} else {
+			rr.TargetTag = rule.GetTargetTag().(*RoutingRule_OutboundTag).OutboundTag
 		}
+
+		if len(rr.Tag) == 0 {
+			u := uuid.New()
+			rr.Tag = u.String()
+		}
+
 		r.rules = append(r.rules, rr)
 	}
 
@@ -72,7 +88,7 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	tag, err := rule.GetTag()
+	tag, err := rule.GetTargetTag()
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +99,9 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	if r.domainStrategy == Config_IpOnDemand {
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
+
+	r.access.RLock()
+	defer r.access.RUnlock()
 
 	for _, rule := range r.rules {
 		if rule.Apply(ctx) {
@@ -104,6 +123,220 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	}
 
 	return nil, ctx, common.ErrNoClue
+}
+
+// FindRule Find the corresponding rule based on Tag
+func (r *Router) FindRule(tag string) (idx int, rule *Rule) {
+	idx = -1
+	for k, v := range r.rules {
+		if v.Tag == tag {
+			idx = k
+			rule = v
+		}
+	}
+	return
+}
+
+// AddRule implement the manager interface.
+// Index less than 1 or more than len(r.rules) is append to the end
+func (r *Router) AddRule(ctx context.Context, index int32, routingRule interface{}) error {
+	rr := routingRule.(*RoutingRule)
+
+	if len(rr.Tag) > 0 {
+		idx, _ := r.FindRule(rr.Tag)
+		if idx != -1 {
+			return newError("existing tag found: " + rr.Tag)
+		}
+	}
+
+	rule, err := rr.Build(r)
+	if err != nil {
+		return err
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	if len(r.rules) < int(index) || index < 1 {
+		// index must be greater than zero
+		// API rules must have precedence
+		r.rules = append(r.rules, rule)
+	} else {
+		// Insert to the specified location
+		temp := make([]*Rule, 0, len(r.rules)+1)
+		temp = append(r.rules[:index], rule)
+		temp = append(temp, r.rules[index:]...)
+		r.rules = temp
+	}
+
+	newError("RoutingRule has been added through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// AlterRule implement the manager interface.
+func (r *Router) AlterRule(ctx context.Context, tag string, routingRule interface{}) error {
+	idx, rule := r.FindRule(tag)
+	if idx == -1 {
+		return newError("tag not found: " + tag)
+	}
+
+	rr := routingRule.(*RoutingRule)
+	// Removing the tag ensures that Build works properly
+	rr.Tag = ""
+	rule, err := rr.Build(r)
+	if err != nil {
+		return err
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	rule.Tag = tag
+	r.rules[idx] = rule
+	newError("The RoutingRule have been modified through the API. [", rule.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// RemoveRule implement the manager interface.
+func (r *Router) RemoveRule(ctx context.Context, tag string) error {
+	idx, rule := r.FindRule(tag)
+	if idx == -1 {
+		return newError("tag not found: " + tag)
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	// remove rule
+	r.rules = append(r.rules[:idx], r.rules[idx+1:]...)
+	newError("The RoutingRule has been removed through the API. [", rule.Tag, "] ").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// SetRules .
+func (r *Router) SetRules(ctx context.Context, rules interface{}) error {
+	rrs := rules.([]*RoutingRule)
+
+	if len(rrs) == 0 {
+		return newError("Add at least one routing rule")
+	}
+
+	temp := make([]*Rule, 0, len(rrs))
+	for _, v := range rrs {
+		rr, err := v.Build(r)
+		if err != nil {
+			return err
+		}
+		temp = append(temp, rr)
+	}
+
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	r.rules = temp
+	newError("Set [", len(temp), "] routing rules through the API").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// GetRules .
+func (r *Router) GetRules(ctx context.Context) (interface{}, error) {
+	rules := make([]*RoutingRule, 0, len(r.rules))
+	for _, rr := range r.rules {
+		rule := rr.RestoreRoutingRule().(*RoutingRule)
+		rules = append(rules, rule)
+	}
+
+	newError("[", len(rules), "] rules were retrieved through the API").WriteToLog(session.ExportIDToError(ctx))
+	return rules, nil
+}
+
+// GetRule implement the manager interface.
+func (r *Router) GetRule(ctx context.Context, tag string) (int, interface{}, error) {
+	idx, rr := r.FindRule(tag)
+	if idx == -1 {
+		err := newError("This [", tag, "] routing rule does not exist")
+		err.WriteToLog(session.ExportIDToError(ctx))
+		return -1, nil, err
+	}
+
+	rule := rr.RestoreRoutingRule()
+	newError("Get [", tag, "] routing rule through the API").WriteToLog(session.ExportIDToError(ctx))
+	return idx, rule, nil
+}
+
+// AddBalancer implement the manager interface.
+func (r *Router) AddBalancer(ctx context.Context, balancingRule interface{}, om outbound.Manager) error {
+	br := balancingRule.(*BalancingRule)
+	if _, found := r.balancers[br.Tag]; found {
+		return newError("existing tag found: " + br.Tag)
+	}
+
+	balancer, err := br.Build(om)
+	if err != nil {
+		return err
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	r.balancers[br.Tag] = balancer
+	newError("BalancingRule has been added through the API. [", br.Tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// AlterBalancer implement the manager interface.
+func (r *Router) AlterBalancer(ctx context.Context, tag string, balancingRule interface{}, om outbound.Manager) error {
+	if _, found := r.balancers[tag]; !found {
+		return newError("tag not found: " + tag)
+	}
+
+	br := balancingRule.(*BalancingRule)
+	balancer, err := br.Build(om)
+	if err != nil {
+		return err
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	// Update RoutingRle bind Balancing
+	for _, v := range r.rules {
+		if v.Balancer == r.balancers[tag] {
+			v.Balancer = balancer
+		}
+	}
+
+	r.balancers[tag] = balancer
+	newError("The BalancingRule have been modified through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// RemoveBalancer implement the manager interface.
+func (r *Router) RemoveBalancer(ctx context.Context, tag string) error {
+	if _, found := r.balancers[tag]; !found {
+		return newError("tag not found: " + tag)
+	}
+	r.access.Lock()
+	defer r.access.Unlock()
+
+	// Update RoutingRle bind Balancing
+	for _, v := range r.rules {
+		if v.Balancer == r.balancers[tag] {
+			v.Balancer = nil
+		}
+	}
+
+	delete(r.balancers, tag)
+	newError("The BalancingRule has been removed through the API. [", tag, "]").WriteToLog(session.ExportIDToError(ctx))
+	return nil
+}
+
+// GetBalancers .
+func (r *Router) GetBalancers(ctx context.Context) (interface{}, error) {
+	balancers := make([]*BalancingRule, 0, len(r.balancers))
+	for tag, balancer := range r.balancers {
+		balancers = append(balancers, &BalancingRule{
+			Tag:              tag,
+			OutboundSelector: balancer.selectors,
+		})
+	}
+	newError("[", len(balancers), "] rules were retrieved through the API").WriteToLog(session.ExportIDToError(ctx))
+	return balancers, nil
 }
 
 // Start implements common.Runnable.
