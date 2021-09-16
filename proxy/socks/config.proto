@@ -23,6 +23,12 @@ enum AuthType {
   PASSWORD = 1;
 }
 
+enum Version {
+  SOCKS5 = 0;
+  SOCKS4 = 1;
+  SOCKS4A = 2;
+}
+
 // ServerConfig is the protobuf config for Socks server.
 message ServerConfig {
   AuthType auth_type = 1;
@@ -37,4 +43,5 @@ message ServerConfig {
 message ClientConfig {
   // Sever is a list of Socks server addresses.
   repeated xray.common.protocol.ServerEndpoint server = 1;
+  Version version = 2;
 }
