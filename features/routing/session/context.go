@@ -70,7 +70,12 @@ func (ctx *Context) GetTargetDomain() string {
 	if ctx.Outbound == nil || !ctx.Outbound.Target.IsValid() {
 		return ""
 	}
-	dest := ctx.Outbound.Target
+	dest := ctx.Outbound.RouteTarget
+	if dest.IsValid() && dest.Address.Family().IsDomain() {
+		return dest.Address.Domain()
+	}
+
+	dest = ctx.Outbound.Target
 	if !dest.Address.Family().IsDomain() {
 		return ""
 	}
