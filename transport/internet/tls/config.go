@@ -66,7 +66,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 				isOcspstapling = true
 			}
 			index := len(certs) - 1
-			go func(cert *tls.Certificate, index int) {
+			go func(entry *Certificate, cert *tls.Certificate, index int) {
 				t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
 				for {
 					if entry.CertificatePath != "" && entry.KeyPath != "" {
@@ -107,7 +107,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 					certs[index] = cert
 					<-t.C
 				}
-			}(certs[len(certs)-1], index)
+			}(entry, certs[index], index)
 		}
 	}
 	return certs
