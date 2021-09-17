@@ -40,7 +40,7 @@
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
-  - [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+  - [Qv2ray](https://github.com/Qv2ray/Qv2ray)  (This project had been archived and currently inactive)
   - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
