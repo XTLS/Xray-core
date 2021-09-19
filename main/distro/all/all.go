@@ -9,10 +9,10 @@ import (
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
 
 	// Default commander and all its services. This is an optional feature.
-	_ "github.com/xtls/xray-core/app/commander"
-	_ "github.com/xtls/xray-core/app/log/command"
-	_ "github.com/xtls/xray-core/app/proxyman/command"
-	_ "github.com/xtls/xray-core/app/stats/command"
+	//_ "github.com/xtls/xray-core/app/commander"
+	//_ "github.com/xtls/xray-core/app/log/command"
+	//_ "github.com/xtls/xray-core/app/proxyman/command"
+	//_ "github.com/xtls/xray-core/app/stats/command"
 
 	// Other optional features.
 	_ "github.com/xtls/xray-core/app/dns"
@@ -33,7 +33,7 @@ import (
 	_ "github.com/xtls/xray-core/proxy/freedom"
 	_ "github.com/xtls/xray-core/proxy/http"
 	_ "github.com/xtls/xray-core/proxy/loopback"
-	_ "github.com/xtls/xray-core/proxy/mtproto"
+	//_ "github.com/xtls/xray-core/proxy/mtproto"
 	_ "github.com/xtls/xray-core/proxy/shadowsocks"
 	_ "github.com/xtls/xray-core/proxy/socks"
 	_ "github.com/xtls/xray-core/proxy/trojan"
@@ -63,14 +63,9 @@ import (
 	_ "github.com/xtls/xray-core/transport/internet/headers/wechat"
 	_ "github.com/xtls/xray-core/transport/internet/headers/wireguard"
 
-	// JSON & TOML & YAML
 	_ "github.com/xtls/xray-core/main/json"
-	_ "github.com/xtls/xray-core/main/toml"
-	_ "github.com/xtls/xray-core/main/yaml"
-
 	// Load config from file or http(s)
-	_ "github.com/xtls/xray-core/main/confloader/external"
-
+	//_ "github.com/xtls/xray-core/main/confloader/external"
 	// Commands
-	_ "github.com/xtls/xray-core/main/commands/all"
+	//_ "github.com/xtls/xray-core/main/commands/all"
 )
