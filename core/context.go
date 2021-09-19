@@ -25,3 +25,10 @@ func MustFromContext(ctx context.Context) *Instance {
 	}
 	return x
 }
+
+func WithContext(ctx context.Context, v *Instance) context.Context {
+	if FromContext(ctx) != v {
+		ctx = context.WithValue(ctx, xrayKey, v)
+	}
+	return ctx
+}
