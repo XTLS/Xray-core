@@ -65,8 +65,8 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			return nil, err
 		}
 		return &PacketConnWrapper{
-			conn: packetConn,
-			dest: destAddr,
+			Conn: packetConn,
+			Dest: destAddr,
 		}, nil
 	}
 
@@ -102,49 +102,49 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 }
 
 type PacketConnWrapper struct {
-	conn net.PacketConn
-	dest net.Addr
+	Conn net.PacketConn
+	Dest net.Addr
 }
 
 func (c *PacketConnWrapper) Close() error {
-	return c.conn.Close()
+	return c.Conn.Close()
 }
 
 func (c *PacketConnWrapper) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
+	return c.Conn.LocalAddr()
 }
 
 func (c *PacketConnWrapper) RemoteAddr() net.Addr {
-	return c.dest
+	return c.Dest
 }
 
 func (c *PacketConnWrapper) Write(p []byte) (int, error) {
-	return c.conn.WriteTo(p, c.dest)
+	return c.Conn.WriteTo(p, c.Dest)
 }
 
 func (c *PacketConnWrapper) Read(p []byte) (int, error) {
-	n, _, err := c.conn.ReadFrom(p)
+	n, _, err := c.Conn.ReadFrom(p)
 	return n, err
 }
 
 func (c *PacketConnWrapper) WriteTo(p []byte, d net.Addr) (int, error) {
-	return c.conn.WriteTo(p, d)
+	return c.Conn.WriteTo(p, d)
 }
 
 func (c *PacketConnWrapper) ReadFrom(p []byte) (int, net.Addr, error) {
-	return c.conn.ReadFrom(p)
+	return c.Conn.ReadFrom(p)
 }
 
 func (c *PacketConnWrapper) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
+	return c.Conn.SetDeadline(t)
 }
 
 func (c *PacketConnWrapper) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
+	return c.Conn.SetReadDeadline(t)
 }
 
 func (c *PacketConnWrapper) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.Conn.SetWriteDeadline(t)
 }
 
 type SystemDialerAdapter interface {
