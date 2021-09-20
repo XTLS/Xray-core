@@ -191,10 +191,16 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 		decryptor = bytes.NewReader(aeadData)
 		s.isAEADRequest = true
 
-	case !s.isAEADForced && errorAEAD == vmessaead.ErrNotFound:
+	case errorAEAD == vmessaead.ErrNotFound:
 		userLegacy, timestamp, valid, userValidationError := s.userValidator.Get(buffer.Bytes())
 		if !valid || userValidationError != nil {
 			return nil, drainConnection(newError("invalid user").Base(userValidationError))
+		}
+		if s.isAEADForced {
+			return nil, drainConnection(newError("invalid user: VMessAEAD is enforced and a non VMessAEAD connection is received. You can still disable this security feature with environment variable xray.vmess.aead.forced = false . You will not be able to enable legacy header workaround in the future."))
+		}
+		if s.userValidator.ShouldShowLegacyWarn() {
+			newError("Critical Warning: potentially invalid user: a non VMessAEAD connection is received. From 2022 Jan 1st, this kind of connection will be rejected by default. You should update or replace your client software now. This message will not be shown for further violation on this inbound.").AtWarning().WriteToLog()
 		}
 		user = userLegacy
 		iv := hashTimestamp(md5.New(), timestamp)
