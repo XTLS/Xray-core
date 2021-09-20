@@ -2,10 +2,11 @@ package conf
 
 import (
 	"encoding/json"
-	"github.com/xtls/xray-core/transport/internet"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/xtls/xray-core/transport/internet"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"

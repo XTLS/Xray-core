@@ -1,5 +1,5 @@
-// +build !windows
-// +build !android
+//go:build !windows && !android
+// +build !windows,!android
 
 package domainsocket_test
 

@@ -8,6 +8,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
+
 	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router/command"
 	"github.com/xtls/xray-core/app/stats"
@@ -15,8 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/testing/mocks"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 func TestServiceSubscribeRoutingStats(t *testing.T) {

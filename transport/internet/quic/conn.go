@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"

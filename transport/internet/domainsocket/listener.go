@@ -1,5 +1,5 @@
-// +build !windows
-// +build !wasm
+//go:build !windows && !wasm
+// +build !windows,!wasm
 
 package domainsocket
 

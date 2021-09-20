@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	aeadForced = false
+	aeadForced     = false
 	aeadForced2022 = false
 )
 

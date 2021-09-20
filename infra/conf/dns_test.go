@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+
 	"github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
