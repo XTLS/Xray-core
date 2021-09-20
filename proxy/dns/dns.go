@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/xtls/xray-core/common"
@@ -104,7 +106,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	newError("handling DNS traffic to ", dest).WriteToLog(session.ExportIDToError(ctx))
 
 	conn := &outboundConn{
-		dialer: func() (internet.Connection, error) {
+		dialer: func() (stat.Connection, error) {
 			return d.Dial(ctx, dest)
 		},
 		connReady: make(chan struct{}, 1),
@@ -266,7 +268,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 
 type outboundConn struct {
 	access sync.Mutex
-	dialer func() (internet.Connection, error)
+	dialer func() (stat.Connection, error)
 
 	conn      net.Conn
 	connReady chan struct{}

@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
@@ -46,7 +48,7 @@ func fetchInput(_ context.Context, input io.Reader, reader PacketReader, conn *C
 }
 
 // DialKCP dials a new KCP connections to the specific destination.
-func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (internet.Connection, error) {
+func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	dest.Network = net.Network_UDP
 	newError("dialing mKCP to ", dest).WriteToLog()
 
@@ -84,7 +86,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	go fetchInput(ctx, rawConn, reader, session)
 
-	var iConn internet.Connection = session
+	var iConn stat.Connection = session
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		iConn = tls.Client(iConn, config.GetTLSConfig(tls.WithDestination(dest)))

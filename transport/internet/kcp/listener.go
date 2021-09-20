@@ -6,6 +6,8 @@ import (
 	gotls "crypto/tls"
 	"sync"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	goxtls "github.com/xtls/go"
 
 	"github.com/xtls/xray-core/common"
@@ -134,7 +136,7 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 			Security: l.security,
 			Writer:   writer,
 		}, writer, l.config)
-		var netConn internet.Connection = conn
+		var netConn stat.Connection = conn
 		if l.tlsConfig != nil {
 			netConn = tls.Server(conn, l.tlsConfig)
 		} else if l.xtlsConfig != nil {
