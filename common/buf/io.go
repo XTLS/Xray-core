@@ -71,17 +71,17 @@ func NewReader(reader io.Reader) Reader {
 
 	_, isFile := reader.(*os.File)
 	if !isFile && useReadv {
-		var counter stats.Counter
-
-		if statConn, ok := reader.(*stat.CounterConnection); ok {
-			reader = statConn.Connection
-			counter = statConn.ReadCounter
-		}
 		if sc, ok := reader.(syscall.Conn); ok {
 			rawConn, err := sc.SyscallConn()
 			if err != nil {
 				newError("failed to get sysconn").Base(err).WriteToLog()
 			} else {
+				var counter stats.Counter
+
+				if statConn, ok := reader.(*stat.CounterConnection); ok {
+					reader = statConn.Connection
+					counter = statConn.ReadCounter
+				}
 				return NewReadVReader(reader, rawConn, counter)
 			}
 		}
