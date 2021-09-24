@@ -143,6 +143,23 @@ func CloseAllServers(servers []*exec.Cmd) {
 	})
 }
 
+func CloseServer(server *exec.Cmd) {
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "Closing server.",
+	})
+	if runtime.GOOS == "windows" {
+		server.Process.Kill()
+	} else {
+		server.Process.Signal(syscall.SIGTERM)
+	}
+	server.Process.Wait()
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "Server closed.",
+	})
+}
+
 func withDefaultApps(config *core.Config) *core.Config {
 	config.App = append(config.App, serial.ToTypedMessage(&dispatcher.Config{}))
 	config.App = append(config.App, serial.ToTypedMessage(&proxyman.InboundConfig{}))
