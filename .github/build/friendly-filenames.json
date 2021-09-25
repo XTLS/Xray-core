@@ -29,5 +29,6 @@
   "openbsd-arm7": { "friendlyName": "openbsd-arm32-v7a" },
   "windows-386": { "friendlyName": "windows-32" },
   "windows-amd64": { "friendlyName": "windows-64" },
+  "windows-arm64": { "friendlyName": "windows-arm64-v8a" },
   "windows-arm7": { "friendlyName": "windows-arm32-v7a" }
 }

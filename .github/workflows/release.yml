@@ -52,7 +52,9 @@ jobs:
           - goos: android
             goarch: arm64
           # END Android ARM 8
-          # Windows ARM 7
+          # Windows ARM
+          - goos: windows
+            goarch: arm64
           - goos: windows
             goarch: arm
             goarm: 7
