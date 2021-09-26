@@ -156,7 +156,7 @@ func TestDokodemoUDP(t *testing.T) {
 		},
 	}
 
-	clientPort := uint32(tcp.PickPort())
+	clientPort := uint32(udp.PickPort())
 	clientPortRange := uint32(5)
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{

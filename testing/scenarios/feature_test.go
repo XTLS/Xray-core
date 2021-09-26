@@ -512,7 +512,7 @@ func TestUDPConnection(t *testing.T) {
 	common.Must(err)
 	defer udpServer.Close()
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
