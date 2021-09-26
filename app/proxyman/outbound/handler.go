@@ -196,6 +196,24 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				ctx = session.ContextWithOutbound(ctx, outbound)
 			}
 			outbound.Gateway = h.senderSettings.Via.AsAddress()
+		} else {
+			outbound := session.OutboundFromContext(ctx)
+			if outbound == nil {
+				outbound = new(session.Outbound)
+				ctx = session.ContextWithOutbound(ctx, outbound)
+			}
+			localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
+			var localIP string
+			switch addr := localAddr.(type) {
+			case *net.UDPAddr:
+				localIP = addr.IP.String()
+			case *net.TCPAddr:
+				localIP = addr.IP.String()
+			}
+			if !net.ParseIP(localIP).IsLoopback() {
+				newError("defaulting to egress through: ", localIP).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+				outbound.Gateway = net.ParseAddress(localIP)
+			}
 		}
 	}
 
