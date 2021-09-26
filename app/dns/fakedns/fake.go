@@ -135,10 +135,6 @@ func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
 	return ""
 }
 
-// GetFakeIPRange return fake IP range from configuration
-func (fkdns *Holder) GetFakeIPRange() *gonet.IPNet {
-	return fkdns.ipRange
-}
 type HolderMulti struct {
 	holders []*Holder
 
