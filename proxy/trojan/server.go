@@ -2,7 +2,6 @@ package trojan
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/udp"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
