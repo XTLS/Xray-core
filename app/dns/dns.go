@@ -223,6 +223,22 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	return nil, newError("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
+// LookupHosts implements dns.HostsLookup.
+func (s *DNS) LookupHosts(domain string) *net.Address {
+	domain = strings.TrimSuffix(domain, ".")
+	if domain == "" {
+		return nil
+	}
+	// Normalize the FQDN form query
+	addrs := s.hosts.Lookup(domain, *s.ipOption)
+	if len(addrs) > 0 {
+		newError("domain replaced: ", domain, " -> ", addrs[0].String()).AtInfo().WriteToLog()
+		return &addrs[0]
+	}
+
+	return nil
+}
+
 // GetIPOption implements ClientWithIPOption.
 func (s *DNS) GetIPOption() *dns.IPOption {
 	return s.ipOption
