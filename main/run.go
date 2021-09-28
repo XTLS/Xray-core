@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -126,7 +125,7 @@ func getRegepxByFormat() string {
 }
 
 func readConfDir(dirPath string) {
-	confs, err := ioutil.ReadDir(dirPath)
+	confs, err := os.ReadDir(dirPath)
 	if err != nil {
 		log.Fatalln(err)
 	}
