@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 
@@ -74,7 +74,7 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 		}
 		defer resp.Body.Close()
 
-		issuerBytes, errC := ioutil.ReadAll(resp.Body)
+		issuerBytes, errC := io.ReadAll(resp.Body)
 		if errC != nil {
 			return nil, newError(errC)
 		}
@@ -98,7 +98,7 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 		return nil, newError(err)
 	}
 	defer req.Body.Close()
-	ocspResBytes, err := ioutil.ReadAll(req.Body)
+	ocspResBytes, err := io.ReadAll(req.Body)
 
 	if err != nil {
 		return nil, newError(err)
