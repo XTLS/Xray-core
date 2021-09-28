@@ -222,6 +222,17 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 		return
 	}
 
+	switch qType {
+	case dnsmessage.TypeA:
+		for i, ip := range ips {
+			ips[i] = ip.To4()
+		}
+	case dnsmessage.TypeAAAA:
+		for i, ip := range ips {
+			ips[i] = ip.To16()
+		}
+	}
+
 	b := buf.New()
 	rawBytes := b.Extend(buf.Size)
 	builder := dnsmessage.NewBuilder(rawBytes[:0], dnsmessage.Header{
