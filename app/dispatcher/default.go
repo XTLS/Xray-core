@@ -271,6 +271,67 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	return inbound, nil
 }
 
+// DispatchLink implements routing.Dispatcher.
+func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.Destination, outbound *transport.Link) error {
+	if !destination.IsValid() {
+		return newError("Dispatcher: Invalid destination.")
+	}
+	ob := &session.Outbound{
+		Target: destination,
+	}
+	ctx = session.ContextWithOutbound(ctx, ob)
+	content := session.ContentFromContext(ctx)
+	if content == nil {
+		content = new(session.Content)
+		ctx = session.ContextWithContent(ctx, content)
+	}
+	sniffingRequest := content.SniffingRequest
+	switch {
+	case !sniffingRequest.Enabled:
+		go d.routedDispatch(ctx, outbound, destination)
+	case destination.Network != net.Network_TCP:
+		// Only metadata sniff will be used for non tcp connection
+		result, err := sniffer(ctx, nil, true)
+		if err == nil {
+			content.Protocol = result.Protocol()
+			if shouldOverride(result, sniffingRequest.OverrideDestinationForProtocol) {
+				domain := result.Domain()
+				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
+				destination.Address = net.ParseAddress(domain)
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
+			}
+		}
+		go d.routedDispatch(ctx, outbound, destination)
+	default:
+		go func() {
+			cReader := &cachedReader{
+				reader: outbound.Reader.(*pipe.Reader),
+			}
+			outbound.Reader = cReader
+			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly)
+			if err == nil {
+				content.Protocol = result.Protocol()
+			}
+			if err == nil && shouldOverride(result, sniffingRequest.OverrideDestinationForProtocol) {
+				domain := result.Domain()
+				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
+				destination.Address = net.ParseAddress(domain)
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
+			}
+			d.routedDispatch(ctx, outbound, destination)
+		}()
+	}
+	return nil
+}
+
 func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (SniffResult, error) {
 	payload := buf.New()
 	defer payload.Release()

@@ -56,6 +56,15 @@ func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport
 	return &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}, nil
 }
 
+// DispatchLink implements routing.Dispatcher
+func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
+	if dest.Address != muxCoolAddress {
+		return s.dispatcher.DispatchLink(ctx, dest, link)
+	}
+	_, err := NewServerWorker(ctx, s.dispatcher, link)
+	return err
+}
+
 // Start implements common.Runnable.
 func (s *Server) Start() error {
 	return nil
