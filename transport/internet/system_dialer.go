@@ -104,6 +104,17 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
 }
 
+func ApplySockopt(sockopt *SocketConfig, dest net.Destination, fd uintptr, ctx context.Context) {
+	if err := applyOutboundSocketOptions(dest.Network.String(), dest.Address.String(), fd, sockopt); err != nil {
+		newError("failed to apply socket options").Base(err).WriteToLog(session.ExportIDToError(ctx))
+	}
+	if dest.Network == net.Network_UDP && hasBindAddr(sockopt) {
+		if err := bindAddr(fd, sockopt.BindAddress, sockopt.BindPort); err != nil {
+			newError("failed to bind source address to ", sockopt.BindAddress).Base(err).WriteToLog(session.ExportIDToError(ctx))
+		}
+	}
+}
+
 type PacketConnWrapper struct {
 	Conn net.PacketConn
 	Dest net.Addr
