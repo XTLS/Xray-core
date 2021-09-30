@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -160,7 +159,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 }
 
 func DrainConnN(reader io.Reader, n int) error {
-	_, err := io.CopyN(ioutil.Discard, reader, int64(n))
+	_, err := io.CopyN(io.Discard, reader, int64(n))
 	return err
 }
 

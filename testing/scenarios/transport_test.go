@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
 	"github.com/xtls/xray-core/testing/servers/tcp"
+	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/domainsocket"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
@@ -257,7 +258,7 @@ func TestVMessQuic(t *testing.T) {
 	defer tcpServer.Close()
 
 	userID := protocol.NewID(uuid.New())
-	serverPort := tcp.PickPort()
+	serverPort := udp.PickPort()
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&log.Config{

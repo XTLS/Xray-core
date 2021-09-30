@@ -2,7 +2,7 @@ package scenarios
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
@@ -512,7 +512,7 @@ func TestUDPConnection(t *testing.T) {
 	common.Must(err)
 	defer udpServer.Close()
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
@@ -642,7 +642,7 @@ func TestDomainSniffing(t *testing.T) {
 		if resp.StatusCode != 200 {
 			t.Error("unexpected status code: ", resp.StatusCode)
 		}
-		common.Must(resp.Write(ioutil.Discard))
+		common.Must(resp.Write(io.Discard))
 	}
 }
 

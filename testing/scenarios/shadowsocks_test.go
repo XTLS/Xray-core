@@ -215,7 +215,7 @@ func TestShadowsocksAES128GCMUDP(t *testing.T) {
 		CipherType: shadowsocks.CipherType_AES_128_GCM,
 	})
 
-	serverPort := tcp.PickPort()
+	serverPort := udp.PickPort()
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&log.Config{
@@ -245,7 +245,7 @@ func TestShadowsocksAES128GCMUDP(t *testing.T) {
 		},
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&log.Config{
@@ -341,7 +341,7 @@ func TestShadowsocksAES128GCMUDPMux(t *testing.T) {
 		},
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&log.Config{

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -56,10 +55,10 @@ func loadArg(arg string) (out io.Reader, err error) {
 		data, err = fetchHTTPContent(arg)
 
 	case arg == "stdin:":
-		data, err = ioutil.ReadAll(os.Stdin)
+		data, err = io.ReadAll(os.Stdin)
 
 	default:
-		data, err = ioutil.ReadFile(arg)
+		data, err = os.ReadFile(arg)
 	}
 
 	if err != nil {
