@@ -178,7 +178,7 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 	ipRecord := &IPRecord{
 		ReqID:  h.ID,
 		RCode:  h.RCode,
-		Expire: now.Add(time.Second * 600),
+		Expire: now.Add(time.Minute * 30),
 	}
 
 L:
