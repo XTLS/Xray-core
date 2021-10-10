@@ -196,12 +196,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				ctx = session.ContextWithOutbound(ctx, outbound)
 			}
 			outbound.Gateway = h.senderSettings.Via.AsAddress()
-		} else {
-			outbound := session.OutboundFromContext(ctx)
-			if outbound == nil {
-				outbound = new(session.Outbound)
-				ctx = session.ContextWithOutbound(ctx, outbound)
-			}
+		} else if dest.Address.Family().IsIP() {
+			destFamily := dest.Address.Family()
 			localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
 			var localIP string
 			switch addr := localAddr.(type) {
@@ -210,8 +206,16 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			case *net.TCPAddr:
 				localIP = addr.IP.String()
 			}
-			if !net.ParseIP(localIP).IsLoopback() {
-				newError("defaulting to egress through: ", localIP).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+			if !net.ParseIP(localIP).IsLoopback() && (
+				(destFamily.IsIPv6() && strings.Contains(localIP, ":")) ||
+				(destFamily.IsIPv4() && !strings.Contains(localIP, ":"))) {
+				newError("defaulting to egress through incoming IP ", localIP, " for destination ", dest.String()).
+					AtDebug().WriteToLog(session.ExportIDToError(ctx))
+				outbound := session.OutboundFromContext(ctx)
+				if outbound == nil {
+					outbound = new(session.Outbound)
+				}
+				ctx = session.ContextWithOutbound(ctx, outbound)
 				outbound.Gateway = net.ParseAddress(localIP)
 			}
 		}
