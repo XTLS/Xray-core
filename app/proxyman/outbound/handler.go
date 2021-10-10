@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"strings"
 
 	"github.com/xtls/xray-core/transport/internet/stat"
 
@@ -135,12 +136,12 @@ func (h *Handler) Tag() string {
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	if h.mux != nil && (h.mux.Enabled || session.MuxPreferedFromContext(ctx)) {
-		if err := h.mux.Dispatch(ctx, link); err != nil {
+		if err := h.mux.Dispatch(ctx, link); err != nil && !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
 			newError("failed to process mux outbound traffic").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
 		}
 	} else {
-		if err := h.proxy.Process(ctx, link, h); err != nil {
+		if err := h.proxy.Process(ctx, link, h); err != nil && !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
 			// Ensure outbound ray is properly closed.
 			newError("failed to process outbound traffic").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
