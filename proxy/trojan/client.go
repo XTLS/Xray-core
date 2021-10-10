@@ -204,7 +204,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
 	}
 
-	var responseDoneAndCloseWriter = task.OnSuccess(getResponse, task.Close(link.Writer))
+	responseDoneAndCloseWriter := task.OnSuccess(getResponse, task.Close(link.Writer))
 	if err := task.Run(ctx, postRequest, responseDoneAndCloseWriter); err != nil {
 		return newError("connection ends").Base(err)
 	}

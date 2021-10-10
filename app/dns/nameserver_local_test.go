@@ -2,9 +2,10 @@ package dns_test
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/net"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/common/net"
 
 	. "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common"

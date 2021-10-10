@@ -51,6 +51,7 @@ type HTTPRemoteConfig struct {
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }
+
 type HTTPClientConfig struct {
 	Servers []*HTTPRemoteConfig `json:"servers"`
 }

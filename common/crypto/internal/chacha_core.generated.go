@@ -3,7 +3,7 @@ package internal
 import "encoding/binary"
 
 func ChaCha20Block(s *[16]uint32, out []byte, rounds int) {
-	var x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 = s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15]
+	x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15 := s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15]
 	for i := 0; i < rounds; i += 2 {
 		var x uint32
 

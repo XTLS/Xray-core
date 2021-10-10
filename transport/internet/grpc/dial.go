@@ -49,7 +49,6 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
 	conn, err := getGrpcClient(ctx, dest, streamSettings)
-
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
@@ -86,7 +85,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return client, nil
 	}
 
-	var dialOptions = []grpc.DialOption{
+	dialOptions := []grpc.DialOption{
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
 				BaseDelay:  500 * time.Millisecond,

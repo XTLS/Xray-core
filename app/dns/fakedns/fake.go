@@ -79,13 +79,13 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}
-	var currentTimeMillis = uint64(time.Now().UnixNano() / 1e6)
+	currentTimeMillis := uint64(time.Now().UnixNano() / 1e6)
 	ones, bits := fkdns.ipRange.Mask.Size()
 	rooms := bits - ones
 	if rooms < 64 {
 		currentTimeMillis %= (uint64(1) << rooms)
 	}
-	var bigIntIP = big.NewInt(0).SetBytes(fkdns.ipRange.IP)
+	bigIntIP := big.NewInt(0).SetBytes(fkdns.ipRange.IP)
 	bigIntIP = bigIntIP.Add(bigIntIP, new(big.Int).SetUint64(currentTimeMillis))
 	var ip net.Address
 	for {

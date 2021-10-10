@@ -11,9 +11,7 @@ type HandlerCreatorOptions struct {
 
 type HandlerCreator func(LogType, HandlerCreatorOptions) (log.Handler, error)
 
-var (
-	handlerCreatorMap = make(map[LogType]HandlerCreator)
-)
+var handlerCreatorMap = make(map[LogType]HandlerCreator)
 
 func RegisterHandlerCreator(logType LogType, f HandlerCreator) error {
 	if f == nil {

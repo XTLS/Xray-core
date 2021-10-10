@@ -271,7 +271,7 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 		return nil
 	}
 
-	var requestDoneAndCloseWriter = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)

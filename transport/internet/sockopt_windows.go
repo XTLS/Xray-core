@@ -25,7 +25,6 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
-
 	}
 
 	return nil

@@ -54,9 +54,7 @@ func isNewer(baseRec *IPRecord, newRec *IPRecord) bool {
 	return baseRec.Expire.Before(newRec.Expire)
 }
 
-var (
-	errRecordNotFound = errors.New("record not found")
-)
+var errRecordNotFound = errors.New("record not found")
 
 type dnsRequest struct {
 	reqType dnsmessage.Type

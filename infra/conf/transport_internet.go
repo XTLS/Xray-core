@@ -540,7 +540,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_Off
 	}
 
-	var dStrategy = internet.DomainStrategy_AS_IS
+	dStrategy := internet.DomainStrategy_AS_IS
 	switch strings.ToLower(c.DomainStrategy) {
 	case "useip", "use_ip":
 		dStrategy = internet.DomainStrategy_USE_IP

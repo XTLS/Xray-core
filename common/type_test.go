@@ -16,7 +16,7 @@ type YConfig struct {
 }
 
 func TestObjectCreation(t *testing.T) {
-	var f = func(ctx context.Context, t interface{}) (interface{}, error) {
+	f := func(ctx context.Context, t interface{}) (interface{}, error) {
 		return func() int {
 			return t.(*TConfig).value
 		}, nil

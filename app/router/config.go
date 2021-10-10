@@ -84,7 +84,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
 			conds.Add(matcher)
 		}
-
 	}
 
 	if len(rr.UserEmail) > 0 {

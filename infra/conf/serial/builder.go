@@ -9,7 +9,6 @@ import (
 )
 
 func BuildConfig(files []string, formats []string) (*core.Config, error) {
-
 	cf := &conf.Config{}
 	for i, file := range files {
 		newError("Reading config: ", file).AtInfo().WriteToLog()
@@ -32,9 +31,7 @@ func BuildConfig(files []string, formats []string) (*core.Config, error) {
 
 type readerDecoder func(io.Reader) (*conf.Config, error)
 
-var (
-	ReaderDecoderByFormat = make(map[string]readerDecoder)
-)
+var ReaderDecoderByFormat = make(map[string]readerDecoder)
 
 func init() {
 	ReaderDecoderByFormat["json"] = DecodeJSONConfig

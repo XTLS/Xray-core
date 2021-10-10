@@ -2,8 +2,9 @@ package router_test
 
 import (
 	"context"
-	"github.com/xtls/xray-core/features/dns"
 	"testing"
+
+	"github.com/xtls/xray-core/features/dns"
 
 	"github.com/golang/mock/gomock"
 

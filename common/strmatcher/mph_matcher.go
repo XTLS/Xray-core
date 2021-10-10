@@ -102,7 +102,7 @@ func (g *MphMatcherGroup) Build() {
 	g.level0Mask = len(g.level0) - 1
 	g.level1 = make([]uint32, nextPow2(keyLen))
 	g.level1Mask = len(g.level1) - 1
-	var sparseBuckets = make([][]int, len(g.level0))
+	sparseBuckets := make([][]int, len(g.level0))
 	var ruleIdx int
 	for rule, hash := range *g.ruleMap {
 		n := int(hash) & g.level0Mask
@@ -122,7 +122,7 @@ func (g *MphMatcherGroup) Build() {
 	occ := make([]bool, len(g.level1))
 	var tmpOcc []int
 	for _, bucket := range buckets {
-		var seed = uint32(0)
+		seed := uint32(0)
 		for {
 			findSeed := true
 			tmpOcc = tmpOcc[:0]
@@ -284,9 +284,11 @@ tail:
 	h ^= h >> 32
 	return uintptr(h)
 }
+
 func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + x)
 }
+
 func readUnaligned32(p unsafe.Pointer) uint32 {
 	q := (*[4]byte)(p)
 	return uint32(q[0]) | uint32(q[1])<<8 | uint32(q[2])<<16 | uint32(q[3])<<24
@@ -295,6 +297,7 @@ func readUnaligned32(p unsafe.Pointer) uint32 {
 func rotl31(x uint64) uint64 {
 	return (x << 31) | (x >> (64 - 31))
 }
+
 func readUnaligned64(p unsafe.Pointer) uint64 {
 	q := (*[8]byte)(p)
 	return uint64(q[0]) | uint64(q[1])<<8 | uint64(q[2])<<16 | uint64(q[3])<<24 | uint64(q[4])<<32 | uint64(q[5])<<40 | uint64(q[6])<<48 | uint64(q[7])<<56

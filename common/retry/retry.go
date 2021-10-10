@@ -6,9 +6,7 @@ import (
 	"time"
 )
 
-var (
-	ErrRetryFailed = newError("all retry attempts failed")
-)
+var ErrRetryFailed = newError("all retry attempts failed")
 
 // Strategy is a way to retry on a specific function.
 type Strategy interface {

@@ -39,7 +39,7 @@ without launching the server
 }
 
 func init() {
-	cmdRun.Run = executeRun //break init loop
+	cmdRun.Run = executeRun // break init loop
 }
 
 var (
@@ -52,7 +52,6 @@ var (
 	 * main func in this file is run.
 	 */
 	_ = func() bool {
-
 		cmdRun.Flag.Var(&configFiles, "config", "Config path for Xray.")
 		cmdRun.Flag.Var(&configFiles, "c", "Short alias of -config")
 		cmdRun.Flag.StringVar(&configDir, "confdir", "", "A dir with multiple json config")
@@ -181,10 +180,9 @@ func getConfigFormat() string {
 func startXray() (core.Server, error) {
 	configFiles := getConfigFilePath()
 
-	//config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
+	// config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
 
 	c, err := core.LoadConfig(getConfigFormat(), configFiles)
-
 	if err != nil {
 		return nil, newError("failed to load config files: [", configFiles.String(), "]").Base(err)
 	}

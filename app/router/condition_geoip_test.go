@@ -89,7 +89,8 @@ func TestGeoIPMatcher(t *testing.T) {
 		{
 			Input:  "192.0.1.0",
 			Output: false,
-		}, {
+		},
+		{
 			Input:  "0.1.0.0",
 			Output: true,
 		},
