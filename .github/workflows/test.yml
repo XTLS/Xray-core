@@ -1,9 +1,10 @@
 name: Test
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - main
+      - hack/easyconfig
     paths:
       - "**/*.go"
       - "go.mod"
