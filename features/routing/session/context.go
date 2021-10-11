@@ -44,6 +44,22 @@ func (ctx *Context) GetSourcePort() net.Port {
 	return ctx.Inbound.Source.Port
 }
 
+// GetReceivingIPs implements routing.Context.
+func (ctx *Context) GetReceivingIP() net.IP {
+	if ctx.Inbound == nil || !ctx.Inbound.Gateway.IsValid() {
+		return nil
+	}
+	return ctx.Inbound.Gateway.Address.IP()
+}
+
+// GetReceivingPort  implements routing.Context.
+func (ctx *Context) GetReceivingPort() net.Port {
+	if ctx.Inbound == nil || !ctx.Inbound.Gateway.IsValid() {
+		return 0
+	}
+	return ctx.Inbound.Gateway.Port
+}
+
 // GetTargetIPs implements routing.Context.
 func (ctx *Context) GetTargetIPs() []net.IP {
 	if ctx.Outbound == nil || !ctx.Outbound.Target.IsValid() {

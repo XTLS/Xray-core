@@ -151,7 +151,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(cond)
 	}
 
-	if conds.Len() == 0 {
+	if conds.Len() == 0 && rr.GetTargetTag().(*RoutingRule_Tag).Tag[0] != '@' {
 		return nil, newError("this rule has no effective fields").AtWarning()
 	}
 

@@ -325,7 +325,45 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				newError("taking detour [", outTag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 				handler = h
 			} else {
-				newError("non existing outTag: ", outTag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				if outTag[0] == '@' {
+					outTag = outTag[1:]
+					for _,t := range strings.Split(outTag, ";") {
+						var rt string
+						switch t {
+						case "inboundTag":
+							rt = inTag
+						case "sourceIP":
+							remoteAddr := session.InboundFromContext(ctx).Conn.RemoteAddr()
+							var sourceIP string
+							switch addr := remoteAddr.(type) {
+							case *net.UDPAddr:
+								sourceIP = addr.IP.String()
+							case *net.TCPAddr:
+								sourceIP = addr.IP.String()
+							}
+							rt = net.ParseAddress(sourceIP).String()
+						case "receivingIP":
+							rt = route.GetReceivingIP().String()
+						case "receivingPort":
+							rt = route.GetReceivingPort().String()
+						case "user":
+							rt = route.GetUser()
+						default:
+							continue
+						}
+						newError("rt: ", rt).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+						if h := d.ohm.GetHandler(rt); h != nil {
+							newError("@ rule(s) result: ", rt).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+							handler = h
+							break
+						} else {
+							outTag = rt
+						}
+					}
+				}
+				if handler == nil {
+					newError("non existing outTag: ", outTag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				}
 			}
 		} else {
 			newError("default route for ", destination).WriteToLog(session.ExportIDToError(ctx))

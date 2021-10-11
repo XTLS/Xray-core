@@ -20,6 +20,14 @@ func (c routingContext) GetSourcePort() net.Port {
 	return net.Port(c.RoutingContext.GetSourcePort())
 }
 
+func (c routingContext) GetReceivingIP() net.IP {
+	return c.RoutingContext.GetReceivingIP()
+}
+
+func (c routingContext) GetReceivingPort() net.Port {
+	return c.RoutingContext.GetReceivingPort()
+}
+
 func (c routingContext) GetTargetIPs() []net.IP {
 	return mapBytesToIPs(c.RoutingContext.GetTargetIPs())
 }

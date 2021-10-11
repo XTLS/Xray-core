@@ -17,6 +17,12 @@ type Context interface {
 	// GetSourcePort returns the source port of the connection.
 	GetSourcePort() net.Port
 
+	// GetReceivingIP returns the local IP bound to incoming connection.
+	GetReceivingIP() net.IP
+
+	// GetReceivingPort returns the local port of the connection.
+	GetReceivingPort() net.Port
+
 	// GetTargetIPs returns the target IP of the connection or resolved IPs of target domain.
 	GetTargetIPs() []net.IP
 

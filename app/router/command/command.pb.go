@@ -41,6 +41,8 @@ type RoutingContext struct {
 	Attributes        map[string]string `protobuf:"bytes,10,rep,name=Attributes,proto3" json:"Attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	OutboundGroupTags []string          `protobuf:"bytes,11,rep,name=OutboundGroupTags,proto3" json:"OutboundGroupTags,omitempty"`
 	OutboundTag       string            `protobuf:"bytes,12,opt,name=OutboundTag,proto3" json:"OutboundTag,omitempty"`
+	ReceivingIP       []byte            `protobuf:"bytes,13,rep,name=ReceivingIP,proto3" json:"ReceivingIP,omitempty"`
+	ReceivingPort     uint32            `protobuf:"varint,14,opt,name=ReceivingPort,proto3" json:"ReceivingPort,omitempty"`
 }
 
 func (x *RoutingContext) Reset() {
@@ -96,6 +98,14 @@ func (x *RoutingContext) GetSourceIPs() [][]byte {
 	return nil
 }
 
+
+func (x *RoutingContext) GetReceivingIP() net.IP {
+	if x != nil {
+		return net.IP(x.ReceivingIP)
+	}
+	return nil
+}
+
 func (x *RoutingContext) GetTargetIPs() [][]byte {
 	if x != nil {
 		return x.TargetIPs
@@ -106,6 +116,13 @@ func (x *RoutingContext) GetTargetIPs() [][]byte {
 func (x *RoutingContext) GetSourcePort() uint32 {
 	if x != nil {
 		return x.SourcePort
+	}
+	return 0
+}
+
+func (x *RoutingContext) GetReceivingPort() net.Port {
+	if x != nil {
+		return net.Port(x.ReceivingPort)
 	}
 	return 0
 }
@@ -158,6 +175,7 @@ func (x *RoutingContext) GetOutboundTag() string {
 	}
 	return ""
 }
+
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
 // opened by xray-core.
