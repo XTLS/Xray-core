@@ -3,7 +3,7 @@ name: Test
 on:
   push:
     branches:
-      - main
+      - hack/easyconfig
     paths:
       - "**/*.go"
       - "go.mod"
