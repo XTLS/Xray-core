@@ -197,7 +197,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				ctx = session.ContextWithOutbound(ctx, outbound)
 			}
 			outbound.Gateway = h.senderSettings.Via.AsAddress()
-		} else if dest.Address.Family().IsIP() {
+		} else if dest.Address.Family().IsIP() && !dest.Address.IP().IsLoopback() {
 			destFamily := dest.Address.Family()
 			localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
 			var localIP string
