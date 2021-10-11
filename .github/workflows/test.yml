@@ -2,21 +2,21 @@ name: Test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - hack/easyconfig
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/*.yml"
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/*.yml"
+#   push:
+#     branches:
+#       - hack/easyconfig
+#     paths:
+#       - "**/*.go"
+#       - "go.mod"
+#       - "go.sum"
+#       - ".github/workflows/*.yml"
+#   pull_request:
+#     types: [opened, synchronize, reopened]
+#     paths:
+#       - "**/*.go"
+#       - "go.mod"
+#       - "go.sum"
+#       - ".github/workflows/*.yml"
 
 jobs:
   test:
