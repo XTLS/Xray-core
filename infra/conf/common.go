@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/net"
@@ -40,13 +41,16 @@ type Address struct {
 	net.Address
 }
 
+func (v *Address) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
 func (v *Address) UnmarshalJSON(data []byte) error {
 	var rawStr string
 	if err := json.Unmarshal(data, &rawStr); err != nil {
 		return newError("invalid address: ", string(data)).Base(err)
 	}
 	v.Address = net.ParseAddress(rawStr)
-
 	return nil
 }
 
@@ -158,6 +162,10 @@ func (v *PortRange) Build() *net.PortRange {
 		From: v.From,
 		To:   v.To,
 	}
+}
+
+func (v *PortRange) MarshalJSON() ([]byte, error) {
+	return json.Marshal(strconv.Itoa(int(v.From)) + "-" + strconv.Itoa(int(v.To)))
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON

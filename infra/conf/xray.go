@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/xtls/xray-core/transport/internet"
@@ -165,6 +166,7 @@ type InboundDetourConfig struct {
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
 	DomainOverride *StringList                    `json:"domainOverride"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
+	Template       string                         `json:"template"`
 }
 
 // Build implements Buildable.
@@ -271,6 +273,7 @@ type OutboundDetourConfig struct {
 	StreamSetting *StreamConfig    `json:"streamSettings"`
 	ProxySettings *ProxyConfig     `json:"proxySettings"`
 	MuxSettings   *MuxConfig       `json:"mux"`
+	Template      string           `json:"template"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -630,12 +633,24 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	for _, rawInboundConfig := range inbounds {
+		if rawInboundConfig.Template != "" {
+			next_t := rawInboundConfig.Template
+			t := c.findInboundTag(next_t)
+			for t >= 0 && next_t != "" {
+				next_t = c.InboundConfigs[t].Template
+				if err := json.Unmarshal(ConfigFromTemplate(c.InboundConfigs[t], rawInboundConfig), &rawInboundConfig); err != nil {
+					return nil, err
+				}
+				t = c.findInboundTag(next_t)
+			}
+		}
 		if c.Transport != nil {
 			if rawInboundConfig.StreamSetting == nil {
 				rawInboundConfig.StreamSetting = &StreamConfig{}
 			}
 			applyTransportConfig(rawInboundConfig.StreamSetting, c.Transport)
 		}
+
 		ic, err := rawInboundConfig.Build()
 		if err != nil {
 			return nil, err
@@ -658,6 +673,17 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	for _, rawOutboundConfig := range outbounds {
+		if rawOutboundConfig.Template != "" {
+			next_t := rawOutboundConfig.Template
+			t := c.findOutboundTag(next_t)
+			for t >= 0 && next_t != "" {
+				next_t = c.OutboundConfigs[t].Template
+				if err := json.Unmarshal(ConfigFromTemplate(c.OutboundConfigs[t], rawOutboundConfig), &rawOutboundConfig); err != nil {
+					return nil, err
+				}
+				t = c.findOutboundTag(next_t)
+			}
+		}
 		if c.Transport != nil {
 			if rawOutboundConfig.StreamSetting == nil {
 				rawOutboundConfig.StreamSetting = &StreamConfig{}
@@ -672,4 +698,52 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	return config, nil
+}
+
+func ConfigFromTemplate (template, override interface{}) []byte {
+	t, _ := json.Marshal(template)
+	o, _ := json.Marshal(override)
+	var tm map[string]interface{}
+	_ = json.Unmarshal(t, &tm)
+	var om map[string]interface{}
+	_ = json.Unmarshal(o, &om)
+	Override(tm, om)
+	td, _ := json.Marshal(tm)
+	return td
+}
+
+func Override(template, override interface{}) {
+	if reflect.DeepEqual(template, override) {
+		return
+	}
+	switch overrideData := override.(type) {
+	case []interface{}:
+		tm := template.([]interface{})
+		for i, v := range overrideData {
+			switch reflect.TypeOf(v).Kind() {
+			case reflect.Slice, reflect.Map:
+				Override(tm[i], v)
+			default:
+				tm[i] = v
+			}
+		}
+	case map[string]interface{}:
+		for k, v := range overrideData {
+			if v == nil || v == "" {
+				continue
+			}
+			tm := template.(map[string]interface{})
+			switch reflect.TypeOf(v).Kind() {
+			case reflect.Slice, reflect.Map:
+				_, ok := tm[k]
+				if !ok {
+					tm[k] = v
+				} else {
+					Override(tm[k], v)
+				}
+			default:
+				tm[k] = v
+			}
+		}
+	}
 }
