@@ -117,12 +117,12 @@ func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig
 func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	newError("redirecting request " + dst.String() + " to " + obt).WriteToLog(session.ExportIDToError(ctx))
 	h := obm.GetHandler(obt)
-	ctx = session.ContextWithOutbound(ctx, &session.Outbound{dst, nil})
+	ctx = session.ContextWithOutbound(ctx, &session.Outbound{Target: dst, Gateway: nil})
 	if h != nil {
 		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
 		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
 
-		go h.Dispatch(ctx, &transport.Link{ur, dw})
+		go h.Dispatch(ctx, &transport.Link{Reader: ur, Writer: dw})
 		nc := cnc.NewConnection(
 			cnc.ConnectionInputMulti(uw),
 			cnc.ConnectionOutputMulti(dr),
