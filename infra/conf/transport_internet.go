@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/domainsocket"
+	httpheader "github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/http"
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/quic"
@@ -180,10 +181,12 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 }
 
 type HTTPConfig struct {
-	Host               *StringList `json:"host"`
-	Path               string      `json:"path"`
-	ReadIdleTimeout    int32       `json:"read_idle_timeout"`
-	HealthCheckTimeout int32       `json:"health_check_timeout"`
+	Host               *StringList            `json:"host"`
+	Path               string                 `json:"path"`
+	ReadIdleTimeout    int32                  `json:"read_idle_timeout"`
+	HealthCheckTimeout int32                  `json:"health_check_timeout"`
+	Method             string                 `json:"method"`
+	Headers            map[string]*StringList `json:"headers"`
 }
 
 // Build implements Buildable.
@@ -201,6 +204,23 @@ func (c *HTTPConfig) Build() (proto.Message, error) {
 	}
 	if c.Host != nil {
 		config.Host = []string(*c.Host)
+	}
+	if c.Method != "" {
+		config.Method = c.Method
+	}
+	if len(c.Headers) > 0 {
+		config.Header = make([]*httpheader.Header, 0, len(c.Headers))
+		headerNames := sortMapKeys(c.Headers)
+		for _, key := range headerNames {
+			value := c.Headers[key]
+			if value == nil {
+				return nil, newError("empty HTTP header value: " + key).AtError()
+			}
+			config.Header = append(config.Header, &httpheader.Header{
+				Name:  key,
+				Value: append([]string(nil), (*value)...),
+			})
+		}
 	}
 	return config, nil
 }
