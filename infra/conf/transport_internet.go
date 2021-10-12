@@ -489,6 +489,8 @@ type SocketConfig struct {
 	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
 	DomainStrategy      string      `json:"domainStrategy"`
 	DialerProxy         string      `json:"dialerProxy"`
+
+	TCPKeepAliveInterval int32 `json:"tcpKeepAliveInterval"`
 }
 
 // Build implements Buildable.
@@ -529,12 +531,13 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}
 
 	return &internet.SocketConfig{
-		Mark:                c.Mark,
-		Tfo:                 tfo,
-		Tproxy:              tproxy,
-		DomainStrategy:      dStrategy,
-		AcceptProxyProtocol: c.AcceptProxyProtocol,
-		DialerProxy:         c.DialerProxy,
+		Mark:                 c.Mark,
+		Tfo:                  tfo,
+		Tproxy:               tproxy,
+		DomainStrategy:       dStrategy,
+		AcceptProxyProtocol:  c.AcceptProxyProtocol,
+		DialerProxy:          c.DialerProxy,
+		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 	}, nil
 }
 
