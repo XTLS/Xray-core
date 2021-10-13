@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
@@ -19,28 +20,39 @@ type NameServerConfig struct {
 	ExpectIPs    StringList
 }
 
-func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
+func (c *NameServerConfig) UnmarshalJSON(data []byte) (err error) {
 	var address Address
-	if err := json.Unmarshal(data, &address); err == nil {
+	if err = json.Unmarshal(data, &address); err == nil {
 		c.Address = &address
-		return nil
+	} else {
+		var advanced struct {
+			Address      *Address   `json:"address"`
+			ClientIP     *Address   `json:"clientIp"`
+			Port         uint16     `json:"port"`
+			SkipFallback bool       `json:"skipFallback"`
+			Domains      []string   `json:"domains"`
+			ExpectIPs    StringList `json:"expectIps"`
+		}
+		if err = json.Unmarshal(data, &advanced); err == nil {
+			c.Address = advanced.Address
+			c.ClientIP = advanced.ClientIP
+			c.Port = advanced.Port
+			c.SkipFallback = advanced.SkipFallback
+			c.Domains = advanced.Domains
+			c.ExpectIPs = advanced.ExpectIPs
+		}
 	}
 
-	var advanced struct {
-		Address      *Address   `json:"address"`
-		ClientIP     *Address   `json:"clientIp"`
-		Port         uint16     `json:"port"`
-		SkipFallback bool       `json:"skipFallback"`
-		Domains      []string   `json:"domains"`
-		ExpectIPs    StringList `json:"expectIps"`
-	}
-	if err := json.Unmarshal(data, &advanced); err == nil {
-		c.Address = advanced.Address
-		c.ClientIP = advanced.ClientIP
-		c.Port = advanced.Port
-		c.SkipFallback = advanced.SkipFallback
-		c.Domains = advanced.Domains
-		c.ExpectIPs = advanced.ExpectIPs
+	if err == nil {
+		if c.Port == 0 && c.Address.Family().IsDomain() {
+			if host, port, err := net.SplitHostPort(c.Address.Domain()); err == nil {
+				port, err := strconv.Atoi(port)
+				if err == nil {
+					c.Address = &Address{Address: net.ParseAddress(host)}
+					c.Port = uint16(port)
+				}
+			}
+		}
 		return nil
 	}
 
