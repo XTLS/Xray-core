@@ -29,6 +29,7 @@ type DNS struct {
 	ipOption               *dns.IPOption
 	hosts                  *StaticHosts
 	clients                []*Client
+	ctx                    context.Context
 	domainMatcher          strmatcher.IndexMatcher
 	matcherInfos           []*DomainMatcherInfo
 }
@@ -136,6 +137,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		hosts:                  hosts,
 		ipOption:               ipOption,
 		clients:                clients,
+		ctx:                    ctx,
 		domainMatcher:          domainMatcher,
 		matcherInfos:           matcherInfos,
 		disableCache:           config.DisableCache,
@@ -199,7 +201,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 
 	// Name servers lookup
 	errs := []error{}
-	ctx := session.ContextWithInbound(context.Background(), &session.Inbound{Tag: s.tag})
+	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
 	for _, client := range s.sortClients(domain) {
 		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
 			newError("skip DNS resolution for domain ", domain, " at server ", client.Name()).AtDebug().WriteToLog()
