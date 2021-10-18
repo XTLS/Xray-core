@@ -38,7 +38,7 @@ func ExportIDToError(ctx context.Context) errors.ExportOption {
 type Inbound struct {
 	// Source address of the inbound connection.
 	Source net.Destination
-	// Getaway address.
+	// Gateway address.
 	Gateway net.Destination
 	// Tag of the inbound proxy that handles the connection.
 	Tag string
@@ -75,7 +75,7 @@ type Content struct {
 
 	Attributes map[string]string
 
-	SkipRoutePick bool
+	SkipDNSResolve bool
 }
 
 // Sockopt is the settings for socket connection.

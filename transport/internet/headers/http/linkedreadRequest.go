@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"net/http"
 
-	_ "unsafe" // required to use //go:linkname
+	// required to use go:linkname
+	_ "unsafe"
 )
 
 //go:linkname readRequest net/http.readRequest
