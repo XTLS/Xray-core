@@ -90,5 +90,8 @@ message SocketConfig {
   bool accept_proxy_protocol = 7;
 
   DomainStrategy domain_strategy = 8;
+
   string dialer_proxy = 9;
+
+  int32 tcp_keep_alive_interval = 10;
 }

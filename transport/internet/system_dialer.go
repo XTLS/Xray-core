@@ -74,7 +74,6 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 
 	dialer := &net.Dialer{
 		Timeout:   time.Second * 16,
-		DualStack: true,
 		LocalAddr: resolveSrcAddr(dest.Network, src),
 	}
 
@@ -174,7 +173,7 @@ func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net
 // xray:api:stable
 func UseAlternativeSystemDialer(dialer SystemDialer) {
 	if dialer == nil {
-		effectiveSystemDialer = &DefaultSystemDialer{}
+		dialer = &DefaultSystemDialer{}
 	}
 	effectiveSystemDialer = dialer
 }

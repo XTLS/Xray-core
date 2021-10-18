@@ -40,8 +40,6 @@ type dialerConf struct {
 	*internet.MemoryStreamConfig
 }
 
-type dialerCanceller func()
-
 var (
 	globalDialerMap    map[dialerConf]*grpc.ClientConn
 	globalDialerAccess sync.Mutex
@@ -50,7 +48,8 @@ var (
 func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	conn, canceller, err := getGrpcClient(ctx, dest, streamSettings)
+	conn, err := getGrpcClient(ctx, dest, streamSettings)
+
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
@@ -59,7 +58,6 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		newError("using gRPC multi mode").AtDebug().WriteToLog()
 		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getNormalizedName())
 		if err != nil {
-			canceller()
 			return nil, newError("Cannot dial gRPC").Base(err)
 		}
 		return encoding.NewMultiHunkConn(grpcService, nil), nil
@@ -67,14 +65,13 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 
 	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.getNormalizedName())
 	if err != nil {
-		canceller()
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
 
 	return encoding.NewHunkConn(grpcService, nil), nil
 }
 
-func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, dialerCanceller, error) {
+func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -85,14 +82,8 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	canceller := func() {
-		globalDialerAccess.Lock()
-		defer globalDialerAccess.Unlock()
-		delete(globalDialerMap, dialerConf{dest, streamSettings})
-	}
-
 	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
-		return client, canceller, nil
+		return client, nil
 	}
 
 	var dialOptions = []grpc.DialOption{
@@ -157,5 +148,5 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions...,
 	)
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
-	return conn, canceller, err
+	return conn, err
 }
