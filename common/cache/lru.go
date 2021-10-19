@@ -2,7 +2,7 @@ package cache
 
 import (
 	"container/list"
-	sync "sync"
+	"sync"
 )
 
 // Lru simple, fast lru cache implementation
@@ -28,7 +28,7 @@ type lruElement struct {
 
 // NewLru init a lru cache
 func NewLru(cap int) Lru {
-	return lru{
+	return &lru{
 		capacity:         cap,
 		doubleLinkedlist: list.New(),
 		keyToElement:     new(sync.Map),
@@ -37,49 +37,53 @@ func NewLru(cap int) Lru {
 	}
 }
 
-func (l lru) Get(key interface{}) (value interface{}, ok bool) {
+func (l *lru) Get(key interface{}) (value interface{}, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if v, ok := l.keyToElement.Load(key); ok {
 		element := v.(*list.Element)
-		l.doubleLinkedlist.MoveBefore(element, l.doubleLinkedlist.Front())
-		return element.Value.(lruElement).value, true
+		l.doubleLinkedlist.MoveToFront(element)
+		return element.Value.(*lruElement).value, true
 	}
 	return nil, false
 }
 
-func (l lru) GetKeyFromValue(value interface{}) (key interface{}, ok bool) {
+func (l *lru) GetKeyFromValue(value interface{}) (key interface{}, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if k, ok := l.valueToElement.Load(value); ok {
 		element := k.(*list.Element)
-		l.doubleLinkedlist.MoveBefore(element, l.doubleLinkedlist.Front())
-		return element.Value.(lruElement).key, true
+		l.doubleLinkedlist.MoveToFront(element)
+		return element.Value.(*lruElement).key, true
 	}
 	return nil, false
 }
 
-func (l lru) PeekKeyFromValue(value interface{}) (key interface{}, ok bool) {
+func (l *lru) PeekKeyFromValue(value interface{}) (key interface{}, ok bool) {
 	if k, ok := l.valueToElement.Load(value); ok {
 		element := k.(*list.Element)
-		return element.Value.(lruElement).key, true
+		return element.Value.(*lruElement).key, true
 	}
 	return nil, false
 }
 
-func (l lru) Put(key, value interface{}) {
-	e := lruElement{key, value}
+func (l *lru) Put(key, value interface{}) {
+	l.mu.Lock()
+	e := &lruElement{key, value}
 	if v, ok := l.keyToElement.Load(key); ok {
 		element := v.(*list.Element)
 		element.Value = e
-		l.doubleLinkedlist.MoveBefore(element, l.doubleLinkedlist.Front())
+		l.doubleLinkedlist.MoveToFront(element)
 	} else {
-		l.mu.Lock()
 		element := l.doubleLinkedlist.PushFront(e)
 		l.keyToElement.Store(key, element)
 		l.valueToElement.Store(value, element)
 		if l.doubleLinkedlist.Len() > l.capacity {
 			toBeRemove := l.doubleLinkedlist.Back()
 			l.doubleLinkedlist.Remove(toBeRemove)
-			l.keyToElement.Delete(toBeRemove.Value.(lruElement).key)
-			l.valueToElement.Delete(toBeRemove.Value.(lruElement).value)
+			l.keyToElement.Delete(toBeRemove.Value.(*lruElement).key)
+			l.valueToElement.Delete(toBeRemove.Value.(*lruElement).value)
 		}
-		l.mu.Unlock()
 	}
+	l.mu.Unlock()
 }
