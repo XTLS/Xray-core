@@ -38,8 +38,7 @@ func (NoOpAuthenticator) Open(dst, nonce, ciphertext, additionalData []byte) ([]
 }
 
 // FnvAuthenticator is an AEAD based on Fnv hash.
-type FnvAuthenticator struct {
-}
+type FnvAuthenticator struct{}
 
 // NonceSize implements AEAD.NonceSize().
 func (*FnvAuthenticator) NonceSize() int {

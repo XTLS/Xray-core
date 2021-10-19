@@ -15,9 +15,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 )
 
-var (
-	globalSessionCache = xtls.NewLRUClientSessionCache(128)
-)
+var globalSessionCache = xtls.NewLRUClientSessionCache(128)
 
 // ParseCertificate converts a cert.Certificate to Certificate.
 func ParseCertificate(c *cert.Certificate) *Certificate {

@@ -186,6 +186,4 @@ func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 	return m, nil
 }
 
-var (
-	globalGeoIPContainer GeoIPMatcherContainer
-)
+var globalGeoIPContainer GeoIPMatcherContainer

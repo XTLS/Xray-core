@@ -382,7 +382,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 		return nil
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))

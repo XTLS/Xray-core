@@ -80,7 +80,6 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
-
 	// SkipDNSResolve is set from DNS module.
 	// the DOH remote server maybe a domain name,
 	// this prevents cycle resolving dead loop

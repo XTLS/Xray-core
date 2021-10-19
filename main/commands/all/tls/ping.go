@@ -27,9 +27,7 @@ func init() {
 	cmdPing.Run = executePing // break init loop
 }
 
-var (
-	pingIPStr = cmdPing.Flag.String("ip", "", "")
-)
+var pingIPStr = cmdPing.Flag.String("ip", "", "")
 
 func executePing(cmd *base.Command, args []string) {
 	if cmdPing.Flag.NArg() < 1 {

@@ -5,10 +5,11 @@
 package mocks
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	dns "github.com/xtls/xray-core/features/dns"
 	net "net"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
+	dns "github.com/xtls/xray-core/features/dns"
 )
 
 // DNSClient is a mock of Client interface

@@ -25,9 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
-var (
-	errSniffingTimeout = newError("timeout on sniffing")
-)
+var errSniffingTimeout = newError("timeout on sniffing")
 
 type cachedReader struct {
 	sync.Mutex

@@ -290,7 +290,6 @@ func (w *AuthenticationWriter) writeStream(mb buf.MultiBuffer) error {
 		mb = nb
 
 		eb, err := w.seal(rawBytes[:nBytes])
-
 		if err != nil {
 			buf.ReleaseMulti(mb2Write)
 			return err

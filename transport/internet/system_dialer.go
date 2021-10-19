@@ -11,9 +11,7 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 )
 
-var (
-	effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
-)
+var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)

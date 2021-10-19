@@ -23,6 +23,7 @@ import (
 
 //go:embed dialer.html
 var webpage []byte
+
 var conns chan *websocket.Conn
 
 func init() {

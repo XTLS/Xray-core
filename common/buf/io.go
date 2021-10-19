@@ -121,7 +121,7 @@ func NewWriter(writer io.Writer) Writer {
 		return mw
 	}
 
-	var iConn = writer
+	iConn := writer
 	if statConn, ok := writer.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}

@@ -482,6 +482,7 @@ func (w *dsWorker) Proxy() proxy.Inbound {
 func (w *dsWorker) Port() net.Port {
 	return net.Port(0)
 }
+
 func (w *dsWorker) Start() error {
 	ctx := context.Background()
 	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn stat.Connection) {

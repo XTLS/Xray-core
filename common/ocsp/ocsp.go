@@ -56,7 +56,6 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 	pemBundle := bundle.Bytes()
 
 	certificates, err := parsePEMBundle(pemBundle)
-
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +98,10 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 	}
 	defer req.Body.Close()
 	ocspResBytes, err := io.ReadAll(req.Body)
-
 	if err != nil {
 		return nil, newError(err)
 	}
 	return ocspResBytes, nil
-
 }
 
 // parsePEMBundle parses a certificate bundle from top to bottom and returns

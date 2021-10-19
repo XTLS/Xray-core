@@ -133,13 +133,11 @@ func Inverse(b []byte) []byte {
 	return b2
 }
 
-var (
-	authPool = sync.Pool{
-		New: func() interface{} {
-			return new(Authentication)
-		},
-	}
-)
+var authPool = sync.Pool{
+	New: func() interface{} {
+		return new(Authentication)
+	},
+}
 
 func getAuthenticationObject() *Authentication {
 	return authPool.Get().(*Authentication)

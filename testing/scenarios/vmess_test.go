@@ -108,12 +108,12 @@ func TestVMessDynamicPort(t *testing.T) {
 		}
 
 		server, _ := InitializeServerConfig(serverConfig)
-		if server != nil && tcpConnAvailableAtPort(t, serverPort + 100) {
+		if server != nil && tcpConnAvailableAtPort(t, serverPort+100) {
 			defer CloseServer(server)
 			break
 		}
 		retry += 1
-		if (retry > 5) {
+		if retry > 5 {
 			t.Fatal("All attempts failed to start server")
 		}
 		serverPort = tcp.PickPort()
@@ -174,7 +174,7 @@ func TestVMessDynamicPort(t *testing.T) {
 
 func tcpConnAvailableAtPort(t *testing.T, port net.Port) bool {
 	for i := 1; ; i++ {
-		if (i > 10) {
+		if i > 10 {
 			t.Log("All attempts failed to test tcp conn")
 			return false
 		}

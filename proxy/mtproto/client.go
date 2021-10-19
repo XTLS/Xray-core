@@ -13,8 +13,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 )
 
-type Client struct {
-}
+type Client struct{}
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	return &Client{}, nil
@@ -62,7 +61,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return buf.Copy(connReader, link.Writer)
 	}
 
-	var responseDoneAndCloseWriter = task.OnSuccess(response, task.Close(link.Writer))
+	responseDoneAndCloseWriter := task.OnSuccess(response, task.Close(link.Writer))
 	if err := task.Run(ctx, request, responseDoneAndCloseWriter); err != nil {
 		return newError("connection ends").Base(err)
 	}

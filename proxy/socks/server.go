@@ -182,7 +182,7 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 		return nil
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
@@ -237,7 +237,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 		for _, payload := range mpayload {
 			request, err := DecodeUDPPacket(payload)
-
 			if err != nil {
 				newError("failed to parse UDP request").Base(err).WriteToLog(session.ExportIDToError(ctx))
 				payload.Release()

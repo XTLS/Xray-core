@@ -5,8 +5,10 @@ import (
 	"os"
 )
 
-type configFileLoader func(string) (io.Reader, error)
-type extconfigLoader func([]string, io.Reader) (io.Reader, error)
+type (
+	configFileLoader func(string) (io.Reader, error)
+	extconfigLoader  func([]string, io.Reader) (io.Reader, error)
+)
 
 var (
 	EffectiveConfigFileLoader configFileLoader

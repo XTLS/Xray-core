@@ -45,6 +45,7 @@ func ioctl(s uintptr, ioc int, b []byte) error {
 	}
 	return nil
 }
+
 func (nl *pfiocNatlook) rdPort() int {
 	return int(binary.BigEndian.Uint16((*[2]byte)(unsafe.Pointer(&nl.Rdport))[:]))
 }

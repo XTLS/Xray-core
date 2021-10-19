@@ -11,9 +11,7 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 )
 
-var (
-	ipPrefix = "198.18."
-)
+var ipPrefix = "198.18."
 
 func TestNewFakeDnsHolder(_ *testing.T) {
 	_, err := NewFakeDNSHolder()

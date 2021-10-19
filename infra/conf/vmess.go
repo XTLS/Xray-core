@@ -127,6 +127,7 @@ type VMessOutboundTarget struct {
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }
+
 type VMessOutboundConfig struct {
 	Receivers []*VMessOutboundTarget `json:"vnext"`
 }

@@ -11,9 +11,7 @@ import (
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
-var (
-	_ buf.Writer = (*Conn)(nil)
-)
+var _ buf.Writer = (*Conn)(nil)
 
 type Conn struct {
 	*tls.Conn

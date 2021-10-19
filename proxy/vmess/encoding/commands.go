@@ -77,8 +77,7 @@ type CommandFactory interface {
 	Unmarshal(data []byte) (interface{}, error)
 }
 
-type CommandSwitchAccountFactory struct {
-}
+type CommandSwitchAccountFactory struct{}
 
 func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Writer) error {
 	cmd, ok := command.(*protocol.CommandSwitchAccount)

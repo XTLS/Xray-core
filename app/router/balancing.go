@@ -9,8 +9,7 @@ type BalancingStrategy interface {
 	PickOutbound([]string) string
 }
 
-type RandomStrategy struct {
-}
+type RandomStrategy struct{}
 
 func (s *RandomStrategy) PickOutbound(tags []string) string {
 	n := len(tags)

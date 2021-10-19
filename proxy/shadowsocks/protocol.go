@@ -54,7 +54,6 @@ func (r *FullReader) Read(p []byte) (n int, err error) {
 
 // ReadTCPSession reads a Shadowsocks TCP session from the given reader, returns its header and remaining parts.
 func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
-
 	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
 
 	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))

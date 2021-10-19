@@ -338,7 +338,7 @@ func parseDomainRule(domain string) ([]*router.Domain, error) {
 		}
 		return domains, nil
 	}
-	var isExtDatFile = 0
+	isExtDatFile := 0
 	{
 		const prefix = "ext:"
 		if strings.HasPrefix(domain, prefix) {
@@ -417,7 +417,7 @@ func toCidrList(ips StringList) ([]*router.GeoIP, error) {
 			})
 			continue
 		}
-		var isExtDatFile = 0
+		isExtDatFile := 0
 		{
 			const prefix = "ext:"
 			if strings.HasPrefix(ip, prefix) {
