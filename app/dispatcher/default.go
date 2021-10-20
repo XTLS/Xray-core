@@ -193,10 +193,15 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 		if strings.HasPrefix(protocolString, p) {
 			return true
 		}
-		if fakeDNSEngine != nil && protocolString != "bittorrent" && p == "fakedns" &&
-			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
-			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
-			return true
+		if fkr0, ok := fakeDNSEngine.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns" &&
+			destination.Address.Family().IsIP() && fkr0.IsIPInIPPool(destination.Address) {
+				newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
+				return true
+		}
+		if resultSubset, ok := result.(SnifferIsProtoSubsetOf); ok {
+			if resultSubset.IsProtoSubsetOf(p) {
+				return true
+			}
 		}
 	}
 
