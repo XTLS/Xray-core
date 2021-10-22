@@ -13,6 +13,8 @@ import "common/protocol/server_spec.proto";
 message Account {
   string password = 1;
   CipherType cipher_type = 2;
+
+  bool iv_check = 3;
 }
 
 enum CipherType {

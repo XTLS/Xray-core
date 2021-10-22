@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/protocol"
@@ -23,6 +24,8 @@ import (
 type MemoryAccount struct {
 	Cipher Cipher
 	Key    []byte
+
+	replayFilter antireplay.GeneralizedReplayFilter
 }
 
 // Equals implements protocol.Account.Equals().
@@ -31,6 +34,16 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 		return bytes.Equal(a.Key, account.Key)
 	}
 	return false
+}
+
+func (a *MemoryAccount) CheckIV(iv []byte) error {
+	if a.replayFilter == nil {
+		return nil
+	}
+	if a.replayFilter.Check(iv) {
+		return nil
+	}
+	return newError("IV is not unique")
 }
 
 func (a *MemoryAccount) GetCipherName() string {
@@ -100,6 +113,12 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 	return &MemoryAccount{
 		Cipher: Cipher,
 		Key:    passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
+		replayFilter: func() antireplay.GeneralizedReplayFilter {
+			if a.IvCheck {
+				return antireplay.NewBloomRing()
+			}
+			return nil
+		}(),
 	}, nil
 }
 
