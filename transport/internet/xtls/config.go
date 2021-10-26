@@ -62,14 +62,14 @@ func (c *Config) BuildCertificates() []*xtls.Certificate {
 		certs = append(certs, &keyPair)
 		if !entry.OneTimeLoading {
 			var isOcspstapling bool
-			hotRelodaInterval := uint64(3600)
+			hotReloadInterval := uint64(3600)
 			if entry.OcspStapling != 0 {
-				hotRelodaInterval = entry.OcspStapling
+				hotReloadInterval = entry.OcspStapling
 				isOcspstapling = true
 			}
 			index := len(certs) - 1
 			go func(entry *Certificate, cert *xtls.Certificate, index int) {
-				t := time.NewTicker(time.Duration(hotRelodaInterval) * time.Second)
+				t := time.NewTicker(time.Duration(hotReloadInterval) * time.Second)
 				for {
 					if entry.CertificatePath != "" && entry.KeyPath != "" {
 						newCert, err := filesystem.ReadFile(entry.CertificatePath)
