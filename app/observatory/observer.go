@@ -102,7 +102,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
 			var connection net.Conn
 			taskErr := task.Run(ctx, func() error {
-				// MUST use V2Fly's built in context system
+				// MUST use Xray's built in context system
 				dest, err := v2net.ParseDestination(network + ":" + addr)
 				if err != nil {
 					return newError("cannot understand address").Base(err)
@@ -133,7 +133,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 	var GETTime time.Duration
 	err := task.Run(o.ctx, func() error {
 		startTime := time.Now()
-		probeURL := "https://api.v2fly.org/checkConnection.svgz"
+		probeURL := "https://www.google.com/generate_204"
 		if o.config.ProbeUrl != "" {
 			probeURL = o.config.ProbeUrl
 		}

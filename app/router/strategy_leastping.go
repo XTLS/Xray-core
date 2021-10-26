@@ -36,6 +36,7 @@ func (l *LeastPingStrategy) PickOutbound(strings []string) string {
 		for _, v := range status {
 			if outboundsList.contains(v.OutboundTag) && v.Alive && v.Delay < leastPing {
 				selectedOutboundName = v.OutboundTag
+				leastPing = v.Delay
 			}
 		}
 		return selectedOutboundName
