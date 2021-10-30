@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/common"
 	clog "github.com/xtls/xray-core/common/log"

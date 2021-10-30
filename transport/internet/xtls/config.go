@@ -1,7 +1,9 @@
 package xtls
 
 import (
+	"crypto/hmac"
 	"crypto/x509"
+	"encoding/base64"
 	"strings"
 	"sync"
 	"time"
@@ -13,11 +15,10 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-var (
-	globalSessionCache = xtls.NewLRUClientSessionCache(128)
-)
+var globalSessionCache = xtls.NewLRUClientSessionCache(128)
 
 // ParseCertificate converts a cert.Certificate to Certificate.
 func ParseCertificate(c *cert.Certificate) *Certificate {
@@ -61,14 +62,14 @@ func (c *Config) BuildCertificates() []*xtls.Certificate {
 		certs = append(certs, &keyPair)
 		if !entry.OneTimeLoading {
 			var isOcspstapling bool
-			hotRelodaInterval := uint64(3600)
+			hotReloadInterval := uint64(3600)
 			if entry.OcspStapling != 0 {
-				hotRelodaInterval = entry.OcspStapling
+				hotReloadInterval = entry.OcspStapling
 				isOcspstapling = true
 			}
 			index := len(certs) - 1
-			go func(cert *xtls.Certificate, index int) {
-				t := time.NewTicker(time.Duration(hotRelodaInterval) * time.Second)
+			go func(entry *Certificate, cert *xtls.Certificate, index int) {
+				t := time.NewTicker(time.Duration(hotReloadInterval) * time.Second)
 				for {
 					if entry.CertificatePath != "" && entry.KeyPath != "" {
 						newCert, err := filesystem.ReadFile(entry.CertificatePath)
@@ -108,7 +109,7 @@ func (c *Config) BuildCertificates() []*xtls.Certificate {
 					certs[index] = cert
 					<-t.C
 				}
-			}(certs[len(certs)-1], index)
+			}(entry, certs[index], index)
 		}
 	}
 	return certs
@@ -212,13 +213,13 @@ func getGetCertificateFunc(c *xtls.Config, ca []*Certificate) func(hello *xtls.C
 	}
 }
 
-func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
+func getNewGetCertificateFunc(certs []*xtls.Certificate, rejectUnknownSNI bool) func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 	return func(hello *xtls.ClientHelloInfo) (*xtls.Certificate, error) {
 		if len(certs) == 0 {
-			return nil, newError("empty certs")
+			return nil, errNoCertificates
 		}
 		sni := strings.ToLower(hello.ServerName)
-		if len(certs) == 1 || sni == "" {
+		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
 			return certs[0], nil
 		}
 		gsni := "*"
@@ -235,12 +236,28 @@ func getNewGetCertficateFunc(certs []*xtls.Certificate) func(hello *xtls.ClientH
 				}
 			}
 		}
+		if rejectUnknownSNI {
+			return nil, errNoCertificates
+		}
 		return certs[0], nil
 	}
 }
 
 func (c *Config) parseServerName() string {
 	return c.ServerName
+}
+
+func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if c.PinnedPeerCertificateChainSha256 != nil {
+		hashValue := tls.GenerateCertChainHash(rawCerts)
+		for _, v := range c.PinnedPeerCertificateChainSha256 {
+			if hmac.Equal(hashValue, v) {
+				return nil
+			}
+		}
+		return newError("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
+	}
+	return nil
 }
 
 // GetXTLSConfig converts this Config into xtls.Config.
@@ -266,6 +283,7 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 		InsecureSkipVerify:     c.AllowInsecure,
 		NextProtos:             c.NextProtocol,
 		SessionTicketsDisabled: !c.EnableSessionResumption,
+		VerifyPeerCertificate:  c.verifyPeerCert,
 	}
 
 	for _, opt := range opts {
@@ -276,7 +294,7 @@ func (c *Config) GetXTLSConfig(opts ...Option) *xtls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
+		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -26,11 +28,11 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
-	"github.com/xtls/xray-core/transport/internet"
 )
 
 var (
-	aeadForced = false
+	aeadForced     = false
+	aeadForced2022 = false
 )
 
 type userByEmail struct {
@@ -205,7 +207,9 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 		return err
 	}
 
-	if request.Option.Has(protocol.RequestOptionChunkStream) {
+	account := request.User.Account.(*vmess.MemoryAccount)
+
+	if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
 		if err := bodyWriter.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 			return err
 		}
@@ -219,14 +223,14 @@ func isInsecureEncryption(s protocol.SecurityType) bool {
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection internet.Connection, dispatcher routing.Dispatcher) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	iConn := connection
-	if statConn, ok := iConn.(*internet.StatCouterConnection); ok {
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
 	_, isDrain := iConn.(*net.TCPConn)
@@ -317,7 +321,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
@@ -368,8 +372,17 @@ func init() {
 		return New(ctx, config.(*Config))
 	}))
 
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	defaultFlagValue := "NOT_DEFINED_AT_ALL"
+
+	if time.Now().Year() >= 2022 {
+		defaultFlagValue = "true_by_default_2022"
+	}
 
 	isAeadForced := platform.NewEnvFlag("xray.vmess.aead.forced").GetValue(func() string { return defaultFlagValue })
 	aeadForced = (isAeadForced == "true")
+
+	if isAeadForced == "true_by_default_2022" {
+		aeadForced = true
+		aeadForced2022 = true
+	}
 }

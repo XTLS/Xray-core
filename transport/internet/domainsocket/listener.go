@@ -1,5 +1,5 @@
-// +build !windows
-// +build !wasm
+//go:build !windows && !wasm
+// +build !windows,!wasm
 
 package domainsocket
 
@@ -8,6 +8,8 @@ import (
 	gotls "crypto/tls"
 	"os"
 	"strings"
+
+	"github.com/xtls/xray-core/transport/internet/stat"
 
 	goxtls "github.com/xtls/go"
 	"golang.org/x/sys/unix"
@@ -98,7 +100,7 @@ func (ln *Listener) run() {
 			conn = xtls.Server(conn, ln.xtlsConfig)
 		}
 
-		ln.addConn(internet.Connection(conn))
+		ln.addConn(stat.Connection(conn))
 	}
 }
 

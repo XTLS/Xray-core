@@ -4,12 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/xtls/xray-core/features/dns"
+
 	"github.com/golang/mock/gomock"
+
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/testing/mocks"
@@ -40,7 +42,7 @@ func TestSimpleRouter(t *testing.T) {
 	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
 
 	r := new(Router)
-	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+	common.Must(r.Init(context.TODO(), config, mockDNS, &mockOutboundManager{
 		Manager:         mockOhm,
 		HandlerSelector: mockHs,
 	}))
@@ -81,7 +83,7 @@ func TestSimpleBalancer(t *testing.T) {
 	mockHs.EXPECT().Select(gomock.Eq([]string{"test-"})).Return([]string{"test"})
 
 	r := new(Router)
-	common.Must(r.Init(config, mockDNS, &mockOutboundManager{
+	common.Must(r.Init(context.TODO(), config, mockDNS, &mockOutboundManager{
 		Manager:         mockOhm,
 		HandlerSelector: mockHs,
 	}))
@@ -123,7 +125,7 @@ func TestIPOnDemand(t *testing.T) {
 	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
-	common.Must(r.Init(config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -162,7 +164,7 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
-	common.Must(r.Init(config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -196,7 +198,7 @@ func TestIPIfNonMatchIP(t *testing.T) {
 	mockDNS := mocks.NewDNSClient(mockCtl)
 
 	r := new(Router)
-	common.Must(r.Init(config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.LocalHostIP, 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))

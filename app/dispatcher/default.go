@@ -4,6 +4,7 @@ package dispatcher
 
 import (
 	"context"
+	"github.com/xtls/xray-core/features/dns"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -25,9 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
-var (
-	errSniffingTimeout = newError("timeout on sniffing")
-)
+var errSniffingTimeout = newError("timeout on sniffing")
 
 type cachedReader struct {
 	sync.Mutex
@@ -94,13 +92,14 @@ type DefaultDispatcher struct {
 	router routing.Router
 	policy policy.Manager
 	stats  stats.Manager
+	hosts  dns.HostsLookup
 }
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
-		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager) error {
-			return d.Init(config.(*Config), om, router, pm, sm)
+		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
+			return d.Init(config.(*Config), om, router, pm, sm, dc)
 		}); err != nil {
 			return nil, err
 		}
@@ -109,11 +108,14 @@ func init() {
 }
 
 // Init initializes DefaultDispatcher.
-func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager) error {
+func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
 	d.ohm = om
 	d.router = router
 	d.policy = pm
 	d.stats = sm
+	if hosts, ok := dc.(dns.HostsLookup); ok {
+		d.hosts = hosts
+	}
 	return nil
 }
 
@@ -195,10 +197,15 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 		if strings.HasPrefix(protocolString, p) {
 			return true
 		}
-		if fakeDNSEngine != nil && protocolString != "bittorrent" && p == "fakedns" &&
-			destination.Address.Family().IsIP() && fakeDNSEngine.GetFakeIPRange().Contains(destination.Address.IP()) {
+		if fkr0, ok := fakeDNSEngine.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns" &&
+			destination.Address.Family().IsIP() && fkr0.IsIPInIPPool(destination.Address) {
 			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
 			return true
+		}
+		if resultSubset, ok := result.(SnifferIsProtoSubsetOf); ok {
+			if resultSubset.IsProtoSubsetOf(p) {
+				return true
+			}
 		}
 	}
 
@@ -234,7 +241,11 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
-				ob.Target = destination
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
 			}
 		}
 		go d.routedDispatch(ctx, outbound, destination)
@@ -252,12 +263,77 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
-				ob.Target = destination
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
 			}
 			d.routedDispatch(ctx, outbound, destination)
 		}()
 	}
 	return inbound, nil
+}
+
+// DispatchLink implements routing.Dispatcher.
+func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.Destination, outbound *transport.Link) error {
+	if !destination.IsValid() {
+		return newError("Dispatcher: Invalid destination.")
+	}
+	ob := &session.Outbound{
+		Target: destination,
+	}
+	ctx = session.ContextWithOutbound(ctx, ob)
+	content := session.ContentFromContext(ctx)
+	if content == nil {
+		content = new(session.Content)
+		ctx = session.ContextWithContent(ctx, content)
+	}
+	sniffingRequest := content.SniffingRequest
+	switch {
+	case !sniffingRequest.Enabled:
+		go d.routedDispatch(ctx, outbound, destination)
+	case destination.Network != net.Network_TCP:
+		// Only metadata sniff will be used for non tcp connection
+		result, err := sniffer(ctx, nil, true)
+		if err == nil {
+			content.Protocol = result.Protocol()
+			if shouldOverride(ctx, result, sniffingRequest, destination) {
+				domain := result.Domain()
+				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
+				destination.Address = net.ParseAddress(domain)
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
+			}
+		}
+		go d.routedDispatch(ctx, outbound, destination)
+	default:
+		go func() {
+			cReader := &cachedReader{
+				reader: outbound.Reader.(*pipe.Reader),
+			}
+			outbound.Reader = cReader
+			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly)
+			if err == nil {
+				content.Protocol = result.Protocol()
+			}
+			if err == nil && shouldOverride(ctx, result, sniffingRequest, destination) {
+				domain := result.Domain()
+				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
+				destination.Address = net.ParseAddress(domain)
+				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
+					ob.RouteTarget = destination
+				} else {
+					ob.Target = destination
+				}
+			}
+			d.routedDispatch(ctx, outbound, destination)
+		}()
+	}
+	return nil
 }
 
 func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (SniffResult, error) {
@@ -307,25 +383,41 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (Sni
 }
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
-	var handler outbound.Handler
-
-	skipRoutePick := false
-	if content := session.ContentFromContext(ctx); content != nil {
-		skipRoutePick = content.SkipRoutePick
+	ob := session.OutboundFromContext(ctx)
+	if d.hosts != nil && destination.Address.Family().IsDomain() {
+		proxied := d.hosts.LookupHosts(ob.Target.String())
+		if proxied != nil {
+			ro := ob.RouteTarget == destination
+			destination.Address = *proxied
+			if ro {
+				ob.RouteTarget = destination
+			} else {
+				ob.Target = destination
+			}
+		}
 	}
 
-	routingLink := routing_session.AsRoutingContext(ctx)
-	inTag := routingLink.GetInboundTag()
-	isPickRoute := false
-	if d.router != nil && !skipRoutePick {
-		if route, err := d.router.PickRoute(routingLink); err == nil {
-			outTag := route.GetOutboundTag()
-			isPickRoute = true
-			if h := d.ohm.GetHandler(outTag); h != nil {
-				newError("taking detour [", outTag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
+	var handler outbound.Handler
+
+	if forcedOutboundTag := session.GetForcedOutboundTagFromContext(ctx); forcedOutboundTag != "" {
+		ctx = session.SetForcedOutboundTagToContext(ctx, "")
+		if h := d.ohm.GetHandler(forcedOutboundTag); h != nil {
+			newError("taking platform initialized detour [", forcedOutboundTag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
+			handler = h
+		} else {
+			newError("non existing tag for platform initialized detour: ", forcedOutboundTag).AtError().WriteToLog(session.ExportIDToError(ctx))
+			common.Close(link.Writer)
+			common.Interrupt(link.Reader)
+			return
+		}
+	} else if d.router != nil {
+		if route, err := d.router.PickRoute(routing_session.AsRoutingContext(ctx)); err == nil {
+			tag := route.GetOutboundTag()
+			if h := d.ohm.GetHandler(tag); h != nil {
+				newError("taking detour [", tag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 				handler = h
 			} else {
-				newError("non existing outTag: ", outTag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				newError("non existing outTag: ", tag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 			}
 		} else {
 			newError("default route for ", destination).WriteToLog(session.ExportIDToError(ctx))
@@ -345,19 +437,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
 		if tag := handler.Tag(); tag != "" {
-			if isPickRoute {
-				if inTag != "" {
-					accessMessage.Detour = inTag + " -> " + tag
-				} else {
-					accessMessage.Detour = tag
-				}
-			} else {
-				if inTag != "" {
-					accessMessage.Detour = inTag + " >> " + tag
-				} else {
-					accessMessage.Detour = tag
-				}
-			}
+			accessMessage.Detour = tag
 		}
 		log.Record(accessMessage)
 	}

@@ -1,5 +1,5 @@
-// +build !windows
-// +build !android
+//go:build !windows && !android
+// +build !windows,!android
 
 package domainsocket_test
 
@@ -7,6 +7,8 @@ import (
 	"context"
 	"runtime"
 	"testing"
+
+	"github.com/xtls/xray-core/transport/internet/stat"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -23,7 +25,7 @@ func TestListen(t *testing.T) {
 			Path: "/tmp/ts3",
 		},
 	}
-	listener, err := Listen(ctx, nil, net.Port(0), streamSettings, func(conn internet.Connection) {
+	listener, err := Listen(ctx, nil, net.Port(0), streamSettings, func(conn stat.Connection) {
 		defer conn.Close()
 
 		b := buf.New()
@@ -64,7 +66,7 @@ func TestListenAbstract(t *testing.T) {
 			Abstract: true,
 		},
 	}
-	listener, err := Listen(ctx, nil, net.Port(0), streamSettings, func(conn internet.Connection) {
+	listener, err := Listen(ctx, nil, net.Port(0), streamSettings, func(conn stat.Connection) {
 		defer conn.Close()
 
 		b := buf.New()

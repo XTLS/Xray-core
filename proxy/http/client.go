@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"golang.org/x/net/http2"
 
 	"github.com/xtls/xray-core/common"
@@ -77,7 +79,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	var user *protocol.MemoryUser
-	var conn internet.Connection
+	var conn stat.Connection
 
 	mbuf, _ := link.Reader.ReadMultiBuffer()
 	len := mbuf.Len()
@@ -101,7 +103,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 					return err
 				}
 			}
-			conn = internet.Connection(netConn)
+			conn = stat.Connection(netConn)
 		}
 		return err
 	}); err != nil {
@@ -131,7 +133,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 	}
 
-	var responseDonePost = task.OnSuccess(responseFunc, task.Close(link.Writer))
+	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
 	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
 		return newError("connection ends").Base(err)
 	}
@@ -231,7 +233,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 	}
 
 	iConn := rawConn
-	if statConn, ok := iConn.(*internet.StatCouterConnection); ok {
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
@@ -96,7 +97,6 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		IP:   address.IP(),
 		Port: int(port),
 	}, streamSettings.SocketSettings)
-
 	if err != nil {
 		return nil, err
 	}

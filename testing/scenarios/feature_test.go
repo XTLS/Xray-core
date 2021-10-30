@@ -2,11 +2,13 @@ package scenarios
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	xproxy "golang.org/x/net/proxy"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
@@ -32,7 +34,6 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
-	xproxy "golang.org/x/net/proxy"
 )
 
 func TestPassiveConnection(t *testing.T) {
@@ -511,7 +512,7 @@ func TestUDPConnection(t *testing.T) {
 	common.Must(err)
 	defer udpServer.Close()
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
@@ -641,7 +642,7 @@ func TestDomainSniffing(t *testing.T) {
 		if resp.StatusCode != 200 {
 			t.Error("unexpected status code: ", resp.StatusCode)
 		}
-		common.Must(resp.Write(ioutil.Discard))
+		common.Must(resp.Write(io.Discard))
 	}
 }
 

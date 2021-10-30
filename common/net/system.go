@@ -3,17 +3,21 @@ package net
 import "net"
 
 // DialTCP is an alias of net.DialTCP.
-var DialTCP = net.DialTCP
-var DialUDP = net.DialUDP
-var DialUnix = net.DialUnix
-var Dial = net.Dial
+var (
+	DialTCP  = net.DialTCP
+	DialUDP  = net.DialUDP
+	DialUnix = net.DialUnix
+	Dial     = net.Dial
+)
 
 type ListenConfig = net.ListenConfig
 
-var Listen = net.Listen
-var ListenTCP = net.ListenTCP
-var ListenUDP = net.ListenUDP
-var ListenUnix = net.ListenUnix
+var (
+	Listen     = net.Listen
+	ListenTCP  = net.ListenTCP
+	ListenUDP  = net.ListenUDP
+	ListenUnix = net.ListenUnix
+)
 
 var LookupIP = net.LookupIP
 
@@ -26,36 +30,54 @@ var SplitHostPort = net.SplitHostPort
 
 var CIDRMask = net.CIDRMask
 
-type Addr = net.Addr
-type Conn = net.Conn
-type PacketConn = net.PacketConn
+type (
+	Addr       = net.Addr
+	Conn       = net.Conn
+	PacketConn = net.PacketConn
+)
 
-type TCPAddr = net.TCPAddr
-type TCPConn = net.TCPConn
+type (
+	TCPAddr = net.TCPAddr
+	TCPConn = net.TCPConn
+)
 
-type UDPAddr = net.UDPAddr
-type UDPConn = net.UDPConn
+type (
+	UDPAddr = net.UDPAddr
+	UDPConn = net.UDPConn
+)
 
-type UnixAddr = net.UnixAddr
-type UnixConn = net.UnixConn
+type (
+	UnixAddr = net.UnixAddr
+	UnixConn = net.UnixConn
+)
 
 // IP is an alias for net.IP.
-type IP = net.IP
-type IPMask = net.IPMask
-type IPNet = net.IPNet
+type (
+	IP     = net.IP
+	IPMask = net.IPMask
+	IPNet  = net.IPNet
+)
 
-const IPv4len = net.IPv4len
-const IPv6len = net.IPv6len
+const (
+	IPv4len = net.IPv4len
+	IPv6len = net.IPv6len
+)
 
-type Error = net.Error
-type AddrError = net.AddrError
+type (
+	Error     = net.Error
+	AddrError = net.AddrError
+)
 
-type Dialer = net.Dialer
-type Listener = net.Listener
-type TCPListener = net.TCPListener
-type UnixListener = net.UnixListener
+type (
+	Dialer       = net.Dialer
+	Listener     = net.Listener
+	TCPListener  = net.TCPListener
+	UnixListener = net.UnixListener
+)
 
-var ResolveUnixAddr = net.ResolveUnixAddr
-var ResolveUDPAddr = net.ResolveUDPAddr
+var (
+	ResolveUnixAddr = net.ResolveUnixAddr
+	ResolveUDPAddr  = net.ResolveUDPAddr
+)
 
 type Resolver = net.Resolver

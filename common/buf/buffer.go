@@ -24,10 +24,17 @@ type Buffer struct {
 	UDP   *net.Destination
 }
 
-// New creates a Buffer with 0 length and 2K capacity.
+// New creates a Buffer with 0 length and 8K capacity.
 func New() *Buffer {
+	buf := pool.Get().([]byte)
+	if cap(buf) >= Size {
+		buf = buf[:Size]
+	} else {
+		buf = make([]byte, Size)
+	}
+
 	return &Buffer{
-		v: pool.Get().([]byte),
+		v: buf,
 	}
 }
 
@@ -50,8 +57,15 @@ func NewExisted(b []byte) *Buffer {
 // StackNew creates a new Buffer object on stack.
 // This method is for buffers that is released in the same function.
 func StackNew() Buffer {
+	buf := pool.Get().([]byte)
+	if cap(buf) >= Size {
+		buf = buf[:Size]
+	} else {
+		buf = make([]byte, Size)
+	}
+
 	return Buffer{
-		v: pool.Get().([]byte),
+		v: buf,
 	}
 }
 
@@ -64,7 +78,10 @@ func (b *Buffer) Release() {
 	p := b.v
 	b.v = nil
 	b.Clear()
-	pool.Put(p)
+
+	if cap(p) == Size {
+		pool.Put(p)
+	}
 	b.UDP = nil
 }
 

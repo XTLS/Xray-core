@@ -97,7 +97,6 @@ func (server *Server) handleConnection(conn net.Conn) {
 			}
 		}
 	})
-
 	if err != nil {
 		fmt.Println("failed to transfer data: ", err.Error())
 	}

@@ -40,12 +40,16 @@
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
+  - [Qv2ray](https://github.com/Qv2ray/Qv2ray)  (This project had been archived and currently inactive)
   - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
+  - [AnXray](https://github.com/XTLS/AnXray)
   - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
-- iOS / Mac
+- iOS & macOS (with M1 chip)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+- macOS (Intel chip & M1 chip)
+  - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
 
 ## Credits
 

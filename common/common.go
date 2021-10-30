@@ -5,7 +5,6 @@ package common
 import (
 	"fmt"
 	"go/build"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,10 +14,8 @@ import (
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
-var (
-	// ErrNoClue is for the situation that existing information is not enough to make a decision. For example, Router may return this error when there is no suitable route.
-	ErrNoClue = errors.New("not enough information for making a decision")
-)
+// ErrNoClue is for the situation that existing information is not enough to make a decision. For example, Router may return this error when there is no suitable route.
+var ErrNoClue = errors.New("not enough information for making a decision")
 
 // Must panics if err is not nil.
 func Must(err error) {
@@ -69,7 +66,7 @@ func GetRuntimeEnv(key string) (string, error) {
 	}
 	var data []byte
 	var runtimeEnv string
-	data, readErr := ioutil.ReadFile(file)
+	data, readErr := os.ReadFile(file)
 	if readErr != nil {
 		return "", readErr
 	}
@@ -131,7 +128,7 @@ func GetModuleName(pathToProjectRoot string) (string, error) {
 	for {
 		if idx := strings.LastIndex(loopPath, string(filepath.Separator)); idx >= 0 {
 			gomodPath := filepath.Join(loopPath, "go.mod")
-			gomodBytes, err := ioutil.ReadFile(gomodPath)
+			gomodBytes, err := os.ReadFile(gomodPath)
 			if err != nil {
 				loopPath = loopPath[:idx]
 				continue

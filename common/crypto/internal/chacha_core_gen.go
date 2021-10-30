@@ -1,3 +1,4 @@
+//go:build generate
 // +build generate
 
 package main
@@ -55,7 +56,7 @@ func ChaCha20Block(s *[16]uint32, out []byte, rounds int) {
 }
 
 func main() {
-	file, err := os.OpenFile("chacha_core.generated.go", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	file, err := os.OpenFile("chacha_core.generated.go", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o644)
 	if err != nil {
 		log.Fatalf("Failed to generate chacha_core.go: %v", err)
 	}

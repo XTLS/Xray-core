@@ -6,7 +6,13 @@ option go_package = "github.com/xtls/xray-core/transport/internet/http";
 option java_package = "com.xray.transport.internet.http";
 option java_multiple_files = true;
 
+import "transport/internet/headers/http/config.proto";
+
 message Config {
   repeated string host = 1;
   string path = 2;
+  int32 idle_timeout = 3;
+  int32 health_check_timeout = 4;
+  string method = 5;
+  repeated xray.transport.internet.headers.http.Header header = 6;
 }

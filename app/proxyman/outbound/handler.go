@@ -3,6 +3,8 @@ package outbound
 import (
 	"context"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/mux"
@@ -134,13 +136,17 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	if h.mux != nil && (h.mux.Enabled || session.MuxPreferedFromContext(ctx)) {
 		if err := h.mux.Dispatch(ctx, link); err != nil {
-			newError("failed to process mux outbound traffic").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			err := newError("failed to process mux outbound traffic").Base(err)
+			session.SubmitOutboundErrorToOriginator(ctx, err)
+			err.WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
 		}
 	} else {
 		if err := h.proxy.Process(ctx, link, h); err != nil {
 			// Ensure outbound ray is properly closed.
-			newError("failed to process outbound traffic").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			err := newError("failed to process outbound traffic").Base(err)
+			session.SubmitOutboundErrorToOriginator(ctx, err)
+			err.WriteToLog(session.ExportIDToError(ctx))
 			common.Interrupt(link.Writer)
 		} else {
 			common.Must(common.Close(link.Writer))
@@ -158,7 +164,7 @@ func (h *Handler) Address() net.Address {
 }
 
 // Dial implements internet.Dialer.
-func (h *Handler) Dial(ctx context.Context, dest net.Destination) (internet.Connection, error) {
+func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil {
 		if h.senderSettings.ProxySettings.HasTag() {
 			tag := h.senderSettings.ProxySettings.Tag
@@ -201,9 +207,9 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (internet.Conn
 	return h.getStatCouterConnection(conn), err
 }
 
-func (h *Handler) getStatCouterConnection(conn internet.Connection) internet.Connection {
+func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {
 	if h.uplinkCounter != nil || h.downlinkCounter != nil {
-		return &internet.StatCouterConnection{
+		return &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  h.downlinkCounter,
 			WriteCounter: h.uplinkCounter,

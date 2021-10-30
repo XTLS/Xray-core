@@ -15,9 +15,10 @@ import (
 )
 
 type VMessAccount struct {
-	ID       string `json:"id"`
-	AlterIds uint16 `json:"alterId"`
-	Security string `json:"security"`
+	ID          string `json:"id"`
+	AlterIds    uint16 `json:"alterId"`
+	Security    string `json:"security"`
+	Experiments string `json:"experiments"`
 }
 
 // Build implements Buildable
@@ -43,6 +44,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 		SecuritySettings: &protocol.SecurityConfig{
 			Type: st,
 		},
+		TestsEnabled: a.Experiments,
 	}
 }
 
@@ -127,6 +129,7 @@ type VMessOutboundTarget struct {
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }
+
 type VMessOutboundConfig struct {
 	Receivers []*VMessOutboundTarget `json:"vnext"`
 }

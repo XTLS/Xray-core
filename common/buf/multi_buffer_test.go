@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/xtls/xray-core/common"
 	. "github.com/xtls/xray-core/common/buf"
 )
@@ -119,7 +119,7 @@ func TestMultiBufferReadAllToByte(t *testing.T) {
 		common.Must(err)
 		f.Close()
 
-		cnt, err := ioutil.ReadFile(dat)
+		cnt, err := os.ReadFile(dat)
 		common.Must(err)
 
 		if d := cmp.Diff(buf2, cnt); d != "" {

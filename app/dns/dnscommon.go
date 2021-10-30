@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/dns/dnsmessage"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	dns_feature "github.com/xtls/xray-core/features/dns"
-	"golang.org/x/net/dns/dnsmessage"
 )
 
 // Fqdn normalize domain make sure it ends with '.'
@@ -53,9 +54,7 @@ func isNewer(baseRec *IPRecord, newRec *IPRecord) bool {
 	return baseRec.Expire.Before(newRec.Expire)
 }
 
-var (
-	errRecordNotFound = errors.New("record not found")
-)
+var errRecordNotFound = errors.New("record not found")
 
 type dnsRequest struct {
 	reqType dnsmessage.Type
@@ -212,7 +211,7 @@ L:
 		case dnsmessage.TypeAAAA:
 			ans, err := parser.AAAAResource()
 			if err != nil {
-				newError("failed to parse A record for domain: ", ah.Name).Base(err).WriteToLog()
+				newError("failed to parse AAAA record for domain: ", ah.Name).Base(err).WriteToLog()
 				break L
 			}
 			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.AAAA[:]))

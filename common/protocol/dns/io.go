@@ -4,10 +4,11 @@ import (
 	"encoding/binary"
 	"sync"
 
+	"golang.org/x/net/dns/dnsmessage"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/serial"
-	"golang.org/x/net/dns/dnsmessage"
 )
 
 func PackMessage(msg *dnsmessage.Message) (*buf.Buffer, error) {

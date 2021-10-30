@@ -43,6 +43,14 @@ func GenerateInitialAEADNonce() BytesGenerator {
 	return GenerateIncreasingNonce([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
 }
 
+func GenerateAEADNonceWithSize(nonceSize int) BytesGenerator {
+	c := make([]byte, nonceSize)
+	for i := 0; i < nonceSize; i++ {
+		c[i] = 0xFF
+	}
+	return GenerateIncreasingNonce(c)
+}
+
 type Authenticator interface {
 	NonceSize() int
 	Overhead() int
@@ -290,7 +298,6 @@ func (w *AuthenticationWriter) writeStream(mb buf.MultiBuffer) error {
 		mb = nb
 
 		eb, err := w.seal(rawBytes[:nBytes])
-
 		if err != nil {
 			buf.ReleaseMulti(mb2Write)
 			return err

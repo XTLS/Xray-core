@@ -11,13 +11,13 @@ import (
 func BenchmarkACAutomaton(b *testing.B) {
 	ac := NewACAutomaton()
 	for i := 1; i <= 1024; i++ {
-		ac.Add(strconv.Itoa(i)+".v2ray.com", Domain)
+		ac.Add(strconv.Itoa(i)+".xray.com", Domain)
 	}
 	ac.Build()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = ac.Match("0.v2ray.com")
+		_ = ac.Match("0.xray.com")
 	}
 }
 

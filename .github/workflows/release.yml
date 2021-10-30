@@ -52,7 +52,9 @@ jobs:
           - goos: android
             goarch: arm64
           # END Android ARM 8
-          # Windows ARM 7
+          # Windows ARM
+          - goos: windows
+            goarch: arm64
           - goos: windows
             goarch: arm
             goarm: 7
@@ -121,7 +123,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: ^1.16
+          go-version: ^1.17.2
 
       - name: Get project dependencies
         run: go mod download

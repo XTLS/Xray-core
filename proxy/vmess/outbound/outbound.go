@@ -6,6 +6,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -57,7 +59,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	var rec *protocol.ServerSpec
-	var conn internet.Connection
+	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 200).On(func() error {
 		rec = h.serverPicker.PickServer()
@@ -117,6 +119,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Option.Clear(protocol.RequestOptionChunkMasking)
 	}
 
+	if account.AuthenticatedLengthExperiment {
+		request.Option.Set(protocol.RequestOptionAuthenticatedLength)
+	}
+
 	input := link.Reader
 	output := link.Writer
 
@@ -162,7 +168,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return err
 		}
 
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
+		if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
 			if err := bodyWriter2.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 				return err
 			}
@@ -189,7 +195,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
 	}
 
-	var responseDonePost = task.OnSuccess(responseDone, task.Close(output))
+	responseDonePost := task.OnSuccess(responseDone, task.Close(output))
 	if err := task.Run(ctx, requestDone, responseDonePost); err != nil {
 		return newError("connection ends").Base(err)
 	}

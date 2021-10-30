@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -15,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
@@ -298,7 +299,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 				if sctx != nil {
 					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
 						iConn := inbound.Conn
-						statConn, ok := iConn.(*internet.StatCouterConnection)
+						statConn, ok := iConn.(*stat.CounterConnection)
 						if ok {
 							iConn = statConn.Connection
 						}
@@ -322,10 +323,10 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 							panic("XTLS Splice: not TCP inbound")
 						}
 					} else {
-						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
+						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
-				reader = buf.NewReadVReader(conn.Connection, rawConn)
+				reader = buf.NewReadVReader(conn.Connection, rawConn, nil)
 				ct = counter
 				if conn.SHOW {
 					fmt.Println(conn.MARK, "ReadV")

@@ -38,7 +38,7 @@ func ExportIDToError(ctx context.Context) errors.ExportOption {
 type Inbound struct {
 	// Source address of the inbound connection.
 	Source net.Destination
-	// Getaway address.
+	// Gateway address.
 	Gateway net.Destination
 	// Tag of the inbound proxy that handles the connection.
 	Tag string
@@ -53,7 +53,8 @@ type Inbound struct {
 // Outbound is the metadata of an outbound connection.
 type Outbound struct {
 	// Target address of the outbound connection.
-	Target net.Destination
+	Target      net.Destination
+	RouteTarget net.Destination
 	// Gateway address
 	Gateway net.Address
 }
@@ -64,6 +65,7 @@ type SniffingRequest struct {
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool
+	RouteOnly                      bool
 }
 
 // Content is the metadata of the connection content.
@@ -75,7 +77,7 @@ type Content struct {
 
 	Attributes map[string]string
 
-	SkipRoutePick bool
+	SkipDNSResolve bool
 }
 
 // Sockopt is the settings for socket connection.

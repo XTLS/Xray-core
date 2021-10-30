@@ -40,8 +40,10 @@ type pipe struct {
 	state       state
 }
 
-var errBufferFull = errors.New("buffer full")
-var errSlowDown = errors.New("slow down")
+var (
+	errBufferFull = errors.New("buffer full")
+	errSlowDown   = errors.New("slow down")
+)
 
 func (p *pipe) getState(forRead bool) error {
 	switch p.state {

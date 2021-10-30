@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/transport/internet/stat"
+
 	goxtls "github.com/xtls/go"
 
 	"github.com/xtls/xray-core/common"
@@ -43,7 +45,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	}
 	var listener net.Listener
 	var err error
-	if port == net.Port(0) { //unix
+	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
 			Net:  "unix",
@@ -120,7 +122,7 @@ func (v *Listener) keepAccepting() {
 			conn = v.authConfig.Server(conn)
 		}
 
-		v.addConn(internet.Connection(conn))
+		v.addConn(stat.Connection(conn))
 	}
 }
 

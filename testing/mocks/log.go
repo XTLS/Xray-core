@@ -5,9 +5,10 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	log "github.com/xtls/xray-core/common/log"
-	reflect "reflect"
 )
 
 // LogHandler is a mock of Handler interface

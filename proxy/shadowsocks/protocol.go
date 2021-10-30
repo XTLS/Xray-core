@@ -3,7 +3,6 @@ package shadowsocks
 import (
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -72,7 +71,16 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 	bs := buffer.Bytes()
 	user, aead, _, ivLen, err := validator.Get(bs, protocol.RequestCommandTCP)
 
-	if user != nil {
+	switch err {
+	case ErrNotFound:
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("failed to match an user").Base(err)
+	case ErrIVNotUnique:
+		readSizeRemain -= int(buffer.Len())
+		DrainConnN(reader, readSizeRemain)
+		return nil, nil, newError("failed iv check").Base(err)
+	default:
 		reader = &FullReader{reader, bs[ivLen:]}
 		readSizeRemain -= int(ivLen)
 
@@ -93,10 +101,6 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 				return nil, nil, newError("failed to initialize decoding stream").Base(err).AtError()
 			}
 		}
-	} else {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed to match an user").Base(err)
 	}
 
 	br := &buf.BufferedReader{Reader: r}
@@ -129,7 +133,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 }
 
 func DrainConnN(reader io.Reader, n int) error {
-	_, err := io.CopyN(ioutil.Discard, reader, int64(n))
+	_, err := io.CopyN(io.Discard, reader, int64(n))
 	return err
 }
 
@@ -142,7 +146,10 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
-		if err := buf.WriteAllBytes(writer, iv); err != nil {
+		if ivError := account.CheckIV(iv); ivError != nil {
+			return nil, newError("failed to mark outgoing iv").Base(ivError)
+		}
+		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
 			return nil, newError("failed to write IV")
 		}
 	}
@@ -176,6 +183,10 @@ func ReadTCPResponse(user *protocol.MemoryUser, reader io.Reader) (buf.Reader, e
 		}
 	}
 
+	if ivError := account.CheckIV(iv); ivError != nil {
+		return nil, newError("failed iv check").Base(ivError)
+	}
+
 	return account.Cipher.NewDecryptionReader(account.Key, iv, reader)
 }
 
@@ -187,7 +198,10 @@ func WriteTCPResponse(request *protocol.RequestHeader, writer io.Writer) (buf.Wr
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
-		if err := buf.WriteAllBytes(writer, iv); err != nil {
+		if ivError := account.CheckIV(iv); ivError != nil {
+			return nil, newError("failed to mark outgoing iv").Base(ivError)
+		}
+		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
 			return nil, newError("failed to write IV.").Base(err)
 		}
 	}

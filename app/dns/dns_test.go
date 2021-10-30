@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/miekg/dns"
-
 	"github.com/xtls/xray-core/app/dispatcher"
 	. "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/app/policy"
@@ -22,8 +21,7 @@ import (
 	"github.com/xtls/xray-core/testing/servers/udp"
 )
 
-type staticHandler struct {
-}
+type staticHandler struct{}
 
 func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	ans := new(dns.Msg)
