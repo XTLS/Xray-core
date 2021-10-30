@@ -84,9 +84,10 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 		if account := user.Account.(*MemoryAccount); account.Cipher.IsAEAD() {
 			aeadCipher := account.Cipher.(*AEADCipher)
 			ivLen = aeadCipher.IVSize()
+			iv := bs[:ivLen]
 			subkey := make([]byte, 32)
 			subkey = subkey[:aeadCipher.KeyBytes]
-			hkdfSHA1(account.Key, bs[:ivLen], subkey)
+			hkdfSHA1(account.Key, iv, subkey)
 			aead = aeadCipher.AEADAuthCreator(subkey)
 
 			var matchErr error
@@ -101,7 +102,7 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 
 			if matchErr == nil {
 				u = user
-				err = account.CheckIV(bs[:ivLen])
+				err = account.CheckIV(iv)
 				return
 			}
 		} else {
