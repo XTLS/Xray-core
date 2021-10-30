@@ -239,8 +239,12 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 	}
 
 	user, _, d, _, err := validator.Get(bs, protocol.RequestCommandUDP)
-
-	if user != nil {
+	switch err {
+	case ErrIVNotUnique:
+		return nil, nil, newError("failed iv check").Base(err)
+	case ErrNotFound:
+		return nil, nil, newError("failed to match an user").Base(err)
+	default:
 		account := user.Account.(*MemoryAccount)
 		if account.Cipher.IsAEAD() {
 			payload.Clear()
@@ -250,13 +254,10 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 				iv := make([]byte, account.Cipher.IVSize())
 				copy(iv, payload.BytesTo(account.Cipher.IVSize()))
 			}
-
 			if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
 				return nil, nil, newError("failed to decrypt UDP payload").Base(err)
 			}
 		}
-	} else {
-		return nil, nil, newError("failed to decrypt UDP payload").Base(err)
 	}
 
 	request := &protocol.RequestHeader{
