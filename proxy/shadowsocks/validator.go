@@ -21,6 +21,10 @@ type Validator struct {
 	behaviorFused bool
 }
 
+var (
+	ErrNotFound = newError("Not Found")
+)
+
 // Add a Shadowsocks user.
 func (v *Validator) Add(u *protocol.MemoryUser) error {
 	v.Lock()
@@ -85,27 +89,30 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 			hkdfSHA1(account.Key, bs[:ivLen], subkey)
 			aead = aeadCipher.AEADAuthCreator(subkey)
 
+			var matchErr error
 			switch command {
 			case protocol.RequestCommandTCP:
 				data := make([]byte, 16)
-				ret, err = aead.Open(data[:0], data[4:16], bs[ivLen:ivLen+18], nil)
+				ret, matchErr = aead.Open(data[:0], data[4:16], bs[ivLen:ivLen+18], nil)
 			case protocol.RequestCommandUDP:
 				data := make([]byte, 8192)
-				ret, err = aead.Open(data[:0], data[8180:8192], bs[ivLen:], nil)
+				ret, matchErr = aead.Open(data[:0], data[8180:8192], bs[ivLen:], nil)
 			}
 
-			if err == nil {
+			if matchErr == nil {
 				u = user
-				break
+				err = account.CheckIV(bs[:ivLen])
+				return
 			}
 		} else {
 			u = user
-			ivLen = u.Account.(*MemoryAccount).Cipher.IVSize()
-			break
+			ivLen = user.Account.(*MemoryAccount).Cipher.IVSize()
+			// err = user.Account.(*MemoryAccount).CheckIV(bs[:ivLen]) // The IV size of None Cipher is 0.
+			return
 		}
 	}
 
-	return
+	return nil, nil, nil, 0, ErrNotFound
 }
 
 func (v *Validator) GetBehaviorSeed() uint64 {
