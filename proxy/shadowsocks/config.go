@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/protocol"
@@ -23,6 +24,8 @@ import (
 type MemoryAccount struct {
 	Cipher Cipher
 	Key    []byte
+
+	replayFilter antireplay.GeneralizedReplayFilter
 }
 
 // Equals implements protocol.Account.Equals().
@@ -31,6 +34,16 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 		return bytes.Equal(a.Key, account.Key)
 	}
 	return false
+}
+
+func (a *MemoryAccount) CheckIV(iv []byte) error {
+	if a.replayFilter == nil {
+		return nil
+	}
+	if a.replayFilter.Check(iv) {
+		return nil
+	}
+	return newError("IV is not unique")
 }
 
 func (a *MemoryAccount) GetCipherName() string {
@@ -64,6 +77,12 @@ func createChaCha20Poly1305(key []byte) cipher.AEAD {
 	return ChaChaPoly1305
 }
 
+func createXChaCha20Poly1305(key []byte) cipher.AEAD {
+	XChaChaPoly1305, err := chacha20poly1305.NewX(key)
+	common.Must(err)
+	return XChaChaPoly1305
+}
+
 func (a *Account) getCipher() (Cipher, error) {
 	switch a.CipherType {
 	case CipherType_AES_128_GCM:
@@ -84,6 +103,12 @@ func (a *Account) getCipher() (Cipher, error) {
 			IVBytes:         32,
 			AEADAuthCreator: createChaCha20Poly1305,
 		}, nil
+	case CipherType_XCHACHA20_POLY1305:
+		return &AEADCipher{
+			KeyBytes:        32,
+			IVBytes:         32,
+			AEADAuthCreator: createXChaCha20Poly1305,
+		}, nil
 	case CipherType_NONE:
 		return NoneCipher{}, nil
 	default:
@@ -100,6 +125,12 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 	return &MemoryAccount{
 		Cipher: Cipher,
 		Key:    passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
+		replayFilter: func() antireplay.GeneralizedReplayFilter {
+			if a.IvCheck {
+				return antireplay.NewBloomRing()
+			}
+			return nil
+		}(),
 	}, nil
 }
 
@@ -133,11 +164,12 @@ func (c *AEADCipher) IVSize() int32 {
 }
 
 func (c *AEADCipher) createAuthenticator(key []byte, iv []byte) *crypto.AEADAuthenticator {
-	nonce := crypto.GenerateInitialAEADNonce()
 	subkey := make([]byte, c.KeyBytes)
 	hkdfSHA1(key, iv, subkey)
+	aead := c.AEADAuthCreator(subkey)
+	nonce := crypto.GenerateAEADNonceWithSize(aead.NonceSize())
 	return &crypto.AEADAuthenticator{
-		AEAD:           c.AEADAuthCreator(subkey),
+		AEAD:           aead,
 		NonceGenerator: nonce,
 	}
 }

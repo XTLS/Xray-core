@@ -24,6 +24,10 @@ func (d *TestDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*t
 	return d.OnDispatch(ctx, dest)
 }
 
+func (d *TestDispatcher) DispatchLink(ctx context.Context, destination net.Destination, outbound *transport.Link) error {
+	return nil
+}
+
 func (d *TestDispatcher) Start() error {
 	return nil
 }

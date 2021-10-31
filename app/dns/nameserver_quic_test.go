@@ -2,10 +2,11 @@ package dns_test
 
 import (
 	"context"
-	"github.com/xtls/xray-core/features/dns"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/features/dns"
 
 	"github.com/google/go-cmp/cmp"
 

@@ -18,7 +18,7 @@ func mustDecodeHex(s string) []byte {
 }
 
 func TestChaCha20Stream(t *testing.T) {
-	var cases = []struct {
+	cases := []struct {
 		key    []byte
 		iv     []byte
 		output []byte

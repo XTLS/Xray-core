@@ -13,6 +13,8 @@ import "common/protocol/server_spec.proto";
 message Account {
   string password = 1;
   CipherType cipher_type = 2;
+
+  bool iv_check = 3;
 }
 
 enum CipherType {
@@ -20,7 +22,8 @@ enum CipherType {
   AES_128_GCM = 5;
   AES_256_GCM = 6;
   CHACHA20_POLY1305 = 7;
-  NONE = 8;
+  XCHACHA20_POLY1305 = 8;
+  NONE = 9;
 }
 
 message ServerConfig {

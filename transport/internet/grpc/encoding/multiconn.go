@@ -92,7 +92,7 @@ func (h *MultiHunkReaderWriter) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return nil, err
 	}
 
-	var mb = make(buf.MultiBuffer, 0, len(h.buf))
+	mb := make(buf.MultiBuffer, 0, len(h.buf))
 	for _, b := range h.buf {
 		if len(b) == 0 {
 			continue

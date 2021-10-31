@@ -130,13 +130,13 @@ func CreateStderrLogWriter() WriterCreator {
 
 // CreateFileLogWriter returns a LogWriterCreator that creates LogWriter for the given file.
 func CreateFileLogWriter(path string) (WriterCreator, error) {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	file.Close()
 	return func() Writer {
-		file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 		if err != nil {
 			return nil
 		}

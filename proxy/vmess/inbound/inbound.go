@@ -207,7 +207,9 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 		return err
 	}
 
-	if request.Option.Has(protocol.RequestOptionChunkStream) {
+	account := request.User.Account.(*vmess.MemoryAccount)
+
+	if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
 		if err := bodyWriter.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 			return err
 		}
@@ -319,7 +321,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
@@ -370,7 +372,7 @@ func init() {
 		return New(ctx, config.(*Config))
 	}))
 
-	var defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	defaultFlagValue := "NOT_DEFINED_AT_ALL"
 
 	if time.Now().Year() >= 2022 {
 		defaultFlagValue = "true_by_default_2022"

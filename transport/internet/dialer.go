@@ -28,9 +28,7 @@ type Dialer interface {
 // dialFunc is an interface to dial network connection to a specific destination.
 type dialFunc func(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (stat.Connection, error)
 
-var (
-	transportDialerCache = make(map[string]dialFunc)
-)
+var transportDialerCache = make(map[string]dialFunc)
 
 // RegisterTransportDialer registers a Dialer with given name.
 func RegisterTransportDialer(protocol string, dialer dialFunc) error {
@@ -81,7 +79,7 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 		return nil, nil
 	}
 
-	var option = dns.IPOption{
+	option := dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 		FakeEnable: false,

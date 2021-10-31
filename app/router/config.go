@@ -84,7 +84,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
 			conds.Add(matcher)
 		}
-
 	}
 
 	if len(rr.UserEmail) > 0 {
@@ -159,9 +158,21 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 }
 
 func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
-	return &Balancer{
-		selectors: br.OutboundSelector,
-		strategy:  &RandomStrategy{},
-		ohm:       ohm,
-	}, nil
+	switch br.Strategy {
+	case "leastPing":
+		return &Balancer{
+			selectors: br.OutboundSelector,
+			strategy:  &LeastPingStrategy{},
+			ohm:       ohm,
+		}, nil
+	case "random":
+		fallthrough
+	default:
+		return &Balancer{
+			selectors: br.OutboundSelector,
+			strategy:  &RandomStrategy{},
+			ohm:       ohm,
+		}, nil
+
+	}
 }

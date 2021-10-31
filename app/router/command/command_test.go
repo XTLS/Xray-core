@@ -284,7 +284,7 @@ func TestSerivceTestRoute(t *testing.T) {
 	r := new(router.Router)
 	mockCtl := gomock.NewController(t)
 	defer mockCtl.Finish()
-	common.Must(r.Init(&router.Config{
+	common.Must(r.Init(context.TODO(), &router.Config{
 		Rule: []*router.RoutingRule{
 			{
 				InboundTag: []string{"in"},

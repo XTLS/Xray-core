@@ -60,8 +60,7 @@ func (c *MTProtoServerConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type MTProtoClientConfig struct {
-}
+type MTProtoClientConfig struct{}
 
 func (c *MTProtoClientConfig) Build() (proto.Message, error) {
 	config := new(mtproto.ClientConfig)

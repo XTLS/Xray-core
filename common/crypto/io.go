@@ -27,9 +27,7 @@ func (r *CryptionReader) Read(data []byte) (int, error) {
 	return nBytes, err
 }
 
-var (
-	_ buf.Writer = (*CryptionWriter)(nil)
-)
+var _ buf.Writer = (*CryptionWriter)(nil)
 
 type CryptionWriter struct {
 	stream    cipher.Stream

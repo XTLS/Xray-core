@@ -18,9 +18,16 @@ type RouterRulesConfig struct {
 	DomainStrategy string            `json:"domainStrategy"`
 }
 
+// StrategyConfig represents a strategy config
+type StrategyConfig struct {
+	Type     string           `json:"type"`
+	Settings *json.RawMessage `json:"settings"`
+}
+
 type BalancingRule struct {
-	Tag       string     `json:"tag"`
-	Selectors StringList `json:"selector"`
+	Tag       string         `json:"tag"`
+	Selectors StringList     `json:"selector"`
+	Strategy  StrategyConfig `json:"strategy"`
 }
 
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
@@ -31,9 +38,20 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		return nil, newError("empty selector list")
 	}
 
+	var strategy string
+	switch strings.ToLower(r.Strategy.Type) {
+	case strategyRandom, "":
+		strategy = strategyRandom
+	case strategyLeastPing:
+		strategy = "leastPing"
+	default:
+		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
+	}
+
 	return &router.BalancingRule{
 		Tag:              r.Tag,
 		OutboundSelector: []string(r.Selectors),
+		Strategy:         strategy,
 	}, nil
 }
 
@@ -338,7 +356,7 @@ func parseDomainRule(domain string) ([]*router.Domain, error) {
 		}
 		return domains, nil
 	}
-	var isExtDatFile = 0
+	isExtDatFile := 0
 	{
 		const prefix = "ext:"
 		if strings.HasPrefix(domain, prefix) {
@@ -399,25 +417,34 @@ func parseDomainRule(domain string) ([]*router.Domain, error) {
 	return []*router.Domain{domainRule}, nil
 }
 
-func toCidrList(ips StringList) ([]*router.GeoIP, error) {
+func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 	var geoipList []*router.GeoIP
 	var customCidrs []*router.CIDR
 
 	for _, ip := range ips {
 		if strings.HasPrefix(ip, "geoip:") {
 			country := ip[6:]
+			isReverseMatch := false
+			if strings.HasPrefix(ip, "geoip:!") {
+				country = ip[7:]
+				isReverseMatch = true
+			}
+			if len(country) == 0 {
+				return nil, newError("empty country name in rule")
+			}
 			geoip, err := loadGeoIP(strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load GeoIP: ", country).Base(err)
 			}
 
 			geoipList = append(geoipList, &router.GeoIP{
-				CountryCode: strings.ToUpper(country),
-				Cidr:        geoip,
+				CountryCode:  strings.ToUpper(country),
+				Cidr:         geoip,
+				ReverseMatch: isReverseMatch,
 			})
 			continue
 		}
-		var isExtDatFile = 0
+		isExtDatFile := 0
 		{
 			const prefix = "ext:"
 			if strings.HasPrefix(ip, prefix) {
@@ -436,14 +463,24 @@ func toCidrList(ips StringList) ([]*router.GeoIP, error) {
 
 			filename := kv[0]
 			country := kv[1]
+			if len(filename) == 0 || len(country) == 0 {
+				return nil, newError("empty filename or empty country in rule")
+			}
+
+			isReverseMatch := false
+			if strings.HasPrefix(country, "!") {
+				country = country[1:]
+				isReverseMatch = true
+			}
 			geoip, err := loadIP(filename, strings.ToUpper(country))
 			if err != nil {
 				return nil, newError("failed to load IPs: ", country, " from ", filename).Base(err)
 			}
 
 			geoipList = append(geoipList, &router.GeoIP{
-				CountryCode: strings.ToUpper(filename + "_" + country),
-				Cidr:        geoip,
+				CountryCode:  strings.ToUpper(filename + "_" + country),
+				Cidr:         geoip,
+				ReverseMatch: isReverseMatch,
 			})
 
 			continue
@@ -525,7 +562,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.IP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.IP)
+		geoipList, err := ToCidrList(*rawFieldRule.IP)
 		if err != nil {
 			return nil, err
 		}
@@ -541,7 +578,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
-		geoipList, err := toCidrList(*rawFieldRule.SourceIP)
+		geoipList, err := ToCidrList(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}
@@ -583,21 +620,21 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	if err != nil {
 		return nil, newError("invalid router rule").Base(err)
 	}
-	if rawRule.Type == "field" {
+	if strings.EqualFold(rawRule.Type, "field") {
 		fieldrule, err := parseFieldRule(msg)
 		if err != nil {
 			return nil, newError("invalid field rule").Base(err)
 		}
 		return fieldrule, nil
 	}
-	if rawRule.Type == "chinaip" {
+	if strings.EqualFold(rawRule.Type, "chinaip") {
 		chinaiprule, err := parseChinaIPRule(msg)
 		if err != nil {
 			return nil, newError("invalid chinaip rule").Base(err)
 		}
 		return chinaiprule, nil
 	}
-	if rawRule.Type == "chinasites" {
+	if strings.EqualFold(rawRule.Type, "chinasites") {
 		chinasitesrule, err := parseChinaSitesRule(msg)
 		if err != nil {
 			return nil, newError("invalid chinasites rule").Base(err)

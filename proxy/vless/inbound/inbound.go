@@ -35,9 +35,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
-var (
-	xtls_show = false
-)
+var xtls_show = false
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {

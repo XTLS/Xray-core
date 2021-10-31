@@ -24,8 +24,7 @@ import (
 	"github.com/xtls/xray-core/testing/servers/udp"
 )
 
-type staticHandler struct {
-}
+type staticHandler struct{}
 
 func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	ans := new(dns.Msg)

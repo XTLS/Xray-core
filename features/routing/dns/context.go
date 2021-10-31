@@ -17,10 +17,6 @@ type ResolvableContext struct {
 
 // GetTargetIPs overrides original routing.Context's implementation.
 func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
-	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
-		return ips
-	}
-
 	if len(ctx.resolvedIPs) > 0 {
 		return ctx.resolvedIPs
 	}
@@ -36,6 +32,10 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 			return ips
 		}
 		newError("resolve ip for ", domain).Base(err).WriteToLog()
+	}
+
+	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
+		return ips
 	}
 
 	return nil

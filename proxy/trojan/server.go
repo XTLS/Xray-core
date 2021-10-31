@@ -2,7 +2,6 @@ package trojan
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"strconv"
 	"strings"
@@ -23,10 +22,11 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
@@ -382,7 +382,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 		return nil
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))

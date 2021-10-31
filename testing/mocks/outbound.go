@@ -6,9 +6,10 @@ package mocks
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	outbound "github.com/xtls/xray-core/features/outbound"
-	reflect "reflect"
 )
 
 // OutboundManager is a mock of Manager interface

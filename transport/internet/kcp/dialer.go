@@ -16,9 +16,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
-var (
-	globalConv = uint32(dice.RollUint16())
-)
+var globalConv = uint32(dice.RollUint16())
 
 func fetchInput(_ context.Context, input io.Reader, reader PacketReader, conn *Connection) {
 	cache := make(chan *buf.Buffer, 1024)

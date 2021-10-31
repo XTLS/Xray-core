@@ -17,7 +17,7 @@ func main() {
 		pkg = "core"
 	}
 
-	file, err := os.OpenFile("errors.generated.go", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	file, err := os.OpenFile("errors.generated.go", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o644)
 	if err != nil {
 		fmt.Printf("Failed to generate errors.generated.go: %v", err)
 		os.Exit(1)

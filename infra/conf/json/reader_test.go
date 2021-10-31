@@ -24,7 +24,8 @@ content 2`,
 			`
 content 
 
-content 2`},
+content 2`,
+		},
 		{`content`, `content`},
 		{" ", " "},
 		{`con/*abcd*/tent`, "content"},

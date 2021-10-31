@@ -142,7 +142,6 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		Reader: downlinkReader,
 		Writer: upLinkWriter,
 	}, f.Strategy)
-
 	if err != nil {
 		return nil, err
 	}
@@ -175,8 +174,10 @@ type ClientWorker struct {
 	strategy       ClientStrategy
 }
 
-var muxCoolAddress = net.DomainAddress("v1.mux.cool")
-var muxCoolPort = net.Port(9527)
+var (
+	muxCoolAddress = net.DomainAddress("v1.mux.cool")
+	muxCoolPort    = net.Port(9527)
+)
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {

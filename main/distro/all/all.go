@@ -14,6 +14,9 @@ import (
 	_ "github.com/xtls/xray-core/app/proxyman/command"
 	_ "github.com/xtls/xray-core/app/stats/command"
 
+	// Developer preview services
+	_ "github.com/xtls/xray-core/app/observatory/command"
+
 	// Other optional features.
 	_ "github.com/xtls/xray-core/app/dns"
 	_ "github.com/xtls/xray-core/app/dns/fakedns"
@@ -23,12 +26,19 @@ import (
 	_ "github.com/xtls/xray-core/app/router"
 	_ "github.com/xtls/xray-core/app/stats"
 
+	// Fix dependency cycle caused by core import in internet package
+	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
+
+	// Developer preview features
+	_ "github.com/xtls/xray-core/app/observatory"
+
 	// Inbound and outbound proxies.
 	_ "github.com/xtls/xray-core/proxy/blackhole"
 	_ "github.com/xtls/xray-core/proxy/dns"
 	_ "github.com/xtls/xray-core/proxy/dokodemo"
 	_ "github.com/xtls/xray-core/proxy/freedom"
 	_ "github.com/xtls/xray-core/proxy/http"
+	_ "github.com/xtls/xray-core/proxy/loopback"
 	_ "github.com/xtls/xray-core/proxy/mtproto"
 	_ "github.com/xtls/xray-core/proxy/shadowsocks"
 	_ "github.com/xtls/xray-core/proxy/socks"
