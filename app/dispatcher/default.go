@@ -423,7 +423,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 						var rt string
 						switch t {
 						case "inboundTag":
-							rt = tag
+							rt = session.InboundFromContext(ctx).Tag
 						case "sourceIP":
 							remoteAddr := session.InboundFromContext(ctx).Conn.RemoteAddr()
 							var sourceIP string
