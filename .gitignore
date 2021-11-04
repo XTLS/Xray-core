@@ -26,3 +26,4 @@ vprotogen
 errorgen
 !common/errors/errorgen/
 *.dat
+.vscode
