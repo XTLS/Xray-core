@@ -214,6 +214,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				localIP = addr.IP.String()
 			case *net.TCPAddr:
 				localIP = addr.IP.String()
+			default:
+				localIP = "127.0.0.1"
 			}
 			if !net.ParseIP(localIP).IsLoopback() && (
 				(destFamily.IsIPv6() && strings.Contains(localIP, ":")) ||
