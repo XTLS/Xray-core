@@ -136,18 +136,22 @@ func (h *Handler) Tag() string {
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	if h.mux != nil && (h.mux.Enabled || session.MuxPreferedFromContext(ctx)) {
-		if err := h.mux.Dispatch(ctx, link); err != nil && !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
+		if err := h.mux.Dispatch(ctx, link); err != nil {
 			err := newError("failed to process mux outbound traffic").Base(err)
 			session.SubmitOutboundErrorToOriginator(ctx, err)
-			err.WriteToLog(session.ExportIDToError(ctx))
+			if !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
+				err.WriteToLog(session.ExportIDToError(ctx))
+			}
 			common.Interrupt(link.Writer)
 		}
 	} else {
-		if err := h.proxy.Process(ctx, link, h); err != nil && !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
+		if err := h.proxy.Process(ctx, link, h); err != nil {
 			// Ensure outbound ray is properly closed.
 			err := newError("failed to process outbound traffic").Base(err)
 			session.SubmitOutboundErrorToOriginator(ctx, err)
-			err.WriteToLog(session.ExportIDToError(ctx))
+			if !strings.HasSuffix(err.Error(), ": connection ends > context canceled") {
+				err.WriteToLog(session.ExportIDToError(ctx))
+			}
 			common.Interrupt(link.Writer)
 		} else {
 			common.Must(common.Close(link.Writer))
