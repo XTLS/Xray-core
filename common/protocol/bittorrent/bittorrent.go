@@ -39,7 +39,7 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 		return nil, common.ErrNoClue
 	}
 
-	buffer := buf.NewExisted(b)
+	buffer := buf.FromBytes(b)
 
 	var typeAndVersion uint8
 

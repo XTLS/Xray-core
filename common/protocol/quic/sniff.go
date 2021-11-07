@@ -47,7 +47,7 @@ var (
 )
 
 func SniffQUIC(b []byte) (*SniffHeader, error) {
-	buffer := buf.NewExisted(b)
+	buffer := buf.FromBytes(b)
 	typeByte, err := buffer.ReadByte()
 	if err != nil {
 		return nil, errNotQuic
@@ -159,7 +159,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 	if err != nil {
 		return nil, err
 	}
-	buffer = buf.NewExisted(decrypted)
+	buffer = buf.FromBytes(decrypted)
 	frameType, err := buffer.ReadByte()
 	if err != nil {
 		return nil, io.ErrUnexpectedEOF
