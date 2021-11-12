@@ -44,8 +44,8 @@ func TestDokodemoTCP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
 					User: []*protocol.User{
@@ -77,8 +77,8 @@ func TestDokodemoTCP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: &net.PortRange{From: clientPort, To: clientPort + clientPortRange},
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{{From: clientPort, To: clientPort + clientPortRange}}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
@@ -135,8 +135,8 @@ func TestDokodemoUDP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
 					User: []*protocol.User{
@@ -162,8 +162,8 @@ func TestDokodemoUDP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: &net.PortRange{From: clientPort, To: clientPort + clientPortRange},
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{{From: clientPort, To: clientPort + clientPortRange}}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),

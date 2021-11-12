@@ -69,8 +69,8 @@ func TestVMessClosing(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
 					User: []*protocol.User{
@@ -108,8 +108,8 @@ func TestVMessClosing(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(clientPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
@@ -183,8 +183,8 @@ func TestZeroBuffer(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
 					User: []*protocol.User{
@@ -216,8 +216,8 @@ func TestZeroBuffer(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(clientPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
