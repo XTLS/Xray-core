@@ -27,17 +27,13 @@ message AllocationStrategy {
 
   Type type = 1;
 
-  message AllocationStrategyConcurrency {
-    uint32 value = 1;
-  }
+  message AllocationStrategyConcurrency { uint32 value = 1; }
 
   // Number of handlers (ports) running in parallel.
   // Default value is 3 if unset.
   AllocationStrategyConcurrency concurrency = 2;
 
-  message AllocationStrategyRefresh {
-    uint32 value = 1;
-  }
+  message AllocationStrategyRefresh { uint32 value = 1; }
 
   // Number of minutes before a handler is regenerated.
   // Default value is 5 if unset.
@@ -59,15 +55,16 @@ message SniffingConfig {
   repeated string domains_excluded = 3;
 
   // Whether should only try to sniff metadata without waiting for client input.
-  // Can be used to support SMTP like protocol where server send the first message.
+  // Can be used to support SMTP like protocol where server send the first
+  // message.
   bool metadata_only = 4;
 
   bool route_only = 5;
 }
 
 message ReceiverConfig {
-  // PortRange specifies the ports which the Receiver should listen on.
-  xray.common.net.PortRange port_range = 1;
+  // PortList specifies the ports which the Receiver should listen on.
+  xray.common.net.PortList port_list = 1;
   // Listen specifies the IP address that the Receiver should listen on.
   xray.common.net.IPOrDomain listen = 2;
   AllocationStrategy allocation_strategy = 3;
@@ -76,7 +73,7 @@ message ReceiverConfig {
   reserved 6;
   // Override domains for the given protocol.
   // Deprecated. Use sniffing_settings.
-  repeated KnownProtocols domain_override = 7 [deprecated = true];
+  repeated KnownProtocols domain_override = 7 [ deprecated = true ];
   SniffingConfig sniffing_settings = 8;
 }
 
