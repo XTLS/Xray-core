@@ -218,7 +218,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 						localIP = addr.IP.String()
 					}
 					if net.ParseAddress(localIP).Family().IsIP() &&
-						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() {
+						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() &&
+						net.ParseAddress(localIP).Family().IsIPv6() == dest.Address.Family().IsIPv6() {
 						outbound := session.OutboundFromContext(ctx)
 						if outbound == nil {
 							outbound = new(session.Outbound)
@@ -228,7 +229,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 							AtDebug().WriteToLog(session.ExportIDToError(ctx))
 						outbound.Gateway = net.ParseAddress(localIP)
 					} else if inbound.Gateway.Address.Family().IsIP() &&
-						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() {
+						inbound.Gateway.Address.IP().IsLoopback() == dest.Address.IP().IsLoopback() &&
+						inbound.Gateway.Address.Family().IsIPv6() == dest.Address.Family().IsIPv6() {
 						outbound := session.OutboundFromContext(ctx)
 						if outbound == nil {
 							outbound = new(session.Outbound)
