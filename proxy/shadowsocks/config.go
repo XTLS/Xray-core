@@ -7,8 +7,6 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"io"
-	"reflect"
-	"strconv"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
@@ -28,6 +26,10 @@ type MemoryAccount struct {
 	replayFilter antireplay.GeneralizedReplayFilter
 }
 
+var (
+	ErrIVNotUnique = newError("IV is not unique")
+)
+
 // Equals implements protocol.Account.Equals().
 func (a *MemoryAccount) Equals(another protocol.Account) bool {
 	if account, ok := another.(*MemoryAccount); ok {
@@ -43,24 +45,7 @@ func (a *MemoryAccount) CheckIV(iv []byte) error {
 	if a.replayFilter.Check(iv) {
 		return nil
 	}
-	return newError("IV is not unique")
-}
-
-func (a *MemoryAccount) GetCipherName() string {
-	switch a.Cipher.(type) {
-	case *AEADCipher:
-		switch reflect.ValueOf(a.Cipher.(*AEADCipher).AEADAuthCreator).Pointer() {
-		case reflect.ValueOf(createAesGcm).Pointer():
-			keyBytes := a.Cipher.(*AEADCipher).KeyBytes
-			return "AES_" + strconv.FormatInt(int64(keyBytes*8), 10) + "_GCM"
-		case reflect.ValueOf(createChaCha20Poly1305).Pointer():
-			return "CHACHA20_POLY1305"
-		}
-	case *NoneCipher:
-		return "NONE"
-	}
-
-	return ""
+	return ErrIVNotUnique
 }
 
 func createAesGcm(key []byte) cipher.AEAD {
