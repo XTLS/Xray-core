@@ -199,35 +199,46 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 		}
 
 		if h.senderSettings.Via != nil {
-			outbound := session.OutboundFromContext(ctx)
-			if outbound == nil {
-				outbound = new(session.Outbound)
-				ctx = session.ContextWithOutbound(ctx, outbound)
-			}
-			outbound.Gateway = h.senderSettings.Via.AsAddress()
-		} else if dest.Address.Family().IsIP() && !dest.Address.IP().IsLoopback() {
-			destFamily := dest.Address.Family()
-			localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
-			var localIP string
-			switch addr := localAddr.(type) {
-			case *net.UDPAddr:
-				localIP = addr.IP.String()
-			case *net.TCPAddr:
-				localIP = addr.IP.String()
-			default:
-				localIP = "127.0.0.1"
-			}
-			if !net.ParseIP(localIP).IsLoopback() && (
-				(destFamily.IsIPv6() && strings.Contains(localIP, ":")) ||
-				(destFamily.IsIPv4() && !strings.Contains(localIP, ":"))) {
-				newError("defaulting to egress through incoming IP ", localIP, " for destination ", dest.String()).
-					AtDebug().WriteToLog(session.ExportIDToError(ctx))
+			if h.senderSettings.Via.AsAddress().String() != "255.255.255.255" {
 				outbound := session.OutboundFromContext(ctx)
 				if outbound == nil {
 					outbound = new(session.Outbound)
+					ctx = session.ContextWithOutbound(ctx, outbound)
 				}
-				ctx = session.ContextWithOutbound(ctx, outbound)
-				outbound.Gateway = net.ParseAddress(localIP)
+				outbound.Gateway = h.senderSettings.Via.AsAddress()
+			} else {
+				if inbound := session.InboundFromContext(ctx); inbound.Conn != nil &&
+					dest.IsValid() && dest.Address.Family().IsIP() {
+					localAddr := inbound.Conn.LocalAddr()
+					var localIP string
+					switch addr := localAddr.(type) {
+					case *net.UDPAddr:
+						localIP = addr.IP.String()
+					case *net.TCPAddr:
+						localIP = addr.IP.String()
+					}
+					if net.ParseAddress(localIP).Family().IsIP() &&
+						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() {
+						outbound := session.OutboundFromContext(ctx)
+						if outbound == nil {
+							outbound = new(session.Outbound)
+							ctx = session.ContextWithOutbound(ctx, outbound)
+						}
+						newError("egressing through incoming IP ", localIP, " for destination ", dest.String()).
+							AtDebug().WriteToLog(session.ExportIDToError(ctx))
+						outbound.Gateway = net.ParseAddress(localIP)
+					} else if inbound.Gateway.Address.Family().IsIP() &&
+						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() {
+						outbound := session.OutboundFromContext(ctx)
+						if outbound == nil {
+							outbound = new(session.Outbound)
+							ctx = session.ContextWithOutbound(ctx, outbound)
+						}
+						newError("egressing through listening IP ", inbound.Gateway.Address.IP().String(), " for destination ", dest.String()).
+							AtDebug().WriteToLog(session.ExportIDToError(ctx))
+						outbound.Gateway = inbound.Gateway.Address
+					}
+				}
 			}
 		}
 	}

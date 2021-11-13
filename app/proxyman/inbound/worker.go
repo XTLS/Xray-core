@@ -319,6 +319,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
 				Gateway: net.UDPDestination(w.address, w.port),
+				Conn:    conn,
 				Tag:     w.tag,
 			})
 			content := new(session.Content)
