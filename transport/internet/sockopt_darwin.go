@@ -10,7 +10,8 @@ const (
 	// TCP_FASTOPEN_SERVER is the value to enable TCP fast open on darwin for server connections.
 	TCP_FASTOPEN_SERVER = 0x01
 	// TCP_FASTOPEN_CLIENT is the value to enable TCP fast open on darwin for client connections.
-	TCP_FASTOPEN_CLIENT = 0x02
+	TCP_FASTOPEN_CLIENT = 0x02 // nolint: revive,stylecheck
+	TCP_KEEPINTVL       = 0x101 // nolint: golint,stylecheck
 )
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
@@ -50,7 +51,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			}
 		}
 		if config.TcpKeepAliveInterval > 0 {
-			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
 				return newError("failed to set TCP_KEEPINTVL", err)
 			}
 			if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
