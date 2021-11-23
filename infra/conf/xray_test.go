@@ -231,10 +231,7 @@ func TestXrayConfig(t *testing.T) {
 				Inbound: []*core.InboundHandlerConfig{
 					{
 						ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-							PortRange: &net.PortRange{
-								From: 443,
-								To:   443,
-							},
+							PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(443)}},
 							StreamSettings: &internet.StreamConfig{
 								ProtocolName: "websocket",
 								TransportSettings: []*internet.TransportConfig{
@@ -281,10 +278,10 @@ func TestXrayConfig(t *testing.T) {
 					},
 					{
 						ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-							PortRange: &net.PortRange{
+							PortList: &net.PortList{Range: []*net.PortRange{{
 								From: 443,
 								To:   500,
-							},
+							}}},
 							AllocationStrategy: &proxyman.AllocationStrategy{
 								Type: proxyman.AllocationStrategy_Random,
 								Concurrency: &proxyman.AllocationStrategy_AllocationStrategyConcurrency{

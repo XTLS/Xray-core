@@ -69,21 +69,25 @@ func NewDynamicInboundHandler(ctx context.Context, tag string, receiverConfig *p
 }
 
 func (h *DynamicInboundHandler) allocatePort() net.Port {
-	from := int(h.receiverConfig.PortRange.From)
-	delta := int(h.receiverConfig.PortRange.To) - from + 1
-
+	allPorts := []int32{}
+	for _, pr := range h.receiverConfig.PortList.Range {
+		for i := pr.From; i <= pr.To; i++ {
+			allPorts = append(allPorts, int32(i))
+		}
+	}
 	h.portMutex.Lock()
 	defer h.portMutex.Unlock()
 
 	for {
-		r := dice.Roll(delta)
-		port := net.Port(from + r)
+		r := dice.Roll(len(allPorts))
+		port := net.Port(allPorts[r])
 		_, used := h.portsInUse[port]
 		if !used {
 			h.portsInUse[port] = true
 			return port
 		}
 	}
+
 }
 
 func (h *DynamicInboundHandler) closeWorkers(workers []worker) {
