@@ -2,7 +2,6 @@ package vmess_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/protocol"
@@ -33,8 +32,8 @@ func TestUserValidator(t *testing.T) {
 	common.Must(v.Add(user))
 
 	{
-		testSmallLag := func(lag time.Duration) {
-			ts := protocol.Timestamp(time.Now().Add(time.Second * lag).Unix())
+		testSmallLag := func(lag int64) {
+			ts := int64(v.GetBaseTime()) + lag + 240
 			idHash := hasher(id.Bytes())
 			common.Must2(serial.WriteUint64(idHash, uint64(ts)))
 			userHash := idHash.Sum(nil)
@@ -46,7 +45,7 @@ func TestUserValidator(t *testing.T) {
 			if euser.Email != user.Email {
 				t.Error("unexpected user email: ", euser.Email, " want ", user.Email)
 			}
-			if ets != ts {
+			if int64(ets) != ts {
 				t.Error("unexpected timestamp: ", ets, " want ", ts)
 			}
 		}
@@ -61,8 +60,8 @@ func TestUserValidator(t *testing.T) {
 	}
 
 	{
-		testBigLag := func(lag time.Duration) {
-			ts := protocol.Timestamp(time.Now().Add(time.Second * lag).Unix())
+		testBigLag := func(lag int64) {
+			ts := int64(v.GetBaseTime()) + lag + 240
 			idHash := hasher(id.Bytes())
 			common.Must2(serial.WriteUint64(idHash, uint64(ts)))
 			userHash := idHash.Sum(nil)
