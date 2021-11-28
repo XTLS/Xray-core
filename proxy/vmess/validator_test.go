@@ -26,7 +26,6 @@ func TestUserValidator(t *testing.T) {
 		Email: "test",
 		Account: toAccount(&Account{
 			Id:      id.String(),
-			AlterId: 8,
 		}),
 	}
 	common.Must(v.Add(user))
@@ -99,7 +98,6 @@ func BenchmarkUserValidator(b *testing.B) {
 				Email: "test",
 				Account: toAccount(&Account{
 					Id:      id.String(),
-					AlterId: 16,
 				}),
 			})
 		}

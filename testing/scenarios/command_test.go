@@ -182,7 +182,6 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 						{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id:      u1.String(),
-								AlterId: 64,
 							}),
 						},
 					},
@@ -249,7 +248,6 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 								{
 									Account: serial.ToTypedMessage(&vmess.Account{
 										Id:      u2.String(),
-										AlterId: 64,
 										SecuritySettings: &protocol.SecurityConfig{
 											Type: protocol.SecurityType_AES128_GCM,
 										},
@@ -286,7 +284,6 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 					Email: "test@example.com",
 					Account: serial.ToTypedMessage(&vmess.Account{
 						Id:      u2.String(),
-						AlterId: 64,
 					}),
 				},
 			}),
@@ -377,7 +374,6 @@ func TestCommanderStats(t *testing.T) {
 							Email: "test",
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id:      userID.String(),
-								AlterId: 64,
 							}),
 						},
 					},
@@ -433,7 +429,6 @@ func TestCommanderStats(t *testing.T) {
 								{
 									Account: serial.ToTypedMessage(&vmess.Account{
 										Id:      userID.String(),
-										AlterId: 64,
 										SecuritySettings: &protocol.SecurityConfig{
 											Type: protocol.SecurityType_AES128_GCM,
 										},
