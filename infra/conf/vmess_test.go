@@ -47,7 +47,7 @@ func TestVMessOutbound(t *testing.T) {
 								Email: "love@example.com",
 								Level: 255,
 								Account: serial.ToTypedMessage(&vmess.Account{
-									Id:      "e641f5ad-9397-41e3-bf1a-e8740dfed019",
+									Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
 									SecuritySettings: &protocol.SecurityConfig{
 										Type: protocol.SecurityType_AUTO,
 									},
@@ -92,7 +92,7 @@ func TestVMessInbound(t *testing.T) {
 						Level: 0,
 						Email: "love@example.com",
 						Account: serial.ToTypedMessage(&vmess.Account{
-							Id:      "27848739-7e62-4138-9fd3-098a63964b6b",
+							Id: "27848739-7e62-4138-9fd3-098a63964b6b",
 							SecuritySettings: &protocol.SecurityConfig{
 								Type: protocol.SecurityType_AES128_GCM,
 							},
@@ -100,7 +100,7 @@ func TestVMessInbound(t *testing.T) {
 					},
 				},
 				Default: &inbound.DefaultConfig{
-					Level:   0,
+					Level: 0,
 				},
 				Detour: &inbound.DetourConfig{
 					To: "tag_to_detour",

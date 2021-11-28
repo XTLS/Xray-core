@@ -673,7 +673,7 @@ func TestDialXray(t *testing.T) {
 					User: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:      userID.String(),
+								Id: userID.String(),
 							}),
 						},
 					},
@@ -704,7 +704,7 @@ func TestDialXray(t *testing.T) {
 							User: []*protocol.User{
 								{
 									Account: serial.ToTypedMessage(&vmess.Account{
-										Id:      userID.String(),
+										Id: userID.String(),
 										SecuritySettings: &protocol.SecurityConfig{
 											Type: protocol.SecurityType_AES128_GCM,
 										},

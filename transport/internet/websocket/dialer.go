@@ -10,14 +10,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"github.com/gorilla/websocket"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 

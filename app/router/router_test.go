@@ -4,14 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/xtls/xray-core/features/dns"
-
 	"github.com/golang/mock/gomock"
 
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/testing/mocks"

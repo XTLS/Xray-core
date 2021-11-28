@@ -1,9 +1,8 @@
 package fakedns
 
 import (
-	"testing"
-
 	gonet "net"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 

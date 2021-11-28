@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/xtls/xray-core/common"
@@ -22,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func init() {

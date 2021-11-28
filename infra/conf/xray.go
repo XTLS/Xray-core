@@ -11,9 +11,8 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/transport/internet"
-
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 

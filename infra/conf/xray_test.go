@@ -264,7 +264,7 @@ func TestXrayConfig(t *testing.T) {
 								{
 									Level: 0,
 									Account: serial.ToTypedMessage(&vmess.Account{
-										Id:      "0cdf8a45-303d-4fed-9780-29aa7f54175e",
+										Id: "0cdf8a45-303d-4fed-9780-29aa7f54175e",
 										SecuritySettings: &protocol.SecurityConfig{
 											Type: protocol.SecurityType_AES128_GCM,
 										},
@@ -319,7 +319,7 @@ func TestXrayConfig(t *testing.T) {
 								{
 									Level: 0,
 									Account: serial.ToTypedMessage(&vmess.Account{
-										Id:      "0cdf8a45-303d-4fed-9780-29aa7f54175e",
+										Id: "0cdf8a45-303d-4fed-9780-29aa7f54175e",
 										SecuritySettings: &protocol.SecurityConfig{
 											Type: protocol.SecurityType_AES128_GCM,
 										},
