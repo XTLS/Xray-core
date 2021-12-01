@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"errors"
+	"syscall"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -15,12 +16,12 @@ import (
 )
 
 type sysConn struct {
-	conn   net.PacketConn
+	conn   *net.UDPConn
 	header internet.PacketHeader
 	auth   cipher.AEAD
 }
 
-func wrapSysConn(rawConn net.PacketConn, config *Config) (*sysConn, error) {
+func wrapSysConn(rawConn *net.UDPConn, config *Config) (*sysConn, error) {
 	header, err := getHeader(config)
 	if err != nil {
 		return nil, err
@@ -128,6 +129,14 @@ func (c *sysConn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
+func (c *sysConn) SetReadBuffer(bytes int) error {
+	return c.conn.SetReadBuffer(bytes)
+}
+
+func (c *sysConn) SetWriteBuffer(bytes int) error {
+	return c.conn.SetWriteBuffer(bytes)
+}
+
 func (c *sysConn) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
@@ -138,6 +147,10 @@ func (c *sysConn) SetReadDeadline(t time.Time) error {
 
 func (c *sysConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
+}
+
+func (c *sysConn) SyscallConn() (syscall.RawConn, error) {
+	return c.conn.SyscallConn()
 }
 
 type interConn struct {

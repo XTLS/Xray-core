@@ -108,7 +108,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		MaxIncomingUniStreams: -1,
 	}
 
-	conn, err := wrapSysConn(rawConn, config)
+	conn, err := wrapSysConn(rawConn.(*net.UDPConn), config)
 	if err != nil {
 		conn.Close()
 		return nil, err
