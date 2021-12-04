@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/units"
 	core "github.com/xtls/xray-core/core"
 )
 
@@ -198,7 +199,18 @@ func testUDPConn(port net.Port, payloadSize int, timeout time.Duration) func() e
 }
 
 func testTCPConn2(conn net.Conn, payloadSize int, timeout time.Duration) func() error {
-	return func() error {
+	return func() (err1 error) {
+		start := time.Now()
+		defer func() {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+			fmt.Println("testConn finishes:", time.Since(start).Milliseconds(), "ms\t",
+				err1, "\tAlloc =", units.ByteSize(m.Alloc).String(),
+				"\tTotalAlloc =", units.ByteSize(m.TotalAlloc).String(),
+				"\tSys =", units.ByteSize(m.Sys).String(),
+				"\tNumGC =", m.NumGC)
+		}()
 		payload := make([]byte, payloadSize)
 		common.Must2(rand.Read(payload))
 
