@@ -5,6 +5,7 @@ package dispatcher
 import (
 	"context"
 	"github.com/xtls/xray-core/features/dns"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -432,12 +433,34 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 								sourceIP = addr.IP.String()
 							case *net.TCPAddr:
 								sourceIP = addr.IP.String()
+							default:
+								continue
 							}
 							rt = net.ParseAddress(sourceIP).String()
-						case "receivingIP":
-							rt = route.GetReceivingIP().String()
-						case "receivingPort":
-							rt = route.GetReceivingPort().String()
+						case "incomingAddr":
+							localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
+							var localIP string
+							switch addr := localAddr.(type) {
+							case *net.UDPAddr:
+								localIP = addr.IP.String()
+							case *net.TCPAddr:
+								localIP = addr.IP.String()
+							case *net.UnixAddr:
+								localIP = addr.Name
+							}
+							rt = net.ParseAddress(localIP).String()
+						case "incomingPort":
+							localAddr := session.InboundFromContext(ctx).Conn.LocalAddr()
+							var localPort int
+							switch addr := localAddr.(type) {
+							case *net.UDPAddr:
+								localPort = addr.Port
+							case *net.TCPAddr:
+								localPort = addr.Port
+							default:
+								continue
+							}
+							rt = strconv.Itoa(localPort)
 						case "user":
 							rt = route.GetUser()
 						default:
