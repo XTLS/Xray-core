@@ -6,9 +6,9 @@ This repo includes personal hacks that allow for easier configuration of complex
 
 &ensp;&ensp;&ensp;&ensp;Many editors will only provide json5 syntax highlighting for '.json5' file.
 
-2. Makes outbound 'sendThrough' use the same IP that received the inbound connection by default
+2. Accepts special 'sendThrough' value of '255.255.255.255' to use the same IP that received the inbound connection
 
-&ensp;&ensp;&ensp;&ensp;This is useful for machines with multiple IPs. Default outgoing IP will be used instead if inbound was received on loopback interface or through an IP in different family. Specify "::" or "0.0.0.0" as "sendThrough" to disable this behaviour.
+&ensp;&ensp;&ensp;&ensp;This is useful for machines with multiple IPs. Default outgoing IP will be used instead if inbound was received on loopback interface or through an IP in different family.
 
 3. Allows templating in inbound and outbound configurations
 
@@ -42,14 +42,14 @@ This repo includes personal hacks that allow for easier configuration of complex
 
 4. Adds special "@" prefix for "outbound" setting in routing rule
 
-&ensp;&ensp;&ensp;&ensp;This allows automatic searching for outbound tag that matches inbound tag ("@inboundTag"), user IP ("@sourceIP"), local IP ("@receivingIP") and port ("@receivingPort") that received inbound connection, or user email ("@user"). Multiple searching rules can be concatenated by ";", and the first one with a matching result will be used.
+&ensp;&ensp;&ensp;&ensp;This allows automatic searching for outbound tag that matches inbound tag ("@inboundTag"), user IP ("@sourceIP"), local address ("@incomingAddr") and port ("@incomingPort") that received inbound connection, or user email ("@user"). Multiple searching rules can be concatenated using ";", and the first one with a matching result will be used.
 
 ```json5
 "routing":
 {
   "rules": [
     ...
-    { "outboundTag": "@receivingIP;user",      "type": "field" }
+    { "outboundTag": "@incomingAddr;user",      "type": "field" }
   ]
 }
 ```
