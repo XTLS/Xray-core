@@ -471,13 +471,11 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 							newError("@ rule(s) result: ", rt).AtDebug().WriteToLog(session.ExportIDToError(ctx))
 							handler = h
 							break
-						} else {
-							tag = rt
 						}
 					}
 				}
 				if handler == nil {
-					newError("non existing outTag: ", tag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+					newError("no route found for: ", tag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 				}
 			}
 		} else {
