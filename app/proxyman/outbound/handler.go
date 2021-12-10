@@ -208,6 +208,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				outbound.Gateway = h.senderSettings.Via.AsAddress()
 			} else {
 				if inbound := session.InboundFromContext(ctx); inbound.Conn != nil {
+					useIncoming := false
 					localAddr := inbound.Conn.LocalAddr()
 					var localIP string
 					switch addr := localAddr.(type) {
@@ -216,8 +217,20 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 					case *net.TCPAddr:
 						localIP = addr.IP.String()
 					}
-					if net.ParseAddress(localIP).Family().IsIP() &&
-						net.ParseAddress(localIP).IP().IsLoopback() == (dest.Address.Family().IsIP() && dest.Address.IP().IsLoopback()) {
+					if net.ParseAddress(localIP).Family().IsIP() {
+						if net.ParseAddress(localIP).IP().IsLoopback() {
+							if dest.Address.Family().IsIP() && dest.Address.IP().IsLoopback() {
+								useIncoming = true
+							}
+						} else if dest.Address.Family().IsIP() {
+							if dest.Address.Family().IsIPv4() == net.ParseAddress(localIP).Family().IsIPv4() {
+								useIncoming = true
+							}
+						} else {
+							useIncoming = true
+						}
+					}
+					if useIncoming {
 						outbound := session.OutboundFromContext(ctx)
 						if outbound == nil {
 							outbound = new(session.Outbound)
@@ -226,16 +239,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 						newError("egressing through incoming IP ", localIP, " for destination ", dest.String()).
 							AtDebug().WriteToLog(session.ExportIDToError(ctx))
 						outbound.Gateway = net.ParseAddress(localIP)
-					} else if inbound.Gateway.Address.Family().IsIP() &&
-						inbound.Gateway.Address.IP().IsLoopback() == (dest.Address.Family().IsIP() && dest.Address.IP().IsLoopback()) {
-						outbound := session.OutboundFromContext(ctx)
-						if outbound == nil {
-							outbound = new(session.Outbound)
-							ctx = session.ContextWithOutbound(ctx, outbound)
-						}
-						newError("egressing through listening IP ", inbound.Gateway.Address.IP().String(), " for destination ", dest.String()).
-							AtDebug().WriteToLog(session.ExportIDToError(ctx))
-						outbound.Gateway = inbound.Gateway.Address
 					}
 				}
 			}
