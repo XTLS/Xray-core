@@ -207,8 +207,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				}
 				outbound.Gateway = h.senderSettings.Via.AsAddress()
 			} else {
-				if inbound := session.InboundFromContext(ctx); inbound.Conn != nil &&
-					dest.IsValid() && dest.Address.Family().IsIP() {
+				if inbound := session.InboundFromContext(ctx); inbound.Conn != nil {
 					localAddr := inbound.Conn.LocalAddr()
 					var localIP string
 					switch addr := localAddr.(type) {
@@ -218,8 +217,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 						localIP = addr.IP.String()
 					}
 					if net.ParseAddress(localIP).Family().IsIP() &&
-						net.ParseAddress(localIP).IP().IsLoopback() == dest.Address.IP().IsLoopback() &&
-						net.ParseAddress(localIP).Family().IsIPv6() == dest.Address.Family().IsIPv6() {
+						net.ParseAddress(localIP).IP().IsLoopback() == (dest.Address.Family().IsIP() && dest.Address.IP().IsLoopback()) {
 						outbound := session.OutboundFromContext(ctx)
 						if outbound == nil {
 							outbound = new(session.Outbound)
@@ -229,8 +227,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 							AtDebug().WriteToLog(session.ExportIDToError(ctx))
 						outbound.Gateway = net.ParseAddress(localIP)
 					} else if inbound.Gateway.Address.Family().IsIP() &&
-						inbound.Gateway.Address.IP().IsLoopback() == dest.Address.IP().IsLoopback() &&
-						inbound.Gateway.Address.Family().IsIPv6() == dest.Address.Family().IsIPv6() {
+						inbound.Gateway.Address.IP().IsLoopback() == (dest.Address.Family().IsIP() && dest.Address.IP().IsLoopback()) {
 						outbound := session.OutboundFromContext(ctx)
 						if outbound == nil {
 							outbound = new(session.Outbound)
