@@ -12,14 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/drain"
-
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/task"
