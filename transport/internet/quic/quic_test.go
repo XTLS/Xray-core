@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/xtls/xray-core/common"
@@ -20,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/headers/wireguard"
 	"github.com/xtls/xray-core/transport/internet/quic"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 

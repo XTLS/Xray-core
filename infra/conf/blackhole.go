@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/json"
+
 	"github.com/golang/protobuf/proto"
 
 	"github.com/xtls/xray-core/common/serial"

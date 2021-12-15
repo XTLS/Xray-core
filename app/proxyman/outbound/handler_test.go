@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"github.com/xtls/xray-core/app/policy"
 	. "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/stats"
@@ -14,6 +12,7 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func TestInterfaces(t *testing.T) {
