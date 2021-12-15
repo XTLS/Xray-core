@@ -13,6 +13,8 @@ import (
 	"hash/fnv"
 	"io"
 
+	"github.com/xtls/xray-core/common/drain"
+
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/xtls/xray-core/common"
@@ -44,10 +46,12 @@ type ClientSession struct {
 	responseBodyIV  [16]byte
 	responseReader  io.Reader
 	responseHeader  byte
+
+	readDrainer drain.Drainer
 }
 
 // NewClientSession creates a new ClientSession.
-func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash) *ClientSession {
+func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash, behaviorSeed int64) *ClientSession {
 	session := &ClientSession{
 		isAEAD: isAEAD,
 		idHash: idHash,
@@ -67,6 +71,14 @@ func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash) 
 		copy(session.responseBodyKey[:], BodyKey[:16])
 		BodyIV := sha256.Sum256(session.requestBodyIV[:])
 		copy(session.responseBodyIV[:], BodyIV[:16])
+	}
+	{
+		var err error
+		session.readDrainer, err = drain.NewBehaviorSeedLimitedDrainer(behaviorSeed, 18, 3266, 64)
+		if err != nil {
+			newError("unable to initialize drainer").Base(err).WriteToLog()
+			session.readDrainer = drain.NewNopDrainer()
+		}
 	}
 
 	return session
@@ -225,12 +237,15 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 		var decryptedResponseHeaderLength int
 		var decryptedResponseHeaderLengthBinaryDeserializeBuffer uint16
 
-		if _, err := io.ReadFull(reader, aeadEncryptedResponseHeaderLength[:]); err != nil {
-			return nil, newError("Unable to Read Header Len").Base(err)
+		if n, err := io.ReadFull(reader, aeadEncryptedResponseHeaderLength[:]); err != nil {
+			c.readDrainer.AcknowledgeReceive(n)
+			return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Len").Base(err))
+		} else { // nolint: golint
+			c.readDrainer.AcknowledgeReceive(n)
 		}
 		if decryptedResponseHeaderLengthBinaryBuffer, err := aeadResponseHeaderLengthEncryptionAEAD.Open(nil, aeadResponseHeaderLengthEncryptionIV, aeadEncryptedResponseHeaderLength[:], nil); err != nil {
-			return nil, newError("Failed To Decrypt Length").Base(err)
-		} else {
+			return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Length").Base(err))
+		} else { // nolint: golint
 			common.Must(binary.Read(bytes.NewReader(decryptedResponseHeaderLengthBinaryBuffer), binary.BigEndian, &decryptedResponseHeaderLengthBinaryDeserializeBuffer))
 			decryptedResponseHeaderLength = int(decryptedResponseHeaderLengthBinaryDeserializeBuffer)
 		}
@@ -243,13 +258,16 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 
 		encryptedResponseHeaderBuffer := make([]byte, decryptedResponseHeaderLength+16)
 
-		if _, err := io.ReadFull(reader, encryptedResponseHeaderBuffer); err != nil {
-			return nil, newError("Unable to Read Header Data").Base(err)
+		if n, err := io.ReadFull(reader, encryptedResponseHeaderBuffer); err != nil {
+			c.readDrainer.AcknowledgeReceive(n)
+			return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Data").Base(err))
+		} else { // nolint: golint
+			c.readDrainer.AcknowledgeReceive(n)
 		}
 
 		if decryptedResponseHeaderBuffer, err := aeadResponseHeaderPayloadEncryptionAEAD.Open(nil, aeadResponseHeaderPayloadEncryptionIV, encryptedResponseHeaderBuffer, nil); err != nil {
-			return nil, newError("Failed To Decrypt Payload").Base(err)
-		} else {
+			return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Payload").Base(err))
+		} else { // nolint: golint
 			c.responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
 		}
 	}
