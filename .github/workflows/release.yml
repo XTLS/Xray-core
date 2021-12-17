@@ -146,7 +146,7 @@ jobs:
       - name: Build background Xray on Windows 
         if: matrix.goos == 'windows'
         run: |
-          go build -v -o build_assets/wxray -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
+          go build -v -o build_assets/wxray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
     
       - name: Build Mips softfloat Xray
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
@@ -158,7 +158,6 @@ jobs:
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
-          mv wxray wxray.exe
 
       - name: Prepare to release
         run: |
