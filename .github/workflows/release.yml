@@ -142,6 +142,7 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+          go build -v -o build_assets/wxray -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
     
       - name: Build Mips softfloat Xray
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
@@ -153,6 +154,7 @@ jobs:
         run: |
           cd ./build_assets || exit 1
           mv xray xray.exe
+          mv wxray wxray.exe
 
       - name: Prepare to release
         run: |
