@@ -27,6 +27,9 @@
   - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
   - [(Tap) Repository 1](https://github.com/xiruizhao/homebrew-xray)
 
+## Contributing
+[Code Of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
+
 ## Usage
 
 [Xray-examples](https://github.com/XTLS/Xray-examples) / [VLESS-TCP-XTLS-WHATEVER](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-WHATEVER)
