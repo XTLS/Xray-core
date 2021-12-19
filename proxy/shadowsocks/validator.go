@@ -93,11 +93,11 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 			var matchErr error
 			switch command {
 			case protocol.RequestCommandTCP:
-				data := make([]byte, 16)
-				ret, matchErr = aead.Open(data[:0], data[4:16], bs[ivLen:ivLen+18], nil)
+				data := make([]byte, 4+aead.NonceSize())
+				ret, matchErr = aead.Open(data[:0], data[4:], bs[ivLen:ivLen+18], nil)
 			case protocol.RequestCommandUDP:
 				data := make([]byte, 8192)
-				ret, matchErr = aead.Open(data[:0], data[8180:8192], bs[ivLen:], nil)
+				ret, matchErr = aead.Open(data[:0], data[8192-aead.NonceSize():8192], bs[ivLen:], nil)
 			}
 
 			if matchErr == nil {
