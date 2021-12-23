@@ -25,7 +25,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
-		if config.TcpKeepAliveInterval > 0 {
+		if config.TcpKeepAliveIdle > 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
 				return newError("failed to set SO_KEEPALIVE", err)
 			}
@@ -40,7 +40,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
-		if config.TcpKeepAliveInterval > 0 {
+		if config.TcpKeepAliveIdle > 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
 				return newError("failed to set SO_KEEPALIVE", err)
 			}
