@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 
@@ -17,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 	. "github.com/xtls/xray-core/transport/internet/kcp"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func TestDialAndListen(t *testing.T) {

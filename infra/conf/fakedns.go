@@ -68,10 +68,10 @@ func (FakeDNSPostProcessingStage) Process(config *Config) error {
 		}
 
 		switch strings.ToLower(config.DNSConfig.QueryStrategy) {
-			case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
-				isIPv4Enable, isIPv6Enable = true, false
-			case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
-				isIPv4Enable, isIPv6Enable = false, true
+		case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
+			isIPv4Enable, isIPv6Enable = true, false
+		case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
+			isIPv4Enable, isIPv6Enable = false, true
 		}
 	}
 

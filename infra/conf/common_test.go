@@ -209,8 +209,7 @@ func TestUserParsing(t *testing.T) {
 	common.Must(json.Unmarshal([]byte(`{
     "id": "96edb838-6d68-42ef-a933-25f7ac3a9d09",
     "email": "love@example.com",
-    "level": 1,
-    "alterId": 100
+    "level": 1
   }`), user))
 
 	nUser := user.Build()

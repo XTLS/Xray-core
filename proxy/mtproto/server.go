@@ -5,8 +5,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
@@ -18,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 var dcList = []net.Address{

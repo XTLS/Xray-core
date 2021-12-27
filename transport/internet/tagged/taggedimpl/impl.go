@@ -2,11 +2,11 @@ package taggedimpl
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/core"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/tagged"
 )

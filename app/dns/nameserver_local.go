@@ -4,9 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/xtls/xray-core/features/dns"
-
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/dns/localdns"
 )
 

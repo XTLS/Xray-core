@@ -2,7 +2,7 @@ package log
 
 import (
 	"sync"
-	
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
 )

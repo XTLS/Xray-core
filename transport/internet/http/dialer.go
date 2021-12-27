@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet/stat"
-
 	"golang.org/x/net/http2"
 
 	"github.com/xtls/xray-core/common"
@@ -18,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
 )
