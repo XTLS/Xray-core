@@ -135,6 +135,10 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		}))
 	}
 
+	if grpcSettings.InitialWindowsSize > 0 {
+		dialOptions = append(dialOptions, grpc.WithInitialWindowSize(grpcSettings.InitialWindowsSize))
+	}
+
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {
 		grpcDestHost = dest.Address.Domain()

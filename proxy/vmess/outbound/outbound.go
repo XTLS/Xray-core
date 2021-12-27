@@ -4,9 +4,10 @@ package outbound
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"hash/crc64"
 	"time"
-
-	"github.com/xtls/xray-core/transport/internet/stat"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -24,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // Handler is an outbound connection handler for VMess protocol.
@@ -131,7 +133,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		isAEAD = true
 	}
 
-	session := encoding.NewClientSession(ctx, isAEAD, protocol.DefaultIDHash)
+	hashkdf := hmac.New(sha256.New, []byte("VMessBF"))
+	hashkdf.Write(account.ID.Bytes())
+
+	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
+
+	session := encoding.NewClientSession(ctx, isAEAD, protocol.DefaultIDHash, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)

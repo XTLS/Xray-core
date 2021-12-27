@@ -4,9 +4,8 @@ package dispatcher
 
 import (
 	"context"
-	"github.com/xtls/xray-core/features/dns"
-	"strconv"
 	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"

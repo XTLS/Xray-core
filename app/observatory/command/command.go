@@ -1,3 +1,4 @@
+//go:build !confonly
 // +build !confonly
 
 package command
@@ -7,9 +8,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
+	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 )
 
