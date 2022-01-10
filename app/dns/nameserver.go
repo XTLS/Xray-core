@@ -186,7 +186,7 @@ func (c *Client) Name() string {
 	return c.server.Name()
 }
 
-// QueryIP send DNS query to the name server with the client's IP.
+// QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption, disableCache bool) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	ips, err := c.server.QueryIP(ctx, domain, c.clientIP, option, disableCache)
