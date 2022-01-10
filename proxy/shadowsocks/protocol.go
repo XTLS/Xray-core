@@ -86,7 +86,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		if aead != nil {
 			auth := &crypto.AEADAuthenticator{
 				AEAD:           aead,
-				NonceGenerator: crypto.GenerateInitialAEADNonce(),
+				NonceGenerator: crypto.GenerateAEADNonceWithSize(aead.NonceSize()),
 			}
 			r = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
 				Auth: auth,
