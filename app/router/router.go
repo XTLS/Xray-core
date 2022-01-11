@@ -122,7 +122,7 @@ func (*Router) Close() error {
 	return nil
 }
 
-// Type implement common.HasType.
+// Type implements common.HasType.
 func (*Router) Type() interface{} {
 	return routing.RouterType()
 }
