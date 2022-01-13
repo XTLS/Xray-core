@@ -22,7 +22,7 @@ func ParseXForwardedFor(header http.Header) []net.Address {
 	return addrs
 }
 
-// RemoveHopByHopHeaders remove hop by hop headers in http header list.
+// RemoveHopByHopHeaders removes hop by hop headers in http header list.
 func RemoveHopByHopHeaders(header http.Header) {
 	// Strip hop-by-hop header based on RFC:
 	// http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.5.1

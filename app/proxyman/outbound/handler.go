@@ -58,7 +58,7 @@ type Handler struct {
 	downlinkCounter stats.Counter
 }
 
-// NewHandler create a new Handler based on the given configuration.
+// NewHandler creates a new Handler based on the given configuration.
 func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbound.Handler, error) {
 	v := core.MustFromContext(ctx)
 	uplinkCounter, downlinkCounter := getStatCounter(v, config.Tag)
