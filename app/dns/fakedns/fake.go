@@ -92,7 +92,7 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 	return nil
 }
 
-// GetFakeIPForDomain check and generate a fake IP for a domain name
+// GetFakeIPForDomain checks and generates a fake IP for a domain name
 func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
@@ -123,7 +123,7 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	return []net.Address{ip}
 }
 
-// GetDomainFromFakeDNS check if an IP is a fake IP and have corresponding domain name
+// GetDomainFromFakeDNS checks if an IP is a fake IP and have corresponding domain name
 func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
 	if !ip.Family().IsIP() || !fkdns.ipRange.Contains(ip.IP()) {
 		return ""

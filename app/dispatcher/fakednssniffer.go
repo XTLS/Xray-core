@@ -11,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 )
 
-// newFakeDNSSniffer Create a Fake DNS metadata sniffer
+// newFakeDNSSniffer Creates a Fake DNS metadata sniffer
 func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error) {
 	var fakeDNSEngine dns.FakeDNSEngine
 	err := core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
