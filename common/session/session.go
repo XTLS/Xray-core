@@ -86,7 +86,7 @@ type Sockopt struct {
 	Mark int32
 }
 
-// SetAttribute attachs additional string attributes to content.
+// SetAttribute attaches additional string attributes to content.
 func (c *Content) SetAttribute(name string, value string) {
 	if c.Attributes == nil {
 		c.Attributes = make(map[string]string)
