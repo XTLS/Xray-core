@@ -118,18 +118,15 @@ func (s *clientSessions) cleanSessions() error {
 
 func (s *clientSessions) openConnection(ctx context.Context, destAddr net.Addr, config *Config, tlsConfig *tls.Config, sockopt *internet.SocketConfig) (stat.Connection, error) {
 	s.access.Lock()
-	defer s.access.Unlock()
-
 	if s.sessions == nil {
 		s.sessions = make(map[net.Destination][]*sessionContext)
 	}
-
 	dest := net.DestinationFromAddr(destAddr)
-
 	var sessions []*sessionContext
 	if s, found := s.sessions[dest]; found {
 		sessions = s
 	}
+	s.access.Unlock()
 
 	if true {
 		conn := openStream(sessions, destAddr)
@@ -137,8 +134,6 @@ func (s *clientSessions) openConnection(ctx context.Context, destAddr net.Addr, 
 			return conn, nil
 		}
 	}
-
-	sessions = removeInactiveSessions(sessions)
 
 	rawConn, err := internet.DialSystem(ctx, dest, sockopt)
 	if err != nil {
@@ -170,7 +165,13 @@ func (s *clientSessions) openConnection(ctx context.Context, destAddr net.Addr, 
 		session: session,
 		rawConn: conn,
 	}
+	s.access.Lock()
+	if s, found := s.sessions[dest]; found {
+		sessions = s
+	}
+	sessions = removeInactiveSessions(sessions)
 	s.sessions[dest] = append(sessions, context)
+	s.access.Unlock()
 	return context.openStream(destAddr)
 }
 
