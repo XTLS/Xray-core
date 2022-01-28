@@ -139,7 +139,7 @@ func (s *clientSessions) openConnection(ctx context.Context, destAddr net.Addr, 
 	}
 
 	sessions = removeInactiveSessions(sessions)
-
+	newError("dialing quic to ", dest).WriteToLog()
 	rawConn, err := internet.DialSystem(ctx, dest, sockopt)
 	if err != nil {
 		return nil, newError("failed to dial to dest: ", err).AtWarning().Base(err)
