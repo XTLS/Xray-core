@@ -58,11 +58,13 @@ func isActive(s quic.Session) bool {
 
 func removeInactiveSessions(sessions []*sessionContext) []*sessionContext {
 	activeSessions := make([]*sessionContext, 0, len(sessions))
-	for _, s := range sessions {
+	for i, s := range sessions {
 		if isActive(s.session) {
 			activeSessions = append(activeSessions, s)
 			continue
 		}
+
+		newError("closing quic session at index: ", i).WriteToLog()
 		if err := s.session.CloseWithError(0, ""); err != nil {
 			newError("failed to close session").Base(err).WriteToLog()
 		}
@@ -72,27 +74,11 @@ func removeInactiveSessions(sessions []*sessionContext) []*sessionContext {
 	}
 
 	if len(activeSessions) < len(sessions) {
+		newError("active quic session reduced from ", len(sessions), " to ", len(activeSessions)).WriteToLog()
 		return activeSessions
 	}
 
 	return sessions
-}
-
-func openStream(sessions []*sessionContext, destAddr net.Addr) *interConn {
-	for _, s := range sessions {
-		if !isActive(s.session) {
-			continue
-		}
-
-		conn, err := s.openStream(destAddr)
-		if err != nil {
-			continue
-		}
-
-		return conn
-	}
-
-	return nil
 }
 
 func (s *clientSessions) cleanSessions() error {
@@ -116,7 +102,7 @@ func (s *clientSessions) cleanSessions() error {
 	return nil
 }
 
-func (s *clientSessions) openConnection(destAddr net.Addr, config *Config, tlsConfig *tls.Config, sockopt *internet.SocketConfig) (stat.Connection, error) {
+func (s *clientSessions) openConnection(ctx context.Context, destAddr net.Addr, config *Config, tlsConfig *tls.Config, sockopt *internet.SocketConfig) (stat.Connection, error) {
 	s.access.Lock()
 	defer s.access.Unlock()
 
@@ -131,29 +117,36 @@ func (s *clientSessions) openConnection(destAddr net.Addr, config *Config, tlsCo
 		sessions = s
 	}
 
-	if true {
-		conn := openStream(sessions, destAddr)
-		if conn != nil {
-			return conn, nil
+	if len(sessions) > 0 {
+		s := sessions[len(sessions)-1]
+		if isActive(s.session) {
+			conn, err := s.openStream(destAddr)
+			if err == nil {
+				return conn, nil
+			}
+			newError("failed to openStream: ").Base(err).WriteToLog()
+		} else {
+			newError("current quic session is not active!").WriteToLog()
 		}
 	}
 
 	sessions = removeInactiveSessions(sessions)
-
-	rawConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
-		IP:   []byte{0, 0, 0, 0},
-		Port: 0,
-	}, sockopt)
+	newError("dialing quic to ", dest).WriteToLog()
+	rawConn, err := internet.DialSystem(ctx, dest, sockopt)
 	if err != nil {
-		return nil, err
+		return nil, newError("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
 	quicConfig := &quic.Config{
 		ConnectionIDLength: 12,
-		KeepAlive:          true,
+		KeepAlive:          false,
 	}
 
-	conn, err := wrapSysConn(rawConn.(*net.UDPConn), config)
+	udpConn, _ := rawConn.(*net.UDPConn)
+	if udpConn == nil {
+		udpConn = rawConn.(*internet.PacketConnWrapper).Conn.(*net.UDPConn)
+	}
+	conn, err := wrapSysConn(udpConn, config)
 	if err != nil {
 		rawConn.Close()
 		return nil, err
@@ -209,7 +202,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	config := streamSettings.ProtocolSettings.(*Config)
 
-	return client.openConnection(destAddr, config, tlsConfig, streamSettings.SocketSettings)
+	return client.openConnection(ctx, destAddr, config, tlsConfig, streamSettings.SocketSettings)
 }
 
 func init() {
