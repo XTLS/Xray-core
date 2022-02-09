@@ -53,7 +53,7 @@ func MergeBytes(dest MultiBuffer, src []byte) MultiBuffer {
 	return dest
 }
 
-// ReleaseMulti release all content of the MultiBuffer, and returns an empty MultiBuffer.
+// ReleaseMulti releases all content of the MultiBuffer, and returns an empty MultiBuffer.
 func ReleaseMulti(mb MultiBuffer) MultiBuffer {
 	for i := range mb {
 		mb[i].Release()
@@ -235,7 +235,7 @@ func (mb MultiBuffer) Len() int32 {
 	return size
 }
 
-// IsEmpty return true if the MultiBuffer has no content.
+// IsEmpty returns true if the MultiBuffer has no content.
 func (mb MultiBuffer) IsEmpty() bool {
 	for _, b := range mb {
 		if !b.IsEmpty() {
@@ -283,14 +283,14 @@ func (c *MultiBufferContainer) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// WriteMultiBuffer implement Writer.
+// WriteMultiBuffer implements Writer.
 func (c *MultiBufferContainer) WriteMultiBuffer(b MultiBuffer) error {
 	mb, _ := MergeMulti(c.MultiBuffer, b)
 	c.MultiBuffer = mb
 	return nil
 }
 
-// Close implement io.Closer.
+// Close implements io.Closer.
 func (c *MultiBufferContainer) Close() error {
 	c.MultiBuffer = ReleaseMulti(c.MultiBuffer)
 	return nil
