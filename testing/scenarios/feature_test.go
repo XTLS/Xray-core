@@ -234,7 +234,7 @@ func TestProxyOverKCP(t *testing.T) {
 	defer tcpServer.Close()
 
 	serverUserID := protocol.NewID(uuid.New())
-	serverPort := tcp.PickPort()
+	serverPort := udp.PickPort()
 	serverConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{

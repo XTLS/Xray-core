@@ -136,7 +136,7 @@ func TestSocksBridageUDP(t *testing.T) {
 		},
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
@@ -148,7 +148,7 @@ func TestSocksBridageUDP(t *testing.T) {
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
 					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP, net.Network_UDP},
+						Network: []net.Network{net.Network_UDP},
 					},
 				}),
 			},
@@ -231,7 +231,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 		},
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
@@ -243,7 +243,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
 					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP, net.Network_UDP},
+						Network: []net.Network{net.Network_UDP},
 					},
 				}),
 			},
