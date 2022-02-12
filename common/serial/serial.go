@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-// ReadUint16 reads first two bytes from the reader, and then coverts them to an uint16 value.
+// ReadUint16 reads first two bytes from the reader, and then converts them to an uint16 value.
 func ReadUint16(reader io.Reader) (uint16, error) {
 	var b [2]byte
 	if _, err := io.ReadFull(reader, b[:]); err != nil {
