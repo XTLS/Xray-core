@@ -142,6 +142,11 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+      - name: Build background Xray on Windows 
+        if: matrix.goos == 'windows'
+        run: |
+          go build -v -o build_assets/wxray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
     
       - name: Build Mips softfloat Xray
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
