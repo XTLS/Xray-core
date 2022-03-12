@@ -58,7 +58,7 @@ func TestXrayClose(t *testing.T) {
 					Address: net.NewIPOrDomain(net.LocalHostIP),
 					Port:    uint32(0),
 					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP, net.Network_UDP},
+						Network: []net.Network{net.Network_TCP},
 					},
 				}),
 			},

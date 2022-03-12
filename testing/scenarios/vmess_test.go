@@ -108,7 +108,7 @@ func TestVMessDynamicPort(t *testing.T) {
 		}
 
 		server, _ := InitializeServerConfig(serverConfig)
-		if server != nil && tcpConnAvailableAtPort(t, serverPort+100) {
+		if server != nil && WaitConnAvailableWithTest(t, testTCPConn(serverPort+100, 1024, time.Second*2)) {
 			defer CloseServer(server)
 			break
 		}
@@ -167,26 +167,9 @@ func TestVMessDynamicPort(t *testing.T) {
 	common.Must(err)
 	defer CloseServer(server)
 
-	if !tcpConnAvailableAtPort(t, clientPort) {
+	if !WaitConnAvailableWithTest(t, testTCPConn(clientPort, 1024, time.Second*2)) {
 		t.Fail()
 	}
-}
-
-func tcpConnAvailableAtPort(t *testing.T, port net.Port) bool {
-	for i := 1; ; i++ {
-		if i > 10 {
-			t.Log("All attempts failed to test tcp conn")
-			return false
-		}
-		time.Sleep(time.Millisecond * 10)
-		if err := testTCPConn(port, 1024, time.Second*2)(); err != nil {
-			t.Log("err ", err)
-		} else {
-			t.Log("success with", i, "attempts")
-			break
-		}
-	}
-	return true
 }
 
 func TestVMessGCM(t *testing.T) {
