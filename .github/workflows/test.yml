@@ -48,4 +48,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" -OutFile "./resources/geoip.dat"
           Invoke-WebRequest -Uri "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat" -OutFile "./resources/geosite.dat"
       - name: Test
-        run: go test -timeout 1h -v ./...
+        run: |
+          go list ./... | grep -v /cmd | grep -v /vendor | xargs -n1 -I{} sh -c 'go test -timeout 1h -race -covermode=atomic -coverprofile=coverage.out -coverpkg $(go list ./... | grep -v /vendor | tr "\n" ",") {} || exit 255'
+          go tool cover -func=coverage.out -mode=atomic
+        shell: bash
