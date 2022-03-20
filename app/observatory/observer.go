@@ -82,26 +82,26 @@ func (o *Observer) background() {
 				if o.finished.Done() {
 					return
 				}
-				time.Sleep(sleepTime)
+				//time.Sleep(sleepTime)
 			}
-			continue
-		}
+			//continue
+		} else {
+			ch := make(chan struct{}, len(outbounds))
 
-		ch := make(chan struct{}, len(outbounds))
+			for _, v := range outbounds {
+				go func(v string) {
+					result := o.probe(v)
+					o.updateStatusForResult(v, &result)
+					ch <- struct{}{}
+				}(v)
+			}
 
-		for _, v := range outbounds {
-			go func(v string) {
-				result := o.probe(v)
-				o.updateStatusForResult(v, &result)
-				ch <- struct{}{}
-			}(v)
-		}
-
-		for range outbounds {
-			select {
-			case <-ch:
-			case <-o.finished.Wait():
-				return
+			for range outbounds {
+				select {
+				case <-ch:
+				case <-o.finished.Wait():
+					return
+				}
 			}
 		}
 		time.Sleep(sleepTime)
