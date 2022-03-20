@@ -48,10 +48,16 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
 	}
 
+	var strategySettings []byte
+	if r.Strategy.Settings != nil {
+		strategySettings = *r.Strategy.Settings
+	}
+
 	return &router.BalancingRule{
 		Tag:              r.Tag,
 		OutboundSelector: []string(r.Selectors),
 		Strategy:         strategy,
+		StrategySettings: strategySettings,
 	}, nil
 }
 
