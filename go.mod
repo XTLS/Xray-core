@@ -23,7 +23,7 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5
 	google.golang.org/grpc v1.45.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/protobuf v1.28.0
 	h12.io/socks v1.0.3
 )
 
