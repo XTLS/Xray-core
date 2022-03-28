@@ -100,8 +100,11 @@ type DefaultDispatcher struct {
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
-		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dns dns.Client, fdns dns.FakeDNSEngine) error {
-			return d.Init(config.(*Config), om, router, pm, sm, dns, fdns)
+		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
+			core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
+				d.fdns = fdns
+			})
+			return d.Init(config.(*Config), om, router, pm, sm, dc)
 		}); err != nil {
 			return nil, err
 		}
@@ -110,13 +113,12 @@ func init() {
 }
 
 // Init initializes DefaultDispatcher.
-func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dns dns.Client, fdns dns.FakeDNSEngine) error {
+func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dns dns.Client) error {
 	d.ohm = om
 	d.router = router
 	d.policy = pm
 	d.stats = sm
 	d.dns = dns
-	d.fdns = fdns
 	return nil
 }
 
@@ -137,69 +139,71 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 	downOpt := pipe.OptionsFromContext(ctx)
 	upOpt := downOpt
 
-	IP2Fake := new(sync.Map) // net.IP.String() => net.IP
-	if network == net.Network_UDP {
-		upOpt = append(upOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
-			mb2 := make(buf.MultiBuffer, 0, len(mb))
-			for _, buffer := range mb {
-				if buffer.UDP == nil {
-					mb2 = append(mb2, buffer)
-					continue
-				}
-				addr := buffer.UDP.Address
-				var originIP net.IP
-				if sniffing.Enabled && addr.Family().IsIP() {
-					// if !d.fdns.GetFakeIPRange().Contains(addr.IP()) {
-					// 	mb2 = append(mb2, buffer)
-					// 	continue
-					// }
-					originIP = addr.IP()
-					domain := d.fdns.GetDomainFromFakeDNS(addr)
+	if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok {
+		IP2Fake := new(sync.Map) // net.IP.String() => net.IP
+		if network == net.Network_UDP {
+			upOpt = append(upOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+				mb2 := make(buf.MultiBuffer, 0, len(mb))
+				for _, buffer := range mb {
+					if buffer.UDP == nil {
+						mb2 = append(mb2, buffer)
+						continue
+					}
+					addr := buffer.UDP.Address
+					var originIP net.IP
+					if sniffing.Enabled && addr.Family().IsIP() {
+						if !fkr0.IsIPInIPPool(addr) {
+							mb2 = append(mb2, buffer)
+							continue
+						}
+						originIP = addr.IP()
+						domain := fkr0.GetDomainFromFakeDNS(addr)
+						if len(domain) > 0 {
+							newError("override buffer.UDP: " + domain).WriteToLog(session.ExportIDToError(ctx))
+							addr = net.DomainAddress(domain)
+						} else {
+							// drop buffer without a valid Fake IP
+							continue
+						}
+					}
+	
+					// addr is DomainAddress
+					domain := addr.Domain()
 					if len(domain) > 0 {
-						newError("override buffer.UDP: " + domain).WriteToLog(session.ExportIDToError(ctx))
-						addr = net.DomainAddress(domain)
-					} else {
-						// drop buffer without a valid Fake IP
-						continue
+						ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
+						if err != nil {
+							newError("failed to look up IP for " + domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
+							continue
+						}
+						overrideIP := ips[dice.Roll(len(ips))]
+						buffer.UDP.Address = net.IPAddress(overrideIP)
+						newError("override buffer.UDP: " + buffer.UDP.Address.String()).WriteToLog(session.ExportIDToError(ctx))
+	
+						if originIP != nil {
+							IP2Fake.Store(overrideIP.String(), originIP)
+						}
+						mb2 = append(mb2, buffer)
 					}
 				}
-
-				// addr is DomainAddress
-				domain := addr.Domain()
-				if len(domain) > 0 {
-					ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
-					if err != nil {
-						newError("failed to look up IP for " + domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
-						continue
-					}
-					overrideIP := ips[dice.Roll(len(ips))]
-					buffer.UDP.Address = net.IPAddress(overrideIP)
-					newError("override buffer.UDP: " + buffer.UDP.Address.String()).WriteToLog(session.ExportIDToError(ctx))
-
-					if originIP != nil {
-						IP2Fake.Store(overrideIP.String(), originIP)
-					}
-					mb2 = append(mb2, buffer)
-				}
-			}
-
-			return mb2
-		}))
-	}
-
-	if network == net.Network_UDP && sniffing.Enabled {
-		downOpt = append(downOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
-			for _, buffer := range mb {
-				if buffer.UDP != nil &&
-					buffer.UDP.Address.Family().IsIP() {
-					if originIP, found := IP2Fake.Load(buffer.UDP.Address.IP().String()); found {
-						buffer.UDP.Address = net.IPAddress(originIP.(net.IP))
-						newError("restore FakeIP: " + originIP.(net.IP).String()).WriteToLog(session.ExportIDToError(ctx))
+	
+				return mb2
+			}))
+		}
+	
+		if network == net.Network_UDP && sniffing.Enabled {
+			downOpt = append(downOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+				for _, buffer := range mb {
+					if buffer.UDP != nil &&
+						buffer.UDP.Address.Family().IsIP() {
+						if originIP, found := IP2Fake.Load(buffer.UDP.Address.IP().String()); found {
+							buffer.UDP.Address = net.IPAddress(originIP.(net.IP))
+							newError("restore FakeIP: " + originIP.(net.IP).String()).WriteToLog(session.ExportIDToError(ctx))
+						}
 					}
 				}
-			}
-			return mb
-		}))
+				return mb
+			}))
+		}
 	}
 	uplinkReader, uplinkWriter := pipe.New(upOpt...)
 	downlinkReader, downlinkWriter := pipe.New(downOpt...)
@@ -245,17 +249,13 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 	return inboundLink, outboundLink
 }
 
-func shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
+func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
 	for _, d := range request.ExcludeForDomain {
 		if strings.ToLower(domain) == d {
 			return false
 		}
 	}
-	var fakeDNSEngine dns.FakeDNSEngine
-	core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
-		fakeDNSEngine = fdns
-	})
 	protocolString := result.Protocol()
 	if resComp, ok := result.(SnifferResultComposite); ok {
 		protocolString = resComp.ProtocolForDomainResult()
@@ -264,7 +264,7 @@ func shouldOverride(ctx context.Context, result SniffResult, request session.Sni
 		if strings.HasPrefix(protocolString, p) {
 			return true
 		}
-		if fkr0, ok := fakeDNSEngine.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns" &&
+		if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns" &&
 			destination.Address.Family().IsIP() && fkr0.IsIPInIPPool(destination.Address) {
 			newError("Using sniffer ", protocolString, " since the fake DNS missed").WriteToLog(session.ExportIDToError(ctx))
 			return true
@@ -304,7 +304,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		result, err := sniffer(ctx, nil, true)
 		if err == nil {
 			content.Protocol = result.Protocol()
-			if shouldOverride(ctx, result, sniffingRequest, destination) {
+			if d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
@@ -326,7 +326,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
-			if err == nil && shouldOverride(ctx, result, sniffingRequest, destination) {
+			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
@@ -365,7 +365,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		result, err := sniffer(ctx, nil, true)
 		if err == nil {
 			content.Protocol = result.Protocol()
-			if shouldOverride(ctx, result, sniffingRequest, destination) {
+			if d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
@@ -387,7 +387,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
-			if err == nil && shouldOverride(ctx, result, sniffingRequest, destination) {
+			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
 				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
 				destination.Address = net.ParseAddress(domain)
