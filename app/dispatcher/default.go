@@ -4,13 +4,13 @@ package dispatcher
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -139,71 +139,70 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 	downOpt := pipe.OptionsFromContext(ctx)
 	upOpt := downOpt
 
-	if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok {
-		IP2Fake := new(sync.Map) // net.IP.String() => net.IP
-		if network == net.Network_UDP {
-			upOpt = append(upOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
-				mb2 := make(buf.MultiBuffer, 0, len(mb))
-				for _, buffer := range mb {
-					if buffer.UDP == nil {
-						mb2 = append(mb2, buffer)
-						continue
-					}
-					addr := buffer.UDP.Address
-					var originIP net.IP
-					if sniffing.Enabled && addr.Family().IsIP() {
-						if !fkr0.IsIPInIPPool(addr) {
-							mb2 = append(mb2, buffer)
-							continue
-						}
-						originIP = addr.IP()
+	if network == net.Network_UDP {
+		var ip2domain *sync.Map // net.IP.String() => domain, this map is used by server side when client turn on fakedns
+		// Client will send domain address in the buffer.UDP.Address, server record all possible target IP addrs.
+		// When target replies, server will restore the domain and send back to client.
+		// Note: this map is not global but per connection context
+		upOpt = append(upOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+			for i, buffer := range mb {
+				if buffer.UDP == nil {
+					continue
+				}
+				addr := buffer.UDP.Address
+				if addr.Family().IsIP() {
+					if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && fkr0.IsIPInIPPool(addr) && sniffing.Enabled {
 						domain := fkr0.GetDomainFromFakeDNS(addr)
 						if len(domain) > 0 {
-							newError("override buffer.UDP: " + domain).WriteToLog(session.ExportIDToError(ctx))
-							addr = net.DomainAddress(domain)
+							buffer.UDP.Address = net.DomainAddress(domain)
+							newError("[fakedns client] override with domain: ", domain, " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
 						} else {
-							// drop buffer without a valid Fake IP
-							continue
+							newError("[fakedns client] failed to find domain! :", addr.String(), " for xUDP buffer at ", i).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 						}
 					}
-	
-					// addr is DomainAddress
+				} else {
+					if (ip2domain == nil) {
+						ip2domain = new(sync.Map)
+						newError("[fakedns client] create a new map").WriteToLog(session.ExportIDToError(ctx))
+					}
 					domain := addr.Domain()
-					if len(domain) > 0 {
-						ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
-						if err != nil {
-							newError("failed to look up IP for " + domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
-							continue
+					ips, err := d.dns.LookupIP(domain, dns.IPOption{true, true, false})
+					if err == nil {
+						for _, ip := range ips {
+							ip2domain.Store(ip.String(), domain)
 						}
-						overrideIP := ips[dice.Roll(len(ips))]
-						buffer.UDP.Address = net.IPAddress(overrideIP)
-						newError("override buffer.UDP: " + buffer.UDP.Address.String()).WriteToLog(session.ExportIDToError(ctx))
-	
-						if originIP != nil {
-							IP2Fake.Store(overrideIP.String(), originIP)
-						}
-						mb2 = append(mb2, buffer)
+						newError("[fakedns client] candidate ip: " + fmt.Sprintf("%v", ips), " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
+					} else {
+						newError("[fakedns client] failed to look up IP for ", domain, " for xUDP buffer at ", i).Base(err).WriteToLog(session.ExportIDToError(ctx))
 					}
 				}
-	
-				return mb2
-			}))
-		}
-	
-		if network == net.Network_UDP && sniffing.Enabled {
-			downOpt = append(downOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
-				for _, buffer := range mb {
-					if buffer.UDP != nil &&
-						buffer.UDP.Address.Family().IsIP() {
-						if originIP, found := IP2Fake.Load(buffer.UDP.Address.IP().String()); found {
-							buffer.UDP.Address = net.IPAddress(originIP.(net.IP))
-							newError("restore FakeIP: " + originIP.(net.IP).String()).WriteToLog(session.ExportIDToError(ctx))
-						}
+			}
+			return mb
+		}))
+		downOpt = append(downOpt, pipe.OnTransmission(func(mb buf.MultiBuffer) buf.MultiBuffer {
+			for i, buffer := range mb {
+				if buffer.UDP == nil {
+					continue
+				}
+				addr := buffer.UDP.Address
+				if addr.Family().IsIP() {
+					if ip2domain == nil {
+						continue
+					}
+					if domain, found := ip2domain.Load(addr.IP().String()); found {
+						buffer.UDP.Address = net.DomainAddress(domain.(string))
+						newError("[fakedns client] restore domain: ", domain.(string), " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
+					}
+				} else {
+					if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok {
+						fakeIp := fkr0.GetFakeIPForDomain(addr.Domain())
+						buffer.UDP.Address = fakeIp[0]
+						newError("[fakedns client] restore FakeIP: ", buffer.UDP, fmt.Sprintf("%v", fakeIp), " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
 					}
 				}
-				return mb
-			}))
-		}
+			}
+			return mb
+		}))
 	}
 	uplinkReader, uplinkWriter := pipe.New(upOpt...)
 	downlinkReader, downlinkWriter := pipe.New(downOpt...)
