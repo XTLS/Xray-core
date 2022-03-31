@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	gonet "net"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -16,6 +17,7 @@ import (
 type Holder struct {
 	domainToIP cache.Lru
 	ipRange    *gonet.IPNet
+	mu         *sync.Mutex
 
 	config *FakeDnsPool
 }
@@ -49,6 +51,7 @@ func (fkdns *Holder) Start() error {
 func (fkdns *Holder) Close() error {
 	fkdns.domainToIP = nil
 	fkdns.ipRange = nil
+	fkdns.mu = nil
 	return nil
 }
 
@@ -67,7 +70,7 @@ func NewFakeDNSHolder() (*Holder, error) {
 }
 
 func NewFakeDNSHolderConfigOnly(conf *FakeDnsPool) (*Holder, error) {
-	return &Holder{nil, nil, conf}, nil
+	return &Holder{nil, nil, nil, conf}, nil
 }
 
 func (fkdns *Holder) initializeFromConfig() error {
@@ -89,11 +92,14 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 	}
 	fkdns.domainToIP = cache.NewLru(lruSize)
 	fkdns.ipRange = ipRange
+	fkdns.mu = new(sync.Mutex)
 	return nil
 }
 
 // GetFakeIPForDomain checks and generates a fake IP for a domain name
 func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}

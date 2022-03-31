@@ -20,6 +20,8 @@ on:
 
 jobs:
   test:
+    permissions:
+      contents: read
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -29,9 +31,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: ^1.17.6
+          go-version: ^1.17.7
+          check-latest: true
       - name: Checkout codebase
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Prepare geo*dat
         if: ${{ matrix.os != 'windows-latest' }}

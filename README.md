@@ -111,6 +111,7 @@ ___
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
 - macOS (Intel chip & M1 chip)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
+  - [V2RayXS](https://github.com/tzmax/V2RayXS)
 
 ## Credits
 
