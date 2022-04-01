@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -99,7 +100,8 @@ func TestMetrics(t *testing.T) {
 	if err2 != nil {
 		t.Fatal(err2)
 	}
-	if string(body2)[0] != '{' {
+	var json2 map[string]interface{}
+	if json.Unmarshal(body2, &json2) != nil {
 		t.Error("unexpected response body from expvars handler")
 	}
 }

@@ -64,6 +64,9 @@ func NewMetricsHandler(ctx context.Context, config *Config) (*MetricsHandler, er
 				c.observatory = observatory
 				return nil
 			}))
+			if c.observatory == nil {
+				return nil
+			}
 		}
 		var resp = map[string]*observatory.OutboundStatus{}
 		if o, err := c.observatory.GetObservation(context.Background()); err != nil {
