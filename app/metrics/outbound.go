@@ -11,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 )
 
-// OutboundListener is a net.Listener for listening pprof http connections.
+// OutboundListener is a net.Listener for listening metrics http connections.
 type OutboundListener struct {
 	buffer chan net.Conn
 	done   *done.Instance
@@ -60,7 +60,7 @@ func (l *OutboundListener) Addr() net.Addr {
 	}
 }
 
-// Outbound is a outbound.Handler that handles pprof http connections.
+// Outbound is an outbound.Handler that handles metrics http connections.
 type Outbound struct {
 	tag      string
 	listener *OutboundListener
