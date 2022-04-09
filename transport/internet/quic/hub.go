@@ -22,17 +22,17 @@ type Listener struct {
 	addConn  internet.ConnHandler
 }
 
-func (l *Listener) acceptStreams(session quic.Session) {
+func (l *Listener) acceptStreams(conn quic.Connection) {
 	for {
-		stream, err := session.AcceptStream(context.Background())
+		stream, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			newError("failed to accept stream").Base(err).WriteToLog()
 			select {
-			case <-session.Context().Done():
+			case <-conn.Context().Done():
 				return
 			case <-l.done.Wait():
-				if err := session.CloseWithError(0, ""); err != nil {
-					newError("failed to close session").Base(err).WriteToLog()
+				if err := conn.CloseWithError(0, ""); err != nil {
+					newError("failed to close connection").Base(err).WriteToLog()
 				}
 				return
 			default:
@@ -43,8 +43,8 @@ func (l *Listener) acceptStreams(session quic.Session) {
 
 		conn := &interConn{
 			stream: stream,
-			local:  session.LocalAddr(),
-			remote: session.RemoteAddr(),
+			local:  conn.LocalAddr(),
+			remote: conn.RemoteAddr(),
 		}
 
 		l.addConn(conn)
@@ -55,7 +55,7 @@ func (l *Listener) keepAccepting() {
 	for {
 		conn, err := l.listener.Accept(context.Background())
 		if err != nil {
-			newError("failed to accept QUIC sessions").Base(err).WriteToLog()
+			newError("failed to accept QUIC connection").Base(err).WriteToLog()
 			if l.done.Done() {
 				break
 			}
