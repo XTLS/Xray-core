@@ -123,7 +123,7 @@ jobs:
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ^1.17.7
           check-latest: true
