@@ -399,9 +399,13 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	var handler outbound.Handler
 
+	routingLink := routing_session.AsRoutingContext(ctx)
+	inTag := routingLink.GetInboundTag()
+	isPickRoute := 0
 	if forcedOutboundTag := session.GetForcedOutboundTagFromContext(ctx); forcedOutboundTag != "" {
 		ctx = session.SetForcedOutboundTagToContext(ctx, "")
 		if h := d.ohm.GetHandler(forcedOutboundTag); h != nil {
+			isPickRoute = 1
 			newError("taking platform initialized detour [", forcedOutboundTag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 			handler = h
 		} else {
@@ -411,13 +415,14 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 			return
 		}
 	} else if d.router != nil {
-		if route, err := d.router.PickRoute(routing_session.AsRoutingContext(ctx)); err == nil {
-			tag := route.GetOutboundTag()
-			if h := d.ohm.GetHandler(tag); h != nil {
-				newError("taking detour [", tag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
+		if route, err := d.router.PickRoute(routingLink); err == nil {
+			outTag := route.GetOutboundTag()
+			if h := d.ohm.GetHandler(outTag); h != nil {
+				isPickRoute = 2
+				newError("taking detour [", outTag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 				handler = h
 			} else {
-				newError("non existing outTag: ", tag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				newError("non existing outTag: ", outTag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 			}
 		} else {
 			newError("default route for ", destination).WriteToLog(session.ExportIDToError(ctx))
@@ -437,7 +442,15 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
 		if tag := handler.Tag(); tag != "" {
-			accessMessage.Detour = tag
+			if inTag == "" {
+				accessMessage.Detour = tag
+			} else if isPickRoute == 1 {
+				accessMessage.Detour = inTag + " ==> " + tag
+			} else if isPickRoute == 2 {
+				accessMessage.Detour = inTag + " -> " + tag
+			} else {
+				accessMessage.Detour = inTag + " >> " + tag
+			}
 		}
 		log.Record(accessMessage)
 	}
