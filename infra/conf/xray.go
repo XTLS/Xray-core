@@ -632,7 +632,7 @@ func (c *Config) Build() (*core.Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
+		config.App = append([]*serial.TypedMessage{serial.ToTypedMessage(r)}, config.App...)
 	}
 
 	if c.Observatory != nil {
