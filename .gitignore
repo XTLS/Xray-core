@@ -18,8 +18,7 @@
 .idea
 *.zip
 *.tar.gz
-v2ray
-v2ctl
+xray
 mockgen
 vprotogen
 !infra/vprotogen/

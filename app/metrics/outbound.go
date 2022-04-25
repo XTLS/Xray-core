@@ -1,4 +1,4 @@
-package commander
+package metrics
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 )
 
-// OutboundListener is a net.Listener for listening gRPC connections.
+// OutboundListener is a net.Listener for listening metrics http connections.
 type OutboundListener struct {
 	buffer chan net.Conn
 	done   *done.Instance
@@ -37,7 +37,7 @@ func (l *OutboundListener) Accept() (net.Conn, error) {
 	}
 }
 
-// Close implements net.Listener.
+// Close implement net.Listener.
 func (l *OutboundListener) Close() error {
 	common.Must(l.done.Close())
 L:
@@ -60,7 +60,7 @@ func (l *OutboundListener) Addr() net.Addr {
 	}
 }
 
-// Outbound is a outbound.Handler that handles gRPC connections.
+// Outbound is an outbound.Handler that handles metrics http connections.
 type Outbound struct {
 	tag      string
 	listener *OutboundListener

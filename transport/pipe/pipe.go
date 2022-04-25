@@ -3,6 +3,7 @@ package pipe
 import (
 	"context"
 
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/features/policy"
@@ -22,6 +23,12 @@ func WithoutSizeLimit() Option {
 func WithSizeLimit(limit int32) Option {
 	return func(opt *pipeOption) {
 		opt.limit = limit
+	}
+}
+
+func OnTransmission(hook func(mb buf.MultiBuffer) buf.MultiBuffer) Option {
+	return func(option *pipeOption) {
+		option.onTransmission = hook
 	}
 }
 
