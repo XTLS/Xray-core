@@ -670,6 +670,11 @@ func (c *Config) Build() (*core.Config, error) {
 
 	for _, rawInboundConfig := range inbounds {
 		if rawInboundConfig.Template != "" {
+			// Do NOT merge ports after PortList changes
+			var saved_pl PortList
+			if rawInboundConfig.PortList != nil {
+				saved_pl = *rawInboundConfig.PortList
+			}
 			next_t := rawInboundConfig.Template
 			t := c.findInboundTag(next_t)
 			for t >= 0 && next_t != "" {
@@ -678,6 +683,9 @@ func (c *Config) Build() (*core.Config, error) {
 					return nil, err
 				}
 				t = c.findInboundTag(next_t)
+			}
+			if len(saved_pl.Range) > 0 {
+				*rawInboundConfig.PortList = saved_pl
 			}
 		}
 		if c.Transport != nil {
