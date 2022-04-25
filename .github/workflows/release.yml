@@ -123,9 +123,9 @@ jobs:
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: ^1.17.7
+          go-version: 1.18
           check-latest: true
 
       - name: Get project dependencies
@@ -198,7 +198,7 @@ jobs:
           mv build_assets Xray-$ASSET_NAME
 
       - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
           path: |
