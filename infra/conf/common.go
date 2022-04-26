@@ -207,7 +207,7 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 	for _, rangeStr := range rangelist {
 		trimmed := strings.TrimSpace(rangeStr)
 		if len(trimmed) > 0 {
-			if strings.Contains(trimmed, "-") {
+			if strings.Contains(trimmed, "-") || strings.Contains(trimmed, "env:") {
 				from, to, err := parseStringPort(trimmed)
 				if err != nil {
 					return newError("invalid port range: ", trimmed).Base(err)
