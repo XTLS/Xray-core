@@ -15,7 +15,7 @@ import (
 func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error) {
 	var fakeDNSEngine dns.FakeDNSEngine
 	{
-		fakeDNSEngineFeat := core.MustFromContext(ctx).GetFeature(fakeDNSEngine)
+		fakeDNSEngineFeat := core.MustFromContext(ctx).GetFeature((*dns.FakeDNSEngine)(nil))
 		if fakeDNSEngineFeat != nil {
 			fakeDNSEngine = fakeDNSEngineFeat.(dns.FakeDNSEngine)
 		}
