@@ -39,18 +39,9 @@ func New() *Buffer {
 }
 
 func NewExisted(b []byte) *Buffer {
-	if cap(b) < Size {
-		panic("Invalid buffer")
-	}
-
-	oLen := len(b)
-	if oLen < Size {
-		b = b[:Size]
-	}
-
 	return &Buffer{
 		v:   b,
-		end: int32(oLen),
+		end: int32(len(b)),
 	}
 }
 
@@ -210,6 +201,28 @@ func (b *Buffer) WriteByte(v byte) error {
 // WriteString implements io.StringWriter.
 func (b *Buffer) WriteString(s string) (int, error) {
 	return b.Write([]byte(s))
+}
+
+// ReadByte implements io.ByteReader
+func (b *Buffer) ReadByte() (byte, error) {
+	if b.start == b.end {
+		return 0, io.EOF
+	}
+
+	nb := b.v[b.start]
+	b.start++
+	return nb, nil
+}
+
+// ReadBytes implements bufio.Reader.ReadBytes
+func (b *Buffer) ReadBytes(length int32) ([]byte, error) {
+	if b.end-b.start < length {
+		return nil, io.EOF
+	}
+
+	nb := b.v[b.start : b.start+length]
+	b.start += length
+	return nb, nil
 }
 
 // Read implements io.Reader.Read().
