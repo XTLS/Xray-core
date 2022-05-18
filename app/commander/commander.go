@@ -7,12 +7,11 @@ import (
 	"net"
 	"sync"
 
-	"google.golang.org/grpc"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/signal/done"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
+	"google.golang.org/grpc"
 )
 
 // Commander is a Xray feature that provides gRPC methods to external clients.

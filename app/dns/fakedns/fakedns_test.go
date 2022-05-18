@@ -6,13 +6,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"golang.org/x/sync/errgroup"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/dns"
+	"golang.org/x/sync/errgroup"
 )
 
 var ipPrefix = "198.1"

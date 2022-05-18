@@ -4,7 +4,6 @@ import (
 	"io"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/vless"

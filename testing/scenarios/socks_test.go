@@ -4,9 +4,6 @@ import (
 	"testing"
 	"time"
 
-	xproxy "golang.org/x/net/proxy"
-	socks4 "h12.io/socks"
-
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
@@ -20,6 +17,8 @@ import (
 	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
+	xproxy "golang.org/x/net/proxy"
+	socks4 "h12.io/socks"
 )
 
 func TestSocksBridgeTCP(t *testing.T) {

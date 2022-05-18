@@ -44,6 +44,7 @@ func (b *Balancer) PickOutbound() (string, error) {
 	}
 	return tag, nil
 }
+
 func (b *Balancer) InjectContext(ctx context.Context) {
 	if contextReceiver, ok := b.strategy.(extension.ContextReceiver); ok {
 		contextReceiver.InjectContext(ctx)

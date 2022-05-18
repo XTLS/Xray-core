@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/cmdarg"

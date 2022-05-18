@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/miekg/dns"
-
 	"github.com/xtls/xray-core/app/dispatcher"
 	dnsapp "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/app/policy"

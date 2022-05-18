@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"

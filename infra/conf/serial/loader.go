@@ -7,7 +7,6 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/pelletier/go-toml"
-
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"

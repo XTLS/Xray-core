@@ -45,7 +45,7 @@ func (l *LeastPingStrategy) PickOutbound(strings []string) string {
 		return selectedOutboundName
 	}
 
-	//No way to understand observeReport
+	// No way to understand observeReport
 	return ""
 }
 

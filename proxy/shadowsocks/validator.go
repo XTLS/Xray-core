@@ -21,9 +21,7 @@ type Validator struct {
 	behaviorFused bool
 }
 
-var (
-	ErrNotFound = newError("Not Found")
-)
+var ErrNotFound = newError("Not Found")
 
 // Add a Shadowsocks user.
 func (v *Validator) Add(u *protocol.MemoryUser) error {

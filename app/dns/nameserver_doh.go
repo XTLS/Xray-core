@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/dns/dnsmessage"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -24,6 +22,7 @@ import (
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 // DoHNameServer implemented DNS over HTTPS (RFC8484) Wire Format,

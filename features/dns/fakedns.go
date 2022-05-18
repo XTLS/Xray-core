@@ -11,8 +11,10 @@ type FakeDNSEngine interface {
 	GetDomainFromFakeDNS(ip net.Address) string
 }
 
-var FakeIPv4Pool = "198.18.0.0/15"
-var FakeIPv6Pool = "fc00::/18"
+var (
+	FakeIPv4Pool = "198.18.0.0/15"
+	FakeIPv6Pool = "fc00::/18"
+)
 
 type FakeDNSEngineRev0 interface {
 	FakeDNSEngine

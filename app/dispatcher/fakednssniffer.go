@@ -85,7 +85,8 @@ func (f DNSThenOthersSniffResult) Domain() string {
 }
 
 func newFakeDNSThenOthers(ctx context.Context, fakeDNSSniffer protocolSnifferWithMetadata, others []protocolSnifferWithMetadata) (
-	protocolSnifferWithMetadata, error) { // nolint: unparam
+	protocolSnifferWithMetadata, error,
+) { // nolint: unparam
 	// ctx may be used in the future
 	_ = ctx
 	return protocolSnifferWithMetadata{

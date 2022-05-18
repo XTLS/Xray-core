@@ -39,7 +39,7 @@ func NewMetricsHandler(ctx context.Context, config *Config) (*MetricsHandler, er
 		if !ok {
 			return nil
 		}
-		var resp = map[string]map[string]map[string]int64{
+		resp := map[string]map[string]map[string]int64{
 			"inbound":  {},
 			"outbound": {},
 			"user":     {},
@@ -68,7 +68,7 @@ func NewMetricsHandler(ctx context.Context, config *Config) (*MetricsHandler, er
 				return nil
 			}
 		}
-		var resp = map[string]*observatory.OutboundStatus{}
+		resp := map[string]*observatory.OutboundStatus{}
 		if o, err := c.observatory.GetObservation(context.Background()); err != nil {
 			return err
 		} else {
