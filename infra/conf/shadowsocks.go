@@ -52,7 +52,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		config.Method = v.Cipher
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
-		if len(v.Users) == 0 {
+		if len(v.Users) != 0 {
 			return nil, newError("shadowsocks 2022 ciphers accept no users.")
 		}
 		return config, nil
