@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 
-	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
@@ -17,23 +16,23 @@ import (
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func init() {
-	common.Must(common.RegisterConfig((*ServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		return NewServer(ctx, config.(*ServerConfig))
+	common.Must(common.RegisterConfig((*MultiUserServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		return NewMultiServer(ctx, config.(*MultiUserServerConfig))
 	}))
 }
 
-type Inbound struct {
+type MultiUserInbound struct {
 	networks []net.Network
-	service  shadowsocks.Service
-	email    string
+	service  *shadowaead_2022.MultiService[string]
 }
 
-func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
+func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
 	networks := config.Network
 	if len(networks) == 0 {
 		networks = []net.Network{
@@ -41,12 +40,8 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 			net.Network_UDP,
 		}
 	}
-	inbound := &Inbound{
+	inbound := &MultiUserInbound{
 		networks: networks,
-		email:    config.Email,
-	}
-	if !C.Contains(shadowaead_2022.List, config.Method) {
-		return nil, newError("unsupported method ", config.Method)
 	}
 	if config.Key == "" {
 		return nil, newError("missing key")
@@ -55,19 +50,35 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 	if err != nil {
 		return nil, newError("parse config").Base(err)
 	}
-	service, err := shadowaead_2022.NewService(config.Method, psk, "", random.Default, 500, inbound)
+	service, err := shadowaead_2022.NewMultiService[string](config.Method, psk, random.Default, 500, inbound)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}
+
+	for _, user := range config.Users {
+		if user.Email == "" {
+			u := uuid.New()
+			user.Email = "(user with empty email - " + u.String() + ")"
+		}
+		uPsk, err := base64.StdEncoding.DecodeString(user.Key)
+		if err != nil {
+			return nil, newError("parse user key for ", user.Email).Base(err)
+		}
+		err = service.AddUser(user.Email, uPsk)
+		if err != nil {
+			return nil, newError("add user").Base(err)
+		}
+	}
+
 	inbound.service = service
 	return inbound, nil
 }
 
-func (i *Inbound) Network() []net.Network {
+func (i *MultiUserInbound) Network() []net.Network {
 	return i.networks
 }
 
-func (i *Inbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {
 		panic("no inbound metadata")
@@ -100,12 +111,13 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 	}
 }
 
-func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+	userCtx := ctx.(*shadowsocks.UserContext[string])
+	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  i.email,
+		Email:  userCtx.User,
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -121,12 +133,13 @@ func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 	return bufio.CopyConn(ctx, conn, outConn)
 }
 
-func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
+	userCtx := ctx.(*shadowsocks.UserContext[string])
+	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  i.email,
+		Email:  userCtx.User,
 	})
 	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -143,20 +156,6 @@ func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
 
-func (i *Inbound) HandleError(err error) {
+func (i *MultiUserInbound) HandleError(err error) {
 	newError(err).AtWarning().WriteToLog()
-}
-
-type natPacketConn struct {
-	net.Conn
-}
-
-func (c *natPacketConn) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {
-	_, err = buffer.ReadFrom(c)
-	return
-}
-
-func (c *natPacketConn) WritePacket(buffer *B.Buffer, addr M.Socksaddr) error {
-	_, err := buffer.WriteTo(c)
-	return err
 }

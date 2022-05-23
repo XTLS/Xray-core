@@ -174,8 +174,6 @@ github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 h1:f/FNXud6gA3MNr
 github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3/go.mod h1:HgjTstvQsPGkxUsCd2KWxErBblirPizecHcpD3ffK+s=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
-github.com/sagernet/sing v0.0.0-20220522025344-b21aa294fca3 h1:z6cVzCta0vPVKo4lsiHMEDmw3cSFC5TGojXobbTS1DA=
-github.com/sagernet/sing v0.0.0-20220522025344-b21aa294fca3/go.mod h1:7aFl1bLxdWLIhptc1DwhMWpRfT62rJYzKPYuYlzYs5w=
 github.com/sagernet/sing v0.0.0-20220523024450-2216901ec429 h1:31vx64WHtycaqw0bGLl6ImJvmHsXqHoPzkuwKmTqbx8=
 github.com/sagernet/sing v0.0.0-20220523024450-2216901ec429/go.mod h1:7aFl1bLxdWLIhptc1DwhMWpRfT62rJYzKPYuYlzYs5w=
 github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb h1:XfLJSPIOUX+osiMraVgIrMR27uMXnRJWGm1+GL8/63U=

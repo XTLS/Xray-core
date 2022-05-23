@@ -12,7 +12,20 @@ import "common/net/address.proto";
 message ServerConfig {
   string method = 1;
   string key = 2;
-  repeated xray.common.net.Network network = 3;
+  string email = 3;
+  repeated xray.common.net.Network network = 4;
+}
+
+message MultiUserServerConfig {
+  string method = 1;
+  string key = 2;
+  repeated User users = 3;
+  repeated xray.common.net.Network network = 4;
+}
+
+message User {
+  string key = 1;
+  string email = 2;
 }
 
 message ClientConfig {

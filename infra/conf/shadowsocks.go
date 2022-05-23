@@ -48,13 +48,36 @@ type ShadowsocksServerConfig struct {
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	if C.Contains(shadowaead_2022.List, v.Cipher) {
+		if len(v.Users) > 0 {
+			if v.Cipher == "" {
+				return nil, newError("shadowsocks 2022 (multi-user): missing server method")
+			}
+			if !strings.Contains(v.Cipher, "aes") {
+				return nil, newError("shadowsocks 2022 (multi-user): only blake3-aes-*-gcm methods are supported")
+			}
+
+			config := new(shadowsocks_2022.MultiUserServerConfig)
+			config.Method = v.Cipher
+
+			config.Key = v.Password
+			config.Network = v.NetworkList.Build()
+
+			for _, user := range v.Users {
+				if user.Cipher != "" {
+					return nil, newError("shadowsocks 2022 (multi-user): users must have empty method")
+				}
+				config.Users = append(config.Users, &shadowsocks_2022.User{
+					Key:   user.Password,
+					Email: user.Email,
+				})
+			}
+			return config, nil
+		}
+
 		config := new(shadowsocks_2022.ServerConfig)
 		config.Method = v.Cipher
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
-		if len(v.Users) != 0 {
-			return nil, newError("shadowsocks 2022 ciphers accept no users.")
-		}
 		return config, nil
 	}
 
