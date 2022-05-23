@@ -4,9 +4,12 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	C "github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/protocol/shadowsocks/shadowaead_2022"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
+	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 )
 
 func cipherFromString(c string) shadowsocks.CipherType {
@@ -44,6 +47,17 @@ type ShadowsocksServerConfig struct {
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
+	if C.Contains(shadowaead_2022.List, v.Cipher) {
+		config := new(shadowsocks_2022.ServerConfig)
+		config.Method = v.Cipher
+		config.Key = v.Password
+		config.Network = v.NetworkList.Build()
+		if len(v.Users) == 0 {
+			return nil, newError("shadowsocks 2022 ciphers accept no users.")
+		}
+		return config, nil
+	}
+
 	config := new(shadowsocks.ServerConfig)
 	config.Network = v.NetworkList.Build()
 
@@ -104,14 +118,38 @@ type ShadowsocksClientConfig struct {
 }
 
 func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
-	config := new(shadowsocks.ClientConfig)
-
 	if len(v.Servers) == 0 {
 		return nil, newError("0 Shadowsocks server configured.")
 	}
 
+	if len(v.Servers) == 1 {
+		server := v.Servers[0]
+		if C.Contains(shadowaead_2022.List, server.Cipher) {
+			if server.Address == nil {
+				return nil, newError("Shadowsocks server address is not set.")
+			}
+			if server.Port == 0 {
+				return nil, newError("Invalid Shadowsocks port.")
+			}
+			if server.Password == "" {
+				return nil, newError("Shadowsocks password is not specified.")
+			}
+
+			config := new(shadowsocks_2022.ClientConfig)
+			config.Address = server.Address.Build()
+			config.Port = uint32(server.Port)
+			config.Method = server.Cipher
+			config.Key = server.Password
+			return config, nil
+		}
+	}
+
+	config := new(shadowsocks.ClientConfig)
 	serverSpecs := make([]*protocol.ServerEndpoint, len(v.Servers))
 	for idx, server := range v.Servers {
+		if C.Contains(shadowaead_2022.List, server.Cipher) {
+			return nil, newError("Shadowsocks 2022 accept no multi servers")
+		}
 		if server.Address == nil {
 			return nil, newError("Shadowsocks server address is not set.")
 		}
