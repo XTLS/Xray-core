@@ -1,6 +1,10 @@
 package session
 
-import "context"
+import (
+	"context"
+
+	"github.com/xtls/xray-core/features/routing"
+)
 
 type sessionKey int
 
@@ -12,6 +16,7 @@ const (
 	muxPreferedSessionKey
 	sockoptSessionKey
 	trackedConnectionErrorKey
+	dispatcherKey
 )
 
 // ContextWithID returns a new context with the given ID.
@@ -114,4 +119,15 @@ func SubmitOutboundErrorToOriginator(ctx context.Context, err error) {
 
 func TrackedConnectionError(ctx context.Context, tracker TrackedRequestErrorFeedback) context.Context {
 	return context.WithValue(ctx, trackedConnectionErrorKey, tracker)
+}
+
+func ContextWithDispatcher(ctx context.Context, dispatcher routing.Dispatcher) context.Context {
+	return context.WithValue(ctx, dispatcherKey, dispatcher)
+}
+
+func DispatcherFromContext(ctx context.Context) routing.Dispatcher {
+	if dispatcher, ok := ctx.Value(dispatcherKey).(routing.Dispatcher); ok {
+		return dispatcher
+	}
+	return nil
 }
