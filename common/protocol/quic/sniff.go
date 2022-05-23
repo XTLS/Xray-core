@@ -8,12 +8,11 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/quicvarint"
-	"golang.org/x/crypto/hkdf"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	ptls "github.com/xtls/xray-core/common/protocol/tls"
+	"golang.org/x/crypto/hkdf"
 )
 
 type SniffHeader struct {
