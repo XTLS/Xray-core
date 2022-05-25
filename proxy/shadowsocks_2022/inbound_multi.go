@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 
+	"github.com/sagernet/sing-shadowsocks"
+	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/random"
-	"github.com/sagernet/sing/protocol/shadowsocks"
-	"github.com/sagernet/sing/protocol/shadowsocks/shadowaead_2022"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
@@ -44,6 +43,7 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	}
 	inbound := &MultiUserInbound{
 		networks: networks,
+		users:    config.Users,
 	}
 	if config.Key == "" {
 		return nil, newError("missing key")
@@ -52,7 +52,7 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	if err != nil {
 		return nil, newError("parse config").Base(err)
 	}
-	service, err := shadowaead_2022.NewMultiService[int](config.Method, psk, random.Default, 500, inbound)
+	service, err := shadowaead_2022.NewMultiService[int](config.Method, psk, 500, inbound)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}

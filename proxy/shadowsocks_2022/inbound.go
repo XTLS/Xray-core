@@ -2,16 +2,14 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"encoding/base64"
 
+	"github.com/sagernet/sing-shadowsocks"
+	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/random"
-	"github.com/sagernet/sing/protocol/shadowsocks"
-	"github.com/sagernet/sing/protocol/shadowsocks/shadowaead_2022"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
@@ -51,14 +49,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 	if !C.Contains(shadowaead_2022.List, config.Method) {
 		return nil, newError("unsupported method ", config.Method)
 	}
-	if config.Key == "" {
-		return nil, newError("missing key")
-	}
-	psk, err := base64.StdEncoding.DecodeString(config.Key)
-	if err != nil {
-		return nil, newError("parse config").Base(err)
-	}
-	service, err := shadowaead_2022.NewService(config.Method, psk, "", random.Default, 500, inbound)
+	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}

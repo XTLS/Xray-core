@@ -2,19 +2,16 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"encoding/base64"
 	"io"
 	"runtime"
-	"strings"
 	"time"
 
+	"github.com/sagernet/sing-shadowsocks"
+	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/random"
-	"github.com/sagernet/sing/protocol/shadowsocks"
-	"github.com/sagernet/sing/protocol/shadowsocks/shadowaead_2022"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -48,21 +45,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 		if config.Key == "" {
 			return nil, newError("missing psk")
 		}
-		var pskList [][]byte
-		for _, ks := range strings.Split(config.Key, ":") {
-			psk, err := base64.StdEncoding.DecodeString(ks)
-			if err != nil {
-				return nil, newError("decode key ", ks).Base(err)
-			}
-			pskList = append(pskList, psk)
-		}
-		var rng io.Reader = random.Default
-		if config.ReducedIvHeadEntropy {
-			rng = &shadowsocks.ReducedEntropyReader{
-				Reader: rng,
-			}
-		}
-		method, err := shadowaead_2022.New(config.Method, pskList, "", rng)
+		method, err := shadowaead_2022.NewWithPassword(config.Method, config.Key)
 		if err != nil {
 			return nil, newError("create method").Base(err)
 		}

@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
-	"github.com/sagernet/sing/protocol/shadowsocks/shadowaead_2022"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/shadowsocks"

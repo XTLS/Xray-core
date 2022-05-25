@@ -35,5 +35,4 @@ message ClientConfig {
   uint32 port = 2;
   string method = 3;
   string key = 4;
-  bool reduced_iv_head_entropy = 5;
 }
