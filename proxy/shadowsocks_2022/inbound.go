@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -31,6 +32,7 @@ type Inbound struct {
 	networks []net.Network
 	service  shadowsocks.Service
 	email    string
+	level    int
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
@@ -44,6 +46,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 	inbound := &Inbound{
 		networks: networks,
 		email:    config.Email,
+		level:    int(config.Level),
 	}
 	if !C.Contains(shadowaead_2022.List, config.Method) {
 		return nil, newError("unsupported method ", config.Method)
@@ -69,9 +72,6 @@ func (i *Inbound) Network() []net.Network {
 
 func (i *Inbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
 
 	var metadata M.Metadata
 	if inbound.Source.IsValid() {
@@ -101,6 +101,11 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 }
 
 func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+	inbound := session.InboundFromContext(ctx)
+	inbound.User = &protocol.MemoryUser{
+		Email: i.email,
+		Level: uint32(i.level),
+	}
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
@@ -122,6 +127,11 @@ func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 }
 
 func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
+	inbound := session.InboundFromContext(ctx)
+	inbound.User = &protocol.MemoryUser{
+		Email: i.email,
+		Level: uint32(i.level),
+	}
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,

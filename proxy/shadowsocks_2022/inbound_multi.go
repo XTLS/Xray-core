@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
@@ -29,7 +30,8 @@ func init() {
 
 type MultiUserInbound struct {
 	networks []net.Network
-	service  *shadowaead_2022.MultiService[string]
+	users    []*User
+	service  *shadowaead_2022.MultiService[int]
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -50,21 +52,21 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	if err != nil {
 		return nil, newError("parse config").Base(err)
 	}
-	service, err := shadowaead_2022.NewMultiService[string](config.Method, psk, random.Default, 500, inbound)
+	service, err := shadowaead_2022.NewMultiService[int](config.Method, psk, random.Default, 500, inbound)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}
 
-	for _, user := range config.Users {
+	for i, user := range config.Users {
 		if user.Email == "" {
 			u := uuid.New()
 			user.Email = "(user with empty email - " + u.String() + ")"
 		}
-		uPsk, err := base64.StdEncoding.DecodeString(user.Key)
+		uPSK, err := base64.StdEncoding.DecodeString(user.Key)
 		if err != nil {
 			return nil, newError("parse user key for ", user.Email).Base(err)
 		}
-		err = service.AddUser(user.Email, uPsk)
+		err = service.AddUser(i, uPSK)
 		if err != nil {
 			return nil, newError("add user").Base(err)
 		}
@@ -80,9 +82,6 @@ func (i *MultiUserInbound) Network() []net.Network {
 
 func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
 
 	var metadata M.Metadata
 	if inbound.Source.IsValid() {
@@ -112,12 +111,18 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 }
 
 func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
-	userCtx := ctx.(*shadowsocks.UserContext[string])
+	userCtx := ctx.(*shadowsocks.UserContext[int])
+	inbound := session.InboundFromContext(ctx)
+	user := i.users[userCtx.User]
+	inbound.User = &protocol.MemoryUser{
+		Email: user.Email,
+		Level: uint32(user.Level),
+	}
 	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  userCtx.User,
+		Email:  user.Email,
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -134,12 +139,18 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 }
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	userCtx := ctx.(*shadowsocks.UserContext[string])
+	userCtx := ctx.(*shadowsocks.UserContext[int])
+	inbound := session.InboundFromContext(ctx)
+	user := i.users[userCtx.User]
+	inbound.User = &protocol.MemoryUser{
+		Email: user.Email,
+		Level: uint32(user.Level),
+	}
 	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  userCtx.User,
+		Email:  user.Email,
 	})
 	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)

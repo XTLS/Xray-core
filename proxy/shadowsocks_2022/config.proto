@@ -13,7 +13,8 @@ message ServerConfig {
   string method = 1;
   string key = 2;
   string email = 3;
-  repeated xray.common.net.Network network = 4;
+  int32 level = 4;
+  repeated xray.common.net.Network network = 5;
 }
 
 message MultiUserServerConfig {
@@ -26,6 +27,7 @@ message MultiUserServerConfig {
 message User {
   string key = 1;
   string email = 2;
+  int32 level = 3;
 }
 
 message ClientConfig {
