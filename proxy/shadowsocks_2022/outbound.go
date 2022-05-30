@@ -67,9 +67,6 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified")
 	}
-	/*if statConn, ok := inboundConn.(*internet.StatCounterConn); ok {
-		inboundConn = statConn.Connection
-	}*/
 	destination := outbound.Target
 	network := destination.Network
 
@@ -92,6 +89,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			}
 			_payload := B.StackNew()
 			payload := C.Dup(_payload)
+			defer payload.Release()
 			for {
 				payload.FullReset()
 				nb, n := buf.SplitBytes(mb, payload.FreeBytes())
@@ -127,7 +125,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			conn.R = &buf.BufferedReader{Reader: link.Reader}
 		}
 
-		return bufio.CopyConn(ctx, conn, serverConn)
+		return returnError(bufio.CopyConn(ctx, conn, serverConn))
 	} else {
 		var packetConn N.PacketConn
 		if pc, isPacketConn := inboundConn.(N.PacketConn); isPacketConn {
@@ -144,6 +142,6 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		}
 
 		serverConn := o.method.DialPacketConn(connection)
-		return bufio.CopyPacketConn(ctx, packetConn, serverConn)
+		return returnError(bufio.CopyPacketConn(ctx, packetConn, serverConn))
 	}
 }

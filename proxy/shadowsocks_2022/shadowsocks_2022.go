@@ -1,11 +1,11 @@
 package shadowsocks_2022
 
 import (
+	"errors"
 	"io"
 
 	B "github.com/sagernet/sing/common/buf"
 	M "github.com/sagernet/sing/common/metadata"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 )
@@ -47,9 +47,6 @@ type pipeConnWrapper struct {
 }
 
 func (w *pipeConnWrapper) Close() error {
-	common.Interrupt(w.R)
-	common.Interrupt(w.W)
-	common.Close(w.Conn)
 	return nil
 }
 
@@ -136,8 +133,13 @@ func (w *packetConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksadd
 }
 
 func (w *packetConnWrapper) Close() error {
-	common.Interrupt(w.Reader)
-	common.Close(w.Conn)
 	buf.ReleaseMulti(w.cached)
 	return nil
+}
+
+func returnError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
 }
