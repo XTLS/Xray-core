@@ -211,6 +211,10 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 		}
 	}
 
+	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
+		return conn, err
+	}
+
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	return h.getStatCouterConnection(conn), err
 }

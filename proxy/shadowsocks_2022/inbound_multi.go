@@ -10,6 +10,7 @@ import (
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
+	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
@@ -93,20 +94,23 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 	ctx = session.ContextWithDispatcher(ctx, dispatcher)
 
 	if network == net.Network_TCP {
-		return i.service.NewConnection(ctx, connection, metadata)
+		return returnError(i.service.NewConnection(ctx, connection, metadata))
 	} else {
 		reader := buf.NewReader(connection)
 		pc := &natPacketConn{connection}
 		for {
 			mb, err := reader.ReadMultiBuffer()
 			if err != nil {
-				return err
+				buf.ReleaseMulti(mb)
+				return returnError(err)
 			}
 			for _, buffer := range mb {
-				err = i.service.NewPacket(ctx, pc, B.As(buffer.Bytes()), metadata)
+				err = i.service.NewPacket(ctx, pc, B.As(buffer.Bytes()).ToOwned(), metadata)
 				if err != nil {
+					buf.ReleaseMulti(mb)
 					return err
 				}
+				buffer.Release()
 			}
 		}
 	}
@@ -170,5 +174,8 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 }
 
 func (i *MultiUserInbound) HandleError(err error) {
+	if E.IsClosed(err) {
+		return
+	}
 	newError(err).AtWarning().WriteToLog()
 }

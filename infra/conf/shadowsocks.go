@@ -136,6 +136,7 @@ type ShadowsocksServerTarget struct {
 	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
 	IVCheck  bool     `json:"ivCheck"`
+	UoT      bool     `json:"uot"`
 }
 
 type ShadowsocksClientConfig struct {
@@ -165,6 +166,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 			config.Port = uint32(server.Port)
 			config.Method = server.Cipher
 			config.Key = server.Password
+			config.UdpOverTcp = server.UoT
 			return config, nil
 		}
 	}

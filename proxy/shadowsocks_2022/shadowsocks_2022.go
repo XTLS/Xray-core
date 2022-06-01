@@ -3,10 +3,10 @@
 package shadowsocks_2022
 
 import (
-	"errors"
 	"io"
 
 	B "github.com/sagernet/sing/common/buf"
+	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -140,7 +140,7 @@ func (w *packetConnWrapper) Close() error {
 }
 
 func returnError(err error) error {
-	if errors.Is(err, io.EOF) {
+	if E.IsClosed(err) {
 		return nil
 	}
 	return err

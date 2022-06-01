@@ -1,4 +1,5 @@
 //go:build !go1.18
+
 package conf
 
 import (
@@ -98,6 +99,7 @@ type ShadowsocksServerTarget struct {
 	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
 	IVCheck  bool     `json:"ivCheck"`
+	UoT      bool     `json:"uot"`
 }
 
 type ShadowsocksClientConfig struct {
