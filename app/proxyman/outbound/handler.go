@@ -2,6 +2,9 @@ package outbound
 
 import (
 	"context"
+	"errors"
+	"io"
+	"os"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -141,7 +144,13 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			common.Interrupt(link.Writer)
 		}
 	} else {
-		if err := h.proxy.Process(ctx, link, h); err != nil {
+		err := h.proxy.Process(ctx, link, h)
+		if err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || errors.Is(err, context.Canceled) {
+				err = nil
+			}
+		}
+		if err != nil {
 			// Ensure outbound ray is properly closed.
 			err := newError("failed to process outbound traffic").Base(err)
 			session.SubmitOutboundErrorToOriginator(ctx, err)
