@@ -779,8 +779,7 @@ func Override(template, override interface{}) {
 			tm := template.(map[string]interface{})
 			switch reflect.TypeOf(v).Kind() {
 			case reflect.Slice, reflect.Map:
-				_, ok := tm[k]
-				if !ok {
+				if tv, ok := tm[k]; tv == nil || !ok {
 					tm[k] = v
 				} else {
 					Override(tm[k], v)
