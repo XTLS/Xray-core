@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 
 	utls "github.com/refraction-networking/utls"
-
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 )

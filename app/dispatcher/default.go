@@ -162,7 +162,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 						}
 					}
 				} else {
-					if (ip2domain == nil) {
+					if ip2domain == nil {
 						ip2domain = new(sync.Map)
 						newError("[fakedns client] create a new map").WriteToLog(session.ExportIDToError(ctx))
 					}
@@ -172,7 +172,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 						for _, ip := range ips {
 							ip2domain.Store(ip.String(), domain)
 						}
-						newError("[fakedns client] candidate ip: " + fmt.Sprintf("%v", ips), " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
+						newError("[fakedns client] candidate ip: "+fmt.Sprintf("%v", ips), " for xUDP buffer at ", i).WriteToLog(session.ExportIDToError(ctx))
 					} else {
 						newError("[fakedns client] failed to look up IP for ", domain, " for xUDP buffer at ", i).Base(err).WriteToLog(session.ExportIDToError(ctx))
 					}
@@ -251,6 +251,9 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
+	if domain == "" {
+		return false
+	}
 	for _, d := range request.ExcludeForDomain {
 		if strings.ToLower(domain) == d {
 			return false
@@ -296,33 +299,15 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx, destination.Network, sniffingRequest)
-	switch {
-	case !sniffingRequest.Enabled:
+	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
-	case destination.Network != net.Network_TCP:
-		// Only metadata sniff will be used for non tcp connection
-		result, err := sniffer(ctx, nil, true)
-		if err == nil {
-			content.Protocol = result.Protocol()
-			if d.shouldOverride(ctx, result, sniffingRequest, destination) {
-				domain := result.Domain()
-				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
-				destination.Address = net.ParseAddress(domain)
-				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
-					ob.RouteTarget = destination
-				} else {
-					ob.Target = destination
-				}
-			}
-		}
-		go d.routedDispatch(ctx, outbound, destination)
-	default:
+	} else {
 		go func() {
 			cReader := &cachedReader{
 				reader: outbound.Reader.(*pipe.Reader),
 			}
 			outbound.Reader = cReader
-			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly)
+			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
@@ -357,33 +342,15 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		ctx = session.ContextWithContent(ctx, content)
 	}
 	sniffingRequest := content.SniffingRequest
-	switch {
-	case !sniffingRequest.Enabled:
+	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
-	case destination.Network != net.Network_TCP:
-		// Only metadata sniff will be used for non tcp connection
-		result, err := sniffer(ctx, nil, true)
-		if err == nil {
-			content.Protocol = result.Protocol()
-			if d.shouldOverride(ctx, result, sniffingRequest, destination) {
-				domain := result.Domain()
-				newError("sniffed domain: ", domain).WriteToLog(session.ExportIDToError(ctx))
-				destination.Address = net.ParseAddress(domain)
-				if sniffingRequest.RouteOnly && result.Protocol() != "fakedns" {
-					ob.RouteTarget = destination
-				} else {
-					ob.Target = destination
-				}
-			}
-		}
-		go d.routedDispatch(ctx, outbound, destination)
-	default:
+	} else {
 		go func() {
 			cReader := &cachedReader{
 				reader: outbound.Reader.(*pipe.Reader),
 			}
 			outbound.Reader = cReader
-			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly)
+			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
@@ -400,10 +367,11 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			d.routedDispatch(ctx, outbound, destination)
 		}()
 	}
+
 	return nil
 }
 
-func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (SniffResult, error) {
+func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, network net.Network) (SniffResult, error) {
 	payload := buf.New()
 	defer payload.Release()
 
@@ -429,7 +397,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool) (Sni
 
 				cReader.Cache(payload)
 				if !payload.IsEmpty() {
-					result, err := sniffer.Sniff(ctx, payload.Bytes())
+					result, err := sniffer.Sniff(ctx, payload.Bytes(), network)
 					if err != common.ErrNoClue {
 						return result, err
 					}

@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"github.com/xtls/xray-core/transport/internet/headers/srtp"

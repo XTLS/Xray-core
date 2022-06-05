@@ -87,7 +87,6 @@ func (h *DynamicInboundHandler) allocatePort() net.Port {
 			return port
 		}
 	}
-
 }
 
 func (h *DynamicInboundHandler) closeWorkers(workers []worker) {

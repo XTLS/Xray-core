@@ -108,9 +108,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
 	cancel()
-	if err := conn.Close(); err != nil {
-		newError("failed to close connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
-	}
+	conn.Close()
 }
 
 func (w *tcpWorker) Proxy() proxy.Inbound {

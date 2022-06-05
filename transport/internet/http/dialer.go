@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/http2"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -19,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
+	"golang.org/x/net/http2"
 )
 
 type dialerConf struct {

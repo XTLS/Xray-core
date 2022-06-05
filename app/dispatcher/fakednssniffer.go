@@ -14,12 +14,13 @@ import (
 // newFakeDNSSniffer Creates a Fake DNS metadata sniffer
 func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error) {
 	var fakeDNSEngine dns.FakeDNSEngine
-	err := core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
-		fakeDNSEngine = fdns
-	})
-	if err != nil {
-		return protocolSnifferWithMetadata{}, err
+	{
+		fakeDNSEngineFeat := core.MustFromContext(ctx).GetFeature((*dns.FakeDNSEngine)(nil))
+		if fakeDNSEngineFeat != nil {
+			fakeDNSEngine = fakeDNSEngineFeat.(dns.FakeDNSEngine)
+		}
 	}
+
 	if fakeDNSEngine == nil {
 		errNotInit := newError("FakeDNSEngine is not initialized, but such a sniffer is used").AtError()
 		return protocolSnifferWithMetadata{}, errNotInit
@@ -84,7 +85,8 @@ func (f DNSThenOthersSniffResult) Domain() string {
 }
 
 func newFakeDNSThenOthers(ctx context.Context, fakeDNSSniffer protocolSnifferWithMetadata, others []protocolSnifferWithMetadata) (
-	protocolSnifferWithMetadata, error) { // nolint: unparam
+	protocolSnifferWithMetadata, error,
+) { // nolint: unparam
 	// ctx may be used in the future
 	_ = ctx
 	return protocolSnifferWithMetadata{

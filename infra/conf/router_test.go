@@ -8,7 +8,6 @@ import (
 	_ "unsafe"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"

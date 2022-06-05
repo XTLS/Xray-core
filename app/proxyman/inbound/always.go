@@ -144,7 +144,6 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 				}
 			}
 		}
-
 	}
 
 	return h, nil

@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	xproxy "golang.org/x/net/proxy"
-
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/proxyman"
@@ -34,6 +32,7 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
+	xproxy "golang.org/x/net/proxy"
 )
 
 func TestPassiveConnection(t *testing.T) {

@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/policy"
 	"github.com/xtls/xray-core/app/proxyman"
@@ -23,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
 	"github.com/xtls/xray-core/testing/servers/tcp"
+	"golang.org/x/sync/errgroup"
 )
 
 func startQuickClosingTCPServer() (net.Listener, error) {

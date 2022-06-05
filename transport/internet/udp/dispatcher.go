@@ -2,6 +2,7 @@ package udp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -107,7 +108,9 @@ func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, cal
 
 		mb, err := input.ReadMultiBuffer()
 		if err != nil {
-			newError("failed to handle UDP input").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			if !errors.Is(err, io.EOF) {
+				newError("failed to handle UDP input").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			}
 			return
 		}
 		timer.Update()

@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	goxtls "github.com/xtls/go"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"

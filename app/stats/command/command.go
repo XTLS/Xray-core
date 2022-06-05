@@ -7,13 +7,12 @@ import (
 	"runtime"
 	"time"
 
-	grpc "google.golang.org/grpc"
-
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
+	grpc "google.golang.org/grpc"
 )
 
 // statsServer is an implementation of StatsService.

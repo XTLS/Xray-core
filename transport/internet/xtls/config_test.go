@@ -6,7 +6,6 @@ import (
 	"time"
 
 	xtls "github.com/xtls/go"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	. "github.com/xtls/xray-core/transport/internet/xtls"

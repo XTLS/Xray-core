@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
-	"golang.org/x/net/dns/dnsmessage"
-	"golang.org/x/net/http2"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -20,6 +17,8 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/dns/dnsmessage"
+	"golang.org/x/net/http2"
 )
 
 // NextProtoDQ - During connection establishment, DNS/QUIC support is indicated
