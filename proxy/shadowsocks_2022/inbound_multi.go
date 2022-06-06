@@ -5,9 +5,11 @@ package shadowsocks_2022
 import (
 	"context"
 	"encoding/base64"
+	"strconv"
 
 	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
+	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -63,16 +65,15 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	for i, user := range config.Users {
 		if user.Email == "" {
 			u := uuid.New()
-			user.Email = "(user with empty email - " + u.String() + ")"
+			user.Email = "unnamed-user-" + strconv.Itoa(i) + "-" + u.String()
 		}
-		uPSK, err := base64.StdEncoding.DecodeString(user.Key)
-		if err != nil {
-			return nil, newError("parse user key for ", user.Email).Base(err)
-		}
-		err = service.AddUser(i, uPSK)
-		if err != nil {
-			return nil, newError("add user").Base(err)
-		}
+	}
+	err = service.UpdateUsersWithPasswords(
+		C.MapIndexed(config.Users, func(index int, it *User) int { return index }),
+		C.Map(config.Users, func(it *User) string { return it.Key }),
+	)
+	if err != nil {
+		return nil, newError("create service").Base(err)
 	}
 
 	inbound.service = service

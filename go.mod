@@ -16,8 +16,8 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.0
-	github.com/sagernet/sing v0.0.0-20220605012533-e0f722558141
-	github.com/sagernet/sing-shadowsocks v0.0.0-20220605012719-1e22882ea853
+	github.com/sagernet/sing v0.0.0-20220606055031-45523fbbe7ae
+	github.com/sagernet/sing-shadowsocks v0.0.0-20220606055616-292d3a4b6cce
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	github.com/stretchr/testify v1.7.1
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
