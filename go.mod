@@ -8,7 +8,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.8
 	github.com/gorilla/websocket v1.5.0
-	github.com/lucas-clemente/quic-go v0.27.1
+	github.com/lucas-clemente/quic-go v0.27.2
 	github.com/marten-seemann/qtls-go1-16 v0.1.5
 	github.com/marten-seemann/qtls-go1-17 v0.1.2
 	github.com/marten-seemann/qtls-go1-18 v0.1.2
@@ -16,8 +16,8 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.0
-	github.com/sagernet/sing v0.0.0-20220606113732-5efacc1c7db5
-	github.com/sagernet/sing-shadowsocks v0.0.0-20220607021139-f9c820eb0fc8
+	github.com/sagernet/sing v0.0.0-20220610074707-a30d5506be41
+	github.com/sagernet/sing-shadowsocks v0.0.0-20220610074818-432dcbdb1d7c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	github.com/stretchr/testify v1.7.2
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
@@ -26,7 +26,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.0.0-20220608164250-635b8c9b7f68
 	google.golang.org/grpc v1.47.0
 	google.golang.org/protobuf v1.28.0
 	h12.io/socks v1.0.3
