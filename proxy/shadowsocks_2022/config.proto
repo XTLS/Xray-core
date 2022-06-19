@@ -24,6 +24,21 @@ message MultiUserServerConfig {
   repeated xray.common.net.Network network = 4;
 }
 
+message RelayDestination {
+  string key = 1;
+  xray.common.net.IPOrDomain address = 2;
+  uint32 port = 3;
+  string email = 4;
+  int32 level = 5;
+}
+
+message RelayServerConfig {
+  string method = 1;
+  string key = 2;
+  repeated RelayDestination destinations = 3;
+  repeated xray.common.net.Network network = 4;
+}
+
 message User {
   string key = 1;
   string email = 2;

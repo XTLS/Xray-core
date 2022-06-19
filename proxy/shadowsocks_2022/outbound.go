@@ -141,7 +141,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		if pc, isPacketConn := inboundConn.(N.PacketConn); isPacketConn {
 			packetConn = pc
 		} else if nc, isNetPacket := inboundConn.(net.PacketConn); isNetPacket {
-			packetConn = &bufio.PacketConnWrapper{PacketConn: nc}
+			packetConn = bufio.NewPacketConn(nc)
 		} else {
 			packetConn = &packetConnWrapper{
 				Reader: link.Reader,
