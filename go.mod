@@ -12,7 +12,7 @@ require (
 	github.com/marten-seemann/qtls-go1-16 v0.1.5
 	github.com/marten-seemann/qtls-go1-17 v0.1.2
 	github.com/marten-seemann/qtls-go1-18 v0.1.2
-	github.com/miekg/dns v1.1.49
+	github.com/miekg/dns v1.1.50
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.0
