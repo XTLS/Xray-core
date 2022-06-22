@@ -53,6 +53,7 @@
 - macOS (Intel chip & M1 chip)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [clash-verge](https://github.com/zzzgydi/clash-verge)
 
 ## Credits
 
