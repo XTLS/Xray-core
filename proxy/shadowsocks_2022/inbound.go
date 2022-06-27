@@ -4,7 +4,6 @@ package shadowsocks_2022
 
 import (
 	"context"
-
 	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
@@ -86,8 +85,10 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 				return returnError(err)
 			}
 			for _, buffer := range mb {
-				err = i.service.NewPacket(ctx, pc, B.As(buffer.Bytes()).ToOwned(), metadata)
+				packet := B.As(buffer.Bytes()).ToOwned()
+				err = i.service.NewPacket(ctx, pc, packet, metadata)
 				if err != nil {
+					packet.Release()
 					buf.ReleaseMulti(mb)
 					return err
 				}

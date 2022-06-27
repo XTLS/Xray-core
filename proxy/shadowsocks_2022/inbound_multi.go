@@ -106,8 +106,10 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 				return returnError(err)
 			}
 			for _, buffer := range mb {
-				err = i.service.NewPacket(ctx, pc, B.As(buffer.Bytes()).ToOwned(), metadata)
+				packet := B.As(buffer.Bytes()).ToOwned()
+				err = i.service.NewPacket(ctx, pc, packet, metadata)
 				if err != nil {
+					packet.Release()
 					buf.ReleaseMulti(mb)
 					return err
 				}
