@@ -19,7 +19,7 @@ require (
 	github.com/sagernet/sing v0.0.0-20220627234642-a817f7084d9c
 	github.com/sagernet/sing-shadowsocks v0.0.0-20220627234717-689e0165ef2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
-	github.com/stretchr/testify v1.7.5
+	github.com/stretchr/testify v1.8.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/xtls/go v0.0.0-20210920065950-d4af136d3672
 	go.starlark.net v0.0.0-20220328144851-d1966c6b9fcd
