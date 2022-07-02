@@ -80,6 +80,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		config.Method = v.Cipher
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
+		config.Email = v.Email
 		return config, nil
 	}
 
