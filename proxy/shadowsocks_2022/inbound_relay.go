@@ -1,9 +1,10 @@
-//go:build go1.18
-
 package shadowsocks_2022
 
 import (
 	"context"
+	"strconv"
+	"strings"
+
 	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
@@ -18,24 +19,24 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func init() {
-	common.Must(common.RegisterConfig((*ServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		return NewServer(ctx, config.(*ServerConfig))
+	common.Must(common.RegisterConfig((*RelayServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		return NewRelayServer(ctx, config.(*RelayServerConfig))
 	}))
 }
 
-type Inbound struct {
-	networks []net.Network
-	service  shadowsocks.Service
-	email    string
-	level    int
+type RelayInbound struct {
+	networks     []net.Network
+	destinations []*RelayDestination
+	service      *shadowaead_2022.RelayService[int]
 }
 
-func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
+func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbound, error) {
 	networks := config.Network
 	if len(networks) == 0 {
 		networks = []net.Network{
@@ -43,15 +44,34 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 			net.Network_UDP,
 		}
 	}
-	inbound := &Inbound{
-		networks: networks,
-		email:    config.Email,
-		level:    int(config.Level),
+	inbound := &RelayInbound{
+		networks:     networks,
+		destinations: config.Destinations,
 	}
-	if !C.Contains(shadowaead_2022.List, config.Method) {
+	if !C.Contains(shadowaead_2022.List, config.Method) || !strings.Contains(config.Method, "aes") {
 		return nil, newError("unsupported method ", config.Method)
 	}
-	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound)
+	service, err := shadowaead_2022.NewRelayServiceWithPassword[int](config.Method, config.Key, 500, inbound)
+	if err != nil {
+		return nil, newError("create service").Base(err)
+	}
+
+	for i, destination := range config.Destinations {
+		if destination.Email == "" {
+			u := uuid.New()
+			destination.Email = "unnamed-destination-" + strconv.Itoa(i) + "-" + u.String()
+		}
+	}
+	err = service.UpdateUsersWithPasswords(
+		C.MapIndexed(config.Destinations, func(index int, it *RelayDestination) int { return index }),
+		C.Map(config.Destinations, func(it *RelayDestination) string { return it.Key }),
+		C.Map(config.Destinations, func(it *RelayDestination) M.Socksaddr {
+			return toSocksaddr(net.Destination{
+				Address: it.Address.AsAddress(),
+				Port:    net.Port(it.Port),
+			})
+		}),
+	)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}
@@ -59,11 +79,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 	return inbound, nil
 }
 
-func (i *Inbound) Network() []net.Network {
+func (i *RelayInbound) Network() []net.Network {
 	return i.networks
 }
 
-func (i *Inbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+func (i *RelayInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 
 	var metadata M.Metadata
@@ -98,17 +118,19 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 	}
 }
 
-func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+	userCtx := ctx.(*shadowsocks.UserContext[int])
 	inbound := session.InboundFromContext(ctx)
+	user := i.destinations[userCtx.User]
 	inbound.User = &protocol.MemoryUser{
-		Email: i.email,
-		Level: uint32(i.level),
+		Email: user.Email,
+		Level: uint32(user.Level),
 	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  i.email,
+		Email:  user.Email,
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -124,17 +146,19 @@ func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 	return bufio.CopyConn(ctx, conn, outConn)
 }
 
-func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
+func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
+	userCtx := ctx.(*shadowsocks.UserContext[int])
 	inbound := session.InboundFromContext(ctx)
+	user := i.destinations[userCtx.User]
 	inbound.User = &protocol.MemoryUser{
-		Email: i.email,
-		Level: uint32(i.level),
+		Email: user.Email,
+		Level: uint32(user.Level),
 	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
-		Email:  i.email,
+		Email:  user.Email,
 	})
 	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -151,23 +175,9 @@ func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
 
-func (i *Inbound) HandleError(err error) {
+func (i *RelayInbound) HandleError(err error) {
 	if E.IsClosed(err) {
 		return
 	}
 	newError(err).AtWarning().WriteToLog()
-}
-
-type natPacketConn struct {
-	net.Conn
-}
-
-func (c *natPacketConn) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {
-	_, err = buffer.ReadFrom(c)
-	return
-}
-
-func (c *natPacketConn) WritePacket(buffer *B.Buffer, addr M.Socksaddr) error {
-	_, err := buffer.WriteTo(c)
-	return err
 }
