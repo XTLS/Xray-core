@@ -44,5 +44,5 @@ func executeGetStats(cmd *base.Command, args []string) {
 	if err != nil {
 		base.Fatalf("failed to get stats: %s", err)
 	}
-	showResponese(resp)
+	showJSONResponse(resp)
 }
