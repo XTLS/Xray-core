@@ -33,5 +33,5 @@ func executeRestartLogger(cmd *base.Command, args []string) {
 	if err != nil {
 		base.Fatalf("failed to restart logger: %s", err)
 	}
-	showResponese(resp)
+	showJSONResponse(resp)
 }
