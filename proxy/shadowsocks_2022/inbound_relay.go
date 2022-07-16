@@ -175,7 +175,7 @@ func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketCon
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
 
-func (i *RelayInbound) HandleError(err error) {
+func (i *RelayInbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}

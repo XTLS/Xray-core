@@ -176,7 +176,7 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
 
-func (i *MultiUserInbound) HandleError(err error) {
+func (i *MultiUserInbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}

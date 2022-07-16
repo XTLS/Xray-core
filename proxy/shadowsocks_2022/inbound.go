@@ -4,6 +4,7 @@ package shadowsocks_2022
 
 import (
 	"context"
+
 	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
@@ -151,7 +152,7 @@ func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
 
-func (i *Inbound) HandleError(err error) {
+func (i *Inbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}
