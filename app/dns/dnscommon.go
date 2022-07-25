@@ -1,13 +1,17 @@
 package dns
 
 import (
+	"context"
 	"encoding/binary"
 	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -224,4 +228,20 @@ L:
 	}
 
 	return ipRecord, nil
+}
+
+// toDnsContext create a new background context with parent inbound, session and dns log
+func toDnsContext(ctx context.Context, addr string) context.Context {
+	dnsCtx := core.ToBackgroundDetachedContext(ctx)
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		dnsCtx = session.ContextWithInbound(dnsCtx, inbound)
+	}
+	dnsCtx = session.ContextWithContent(dnsCtx, session.ContentFromContext(ctx))
+	dnsCtx = log.ContextWithAccessMessage(dnsCtx, &log.AccessMessage{
+		From:   "DNS",
+		To:     addr,
+		Status: log.AccessAccepted,
+		Reason: "",
+	})
+	return dnsCtx
 }
