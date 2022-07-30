@@ -39,6 +39,10 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 1); err != nil {
 				return newError("failed to set SO_KEEPALIVE", err)
 			}
+		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
+			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 0); err != nil {
+				return newError("failed to unset SO_KEEPALIVE", err)
+			}
 		}
 	}
 
@@ -69,6 +73,10 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			}
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 1); err != nil {
 				return newError("failed to set SO_KEEPALIVE", err)
+			}
+		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
+			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 0); err != nil {
+				return newError("failed to unset SO_KEEPALIVE", err)
 			}
 		}
 	}
