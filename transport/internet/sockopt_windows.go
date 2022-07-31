@@ -25,6 +25,15 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
+		if config.TcpKeepAliveIdle > 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
+				return newError("failed to set SO_KEEPALIVE", err)
+			}
+		} else if config.TcpKeepAliveIdle < 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
+				return newError("failed to unset SO_KEEPALIVE", err)
+			}
+		}
 	}
 
 	return nil
@@ -34,6 +43,15 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	if isTCPSocket(network) {
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
+		}
+		if config.TcpKeepAliveIdle > 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
+				return newError("failed to set SO_KEEPALIVE", err)
+			}
+		} else if config.TcpKeepAliveIdle < 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
+				return newError("failed to unset SO_KEEPALIVE", err)
+			}
 		}
 	}
 
