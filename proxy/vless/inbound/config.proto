@@ -23,4 +23,5 @@ message Config {
   // for now.
   string decryption = 2;
   repeated Fallback fallbacks = 3;
+  uint32 timeout = 4;
 }

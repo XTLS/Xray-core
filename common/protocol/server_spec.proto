@@ -13,4 +13,5 @@ message ServerEndpoint {
   xray.common.net.IPOrDomain address = 1;
   uint32 port = 2;
   repeated xray.common.protocol.User user = 3;
+  uint32 timeout = 4;
 }

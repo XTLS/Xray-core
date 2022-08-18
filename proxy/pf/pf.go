@@ -1,4 +1,4 @@
-package dokodemo
+package pf
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
@@ -18,12 +18,13 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		d := new(DokodemoDoor)
+		d := new(pf)
 		err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
 			return d.Init(config.(*Config), pm, session.SockoptFromContext(ctx))
 		})
@@ -31,7 +32,7 @@ func init() {
 	}))
 }
 
-type DokodemoDoor struct {
+type pf struct {
 	policyManager policy.Manager
 	config        *Config
 	address       net.Address
@@ -39,8 +40,8 @@ type DokodemoDoor struct {
 	sockopt       *session.Sockopt
 }
 
-// Init initializes the DokodemoDoor instance with necessary parameters.
-func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
+// Init initializes the pf instance with necessary parameters.
+func (d *pf) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
 	if (config.NetworkList == nil || len(config.NetworkList.Network) == 0) && len(config.Networks) == 0 {
 		return newError("no network specified")
 	}
@@ -54,7 +55,7 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 }
 
 // Network implements proxy.Inbound.
-func (d *DokodemoDoor) Network() []net.Network {
+func (d *pf) Network() []net.Network {
 	if len(d.config.Networks) > 0 {
 		return d.config.Networks
 	}
@@ -62,7 +63,7 @@ func (d *DokodemoDoor) Network() []net.Network {
 	return d.config.NetworkList.Network
 }
 
-func (d *DokodemoDoor) policy() policy.Session {
+func (d *pf) policy() policy.Session {
 	config := d.config
 	p := d.policyManager.ForLevel(config.UserLevel)
 	if config.Timeout > 0 && config.UserLevel == 0 {
@@ -76,12 +77,18 @@ type hasHandshakeAddress interface {
 }
 
 // Process implements proxy.Inbound.
-func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+func (d *pf) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	newError("processing connection from: ", conn.RemoteAddr()).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+
+	ip, port, err := internet.OriginalDst(conn.LocalAddr(), conn.RemoteAddr())
+	if err != nil {
+		return newError("failed to get destination").Base(err)
+	}
+
 	dest := net.Destination{
 		Network: network,
-		Address: d.address,
-		Port:    d.port,
+		Address: net.IPAddress(ip),
+		Port:    net.PortFromBytes(port[:2]),
 	}
 
 	destinationOverridden := false
@@ -185,38 +192,6 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 			}
 			writer = NewPacketWriter(pConn, &dest, mark, back)
 			defer writer.(*PacketWriter).Close()
-			/*
-				sockopt := &internet.SocketConfig{
-					Tproxy: internet.SocketConfig_TProxy,
-				}
-				if dest.Address.Family().IsIP() {
-					sockopt.BindAddress = dest.Address.IP()
-					sockopt.BindPort = uint32(dest.Port)
-				}
-				if d.sockopt != nil {
-					sockopt.Mark = d.sockopt.Mark
-				}
-				tConn, err := internet.DialSystem(ctx, net.DestinationFromAddr(conn.RemoteAddr()), sockopt)
-				if err != nil {
-					return err
-				}
-				defer tConn.Close()
-
-				writer = &buf.SequentialWriter{Writer: tConn}
-				tReader := buf.NewPacketReader(tConn)
-				requestCount++
-				tproxyRequest = func() error {
-					defer func() {
-						if atomic.AddInt32(&requestCount, -1) == 0 {
-							timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
-						}
-					}()
-					if err := buf.Copy(tReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-						return newError("failed to transport request (TPROXY conn)").Base(err)
-					}
-					return nil
-				}
-			*/
 		}
 	}
 

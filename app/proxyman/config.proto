@@ -27,13 +27,13 @@ message AllocationStrategy {
 
   Type type = 1;
 
-  message AllocationStrategyConcurrency { uint32 value = 1; }
+  message AllocationStrategyConcurrency {uint32 value = 1;}
 
   // Number of handlers (ports) running in parallel.
   // Default value is 3 if unset.
   AllocationStrategyConcurrency concurrency = 2;
 
-  message AllocationStrategyRefresh { uint32 value = 1; }
+  message AllocationStrategyRefresh {uint32 value = 1;}
 
   // Number of minutes before a handler is regenerated.
   // Default value is 5 if unset.
@@ -73,8 +73,9 @@ message ReceiverConfig {
   reserved 6;
   // Override domains for the given protocol.
   // Deprecated. Use sniffing_settings.
-  repeated KnownProtocols domain_override = 7 [ deprecated = true ];
+  repeated KnownProtocols domain_override = 7 [deprecated = true];
   SniffingConfig sniffing_settings = 8;
+  uint32 timeout = 9;
 }
 
 message InboundHandlerConfig {

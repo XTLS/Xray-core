@@ -26,16 +26,19 @@ type Client struct {
 	policyManager policy.Manager
 	version       Version
 	dns           dns.Client
+	timeout       uint32
 }
 
 // NewClient create a new Socks5 client based on the given config.
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	serverList := protocol.NewServerList()
+	timeout := uint32(0)
 	for _, rec := range config.Server {
 		s, err := protocol.NewServerSpecFromPB(rec)
 		if err != nil {
 			return nil, newError("failed to get server spec").Base(err)
 		}
+		timeout = rec.Timeout
 		serverList.AddServer(s)
 	}
 	if serverList.Size() == 0 {
@@ -47,6 +50,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		version:       config.Version,
+		timeout:       timeout,
 	}
 	if config.Version == Version_SOCKS4 {
 		c.dns = v.GetFeature(dns.ClientType()).(dns.Client)
@@ -151,8 +155,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		newError("failed to clear deadline after handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
+	var cancel context.CancelFunc
+	var timer *signal.ActivityTimer
+	if c.timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(c.timeout))
+		timer = signal.CancelAfterInactivity(ctx, cancel, time.Second*time.Duration(c.timeout))
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+		timer = signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
+	}
 
 	var requestFunc func() error
 	var responseFunc func() error

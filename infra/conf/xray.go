@@ -19,6 +19,7 @@ import (
 var (
 	inboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
+		"pf":            func() interface{} { return new(PfConfig) },
 		"http":          func() interface{} { return new(HTTPServerConfig) },
 		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
 		"socks":         func() interface{} { return new(SocksServerConfig) },
@@ -172,6 +173,7 @@ type InboundDetourConfig struct {
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
 	DomainOverride *StringList                    `json:"domainOverride"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
+	Timeout        uint32                         `json:"timeout"`
 }
 
 // Build implements Buildable.
@@ -266,6 +268,20 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
 		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.Redirect
 	}
+
+	if pfConfig, ok := rawConfig.(*PfConfig); ok {
+		receiverSettings.ReceiveOriginalDestination = pfConfig.Redirect
+		receiverSettings.Timeout = pfConfig.Timeout
+	}
+
+	if inboundDetourConfig, ok := rawConfig.(*InboundDetourConfig); ok {
+		receiverSettings.Timeout = inboundDetourConfig.Timeout
+	}
+
+	if socksServerConfig, ok := rawConfig.(*SocksServerConfig); ok {
+		receiverSettings.Timeout = socksServerConfig.Timeout
+	}
+
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, err

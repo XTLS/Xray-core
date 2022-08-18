@@ -113,6 +113,7 @@ type Handler struct {
 	detours               *DetourConfig
 	sessionHistory        *encoding.SessionHistory
 	secure                bool
+	timeout               uint32
 }
 
 // New creates a new VMess inbound handler.
@@ -126,6 +127,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
 		secure:                config.SecureEncryptionOnly,
+		timeout:               config.Timeout,
 	}
 
 	for _, user := range config.User {
@@ -291,8 +293,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	var cancel context.CancelFunc
+	var timer *signal.ActivityTimer
+	if h.timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(h.timeout))
+		timer = signal.CancelAfterInactivity(ctx, cancel, time.Second*time.Duration(h.timeout))
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+		timer = signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, request.Destination())

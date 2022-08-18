@@ -30,6 +30,7 @@ type VLessInboundConfig struct {
 	Decryption string                  `json:"decryption"`
 	Fallback   *VLessInboundFallback   `json:"fallback"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
+	Timeout    uint32                  `json:"timeout"`
 }
 
 // Build implements Buildable
@@ -139,6 +140,7 @@ type VLessOutboundVnext struct {
 	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
+	Timeout uint32            `json:"timeout"`
 }
 
 type VLessOutboundConfig struct {
@@ -163,6 +165,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
+			Timeout: rec.Timeout,
 			User:    make([]*protocol.User, len(rec.Users)),
 		}
 		for idx, rawUser := range rec.Users {

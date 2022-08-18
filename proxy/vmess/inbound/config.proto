@@ -22,4 +22,5 @@ message Config {
   DefaultConfig default = 2;
   DetourConfig detour = 3;
   bool secure_encryption_only = 4;
+  uint32 timeout = 5;
 }

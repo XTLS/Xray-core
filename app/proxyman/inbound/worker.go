@@ -45,7 +45,8 @@ type tcpWorker struct {
 
 	hub internet.Listener
 
-	ctx context.Context
+	ctx     context.Context
+	timeout uint32
 }
 
 func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyMode {
@@ -56,7 +57,14 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 }
 
 func (w *tcpWorker) callback(conn stat.Connection) {
-	ctx, cancel := context.WithCancel(w.ctx)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if w.timeout != 0 {
+		ctx, cancel = context.WithTimeout(w.ctx, time.Second*time.Duration(w.timeout))
+	} else {
+		ctx, cancel = context.WithCancel(w.ctx)
+	}
+
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
 

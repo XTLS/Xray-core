@@ -64,6 +64,7 @@ type Handler struct {
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
+	timeout uint32
 }
 
 // New creates a new VLess inbound handler.
@@ -74,6 +75,7 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:             new(vless.Validator),
 		dns:                   dc,
+		timeout:               config.Timeout,
 	}
 
 	for _, user := range config.Clients {
@@ -310,8 +312,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				return newError(`failed to find the default "path" config`).AtWarning()
 			}
 
-			ctx, cancel := context.WithCancel(ctx)
-			timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+			var cancel context.CancelFunc
+			var timer *signal.ActivityTimer
+			if h.timeout != 0 {
+				ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(h.timeout))
+				timer = signal.CancelAfterInactivity(ctx, cancel, time.Second*time.Duration(h.timeout))
+			} else {
+				ctx, cancel = context.WithCancel(ctx)
+				timer = signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+			}
+
 			ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 			var conn net.Conn
@@ -483,8 +493,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	var cancel context.CancelFunc
+	var timer *signal.ActivityTimer
+	if h.timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(h.timeout))
+		timer = signal.CancelAfterInactivity(ctx, cancel, time.Second*time.Duration(h.timeout))
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+		timer = signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	}
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 	link, err := dispatcher.Dispatch(ctx, request.Destination())

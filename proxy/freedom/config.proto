@@ -20,7 +20,7 @@ message Config {
     USE_IP6 = 3;
   }
   DomainStrategy domain_strategy = 1;
-  uint32 timeout = 2 [deprecated = true];
+  uint32 timeout = 2;
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
 }

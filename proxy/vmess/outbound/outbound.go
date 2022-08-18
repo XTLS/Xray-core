@@ -34,16 +34,19 @@ type Handler struct {
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
 	cone          bool
+	timeout       uint32
 }
 
 // New creates a new VMess outbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	serverList := protocol.NewServerList()
+	timeout := uint32(0)
 	for _, rec := range config.Receiver {
 		s, err := protocol.NewServerSpecFromPB(rec)
 		if err != nil {
 			return nil, newError("failed to parse server spec").Base(err)
 		}
+		timeout = rec.Timeout
 		serverList.AddServer(s)
 	}
 
@@ -53,6 +56,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		timeout:       timeout,
 	}
 
 	return handler, nil
@@ -141,8 +145,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	session := encoding.NewClientSession(ctx, isAEAD, protocol.DefaultIDHash, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	var cancel context.CancelFunc
+	var timer *signal.ActivityTimer
+	if h.timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(h.timeout))
+		timer = signal.CancelAfterInactivity(ctx, cancel, time.Second*time.Duration(h.timeout))
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+		timer = signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	}
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux

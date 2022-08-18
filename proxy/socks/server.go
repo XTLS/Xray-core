@@ -147,14 +147,14 @@ func (*Server) handleUDP(c io.Reader) error {
 }
 
 func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
-	ctx, cancel := context.WithCancel(ctx)
+	plcy := s.policy()
+	ctx, cancel := context.WithTimeout(ctx, plcy.Timeouts.ConnectionIdle)
 	timer := signal.CancelAfterInactivity(ctx, cancel, s.policy().Timeouts.ConnectionIdle)
 
 	if inbound != nil {
 		inbound.Timer = timer
 	}
 
-	plcy := s.policy()
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {

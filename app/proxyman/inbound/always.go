@@ -123,6 +123,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
 						ctx:             ctx,
+						timeout:         receiverConfig.Timeout,
 					}
 					h.workers = append(h.workers, worker)
 				}

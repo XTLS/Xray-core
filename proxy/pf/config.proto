@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package xray.proxy.dokodemo;
-option csharp_namespace = "Xray.Proxy.Dokodemo";
-option go_package = "github.com/xtls/xray-core/proxy/dokodemo";
-option java_package = "com.xray.proxy.dokodemo";
+package xray.proxy.pf;
+option csharp_namespace = "Xray.Proxy.pf";
+option go_package = "github.com/xtls/xray-core/proxy/pf";
+option java_package = "com.xray.proxy.pf";
 option java_multiple_files = true;
 
 import "common/net/address.proto";
@@ -13,10 +13,10 @@ message Config {
   xray.common.net.IPOrDomain address = 1;
   uint32 port = 2;
 
-  // List of networks that the Dokodemo accepts.
+  // List of networks that the pf accepts.
   // Deprecated. Use networks.
   xray.common.net.NetworkList network_list = 3 [deprecated = true];
-  // List of networks that the Dokodemo accepts.
+  // List of networks that the pf accepts.
   repeated xray.common.net.Network networks = 7;
 
   uint32 timeout = 4;
