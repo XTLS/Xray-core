@@ -72,13 +72,6 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 			}
 		case internet.SocketConfig_TProxy:
 			dest = net.DestinationFromAddr(conn.LocalAddr())
-		case internet.SocketConfig_PF:
-			d, err := net.OriginalDst(conn)
-			if err != nil {
-				newError("failed to get original destination").Base(err).WriteToLog(session.ExportIDToError(ctx))
-			} else {
-				dest = d
-			}
 		}
 		if dest.IsValid() {
 			ctx = session.ContextWithOutbound(ctx, &session.Outbound{
