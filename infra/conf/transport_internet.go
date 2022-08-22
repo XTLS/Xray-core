@@ -558,8 +558,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_TProxy
 	case "redirect":
 		tproxy = internet.SocketConfig_Redirect
-	case "pf":
-		tproxy = internet.SocketConfig_PF
 	default:
 		tproxy = internet.SocketConfig_Off
 	}

@@ -74,8 +74,6 @@ message SocketConfig {
     TProxy = 1;
     // Redirect mode.
     Redirect = 2;
-    // PF mode.
-    PF = 3;
   }
 
   // TProxy is for enabling TProxy socket option.
