@@ -52,23 +52,11 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher) (*DoHNameServ
 		TLSHandshakeTimeout: 30 * time.Second,
 		ForceAttemptHTTP2:   true,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			dispatcherCtx := context.Background()
-
 			dest, err := net.ParseDestination(network + ":" + addr)
 			if err != nil {
 				return nil, err
 			}
-
-			dispatcherCtx = session.ContextWithContent(dispatcherCtx, session.ContentFromContext(ctx))
-			dispatcherCtx = session.ContextWithInbound(dispatcherCtx, session.InboundFromContext(ctx))
-			dispatcherCtx = log.ContextWithAccessMessage(dispatcherCtx, &log.AccessMessage{
-				From:   "DoH",
-				To:     s.dohURL,
-				Status: log.AccessAccepted,
-				Reason: "",
-			})
-
-			link, err := s.dispatcher.Dispatch(dispatcherCtx, dest)
+			link, err := s.dispatcher.Dispatch(toDnsContext(ctx, s.dohURL), dest)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -115,7 +103,7 @@ func NewDoHLocalNameServer(url *url.URL) *DoHNameServer {
 			}
 			conn, err := internet.DialSystem(ctx, dest, nil)
 			log.Record(&log.AccessMessage{
-				From:   "DoH",
+				From:   "DNS",
 				To:     s.dohURL,
 				Status: log.AccessAccepted,
 				Detour: "local",

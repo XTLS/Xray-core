@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
@@ -275,6 +276,7 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
 			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, err
 		}
 	}
@@ -306,10 +308,12 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		close(done)
 	}()
 	s.sendQuery(ctx, fqdn, clientIP, option)
+	start := time.Now()
 
 	for {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
+			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 			return ips, err
 		}
 
@@ -371,6 +375,12 @@ func (s *QUICNameServer) openConnection() (quic.Connection, error) {
 	}
 
 	conn, err := quic.DialAddrContext(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
+	log.Record(&log.AccessMessage{
+		From:   "DNS",
+		To:     s.destination,
+		Status: log.AccessAccepted,
+		Detour: "local",
+	})
 	if err != nil {
 		return nil, err
 	}
