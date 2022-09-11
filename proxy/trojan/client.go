@@ -126,7 +126,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 				}
 				if connWriter.Flow == XRD {
 					xtlsConn.DirectMode = true
-					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
+					if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
 				}

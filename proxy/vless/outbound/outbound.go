@@ -156,7 +156,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				if requestAddons.Flow == vless.XRD {
 					xtlsConn.DirectMode = true
-					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
+					if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
 				}
