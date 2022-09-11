@@ -456,7 +456,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					xtlsConn.MARK = "XTLS"
 					if requestAddons.Flow == vless.XRD {
 						xtlsConn.DirectMode = true
-						if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
+						if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}
 					}

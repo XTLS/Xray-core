@@ -190,14 +190,14 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 							iConn = statConn.Connection
 						}
 						if xc, ok := iConn.(*xtls.Conn); ok {
-							iConn = xc.Connection
+							iConn = xc.NetConn()
 						}
 						if tc, ok := iConn.(*net.TCPConn); ok {
 							if conn.SHOW {
 								fmt.Println(conn.MARK, "Splice")
 							}
 							runtime.Gosched() // necessary
-							w, err := tc.ReadFrom(conn.Connection)
+							w, err := tc.ReadFrom(conn.NetConn())
 							if counter != nil {
 								counter.Add(w)
 							}
@@ -212,7 +212,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
-				reader = buf.NewReadVReader(conn.Connection, rawConn, nil)
+				reader = buf.NewReadVReader(conn.NetConn(), rawConn, nil)
 				ct = counter
 				if conn.SHOW {
 					fmt.Println(conn.MARK, "ReadV")
