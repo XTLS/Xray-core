@@ -119,7 +119,8 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 
 func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
-	user, _ := A.UserFromContext[User](ctx)
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.users[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
@@ -146,7 +147,8 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
-	user, _ := A.UserFromContext[User](ctx)
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.users[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),

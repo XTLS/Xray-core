@@ -120,7 +120,8 @@ func (i *RelayInbound) Process(ctx context.Context, network net.Network, connect
 
 func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
-	user, _ := A.UserFromContext[User](ctx)
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.destinations[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
@@ -147,7 +148,8 @@ func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadat
 
 func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
-	user, _ := A.UserFromContext[User](ctx)
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.destinations[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
