@@ -3,14 +3,12 @@ module github.com/xtls/xray-core
 go 1.19
 
 require (
-	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
+	github.com/invopop/yaml v0.2.0
 	github.com/lucas-clemente/quic-go v0.29.0
-	github.com/marten-seemann/qtls-go1-16 v0.1.5
-	github.com/marten-seemann/qtls-go1-17 v0.1.2
 	github.com/marten-seemann/qtls-go1-18 v0.1.2
 	github.com/miekg/dns v1.1.50
 	github.com/pelletier/go-toml v1.9.5
@@ -52,7 +50,6 @@ require (
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/genproto v0.0.0-20220916172020-2692e8806bfa // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )

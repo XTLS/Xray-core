@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/ghodss/yaml"
+	"github.com/invopop/yaml"
 	"github.com/pelletier/go-toml"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
