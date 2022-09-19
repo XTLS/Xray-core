@@ -16,7 +16,7 @@ message Config {
 
 message HealthPingConfig {
   // destination url, need 204 for success return
-  // default http://www.google.com/gen_204
+  // default https://connectivitycheck.gstatic.com/generate_204
   string destination = 1;
   // connectivity check url
   string connectivity = 2;

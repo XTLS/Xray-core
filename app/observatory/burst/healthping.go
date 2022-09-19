@@ -43,7 +43,10 @@ func NewHealthPing(ctx context.Context, config *HealthPingConfig) *HealthPing {
 		}
 	}
 	if settings.Destination == "" {
-		settings.Destination = "http://www.google.com/gen_204"
+		// Destination URL, need 204 for success return default to chromium
+		// https://github.com/chromium/chromium/blob/main/components/safety_check/url_constants.cc#L10
+		// https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/safety_check/url_constants.cc#10
+		settings.Destination = "https://connectivitycheck.gstatic.com/generate_204"
 	}
 	if settings.Interval == 0 {
 		settings.Interval = time.Duration(1) * time.Minute

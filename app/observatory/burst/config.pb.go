@@ -82,7 +82,7 @@ type HealthPingConfig struct {
 	unknownFields protoimpl.UnknownFields
 
 	// destination url, need 204 for success return
-	// default http://www.google.com/gen_204
+	// default https://connectivitycheck.gstatic.com/generate_204
 	Destination string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
 	// connectivity check url
 	Connectivity string `protobuf:"bytes,2,opt,name=connectivity,proto3" json:"connectivity,omitempty"`
