@@ -1,5 +1,3 @@
-//go:build go1.18
-
 package shadowsocks_2022
 
 import (
@@ -7,9 +5,9 @@ import (
 	"encoding/base64"
 	"strconv"
 
-	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
+	A "github.com/sagernet/sing/common/auth"
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -120,14 +118,14 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 }
 
 func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
-	userCtx := ctx.(*shadowsocks.UserContext[int])
 	inbound := session.InboundFromContext(ctx)
-	user := i.users[userCtx.User]
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.users[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
 	}
-	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,
@@ -148,14 +146,14 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 }
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	userCtx := ctx.(*shadowsocks.UserContext[int])
 	inbound := session.InboundFromContext(ctx)
-	user := i.users[userCtx.User]
+	userInt, _ := A.UserFromContext[int](ctx)
+	user := i.users[userInt]
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
 	}
-	ctx = log.ContextWithAccessMessage(userCtx.Context, &log.AccessMessage{
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
 		Status: log.AccessAccepted,

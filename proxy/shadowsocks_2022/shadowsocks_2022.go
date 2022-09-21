@@ -1,5 +1,3 @@
-//go:build go1.18
-
 package shadowsocks_2022
 
 import (
@@ -15,7 +13,7 @@ import (
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 func toDestination(socksaddr M.Socksaddr, network net.Network) net.Destination {
-	if socksaddr.Family().IsFqdn() {
+	if socksaddr.IsFqdn() {
 		return net.Destination{
 			Network: network,
 			Address: net.DomainAddress(socksaddr.Fqdn),
