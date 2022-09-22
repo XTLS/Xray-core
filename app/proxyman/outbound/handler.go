@@ -234,8 +234,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 							if dest.Address.Family().IsIPv4() == net.ParseAddress(localIP).Family().IsIPv4() {
 								useIncoming = true
 							}
-						} else {
-							useIncoming = true
 						}
 					}
 					if useIncoming {
