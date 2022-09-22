@@ -681,6 +681,9 @@ func (c *Config) Build() (*core.Config, error) {
 			t := c.findInboundTag(next_t)
 			for t >= 0 && next_t != "" {
 				next_t = c.InboundConfigs[t].Template
+				if len(saved_pl.Range) == 0 && c.InboundConfigs[t].PortList != nil {
+					saved_pl = *c.InboundConfigs[t].PortList
+				}
 				if err := json.Unmarshal(ConfigFromTemplate(c.InboundConfigs[t], rawInboundConfig), &rawInboundConfig); err != nil {
 					return nil, err
 				}
@@ -770,7 +773,11 @@ func Override(template, override interface{}) {
 			case reflect.Slice, reflect.Map:
 				Override(tm[i], v)
 			default:
-				tm[i] = v
+				if i < len(tm) {
+					tm[i] = v
+				} else {
+					tm = append(tm, v)
+				}
 			}
 		}
 	case map[string]interface{}:
