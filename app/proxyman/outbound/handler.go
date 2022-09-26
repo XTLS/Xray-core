@@ -2,10 +2,10 @@ package outbound
 
 import (
 	"context"
-	"strings"
 	"errors"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -234,6 +234,9 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 							if dest.Address.Family().IsIPv4() == net.ParseAddress(localIP).Family().IsIPv4() {
 								useIncoming = true
 							}
+						} else if dest.Address.Family().IsDomain() {
+							// this will prevent access to single-stack domains
+							useIncoming = true
 						}
 					}
 					if useIncoming {
