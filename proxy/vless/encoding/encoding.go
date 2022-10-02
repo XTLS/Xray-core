@@ -3,6 +3,7 @@ package encoding
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -18,12 +19,17 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 const (
 	Version = byte(0)
 )
+
+var tls13SupportedVersions = []byte{0x00, 0x2b, 0x00, 0x02, 0x03, 0x04}
+var tlsHandShakeStart = []byte{0x16, 0x03, 0x03}
+var tlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
 
 var addrParser = protocol.NewAddressParser(
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv4), net.AddressFamilyIPv4),
@@ -237,4 +243,173 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 		return err
 	}
 	return nil
+}
+
+// XtlsRead filter and read xtls protocol
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context, userUUID []byte, filterServerHello bool, isTLS13Connection *bool) error {
+	err := func() error {
+		var ct stats.Counter
+		numberOfPacketToFilter := 0
+		if filterServerHello {
+			numberOfPacketToFilter = 5
+		}
+		filterUUID := true
+		shouldSwitchToDirectCopy := false
+		for {
+			if shouldSwitchToDirectCopy {
+				shouldSwitchToDirectCopy = false
+				if sctx != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
+					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
+						iConn := inbound.Conn
+						statConn, ok := iConn.(*stat.CounterConnection)
+						if ok {
+							iConn = statConn.Connection
+						}
+						if xc, ok := iConn.(*tls.Conn); ok {
+							iConn = xc.NetConn()
+						}
+						if tc, ok := iConn.(*net.TCPConn); ok {
+							newError("XtlsRead splice").WriteToLog()
+							runtime.Gosched() // necessary
+							w, err := tc.ReadFrom(conn.NetConn())
+							if counter != nil {
+								counter.Add(w)
+							}
+							if statConn != nil && statConn.WriteCounter != nil {
+								statConn.WriteCounter.Add(w)
+							}
+							return err
+						} else {
+							panic("XTLS Splice: not TCP inbound")
+						}
+					} else {
+						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
+					}
+				}
+				reader = buf.NewReadVReader(conn.NetConn(), rawConn, nil)
+				ct = counter
+				newError("XtlsRead readV").WriteToLog()
+			}
+			buffer, err := reader.ReadMultiBuffer()
+			if !buffer.IsEmpty() {
+				if numberOfPacketToFilter > 0 {
+					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13Connection)
+				}
+				if filterUUID && *isTLS13Connection {
+					for i, b := range buffer {
+						if b.Len() >= 16 && bytes.Equal(userUUID, b.BytesFrom(b.Len() - 16)) {
+							shouldSwitchToDirectCopy = true
+							filterUUID = false
+							b.Resize(0, b.Len() - 16)
+							newError("XtlsRead found UUID ", i, " ", b.Len()).WriteToLog()
+						}
+					}
+				}
+				if ct != nil {
+					ct.Add(int64(buffer.Len()))
+				}
+				timer.Update()
+				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
+					return werr
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}()
+	if err != nil && errors.Cause(err) != io.EOF {
+		return err
+	}
+	return nil
+}
+
+// XtlsRead filter and write xtls protocol
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, userUUID []byte, filterServerHello bool, isTLS13Connection *bool) error {
+	err := func() error {
+		var ct stats.Counter
+		numberOfPacketToFilter := 0
+		if filterServerHello && !*isTLS13Connection {
+			numberOfPacketToFilter = 5
+		}
+		filterTlsApplicationData := true
+		shouldSwitchToDirectCopy := false
+		for {
+			buffer, err := reader.ReadMultiBuffer()
+			if !buffer.IsEmpty() {
+				if numberOfPacketToFilter > 0 {
+					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13Connection)
+				}
+				if filterTlsApplicationData && *isTLS13Connection {
+					var xtlsSpecIndex int
+					for i, b := range buffer {
+						if b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
+							shouldSwitchToDirectCopy = true
+							filterTlsApplicationData = false
+							b.Write(userUUID)
+							xtlsSpecIndex = i
+							break
+						}
+					}
+					if shouldSwitchToDirectCopy {
+						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex + 1)
+						length := encryptBuffer.Len()
+						if !encryptBuffer.IsEmpty() {
+							timer.Update()
+							if werr := writer.WriteMultiBuffer(encryptBuffer); werr != nil {
+								return werr
+							}
+						}
+						buffer = directBuffer
+						writer = buf.NewWriter(conn.NetConn())
+						ct = counter
+						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog()
+					}
+				}
+				if !buffer.IsEmpty() {
+					if ct != nil {
+						ct.Add(int64(buffer.Len()))
+					}
+					timer.Update()
+					if werr := writer.WriteMultiBuffer(buffer); werr != nil {
+						return werr
+					}
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}()
+	if err != nil && errors.Cause(err) != io.EOF {
+		return err
+	}
+	return nil
+}
+
+// XtlsFilterTls13 filter and recognize tls 1.3
+func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS13Connection *bool) {
+	for _, b := range buffer {
+		*numberOfPacketToFilter--
+		if b.Len() >= 6 {
+			startsBytes := b.BytesTo(6)
+			if bytes.Equal(tlsHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
+				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
+				if b.Len() >= int32(total) {
+					if (bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions)) {
+						*isTLS13Connection = true
+						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog()
+					} else {
+						*isTLS13Connection = false
+						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog()
+					}
+					*numberOfPacketToFilter = 0
+					return
+				}
+			}
+		}
+		if (*numberOfPacketToFilter == 0) {
+			newError("XtlsFilterTls13 stop filtering, did not find internal tls connection ", buffer.Len()).WriteToLog()
+		}
+	}
 }

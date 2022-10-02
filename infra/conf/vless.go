@@ -53,8 +53,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		account.Id = u.String()
 
 		switch account.Flow {
-		case "", "xtls-rprx-origin", "xtls-rprx-direct":
-		case "xtls-rprx-splice":
+		case "", vless.XRO, vless.XRD, vless.XRV:
+		case vless.XRS:
 			return nil, newError(`VLESS clients: inbound doesn't support "xtls-rprx-splice" in this version, please use "xtls-rprx-direct" instead`)
 		default:
 			return nil, newError(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
@@ -182,8 +182,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account.Id = u.String()
 
 			switch account.Flow {
-			case "", "xtls-rprx-origin", "xtls-rprx-origin-udp443", "xtls-rprx-direct", "xtls-rprx-direct-udp443":
-			case "xtls-rprx-splice", "xtls-rprx-splice-udp443":
+			case "", vless.XRO, vless.XRO + "-udp443", vless.XRD, vless.XRD + "-udp443", vless.XRV, vless.XRV + "-udp443":
+			case vless.XRS, vless.XRS + "-udp443":
 				if runtime.GOOS != "linux" && runtime.GOOS != "android" {
 					return nil, newError(`VLESS users: "` + account.Flow + `" only support linux in this version`)
 				}

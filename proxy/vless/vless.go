@@ -11,4 +11,5 @@ const (
 	XRO = "xtls-rprx-origin"
 	XRD = "xtls-rprx-direct"
 	XRS = "xtls-rprx-splice"
+	XRV = "xtls-rprx-vision"
 )

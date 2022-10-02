@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
@@ -132,11 +133,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	allowUDP443 := false
 	switch requestAddons.Flow {
-	case vless.XRO + "-udp443", vless.XRD + "-udp443", vless.XRS + "-udp443":
+	case vless.XRO + "-udp443", vless.XRD + "-udp443", vless.XRS + "-udp443", vless.XRV + "-udp443":
 		allowUDP443 = true
 		requestAddons.Flow = requestAddons.Flow[:16]
 		fallthrough
-	case vless.XRO, vless.XRD, vless.XRS:
+	case vless.XRO, vless.XRD, vless.XRS, vless.XRV:
 		switch request.Command {
 		case protocol.RequestCommandMux:
 			return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
@@ -160,6 +161,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 						rawConn, _ = sc.SyscallConn()
 					}
 				}
+			} else if requestAddons.Flow == vless.XRV {
+				sctx = ctx
+				if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
+					rawConn, _ = sc.SyscallConn()
+				}
 			} else {
 				return newError(`failed to use ` + requestAddons.Flow + `, maybe "security" is not "xtls"`).AtWarning()
 			}
@@ -176,6 +182,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
+	isTLS13Connection := false
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
@@ -205,8 +212,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return newError("failed to write A request payload").Base(err).AtWarning()
 		}
 
-		// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
-		if err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer)); err != nil {
+		var err error
+		if rawConn != nil && requestAddons.Flow == vless.XRV {
+			var counter stats.Counter
+			if statConn != nil {
+				counter = statConn.WriteCounter
+			}
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, account.ID.Bytes(), false, &isTLS13Connection)
+		} else {
+			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
+			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
+		}
+		if err != nil {
 			return newError("failed to transfer request payload").Base(err).AtInfo()
 		}
 
@@ -236,7 +253,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
+			if requestAddons.Flow == vless.XRV {
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, sctx, account.ID.Bytes(), true, &isTLS13Connection)
+			} else {
+				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
+			}
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
