@@ -147,7 +147,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 			requestAddons.Flow = ""
 		case protocol.RequestCommandTCP:
-			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+			if requestAddons.Flow == vless.XRV {
+				if _, ok := iConn.(*xtls.Conn); ok {
+					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
+				}
+				sctx = ctx
+				if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
+					rawConn, _ = sc.SyscallConn()
+				}
+			} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
 				xtlsConn.SHOW = xtls_show
 				xtlsConn.MARK = "XTLS"
@@ -160,11 +168,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
-				}
-			} else if requestAddons.Flow == vless.XRV {
-				sctx = ctx
-				if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
-					rawConn, _ = sc.SyscallConn()
 				}
 			} else {
 				return newError(`failed to use ` + requestAddons.Flow + `, maybe "security" is not "xtls"`).AtWarning()

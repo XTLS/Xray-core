@@ -450,7 +450,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
 			case protocol.RequestCommandTCP:
-				if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+				if requestAddons.Flow == vless.XRV {
+					if _, ok := iConn.(*xtls.Conn); ok {
+						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
+					}
+					if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
+						rawConn, _ = sc.SyscallConn()
+					}
+				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 					xtlsConn.RPRX = true
 					xtlsConn.SHOW = xtls_show
 					xtlsConn.MARK = "XTLS"
@@ -459,10 +466,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}
-					}
-				} else if requestAddons.Flow == vless.XRV {
-					if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
 					}
 				} else {
 					return newError(`failed to use ` + requestAddons.Flow + `, maybe "security" is not "xtls"`).AtWarning()
