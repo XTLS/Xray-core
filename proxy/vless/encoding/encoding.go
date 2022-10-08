@@ -5,8 +5,10 @@ package encoding
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
+	"math/big"
 	"runtime"
 	"syscall"
 
@@ -28,7 +30,8 @@ const (
 )
 
 var tls13SupportedVersions = []byte{0x00, 0x2b, 0x00, 0x02, 0x03, 0x04}
-var tlsHandShakeStart = []byte{0x16, 0x03, 0x03}
+var tlsClientHandShakeStart = []byte{0x16, 0x03}
+var tlsServerHandShakeStart = []byte{0x16, 0x03, 0x03}
 var tlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
 
 var addrParser = protocol.NewAddressParser(
@@ -182,40 +185,36 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 	return responseAddons, nil
 }
 
-func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
+func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context) error {
 	err := func() error {
 		var ct stats.Counter
 		for {
 			if conn.DirectIn {
 				conn.DirectIn = false
-				if sctx != nil {
-					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
-						iConn := inbound.Conn
-						statConn, ok := iConn.(*stat.CounterConnection)
-						if ok {
-							iConn = statConn.Connection
+				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
+					iConn := inbound.Conn
+					statConn, ok := iConn.(*stat.CounterConnection)
+					if ok {
+						iConn = statConn.Connection
+					}
+					if xc, ok := iConn.(*xtls.Conn); ok {
+						iConn = xc.NetConn()
+					}
+					if tc, ok := iConn.(*net.TCPConn); ok {
+						if conn.SHOW {
+							fmt.Println(conn.MARK, "Splice")
 						}
-						if xc, ok := iConn.(*xtls.Conn); ok {
-							iConn = xc.NetConn()
+						runtime.Gosched() // necessary
+						w, err := tc.ReadFrom(conn.NetConn())
+						if counter != nil {
+							counter.Add(w)
 						}
-						if tc, ok := iConn.(*net.TCPConn); ok {
-							if conn.SHOW {
-								fmt.Println(conn.MARK, "Splice")
-							}
-							runtime.Gosched() // necessary
-							w, err := tc.ReadFrom(conn.NetConn())
-							if counter != nil {
-								counter.Add(w)
-							}
-							if statConn != nil && statConn.WriteCounter != nil {
-								statConn.WriteCounter.Add(w)
-							}
-							return err
-						} else {
-							panic("XTLS Splice: not TCP inbound")
+						if statConn != nil && statConn.WriteCounter != nil {
+							statConn.WriteCounter.Add(w)
 						}
+						return err
 					} else {
-						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
+						panic("XTLS Splice: not TCP inbound")
 					}
 				}
 				reader = buf.NewReadVReader(conn.NetConn(), rawConn, nil)
@@ -246,11 +245,11 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context, userUUID []byte, filterServerHello bool, isTLS13Connection *bool) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		numberOfPacketToFilter := 0
-		if filterServerHello {
+		if !*isTLS12 && !*isTLS13 {
 			numberOfPacketToFilter = 5
 		}
 		filterUUID := true
@@ -258,8 +257,8 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 		for {
 			if shouldSwitchToDirectCopy {
 				shouldSwitchToDirectCopy = false
-				if sctx != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
-					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
+				if runtime.GOOS == "linux" || runtime.GOOS == "android" {
+					if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
 						iConn := inbound.Conn
 						statConn, ok := iConn.(*stat.CounterConnection)
 						if ok {
@@ -269,7 +268,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 							iConn = xc.NetConn()
 						}
 						if tc, ok := iConn.(*net.TCPConn); ok {
-							newError("XtlsRead splice").WriteToLog()
+							newError("XtlsRead splice").WriteToLog(session.ExportIDToError(ctx))
 							runtime.Gosched() // necessary
 							w, err := tc.ReadFrom(conn.NetConn())
 							if counter != nil {
@@ -288,20 +287,32 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 				}
 				reader = buf.NewReadVReader(conn.NetConn(), rawConn, nil)
 				ct = counter
-				newError("XtlsRead readV").WriteToLog()
+				newError("XtlsRead readV").WriteToLog(session.ExportIDToError(ctx))
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				if numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13Connection)
+					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
-				if filterUUID && *isTLS13Connection {
+				if filterUUID && (*isTLS || numberOfPacketToFilter > 0) {
 					for i, b := range buffer {
-						if b.Len() >= 16 && bytes.Equal(userUUID, b.BytesFrom(b.Len() - 16)) {
-							shouldSwitchToDirectCopy = true
-							filterUUID = false
-							b.Resize(0, b.Len() - 16)
-							newError("XtlsRead found UUID ", i, " ", b.Len()).WriteToLog()
+						if b.Len() >= 19 && bytes.Equal(userUUID, b.BytesFrom(b.Len() - 16)) {
+							paddingInfo := b.BytesRange(b.Len() - 19, b.Len() - 16)
+							total := (int32(paddingInfo[2])<<8 | int32(paddingInfo[1])) + 18
+							if paddingInfo[0] == 0x01 {
+								filterUUID = false
+							} else if paddingInfo[0] == 0x02 {
+								filterUUID = false
+								shouldSwitchToDirectCopy = true
+							} else if paddingInfo[0] != 0x00 {
+								newError("XtlsRead unknown command ", paddingInfo[0], b.Len()).WriteToLog(session.ExportIDToError(ctx))
+							}
+							newError("XtlsRead found UUID ", i, " ", b.Len(), " padding ", total, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
+							if (b.Len() >= total) {
+								b.Resize(0, b.Len() - total)
+							} else {
+								newError("XtlsRead error with padding!").AtWarning().WriteToLog(session.ExportIDToError(ctx))
+							}
 						}
 					}
 				}
@@ -324,12 +335,12 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 	return nil
 }
 
-// XtlsRead filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, userUUID []byte, filterServerHello bool, isTLS13Connection *bool) error {
+// XtlsWrite filter and write xtls protocol
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID []byte, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		numberOfPacketToFilter := 0
-		if filterServerHello && !*isTLS13Connection {
+		if !*isTLS12 && !*isTLS13 {
 			numberOfPacketToFilter = 5
 		}
 		filterTlsApplicationData := true
@@ -338,18 +349,28 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				if numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13Connection)
+					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
-				if filterTlsApplicationData && *isTLS13Connection {
+				if filterTlsApplicationData && *isTLS {
 					var xtlsSpecIndex int
 					for i, b := range buffer {
 						if b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
-							shouldSwitchToDirectCopy = true
+							var command byte = 0x01
+							if *isTLS13 {
+								shouldSwitchToDirectCopy = true
+								xtlsSpecIndex = i
+								command = 0x02
+							}
 							filterTlsApplicationData = false
-							b.Write(userUUID)
-							xtlsSpecIndex = i
+							XtlsPadding(b, command, userUUID, ctx)
+							break
+						} else if !*isTLS12 && !*isTLS13 && numberOfPacketToFilter == 0 {
+							//maybe tls 1.1 or 1.0
+							filterTlsApplicationData = false
+							XtlsPadding(b, 0x01, userUUID, ctx)
 							break
 						}
+						XtlsPadding(b, 0x00, userUUID, ctx)
 					}
 					if shouldSwitchToDirectCopy {
 						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex + 1)
@@ -363,7 +384,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 						buffer = directBuffer
 						writer = buf.NewWriter(conn.NetConn())
 						ct = counter
-						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog()
+						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					}
 				}
 				if !buffer.IsEmpty() {
@@ -388,28 +409,55 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 }
 
 // XtlsFilterTls13 filter and recognize tls 1.3
-func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS13Connection *bool) {
+func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool, ctx context.Context) {
 	for _, b := range buffer {
 		*numberOfPacketToFilter--
 		if b.Len() >= 6 {
 			startsBytes := b.BytesTo(6)
-			if bytes.Equal(tlsHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
+			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
 				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
 				if b.Len() >= int32(total) {
 					if (bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions)) {
-						*isTLS13Connection = true
-						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog()
+						*isTLS13 = true
+						*isTLS = true
+						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					} else {
-						*isTLS13Connection = false
-						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog()
+						*isTLS12 = true
+						*isTLS = true
+						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					}
 					*numberOfPacketToFilter = 0
 					return
 				}
+			} else if bytes.Equal(tlsClientHandShakeStart, startsBytes[:2]) && startsBytes[5] == 0x01 {
+				*isTLS = true
+				newError("XtlsFilterTls13 found tls client hello! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 		if (*numberOfPacketToFilter == 0) {
-			newError("XtlsFilterTls13 stop filtering, did not find internal tls connection ", buffer.Len()).WriteToLog()
+			newError("XtlsFilterTls13 stop filtering", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}
+}
+
+// CtlsPadding add padding to eliminate length siganature during tls handshake
+func XtlsPadding(b *buf.Buffer, command byte, userUUID []byte, ctx context.Context) int {
+	if (b.Len() < 900) {
+		l, err := rand.Int(rand.Reader, big.NewInt(500))
+		if err != nil {
+			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		}
+		length := int32(l.Int64()) + 1 + 900 - b.Len()
+		b.Extend(length - 1)
+		b.Write([]byte{ command, byte(length), byte((length) >> 8) })
+		b.Write(userUUID)
+		newError("XtlsPadding ", length + 18, " ", command).WriteToLog(session.ExportIDToError(ctx))
+		return int(length + 18)
+	} else if command != 0x00 {
+		b.Write([]byte{ command, 0x01, 0x00 })
+		b.Write(userUUID)
+		newError("XtlsPadding 19 ", command).WriteToLog(session.ExportIDToError(ctx))
+		return 19
+	}
+	return 0
 }

@@ -501,7 +501,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
-	isTLS13Connection := false
+	isTLS13 := false
+	isTLS12 := false
+	isTLS := false
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -517,9 +519,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, nil, account.ID.Bytes(), false, &isTLS13Connection)
+				//TODO enable splice
+				ctx = session.ContextWithInbound(ctx, nil)
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
 			} else {
-				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
+				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
@@ -543,23 +547,36 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		// default: clientWriter := bufferWriter
 		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons)
-		{
-			multiBuffer, err := serverReader.ReadMultiBuffer()
-			if err != nil {
-				return err // ...
+		multiBuffer, err1 := serverReader.ReadMultiBuffer()
+		if err1 != nil {
+			return err1 // ...
+		}
+		padding := 0
+		if requestAddons.Flow == vless.XRV {
+			i := 5
+			encoding.XtlsFilterTls13(multiBuffer, &i, &isTLS13, &isTLS12, &isTLS, ctx)
+			if isTLS {
+				for _, b := range multiBuffer {
+					padding = encoding.XtlsPadding(b, 0x00, account.ID.Bytes(), ctx)
+				}
 			}
-			if requestAddons.Flow == vless.XRV {
-				i := 5
-				encoding.XtlsFilterTls13(multiBuffer, &i, &isTLS13Connection)
+		}
+		if padding > 0 {
+			// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return newError("failed to write A response payload").Base(err).AtWarning()
 			}
 			if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
 				return err // ...
 			}
-		}
-
-		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
-		if err := bufferWriter.SetBuffered(false); err != nil {
-			return newError("failed to write A response payload").Base(err).AtWarning()
+		} else {
+			if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
+				return err // ...
+			}
+			// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return newError("failed to write A response payload").Base(err).AtWarning()
+			}
 		}
 
 		var err error
@@ -568,7 +585,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, iConn.(*tls.Conn), counter, account.ID.Bytes(), true, &isTLS13Connection)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

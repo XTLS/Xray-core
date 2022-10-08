@@ -5,7 +5,6 @@ package outbound
 import (
 	"context"
 	"syscall"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -129,8 +128,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	var rawConn syscall.RawConn
-	var sctx context.Context
-
 	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRO + "-udp443", vless.XRD + "-udp443", vless.XRS + "-udp443", vless.XRV + "-udp443":
@@ -151,7 +148,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				if _, ok := iConn.(*xtls.Conn); ok {
 					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
 				}
-				sctx = ctx
 				if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
 					rawConn, _ = sc.SyscallConn()
 				}
@@ -160,7 +156,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				xtlsConn.SHOW = xtls_show
 				xtlsConn.MARK = "XTLS"
 				if requestAddons.Flow == vless.XRS {
-					sctx = ctx
 					requestAddons.Flow = vless.XRD
 				}
 				if requestAddons.Flow == vless.XRD {
@@ -185,7 +180,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
-	isTLS13Connection := false
+	isTLS13 := false
+	isTLS12 := false
+	isTLS := false
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
@@ -206,13 +203,36 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target)
 		}
-		if err := buf.CopyOnceTimeout(clientReader, serverWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-			return err // ...
+		multiBuffer, err1 := clientReader.ReadMultiBuffer()
+		if err1 != nil {
+			return err1 // ...
 		}
-
-		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
-		if err := bufferWriter.SetBuffered(false); err != nil {
-			return newError("failed to write A request payload").Base(err).AtWarning()
+		padding := 0
+		if requestAddons.Flow == vless.XRV {
+			i := 5
+			encoding.XtlsFilterTls13(multiBuffer, &i, &isTLS13, &isTLS12, &isTLS, ctx)
+			if isTLS {
+				for _, b := range multiBuffer {
+					padding = encoding.XtlsPadding(b, 0x00, account.ID.Bytes(), ctx)
+				}
+			}
+		}
+		if padding > 0 {
+			// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return newError("failed to write A request payload").Base(err).AtWarning()
+			}
+			if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
+				return err // ...
+			}
+		} else {
+			if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
+				return err // ...
+			}
+			// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return newError("failed to write A request payload").Base(err).AtWarning()
+			}
 		}
 
 		var err error
@@ -221,7 +241,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, account.ID.Bytes(), false, &isTLS13Connection)
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -257,9 +277,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, sctx, account.ID.Bytes(), true, &isTLS13Connection)
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
 			} else {
-				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
+				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
