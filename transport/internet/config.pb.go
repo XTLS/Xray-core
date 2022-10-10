@@ -424,6 +424,7 @@ type SocketConfig struct {
 	DialerProxy                string         `protobuf:"bytes,9,opt,name=dialer_proxy,json=dialerProxy,proto3" json:"dialer_proxy,omitempty"`
 	TcpKeepAliveInterval       int32          `protobuf:"varint,10,opt,name=tcp_keep_alive_interval,json=tcpKeepAliveInterval,proto3" json:"tcp_keep_alive_interval,omitempty"`
 	TcpKeepAliveIdle           int32          `protobuf:"varint,11,opt,name=tcp_keep_alive_idle,json=tcpKeepAliveIdle,proto3" json:"tcp_keep_alive_idle,omitempty"`
+        TcpCongestion              string         `protobuf:"bytes,12,opt,name=tcp_congestion,json=tcpCongestion,proto3 json:"tcp_congestion,omitempty"`
 }
 
 func (x *SocketConfig) Reset() {

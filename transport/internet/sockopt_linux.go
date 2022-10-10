@@ -77,6 +77,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return newError("failed to unset SO_KEEPALIVE", err)
 			}
 		}
+
+                if config.TcpCongestion != "" {
+                        if err := syscall.SetsockoptString(int(fd), syscall.SOL_TCP, syscall.TCP_CONGESTION, config.TcpCongestion); err != nil {
+                                return newError("failed to set TCP_CONGESTION", err)
+                        }
+                }
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -121,6 +127,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				return newError("failed to unset SO_KEEPALIVE", err)
 			}
 		}
+
+                if config.TcpCongestion != "" {
+                        if err := syscall.SetsockoptString(int(fd), syscall.SOL_TCP, syscall.TCP_CONGESTION, config.TcpCongestion); err != nil {
+                                return newError("failed to set TCP_CONGESTION", err)
+                        }
+                }
 	}
 
 	if config.Tproxy.IsEnabled() {
