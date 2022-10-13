@@ -39,8 +39,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
-	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	if tlsConfig == nil {
+	tlsConfigs := tls.ConfigFromStreamSettings(streamSettings)
+	if tlsConfigs == nil {
 		return nil, newError("TLS must be enabled for http transport.").AtWarning()
 	}
 	sockopt := streamSettings.SocketSettings
@@ -74,7 +74,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
-			cn := gotls.Client(pconn, tlsConfig)
+			var cn tls.Interface
+			if fingerprint, ok := tls.Fingerprints[tlsConfigs.Fingerprint]; ok {
+				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
+			} else {
+				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
+			}
 			if err := cn.Handshake(); err != nil {
 				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
@@ -85,16 +90,16 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 			}
-			state := cn.ConnectionState()
-			if p := state.NegotiatedProtocol; p != http2.NextProtoTLS {
-				return nil, newError("http2: unexpected ALPN protocol " + p + "; want q" + http2.NextProtoTLS).AtError()
+			negotiatedProtocol, negotiatedProtocolIsMutual := cn.NegotiatedProtocol()
+			if negotiatedProtocol != http2.NextProtoTLS {
+				return nil, newError("http2: unexpected ALPN protocol " + negotiatedProtocol + "; want q" + http2.NextProtoTLS).AtError()
 			}
-			if !state.NegotiatedProtocolIsMutual {
+			if !negotiatedProtocolIsMutual {
 				return nil, newError("http2: could not negotiate protocol mutually").AtError()
 			}
 			return cn, nil
 		},
-		TLSClientConfig: tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
+		TLSClientConfig: tlsConfigs.GetTLSConfig(tls.WithDestination(dest)),
 	}
 
 	if httpSettings.IdleTimeout > 0 || httpSettings.HealthCheckTimeout > 0 {
