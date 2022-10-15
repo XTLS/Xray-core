@@ -76,10 +76,10 @@ func (c *UConn) WebsocketHandshake() error {
 	}
 	// Iterate over extensions and check for utls.ALPNExtension
 	hasALPNExtension := false
-	for i, extension := range c.Extensions {
-		if _, ok := extension.(*utls.ALPNExtension); ok {
+	for _, extension := range c.Extensions {
+		if alpn, ok := extension.(*utls.ALPNExtension); ok {
 			hasALPNExtension = true
-			c.Extensions[i] = &utls.ALPNExtension{AlpnProtocols: []string{"http/1.1"}}
+			alpn.AlpnProtocols = []string{"http/1.1"}
 			break
 		}
 	}
