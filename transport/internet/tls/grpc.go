@@ -27,7 +27,7 @@ func (t grpcUtlsInfo) AuthType() string {
 // GetSecurityValue returns security info requested by channelz.
 func (t grpcUtlsInfo) GetSecurityValue() credentials.ChannelzSecurityValue {
 	v := &credentials.TLSChannelzSecurityValue{
-		StandardName: strconv.FormatUint(uint64(t.State.CipherSuite), 10),
+		StandardName: "0x" + strconv.FormatUint(uint64(t.State.CipherSuite), 16),
 	}
 	// Currently there's no way to get LocalCertificate info from tls package.
 	if len(t.State.PeerCertificates) > 0 {
