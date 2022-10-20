@@ -121,7 +121,13 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	if tlsConfig != nil {
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig.GetTLSConfig())))
+		var transportCredential credentials.TransportCredentials
+		if fingerprint, exists := tls.Fingerprints[tlsConfig.Fingerprint]; exists {
+			transportCredential = tls.NewGrpcUtls(tlsConfig.GetTLSConfig(), fingerprint)
+		} else { // Fallback to normal gRPC TLS
+			transportCredential = credentials.NewTLS(tlsConfig.GetTLSConfig())
+		}
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(transportCredential))
 	} else {
 		dialOptions = append(dialOptions, grpc.WithInsecure())
 	}
