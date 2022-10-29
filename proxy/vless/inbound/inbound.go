@@ -504,6 +504,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	isTLS13 := false
 	isTLS12 := false
 	isTLS := false
+	numberOfPacketToFilter := 8
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -521,7 +522,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if requestAddons.Flow == vless.XRV {
 				//TODO enable splice
 				ctx = session.ContextWithInbound(ctx, nil)
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
@@ -553,8 +554,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		padding := 0
 		if requestAddons.Flow == vless.XRV {
-			i := 5
-			encoding.XtlsFilterTls13(multiBuffer, &i, &isTLS13, &isTLS12, &isTLS, ctx)
+			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
 			if isTLS {
 				for _, b := range multiBuffer {
 					padding = encoding.XtlsPadding(b, 0x00, account.ID.Bytes(), ctx)
@@ -585,7 +585,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

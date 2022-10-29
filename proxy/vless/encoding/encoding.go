@@ -245,13 +245,9 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
-		numberOfPacketToFilter := 0
-		if !*isTLS12 && !*isTLS13 {
-			numberOfPacketToFilter = 5
-		}
 		filterUUID := true
 		shouldSwitchToDirectCopy := false
 		for {
@@ -291,10 +287,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				if numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
+				if *numberOfPacketToFilter > 0 {
+					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
-				if filterUUID && (*isTLS || numberOfPacketToFilter > 0) {
+				if filterUUID && (*isTLS || *numberOfPacketToFilter > 0) {
 					for i, b := range buffer {
 						if b.Len() >= 19 && bytes.Equal(userUUID, b.BytesFrom(b.Len() - 16)) {
 							paddingInfo := b.BytesRange(b.Len() - 19, b.Len() - 16)
@@ -313,6 +309,8 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 							} else {
 								newError("XtlsRead error with padding!").AtWarning().WriteToLog(session.ExportIDToError(ctx))
 							}
+						} else {
+							newError("XtlsRead read buffer", i, " ", b.Len()).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 						}
 					}
 				}
@@ -336,20 +334,16 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID []byte, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
-		numberOfPacketToFilter := 0
-		if !*isTLS12 && !*isTLS13 {
-			numberOfPacketToFilter = 5
-		}
 		filterTlsApplicationData := true
 		shouldSwitchToDirectCopy := false
 		for {
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				if numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, &numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
+				if *numberOfPacketToFilter > 0 {
+					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
 				if filterTlsApplicationData && *isTLS {
 					var xtlsSpecIndex int
@@ -364,7 +358,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 							filterTlsApplicationData = false
 							XtlsPadding(b, command, userUUID, ctx)
 							break
-						} else if !*isTLS12 && !*isTLS13 && numberOfPacketToFilter == 0 {
+						} else if !*isTLS12 && !*isTLS13 && *numberOfPacketToFilter == 0 {
 							//maybe tls 1.1 or 1.0
 							filterTlsApplicationData = false
 							XtlsPadding(b, 0x01, userUUID, ctx)

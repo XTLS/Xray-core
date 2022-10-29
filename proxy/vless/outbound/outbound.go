@@ -183,6 +183,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	isTLS13 := false
 	isTLS12 := false
 	isTLS := false
+	numberOfPacketToFilter := 8
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
@@ -209,8 +210,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		padding := 0
 		if requestAddons.Flow == vless.XRV {
-			i := 5
-			encoding.XtlsFilterTls13(multiBuffer, &i, &isTLS13, &isTLS12, &isTLS, ctx)
+			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
 			if isTLS {
 				for _, b := range multiBuffer {
 					padding = encoding.XtlsPadding(b, 0x00, account.ID.Bytes(), ctx)
@@ -241,7 +241,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -277,7 +277,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 			} else {
 				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
