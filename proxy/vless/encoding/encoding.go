@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -250,6 +251,9 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 		var ct stats.Counter
 		filterUUID := true
 		shouldSwitchToDirectCopy := false
+		var remainingContent int32 = -1
+		var remainingPadding int32 = -1
+		currentCommand := 0
 		for {
 			if shouldSwitchToDirectCopy {
 				shouldSwitchToDirectCopy = false
@@ -287,32 +291,21 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				if *numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
-				}
 				if filterUUID && (*isTLS || *numberOfPacketToFilter > 0) {
-					for i, b := range buffer {
-						if b.Len() >= 19 && bytes.Equal(userUUID, b.BytesFrom(b.Len() - 16)) {
-							paddingInfo := b.BytesRange(b.Len() - 19, b.Len() - 16)
-							total := (int32(paddingInfo[2])<<8 | int32(paddingInfo[1])) + 18
-							if paddingInfo[0] == 0x01 {
-								filterUUID = false
-							} else if paddingInfo[0] == 0x02 {
-								filterUUID = false
-								shouldSwitchToDirectCopy = true
-							} else if paddingInfo[0] != 0x00 {
-								newError("XtlsRead unknown command ", paddingInfo[0], b.Len()).WriteToLog(session.ExportIDToError(ctx))
-							}
-							newError("XtlsRead found UUID ", i, " ", b.Len(), " padding ", total, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
-							if (b.Len() >= total) {
-								b.Resize(0, b.Len() - total)
-							} else {
-								newError("XtlsRead error with padding!").AtWarning().WriteToLog(session.ExportIDToError(ctx))
-							}
-						} else {
-							newError("XtlsRead read buffer", i, " ", b.Len()).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+					buffer = XtlsUnpadding(ctx, buffer, userUUID, &remainingContent, &remainingPadding, &currentCommand)
+					if remainingContent == 0 && remainingPadding == 0 {
+						if currentCommand == 1 {
+							filterUUID = false
+						} else if currentCommand == 2 {
+							filterUUID = false
+							shouldSwitchToDirectCopy = true
+						} else if currentCommand != 0 {
+							newError("XtlsRead unknown command ", currentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						}
 					}
+				}
+				if *numberOfPacketToFilter > 0 {
+					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
 				if ct != nil {
 					ct.Add(int64(buffer.Len()))
@@ -334,7 +327,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		filterTlsApplicationData := true
@@ -356,18 +349,18 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 								command = 0x02
 							}
 							filterTlsApplicationData = false
-							XtlsPadding(b, command, userUUID, ctx)
+							buffer[i] = XtlsPadding(b, command, userUUID, ctx)
 							break
-						} else if !*isTLS12 && !*isTLS13 && *numberOfPacketToFilter == 0 {
+						} else if !*isTLS12 && !*isTLS13 && *numberOfPacketToFilter <= 0 {
 							//maybe tls 1.1 or 1.0
 							filterTlsApplicationData = false
-							XtlsPadding(b, 0x01, userUUID, ctx)
+							buffer[i] = XtlsPadding(b, 0x01, userUUID, ctx)
 							break
 						}
-						XtlsPadding(b, 0x00, userUUID, ctx)
+						buffer[i] = XtlsPadding(b, 0x00, userUUID, ctx)
 					}
 					if shouldSwitchToDirectCopy {
-						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex + 1)
+						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex+1)
 						length := encryptBuffer.Len()
 						if !encryptBuffer.IsEmpty() {
 							timer.Update()
@@ -379,6 +372,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 						writer = buf.NewWriter(conn.NetConn())
 						ct = counter
 						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
+						time.Sleep(5 * time.Millisecond) // for some device, the first xtls direct packet fails without this delay
 					}
 				}
 				if !buffer.IsEmpty() {
@@ -411,7 +405,7 @@ func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS1
 			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
 				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
 				if b.Len() >= int32(total) {
-					if (bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions)) {
+					if bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions) {
 						*isTLS13 = true
 						*isTLS = true
 						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
@@ -428,30 +422,102 @@ func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS1
 				newError("XtlsFilterTls13 found tls client hello! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
-		if (*numberOfPacketToFilter == 0) {
+		if *numberOfPacketToFilter <= 0 {
 			newError("XtlsFilterTls13 stop filtering", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}
 }
 
-// CtlsPadding add padding to eliminate length siganature during tls handshake
-func XtlsPadding(b *buf.Buffer, command byte, userUUID []byte, ctx context.Context) int {
-	if (b.Len() < 900) {
+// XtlsPadding add padding to eliminate length siganature during tls handshake
+func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, ctx context.Context) *buf.Buffer {
+	var length int32 = 0
+	if b.Len() < 900 {
 		l, err := rand.Int(rand.Reader, big.NewInt(500))
 		if err != nil {
 			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
-		length := int32(l.Int64()) + 1 + 900 - b.Len()
-		b.Extend(length - 1)
-		b.Write([]byte{ command, byte(length), byte((length) >> 8) })
-		b.Write(userUUID)
-		newError("XtlsPadding ", length + 18, " ", command).WriteToLog(session.ExportIDToError(ctx))
-		return int(length + 18)
-	} else if command != 0x00 {
-		b.Write([]byte{ command, 0x01, 0x00 })
-		b.Write(userUUID)
-		newError("XtlsPadding 19 ", command).WriteToLog(session.ExportIDToError(ctx))
-		return 19
+		length = int32(l.Int64()) + 900 - b.Len()
 	}
-	return 0
+	newbuffer := buf.New()
+	if userUUID != nil {
+		newbuffer.Write(*userUUID)
+		*userUUID = nil
+	}
+	newbuffer.Write([]byte{command, byte(b.Len() >> 8), byte(b.Len()), byte(length >> 8), byte(length)})
+	newbuffer.Write(b.Bytes())
+	newbuffer.Extend(length)
+	newError("XtlsPadding ", b.Len(), " ", length, " ", command).WriteToLog(session.ExportIDToError(ctx))
+	b.Release()
+	b = nil
+	return newbuffer
+}
+
+// XtlsUnpadding remove padding and parse command
+func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte, remainingContent *int32, remainingPadding *int32, currentCommand *int) buf.MultiBuffer {
+	posindex := 0
+	var posByte int32 = 0
+	if *remainingContent == -1 && *remainingPadding == -1 {
+		for i, b := range buffer {
+			if b.Len() >= 21 && bytes.Equal(userUUID, b.BytesTo(16)) {
+				posindex = i
+				posByte = 16
+				*remainingContent = 0
+				*remainingPadding = 0
+				break
+			}
+		}
+	}
+	if *remainingContent == -1 && *remainingPadding == -1 {
+		return buffer
+	}
+	mb2 := make(buf.MultiBuffer, 0, len(buffer))
+	for i := 0; i < posindex; i++ {
+		newbuffer := buf.New()
+		newbuffer.Write(buffer[i].Bytes())
+		mb2 = append(mb2, newbuffer)
+	}
+	for i := posindex; i < len(buffer); i++ {
+		b := buffer[i]
+		for posByte < b.Len() {
+			if *remainingContent <= 0 && *remainingPadding <= 0 {
+				if *currentCommand == 1 {
+					len := b.Len() - posByte
+					newbuffer := buf.New()
+					newbuffer.Write(b.BytesRange(posByte, posByte+len))
+					mb2 = append(mb2, newbuffer)
+					posByte += len
+				} else {
+					paddingInfo := b.BytesRange(posByte, posByte+5)
+					*currentCommand = int(paddingInfo[0])
+					*remainingContent = int32(paddingInfo[1])<<8 | int32(paddingInfo[2])
+					*remainingPadding = int32(paddingInfo[3])<<8 | int32(paddingInfo[4])
+					newError("Xtls Unpadding new block", i, " ", posByte, " content ", *remainingContent, " padding ", *remainingPadding, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
+					posByte += 5
+				}
+			} else if *remainingContent > 0 {
+				len := *remainingContent
+				if b.Len() < posByte+*remainingContent {
+					len = b.Len() - posByte
+				}
+				newbuffer := buf.New()
+				newbuffer.Write(b.BytesRange(posByte, posByte+len))
+				mb2 = append(mb2, newbuffer)
+				*remainingContent -= len
+				posByte += len
+			} else { // remainingPadding > 0
+				len := *remainingPadding
+				if b.Len() < posByte+*remainingPadding {
+					len = b.Len() - posByte
+				}
+				*remainingPadding -= len
+				posByte += len
+			}
+			if posByte == b.Len() {
+				posByte = 0
+				break
+			}
+		}
+	}
+	buf.ReleaseMulti(buffer)
+	return mb2
 }
