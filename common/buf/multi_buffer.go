@@ -203,6 +203,19 @@ func SplitSize(mb MultiBuffer, size int32) (MultiBuffer, MultiBuffer) {
 	return mb, r
 }
 
+// SplitMulti splits the beginning of the MultiBuffer into first one, the index i and after into second one
+func SplitMulti(mb MultiBuffer, i int) (MultiBuffer, MultiBuffer) {
+	mb2 := make(MultiBuffer, 0, len(mb))
+	if i < len(mb) && i >= 0 {
+		mb2 = append(mb2, mb[i:]...)
+		for j := i; j < len(mb); j++ {
+			mb[j] = nil
+		}
+		mb = mb[:i]
+	}
+	return mb, mb2
+}
+
 // WriteMultiBuffer writes all buffers from the MultiBuffer to the Writer one by one, and return error if any, with leftover MultiBuffer.
 func WriteMultiBuffer(writer io.Writer, mb MultiBuffer) (MultiBuffer, error) {
 	for {
