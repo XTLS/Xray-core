@@ -116,7 +116,7 @@ func TestSelectLeastExpectedAndBaselines(t *testing.T) {
 		{Tag: "d", RTTDeviationCost: 300},
 		{Tag: "e", RTTDeviationCost: 310},
 	}
-	expected := 4
+	expected := 3
 	ns := strategy.selectLeastLoad(nodes)
 	if len(ns) != expected {
 		t.Errorf("expected: %v, actual: %v", expected, len(ns))
@@ -154,7 +154,7 @@ func TestSelectLeastLoadBaselines(t *testing.T) {
 		{Tag: "b", RTTDeviationCost: 200},
 		{Tag: "c", RTTDeviationCost: 300},
 	}
-	expected := 2
+	expected := 1
 	ns := strategy.selectLeastLoad(nodes)
 	if len(ns) != expected {
 		t.Errorf("expected: %v, actual: %v", expected, len(ns))
