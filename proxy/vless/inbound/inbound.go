@@ -519,9 +519,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
+			//TODO enable splice
+			ctx = session.ContextWithInbound(ctx, nil)
 			if requestAddons.Flow == vless.XRV {
-				//TODO enable splice
-				ctx = session.ContextWithInbound(ctx, nil)
 				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
