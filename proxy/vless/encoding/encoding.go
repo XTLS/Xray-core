@@ -246,7 +246,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		filterUUID := true
@@ -270,7 +270,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						if tc, ok := iConn.(*net.TCPConn); ok {
 							newError("XtlsRead splice").WriteToLog(session.ExportIDToError(ctx))
 							runtime.Gosched() // necessary
-							w, err := tc.ReadFrom(conn.NetConn())
+							w, err := tc.ReadFrom(conn)
 							if counter != nil {
 								counter.Add(w)
 							}
@@ -285,7 +285,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
-				reader = buf.NewReadVReader(conn.NetConn(), rawConn, nil)
+				reader = buf.NewReadVReader(conn, rawConn, nil)
 				ct = counter
 				newError("XtlsRead readV").WriteToLog(session.ExportIDToError(ctx))
 			}
@@ -327,7 +327,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *tls.Conn, counter stats.Counter, ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter, ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		filterTlsApplicationData := true
@@ -369,7 +369,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 							}
 						}
 						buffer = directBuffer
-						writer = buf.NewWriter(conn.NetConn())
+						writer = buf.NewWriter(conn)
 						ct = counter
 						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						time.Sleep(5 * time.Millisecond) // for some device, the first xtls direct packet fails without this delay

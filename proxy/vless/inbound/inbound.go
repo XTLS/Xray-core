@@ -439,6 +439,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
+	var netConn net.Conn
 	var rawConn syscall.RawConn
 
 	switch requestAddons.Flow {
@@ -451,11 +452,17 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
 			case protocol.RequestCommandTCP:
 				if requestAddons.Flow == vless.XRV {
-					if _, ok := iConn.(*xtls.Conn); ok {
+					if tlsConn, ok := iConn.(*tls.Conn); ok {
+						netConn = tlsConn.NetConn()
+						if sc, ok :=  netConn.(syscall.Conn); ok {
+							rawConn, _ = sc.SyscallConn()
+						}
+					} else if _, ok := iConn.(*tls.UConn); ok {
+						return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
+					} else if _, ok := iConn.(*xtls.Conn); ok {
 						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
-					}
-					if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
+					} else {
+						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 					}
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 					xtlsConn.RPRX = true
@@ -522,7 +529,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			//TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
@@ -576,7 +583,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, iConn.(*tls.Conn), counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

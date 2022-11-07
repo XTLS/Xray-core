@@ -127,6 +127,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Flow: account.Flow,
 	}
 
+	var netConn net.Conn
 	var rawConn syscall.RawConn
 	allowUDP443 := false
 	switch requestAddons.Flow {
@@ -145,11 +146,20 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			requestAddons.Flow = ""
 		case protocol.RequestCommandTCP:
 			if requestAddons.Flow == vless.XRV {
-				if _, ok := iConn.(*xtls.Conn); ok {
+				if tlsConn, ok := iConn.(*tls.Conn); ok {
+					netConn = tlsConn.NetConn()
+					if sc, ok :=  netConn.(syscall.Conn); ok {
+						rawConn, _ = sc.SyscallConn()
+					}
+				} else if utlsConn, ok := iConn.(*tls.UConn); ok {
+					netConn = utlsConn.Conn.NetConn()
+					if sc, ok := netConn.(syscall.Conn); ok {
+						rawConn, _ = sc.SyscallConn()
+					}
+				} else if _, ok := iConn.(*xtls.Conn); ok {
 					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
-				}
-				if sc, ok := iConn.(*tls.Conn).NetConn().(syscall.Conn); ok {
-					rawConn, _ = sc.SyscallConn()
+				} else {
+					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 				}
 			} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
@@ -231,7 +241,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, iConn.(*tls.Conn), counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -267,7 +277,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, iConn.(*tls.Conn), rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
 			} else {
 				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
