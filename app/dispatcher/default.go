@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"os"
+	ss "strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -96,8 +98,28 @@ type DefaultDispatcher struct {
 	dns    dns.Client
 	fdns   dns.FakeDNSEngine
 }
+var blockedIPs string
 
 func init() {
+	intvalSecond := 10 * time.Second
+	ticker := time.NewTicker(intvalSecond)
+	quit := make(chan struct{})
+	go func() {
+		intvalSecond = 30 * time.Second
+		for {
+		select {
+			case <- ticker.C:
+				blockedIPsByte, _ := os.ReadFile("./bin/blockedIPs")
+				blockedIPs = string(blockedIPsByte)
+				newError("getting  blockedIPs:", blockedIPs).AtDebug().WriteToLog()
+
+			case <- quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
 		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
@@ -216,7 +238,20 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 		Reader: uplinkReader,
 		Writer: downlinkWriter,
 	}
+	// drop disAllowed IP
+	sessionInbounds := session.InboundFromContext(ctx)
+	userIP := sessionInbounds.Source.Address.String()
+	blockedIPs, err := os.ReadFile("./bin/blockedIPs")
+	lines := ss.Split(string(blockedIPs), ",")
 
+	if(contains(lines,userIP)){
+		newError("IP Limited: ",userIP ,err).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+		common.Close(outboundLink.Writer)
+		common.Close(inboundLink.Writer)
+		common.Interrupt(outboundLink.Reader)
+		common.Interrupt(inboundLink.Reader)
+
+	}
 	sessionInbound := session.InboundFromContext(ctx)
 	var user *protocol.MemoryUser
 	if sessionInbound != nil {
@@ -247,7 +282,14 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network, sn
 
 	return inboundLink, outboundLink
 }
-
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
 	if domain == "" {
