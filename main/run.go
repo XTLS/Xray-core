@@ -33,6 +33,10 @@ The -confdir=dir flag sets a dir with multiple json config
 The -format=json flag sets the format of config files. 
 Default "auto".
 
+The -restrictedIPsPath=file, -rip=file flags set the restricted IPs file path
+The IPs should split by "," in file. EX : 1.1.1.1,2.2.2.2 
+Default "".
+
 The -test flag tells Xray to test config files only, 
 without launching the server
 	`,
@@ -45,6 +49,7 @@ func init() {
 var (
 	configFiles cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
 	configDir   string
+	restrictedIPsPath  string
 	test        = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
 	format      = cmdRun.Flag.String("format", "auto", "Format of input file.")
 
@@ -55,6 +60,8 @@ var (
 		cmdRun.Flag.Var(&configFiles, "config", "Config path for Xray.")
 		cmdRun.Flag.Var(&configFiles, "c", "Short alias of -config")
 		cmdRun.Flag.StringVar(&configDir, "confdir", "", "A dir with multiple json config")
+		cmdRun.Flag.StringVar(&restrictedIPsPath, "restrictedIPsPath", "", "disAllowed IPs file path")
+		cmdRun.Flag.StringVar(&restrictedIPsPath, "rip", "", "Short alias of -restrictedIPsPath")
 
 		return true
 	}()
