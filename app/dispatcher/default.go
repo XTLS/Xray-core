@@ -280,6 +280,9 @@ func initRestrictedIPs(){
 	ticker := time.NewTicker(intvalSecond)
 	quit := make(chan struct{})
 	restrictedIPsPath := getOsArgValue(os.Args,"-restrictedIPsPath","-rip")
+	if restrictedIPsPath == "" {
+		return
+	}
 	go func() {
 		intvalSecond = 30 * time.Second
 		for {
@@ -297,7 +300,9 @@ func initRestrictedIPs(){
 	}()
 }
 func dropRestrictedConnections(ctx context.Context,outboundLink *transport.Link,inboundLink *transport.Link){
-	
+	if restrictedIPs == ""{
+		return
+	}
 	// Drop Restricted Connections
 	sessionInbounds := session.InboundFromContext(ctx)
 	userIP := sessionInbounds.Source.Address.String()
