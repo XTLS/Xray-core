@@ -439,10 +439,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
+	var netConn net.Conn
 	var rawConn syscall.RawConn
 
 	switch requestAddons.Flow {
-	case vless.XRO, vless.XRD:
+	case vless.XRO, vless.XRD, vless.XRV:
 		if account.Flow == requestAddons.Flow {
 			switch request.Command {
 			case protocol.RequestCommandMux:
@@ -450,7 +451,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
 			case protocol.RequestCommandTCP:
-				if xtlsConn, ok := iConn.(*xtls.Conn); ok {
+				if requestAddons.Flow == vless.XRV {
+					if tlsConn, ok := iConn.(*tls.Conn); ok {
+						netConn = tlsConn.NetConn()
+						if sc, ok :=  netConn.(syscall.Conn); ok {
+							rawConn, _ = sc.SyscallConn()
+						}
+					} else if _, ok := iConn.(*tls.UConn); ok {
+						return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
+					} else if _, ok := iConn.(*xtls.Conn); ok {
+						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
+					} else {
+						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+					}
+				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 					xtlsConn.RPRX = true
 					xtlsConn.SHOW = xtls_show
 					xtlsConn.MARK = "XTLS"
@@ -494,6 +508,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
+	isTLS13 := false
+	isTLS12 := false
+	isTLS := false
+	numberOfPacketToFilter := 8
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -508,7 +526,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
+			//TODO enable splice
+			ctx = session.ContextWithInbound(ctx, nil)
+			if requestAddons.Flow == vless.XRV {
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+			} else {
+				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
+			}
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -531,26 +555,42 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		// default: clientWriter := bufferWriter
 		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons)
-		{
-			multiBuffer, err := serverReader.ReadMultiBuffer()
-			if err != nil {
-				return err // ...
-			}
-			if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
-				return err // ...
+		userUUID := account.ID.Bytes()
+		multiBuffer, err1 := serverReader.ReadMultiBuffer()
+		if err1 != nil {
+			return err1 // ...
+		}
+		if requestAddons.Flow == vless.XRV {
+			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
+			if isTLS {
+				for i, b := range multiBuffer {
+					
+					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
+				}
 			}
 		}
-
+		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
+			return err // ...
+		}
 		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
 		if err := bufferWriter.SetBuffered(false); err != nil {
 			return newError("failed to write A response payload").Base(err).AtWarning()
 		}
 
-		// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
-		if err := buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer)); err != nil {
+		var err error
+		if rawConn != nil && requestAddons.Flow == vless.XRV {
+			var counter stats.Counter
+			if statConn != nil {
+				counter = statConn.WriteCounter
+			}
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+		} else {
+			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
+			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
+		}
+		if err != nil {
 			return newError("failed to transfer response payload").Base(err).AtInfo()
 		}
-
 		// Indicates the end of response payload.
 		switch responseAddons.Flow {
 		default:
