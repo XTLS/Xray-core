@@ -247,7 +247,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn, counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		filterUUID := true
@@ -306,7 +306,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 					}
 				}
 				if *numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
+					XtlsFilterTls(buffer, numberOfPacketToFilter, enableXtls, isTLS12orAbove, isTLS, ctx)
 				}
 				if ct != nil {
 					ct.Add(int64(buffer.Len()))
@@ -328,7 +328,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter, ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter, ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool) error {
 	err := func() error {
 		var ct stats.Counter
 		filterTlsApplicationData := true
@@ -337,7 +337,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				if *numberOfPacketToFilter > 0 {
-					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
+					XtlsFilterTls(buffer, numberOfPacketToFilter, enableXtls, isTLS12orAbove, isTLS, ctx)
 				}
 				if filterTlsApplicationData && *isTLS {
 					buffer = ReshapeMultiBuffer(ctx, buffer)
@@ -345,7 +345,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 					for i, b := range buffer {
 						if b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
 							var command byte = 0x01
-							if *isTLS13 {
+							if *enableXtls {
 								shouldSwitchToDirectCopy = true
 								xtlsSpecIndex = i
 								command = 0x02
@@ -353,7 +353,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 							filterTlsApplicationData = false
 							buffer[i] = XtlsPadding(b, command, userUUID, ctx)
 							break
-						} else if !*isTLS12 && !*isTLS13 && *numberOfPacketToFilter <= 0 {
+						} else if !*isTLS12orAbove && *numberOfPacketToFilter <= 0 {
 							//maybe tls 1.1 or 1.0
 							filterTlsApplicationData = false
 							buffer[i] = XtlsPadding(b, 0x01, userUUID, ctx)
@@ -398,8 +398,8 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 	return nil
 }
 
-// XtlsFilterTls13 filter and recognize tls 1.3
-func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS13 *bool, isTLS12 *bool, isTLS *bool, ctx context.Context) {
+// XtlsFilterTls filter and recognize tls 1.3 and other info
+func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool, ctx context.Context) {
 	for _, b := range buffer {
 		*numberOfPacketToFilter--
 		if b.Len() >= 6 {
@@ -408,14 +408,13 @@ func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS1
 				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
 				if b.Len() >= int32(total) {
 					if bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions) {
-						*isTLS13 = true
-						*isTLS = true
+						*enableXtls = true
 						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					} else {
-						*isTLS12 = true
-						*isTLS = true
 						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					}
+					*isTLS12orAbove = true
+					*isTLS = true
 					*numberOfPacketToFilter = 0
 					return
 				}
@@ -434,17 +433,17 @@ func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS1
 func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBuffer {
 	needReshape := false
 	for _, b := range buffer {
-		if b.Len() >= buf.Size - 21 {
+		if b.Len() >= buf.Size-21 {
 			needReshape = true
 		}
 	}
 	if !needReshape {
-		return buffer;
+		return buffer
 	}
 	mb2 := make(buf.MultiBuffer, 0, len(buffer))
 	print := ""
 	for _, b := range buffer {
-		if b.Len() >= buf.Size - 21 {
+		if b.Len() >= buf.Size-21 {
 			index := int32(bytes.LastIndex(b.Bytes(), tlsApplicationDataStart))
 			if index <= 0 {
 				index = buf.Size / 2

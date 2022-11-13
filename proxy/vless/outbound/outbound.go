@@ -148,7 +148,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if requestAddons.Flow == vless.XRV {
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
 					netConn = tlsConn.NetConn()
-					if sc, ok :=  netConn.(syscall.Conn); ok {
+					if sc, ok := netConn.(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
 				} else if utlsConn, ok := iConn.(*tls.UConn); ok {
@@ -190,8 +190,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
-	isTLS13 := false
-	isTLS12 := false
+	enableXtls := false
+	isTLS12orAbove := false
 	isTLS := false
 	numberOfPacketToFilter := 8
 
@@ -220,7 +220,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return err1 // ...
 		}
 		if requestAddons.Flow == vless.XRV {
-			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
+			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, ctx)
 			if isTLS {
 				for i, b := range multiBuffer {
 					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
@@ -241,7 +241,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -277,7 +277,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS)
 			} else {
 				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}

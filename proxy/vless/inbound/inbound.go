@@ -454,7 +454,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				if requestAddons.Flow == vless.XRV {
 					if tlsConn, ok := iConn.(*tls.Conn); ok {
 						netConn = tlsConn.NetConn()
-						if sc, ok :=  netConn.(syscall.Conn); ok {
+						if sc, ok := netConn.(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}
 					} else if _, ok := iConn.(*tls.UConn); ok {
@@ -508,8 +508,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
-	isTLS13 := false
-	isTLS12 := false
+	enableXtls := false
+	isTLS12orAbove := false
 	isTLS := false
 	numberOfPacketToFilter := 8
 
@@ -529,7 +529,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			//TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
@@ -561,7 +561,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return err1 // ...
 		}
 		if requestAddons.Flow == vless.XRV {
-			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
+			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, ctx)
 			if isTLS {
 				multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
 				for i, b := range multiBuffer {
@@ -583,7 +583,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
