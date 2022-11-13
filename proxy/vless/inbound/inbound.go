@@ -563,8 +563,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			encoding.XtlsFilterTls13(multiBuffer, &numberOfPacketToFilter, &isTLS13, &isTLS12, &isTLS, ctx)
 			if isTLS {
+				multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
 				for i, b := range multiBuffer {
-					
 					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
 				}
 			}

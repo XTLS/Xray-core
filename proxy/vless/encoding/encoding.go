@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/big"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -339,6 +340,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 					XtlsFilterTls13(buffer, numberOfPacketToFilter, isTLS13, isTLS12, isTLS, ctx)
 				}
 				if filterTlsApplicationData && *isTLS {
+					buffer = ReshapeMultiBuffer(ctx, buffer)
 					var xtlsSpecIndex int
 					for i, b := range buffer {
 						if b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
@@ -428,6 +430,43 @@ func XtlsFilterTls13(buffer buf.MultiBuffer, numberOfPacketToFilter *int, isTLS1
 	}
 }
 
+// ReshapeMultiBuffer prepare multi buffer for padding stucture (max 21 bytes)
+func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBuffer {
+	needReshape := false
+	for _, b := range buffer {
+		if b.Len() >= buf.Size - 21 {
+			needReshape = true
+		}
+	}
+	if !needReshape {
+		return buffer;
+	}
+	mb2 := make(buf.MultiBuffer, 0, len(buffer))
+	print := ""
+	for _, b := range buffer {
+		if b.Len() >= buf.Size - 21 {
+			index := int32(bytes.LastIndex(b.Bytes(), tlsApplicationDataStart))
+			if index <= 0 {
+				index = buf.Size / 2
+			}
+			buffer1 := buf.New()
+			buffer2 := buf.New()
+			buffer1.Write(b.BytesTo(index))
+			buffer2.Write(b.BytesFrom(index))
+			mb2 = append(mb2, buffer1, buffer2)
+			print += " " + strconv.Itoa(int(buffer1.Len())) + " " + strconv.Itoa(int(buffer2.Len()))
+		} else {
+			newbuffer := buf.New()
+			newbuffer.Write(b.Bytes())
+			mb2 = append(mb2, newbuffer)
+			print += " " + strconv.Itoa(int(b.Len()))
+		}
+	}
+	buf.ReleaseMulti(buffer)
+	newError("ReshapeMultiBuffer ", print).WriteToLog(session.ExportIDToError(ctx))
+	return mb2
+}
+
 // XtlsPadding add padding to eliminate length siganature during tls handshake
 func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, ctx context.Context) *buf.Buffer {
 	var length int32 = 0
@@ -480,7 +519,7 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 		b := buffer[i]
 		for posByte < b.Len() {
 			if *remainingContent <= 0 && *remainingPadding <= 0 {
-				if *currentCommand == 1 {
+				if *currentCommand == 1 { // possible buffer after padding, no need to worry about xtls (command 2)
 					len := b.Len() - posByte
 					newbuffer := buf.New()
 					newbuffer.Write(b.BytesRange(posByte, posByte+len))
