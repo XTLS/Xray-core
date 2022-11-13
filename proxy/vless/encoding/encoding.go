@@ -406,10 +406,18 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 			startsBytes := b.BytesTo(6)
 			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
 				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
-				if b.Len() >= int32(total) {
+				if b.Len() >= int32(total) && total >= 74 {
 					if bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions) {
-						*enableXtls = true
-						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
+						sessionIdLen := int32(b.Byte(43))
+						cipherSuite := b.BytesRange(43 + sessionIdLen + 1, 43 + sessionIdLen + 3)
+						cipherNum := uint16(cipherSuite[0]) << 8 | uint16(cipherSuite[1])
+						v, ok := Tls13CipherSuiteDic[cipherNum]
+						if !ok {
+							v = "Unknown cipher!"
+						} else if (v != "TLS_AES_128_CCM_8_SHA256") {
+							*enableXtls = true
+						}
+						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len(), " ", v).WriteToLog(session.ExportIDToError(ctx))
 					} else {
 						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					}
@@ -558,4 +566,12 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 	}
 	buf.ReleaseMulti(buffer)
 	return mb2
+}
+
+var Tls13CipherSuiteDic = map[uint16]string{
+	0x1301 : "TLS_AES_128_GCM_SHA256",
+	0x1302 : "TLS_AES_256_GCM_SHA384",
+	0x1303 : "TLS_CHACHA20_POLY1305_SHA256",
+	0x1304 : "TLS_AES_128_CCM_SHA256",
+	0x1305 : "TLS_AES_128_CCM_8_SHA256",
 }
