@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	version  = "1.6.3"
+	version  = "1.6.4"
 	build    = "Custom"
 	codename = "Xray, Penetrates Everything."
 	intro    = "A unified platform for anti-censorship."
