@@ -25,6 +25,7 @@ require (
 	golang.org/x/net v0.2.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.2.0
+	golang.zx2c4.com/wireguard v0.0.0-20220920152132-bb719d3a6e2c
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
 	h12.io/socks v1.0.3
@@ -36,6 +37,7 @@ require (
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
+	github.com/google/btree v1.0.1 // indirect
 	github.com/google/pprof v0.0.0-20221112000123-84eb7ad69597 // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.0 // indirect
@@ -46,9 +48,12 @@ require (
 	golang.org/x/exp v0.0.0-20221111204811-129d8d6c17ab // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20211104114900-415007cec224 // indirect
 	google.golang.org/genproto v0.0.0-20221111202108-142d8a6fa32e // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gvisor.dev/gvisor v0.0.0-20220817001344-846276b3dbc5 // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
