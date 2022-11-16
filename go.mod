@@ -11,12 +11,12 @@ require (
 	github.com/lucas-clemente/quic-go v0.30.0
 	github.com/marten-seemann/qtls-go1-18 v0.1.3
 	github.com/miekg/dns v1.1.50
-	github.com/nanoda0523/wireguard-go v0.0.0-20221116121852-f87e70b72561
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.5
 	github.com/sagernet/sing v0.0.0-20220801112236-1bb95f9661fc
 	github.com/sagernet/sing-shadowsocks v0.0.0-20220801112336-a91eacdd01e1
+	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	github.com/stretchr/testify v1.8.1
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e

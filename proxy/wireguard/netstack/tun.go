@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanoda0523/wireguard-go/tun"
+	"github.com/sagernet/wireguard-go/tun"
 	"golang.org/x/net/dns/dnsmessage"
 	"gvisor.dev/gvisor/pkg/bufferv2"
 	"gvisor.dev/gvisor/pkg/tcpip"
