@@ -19,4 +19,5 @@ message DeviceConfig {
     repeated string endpoint = 2;
     repeated PeerConfig peers = 3;
     int32 mtu = 4;
+    int32 num_workers = 5;
 }

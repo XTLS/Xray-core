@@ -28,7 +28,6 @@ import (
 
 	"github.com/nanoda0523/wireguard-go/conn"
 	"github.com/nanoda0523/wireguard-go/device"
-	"github.com/nanoda0523/wireguard-go/tun/netstack"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
@@ -40,6 +39,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/proxy/wireguard/netstack"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -209,7 +209,7 @@ func makeVirtualTun(conf *DeviceConfig) (*netstack.Net, error) {
 				Content:  fmt.Sprintf(format, args...),
 			})
 		},
-	})
+	}, int(conf.NumWorkers))
 	err = dev.IpcSet(createIPCRequest(conf))
 	if err != nil {
 		return nil, err

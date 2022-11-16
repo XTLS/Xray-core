@@ -47,10 +47,11 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 }
 
 type WireGuardConfig struct {
-	SecretKey string                 `json:"secretKey"`
-	Address   []string               `json:"address"`
-	Peers     []*WireGuardPeerConfig `json:"peers"`
-	MTU       int                    `json:"mtu"`
+	SecretKey  string                 `json:"secretKey"`
+	Address    []string               `json:"address"`
+	Peers      []*WireGuardPeerConfig `json:"peers"`
+	MTU        int                    `json:"mtu"`
+	NumWorkers int                    `json:"workers"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -83,6 +84,9 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	} else {
 		config.Mtu = int32(c.MTU)
 	}
+	// these a fallback code exists in github.com/nanoda0523/wireguard-go code,
+	// we don't need to process fallback manually
+	config.NumWorkers = int32(c.NumWorkers)
 
 	return config, nil
 }
