@@ -322,8 +322,8 @@ github.com/mohae/deepcopy v0.0.0-20170308212314-bb9b5e7adda9/go.mod h1:TaXosZuwd
 github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f/go.mod h1:ZdcZmHo+o7JKHSa8/e818NopupXU1YMK5fe1lsApnBw=
-github.com/nanoda0523/wireguard-go v0.0.0-20221116100241-f5cbc0f31439 h1:c3n/p6ZD5A1E0vW1OGLV9edX+WwyQEZd2+xsyH+UtWQ=
-github.com/nanoda0523/wireguard-go v0.0.0-20221116100241-f5cbc0f31439/go.mod h1:yjnBmkLqQES/Cn2upHTwvXNGADeXKPLSj8ZqPFIQasw=
+github.com/nanoda0523/wireguard-go v0.0.0-20221116103249-03cd29815391 h1:7nIc+doc3IOkwGNXoOw8CUdVnZegs1GZVWo5q1Ii+sA=
+github.com/nanoda0523/wireguard-go v0.0.0-20221116103249-03cd29815391/go.mod h1:yjnBmkLqQES/Cn2upHTwvXNGADeXKPLSj8ZqPFIQasw=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
