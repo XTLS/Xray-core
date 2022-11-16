@@ -11,7 +11,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.30.0
 	github.com/marten-seemann/qtls-go1-18 v0.1.3
 	github.com/miekg/dns v1.1.50
-	github.com/nanoda0523/wireguard v0.0.0-20221116042149-fac14528bf0a
+	github.com/nanoda0523/wireguard-go v0.0.0-20221116100241-f5cbc0f31439
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.5
@@ -50,7 +50,6 @@ require (
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
-	golang.zx2c4.com/wintun v0.0.0-20211104114900-415007cec224 // indirect
 	google.golang.org/genproto v0.0.0-20221111202108-142d8a6fa32e // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

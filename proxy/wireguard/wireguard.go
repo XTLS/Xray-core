@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/nanoda0523/wireguard/conn"
-	"github.com/nanoda0523/wireguard/device"
-	"github.com/nanoda0523/wireguard/tun/netstack"
+	"github.com/nanoda0523/wireguard-go/conn"
+	"github.com/nanoda0523/wireguard-go/device"
+	"github.com/nanoda0523/wireguard-go/tun/netstack"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
