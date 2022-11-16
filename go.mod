@@ -11,6 +11,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.30.0
 	github.com/marten-seemann/qtls-go1-18 v0.1.3
 	github.com/miekg/dns v1.1.50
+	github.com/nanoda0523/wireguard v0.0.0-20221116042149-fac14528bf0a
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/refraction-networking/utls v1.1.5
@@ -25,7 +26,6 @@ require (
 	golang.org/x/net v0.2.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.2.0
-	golang.zx2c4.com/wireguard v0.0.0-20220920152132-bb719d3a6e2c
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
 	h12.io/socks v1.0.3

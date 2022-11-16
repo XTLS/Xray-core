@@ -26,6 +26,9 @@ import (
 	"fmt"
 	"net/netip"
 
+	"github.com/nanoda0523/wireguard/conn"
+	"github.com/nanoda0523/wireguard/device"
+	"github.com/nanoda0523/wireguard/tun/netstack"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
@@ -39,9 +42,6 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"golang.zx2c4.com/wireguard/conn"
-	"golang.zx2c4.com/wireguard/device"
-	"golang.zx2c4.com/wireguard/tun/netstack"
 )
 
 // Handler is an outbound connection that silently swallow the entire payload.
