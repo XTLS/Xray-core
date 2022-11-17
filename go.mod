@@ -21,7 +21,7 @@ require (
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/xtls/go v0.0.0-20220914232946-0441cf4cf837
 	go.starlark.net v0.0.0-20221028183056-acb66ad56dd2
-	golang.org/x/crypto v0.2.0
+	golang.org/x/crypto v0.3.0
 	golang.org/x/net v0.2.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.2.0
