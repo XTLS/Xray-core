@@ -46,22 +46,20 @@ import (
 
 // Handler is an outbound connection that silently swallow the entire payload.
 type Handler struct {
+	conf          *DeviceConfig
+	usedDialer    internet.Dialer
 	net           *netstack.Net
+	bind          conn.Bind
 	policyManager policy.Manager
 	dns           dns.Client
 }
 
 // New creates a new wireguard handler.
 func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
-	net, err := makeVirtualTun(conf)
-	if err != nil {
-		return nil, err
-	}
-
 	v := core.MustFromContext(ctx)
 
 	return &Handler{
-		net:           net,
+		conf:          conf,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		dns:           v.GetFeature(dns.ClientType()).(dns.Client),
 	}, nil
@@ -69,10 +67,35 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	// TODO: make it works with ProxySettings
+	if h.usedDialer != dialer || h.net == nil {
+		log.Record(&log.GeneralMessage{
+			Severity: log.Severity_Info,
+			Content:  "switching dialer",
+		})
+		// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
+		bind := &netBind{
+			ctx:     ctx,
+			dialer:  dialer,
+			workers: int(h.conf.NumWorkers),
+		}
+
+		net, err := makeVirtualTun(h.conf, bind)
+		if err != nil {
+			bind.Close()
+			return newError("failed to create virtual tun interface").Base(err)
+		}
+
+		h.net = net
+		if h.bind != nil {
+			h.bind.Close()
+		}
+		h.usedDialer = dialer
+		h.bind = bind
+	}
+
 	outbound := session.OutboundFromContext(ctx)
 	if outbound == nil || !outbound.Target.IsValid() {
-		return newError("target not specified.")
+		return newError("target not specified")
 	}
 	// Destination of the inner request.
 	destination := outbound.Target
@@ -175,7 +198,7 @@ func createIPCRequest(conf *DeviceConfig) string {
 }
 
 // creates a tun interface on netstack given a configuration
-func makeVirtualTun(conf *DeviceConfig) (*netstack.Net, error) {
+func makeVirtualTun(conf *DeviceConfig, bind conn.Bind) (*netstack.Net, error) {
 	// convert endpoint string to netip.Addr
 	endpoints := make([]netip.Addr, len(conf.Endpoint))
 	for i, str := range conf.Endpoint {
@@ -196,7 +219,7 @@ func makeVirtualTun(conf *DeviceConfig) (*netstack.Net, error) {
 	}
 
 	// dev := device.NewDevice(tun, conn.NewDefaultBind(), nil /* device.NewLogger(device.LogLevelVerbose, "") */)
-	dev := device.NewDevice(tun, conn.NewDefaultBind(), &device.Logger{
+	dev := device.NewDevice(tun, bind, &device.Logger{
 		Verbosef: func(format string, args ...any) {
 			log.Record(&log.GeneralMessage{
 				Severity: log.Severity_Debug,
