@@ -47,9 +47,8 @@ import (
 // Handler is an outbound connection that silently swallow the entire payload.
 type Handler struct {
 	conf          *DeviceConfig
-	usedDialer    internet.Dialer
 	net           *netstack.Net
-	bind          conn.Bind
+	bind          *netBind
 	policyManager policy.Manager
 	dns           dns.Client
 }
@@ -67,14 +66,13 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	if h.usedDialer != dialer || h.net == nil {
+	if h.bind == nil || h.bind.dialer != dialer || h.net == nil {
 		log.Record(&log.GeneralMessage{
 			Severity: log.Severity_Info,
 			Content:  "switching dialer",
 		})
 		// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
 		bind := &netBind{
-			ctx:     ctx,
 			dialer:  dialer,
 			workers: int(h.conf.NumWorkers),
 		}
@@ -89,7 +87,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if h.bind != nil {
 			h.bind.Close()
 		}
-		h.usedDialer = dialer
 		h.bind = bind
 	}
 

@@ -3,6 +3,7 @@ package wireguard
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/netip"
 	"sync"
@@ -25,7 +26,6 @@ type netReadInfo struct {
 
 type netBind struct {
 	workers     int
-	ctx         context.Context
 	dialer      internet.Dialer
 	connections map[conn.Endpoint]net.Conn
 
@@ -80,57 +80,71 @@ func (bind *netBind) Close() error {
 	return nil
 }
 
+func (bind *netBind) connectTo(addrPort netip.AddrPort, endpoint conn.Endpoint) (net.Conn, error) {
+	addr := addrPort.Addr()
+	var ip xnet.Address
+	if addr.Is4() {
+		ip4 := addr.As4()
+		ip = xnet.IPAddress(ip4[:])
+	} else {
+		ip6 := addr.As16()
+		ip = xnet.IPAddress(ip6[:])
+	}
+
+	dst := xnet.Destination{
+		Address: ip,
+		Port:    xnet.Port(addrPort.Port()),
+		Network: xnet.Network_UDP,
+	}
+	c, err := bind.dialer.Dial(context.Background(), dst)
+	if err != nil {
+		return nil, err
+	}
+	bind.connections[endpoint] = c
+
+	go func(readQueue <-chan *netReadInfo, endpoint conn.Endpoint) {
+		for {
+			v, ok := <-readQueue
+			if !ok {
+				return
+			}
+			i, err := c.Read(v.buff)
+			v.bytes = i
+			v.endpoint = endpoint
+			v.err = err
+			v.lock.Unlock()
+			if err != nil && errors.Is(err, io.EOF) {
+				delete(bind.connections, endpoint)
+				return
+			}
+		}
+	}(bind.readQueue, endpoint)
+
+	return c, nil
+}
+
 func (bind *netBind) Send(buff []byte, endpoint conn.Endpoint) error {
 	if bind.connections == nil {
 		return newError("bind not be open yet")
 	}
 
-	nend, ok := endpoint.(StdNetEndpoint)
-	if !ok {
-		return conn.ErrWrongEndpointType
-	}
-	addrPort := netip.AddrPort(nend)
+	var err error
 
 	uconn, ok := bind.connections[endpoint]
 	if !ok {
-		addr := addrPort.Addr()
-		var ip xnet.Address
-		if addr.Is4() {
-			ip4 := addr.As4()
-			ip = xnet.IPAddress(ip4[:])
-		} else {
-			ip6 := addr.As16()
-			ip = xnet.IPAddress(ip6[:])
+		nend, ok := endpoint.(StdNetEndpoint)
+		if !ok {
+			return conn.ErrWrongEndpointType
 		}
+		addrPort := netip.AddrPort(nend)
 
-		dst := xnet.Destination{
-			Address: ip,
-			Port:    xnet.Port(addrPort.Port()),
-			Network: xnet.Network_UDP,
-		}
-		c, err := bind.dialer.Dial(bind.ctx, dst)
+		uconn, err = bind.connectTo(addrPort, endpoint)
 		if err != nil {
 			return err
 		}
-		uconn = c
-		bind.connections[endpoint] = c
-
-		go func(readQueue <-chan *netReadInfo, endpoint conn.Endpoint) {
-			for {
-				v, ok := <-readQueue
-				if !ok {
-					return
-				}
-				i, err := uconn.Read(v.buff)
-				v.bytes = i
-				v.endpoint = endpoint
-				v.err = err
-				v.lock.Unlock()
-			}
-		}(bind.readQueue, endpoint)
 	}
 
-	_, err := uconn.Write(buff)
+	_, err = uconn.Write(buff)
 
 	return err
 }
