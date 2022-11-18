@@ -13,7 +13,7 @@ require (
 	github.com/miekg/dns v1.1.50
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
-	github.com/refraction-networking/utls v1.1.5
+	github.com/refraction-networking/utls v1.2.0
 	github.com/sagernet/sing v0.0.0-20220801112236-1bb95f9661fc
 	github.com/sagernet/sing-shadowsocks v0.0.0-20220801112336-a91eacdd01e1
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
