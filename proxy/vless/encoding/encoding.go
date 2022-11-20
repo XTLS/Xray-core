@@ -406,7 +406,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 			startsBytes := b.BytesTo(6)
 			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
 				total := (int(startsBytes[3])<<8 | int(startsBytes[4])) + 5
-				if b.Len() >= int32(total) && total >= 74 {
+				if b.Len() >= 74 && total >= 74 {
 					if bytes.Contains(b.BytesTo(int32(total)), tls13SupportedVersions) {
 						sessionIdLen := int32(b.Byte(43))
 						cipherSuite := b.BytesRange(43 + sessionIdLen + 1, 43 + sessionIdLen + 3)
@@ -417,22 +417,24 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 						} else if (v != "TLS_AES_128_CCM_8_SHA256") {
 							*enableXtls = true
 						}
-						newError("XtlsFilterTls13 found tls 1.3! ", buffer.Len(), " ", v).WriteToLog(session.ExportIDToError(ctx))
+						newError("XtlsFilterTls found tls 1.3! ", buffer.Len(), " ", v).WriteToLog(session.ExportIDToError(ctx))
 					} else {
-						newError("XtlsFilterTls13 found tls 1.2! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
+						newError("XtlsFilterTls found tls 1.2! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 					}
 					*isTLS12orAbove = true
 					*isTLS = true
 					*numberOfPacketToFilter = 0
 					return
+				} else {
+					newError("XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", total).WriteToLog(session.ExportIDToError(ctx))
 				}
 			} else if bytes.Equal(tlsClientHandShakeStart, startsBytes[:2]) && startsBytes[5] == 0x01 {
 				*isTLS = true
-				newError("XtlsFilterTls13 found tls client hello! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
+				newError("XtlsFilterTls found tls client hello! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 		if *numberOfPacketToFilter <= 0 {
-			newError("XtlsFilterTls13 stop filtering", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
+			newError("XtlsFilterTls stop filtering", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}
 }
