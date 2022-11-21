@@ -25,8 +25,8 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"strings"
 
-	"github.com/sagernet/wireguard-go/conn"
 	"github.com/sagernet/wireguard-go/device"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -51,16 +51,26 @@ type Handler struct {
 	bind          *netBind
 	policyManager policy.Manager
 	dns           dns.Client
+	// cached configuration
+	ipc       string
+	endpoints []netip.Addr
 }
 
 // New creates a new wireguard handler.
 func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 
+	endpoints, err := parseEndpoints(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Handler{
 		conf:          conf,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		dns:           v.GetFeature(dns.ClientType()).(dns.Client),
+		ipc:           createIPCRequest(conf),
+		endpoints:     endpoints,
 	}, nil
 }
 
@@ -75,9 +85,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		bind := &netBind{
 			dialer:  dialer,
 			workers: int(h.conf.NumWorkers),
+			dns:     h.dns,
 		}
 
-		net, err := makeVirtualTun(h.conf, bind)
+		net, err := h.makeVirtualTun(bind)
 		if err != nil {
 			bind.Close()
 			return newError("failed to create virtual tun interface").Base(err)
@@ -105,8 +116,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	addr := destination.Address
 	if addr.Family().IsDomain() {
 		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: true,
+			IPv4Enable: h.net.HasV4(),
+			IPv6Enable: h.net.HasV6(),
 		})
 		if err != nil {
 			return newError("failed to lookup DNS").Base(err)
@@ -120,20 +131,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
-
-	var addrGo netip.Addr
-	if addr.Family().IsIPv4() {
-		ip := addr.IP()
-		addrGo = netip.AddrFrom4([4]byte{ip[0], ip[1], ip[2], ip[3]})
-	} else {
-		ip := addr.IP()
-		arr := [16]byte{}
-		for i := 0; i < 16; i++ {
-			arr[i] = ip[i]
-		}
-		addrGo = netip.AddrFrom16(arr)
-	}
-	addrPort := netip.AddrPortFrom(addrGo, destination.Port.Value())
+	addrPort := netip.AddrPortFrom(toNetIpAddr(addr), destination.Port.Value())
 
 	var requestFunc func() error
 	var responseFunc func() error
@@ -194,26 +192,42 @@ func createIPCRequest(conf *DeviceConfig) string {
 	return request.String()[:request.Len()]
 }
 
-// creates a tun interface on netstack given a configuration
-func makeVirtualTun(conf *DeviceConfig, bind conn.Bind) (*netstack.Net, error) {
-	// convert endpoint string to netip.Addr
+// convert endpoint string to netip.Addr
+func parseEndpoints(conf *DeviceConfig) ([]netip.Addr, error) {
 	endpoints := make([]netip.Addr, len(conf.Endpoint))
 	for i, str := range conf.Endpoint {
-		prefix, err := netip.ParsePrefix(str)
-		if err != nil {
-			return nil, err
-		}
-		addr := prefix.Addr()
-		if prefix.Bits() != addr.BitLen() {
-			return nil, newError("interface address subnet should be /32 for IPv4 and /128 for IPv6")
+		var addr netip.Addr
+		if strings.Contains(str, "/") {
+			prefix, err := netip.ParsePrefix(str)
+			if err != nil {
+				return nil, err
+			}
+			addr = prefix.Addr()
+			if prefix.Bits() != addr.BitLen() {
+				return nil, newError("interface address subnet should be /32 for IPv4 and /128 for IPv6")
+			}
+		} else {
+			var err error
+			addr, err = netip.ParseAddr(str)
+			if err != nil {
+				return nil, err
+			}
 		}
 		endpoints[i] = addr
 	}
 
-	tun, tnet, err := netstack.CreateNetTUN(endpoints, make([]netip.Addr, 0), int(conf.Mtu))
+	return endpoints, nil
+}
+
+// creates a tun interface on netstack given a configuration
+func (h *Handler) makeVirtualTun(bind *netBind) (*netstack.Net, error) {
+	tun, tnet, err := netstack.CreateNetTUN(h.endpoints, h.dns, int(h.conf.Mtu))
 	if err != nil {
 		return nil, err
 	}
+
+	bind.dnsOption.IPv4Enable = tnet.HasV4()
+	bind.dnsOption.IPv6Enable = tnet.HasV6()
 
 	// dev := device.NewDevice(tun, conn.NewDefaultBind(), nil /* device.NewLogger(device.LogLevelVerbose, "") */)
 	dev := device.NewDevice(tun, bind, &device.Logger{
@@ -229,8 +243,8 @@ func makeVirtualTun(conf *DeviceConfig, bind conn.Bind) (*netstack.Net, error) {
 				Content:  fmt.Sprintf(format, args...),
 			})
 		},
-	}, int(conf.NumWorkers))
-	err = dev.IpcSet(createIPCRequest(conf))
+	}, int(h.conf.NumWorkers))
+	err = dev.IpcSet(h.ipc)
 	if err != nil {
 		return nil, err
 	}

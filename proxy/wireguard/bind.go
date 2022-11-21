@@ -6,10 +6,13 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 
 	"github.com/sagernet/wireguard-go/conn"
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/proxy/wireguard/netstack"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -25,31 +28,46 @@ type netReadInfo struct {
 }
 
 type netBind struct {
-	workers int
-	dialer  internet.Dialer
+	workers   int
+	dialer    internet.Dialer
+	dns       dns.Client
+	dnsOption dns.IPOption
 
 	readQueue chan *netReadInfo
 }
 
-func (*netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
-	addrPort, err := netip.ParseAddrPort(s)
+func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
+	ipStr, port, _, err := splitAddrPort(s)
 	if err != nil {
 		return nil, err
 	}
 
-	addr := addrPort.Addr()
-	var ip xnet.Address
-	if addr.Is4() {
-		ip4 := addr.As4()
-		ip = xnet.IPAddress(ip4[:])
+	var addr net.IP
+	if netstack.IsDomainName(ipStr) {
+		ips, err := n.dns.LookupIP(ipStr, n.dnsOption)
+		if err != nil {
+			return nil, err
+		} else if len(ips) == 0 {
+			return nil, dns.ErrEmptyResponse
+		}
+		addr = ips[0]
 	} else {
-		ip6 := addr.As16()
-		ip = xnet.IPAddress(ip6[:])
+		addr = net.ParseIP(ipStr)
+	}
+	if addr == nil {
+		return nil, errors.New("failed to parse ip: " + ipStr)
+	}
+
+	var ip xnet.Address
+	if p4 := addr.To4(); len(p4) == net.IPv4len {
+		ip = xnet.IPAddress(p4[:])
+	} else {
+		ip = xnet.IPAddress(addr[:])
 	}
 
 	dst := xnet.Destination{
 		Address: ip,
-		Port:    xnet.Port(addrPort.Port()),
+		Port:    xnet.Port(port),
 		Network: xnet.Network_UDP,
 	}
 
@@ -157,7 +175,7 @@ type netEndpoint struct {
 func (netEndpoint) ClearSrc() {}
 
 func (e netEndpoint) DstIP() netip.Addr {
-	return netip.Addr{}
+	return toNetIpAddr(e.dst.Address)
 }
 
 func (e netEndpoint) SrcIP() netip.Addr {
@@ -165,13 +183,73 @@ func (e netEndpoint) SrcIP() netip.Addr {
 }
 
 func (e netEndpoint) DstToBytes() []byte {
-	return []byte{}
+	var dat []byte
+	if e.dst.Address.Family().IsIPv4() {
+		dat = e.dst.Address.IP().To4()[:]
+	} else {
+		dat = e.dst.Address.IP().To16()[:]
+	}
+	dat = append(dat, byte(e.dst.Port), byte(e.dst.Port>>8))
+	return dat
 }
 
 func (e netEndpoint) DstToString() string {
-	return ""
+	return e.dst.NetAddr()
 }
 
 func (e netEndpoint) SrcToString() string {
 	return ""
+}
+
+func toNetIpAddr(addr xnet.Address) netip.Addr {
+	if addr.Family().IsIPv4() {
+		ip := addr.IP()
+		return netip.AddrFrom4([4]byte{ip[0], ip[1], ip[2], ip[3]})
+	} else {
+		ip := addr.IP()
+		arr := [16]byte{}
+		for i := 0; i < 16; i++ {
+			arr[i] = ip[i]
+		}
+		return netip.AddrFrom16(arr)
+	}
+}
+
+func stringsLastIndexByte(s string, b byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
+func splitAddrPort(s string) (ip string, port uint16, v6 bool, err error) {
+	i := stringsLastIndexByte(s, ':')
+	if i == -1 {
+		return "", 0, false, errors.New("not an ip:port")
+	}
+
+	ip = s[:i]
+	portStr := s[i+1:]
+	if len(ip) == 0 {
+		return "", 0, false, errors.New("no IP")
+	}
+	if len(portStr) == 0 {
+		return "", 0, false, errors.New("no port")
+	}
+	port64, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return "", 0, false, errors.New("invalid port " + strconv.Quote(portStr) + " parsing " + strconv.Quote(s))
+	}
+	port = uint16(port64)
+	if ip[0] == '[' {
+		if len(ip) < 2 || ip[len(ip)-1] != ']' {
+			return "", 0, false, errors.New("missing ]")
+		}
+		ip = ip[1 : len(ip)-1]
+		v6 = true
+	}
+
+	return ip, port, v6, nil
 }
