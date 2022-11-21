@@ -63,9 +63,11 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, err
 	}
 
-	config.Endpoint = c.Address
-	if config.Endpoint == nil {
-		return nil, newError("no available addresses")
+	if c.Address == nil {
+		// bogon ips
+		config.Endpoint = []string{"10.0.0.1", "fd59:7153:2388:b5fd:0000:0000:0000:0001"}
+	} else {
+		config.Endpoint = c.Address
 	}
 
 	if c.Peers != nil {
