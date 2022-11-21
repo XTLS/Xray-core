@@ -94,7 +94,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 }
 
 func parseWireGuardKey(str string) (string, error) {
-	if len(str) != 32 {
+	if len(str) != 64 {
 		// may in base64 form
 		dat, err := base64.StdEncoding.DecodeString(str)
 		if err != nil {

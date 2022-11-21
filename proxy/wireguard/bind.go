@@ -12,7 +12,6 @@ import (
 	"github.com/sagernet/wireguard-go/conn"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/proxy/wireguard/netstack"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -27,7 +26,7 @@ type netReadInfo struct {
 	err      error
 }
 
-type netBind struct {
+type netBindClient struct {
 	workers   int
 	dialer    internet.Dialer
 	dns       dns.Client
@@ -36,14 +35,14 @@ type netBind struct {
 	readQueue chan *netReadInfo
 }
 
-func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
+func (n *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
 	ipStr, port, _, err := splitAddrPort(s)
 	if err != nil {
 		return nil, err
 	}
 
 	var addr net.IP
-	if netstack.IsDomainName(ipStr) {
+	if IsDomainName(ipStr) {
 		ips, err := n.dns.LookupIP(ipStr, n.dnsOption)
 		if err != nil {
 			return nil, err
@@ -76,7 +75,7 @@ func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	}, nil
 }
 
-func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
+func (bind *netBindClient) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
 
 	fun := func(buff []byte) (cap int, ep conn.Endpoint, err error) {
@@ -108,14 +107,14 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	return arr, uint16(uport), nil
 }
 
-func (bind *netBind) Close() error {
+func (bind *netBindClient) Close() error {
 	if bind.readQueue != nil {
 		close(bind.readQueue)
 	}
 	return nil
 }
 
-func (bind *netBind) connectTo(endpoint *netEndpoint) error {
+func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	c, err := bind.dialer.Dial(context.Background(), endpoint.dst)
 	if err != nil {
 		return err
@@ -143,7 +142,7 @@ func (bind *netBind) connectTo(endpoint *netEndpoint) error {
 	return nil
 }
 
-func (bind *netBind) Send(buff []byte, endpoint conn.Endpoint) error {
+func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
 	var err error
 
 	nend, ok := endpoint.(*netEndpoint)
@@ -163,7 +162,7 @@ func (bind *netBind) Send(buff []byte, endpoint conn.Endpoint) error {
 	return err
 }
 
-func (bind *netBind) SetMark(mark uint32) error {
+func (bind *netBindClient) SetMark(mark uint32) error {
 	return nil
 }
 

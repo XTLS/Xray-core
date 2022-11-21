@@ -3,7 +3,7 @@
  * Copyright (C) 2017-2022 WireGuard LLC. All Rights Reserved.
  */
 
-package netstack
+package wireguard
 
 import (
 	"context"

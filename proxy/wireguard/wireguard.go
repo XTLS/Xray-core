@@ -39,7 +39,6 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/proxy/wireguard/netstack"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -47,8 +46,8 @@ import (
 // Handler is an outbound connection that silently swallow the entire payload.
 type Handler struct {
 	conf          *DeviceConfig
-	net           *netstack.Net
-	bind          *netBind
+	net           *Net
+	bind          *netBindClient
 	policyManager policy.Manager
 	dns           dns.Client
 	// cached configuration
@@ -82,7 +81,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			Content:  "switching dialer",
 		})
 		// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
-		bind := &netBind{
+		bind := &netBindClient{
 			dialer:  dialer,
 			workers: int(h.conf.NumWorkers),
 			dns:     h.dns,
@@ -220,8 +219,8 @@ func parseEndpoints(conf *DeviceConfig) ([]netip.Addr, error) {
 }
 
 // creates a tun interface on netstack given a configuration
-func (h *Handler) makeVirtualTun(bind *netBind) (*netstack.Net, error) {
-	tun, tnet, err := netstack.CreateNetTUN(h.endpoints, h.dns, int(h.conf.Mtu))
+func (h *Handler) makeVirtualTun(bind *netBindClient) (*Net, error) {
+	tun, tnet, err := CreateNetTUN(h.endpoints, h.dns, int(h.conf.Mtu))
 	if err != nil {
 		return nil, err
 	}
