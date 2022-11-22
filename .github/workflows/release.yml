@@ -115,11 +115,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Show workflow information 
-        id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
-          echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
@@ -184,9 +182,9 @@ jobs:
         run: |
           pushd build_assets || exit 1
           touch -mt $(date +%Y01010000) *
-          zip -9vr ../Xray-$ASSET_NAME.zip .
+          zip -9vr ../Xray-${{ env.ASSET_NAME }}.zip .
           popd || exit 1
-          FILE=./Xray-$ASSET_NAME.zip
+          FILE=./Xray-${{ env.ASSET_NAME }}.zip
           DGST=$FILE.dgst
           for METHOD in {"md5","sha1","sha256","sha512"}
           do
@@ -195,20 +193,20 @@ jobs:
 
       - name: Change the name
         run: |
-          mv build_assets Xray-$ASSET_NAME
+          mv build_assets Xray-${{ env.ASSET_NAME }}
 
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          name: Xray-${{ env.ASSET_NAME }}
           path: |
-            ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}/*
+            ./Xray-${{ env.ASSET_NAME }}/*
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+          file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
