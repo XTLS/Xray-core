@@ -5,9 +5,9 @@ package command
 import (
 	"context"
 
-	"github.com/xtls/xray-core/app/log"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/core"
+	"github.com/jobberrt/xray-core/app/log"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/core"
 	grpc "google.golang.org/grpc"
 )
 

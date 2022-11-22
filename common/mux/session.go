@@ -3,10 +3,10 @@ package mux
 import (
 	"sync"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/common/buf"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/protocol"
 )
 
 type SessionManager struct {

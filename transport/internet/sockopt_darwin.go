@@ -1,7 +1,7 @@
 package internet
 
 import (
-	"github.com/xtls/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/net"
 	"golang.org/x/sys/unix"
 	"os"
 	"syscall"

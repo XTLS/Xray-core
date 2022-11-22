@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/xtls/xray-core/common"
+	"github.com/jobberrt/xray-core/common"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen

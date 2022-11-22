@@ -9,14 +9,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
-	"github.com/xtls/xray-core/features"
-	"github.com/xtls/xray-core/features/dns"
+	"github.com/jobberrt/xray-core/app/router"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/common/errors"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/session"
+	"github.com/jobberrt/xray-core/common/strmatcher"
+	"github.com/jobberrt/xray-core/features"
+	"github.com/jobberrt/xray-core/features/dns"
 )
 
 // DNS is a DNS rely server.

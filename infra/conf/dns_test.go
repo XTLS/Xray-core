@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/jobberrt/xray-core/app/dns"
+	"github.com/jobberrt/xray-core/app/router"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/platform"
+	"github.com/jobberrt/xray-core/common/platform/filesystem"
+	. "github.com/jobberrt/xray-core/infra/conf"
 )
 
 func init() {

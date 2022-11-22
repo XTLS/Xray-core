@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	. "github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/routing"
-	routing_session "github.com/xtls/xray-core/features/routing/session"
+	. "github.com/jobberrt/xray-core/app/router"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/common/errors"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/platform"
+	"github.com/jobberrt/xray-core/common/platform/filesystem"
+	"github.com/jobberrt/xray-core/common/protocol"
+	"github.com/jobberrt/xray-core/common/protocol/http"
+	"github.com/jobberrt/xray-core/common/session"
+	"github.com/jobberrt/xray-core/features/routing"
+	routing_session "github.com/jobberrt/xray-core/features/routing/session"
 )
 
 func init() {

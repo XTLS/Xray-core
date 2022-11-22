@@ -5,12 +5,12 @@ package router
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
-	routing_dns "github.com/xtls/xray-core/features/routing/dns"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/core"
+	"github.com/jobberrt/xray-core/features/dns"
+	"github.com/jobberrt/xray-core/features/outbound"
+	"github.com/jobberrt/xray-core/features/routing"
+	routing_dns "github.com/jobberrt/xray-core/features/routing/dns"
 )
 
 // Router is an implementation of routing.Router.

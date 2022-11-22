@@ -14,7 +14,7 @@ package core
 import (
 	"runtime"
 
-	"github.com/xtls/xray-core/common/serial"
+	"github.com/jobberrt/xray-core/common/serial"
 )
 
 var (

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/proxy/http"
+	"github.com/jobberrt/xray-core/common/protocol"
+	"github.com/jobberrt/xray-core/common/serial"
+	"github.com/jobberrt/xray-core/proxy/http"
 )
 
 type HTTPAccount struct {

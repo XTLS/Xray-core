@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 
 	utls "github.com/refraction-networking/utls"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/buf"
+	"github.com/jobberrt/xray-core/common/net"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen

@@ -6,10 +6,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/features/stats"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/core"
+	"github.com/jobberrt/xray-core/features/routing"
+	"github.com/jobberrt/xray-core/features/stats"
 	"google.golang.org/grpc"
 )
 

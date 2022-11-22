@@ -3,7 +3,7 @@ package xtls
 import (
 	xtls "github.com/xtls/go"
 
-	"github.com/xtls/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/net"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen

@@ -14,17 +14,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/proxy/vless"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/xtls"
+	"github.com/jobberrt/xray-core/common/buf"
+	"github.com/jobberrt/xray-core/common/errors"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/protocol"
+	"github.com/jobberrt/xray-core/common/session"
+	"github.com/jobberrt/xray-core/common/signal"
+	"github.com/jobberrt/xray-core/features/stats"
+	"github.com/jobberrt/xray-core/proxy/vless"
+	"github.com/jobberrt/xray-core/transport/internet/stat"
+	"github.com/jobberrt/xray-core/transport/internet/tls"
+	"github.com/jobberrt/xray-core/transport/internet/xtls"
 )
 
 const (

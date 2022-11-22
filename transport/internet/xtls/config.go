@@ -9,12 +9,12 @@ import (
 	"time"
 
 	xtls "github.com/xtls/go"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/ocsp"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	"github.com/xtls/xray-core/common/protocol/tls/cert"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/jobberrt/xray-core/common/net"
+	"github.com/jobberrt/xray-core/common/ocsp"
+	"github.com/jobberrt/xray-core/common/platform/filesystem"
+	"github.com/jobberrt/xray-core/common/protocol/tls/cert"
+	"github.com/jobberrt/xray-core/transport/internet"
+	"github.com/jobberrt/xray-core/transport/internet/tls"
 )
 
 var globalSessionCache = xtls.NewLRUClientSessionCache(128)

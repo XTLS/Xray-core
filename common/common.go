@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/jobberrt/xray-core/common/errors"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen

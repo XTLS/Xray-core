@@ -7,7 +7,7 @@
 package kcp
 
 import (
-	serial "github.com/xtls/xray-core/common/serial"
+	serial "github.com/jobberrt/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

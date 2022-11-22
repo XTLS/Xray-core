@@ -26,3 +26,5 @@ errorgen
 !common/errors/errorgen/
 *.dat
 .vscode
+
+vendor/

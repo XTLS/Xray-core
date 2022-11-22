@@ -5,8 +5,8 @@ package stats
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/features"
+	"github.com/jobberrt/xray-core/common"
+	"github.com/jobberrt/xray-core/features"
 )
 
 // Counter is the interface for stats counters.

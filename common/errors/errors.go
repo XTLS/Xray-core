@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/serial"
+	"github.com/jobberrt/xray-core/common/log"
+	"github.com/jobberrt/xray-core/common/serial"
 )
 
 const trim = len("github.com/xtls/xray-core/")
