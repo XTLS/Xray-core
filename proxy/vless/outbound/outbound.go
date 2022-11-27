@@ -279,6 +279,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if requestAddons.Flow == vless.XRV {
 				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS)
 			} else {
+				if requestAddons.Flow != vless.XRS {
+					ctx = session.ContextWithInbound(ctx, nil)
+				}
 				err = encoding.ReadV(serverReader, clientWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
 		} else {
