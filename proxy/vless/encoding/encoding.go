@@ -260,8 +260,8 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 		for {
 			if shouldSwitchToDirectCopy {
 				shouldSwitchToDirectCopy = false
-				if runtime.GOOS == "linux" || runtime.GOOS == "android" {
-					if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
+				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
+					if _, ok := inbound.User.Account.(*vless.MemoryAccount); inbound.User.Account == nil || ok {
 						iConn := inbound.Conn
 						statConn, ok := iConn.(*stat.CounterConnection)
 						if ok {
@@ -281,11 +281,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 								statConn.WriteCounter.Add(w)
 							}
 							return err
-						} else {
-							panic("XTLS Splice: not TCP inbound")
 						}
-					} else {
-						// panic("XTLS Splice: nil inbound or nil inbound.Conn")
 					}
 				}
 				reader = buf.NewReadVReader(conn, rawConn, nil)
