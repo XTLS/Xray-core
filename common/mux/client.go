@@ -355,6 +355,7 @@ func (m *ClientWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.Buffered
 			common.Interrupt(s.input)
 			common.Interrupt(s.output)
 		}
+		common.Interrupt(s.input)
 		s.Close()
 	}
 	if meta.Option.Has(OptionData) {
