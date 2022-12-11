@@ -5,6 +5,7 @@ package outbound
 import (
 	"context"
 	"syscall"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -217,20 +218,26 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			serverWriter = xudp.NewPacketWriter(serverWriter, target)
 		}
 		userUUID := account.ID.Bytes()
-		multiBuffer, err1 := clientReader.ReadMultiBuffer()
-		if err1 != nil {
-			return err1 // ...
-		}
-		if requestAddons.Flow == vless.XRV {
-			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
-			if isTLS {
-				for i, b := range multiBuffer {
-					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
+		timeoutReader, ok := clientReader.(buf.TimeoutReader)
+		if ok {
+			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond*500)
+			if err1 == nil {
+				if requestAddons.Flow == vless.XRV {
+					encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
+					if isTLS {
+						for i, b := range multiBuffer {
+							multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
+						}
+					}
 				}
+				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
+					return err // ...
+				}
+			} else if err1 != buf.ErrReadTimeout {
+				return err1
 			}
-		}
-		if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
-			return err // ...
+		} else {
+			newError("Reader is not timeout reader, will send out vless header separately from first payload").AtDebug().WriteToLog(session.ExportIDToError(ctx))
 		}
 		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
 		if err := bufferWriter.SetBuffered(false); err != nil {
