@@ -492,7 +492,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "", "none":
-		if accountFlow == vless.XRV && !allowNoneFlow {
+		if accountFlow == vless.XRV && !allowNoneFlow && request.Command == protocol.RequestCommandTCP {
 			return newError(account.ID.String() + " is not able to use " + vless.XRV + 
 			". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
 		}
