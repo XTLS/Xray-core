@@ -2,12 +2,14 @@ package http
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
 	"net/http"
 	"net/url"
 	"sync"
+	"text/template"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -30,6 +32,7 @@ import (
 type Client struct {
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
+	header        []*Header
 }
 
 type h2Conn struct {
@@ -60,6 +63,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	return &Client{
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		header:        config.Header,
 	}, nil
 }
 
@@ -88,12 +92,17 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	buf.ReleaseMulti(mbuf)
 	defer bytespool.Free(firstPayload)
 
+	header, err := fillRequestHeader(ctx, c.header)
+	if err != nil {
+		return newError("failed to fill out header").Base(err)
+	}
+
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
 		server := c.serverPicker.PickServer()
 		dest := server.Destination()
 		user = server.PickUser()
 
-		netConn, err := setUpHTTPTunnel(ctx, dest, targetAddr, user, dialer, firstPayload)
+		netConn, err := setUpHTTPTunnel(ctx, dest, targetAddr, user, dialer, header, firstPayload)
 		if netConn != nil {
 			if _, ok := netConn.(*http2Conn); !ok {
 				if _, err := netConn.Write(firstPayload); err != nil {
@@ -139,8 +148,42 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	return nil
 }
 
+// fillRequestHeader will fill out the template of the headers
+func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error) {
+	if len(header) == 0 {
+		return header, nil
+	}
+
+	inbound := session.InboundFromContext(ctx)
+	outbound := session.OutboundFromContext(ctx)
+
+	data := struct {
+		Source net.Destination
+		Target net.Destination
+	}{
+		Source: inbound.Source,
+		Target: outbound.Target,
+	}
+
+	filled := make([]*Header, len(header))
+	for i, h := range header {
+		tmpl, err := template.New(h.Key).Parse(h.Value)
+		if err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+
+		if err = tmpl.Execute(&buf, data); err != nil {
+			return nil, err
+		}
+		filled[i] = &Header{Key: h.Key, Value: buf.String()}
+	}
+
+	return filled, nil
+}
+
 // setUpHTTPTunnel will create a socket tunnel via HTTP CONNECT method
-func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, user *protocol.MemoryUser, dialer internet.Dialer, firstPayload []byte) (net.Conn, error) {
+func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, user *protocol.MemoryUser, dialer internet.Dialer, header []*Header, firstPayload []byte) (net.Conn, error) {
 	req := &http.Request{
 		Method: http.MethodConnect,
 		URL:    &url.URL{Host: target},
@@ -152,6 +195,10 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		account := user.Account.(*Account)
 		auth := account.GetUsername() + ":" + account.GetPassword()
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	}
+
+	for _, h := range header {
+		req.Header.Set(h.Key, h.Value)
 	}
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
