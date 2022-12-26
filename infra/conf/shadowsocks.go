@@ -107,7 +107,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 		config.Email = v.Email
 		return config, nil
 	}
-	
+
 	if v.Cipher == "" {
 		return nil, newError("shadowsocks 2022 (multi-user): missing server method")
 	}
@@ -120,7 +120,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 		config.Method = v.Cipher
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
-	
+
 		for _, user := range v.Users {
 			if user.Cipher != "" {
 				return nil, newError("shadowsocks 2022 (multi-user): users must have empty method")
@@ -145,10 +145,10 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 			return nil, newError("shadowsocks 2022 (relay): all users must have relay address")
 		}
 		config.Destinations = append(config.Destinations, &shadowsocks_2022.RelayDestination{
-			Key: user.Password,
-			Email: user.Email,
+			Key:     user.Password,
+			Email:   user.Email,
 			Address: user.Address.Build(),
-			Port: uint32(user.Port),
+			Port:    uint32(user.Port),
 		})
 	}
 	return config, nil

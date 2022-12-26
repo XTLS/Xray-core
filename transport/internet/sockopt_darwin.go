@@ -1,11 +1,12 @@
 package internet
 
 import (
-	"github.com/xtls/xray-core/common/net"
-	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/xtls/xray-core/common/net"
+	"golang.org/x/sys/unix"
 )
 
 const (

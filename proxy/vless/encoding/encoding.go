@@ -31,10 +31,12 @@ const (
 	Version = byte(0)
 )
 
-var tls13SupportedVersions = []byte{0x00, 0x2b, 0x00, 0x02, 0x03, 0x04}
-var tlsClientHandShakeStart = []byte{0x16, 0x03}
-var tlsServerHandShakeStart = []byte{0x16, 0x03, 0x03}
-var tlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
+var (
+	tls13SupportedVersions  = []byte{0x00, 0x2b, 0x00, 0x02, 0x03, 0x04}
+	tlsClientHandShakeStart = []byte{0x16, 0x03}
+	tlsServerHandShakeStart = []byte{0x16, 0x03, 0x03}
+	tlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
+)
 
 var addrParser = protocol.NewAddressParser(
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv4), net.AddressFamilyIPv4),
@@ -247,9 +249,10 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn, 
-	counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool, 
-	isTLS12orAbove *bool, isTLS *bool, cipher *uint16, remainingServerHello *int32) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn,
+	counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool,
+	isTLS12orAbove *bool, isTLS *bool, cipher *uint16, remainingServerHello *int32,
+) error {
 	err := func() error {
 		var ct stats.Counter
 		filterUUID := true
@@ -326,9 +329,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter, 
-	ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool, 
-	cipher *uint16, remainingServerHello *int32) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter,
+	ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
+	cipher *uint16, remainingServerHello *int32,
+) error {
 	err := func() error {
 		var ct stats.Counter
 		filterTlsApplicationData := true
@@ -354,7 +358,7 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 							buffer[i] = XtlsPadding(b, command, userUUID, ctx)
 							break
 						} else if !*isTLS12orAbove && *numberOfPacketToFilter <= 0 {
-							//maybe tls 1.1 or 1.0
+							// maybe tls 1.1 or 1.0
 							filterTlsApplicationData = false
 							buffer[i] = XtlsPadding(b, 0x01, userUUID, ctx)
 							break
@@ -399,8 +403,9 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 }
 
 // XtlsFilterTls filter and recognize tls 1.3 and other info
-func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool, 
-	cipher *uint16, remainingServerHello *int32, ctx context.Context) {
+func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
+	cipher *uint16, remainingServerHello *int32, ctx context.Context,
+) {
 	for _, b := range buffer {
 		*numberOfPacketToFilter--
 		if b.Len() >= 6 {
@@ -411,8 +416,8 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 				*isTLS = true
 				if b.Len() >= 79 && *remainingServerHello >= 79 {
 					sessionIdLen := int32(b.Byte(43))
-					cipherSuite := b.BytesRange(43 + sessionIdLen + 1, 43 + sessionIdLen + 3)
-					*cipher = uint16(cipherSuite[0]) << 8 | uint16(cipherSuite[1])
+					cipherSuite := b.BytesRange(43+sessionIdLen+1, 43+sessionIdLen+3)
+					*cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
 				} else {
 					newError("XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", *remainingServerHello).WriteToLog(session.ExportIDToError(ctx))
 				}
@@ -431,7 +436,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 				v, ok := Tls13CipherSuiteDic[*cipher]
 				if !ok {
 					v = "Old cipher: " + strconv.FormatUint(uint64(*cipher), 16)
-				} else if (v != "TLS_AES_128_CCM_8_SHA256") {
+				} else if v != "TLS_AES_128_CCM_8_SHA256" {
 					*enableXtls = true
 				}
 				newError("XtlsFilterTls found tls 1.3! ", b.Len(), " ", v).WriteToLog(session.ExportIDToError(ctx))
@@ -582,9 +587,9 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 }
 
 var Tls13CipherSuiteDic = map[uint16]string{
-	0x1301 : "TLS_AES_128_GCM_SHA256",
-	0x1302 : "TLS_AES_256_GCM_SHA384",
-	0x1303 : "TLS_CHACHA20_POLY1305_SHA256",
-	0x1304 : "TLS_AES_128_CCM_SHA256",
-	0x1305 : "TLS_AES_128_CCM_8_SHA256",
+	0x1301: "TLS_AES_128_GCM_SHA256",
+	0x1302: "TLS_AES_256_GCM_SHA384",
+	0x1303: "TLS_CHACHA20_POLY1305_SHA256",
+	0x1304: "TLS_AES_128_CCM_SHA256",
+	0x1305: "TLS_AES_128_CCM_8_SHA256",
 }

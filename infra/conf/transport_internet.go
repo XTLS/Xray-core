@@ -533,7 +533,7 @@ type SocketConfig struct {
 	DialerProxy          string      `json:"dialerProxy"`
 	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
 	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
-        TCPCongestion        string      `json:"tcpCongestion"`
+	TCPCongestion        string      `json:"tcpCongestion"`
 }
 
 // Build implements Buildable.
@@ -582,7 +582,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		DialerProxy:          c.DialerProxy,
 		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
-                TcpCongestion:        c.TCPCongestion,
+		TcpCongestion:        c.TCPCongestion,
 	}, nil
 }
 

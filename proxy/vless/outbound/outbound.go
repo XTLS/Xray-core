@@ -220,7 +220,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		userUUID := account.ID.Bytes()
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
 		if ok {
-			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond*500)
+			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
 			if err1 == nil {
 				if requestAddons.Flow == vless.XRV {
 					encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
@@ -250,7 +250,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, 
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
@@ -287,8 +287,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), 
-				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(),
+					&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 			} else {
 				if requestAddons.Flow != vless.XRS {
 					ctx = session.ContextWithInbound(ctx, nil)

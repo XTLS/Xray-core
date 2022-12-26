@@ -493,8 +493,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 	case "", "none":
 		if accountFlow == vless.XRV && !allowNoneFlow && request.Command == protocol.RequestCommandTCP {
-			return newError(account.ID.String() + " is not able to use " + vless.XRV + 
-			". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
+			return newError(account.ID.String() + " is not able to use " + vless.XRV +
+				". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
 		}
 	default:
 		return newError("unknown request flow " + requestAddons.Flow).AtWarning()
@@ -542,11 +542,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.ReadCounter
 			}
-			//TODO enable splice
+			// TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(), 
-				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(),
+					&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
 			}
@@ -600,7 +600,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter, 
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
