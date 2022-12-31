@@ -297,7 +297,23 @@ func (s *Instance) RequireFeatures(callback interface{}) error {
 
 // AddFeature registers a feature into current Instance.
 func (s *Instance) AddFeature(feature features.Feature) error {
-	s.features = append(s.features, feature)
+	// Before add feature remove old one
+	s.access.Lock()
+	if len(s.features) == 0 {
+		s.features = append(s.features, feature)
+	} else {
+		idx := -1
+		for i := range s.features {
+			if reflect.TypeOf(s.features[i]) == reflect.TypeOf(feature) {
+				idx = i
+				s.features[i] = feature
+			}
+		}
+		if idx == -1 {
+			s.features = append(s.features, feature)
+		}
+	}
+	s.access.Unlock()
 
 	if s.running {
 		if err := feature.Start(); err != nil {
