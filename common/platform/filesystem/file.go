@@ -3,7 +3,7 @@ package filesystem
 import (
 	"io"
 	"os"
-
+	"path/filepath"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/platform"
 )
@@ -11,7 +11,11 @@ import (
 type FileReaderFunc func(path string) (io.ReadCloser, error)
 
 var NewFileReader FileReaderFunc = func(path string) (io.ReadCloser, error) {
-	return os.Open(path)
+	resolved_path,err:=filepath.EvalSymlinks(path)
+	if err!= nil{
+		return nil,err
+	}
+	return os.Open(resolved_path)
 }
 
 func ReadFile(path string) ([]byte, error) {
