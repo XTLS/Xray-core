@@ -2,6 +2,7 @@ package serial
 
 import (
 	"io"
+	"path/filepath"
 
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
@@ -10,7 +11,11 @@ import (
 
 func BuildConfig(files []string, formats []string) (*core.Config, error) {
 	cf := &conf.Config{}
-	for i, file := range files {
+	for i, file_ := range files {
+		file, err := filepath.EvalSymlinks(file_)
+		if err != nil {
+			return nil, err
+		}
 		newError("Reading config: ", file).AtInfo().WriteToLog()
 		r, err := confloader.LoadConfig(file)
 		if err != nil {
