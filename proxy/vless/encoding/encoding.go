@@ -250,6 +250,7 @@ func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, c
 
 // XtlsRead filter and read xtls protocol
 func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn,
+	input *bytes.Reader, rawInput *bytes.Buffer,
 	counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool,
 	isTLS12orAbove *bool, isTLS *bool, cipher *uint16, remainingServerHello *int32,
 ) error {
@@ -301,6 +302,17 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						} else if currentCommand == 2 {
 							filterUUID = false
 							shouldSwitchToDirectCopy = true
+							// XTLS Vision processes struct TLS Conn's input and rawInput
+							if inputBuffer, err := buf.ReadFrom(input); err == nil {
+								if !inputBuffer.IsEmpty() {
+									buffer, _ = buf.MergeMulti(buffer, inputBuffer)
+								}
+							}
+							if rawInputBuffer, err := buf.ReadFrom(rawInput); err == nil {
+								if !rawInputBuffer.IsEmpty() {
+									buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
+								}
+							}
 						} else if currentCommand != 0 {
 							newError("XtlsRead unknown command ", currentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						}

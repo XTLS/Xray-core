@@ -3,9 +3,12 @@ package outbound
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"bytes"
 	"context"
+	"reflect"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -130,6 +133,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var netConn net.Conn
 	var rawConn syscall.RawConn
+	var input *bytes.Reader
+	var rawInput *bytes.Buffer
 	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRO + "-udp443", vless.XRD + "-udp443", vless.XRS + "-udp443", vless.XRV + "-udp443":
@@ -147,21 +152,31 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			requestAddons.Flow = ""
 		case protocol.RequestCommandTCP:
 			if requestAddons.Flow == vless.XRV {
+				var t reflect.Type
+				var p uintptr
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
 					netConn = tlsConn.NetConn()
 					if sc, ok := netConn.(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
+					t = reflect.TypeOf(tlsConn.Conn).Elem()
+					p = uintptr(unsafe.Pointer(tlsConn.Conn))
 				} else if utlsConn, ok := iConn.(*tls.UConn); ok {
 					netConn = utlsConn.Conn.NetConn()
 					if sc, ok := netConn.(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
 					}
+					t = reflect.TypeOf(utlsConn.Conn).Elem()
+					p = uintptr(unsafe.Pointer(utlsConn.Conn))
 				} else if _, ok := iConn.(*xtls.Conn); ok {
 					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
 				} else {
 					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 				}
+				i, _ := t.FieldByName("input")
+				r, _ := t.FieldByName("rawInput")
+				input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
+				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 			} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				xtlsConn.RPRX = true
 				xtlsConn.SHOW = xtls_show
@@ -287,7 +302,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				counter = statConn.ReadCounter
 			}
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(),
+				err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
 					&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 			} else {
 				if requestAddons.Flow != vless.XRS {

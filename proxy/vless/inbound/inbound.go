@@ -3,12 +3,15 @@ package inbound
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -441,6 +444,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	var netConn net.Conn
 	var rawConn syscall.RawConn
+	var input *bytes.Reader
+	var rawInput *bytes.Buffer
 	allowNoneFlow := false
 	accountFlow := account.Flow
 	flows := strings.Split(account.Flow, ",")
@@ -462,11 +467,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
 			case protocol.RequestCommandTCP:
 				if requestAddons.Flow == vless.XRV {
+					var t reflect.Type
+					var p uintptr
 					if tlsConn, ok := iConn.(*tls.Conn); ok {
 						netConn = tlsConn.NetConn()
 						if sc, ok := netConn.(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}
+						t = reflect.TypeOf(tlsConn.Conn).Elem()
+						p = uintptr(unsafe.Pointer(tlsConn.Conn))
 					} else if _, ok := iConn.(*tls.UConn); ok {
 						return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
 					} else if _, ok := iConn.(*xtls.Conn); ok {
@@ -474,6 +483,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					} else {
 						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 					}
+					i, _ := t.FieldByName("input")
+					r, _ := t.FieldByName("rawInput")
+					input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
+					rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 					xtlsConn.RPRX = true
 					xtlsConn.SHOW = xtls_show
@@ -545,7 +558,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			// TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
 			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, counter, ctx, account.ID.Bytes(),
+				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
 					&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 			} else {
 				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
