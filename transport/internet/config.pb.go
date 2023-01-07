@@ -425,7 +425,7 @@ type SocketConfig struct {
 	TcpKeepAliveInterval       int32          `protobuf:"varint,10,opt,name=tcp_keep_alive_interval,json=tcpKeepAliveInterval,proto3" json:"tcp_keep_alive_interval,omitempty"`
 	TcpKeepAliveIdle           int32          `protobuf:"varint,11,opt,name=tcp_keep_alive_idle,json=tcpKeepAliveIdle,proto3" json:"tcp_keep_alive_idle,omitempty"`
 	TcpCongestion              string         `protobuf:"bytes,12,opt,name=tcp_congestion,json=tcpCongestion,proto3" json:"tcp_congestion,omitempty"`
-	Interface                  string         `protobuf:"bytes,13,opt,name=interface,json=interface,proto3" json:"interface,omitempty"`
+	Interface                  string         `protobuf:"bytes,12,opt,name=interface,json=interface,proto3" json:"interface,omitempty"`
 }
 
 func (x *SocketConfig) Reset() {
