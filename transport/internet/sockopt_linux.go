@@ -46,6 +46,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			return newError("failed to set SO_MARK").Base(err)
 		}
 	}
+	
+	if  config.Interface != "" {
+                if err := syscall.BindToDevice(int(fd), config.Interface); err != nil {
+                        return newError("failed to set Interface").Base(err)
+                }
+        }
 
 	if isTCPSocket(network) {
 		tfo := config.ParseTFOValue()
