@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/golang/protobuf/proto"
@@ -52,7 +53,15 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 		account.Id = u.String()
 
-		switch account.Flow {
+		accountFlow := account.Flow
+		flows := strings.Split(account.Flow, ",")
+		for _, f := range flows {
+			t := strings.TrimSpace(f)
+			if t != "none" {
+				accountFlow = t
+			}
+		}
+		switch accountFlow {
 		case "", vless.XRO, vless.XRD, vless.XRV:
 		case vless.XRS:
 			return nil, newError(`VLESS clients: inbound doesn't support "xtls-rprx-splice" in this version, please use "xtls-rprx-direct" instead`)
