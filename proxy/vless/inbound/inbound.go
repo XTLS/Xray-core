@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -471,6 +472,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					var p uintptr
 					if tlsConn, ok := iConn.(*tls.Conn); ok {
 						netConn = tlsConn.NetConn()
+						if pc, ok := netConn.(*proxyproto.Conn); ok {
+							netConn = pc.Raw()
+							// 8192 > 4096, there is no need to process pc's bufReader
+						}
 						if sc, ok := netConn.(syscall.Conn); ok {
 							rawConn, _ = sc.SyscallConn()
 						}
