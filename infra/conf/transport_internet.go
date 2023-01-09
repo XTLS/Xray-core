@@ -534,6 +534,7 @@ type SocketConfig struct {
 	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
 	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
 	TCPCongestion        string      `json:"tcpCongestion"`
+	Interface            string      `json:"interface"`
 }
 
 // Build implements Buildable.
@@ -583,6 +584,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
 		TcpCongestion:        c.TCPCongestion,
+		Interface:            c.Interface,
 	}, nil
 }
 
