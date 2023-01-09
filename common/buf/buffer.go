@@ -160,6 +160,19 @@ func (b *Buffer) BytesTo(to int32) []byte {
 	return b.v[b.start : b.start+to]
 }
 
+// Check makes sure that 0 <= b.start <= b.end.
+func (b *Buffer) Check() {
+	if b.start < 0 {
+		b.start = 0
+	}
+	if b.end < 0 {
+		b.end = 0
+	}
+	if b.start > b.end {
+		b.start = b.end
+	}
+}
+
 // Resize cuts the buffer at the given position.
 func (b *Buffer) Resize(from, to int32) {
 	if from < 0 {
@@ -173,6 +186,7 @@ func (b *Buffer) Resize(from, to int32) {
 	}
 	b.end = b.start + to
 	b.start += from
+	b.Check()
 }
 
 // Advance cuts the buffer at the given position.
@@ -181,6 +195,7 @@ func (b *Buffer) Advance(from int32) {
 		from += b.Len()
 	}
 	b.start += from
+	b.Check()
 }
 
 // Len returns the length of the buffer content.
