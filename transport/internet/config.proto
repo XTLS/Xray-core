@@ -98,4 +98,6 @@ message SocketConfig {
   int32 tcp_keep_alive_idle = 11;
   
   string tcp_congestion = 12;
+  
+  string interface = 13;
 }
