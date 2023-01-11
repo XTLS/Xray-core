@@ -203,6 +203,9 @@ func (b *Buffer) Len() int32 {
 	if b == nil {
 		return 0
 	}
+	if len(b.v) == 0 {
+		return 0
+	}
 	return b.end - b.start
 }
 
