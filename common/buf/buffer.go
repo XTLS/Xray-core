@@ -2,6 +2,7 @@ package buf
 
 import (
 	"io"
+	"strconv"
 
 	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/net"
@@ -23,6 +24,13 @@ type Buffer struct {
 	end       int32
 	unmanaged bool
 	UDP       *net.Destination
+}
+
+func (b *Buffer) PrintInfo() string {
+	if b == nil {
+		return "nil"
+	}
+	return " " + strconv.Itoa(len(b.v)) + " " + strconv.Itoa(cap(b.v)) + " " + strconv.Itoa(int(b.start)) + " " + strconv.Itoa(int(b.end)) + " " + strconv.FormatBool(b.unmanaged) + " "
 }
 
 // New creates a Buffer with 0 length and 8K capacity.

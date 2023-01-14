@@ -554,6 +554,7 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 	}
 	for i := posindex; i < len(buffer); i++ {
 		b := buffer[i]
+		newError("Xtls Unpadding prcess buffer ", i, " ", posByte, " ", posindex, " content ", *remainingContent, " padding ", *remainingPadding, " buffer ", b.PrintInfo()).WriteToLog(session.ExportIDToError(ctx))
 		for posByte < b.Len() {
 			if *remainingContent <= 0 && *remainingPadding <= 0 {
 				if *currentCommand == 1 { // possible buffer after padding, no need to worry about xtls (command 2)
@@ -575,6 +576,7 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 				if b.Len() < posByte+*remainingContent {
 					len = b.Len() - posByte
 				}
+				newError("Xtls Unpadding read content ", len, i, " ", posByte, " ", posindex, " content ", *remainingContent, " padding ", *remainingPadding, " buffer ", b.PrintInfo()).WriteToLog(session.ExportIDToError(ctx))
 				newbuffer := buf.New()
 				newbuffer.Write(b.BytesRange(posByte, posByte+len))
 				mb2 = append(mb2, newbuffer)
