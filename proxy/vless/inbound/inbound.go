@@ -198,6 +198,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		Reader: buf.NewReader(connection),
 		Buffer: buf.MultiBuffer{first},
 	}
+	newError("reader: ", reflect.TypeOf(reader.Reader)).AtInfo().WriteToLog(sid)
 
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
