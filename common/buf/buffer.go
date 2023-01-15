@@ -2,6 +2,8 @@ package buf
 
 import (
 	"io"
+	"runtime/debug"
+	"fmt"
 	"strconv"
 
 	"github.com/xtls/xray-core/common/bytespool"
@@ -29,6 +31,9 @@ type Buffer struct {
 func (b *Buffer) PrintInfo() string {
 	if b == nil {
 		return "nil"
+	}
+	if b.v == nil {
+		return "b.v nil"
 	}
 	return " " + strconv.Itoa(len(b.v)) + " " + strconv.Itoa(cap(b.v)) + " " + strconv.Itoa(int(b.start)) + " " + strconv.Itoa(int(b.end)) + " " + strconv.FormatBool(b.unmanaged) + " "
 }
@@ -95,6 +100,7 @@ func (b *Buffer) Release() {
 	}
 
 	p := b.v
+	fmt.Println("buffer release ", string(debug.Stack()))
 	b.v = nil
 	b.Clear()
 
@@ -123,6 +129,9 @@ func (b *Buffer) SetByte(index int32, value byte) {
 
 // Bytes returns the content bytes of this Buffer.
 func (b *Buffer) Bytes() []byte {
+	if (b == nil || b.v == nil) {
+		return nil
+	}
 	return b.v[b.start:b.end]
 }
 
@@ -140,6 +149,9 @@ func (b *Buffer) Extend(n int32) []byte {
 
 // BytesRange returns a slice of this buffer with given from and to boundary.
 func (b *Buffer) BytesRange(from, to int32) []byte {
+	if (b == nil || b.v == nil) {
+		return nil
+	}
 	if from < 0 {
 		from += b.Len()
 	}

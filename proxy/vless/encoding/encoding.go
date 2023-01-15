@@ -560,15 +560,15 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 				if *currentCommand == 1 { // possible buffer after padding, no need to worry about xtls (command 2)
 					len := b.Len() - posByte
 					newbuffer := buf.New()
-					newbuffer.Write(b.BytesRange(posByte, posByte+len))
+					realLen, _ := newbuffer.Write(b.BytesRange(posByte, posByte+len))
 					mb2 = append(mb2, newbuffer)
-					posByte += len
+					posByte += int32(realLen)
 				} else {
 					paddingInfo := b.BytesRange(posByte, posByte+5)
 					*currentCommand = int(paddingInfo[0])
 					*remainingContent = int32(paddingInfo[1])<<8 | int32(paddingInfo[2])
 					*remainingPadding = int32(paddingInfo[3])<<8 | int32(paddingInfo[4])
-					newError("Xtls Unpadding new block", i, " ", posByte, " content ", *remainingContent, " padding ", *remainingPadding, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
+					newError("Xtls Unpadding new block ", i, " ", posByte, " content ", *remainingContent, " padding ", *remainingPadding, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
 					posByte += 5
 				}
 			} else if *remainingContent > 0 {
@@ -576,12 +576,13 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 				if b.Len() < posByte+*remainingContent {
 					len = b.Len() - posByte
 				}
-				newError("Xtls Unpadding read content ", len, i, " ", posByte, " ", posindex, " content ", *remainingContent, " padding ", *remainingPadding, " buffer ", b.PrintInfo()).WriteToLog(session.ExportIDToError(ctx))
+				newError("Xtls Unpadding read content ", len, " ", i, " ", posByte, " ", posindex, " content ", *remainingContent, " padding ", *remainingPadding, " buffer ", b.PrintInfo()).WriteToLog(session.ExportIDToError(ctx))
 				newbuffer := buf.New()
-				newbuffer.Write(b.BytesRange(posByte, posByte+len))
+				realLen, _ := newbuffer.Write(b.BytesRange(posByte, posByte+len))
 				mb2 = append(mb2, newbuffer)
-				*remainingContent -= len
-				posByte += len
+				*remainingContent -= int32(realLen)
+				posByte += int32(realLen)
+				newError("Xtls Unpadding read content finish ", len, " ", realLen, " ", i, " ", posByte, " ", posindex, " content ", *remainingContent, " padding ", *remainingPadding, " buffer ", b.PrintInfo()).WriteToLog(session.ExportIDToError(ctx))
 			} else { // remainingPadding > 0
 				len := *remainingPadding
 				if b.Len() < posByte+*remainingPadding {
