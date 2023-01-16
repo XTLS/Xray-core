@@ -188,9 +188,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	first := buf.New()
-	defer first.Release()
-
+	first := buf.FromBytes(make([]byte, 0, buf.Size))
 	firstLen, _ := first.ReadFrom(connection)
 	newError("firstLen = ", firstLen).AtInfo().WriteToLog(sid)
 

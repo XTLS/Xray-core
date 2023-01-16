@@ -155,9 +155,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	first := buf.New()
-	defer first.Release()
-
+	first := buf.FromBytes(make([]byte, 0, buf.Size))
 	firstLen, err := first.ReadFrom(conn)
 	if err != nil {
 		return newError("failed to read first request").Base(err)
