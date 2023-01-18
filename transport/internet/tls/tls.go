@@ -1,16 +1,22 @@
 package tls
 
 import (
+	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"math/big"
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 var _ buf.Writer = (*Conn)(nil)
+
+var XrayRandom *utls.ClientHelloID
 
 type Conn struct {
 	*tls.Conn
@@ -111,16 +117,47 @@ func copyConfig(c *tls.Config) *utls.Config {
 	}
 }
 
+func GetFingerprint(ctx context.Context, config string) (*utls.ClientHelloID, bool) {
+	if XrayRandom == nil {
+		// lazy init
+		for k, v := range FingerprintsForRNG {
+			Fingerprints[k] = v
+		}
+		big, err := rand.Int(rand.Reader, big.NewInt(int64(len(FingerprintsForRNG))))
+		if err != nil {
+			newError("failed to generate xray random fingerprint").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		}
+		var i = int(big.Int64())
+		count := 0
+		for k, v := range FingerprintsForRNG {
+			if count == i {
+				newError("xray random fingerprint: ", k).WriteToLog(session.ExportIDToError(ctx))
+				XrayRandom = v
+				break
+			}
+			count++
+		}
+	}
+	if config == "xray_random" {
+		return XrayRandom, true
+	}
+	fingerprint, ok := Fingerprints[config]
+	return fingerprint, ok
+}
+
 var Fingerprints = map[string]*utls.ClientHelloID{
 	"chrome":     &utls.HelloChrome_Auto,
 	"firefox":    &utls.HelloFirefox_Auto,
 	"safari":     &utls.HelloSafari_Auto,
 	"randomized": &utls.HelloRandomized,
 	// This is a bit lame, but it seems there is no good way to reflect variables from Golang package
-	"hellogolang":             &utls.HelloGolang,
-	"hellorandomized":         &utls.HelloRandomized,
-	"hellorandomizedalpn":     &utls.HelloRandomizedALPN,
-	"hellorandomizednoalpn":   &utls.HelloRandomizedNoALPN,
+	"hellogolang":           &utls.HelloGolang,
+	"hellorandomized":       &utls.HelloRandomized,
+	"hellorandomizedalpn":   &utls.HelloRandomizedALPN,
+	"hellorandomizednoalpn": &utls.HelloRandomizedNoALPN,
+}
+
+var FingerprintsForRNG = map[string]*utls.ClientHelloID{
 	"hellofirefox_auto":       &utls.HelloFirefox_Auto,
 	"hellofirefox_55":         &utls.HelloFirefox_55,
 	"hellofirefox_56":         &utls.HelloFirefox_56,
