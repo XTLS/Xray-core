@@ -138,7 +138,7 @@ func GetFingerprint(ctx context.Context, config string) (*utls.ClientHelloID, bo
 			count++
 		}
 	}
-	if config == "xray_random" {
+	if config == "random" {
 		return XrayRandom, true
 	}
 	fingerprint, ok := Fingerprints[config]
@@ -151,26 +151,29 @@ var Fingerprints = map[string]*utls.ClientHelloID{
 	"safari":     &utls.HelloSafari_Auto,
 	"randomized": &utls.HelloRandomized,
 	// This is a bit lame, but it seems there is no good way to reflect variables from Golang package
+	// We don't RNG for go, randomized, or fingerprints that is more than 4 years old
 	"hellogolang":           &utls.HelloGolang,
 	"hellorandomized":       &utls.HelloRandomized,
 	"hellorandomizedalpn":   &utls.HelloRandomizedALPN,
 	"hellorandomizednoalpn": &utls.HelloRandomizedNoALPN,
+	"hellofirefox_55":       &utls.HelloFirefox_55,
+	"hellofirefox_56":       &utls.HelloFirefox_56,
+	"hellofirefox_63":       &utls.HelloFirefox_63,
+	"hellofirefox_65":       &utls.HelloFirefox_65,
+	"hellochrome_58":        &utls.HelloChrome_58,
+	"hellochrome_62":        &utls.HelloChrome_62,
+	"hellochrome_70":        &utls.HelloChrome_70,
+	"hellochrome_72":        &utls.HelloChrome_72,
+	"helloios_11_1":         &utls.HelloIOS_11_1,
+	"hello360_7_5":          &utls.Hello360_7_5,
 }
 
 var FingerprintsForRNG = map[string]*utls.ClientHelloID{
 	"hellofirefox_auto":       &utls.HelloFirefox_Auto,
-	"hellofirefox_55":         &utls.HelloFirefox_55,
-	"hellofirefox_56":         &utls.HelloFirefox_56,
-	"hellofirefox_63":         &utls.HelloFirefox_63,
-	"hellofirefox_65":         &utls.HelloFirefox_65,
 	"hellofirefox_99":         &utls.HelloFirefox_99,
 	"hellofirefox_102":        &utls.HelloFirefox_102,
 	"hellofirefox_105":        &utls.HelloFirefox_105,
 	"hellochrome_auto":        &utls.HelloChrome_Auto,
-	"hellochrome_58":          &utls.HelloChrome_58,
-	"hellochrome_62":          &utls.HelloChrome_62,
-	"hellochrome_70":          &utls.HelloChrome_70,
-	"hellochrome_72":          &utls.HelloChrome_72,
 	"hellochrome_83":          &utls.HelloChrome_83,
 	"hellochrome_87":          &utls.HelloChrome_87,
 	"hellochrome_96":          &utls.HelloChrome_96,
@@ -178,7 +181,6 @@ var FingerprintsForRNG = map[string]*utls.ClientHelloID{
 	"hellochrome_102":         &utls.HelloChrome_102,
 	"hellochrome_106_shuffle": &utls.HelloChrome_106_Shuffle,
 	"helloios_auto":           &utls.HelloIOS_Auto,
-	"helloios_11_1":           &utls.HelloIOS_11_1,
 	"helloios_12_1":           &utls.HelloIOS_12_1,
 	"helloios_13":             &utls.HelloIOS_13,
 	"helloios_14":             &utls.HelloIOS_14,
@@ -189,7 +191,6 @@ var FingerprintsForRNG = map[string]*utls.ClientHelloID{
 	"hellosafari_auto":        &utls.HelloSafari_Auto,
 	"hellosafari_16_0":        &utls.HelloSafari_16_0,
 	"hello360_auto":           &utls.Hello360_Auto,
-	"hello360_7_5":            &utls.Hello360_7_5,
 	"hello360_11_0":           &utls.Hello360_11_0,
 	"helloqq_auto":            &utls.HelloQQ_Auto,
 	"helloqq_11_1":            &utls.HelloQQ_11_1,
