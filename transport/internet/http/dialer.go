@@ -75,7 +75,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			}
 
 			var cn tls.Interface
-			if fingerprint, ok := tls.Fingerprints[tlsConfigs.Fingerprint]; ok {
+			if fingerprint, ok := tls.GetFingerprint(ctx, tlsConfigs.Fingerprint); ok {
 				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 			} else {
 				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
