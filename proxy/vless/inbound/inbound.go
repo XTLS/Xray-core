@@ -5,6 +5,7 @@ package inbound
 import (
 	"bytes"
 	"context"
+	gotls "crypto/tls"
 	"io"
 	"reflect"
 	"strconv"
@@ -470,6 +471,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					var t reflect.Type
 					var p uintptr
 					if tlsConn, ok := iConn.(*tls.Conn); ok {
+						if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
+							return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
+						}
 						netConn = tlsConn.NetConn()
 						if pc, ok := netConn.(*proxyproto.Conn); ok {
 							netConn = pc.Raw()
