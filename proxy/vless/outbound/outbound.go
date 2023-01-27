@@ -5,11 +5,13 @@ package outbound
 import (
 	"bytes"
 	"context"
+	gotls "crypto/tls"
 	"reflect"
 	"syscall"
 	"time"
 	"unsafe"
 
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -261,6 +263,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		var err error
 		if rawConn != nil && requestAddons.Flow == vless.XRV {
+			if tlsConn, ok := iConn.(*tls.Conn); ok {
+				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
+					return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
+				}
+			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
+				if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
+					return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, utlsConn.ConnectionState().Version).AtWarning()
+				}
+			}
 			var counter stats.Counter
 			if statConn != nil {
 				counter = statConn.WriteCounter
