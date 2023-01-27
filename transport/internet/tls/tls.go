@@ -111,9 +111,10 @@ func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) ne
 
 func copyConfig(c *tls.Config) *utls.Config {
 	return &utls.Config{
-		RootCAs:            c.RootCAs,
-		ServerName:         c.ServerName,
-		InsecureSkipVerify: c.InsecureSkipVerify,
+		RootCAs:               c.RootCAs,
+		ServerName:            c.ServerName,
+		InsecureSkipVerify:    c.InsecureSkipVerify,
+		VerifyPeerCertificate: c.VerifyPeerCertificate,
 	}
 }
 
