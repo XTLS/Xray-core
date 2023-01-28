@@ -8,8 +8,8 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
-	github.com/lucas-clemente/quic-go v0.31.1
-	github.com/marten-seemann/qtls-go1-18 v0.1.4
+	github.com/quic-go/quic-go v0.31.1
+	github.com/quic-go/qtls-go1-18 v0.2.0
 	github.com/miekg/dns v1.1.50
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
@@ -43,7 +43,7 @@ require (
 	github.com/klauspost/compress v1.15.14 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
-	github.com/marten-seemann/qtls-go1-19 v0.1.2 // indirect
+	github.com/quic-go/qtls-go1-19 v0.2.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.6.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
