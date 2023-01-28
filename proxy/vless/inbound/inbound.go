@@ -154,6 +154,19 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	return handler, nil
 }
 
+func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
+	if request.Command != protocol.RequestCommandMux {
+		return false
+	}
+	if first.Len() < 7 {
+		return true
+	}
+	firstBytes := first.Bytes()
+	return !(firstBytes[2] == 0 && // ID high
+		firstBytes[3] == 0 && // ID low
+		firstBytes[6] == 2) // Network type: UDP
+}
+
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
 	return errors.Combine(common.Close(h.validator))
@@ -513,7 +526,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "", "none":
-		if accountFlow == vless.XRV && !allowNoneFlow && request.Command == protocol.RequestCommandTCP {
+		if accountFlow == vless.XRV && !allowNoneFlow && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return newError(account.ID.String() + " is not able to use " + vless.XRV +
 				". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
 		}
