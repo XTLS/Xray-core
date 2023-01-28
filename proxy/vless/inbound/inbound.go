@@ -155,14 +155,16 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 }
 
 func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
-	if (first.Len() < 7) {
+	if request.Command != protocol.RequestCommandMux {
 		return false
 	}
+	if first.Len() < 7 {
+		return true
+	}
 	firstBytes := first.Bytes()
-	return request.Command == protocol.RequestCommandMux && 
-	!(firstBytes[2] == 0 && // ID high
-	firstBytes[3] == 0 && // ID low
-	firstBytes[6] == 2) // Network type: UDP
+	return !(firstBytes[2] == 0 && // ID high
+		firstBytes[3] == 0 && // ID low
+		firstBytes[6] == 2) // Network type: UDP
 }
 
 // Close implements common.Closable.Close().
