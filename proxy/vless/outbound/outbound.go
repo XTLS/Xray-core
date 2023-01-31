@@ -158,22 +158,19 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				var p uintptr
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
 					netConn = tlsConn.NetConn()
-					if sc, ok := netConn.(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
-					}
 					t = reflect.TypeOf(tlsConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(tlsConn.Conn))
 				} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-					netConn = utlsConn.Conn.NetConn()
-					if sc, ok := netConn.(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
-					}
+					netConn = utlsConn.NetConn()
 					t = reflect.TypeOf(utlsConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(utlsConn.Conn))
 				} else if _, ok := iConn.(*xtls.Conn); ok {
 					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
 				} else {
 					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+				}
+				if sc, ok := netConn.(syscall.Conn); ok {
+					rawConn, _ = sc.SyscallConn()
 				}
 				i, _ := t.FieldByName("input")
 				r, _ := t.FieldByName("rawInput")
@@ -265,11 +262,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if rawConn != nil && requestAddons.Flow == vless.XRV {
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
 				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
-					return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
+					return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 				}
 			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
 				if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
-					return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, utlsConn.ConnectionState().Version).AtWarning()
+					return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version).AtWarning()
 				}
 			}
 			var counter stats.Counter

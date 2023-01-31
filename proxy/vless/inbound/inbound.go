@@ -485,15 +485,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					var p uintptr
 					if tlsConn, ok := iConn.(*tls.Conn); ok {
 						if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
-							return newError(`failed to use ` + requestAddons.Flow + `, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
+							return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 						}
 						netConn = tlsConn.NetConn()
 						if pc, ok := netConn.(*proxyproto.Conn); ok {
 							netConn = pc.Raw()
 							// 8192 > 4096, there is no need to process pc's bufReader
-						}
-						if sc, ok := netConn.(syscall.Conn); ok {
-							rawConn, _ = sc.SyscallConn()
 						}
 						t = reflect.TypeOf(tlsConn.Conn).Elem()
 						p = uintptr(unsafe.Pointer(tlsConn.Conn))
@@ -503,6 +500,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
 					} else {
 						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+					}
+					if sc, ok := netConn.(syscall.Conn); ok {
+						rawConn, _ = sc.SyscallConn()
 					}
 					i, _ := t.FieldByName("input")
 					r, _ := t.FieldByName("rawInput")
