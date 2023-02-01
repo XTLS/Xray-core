@@ -83,23 +83,22 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	return entry, nil
 }
 
-func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, payload *buf.Buffer) {
+func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, payload *buf.Buffer) error {
 	// TODO: Add user to destString
 	newError("dispatch request to: ", destination).AtDebug().WriteToLog(session.ExportIDToError(ctx))
 
 	conn, err := v.getInboundRay(ctx, destination)
 	if err != nil {
-		newError("failed to get inbound").Base(err).WriteToLog(session.ExportIDToError(ctx))
-		return
+		return newError("failed to get inbound").Base(err)
 	}
 	outputStream := conn.link.Writer
 	if outputStream != nil {
 		if err := outputStream.WriteMultiBuffer(buf.MultiBuffer{payload}); err != nil {
-			newError("failed to write first UDP payload").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			conn.cancel()
-			return
+			return newError("failed to write first UDP payload").Base(err)
 		}
 	}
+	return nil
 }
 
 func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, callback ResponseCallback) {
