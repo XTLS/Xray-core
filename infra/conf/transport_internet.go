@@ -379,6 +379,9 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.CipherSuites = c.CipherSuites
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
+	if config.Fingerprint != "" && tls.GetFingerprint(config.Fingerprint) == nil {
+		return nil, newError(`unknown fingerprint: `, config.Fingerprint)
+	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
 	if c.PinnedPeerCertificateChainSha256 != nil {
