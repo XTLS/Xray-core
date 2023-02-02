@@ -3,7 +3,7 @@ package quic
 import (
 	"crypto/cipher"
 
-	"github.com/marten-seemann/qtls-go1-18"
+	"github.com/quic-go/qtls-go1-20"
 )
 
 type (
