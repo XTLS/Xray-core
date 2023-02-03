@@ -1,11 +1,11 @@
-//go:build go1.18 && !go1.19
+//go:build go1.20
 
 package quic
 
 import (
 	"crypto/cipher"
 
-	"github.com/quic-go/qtls-go1-18"
+	"github.com/quic-go/qtls-go1-20"
 )
 
 type (
