@@ -47,9 +47,11 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
+  - [Napsternetv](https://play.google.com/store/apps/details?id=com.napsternetlabs.napsternetv)
 - iOS & macOS (with M1 chip)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
+  - [Napsternetv](https://apps.apple.com/us/app/napsternetv/id1629465476)
 - macOS (Intel chip & M1 chip)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
