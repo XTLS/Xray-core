@@ -42,6 +42,7 @@
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
+  - [Nekoray](https://github.com/MatsuriDayo/nekoray)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch) (This project had been archived and currently inactive)
 - Android
@@ -53,6 +54,9 @@
 - macOS (Intel chip & M1 chip)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [Nekoray](https://github.com/MatsuriDayo/nekoray)
+- Linux
+  - [Nekoray](https://github.com/MatsuriDayo/nekoray)
 
 ## Credits
 
