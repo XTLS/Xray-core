@@ -12,6 +12,13 @@ import (
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
+type Interface interface {
+	net.Conn
+	Handshake() error
+	VerifyHostname(host string) error
+	NegotiatedProtocol() (name string, mutual bool)
+}
+
 var _ buf.Writer = (*Conn)(nil)
 
 type Conn struct {
@@ -125,6 +132,19 @@ func init() {
 		}
 		i++
 	}
+	randomized := utls.HelloRandomized
+	for {
+		randomized.Seed, _ = utls.NewPRNGSeed()
+		clientHelloSpec, _ := utls.UTLSIdToSpec(randomized)
+		if clientHelloSpec.TLSVersMax == utls.VersionTLS13 {
+			for _, ext := range clientHelloSpec.Extensions {
+				if ks, ok := ext.(*utls.KeyShareExtension); ok && ks.KeyShares[0].Group == utls.X25519 {
+					PresetFingerprints["randomized"] = &randomized
+					return
+				}
+			}
+		}
+	}
 }
 
 func GetFingerprint(name string) (fingerprint *utls.ClientHelloID) {
@@ -154,7 +174,7 @@ var PresetFingerprints = map[string]*utls.ClientHelloID{
 	"360":        &utls.Hello360_Auto,
 	"qq":         &utls.HelloQQ_Auto,
 	"random":     nil,
-	"randomized": &utls.HelloRandomized,
+	"randomized": nil,
 }
 
 var ModernFingerprints = map[string]*utls.ClientHelloID{
@@ -202,11 +222,4 @@ var OtherFingerprints = map[string]*utls.ClientHelloID{
 	"hellochrome_72":        &utls.HelloChrome_72,
 	"helloios_11_1":         &utls.HelloIOS_11_1,
 	"hello360_7_5":          &utls.Hello360_7_5,
-}
-
-type Interface interface {
-	net.Conn
-	Handshake() error
-	VerifyHostname(host string) error
-	NegotiatedProtocol() (name string, mutual bool)
 }
