@@ -249,6 +249,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 			} else if err1 != buf.ErrReadTimeout {
 				return err1
+			} else if requestAddons.Flow == vless.XRV {
+				mb := make(buf.MultiBuffer, 1)
+				mb[0] = encoding.XtlsPadding(nil, 0x01, &userUUID, ctx) // it must not be tls so padding finish with it (command 1)
+				newError("Insert padding with empty content to camouflage VLESS header ", mb.Len()).WriteToLog(session.ExportIDToError(ctx))
+				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
+					return err
+				}
 			}
 		} else {
 			newError("Reader is not timeout reader, will send out vless header separately from first payload").AtDebug().WriteToLog(session.ExportIDToError(ctx))
