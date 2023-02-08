@@ -12,6 +12,13 @@ import (
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
+type Interface interface {
+	net.Conn
+	Handshake() error
+	VerifyHostname(host string) error
+	NegotiatedProtocol() (name string, mutual bool)
+}
+
 var _ buf.Writer = (*Conn)(nil)
 
 type Conn struct {
@@ -125,6 +132,13 @@ func init() {
 		}
 		i++
 	}
+	weights := utls.DefaultWeights
+	weights.TLSVersMax_Set_VersionTLS13 = 1
+	weights.FirstKeyShare_Set_CurveP256 = 0
+	randomized := utls.HelloRandomized
+	randomized.Seed, _ = utls.NewPRNGSeed()
+	randomized.Weights = &weights
+	PresetFingerprints["randomized"] = &randomized
 }
 
 func GetFingerprint(name string) (fingerprint *utls.ClientHelloID) {
@@ -154,7 +168,7 @@ var PresetFingerprints = map[string]*utls.ClientHelloID{
 	"360":        &utls.Hello360_Auto,
 	"qq":         &utls.HelloQQ_Auto,
 	"random":     nil,
-	"randomized": &utls.HelloRandomized,
+	"randomized": nil,
 }
 
 var ModernFingerprints = map[string]*utls.ClientHelloID{
@@ -202,11 +216,4 @@ var OtherFingerprints = map[string]*utls.ClientHelloID{
 	"hellochrome_72":        &utls.HelloChrome_72,
 	"helloios_11_1":         &utls.HelloIOS_11_1,
 	"hello360_7_5":          &utls.Hello360_7_5,
-}
-
-type Interface interface {
-	net.Conn
-	Handshake() error
-	VerifyHostname(host string) error
-	NegotiatedProtocol() (name string, mutual bool)
 }
