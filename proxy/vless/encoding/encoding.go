@@ -469,18 +469,18 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 
 // ReshapeMultiBuffer prepare multi buffer for padding stucture (max 21 bytes)
 func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBuffer {
-	needReshape := false
+	needReshape := 0
 	for _, b := range buffer {
 		if b.Len() >= buf.Size-21 {
-			needReshape = true
+			needReshape += 1
 		}
 	}
-	if !needReshape {
+	if needReshape == 0 {
 		return buffer
 	}
-	mb2 := make(buf.MultiBuffer, 0, len(buffer))
-	print := ""
-	for _, b := range buffer {
+	mb2 := make(buf.MultiBuffer, 0, len(buffer)+needReshape)
+	toPrint := ""
+	for i, b := range buffer {
 		if b.Len() >= buf.Size-21 {
 			index := int32(bytes.LastIndex(b.Bytes(), tlsApplicationDataStart))
 			if index <= 0 {
@@ -490,17 +490,17 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 			buffer2 := buf.New()
 			buffer1.Write(b.BytesTo(index))
 			buffer2.Write(b.BytesFrom(index))
+			b.Release()
 			mb2 = append(mb2, buffer1, buffer2)
-			print += " " + strconv.Itoa(int(buffer1.Len())) + " " + strconv.Itoa(int(buffer2.Len()))
+			toPrint += " " + strconv.Itoa(int(buffer1.Len())) + " " + strconv.Itoa(int(buffer2.Len()))
 		} else {
-			newbuffer := buf.New()
-			newbuffer.Write(b.Bytes())
-			mb2 = append(mb2, newbuffer)
-			print += " " + strconv.Itoa(int(b.Len()))
+			mb2 = append(mb2, b)
+			toPrint += " " + strconv.Itoa(int(b.Len()))
 		}
+		buffer[i] = nil
 	}
-	buf.ReleaseMulti(buffer)
-	newError("ReshapeMultiBuffer ", print).WriteToLog(session.ExportIDToError(ctx))
+	buffer = buffer[:0]
+	newError("ReshapeMultiBuffer ", toPrint).WriteToLog(session.ExportIDToError(ctx))
 	return mb2
 }
 
@@ -524,7 +524,7 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, ctx context.Cont
 		*userUUID = nil
 	}
 	newbuffer.Write([]byte{command, byte(contantLen >> 8), byte(contantLen), byte(paddingLen >> 8), byte(paddingLen)})
-	if (b != nil) {
+	if b != nil {
 		newbuffer.Write(b.Bytes())
 		b.Release()
 		b = nil
