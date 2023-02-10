@@ -486,11 +486,17 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 			if index <= 0 {
 				index = buf.Size / 2
 			}
-			buffer1 := buf.New()
+			var buffer1 *buf.Buffer
 			buffer2 := buf.New()
-			buffer1.Write(b.BytesTo(index))
 			buffer2.Write(b.BytesFrom(index))
-			b.Release()
+			if index >= buf.Size-21 {
+				buffer1 = buf.New()
+				buffer1.Write(b.BytesTo(index))
+				b.Release()
+			} else {
+				b.Resize(0, index)
+				buffer1 = b
+			}
 			mb2 = append(mb2, buffer1, buffer2)
 			toPrint += " " + strconv.Itoa(int(buffer1.Len())) + " " + strconv.Itoa(int(buffer2.Len()))
 		} else {
