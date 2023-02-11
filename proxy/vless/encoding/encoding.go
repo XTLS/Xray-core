@@ -480,28 +480,20 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 	}
 	mb2 := make(buf.MultiBuffer, 0, len(buffer)+needReshape)
 	toPrint := ""
-	for i, b := range buffer {
-		if b.Len() >= buf.Size-21 {
-			index := int32(bytes.LastIndex(b.Bytes(), tlsApplicationDataStart))
+	for i, buffer1 := range buffer {
+		if buffer1.Len() >= buf.Size-21 {
+			index := int32(bytes.LastIndex(buffer1.Bytes(), tlsApplicationDataStart))
 			if index <= 0 {
 				index = buf.Size / 2
 			}
-			var buffer1 *buf.Buffer
 			buffer2 := buf.New()
-			buffer2.Write(b.BytesFrom(index))
-			if index >= buf.Size-21 {
-				buffer1 = buf.New()
-				buffer1.Write(b.BytesTo(index))
-				b.Release()
-			} else {
-				b.Resize(0, index)
-				buffer1 = b
-			}
+			buffer2.Write(buffer1.BytesFrom(index))
+			buffer1.Resize(0, index)
 			mb2 = append(mb2, buffer1, buffer2)
 			toPrint += " " + strconv.Itoa(int(buffer1.Len())) + " " + strconv.Itoa(int(buffer2.Len()))
 		} else {
-			mb2 = append(mb2, b)
-			toPrint += " " + strconv.Itoa(int(b.Len()))
+			mb2 = append(mb2, buffer1)
+			toPrint += " " + strconv.Itoa(int(buffer1.Len()))
 		}
 		buffer[i] = nil
 	}
