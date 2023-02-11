@@ -256,7 +256,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 ) error {
 	err := func() error {
 		var ct stats.Counter
-		filterUUID := true
+		withinPaddingBuffers := false
 		shouldSwitchToDirectCopy := false
 		var remainingContent int32 = -1
 		var remainingPadding int32 = -1
@@ -294,13 +294,15 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				if filterUUID && (*isTLS || *numberOfPacketToFilter > 0) {
+				if withinPaddingBuffers || *numberOfPacketToFilter > 0 {
 					buffer = XtlsUnpadding(ctx, buffer, userUUID, &remainingContent, &remainingPadding, &currentCommand)
 					if remainingContent == 0 && remainingPadding == 0 {
 						if currentCommand == 1 {
-							filterUUID = false
+							withinPaddingBuffers = false
+							remainingContent = -1
+							remainingPadding = -1 // set to initial state to parse the next padding
 						} else if currentCommand == 2 {
-							filterUUID = false
+							withinPaddingBuffers = false
 							shouldSwitchToDirectCopy = true
 							// XTLS Vision processes struct TLS Conn's input and rawInput
 							if inputBuffer, err := buf.ReadFrom(input); err == nil {
@@ -313,9 +315,13 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 									buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
 								}
 							}
-						} else if currentCommand != 0 {
+						} else if currentCommand == 0 {
+							withinPaddingBuffers = true
+						} else {
 							newError("XtlsRead unknown command ", currentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						}
+					} else {
+						withinPaddingBuffers = true
 					}
 				}
 				if *numberOfPacketToFilter > 0 {
@@ -543,6 +549,7 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 				posByte = 16
 				*remainingContent = 0
 				*remainingPadding = 0
+				*currentCommand = 0
 				break
 			}
 		}
