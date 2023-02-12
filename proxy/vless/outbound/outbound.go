@@ -236,7 +236,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target)
 		}
-		userUUID := account.ID.Bytes()
+		UUIDForTlsBlock := account.ID.Bytes()
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
 		if ok {
 			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
@@ -245,7 +245,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
 					if isTLS {
 						for i, b := range multiBuffer {
-							multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
+							multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &UUIDForTlsBlock, ctx)
 						}
 					}
 				}
@@ -256,7 +256,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				return err1
 			} else if requestAddons.Flow == vless.XRV {
 				mb := make(buf.MultiBuffer, 1)
-				mb[0] = encoding.XtlsPadding(nil, 0x01, &userUUID, ctx) // it must not be tls so padding finish with it (command 1)
+				UUIDForFirstBlock := account.ID.Bytes()
+				mb[0] = encoding.XtlsPadding(nil, 0x01, &UUIDForFirstBlock, ctx) // first block padding finish with it (command 1)
 				newError("Insert padding with empty content to camouflage VLESS header ", mb.Len()).WriteToLog(session.ExportIDToError(ctx))
 				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
 					return err
@@ -285,7 +286,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &UUIDForTlsBlock, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
