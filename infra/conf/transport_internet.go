@@ -642,7 +642,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			return nil, newError(`invalid "shortId": `, c.ShortId)
 		}
 		if c.SpiderX == "" {
-			return nil, newError(`empty "spiderX"`)
+			c.SpiderX = "/"
 		}
 		if c.SpiderX[0] != '/' {
 			return nil, newError(`invalid "spiderX": `, c.SpiderX)
