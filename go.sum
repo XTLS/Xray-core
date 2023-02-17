@@ -193,8 +193,8 @@ github.com/viant/assertly v0.4.8/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49u
 github.com/viant/toolbox v0.24.0/go.mod h1:OxMCG57V0PXuIP2HNQrtJf2CjqdmbrOx5EkMILuUhzM=
 github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3 h1:a3Y4WVjCxwoyO4E2xdNvq577tW8lkSBgyrA8E9+2NtM=
 github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3/go.mod h1:YJTRELIWrGxR1s8xcEBgxcxBfwQfMGjdvNLTjN9XFgY=
-github.com/xtls/reality v0.0.0-20230210055008-e814936a3d99 h1:H7I3fhMXA0GKSysu+KcSNMdX/o4MBElWR02/NIwhmpY=
-github.com/xtls/reality v0.0.0-20230210055008-e814936a3d99/go.mod h1:rkuAY1S9F8eI8gDiPDYvACE8e2uwkyg8qoOTuwWov7Y=
+github.com/xtls/reality v0.0.0-20230217102704-085bdf2104d3 h1:Rp9BfXZ+Li5j5L40zAdFZLcr0nXrYBPgaNpQ9lQnpWg=
+github.com/xtls/reality v0.0.0-20230217102704-085bdf2104d3/go.mod h1:rkuAY1S9F8eI8gDiPDYvACE8e2uwkyg8qoOTuwWov7Y=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 go.opencensus.io v0.18.0/go.mod h1:vKdFvxhtzZ9onBp9VKHK8z/sRpBMnKAsufL7wlDrCOA=
 go.starlark.net v0.0.0-20230128213706-3f75dec8e403 h1:jPeC7Exc+m8OBJUlWbBLh0O5UZPM7yU5W4adnhhbG4U=
