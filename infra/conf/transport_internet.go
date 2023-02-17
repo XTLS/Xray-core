@@ -343,19 +343,20 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                         bool             `json:"allowInsecure"`
-	Certs                            []*TLSCertConfig `json:"certificates"`
-	ServerName                       string           `json:"serverName"`
-	ALPN                             *StringList      `json:"alpn"`
-	EnableSessionResumption          bool             `json:"enableSessionResumption"`
-	DisableSystemRoot                bool             `json:"disableSystemRoot"`
-	MinVersion                       string           `json:"minVersion"`
-	MaxVersion                       string           `json:"maxVersion"`
-	CipherSuites                     string           `json:"cipherSuites"`
-	PreferServerCipherSuites         bool             `json:"preferServerCipherSuites"`
-	Fingerprint                      string           `json:"fingerprint"`
-	RejectUnknownSNI                 bool             `json:"rejectUnknownSni"`
-	PinnedPeerCertificateChainSha256 *[]string        `json:"pinnedPeerCertificateChainSha256"`
+	Insecure                             bool             `json:"allowInsecure"`
+	Certs                                []*TLSCertConfig `json:"certificates"`
+	ServerName                           string           `json:"serverName"`
+	ALPN                                 *StringList      `json:"alpn"`
+	EnableSessionResumption              bool             `json:"enableSessionResumption"`
+	DisableSystemRoot                    bool             `json:"disableSystemRoot"`
+	MinVersion                           string           `json:"minVersion"`
+	MaxVersion                           string           `json:"maxVersion"`
+	CipherSuites                         string           `json:"cipherSuites"`
+	PreferServerCipherSuites             bool             `json:"preferServerCipherSuites"`
+	Fingerprint                          string           `json:"fingerprint"`
+	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
+	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
+	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 }
 
 // Build implements Buildable.
@@ -397,6 +398,17 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 				return nil, err
 			}
 			config.PinnedPeerCertificateChainSha256 = append(config.PinnedPeerCertificateChainSha256, hashValue)
+		}
+	}
+
+	if c.PinnedPeerCertificatePublicKeySha256 != nil {
+		config.PinnedPeerCertificatePublicKeySha256 = [][]byte{}
+		for _, v := range *c.PinnedPeerCertificatePublicKeySha256 {
+			hashValue, err := base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				return nil, err
+			}
+			config.PinnedPeerCertificatePublicKeySha256 = append(config.PinnedPeerCertificatePublicKeySha256, hashValue)
 		}
 	}
 

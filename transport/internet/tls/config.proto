@@ -76,4 +76,11 @@ message Config {
      @Critical
   */
   repeated bytes pinned_peer_certificate_chain_sha256 = 13;
+
+  /* @Document A pinned certificate public key sha256 hash.
+     @Document If the server's public key hash does not match this value, the connection will be aborted.
+     @Document This value replace allow_insecure.
+     @Critical
+  */
+  repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
 }
