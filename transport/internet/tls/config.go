@@ -266,6 +266,20 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 		}
 		return newError("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
 	}
+
+	if c.PinnedPeerCertificatePublicKeySha256 != nil {
+		for _, v := range verifiedChains {
+			for _, cert := range v {
+				publicHash := GenerateCertPublicKeyHash(cert)
+				for _, c := range c.PinnedPeerCertificatePublicKeySha256 {
+					if hmac.Equal(publicHash, c) {
+						return nil
+					}
+				}
+			}
+		}
+		return newError("peer public key is unrecognized.")
+	}
 	return nil
 }
 
