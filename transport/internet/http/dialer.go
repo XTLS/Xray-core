@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -40,8 +41,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
 	tlsConfigs := tls.ConfigFromStreamSettings(streamSettings)
-	if tlsConfigs == nil {
-		return nil, newError("TLS must be enabled for http transport.").AtWarning()
+	realityConfigs := reality.ConfigFromStreamSettings(streamSettings)
+	if tlsConfigs == nil && realityConfigs == nil {
+		return nil, newError("TLS or REALITY must be enabled for http transport.").AtWarning()
 	}
 	sockopt := streamSettings.SocketSettings
 
@@ -74,6 +76,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
+			if realityConfigs != nil {
+				return reality.UClient(pconn, realityConfigs, ctx, dest)
+			}
+
 			var cn tls.Interface
 			if fingerprint := tls.GetFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
 				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
@@ -99,7 +105,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			}
 			return cn, nil
 		},
-		TLSClientConfig: tlsConfigs.GetTLSConfig(tls.WithDestination(dest)),
+	}
+
+	if tlsConfigs != nil {
+		transport.TLSClientConfig = tlsConfigs.GetTLSConfig(tls.WithDestination(dest))
 	}
 
 	if httpSettings.IdleTimeout > 0 || httpSettings.HealthCheckTimeout > 0 {

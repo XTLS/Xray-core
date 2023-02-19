@@ -22,13 +22,14 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/xudp"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
@@ -164,8 +165,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					netConn = utlsConn.NetConn()
 					t = reflect.TypeOf(utlsConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(utlsConn.Conn))
+				} else if realityConn, ok := iConn.(*reality.UConn); ok {
+					netConn = realityConn.NetConn()
+					t = reflect.TypeOf(realityConn.Conn).Elem()
+					p = uintptr(unsafe.Pointer(realityConn.Conn))
 				} else if _, ok := iConn.(*xtls.Conn); ok {
-					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
+					return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls" or "reality"`).AtWarning()
 				} else {
 					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 				}

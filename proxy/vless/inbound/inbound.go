@@ -26,7 +26,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
@@ -34,6 +34,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
@@ -242,6 +243,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 			} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 				cs := xtlsConn.ConnectionState()
+				name = cs.ServerName
+				alpn = cs.NegotiatedProtocol
+				newError("realName = " + name).AtInfo().WriteToLog(sid)
+				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+			} else if realityConn, ok := iConn.(*reality.Conn); ok {
+				cs := realityConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
 				newError("realName = " + name).AtInfo().WriteToLog(sid)
@@ -494,10 +501,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						}
 						t = reflect.TypeOf(tlsConn.Conn).Elem()
 						p = uintptr(unsafe.Pointer(tlsConn.Conn))
+					} else if realityConn, ok := iConn.(*reality.Conn); ok {
+						netConn = realityConn.NetConn()
+						t = reflect.TypeOf(realityConn.Conn).Elem()
+						p = uintptr(unsafe.Pointer(realityConn.Conn))
 					} else if _, ok := iConn.(*tls.UConn); ok {
 						return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
 					} else if _, ok := iConn.(*xtls.Conn); ok {
-						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
+						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls" or "reality"`).AtWarning()
 					} else {
 						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 					}

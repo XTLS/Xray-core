@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	goxtls "github.com/xtls/go"
+	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/xtls"
@@ -20,13 +22,14 @@ import (
 )
 
 type Listener struct {
-	addr       *net.UnixAddr
-	ln         net.Listener
-	tlsConfig  *gotls.Config
-	xtlsConfig *goxtls.Config
-	config     *Config
-	addConn    internet.ConnHandler
-	locker     *fileLocker
+	addr          *net.UnixAddr
+	ln            net.Listener
+	tlsConfig     *gotls.Config
+	xtlsConfig    *goxtls.Config
+	realityConfig *goreality.Config
+	config        *Config
+	addConn       internet.ConnHandler
+	locker        *fileLocker
 }
 
 func Listen(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
@@ -64,6 +67,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
 		ln.xtlsConfig = config.GetXTLSConfig()
 	}
+	if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
+		ln.realityConfig = config.GetREALITYConfig()
+	}
 
 	go ln.run()
 
@@ -91,14 +97,19 @@ func (ln *Listener) run() {
 			newError("failed to accepted raw connections").Base(err).AtWarning().WriteToLog()
 			continue
 		}
-
-		if ln.tlsConfig != nil {
-			conn = tls.Server(conn, ln.tlsConfig)
-		} else if ln.xtlsConfig != nil {
-			conn = xtls.Server(conn, ln.xtlsConfig)
-		}
-
-		ln.addConn(stat.Connection(conn))
+		go func() {
+			if ln.tlsConfig != nil {
+				conn = tls.Server(conn, ln.tlsConfig)
+			} else if ln.xtlsConfig != nil {
+				conn = xtls.Server(conn, ln.xtlsConfig)
+			} else if ln.realityConfig != nil {
+				if conn, err = reality.Server(conn, ln.realityConfig); err != nil {
+					newError(err).AtInfo().WriteToLog()
+					return
+				}
+			}
+			ln.addConn(stat.Connection(conn))
+		}()
 	}
 }
 

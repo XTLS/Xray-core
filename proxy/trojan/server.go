@@ -24,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -407,6 +408,12 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
 	} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
 		cs := xtlsConn.ConnectionState()
+		name = cs.ServerName
+		alpn = cs.NegotiatedProtocol
+		newError("realName = " + name).AtInfo().WriteToLog(sid)
+		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+	} else if realityConn, ok := iConn.(*reality.Conn); ok {
+		cs := realityConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
 		newError("realName = " + name).AtInfo().WriteToLog(sid)

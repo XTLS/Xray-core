@@ -12,13 +12,19 @@ package core
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/xtls/xray-core/common/serial"
 )
 
 var (
-	version  = "1.7.5"
+	Version_x byte = 1
+	Version_y byte = 7
+	Version_z byte = 5
+)
+
+var (
 	build    = "Custom"
 	codename = "Xray, Penetrates Everything."
 	intro    = "A unified platform for anti-censorship."
@@ -27,7 +33,7 @@ var (
 // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
 // ".z" part may be omitted in regular releases.
 func Version() string {
-	return version
+	return fmt.Sprintf("%v.%v.%v", Version_x, Version_y, Version_z)
 }
 
 // VersionStatement returns a list of strings representing the full version info.
