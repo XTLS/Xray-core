@@ -13,7 +13,7 @@ require (
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/quic-go/quic-go v0.32.0
 	github.com/refraction-networking/utls v1.2.2
-	github.com/sagernet/sing v0.1.6
+	github.com/sagernet/sing v0.1.7
 	github.com/sagernet/sing-shadowsocks v0.1.1-0.20230202035033-e3123545f2f7
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
