@@ -631,11 +631,17 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		if config.Fingerprint == "hellogolang" {
 			return nil, newError(`invalid "fingerprint": `, config.Fingerprint)
 		}
+		if len(c.ServerNames) != 0 {
+			return nil, newError(`non-empty "serverNames", please use "serverName" instead`)
+		}
 		if c.PublicKey == "" {
 			return nil, newError(`empty "publicKey"`)
 		}
 		if config.PublicKey, err = base64.RawURLEncoding.DecodeString(c.PublicKey); err != nil || len(config.PublicKey) != 32 {
 			return nil, newError(`invalid "publicKey": `, c.PublicKey)
+		}
+		if len(c.ShortIds) != 0 {
+			return nil, newError(`non-empty "shortIds", please use "shortId" instead`)
 		}
 		config.ShortId = make([]byte, 8)
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
