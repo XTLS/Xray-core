@@ -21,37 +21,55 @@ type ShadowTLSUser struct {
 	Password string `json:"password,omitempty"`
 }
 
-func (c ShadowTLSUser) Build() *shadowtls.User {
-	return &shadowtls.User{
-		Email:    c.Email,
-		Password: c.Password,
-	}
-}
-
 type ShadowTLSHandshakeConfig struct {
 	Address *Address `json:"address"`
 	Port    uint16   `json:"port"`
 }
 
-func (c ShadowTLSHandshakeConfig) Build() *shadowtls.HandshakeConfig {
-	return &shadowtls.HandshakeConfig{
-		Address: c.Address.Build(),
-		Port:    uint32(c.Port),
-	}
-}
-
 func (c *ShadowTLSServerConfig) Build() (proto.Message, error) {
+	if c.Version == 0 {
+		return nil, newError("shadow-tls version is not set.")
+	}
+	if c.Version == 3 && len(c.Users) == 0 {
+		return nil, newError("shadow-tls users is not set.")
+	}
+	if c.Handshake == nil {
+		return nil, newError("shadow-tls handshake config is not set.")
+	}
 	var handshakeForServerName map[string]*shadowtls.HandshakeConfig
 	if c.HandshakeForServerName != nil {
 		for serverName, serverConfig := range c.HandshakeForServerName {
-			handshakeForServerName[serverName] = serverConfig.Build()
+			if serverConfig.Address == nil {
+				return nil, newError("shadow-tls handshake server address is not set.")
+			}
+			if serverConfig.Port == 0 {
+				return nil, newError("shadow-tls handshake server port is not set.")
+			}
+			handshakeForServerName[serverName] = &shadowtls.HandshakeConfig{
+				Address: serverConfig.Address.Build(),
+				Port:    uint32(serverConfig.Port),
+			}
 		}
 	}
+	if c.Handshake.Address == nil {
+		return nil, newError("shadow-tls handshake server address is not set.")
+	}
+	if c.Handshake.Port == 0 {
+		return nil, newError("shadow-tls handshake server port is not set.")
+	}
 	return &shadowtls.ServerConfig{
-		Version:                uint32(c.Version),
-		Password:               c.Password,
-		Users:                  common.Map(c.Users, ShadowTLSUser.Build),
-		Handshake:              c.Handshake.Build(),
+		Version:  uint32(c.Version),
+		Password: c.Password,
+		Users: common.Map(c.Users, func(it ShadowTLSUser) *shadowtls.User {
+			return &shadowtls.User{
+				Email:    it.Email,
+				Password: it.Password,
+			}
+		}),
+		Handshake: &shadowtls.HandshakeConfig{
+			Address: c.Handshake.Address.Build(),
+			Port:    uint32(c.Handshake.Port),
+		},
 		HandshakeForServerName: handshakeForServerName,
 		StrictMode:             c.StrictMode,
 		Detour:                 c.Detour,
@@ -66,6 +84,15 @@ type ShadowTLSClientConfig struct {
 }
 
 func (c *ShadowTLSClientConfig) Build() (proto.Message, error) {
+	if c.Version == 0 {
+		return nil, newError("shadow-tls version is not set.")
+	}
+	if c.Address == nil {
+		return nil, newError("shadow-tls server address is not set.")
+	}
+	if c.Port == 0 {
+		return nil, newError("shadow-tls server port is not set.")
+	}
 	return &shadowtls.ClientConfig{
 		Address:  c.Address.Build(),
 		Port:     uint32(c.Port),
