@@ -3,8 +3,8 @@ package dns
 import (
 	"context"
 	"encoding/binary"
-	"strings"
 
+	"github.com/miekg/dns"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 )
@@ -33,13 +33,17 @@ func NewDNS(ctx context.Context, config interface{}) (interface{}, error) {
 	header = binary.BigEndian.AppendUint16(header, 0x0000) // Answer RRs
 	header = binary.BigEndian.AppendUint16(header, 0x0000) // Authority RRs
 	header = binary.BigEndian.AppendUint16(header, 0x0000) // Additional RRs
-	// Query
-	splits := strings.Split(config.(*Config).Domain, ".") // Name
-	for i := 0; i < len(splits); i++ {
-		header = append(header, byte(len(splits[i])))
-		header = append(header, splits[i]...)
+
+	buf := make([]byte, 0x100)
+
+	off1, err := dns.PackDomainName(dns.Fqdn(config.(*Config).Domain), buf, 0, nil, false)
+
+	if err != nil {
+		return nil, err
 	}
-	header = append(header, 0)
+
+	header = append(header, buf[:off1]...)
+
 	header = binary.BigEndian.AppendUint16(header, 0x0001) // Type: A
 	header = binary.BigEndian.AppendUint16(header, 0x0001) // Class: IN
 
