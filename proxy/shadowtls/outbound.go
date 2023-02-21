@@ -5,12 +5,15 @@ import (
 	"crypto/tls"
 
 	"github.com/sagernet/sing-shadowtls"
+	sing_common "github.com/sagernet/sing/common"
+	utls "github.com/sagernet/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	internet_tls "github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func init() {
@@ -60,14 +63,14 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 
 	var client *shadowtls.Client
 	clientConfig := o.clientConfig
-	if clientConfig.Version == 3 {
-		clientConfig.Dialer = singbridge.NewTLSDialer(dialer, func(conn net.Conn, config *tls.Config) net.Conn {
-			client.SetTLSConfig(config)
-			return conn
-		})
-	} else {
-		clientConfig.Dialer = singbridge.NewDialer(dialer)
-	}
+	clientConfig.Dialer = singbridge.NewTLSDialer(dialer, func(conn net.Conn, xrayConfig *internet_tls.Config, config *tls.Config) net.Conn {
+		if fingerprint := internet_tls.GetFingerprint(xrayConfig.Fingerprint); fingerprint != nil {
+			client.SetHandshakeFunc(uTLSHandshakeFunc(config, *fingerprint))
+		} else {
+			client.SetHandshakeFunc(shadowtls.DefaultTLSHandshakeFunc(clientConfig.Password, config))
+		}
+		return conn
+	})
 	var err error
 	client, err = shadowtls.NewClient(clientConfig)
 	if err != nil {
@@ -80,4 +83,29 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 
 	return singbridge.CopyConn(ctx, inboundConn, link, conn)
+}
+
+func uTLSHandshakeFunc(config *tls.Config, clientHelloID utls.ClientHelloID) shadowtls.TLSHandshakeFunc {
+	return func(ctx context.Context, conn net.Conn, sessionIDGenerator shadowtls.TLSSessionIDGeneratorFunc) error {
+		tlsConfig := &utls.Config{
+			Rand:                  config.Rand,
+			Time:                  config.Time,
+			VerifyPeerCertificate: config.VerifyPeerCertificate,
+			RootCAs:               config.RootCAs,
+			NextProtos:            config.NextProtos,
+			ServerName:            config.ServerName,
+			InsecureSkipVerify:    config.InsecureSkipVerify,
+			CipherSuites:          config.CipherSuites,
+			MinVersion:            config.MinVersion,
+			MaxVersion:            config.MaxVersion,
+			CurvePreferences: sing_common.Map(config.CurvePreferences, func(it tls.CurveID) utls.CurveID {
+				return utls.CurveID(it)
+			}),
+			SessionTicketsDisabled: config.SessionTicketsDisabled,
+			Renegotiation:          utls.RenegotiationSupport(config.Renegotiation),
+			SessionIDGenerator:     sessionIDGenerator,
+		}
+		tlsConn := utls.UClient(conn, tlsConfig, clientHelloID)
+		return tlsConn.HandshakeContext(ctx)
+	}
 }

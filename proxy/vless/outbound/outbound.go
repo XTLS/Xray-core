@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	utls "github.com/refraction-networking/utls"
+	utls "github.com/sagernet/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"

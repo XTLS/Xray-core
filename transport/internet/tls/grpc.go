@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
-	utls "github.com/refraction-networking/utls"
+	utls "github.com/sagernet/utls"
 	"google.golang.org/grpc/credentials"
 )
 

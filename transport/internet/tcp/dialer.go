@@ -25,7 +25,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
 		customClient, loaded := tls.CustomClientFromContext(ctx)
 		if loaded {
-			conn = customClient(conn, tlsConfig)
+			conn = customClient(conn, config, tlsConfig)
 		} else {
 			if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 				conn = tls.UClient(conn, tlsConfig, fingerprint)

@@ -22,8 +22,10 @@ func NewTLSDialer(dialer internet.Dialer, clientFunc tls.CustomClientFunc) *Xray
 }
 
 func (d *XrayTLSDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	var internetTLSConfig *tls.Config
 	var tlsConfig *gotls.Config
-	conn, err := d.dialer.Dial(tls.ContextWithCustomClient(ctx, func(conn net.Conn, config *gotls.Config) net.Conn {
+	conn, err := d.dialer.Dial(tls.ContextWithCustomClient(ctx, func(conn net.Conn, xrayConfig *tls.Config, config *gotls.Config) net.Conn {
+		internetTLSConfig = xrayConfig
 		tlsConfig = config
 		return conn
 	}), ToDestination(destination, ToNetwork(network)))
@@ -33,7 +35,7 @@ func (d *XrayTLSDialer) DialContext(ctx context.Context, network string, destina
 	if tlsConfig == nil {
 		return nil, E.New("missing TLS config")
 	}
-	return d.clientFunc(conn, tlsConfig), nil
+	return d.clientFunc(conn, internetTLSConfig, tlsConfig), nil
 }
 
 func (d *XrayTLSDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {

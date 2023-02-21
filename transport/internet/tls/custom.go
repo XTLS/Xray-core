@@ -9,7 +9,7 @@ import (
 
 type customClientKey struct{}
 
-type CustomClientFunc func(conn net.Conn, config *tls.Config) net.Conn
+type CustomClientFunc func(conn net.Conn, xrayConfig *Config, config *tls.Config) net.Conn
 
 func CustomClientFromContext(ctx context.Context) (CustomClientFunc, bool) {
 	client, loaded := ctx.Value(customClientKey{}).(CustomClientFunc)

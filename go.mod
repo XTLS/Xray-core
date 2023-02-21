@@ -12,10 +12,10 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/quic-go/quic-go v0.32.0
-	github.com/refraction-networking/utls v1.2.2
 	github.com/sagernet/sing v0.1.6
 	github.com/sagernet/sing-shadowsocks v0.1.1-0.20230202035033-e3123545f2f7
-	github.com/sagernet/sing-shadowtls v0.0.0-20230221100347-75f55ea45b99
+	github.com/sagernet/sing-shadowtls v0.0.0-20230221123345-78e50cd7b587
+	github.com/sagernet/utls v0.0.0-20230220130002-c08891932056
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	github.com/stretchr/testify v1.8.1
@@ -34,7 +34,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.4 // indirect
+	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
