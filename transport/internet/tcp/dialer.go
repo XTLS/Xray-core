@@ -23,13 +23,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
-		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
-			conn = tls.UClient(conn, tlsConfig, fingerprint)
-			if err := conn.(*tls.UConn).Handshake(); err != nil {
-				return nil, err
-			}
+		customClient, loaded := tls.CustomClientFromContext(ctx)
+		if loaded {
+			conn = customClient(conn, tlsConfig)
 		} else {
-			conn = tls.Client(conn, tlsConfig)
+			if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
+				conn = tls.UClient(conn, tlsConfig, fingerprint)
+				if err := conn.(*tls.UConn).Handshake(); err != nil {
+					return nil, err
+				}
+			} else {
+				conn = tls.Client(conn, tlsConfig)
+			}
 		}
 	} else if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
 		xtlsConfig := config.GetXTLSConfig(xtls.WithDestination(dest))

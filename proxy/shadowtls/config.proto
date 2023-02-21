@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package xray.proxy.shadowtls;
+option csharp_namespace = "Xray.Proxy.ShadowTLS";
+option go_package = "github.com/xtls/xray-core/proxy/shadowtls";
+option java_package = "com.xray.proxy.shadowtls";
+option java_multiple_files = true;
+
+import "common/net/address.proto";
+
+message ServerConfig {
+  uint32 version = 1;
+  string password = 2;
+  repeated User users = 3;
+  HandshakeConfig handshake = 4;
+  map<string, HandshakeConfig> handshake_for_server_name = 5;
+  bool strict_mode = 6;
+  string detour = 7;
+}
+
+message HandshakeConfig {
+  xray.common.net.IPOrDomain address = 1;
+  uint32 port = 2;
+}
+
+message User {
+  string email = 1;
+  string password = 2;
+  int32 level = 3;
+}
+
+message ClientConfig {
+  xray.common.net.IPOrDomain address = 1;
+  uint32 port = 2;
+  uint32 version = 3;
+  string password = 4;
+}
