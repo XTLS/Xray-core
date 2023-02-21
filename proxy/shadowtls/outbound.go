@@ -3,7 +3,6 @@ package shadowtls
 import (
 	"context"
 	"crypto/tls"
-
 	"github.com/sagernet/sing-shadowtls"
 	sing_common "github.com/sagernet/sing/common"
 	utls "github.com/sagernet/utls"
@@ -64,8 +63,8 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	var client *shadowtls.Client
 	clientConfig := o.clientConfig
 	clientConfig.Dialer = singbridge.NewTLSDialer(dialer, func(conn net.Conn, xrayConfig *internet_tls.Config, config *tls.Config) net.Conn {
-		if fingerprint := internet_tls.GetFingerprint(xrayConfig.Fingerprint); fingerprint != nil {
-			client.SetHandshakeFunc(uTLSHandshakeFunc(config, *fingerprint))
+		if fingerprint := GetFingerprint(xrayConfig.Fingerprint); fingerprint != nil {
+			client.SetHandshakeFunc(uTLSHandshakeFunc(config, fingerprint))
 		} else {
 			client.SetHandshakeFunc(shadowtls.DefaultTLSHandshakeFunc(clientConfig.Password, config))
 		}
@@ -85,7 +84,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	return singbridge.CopyConn(ctx, inboundConn, link, conn)
 }
 
-func uTLSHandshakeFunc(config *tls.Config, clientHelloID utls.ClientHelloID) shadowtls.TLSHandshakeFunc {
+func uTLSHandshakeFunc(config *tls.Config, clientHelloID *utls.ClientHelloID) shadowtls.TLSHandshakeFunc {
 	return func(ctx context.Context, conn net.Conn, sessionIDGenerator shadowtls.TLSSessionIDGeneratorFunc) error {
 		tlsConfig := &utls.Config{
 			Rand:                  config.Rand,
@@ -105,7 +104,7 @@ func uTLSHandshakeFunc(config *tls.Config, clientHelloID utls.ClientHelloID) sha
 			Renegotiation:          utls.RenegotiationSupport(config.Renegotiation),
 			SessionIDGenerator:     sessionIDGenerator,
 		}
-		tlsConn := utls.UClient(conn, tlsConfig, clientHelloID)
+		tlsConn := utls.UClient(conn, tlsConfig, *clientHelloID)
 		return tlsConn.HandshakeContext(ctx)
 	}
 }
