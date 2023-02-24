@@ -35,7 +35,7 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v3
 
-      - name: Prepare geo*dat
+      - name: Prepare geoip
         if: ${{ matrix.os != 'windows-latest' }}
         uses: nick-fields/retry@v2
         with:
@@ -45,8 +45,16 @@ jobs:
           command: |
             mkdir resources
             wget -O ./resources/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+      - name: Prepare geosite
+        if: ${{ matrix.os != 'windows-latest' }}
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 60
+          retry_wait_seconds: 30
+          max_attempts: 60
+          command: |
             wget -O ./resources/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-      - name: Prepare geo*dat for Windows
+      - name: Prepare geoip for Windows
         if: ${{ matrix.os == 'windows-latest' }}
         uses: nick-fields/retry@v2
         with:
@@ -56,6 +64,14 @@ jobs:
           command: |
             mkdir resources
             Invoke-WebRequest -Uri "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" -OutFile "./resources/geoip.dat"
+      - name: Prepare geosite for Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 60
+          retry_wait_seconds: 30
+          max_attempts: 60
+          command: |
             Invoke-WebRequest -Uri "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat" -OutFile "./resources/geosite.dat"
       - name: Test
         run: go test -timeout 1h -v ./...
