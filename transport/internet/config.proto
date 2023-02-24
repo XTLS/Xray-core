@@ -100,4 +100,6 @@ message SocketConfig {
   string tcp_congestion = 12;
   
   string interface = 13;
+
+  bool   v6only = 14;
 }
