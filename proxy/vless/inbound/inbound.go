@@ -624,11 +624,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		if requestAddons.Flow == vless.XRV {
 			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
-			if isTLS {
-				multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
-				for i, b := range multiBuffer {
-					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
-				}
+			multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
+			for i, b := range multiBuffer {
+				multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, isTLS, ctx)
 			}
 		}
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
@@ -645,7 +643,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer

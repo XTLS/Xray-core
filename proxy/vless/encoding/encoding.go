@@ -348,12 +348,12 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 
 // XtlsWrite filter and write xtls protocol
 func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter,
-	ctx context.Context, userUUID *[]byte, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
+	ctx context.Context, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
 	cipher *uint16, remainingServerHello *int32,
 ) error {
 	err := func() error {
 		var ct stats.Counter
-		filterTlsApplicationData := true
+		isPadding := true
 		shouldSwitchToDirectCopy := false
 		for {
 			buffer, err := reader.ReadMultiBuffer()
@@ -361,27 +361,26 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 				if *numberOfPacketToFilter > 0 {
 					XtlsFilterTls(buffer, numberOfPacketToFilter, enableXtls, isTLS12orAbove, isTLS, cipher, remainingServerHello, ctx)
 				}
-				if filterTlsApplicationData && *isTLS {
+				if isPadding {
 					buffer = ReshapeMultiBuffer(ctx, buffer)
 					var xtlsSpecIndex int
 					for i, b := range buffer {
-						if b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
+						if *isTLS && b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
 							var command byte = 0x01
 							if *enableXtls {
 								shouldSwitchToDirectCopy = true
 								xtlsSpecIndex = i
 								command = 0x02
 							}
-							filterTlsApplicationData = false
-							buffer[i] = XtlsPadding(b, command, userUUID, ctx)
+							isPadding = false
+							buffer[i] = XtlsPadding(b, command, nil, *isTLS, ctx)
 							break
-						} else if !*isTLS12orAbove && *numberOfPacketToFilter <= 0 {
-							// maybe tls 1.1 or 1.0
-							filterTlsApplicationData = false
-							buffer[i] = XtlsPadding(b, 0x01, userUUID, ctx)
+						} else if !*isTLS12orAbove && *numberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
+							isPadding = false
+							buffer[i] = XtlsPadding(b, 0x01, nil, *isTLS, ctx)
 							break
 						}
-						buffer[i] = XtlsPadding(b, 0x00, userUUID, ctx)
+						buffer[i] = XtlsPadding(b, 0x00, nil, *isTLS, ctx)
 					}
 					if shouldSwitchToDirectCopy {
 						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex+1)
@@ -509,23 +508,28 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 }
 
 // XtlsPadding add padding to eliminate length siganature during tls handshake
-func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, ctx context.Context) *buf.Buffer {
+func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context) *buf.Buffer {
 	var contantLen int32 = 0
 	var paddingLen int32 = 0
 	if b != nil {
 		contantLen = b.Len()
 	}
-	if contantLen < 900 {
+	if contantLen < 900 && longPadding {
 		l, err := rand.Int(rand.Reader, big.NewInt(500))
 		if err != nil {
 			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
 		paddingLen = int32(l.Int64()) + 900 - contantLen
+	} else {
+		l, err := rand.Int(rand.Reader, big.NewInt(256))
+		if err != nil {
+			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		}
+		paddingLen = int32(l.Int64())
 	}
 	newbuffer := buf.New()
 	if userUUID != nil {
 		newbuffer.Write(*userUUID)
-		*userUUID = nil
 	}
 	newbuffer.Write([]byte{command, byte(contantLen >> 8), byte(contantLen), byte(paddingLen >> 8), byte(paddingLen)})
 	if b != nil {
