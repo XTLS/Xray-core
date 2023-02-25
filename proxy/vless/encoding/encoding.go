@@ -256,7 +256,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 ) error {
 	err := func() error {
 		var ct stats.Counter
-		withinPaddingBuffers := false
+		withinPaddingBuffers := true
 		shouldSwitchToDirectCopy := false
 		var remainingContent int32 = -1
 		var remainingPadding int32 = -1
@@ -320,8 +320,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						} else {
 							newError("XtlsRead unknown command ", currentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						}
-					} else {
+					} else if remainingContent > 0 || remainingPadding > 0 {
 						withinPaddingBuffers = true
+					} else {
+						withinPaddingBuffers = false
 					}
 				}
 				if *numberOfPacketToFilter > 0 {
