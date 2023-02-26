@@ -1,6 +1,7 @@
 package reality
 
 import (
+	"net"
 	"time"
 
 	"github.com/xtls/reality"
@@ -8,7 +9,10 @@ import (
 )
 
 func (c *Config) GetREALITYConfig() *reality.Config {
+	var dialer net.Dialer
 	config := &reality.Config{
+		DialContext: dialer.DialContext,
+
 		Show: c.Show,
 		Type: c.Type,
 		Dest: c.Dest,

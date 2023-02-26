@@ -495,10 +495,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 							return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 						}
 						netConn = tlsConn.NetConn()
-						if pc, ok := netConn.(*proxyproto.Conn); ok {
-							netConn = pc.Raw()
-							// 8192 > 4096, there is no need to process pc's bufReader
-						}
 						t = reflect.TypeOf(tlsConn.Conn).Elem()
 						p = uintptr(unsafe.Pointer(tlsConn.Conn))
 					} else if realityConn, ok := iConn.(*reality.Conn); ok {
@@ -511,6 +507,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls" or "reality"`).AtWarning()
 					} else {
 						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+					}
+					if pc, ok := netConn.(*proxyproto.Conn); ok {
+						netConn = pc.Raw()
+						// 8192 > 4096, there is no need to process pc's bufReader
 					}
 					if sc, ok := netConn.(syscall.Conn); ok {
 						rawConn, _ = sc.SyscallConn()
