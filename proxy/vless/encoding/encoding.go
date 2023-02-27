@@ -36,6 +36,23 @@ var (
 	tlsClientHandShakeStart = []byte{0x16, 0x03}
 	tlsServerHandShakeStart = []byte{0x16, 0x03, 0x03}
 	tlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
+
+	Tls13CipherSuiteDic = map[uint16]string{
+		0x1301: "TLS_AES_128_GCM_SHA256",
+		0x1302: "TLS_AES_256_GCM_SHA384",
+		0x1303: "TLS_CHACHA20_POLY1305_SHA256",
+		0x1304: "TLS_AES_128_CCM_SHA256",
+		0x1305: "TLS_AES_128_CCM_8_SHA256",
+	}
+)
+
+const (
+	tlsHandshakeTypeClientHello byte = 0x01
+	tlsHandshakeTypeServerHello byte = 0x02
+
+	CommandPaddingContinue byte = 0x00
+	CommandPaddingEnd      byte = 0x01
+	CommandPaddingDirect   byte = 0x02
 )
 
 var addrParser = protocol.NewAddressParser(
@@ -368,21 +385,21 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 					var xtlsSpecIndex int
 					for i, b := range buffer {
 						if *isTLS && b.Len() >= 6 && bytes.Equal(tlsApplicationDataStart, b.BytesTo(3)) {
-							var command byte = 0x01
+							var command byte = CommandPaddingEnd
 							if *enableXtls {
 								shouldSwitchToDirectCopy = true
 								xtlsSpecIndex = i
-								command = 0x02
+								command = CommandPaddingDirect
 							}
 							isPadding = false
 							buffer[i] = XtlsPadding(b, command, nil, *isTLS, ctx)
 							break
 						} else if !*isTLS12orAbove && *numberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
 							isPadding = false
-							buffer[i] = XtlsPadding(b, 0x01, nil, *isTLS, ctx)
+							buffer[i] = XtlsPadding(b, CommandPaddingEnd, nil, *isTLS, ctx)
 							break
 						}
-						buffer[i] = XtlsPadding(b, 0x00, nil, *isTLS, ctx)
+						buffer[i] = XtlsPadding(b, CommandPaddingContinue, nil, *isTLS, ctx)
 					}
 					if shouldSwitchToDirectCopy {
 						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex+1)
@@ -429,7 +446,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 		*numberOfPacketToFilter--
 		if b.Len() >= 6 {
 			startsBytes := b.BytesTo(6)
-			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == 0x02 {
+			if bytes.Equal(tlsServerHandShakeStart, startsBytes[:3]) && startsBytes[5] == tlsHandshakeTypeServerHello {
 				*remainingServerHello = (int32(startsBytes[3])<<8 | int32(startsBytes[4])) + 5
 				*isTLS12orAbove = true
 				*isTLS = true
@@ -440,7 +457,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, numberOfPacketToFilter *int, enableXt
 				} else {
 					newError("XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", *remainingServerHello).WriteToLog(session.ExportIDToError(ctx))
 				}
-			} else if bytes.Equal(tlsClientHandShakeStart, startsBytes[:2]) && startsBytes[5] == 0x01 {
+			} else if bytes.Equal(tlsClientHandShakeStart, startsBytes[:2]) && startsBytes[5] == tlsHandshakeTypeClientHello {
 				*isTLS = true
 				newError("XtlsFilterTls found tls client hello! ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 			}
@@ -613,12 +630,4 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 	}
 	buf.ReleaseMulti(buffer)
 	return mb2
-}
-
-var Tls13CipherSuiteDic = map[uint16]string{
-	0x1301: "TLS_AES_128_GCM_SHA256",
-	0x1302: "TLS_AES_256_GCM_SHA384",
-	0x1303: "TLS_CHACHA20_POLY1305_SHA256",
-	0x1304: "TLS_AES_128_CCM_SHA256",
-	0x1305: "TLS_AES_128_CCM_8_SHA256",
 }

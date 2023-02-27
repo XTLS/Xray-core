@@ -626,7 +626,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
 			multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
 			for i, b := range multiBuffer {
-				multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, isTLS, ctx)
+				multiBuffer[i] = encoding.XtlsPadding(b, encoding.CommandPaddingContinue, &userUUID, isTLS, ctx)
 			}
 		}
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
