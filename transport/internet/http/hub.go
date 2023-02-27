@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -187,14 +189,17 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		}
 
 		if config == nil {
+			if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
+				streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
+			}
 			err = server.Serve(streamListener)
 			if err != nil {
-				newError("stopping serving H2C").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("stopping serving H2C or REALITY H2").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
 		} else {
 			err = server.ServeTLS(streamListener, "", "")
 			if err != nil {
-				newError("stopping serving TLS").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				newError("stopping serving TLS H2").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
 		}
 	}()
