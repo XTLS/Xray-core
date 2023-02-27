@@ -17,7 +17,7 @@ require (
 	github.com/sagernet/sing-shadowsocks v0.1.1
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3
 	github.com/xtls/reality v0.0.0-20230227192902-524506d97551
