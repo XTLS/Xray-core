@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3
-	github.com/xtls/reality v0.0.0-20230227150228-9e83b0bee167
+	github.com/xtls/reality v0.0.0-20230227192902-524506d97551
 	go.starlark.net v0.0.0-20230128213706-3f75dec8e403
 	golang.org/x/crypto v0.6.0
 	golang.org/x/net v0.7.0

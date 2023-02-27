@@ -849,8 +849,8 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecurityType = tm.Type
 	}
 	if strings.EqualFold(c.Security, "reality") {
-		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "domainsocket" {
-			return nil, newError("REALITY only supports TCP, H2 and DomainSocket for now.")
+		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "domainsocket" {
+			return nil, newError("REALITY only supports TCP, H2, gRPC and DomainSocket for now.")
 		}
 		if c.REALITYSettings == nil {
 			return nil, newError(`REALITY: Empty "realitySettings".`)
