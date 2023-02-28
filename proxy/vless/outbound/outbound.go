@@ -243,10 +243,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if err1 == nil {
 				if requestAddons.Flow == vless.XRV {
 					encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
-					if isTLS {
-						for i, b := range multiBuffer {
-							multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
-						}
+					multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
+					for i, b := range multiBuffer {
+						multiBuffer[i] = encoding.XtlsPadding(b, encoding.CommandPaddingContinue, &userUUID, isTLS, ctx)
 					}
 				}
 				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
@@ -256,7 +255,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				return err1
 			} else if requestAddons.Flow == vless.XRV {
 				mb := make(buf.MultiBuffer, 1)
-				mb[0] = encoding.XtlsPadding(nil, 0x01, &userUUID, ctx) // it must not be tls so padding finish with it (command 1)
+				mb[0] = encoding.XtlsPadding(nil, encoding.CommandPaddingContinue, &userUUID, true, ctx) // we do a long padding to hide vless header
 				newError("Insert padding with empty content to camouflage VLESS header ", mb.Len()).WriteToLog(session.ExportIDToError(ctx))
 				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
 					return err
@@ -285,7 +284,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
