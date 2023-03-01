@@ -556,6 +556,9 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 		b.Release()
 		b = nil
 	}
+	if paddingLen > buf.Size - newbuffer.Len() {
+		paddingLen = buf.Size - newbuffer.Len()
+	}
 	newbuffer.Extend(paddingLen)
 	newError("XtlsPadding ", contantLen, " ", paddingLen, " ", command).WriteToLog(session.ExportIDToError(ctx))
 	return newbuffer
