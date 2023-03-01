@@ -189,8 +189,6 @@ github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e h1:5QefA066A1tF
 github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e/go.mod h1:5t19P9LBIrNamL6AcMQOncg/r10y3Pc01AbHeMhwlpU=
 github.com/viant/assertly v0.4.8/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49uaYMPRU=
 github.com/viant/toolbox v0.24.0/go.mod h1:OxMCG57V0PXuIP2HNQrtJf2CjqdmbrOx5EkMILuUhzM=
-github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3 h1:a3Y4WVjCxwoyO4E2xdNvq577tW8lkSBgyrA8E9+2NtM=
-github.com/xtls/go v0.0.0-20230107031059-4610f88d00f3/go.mod h1:YJTRELIWrGxR1s8xcEBgxcxBfwQfMGjdvNLTjN9XFgY=
 github.com/xtls/reality v0.0.0-20230227192902-524506d97551 h1:zOP9NvpCMa1Y58UmA9EhbWs5/FNKvqwD5EyDLVit2LI=
 github.com/xtls/reality v0.0.0-20230227192902-524506d97551/go.mod h1:rkuAY1S9F8eI8gDiPDYvACE8e2uwkyg8qoOTuwWov7Y=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
