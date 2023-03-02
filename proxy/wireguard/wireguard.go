@@ -82,9 +82,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		})
 		// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
 		bind := &netBindClient{
-			dialer:  dialer,
-			workers: int(h.conf.NumWorkers),
-			dns:     h.dns,
+			dialer:   dialer,
+			workers:  int(h.conf.NumWorkers),
+			dns:      h.dns,
+			reserved: h.conf.Reserved,
 		}
 
 		net, err := h.makeVirtualTun(bind)

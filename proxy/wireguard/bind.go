@@ -31,6 +31,7 @@ type netBindClient struct {
 	dialer    internet.Dialer
 	dns       dns.Client
 	dnsOption dns.IPOption
+	reserved  []byte
 
 	readQueue chan *netReadInfo
 }
@@ -155,6 +156,10 @@ func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if len(buff) > 3 && len(bind.reserved) == 3 {
+		copy(buff[1:], bind.reserved)
 	}
 
 	_, err = nend.conn.Write(buff)

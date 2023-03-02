@@ -20,4 +20,5 @@ message DeviceConfig {
     repeated PeerConfig peers = 3;
     int32 mtu = 4;
     int32 num_workers = 5;
+    bytes reserved = 6;
 }
