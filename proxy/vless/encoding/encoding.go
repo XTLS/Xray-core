@@ -528,17 +528,17 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 
 // XtlsPadding add padding to eliminate length siganature during tls handshake
 func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context) *buf.Buffer {
-	var contantLen int32 = 0
+	var contentLen int32 = 0
 	var paddingLen int32 = 0
 	if b != nil {
-		contantLen = b.Len()
+		contentLen = b.Len()
 	}
-	if contantLen < 900 && longPadding {
+	if contentLen < 900 && longPadding {
 		l, err := rand.Int(rand.Reader, big.NewInt(500))
 		if err != nil {
 			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
-		paddingLen = int32(l.Int64()) + 900 - contantLen
+		paddingLen = int32(l.Int64()) + 900 - contentLen
 	} else {
 		l, err := rand.Int(rand.Reader, big.NewInt(256))
 		if err != nil {
@@ -546,21 +546,21 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 		}
 		paddingLen = int32(l.Int64())
 	}
+	if paddingLen > buf.Size - 21 - contentLen {
+		paddingLen = buf.Size - 21 - contentLen
+	}
 	newbuffer := buf.New()
 	if userUUID != nil {
 		newbuffer.Write(*userUUID)
 	}
-	newbuffer.Write([]byte{command, byte(contantLen >> 8), byte(contantLen), byte(paddingLen >> 8), byte(paddingLen)})
+	newbuffer.Write([]byte{command, byte(contentLen >> 8), byte(contentLen), byte(paddingLen >> 8), byte(paddingLen)})
 	if b != nil {
 		newbuffer.Write(b.Bytes())
 		b.Release()
 		b = nil
 	}
-	if paddingLen > buf.Size - newbuffer.Len() {
-		paddingLen = buf.Size - newbuffer.Len()
-	}
 	newbuffer.Extend(paddingLen)
-	newError("XtlsPadding ", contantLen, " ", paddingLen, " ", command).WriteToLog(session.ExportIDToError(ctx))
+	newError("XtlsPadding ", contentLen, " ", paddingLen, " ", command).WriteToLog(session.ExportIDToError(ctx))
 	return newbuffer
 }
 
