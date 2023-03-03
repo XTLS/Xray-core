@@ -129,6 +129,13 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 				return
 			}
 			i, err := c.Read(v.buff)
+
+			if i > 3 {
+				v.buff[1] = 0
+				v.buff[2] = 0
+				v.buff[3] = 0
+			}
+
 			v.bytes = i
 			v.endpoint = endpoint
 			v.err = err
