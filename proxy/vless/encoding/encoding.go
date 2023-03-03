@@ -552,6 +552,7 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 	newbuffer := buf.New()
 	if userUUID != nil {
 		newbuffer.Write(*userUUID)
+		*userUUID = nil
 	}
 	newbuffer.Write([]byte{command, byte(contentLen >> 8), byte(contentLen), byte(paddingLen >> 8), byte(paddingLen)})
 	if b != nil {
