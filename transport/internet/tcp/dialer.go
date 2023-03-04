@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 // Dial dials a new TCP connection to the given destination.
@@ -31,9 +30,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		} else {
 			conn = tls.Client(conn, tlsConfig)
 		}
-	} else if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
-		xtlsConfig := config.GetXTLSConfig(xtls.WithDestination(dest))
-		conn = xtls.Client(conn, xtlsConfig)
 	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
 		if conn, err = reality.UClient(conn, config, ctx, dest); err != nil {
 			return nil, err

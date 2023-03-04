@@ -22,7 +22,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 type MemoryAccount struct {
 	// ID of the account.
 	ID *protocol.ID
-	// Flow of the account. May be "xtls-rprx-direct".
+	// Flow of the account. May be "xtls-rprx-vision".
 	Flow string
 	// Encryption of the account. Used for client connections, and only accepts "none" for now.
 	Encryption string

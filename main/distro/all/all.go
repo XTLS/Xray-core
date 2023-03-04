@@ -61,7 +61,6 @@ import (
 	_ "github.com/xtls/xray-core/transport/internet/tls"
 	_ "github.com/xtls/xray-core/transport/internet/udp"
 	_ "github.com/xtls/xray-core/transport/internet/websocket"
-	_ "github.com/xtls/xray-core/transport/internet/xtls"
 
 	// Transport headers
 	_ "github.com/xtls/xray-core/transport/internet/headers/http"

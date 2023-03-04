@@ -27,7 +27,7 @@ type Account struct {
 
 	// ID of the account, in the form of a UUID, e.g., "66ad4540-b58c-4ad2-9926-ea63445a9b57".
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Flow settings. May be "xtls-rprx-direct".
+	// Flow settings. May be "xtls-rprx-vision".
 	Flow string `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
 	// Encryption settings. Only applies to client side, and only accepts "none" for now.
 	Encryption string `protobuf:"bytes,3,opt,name=encryption,proto3" json:"encryption,omitempty"`
