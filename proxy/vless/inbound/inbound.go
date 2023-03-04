@@ -450,20 +450,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	var rawConn syscall.RawConn
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
-	allowNoneFlow := false
-	accountFlow := account.Flow
-	flows := strings.Split(account.Flow, ",")
-	for _, f := range flows {
-		t := strings.TrimSpace(f)
-		if t == "none" {
-			allowNoneFlow = true
-		} else {
-			accountFlow = t
-		}
-	}
+
 	switch requestAddons.Flow {
 	case vless.XRV:
-		if accountFlow == requestAddons.Flow {
+		if account.Flow == requestAddons.Flow {
 			switch request.Command {
 			case protocol.RequestCommandMux:
 				return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
@@ -503,10 +493,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		} else {
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
-	case "", "none":
-		if accountFlow == vless.XRV && !allowNoneFlow && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
-			return newError(account.ID.String() + " is not able to use " + vless.XRV +
-				". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
+	case "":
+		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
+			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
 		return newError("unknown request flow " + requestAddons.Flow).AtWarning()
@@ -557,7 +546,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			// TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
 			err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
-			&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
+				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))

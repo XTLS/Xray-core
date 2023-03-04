@@ -700,7 +700,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.ProtocolName = protocol
 	}
-	if strings.EqualFold(c.Security, "tls") {
+	switch strings.ToLower(c.Security) {
+	case "", "none":
+	case "tls":
 		tlsSettings := c.TLSSettings
 		if tlsSettings == nil {
 			tlsSettings = &TLSConfig{}
@@ -712,8 +714,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
-	}
-	if strings.EqualFold(c.Security, "reality") {
+	case "reality":
 		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "domainsocket" {
 			return nil, newError("REALITY only supports TCP, H2, gRPC and DomainSocket for now.")
 		}
@@ -727,6 +728,10 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
+	case "xtls":
+		return nil, newError(`Please use VLESS flow "xtls-rprx-vision" with TLS or REALITY.`)
+	default:
+		return nil, newError(`Unknown security "` + c.Security + `".`)
 	}
 	if c.TCPSettings != nil {
 		ts, err := c.TCPSettings.Build()
