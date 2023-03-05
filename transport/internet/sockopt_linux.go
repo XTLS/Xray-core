@@ -46,7 +46,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			return newError("failed to set SO_MARK").Base(err)
 		}
 	}
-	
+
 	if  config.Interface != "" {
                 if err := syscall.BindToDevice(int(fd), config.Interface); err != nil {
                         return newError("failed to set Interface").Base(err)
@@ -89,6 +89,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return newError("failed to set TCP_CONGESTION", err)
 			}
 		}
+
+		if config.TcpWindowClamp > 0 {
+                        if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_WINDOW_CLAMP, int(config.TcpWindowClamp)); err != nil {
+                                return newError("failed to set TCP_WINDOW_CLAMP", err)
+                        }
+                }
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -138,6 +144,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			if err := syscall.SetsockoptString(int(fd), syscall.SOL_TCP, syscall.TCP_CONGESTION, config.TcpCongestion); err != nil {
 				return newError("failed to set TCP_CONGESTION", err)
 			}
+		}
+
+		if config.TcpWindowClamp > 0 {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_WINDOW_CLAMP, int(config.TcpWindowClamp)); err != nil {
+                                return newError("failed to set TCP_WINDOW_CLAMP", err)
+                        }
 		}
 	}
 

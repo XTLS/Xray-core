@@ -102,4 +102,6 @@ message SocketConfig {
   string interface = 13;
 
   bool   v6only = 14;
+
+  int32 tcp_window_clamp = 15;
 }
