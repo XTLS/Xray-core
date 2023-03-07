@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io"
 
 	"github.com/xtls/xray-core/main/commands/base"
 	"golang.org/x/crypto/curve25519"
@@ -44,17 +43,26 @@ func executeX25519(cmd *base.Command, args []string) {
 			goto out
 		}
 	}
+
 	if privateKey == nil {
 		privateKey = make([]byte, curve25519.ScalarSize)
-		if _, err = io.ReadFull(rand.Reader, privateKey); err != nil {
+		if _, err = rand.Read(privateKey); err != nil {
 			output = err.Error()
 			goto out
 		}
 	}
+
+	// Modify random bytes using algorithm described at:
+	// https://cr.yp.to/ecdh.html.
+	privateKey[0] &= 248
+	privateKey[31] &= 127
+	privateKey[31] |= 64
+
 	if publicKey, err = curve25519.X25519(privateKey, curve25519.Basepoint); err != nil {
 		output = err.Error()
 		goto out
 	}
+
 	output = fmt.Sprintf("Private key: %v\nPublic key: %v",
 		base64.RawURLEncoding.EncodeToString(privateKey),
 		base64.RawURLEncoding.EncodeToString(publicKey))
