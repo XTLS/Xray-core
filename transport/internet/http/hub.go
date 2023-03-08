@@ -51,6 +51,13 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
+	defer func() {
+		if recover() != nil {
+			fw.d.Close()
+			err = io.ErrClosedPipe
+		}
+	}()
+
 	n, err = fw.w.Write(p)
 	if f, ok := fw.w.(http.Flusher); ok && err == nil {
 		f.Flush()

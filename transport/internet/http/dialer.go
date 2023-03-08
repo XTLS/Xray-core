@@ -204,7 +204,7 @@ type WaitReadCloser struct {
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
 	w.ReadCloser = rc
 	defer func() {
-		if err := recover(); err != nil {
+		if recover() != nil {
 			rc.Close()
 		}
 	}()
@@ -225,10 +225,8 @@ func (w *WaitReadCloser) Close() error {
 		return w.ReadCloser.Close()
 	}
 	defer func() {
-		if err := recover(); err != nil {
-			if w.ReadCloser != nil {
-				w.ReadCloser.Close()
-			}
+		if recover() != nil && w.ReadCloser != nil {
+			w.ReadCloser.Close()
 		}
 	}()
 	close(w.Wait)
