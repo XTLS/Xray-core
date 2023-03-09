@@ -616,7 +616,7 @@ type SocketConfig struct {
 	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
 	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
 	TCPCongestion        string      `json:"tcpCongestion"`
-	TCPWindowClamp       int32	 `json:"TcpWindowClamp"`
+	TCPWindowClamp       int32	 `json:"tcpWindowClamp"`
 	V6only               bool        `json:"v6only"`
 	Interface            string      `json:"interface"`
 }
