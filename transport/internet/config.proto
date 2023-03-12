@@ -104,4 +104,6 @@ message SocketConfig {
   bool   v6only = 14;
 
   int32 tcp_window_clamp = 15;
+
+  int32 tcp_user_timeout = 16;
 }

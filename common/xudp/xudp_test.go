@@ -11,7 +11,7 @@ import (
 func TestXudpReadWrite(t *testing.T) {
 	addr, _ := net.ParseDestination("tcp:127.0.0.1:1345")
 	mb := make(buf.MultiBuffer, 0, 16)
-	m := buf.MultiBufferContainer {
+	m := buf.MultiBufferContainer{
 		MultiBuffer: mb,
 	}
 	var arr [8]byte
