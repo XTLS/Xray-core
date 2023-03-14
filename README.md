@@ -50,9 +50,11 @@
 - iOS & macOS (with M1 chip)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
+  - [Wings X Client](https://apps.apple.com/app/wings-x-client/id6446119727)
 - macOS (Intel chip & M1 chip)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [Wings X Client](https://apps.apple.com/app/wings-x-client/id6446119727)
 
 ## Credits
 
