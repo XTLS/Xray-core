@@ -125,7 +125,8 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 			}
 		}
 
-		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.getNormalizedName())
+		newError("gRPC listen for service name `" + grpcSettings.getServiceName() + "` tun `" + grpcSettings.getTunStreamName() + "` multi tun `" + grpcSettings.getMultiTunStreamName() + "`").AtDebug().WriteToLog()
+		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.getServiceName(), grpcSettings.getTunStreamName(), grpcSettings.getMultiTunStreamName())
 
 		if config := reality.ConfigFromStreamSettings(settings); config != nil {
 			streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
