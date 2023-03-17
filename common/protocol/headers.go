@@ -3,11 +3,10 @@ package protocol
 import (
 	"runtime"
 
-	"golang.org/x/sys/cpu"
-
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/uuid"
+	"golang.org/x/sys/cpu"
 )
 
 // RequestCommand is a custom command in a proxy request.

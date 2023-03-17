@@ -37,7 +37,6 @@ func NewDNS(ctx context.Context, config interface{}) (interface{}, error) {
 	buf := make([]byte, 0x100)
 
 	off1, err := dns.PackDomainName(dns.Fqdn(config.(*Config).Domain), buf, 0, nil, false)
-
 	if err != nil {
 		return nil, err
 	}

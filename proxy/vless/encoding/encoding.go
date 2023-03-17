@@ -485,7 +485,7 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 		}
 		paddingLen = int32(l.Int64())
 	}
-	if paddingLen > buf.Size - 21 - contentLen {
+	if paddingLen > buf.Size-21-contentLen {
 		paddingLen = buf.Size - 21 - contentLen
 	}
 	newbuffer := buf.New()

@@ -240,8 +240,10 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	return uConn, nil
 }
 
-var href = regexp.MustCompile(`href="([/h].*?)"`)
-var dot = []byte(".")
+var (
+	href = regexp.MustCompile(`href="([/h].*?)"`)
+	dot  = []byte(".")
+)
 
 var maps struct {
 	sync.Mutex

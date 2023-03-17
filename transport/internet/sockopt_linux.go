@@ -47,11 +47,11 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		}
 	}
 
-	if  config.Interface != "" {
-                if err := syscall.BindToDevice(int(fd), config.Interface); err != nil {
-                        return newError("failed to set Interface").Base(err)
-                }
-        }
+	if config.Interface != "" {
+		if err := syscall.BindToDevice(int(fd), config.Interface); err != nil {
+			return newError("failed to set Interface").Base(err)
+		}
+	}
 
 	if isTCPSocket(network) {
 		tfo := config.ParseTFOValue()
@@ -91,10 +91,10 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		}
 
 		if config.TcpWindowClamp > 0 {
-                        if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_WINDOW_CLAMP, int(config.TcpWindowClamp)); err != nil {
-                                return newError("failed to set TCP_WINDOW_CLAMP", err)
-                        }
-                }
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_WINDOW_CLAMP, int(config.TcpWindowClamp)); err != nil {
+				return newError("failed to set TCP_WINDOW_CLAMP", err)
+			}
+		}
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -148,8 +148,8 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 
 		if config.TcpWindowClamp > 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_WINDOW_CLAMP, int(config.TcpWindowClamp)); err != nil {
-                                return newError("failed to set TCP_WINDOW_CLAMP", err)
-                        }
+				return newError("failed to set TCP_WINDOW_CLAMP", err)
+			}
 		}
 	}
 

@@ -24,14 +24,14 @@ type ConnectionID struct {
 // Listener defines a server listening for connections
 type Listener struct {
 	sync.Mutex
-	sessions   map[ConnectionID]*Connection
-	hub        *udp.Hub
-	tlsConfig  *gotls.Config
-	config     *Config
-	reader     PacketReader
-	header     internet.PacketHeader
-	security   cipher.AEAD
-	addConn    internet.ConnHandler
+	sessions  map[ConnectionID]*Connection
+	hub       *udp.Hub
+	tlsConfig *gotls.Config
+	config    *Config
+	reader    PacketReader
+	header    internet.PacketHeader
+	security  cipher.AEAD
+	addConn   internet.ConnHandler
 }
 
 func NewListener(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (*Listener, error) {
