@@ -75,7 +75,7 @@ func TestConfig_GetTunStreamName(t *testing.T) {
 	}
 }
 
-func TestConfig_GetMultiTunStreamName(t *testing.T) {
+func TestConfig_GetTunMultiStreamName(t *testing.T) {
 	tests := []struct {
 		TestName    string
 		ServiceName string
@@ -105,7 +105,7 @@ func TestConfig_GetMultiTunStreamName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.TestName, func(t *testing.T) {
 			config := Config{ServiceName: test.ServiceName}
-			assert.Equal(t, test.Expected, config.getMultiTunStreamName())
+			assert.Equal(t, test.Expected, config.getTunMultiStreamName())
 		})
 	}
 }

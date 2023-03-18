@@ -40,7 +40,7 @@ func (c *Config) getTunStreamName() string {
 	return url.PathEscape(strings.Split(endingPath, "|")[0])
 }
 
-func (c *Config) getMultiTunStreamName() string {
+func (c *Config) getTunMultiStreamName() string {
 	// Normal old school config
 	if !strings.HasPrefix(c.ServiceName, "/") {
 		return "TunMulti"
