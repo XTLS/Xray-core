@@ -22,8 +22,7 @@ func (c *Config) getServiceName() string {
 		return url.PathEscape(c.ServiceName)
 	}
 	// Otherwise new custom paths
-	tunListen := strings.Split(c.ServiceName, ",")[0]
-	return tunListen[1:strings.LastIndex(tunListen, "/")] // trim from first to last '/'
+	return c.ServiceName[1:strings.LastIndex(c.ServiceName, "/")] // trim from first to last '/'
 }
 
 func (c *Config) getTunStreamName() string {
@@ -32,8 +31,8 @@ func (c *Config) getTunStreamName() string {
 		return "Tun"
 	}
 	// Otherwise new custom paths
-	tunListen := strings.Split(c.ServiceName, ",")[0]
-	return tunListen[strings.LastIndex(tunListen, "/")+1:] // from the last '/' to the end
+	endingPath := c.ServiceName[strings.LastIndex(c.ServiceName, "/")+1:] // from the last '/' to end of string
+	return strings.Split(endingPath, "|")[0]
 }
 
 func (c *Config) getMultiTunStreamName() string {
@@ -42,12 +41,11 @@ func (c *Config) getMultiTunStreamName() string {
 		return "TunMulti"
 	}
 	// Otherwise new custom paths
-	splitServiceName := strings.Split(c.ServiceName, ",")
-	var fullPath string
-	if len(splitServiceName) == 1 { // client side. Service name is the full path to multi tun
-		fullPath = splitServiceName[0]
+	endingPath := c.ServiceName[strings.LastIndex(c.ServiceName, "/")+1:] // from the last '/' to end of string
+	streamNames := strings.Split(endingPath, "|")
+	if len(streamNames) == 1 { // client side. Service name is the full path to multi tun
+		return streamNames[0]
 	} else { // server side. The second part is the path to multi tun
-		fullPath = splitServiceName[1]
+		return streamNames[1]
 	}
-	return fullPath[strings.LastIndex(fullPath, "/")+1:] // from the last '/' to the end
 }
