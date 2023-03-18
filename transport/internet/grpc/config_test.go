@@ -26,6 +26,11 @@ func TestConfig_GetServiceName(t *testing.T) {
 			ServiceName: "/my/sample/path/a|b",
 			Expected:    "my/sample/path",
 		},
+		{
+			TestName:    "escape absolute path",
+			ServiceName: "/hello /world!/a|b",
+			Expected:    "hello%20/world%21",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.TestName, func(t *testing.T) {
@@ -56,6 +61,11 @@ func TestConfig_GetTunStreamName(t *testing.T) {
 			ServiceName: "/my/sample/path/tun_service",
 			Expected:    "tun_service",
 		},
+		{
+			TestName:    "escape absolute path client",
+			ServiceName: "/m y/sa !mple/pa\\th/tun\\_serv!ice",
+			Expected:    "tun%5C_serv%21ice",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.TestName, func(t *testing.T) {
@@ -85,6 +95,11 @@ func TestConfig_GetMultiTunStreamName(t *testing.T) {
 			TestName:    "absolute path client",
 			ServiceName: "/my/sample/path/multi_service",
 			Expected:    "multi_service",
+		},
+		{
+			TestName:    "escape absolute path client",
+			ServiceName: "/m y/sa !mple/pa\\th/mu%lti\\_serv!ice",
+			Expected:    "mu%25lti%5C_serv%21ice",
 		},
 	}
 	for _, test := range tests {
