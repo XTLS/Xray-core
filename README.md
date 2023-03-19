@@ -13,22 +13,22 @@
 ## Installation
 
 - Linux Script
-  - [Xray-install](https://github.com/XTLS/Xray-install)
-  - [Xray-script](https://github.com/kirin10000/Xray-script)
+  - [Xray-script](https://github.com/kirin10000/Xray-script) (Official)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - One Click
-  - [ProxySU](https://github.com/proxysu/ProxySU)
+  - [Xray-install](https://github.com/XTLS/Xray-install)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
-  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
-  - [Xray_onekey](https://github.com/wulabing/Xray_onekey)
+  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes) (Lack of maintenance)
+  - [Xray_onekey](https://github.com/wulabing/Xray_onekey) (Lack of maintenance)
+  - [ProxySU](https://github.com/proxysu/ProxySU) (Lack of maintenance)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
-  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
+  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk) (Lack of maintenance)
 - Homebrew
   - `brew install xray`
   - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
-  - [(Tap) Repository 1](https://github.com/xiruizhao/homebrew-xray)
 - Tutorial
   - [Xray Vision tutorial](https://github.com/chika0801/Xray-install)
   - [Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
