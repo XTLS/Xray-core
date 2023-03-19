@@ -6,6 +6,12 @@
 
 [Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
 
+## Document
+
+[Project X](https://xtls.github.io/Xray-docs-next/config/)
+
+[Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
+
 ## Installation
 
 - Linux Script
@@ -32,6 +38,10 @@
 ## Usage
 
 [Xray-examples](https://github.com/XTLS/Xray-examples) / [VLESS-TCP-XTLS-WHATEVER](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-WHATEVER)
+
+[chika0801's examples](https://github.com/chika0801/Xray-examples)
+
+[lxhao61's examples](https://github.com/lxhao61/integrated-examples)
 
 ## GUI Clients
 
