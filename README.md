@@ -10,8 +10,6 @@
 
 [Project X](https://xtls.github.io/Xray-docs-next/config/)
 
-[Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
-
 ## Installation
 
 - Linux Script
@@ -31,13 +29,16 @@
   - `brew install xray`
   - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
   - [(Tap) Repository 1](https://github.com/xiruizhao/homebrew-xray)
+- Tutorial
+  - [Xray Vision tutorial](https://github.com/chika0801/Xray-install)
+  - [Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
 
 ## Contributing
 [Code Of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
 
 ## Usage
 
-[Xray-examples](https://github.com/XTLS/Xray-examples) / [VLESS-TCP-XTLS-WHATEVER](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-WHATEVER)
+[Xray-examples](https://github.com/XTLS/Xray-examples) / [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx)
 
 [chika0801's examples](https://github.com/chika0801/Xray-examples)
 
