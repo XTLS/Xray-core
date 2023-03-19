@@ -13,32 +13,35 @@
 ## Installation
 
 - Linux Script
-  - [Xray-script](https://github.com/kirin10000/Xray-script) (Official)
+  - [Xray-install](https://github.com/XTLS/Xray-install) (Official)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - One Click
-  - [Xray-install](https://github.com/XTLS/Xray-install)
+  - [Xray-script](https://github.com/kirin10000/Xray-script)
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
-  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes) (Lack of maintenance)
-  - [Xray_onekey](https://github.com/wulabing/Xray_onekey) (Lack of maintenance)
-  - [ProxySU](https://github.com/proxysu/ProxySU) (Lack of maintenance)
-- Magisk
-  - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
-  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk) (Lack of maintenance)
-- Homebrew
-  - `brew install xray`
-  - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
+  - [Xray_onekey](https://github.com/wulabing/Xray_onekey)
+  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
+  - [ProxySU](https://github.com/proxysu/ProxySU)
+- Web Panel
+  - [X-UI](https://github.com/FranzKafkaYu/x-ui)
+  - [Hiddify](https://github.com/hiddify/hiddify-config)
 - Tutorial
   - [Xray Vision tutorial](https://github.com/chika0801/Xray-install)
   - [Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
+- Magisk
+  - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
+  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
+- Homebrew
+  - `brew install xray`
+  - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
 
 ## Contributing
 [Code Of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
 
 ## Usage
 
-[Xray-examples](https://github.com/XTLS/Xray-examples) / [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx)
+[Xray-examples](https://github.com/XTLS/Xray-examples) / [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx) / [VLESS-TCP-XTLS-Vision](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-Vision)
 
 [chika0801's examples](https://github.com/chika0801/Xray-examples)
 
@@ -57,6 +60,8 @@
     - [clashN](https://github.com/2dust/clashN)
   - Android
     - [Clash Meta For Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
+  - iOS
+    - [MFI](https://t.me/meta_for_ios) 
   - macOS
     - [Clash Verge](https://github.com/zzzgydi/clash-verge)
   - Linux
@@ -66,6 +71,8 @@
     - [NekoRay](https://github.com/MatsuriDayo/nekoray)
   - Android
     - [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid)
+  - iOS
+    - [SFI](https://sing-box.sagernet.org/zh/installation/clients/sfi/) 
 - OpenWrt
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
   - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
