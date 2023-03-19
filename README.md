@@ -46,12 +46,12 @@
 
 ## GUI Clients
 
-- User Xray-core
+- Use Xray-core
   - Windows
     - [v2rayN](https://github.com/2dust/v2rayN)
   - Android
     - [v2rayNG](https://github.com/2dust/v2rayNG)
-- User [Clash Meta kernel](https://github.com/MetaCubeX/Clash.Meta)
+- Use [Clash Meta kernel](https://github.com/MetaCubeX/Clash.Meta)
   - Windows
     - [Clash Verge](https://github.com/zzzgydi/clash-verge)
     - [clashN](https://github.com/2dust/clashN)
@@ -61,7 +61,7 @@
     - [Clash Verge](https://github.com/zzzgydi/clash-verge)
   - Linux
     - [Clash Verge](https://github.com/zzzgydi/clash-verge)
-- User [sing-box](https://github.com/SagerNet/sing-box)
+- Use [sing-box](https://github.com/SagerNet/sing-box)
   - Windows
     - [NekoRay](https://github.com/MatsuriDayo/nekoray)
   - Android
