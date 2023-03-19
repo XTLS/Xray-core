@@ -72,15 +72,11 @@
   - [PassWall 2](https://github.com/xiaorouji/openwrt-passwall2)
   - [HelloWorld](https://github.com/jerrykuku/luci-app-vssr)
   - [luci-app-xray](https://github.com/yichya/luci-app-xray)
-- Windows
-  - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
-  - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch) (This project had been archived and currently inactive)
-  - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
-- iOS & macOS (with M1 chip)
+- iOS & macOS
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+  - [Wings X](https://apps.apple.com/app/wings-x-client/id6446119727)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
-- macOS (Intel chip & M1 chip)
-  - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
+- macOS
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
 
 ## Credits
