@@ -46,17 +46,35 @@
 
 ## GUI Clients
 
+- User Xray-core
+  - Windows
+    - [v2rayN](https://github.com/2dust/v2rayN)
+  - Android
+    - [v2rayNG](https://github.com/2dust/v2rayNG)
+- User [Clash Meta kernel](https://github.com/MetaCubeX/Clash.Meta)
+  - Windows
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+    - [clashN](https://github.com/2dust/clashN)
+  - Android
+    - [Clash Meta For Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
+  - macOS
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+  - Linux
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+- User [sing-box](https://github.com/SagerNet/sing-box)
+  - Windows
+    - [NekoRay](https://github.com/MatsuriDayo/nekoray)
+  - Android
+    - [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid)
 - OpenWrt
-  - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
-  - [Hello World](https://github.com/jerrykuku/luci-app-vssr)
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
-  - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
+  - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
+  - [PassWall 2](https://github.com/xiaorouji/openwrt-passwall2)
+  - [HelloWorld](https://github.com/jerrykuku/luci-app-vssr)
+  - [luci-app-xray](https://github.com/yichya/luci-app-xray)
 - Windows
-  - [v2rayN](https://github.com/2dust/v2rayN)
   - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
   - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch) (This project had been archived and currently inactive)
-- Android
-  - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
 - iOS & macOS (with M1 chip)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
