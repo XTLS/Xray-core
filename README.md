@@ -6,52 +6,86 @@
 
 [Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
 
+## Document
+
+[Project X](https://xtls.github.io/Xray-docs-next/config/)
+
+## Telegram
+
+[Project X](https://t.me/projectXray)
+
+[Project X Channel](https://t.me/projectXtls)
+
 ## Installation
 
 - Linux Script
-  - [Xray-install](https://github.com/XTLS/Xray-install)
-  - [Xray-script](https://github.com/kirin10000/Xray-script)
+  - [Xray-install](https://github.com/XTLS/Xray-install) (Official)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - One Click
-  - [ProxySU](https://github.com/proxysu/ProxySU)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
+  - [Xray-script](https://github.com/kirin10000/Xray-script)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
-  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
   - [Xray_onekey](https://github.com/wulabing/Xray_onekey)
+  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
+  - [ProxySU](https://github.com/proxysu/ProxySU)
+- Web Panel
+  - [X-UI](https://github.com/FranzKafkaYu/x-ui)
+  - [Hiddify](https://github.com/hiddify/hiddify-config)
+- Tutorial
+  - [Xray Vision tutorial](https://github.com/chika0801/Xray-install)
+  - [Xray REALITY tutorial](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
   - `brew install xray`
   - [(Tap) Repository 0](https://github.com/N4FA/homebrew-xray)
-  - [(Tap) Repository 1](https://github.com/xiruizhao/homebrew-xray)
-
-## Contributing
-[Code Of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
 
 ## Usage
 
-[Xray-examples](https://github.com/XTLS/Xray-examples) / [VLESS-TCP-XTLS-WHATEVER](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-WHATEVER)
+[Xray-examples](https://github.com/XTLS/Xray-examples) / [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx) / [VLESS-TCP-XTLS-Vision](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-Vision)
+
+[chika0801's examples](https://github.com/chika0801/Xray-examples)
+
+[lxhao61's examples](https://github.com/lxhao61/integrated-examples)
 
 ## GUI Clients
 
+- Use Xray-core
+  - Windows
+    - [v2rayN](https://github.com/2dust/v2rayN)
+  - Android
+    - [v2rayNG](https://github.com/2dust/v2rayNG)
+- Use [Clash Meta kernel](https://github.com/MetaCubeX/Clash.Meta)
+  - Windows
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+    - [clashN](https://github.com/2dust/clashN)
+  - Android
+    - [Clash Meta For Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
+  - iOS
+    - [MFI](https://t.me/meta_for_ios) 
+  - macOS
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+  - Linux
+    - [Clash Verge](https://github.com/zzzgydi/clash-verge)
+- Use [sing-box](https://github.com/SagerNet/sing-box)
+  - Windows
+    - [NekoRay](https://github.com/MatsuriDayo/nekoray)
+  - Android
+    - [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid)
+  - iOS
+    - [SFI](https://sing-box.sagernet.org/zh/installation/clients/sfi/) 
 - OpenWrt
-  - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
-  - [Hello World](https://github.com/jerrykuku/luci-app-vssr)
   - [ShadowSocksR Plus+](https://github.com/fw876/helloworld)
-  - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
-- Windows
-  - [v2rayN](https://github.com/2dust/v2rayN)
-  - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
-  - [Netch (NetFilter & TUN/TAP)](https://github.com/NetchX/Netch) (This project had been archived and currently inactive)
-- Android
-  - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [Kitsunebi](https://github.com/rurirei/Kitsunebi/tree/release_xtls)
-- iOS & macOS (with M1 chip)
+  - [PassWall](https://github.com/xiaorouji/openwrt-passwall)
+  - [PassWall 2](https://github.com/xiaorouji/openwrt-passwall2)
+  - [luci-app-xray](https://github.com/yichya/luci-app-xray)
+- iOS & macOS
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+  - [Wings X](https://apps.apple.com/app/wings-x-client/id6446119727)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
-- macOS (Intel chip & M1 chip)
-  - [Qv2ray](https://github.com/Qv2ray/Qv2ray) (This project had been archived and currently inactive)
+- macOS
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
 
 ## Credits
@@ -74,6 +108,10 @@ This repo relies on the following third-party projects:
   - [stretchr/testify](https://github.com/stretchr/testify)
   - [h12w/socks](https://github.com/h12w/socks)
 
+
+## Contributing
+[Code Of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
+
 ## Compilation
 
 ### Windows
@@ -87,12 +125,6 @@ go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
 ```bash
 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 ```
-
-## Telegram
-
-[Project X](https://t.me/projectXray)
-
-[Project X Channel](https://t.me/projectXtls)
 
 ## Stargazers over time
 
