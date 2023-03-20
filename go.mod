@@ -12,7 +12,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.6.2
 	github.com/quic-go/quic-go v0.33.0
-	github.com/refraction-networking/utls v1.2.3-0.20230308205431-4f1df6c200db
+	github.com/refraction-networking/utls v1.3.1
 	github.com/sagernet/sing v0.2.0
 	github.com/sagernet/sing-shadowsocks v0.2.0
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
