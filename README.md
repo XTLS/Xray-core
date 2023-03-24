@@ -55,6 +55,7 @@
 - Use Xray-core
   - Windows
     - [v2rayN](https://github.com/2dust/v2rayN)
+    - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
   - Android
     - [v2rayNG](https://github.com/2dust/v2rayNG)
 - Use [Clash Meta kernel](https://github.com/MetaCubeX/Clash.Meta)
