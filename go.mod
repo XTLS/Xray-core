@@ -8,11 +8,11 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
-	github.com/miekg/dns v1.1.51
+	github.com/miekg/dns v1.1.52
 	github.com/pelletier/go-toml v1.9.5
-	github.com/pires/go-proxyproto v0.6.2
+	github.com/pires/go-proxyproto v0.7.0
 	github.com/quic-go/quic-go v0.33.0
-	github.com/refraction-networking/utls v1.2.3-0.20230308205431-4f1df6c200db
+	github.com/refraction-networking/utls v1.3.1
 	github.com/sagernet/sing v0.2.0
 	github.com/sagernet/sing-shadowsocks v0.2.0
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
@@ -25,8 +25,8 @@ require (
 	golang.org/x/net v0.8.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.6.0
-	google.golang.org/grpc v1.53.0
-	google.golang.org/protobuf v1.29.0
+	google.golang.org/grpc v1.54.0
+	google.golang.org/protobuf v1.30.0
 	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
 	h12.io/socks v1.0.3
 )
