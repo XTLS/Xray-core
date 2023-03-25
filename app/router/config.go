@@ -165,6 +165,12 @@ func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
 			strategy:  &LeastPingStrategy{},
 			ohm:       ohm,
 		}, nil
+	case "optimal":
+		return &Balancer{
+			selectors: br.OutboundSelector,
+			strategy:  NewOptimalStrategy(br.OptimalStrategyConfig),
+			ohm:       ohm,
+		}, nil
 	case "random":
 		fallthrough
 	default:

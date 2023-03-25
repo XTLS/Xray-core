@@ -17,16 +17,26 @@ type RouterRulesConfig struct {
 	DomainStrategy string            `json:"domainStrategy"`
 }
 
+// BalancingOptimalStrategyConfig stores BalancingOptimalStrategy config
+type BalancingOptimalStrategyConfig struct {
+	Timeout  uint32            `json:"timeout,omitempty"`
+	Interval uint32            `json:"interval,omitempty"`
+	URL      string            `json:"url",omitempty`
+	Count    uint32            `json:"count,omitempty"`
+	Weights  []*router.Weights `json:"weights,omitempty"`
+}
+
 // StrategyConfig represents a strategy config
 type StrategyConfig struct {
 	Type     string           `json:"type"`
-	Settings *json.RawMessage `json:"settings"`
+	Settings *json.RawMessage `json:"settings,omitempty"`
 }
 
 type BalancingRule struct {
-	Tag       string         `json:"tag"`
-	Selectors StringList     `json:"selector"`
-	Strategy  StrategyConfig `json:"strategy"`
+	Tag                   string                          `json:"tag"`
+	Selectors             StringList                      `json:"selector"`
+	Strategy              StrategyConfig                  `json:"strategy"`
+	OptimalStrategyConfig *BalancingOptimalStrategyConfig `json:"optimalSettings"`
 }
 
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
@@ -43,14 +53,26 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		strategy = strategyRandom
 	case strategyLeastPing:
 		strategy = "leastPing"
+	case strategyOptimal:
+		strategy = "optimal"
 	default:
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
 	}
 
+	optimalStrategyConfig := &router.BalancingOptimalStrategyConfig{}
+	if r.OptimalStrategyConfig != nil {
+		optimalStrategyConfig.Timeout = r.OptimalStrategyConfig.Timeout
+		optimalStrategyConfig.Interval = r.OptimalStrategyConfig.Interval
+		optimalStrategyConfig.Url = r.OptimalStrategyConfig.URL
+		optimalStrategyConfig.Count = r.OptimalStrategyConfig.Count
+		optimalStrategyConfig.Weights = r.OptimalStrategyConfig.Weights
+	}
+
 	return &router.BalancingRule{
-		Tag:              r.Tag,
-		OutboundSelector: []string(r.Selectors),
-		Strategy:         strategy,
+		Tag:                   r.Tag,
+		OutboundSelector:      []string(r.Selectors),
+		Strategy:              strategy,
+		OptimalStrategyConfig: optimalStrategyConfig,
 	}, nil
 }
 
