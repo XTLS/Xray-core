@@ -45,6 +45,9 @@ func (v *Address) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &rawStr); err != nil {
 		return newError("invalid address: ", string(data)).Base(err)
 	}
+	if strings.HasPrefix(rawStr, "env:") {
+		rawStr = os.Getenv(rawStr[4:])
+	}
 	v.Address = net.ParseAddress(rawStr)
 
 	return nil
@@ -115,8 +118,7 @@ func parseIntPort(data []byte) (net.Port, error) {
 
 func parseStringPort(s string) (net.Port, net.Port, error) {
 	if strings.HasPrefix(s, "env:") {
-		s = s[4:]
-		s = os.Getenv(s)
+		s = os.Getenv(s[4:])
 	}
 
 	pair := strings.SplitN(s, "-", 2)
