@@ -107,8 +107,8 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
 	}
-	if utlsConfig.ServerName == "" && dest.Address.Family().IsDomain() {
-		utlsConfig.ServerName = dest.Address.Domain()
+	if utlsConfig.ServerName == "" {
+		utlsConfig.ServerName = dest.Address.String()
 	}
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
