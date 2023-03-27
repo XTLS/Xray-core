@@ -35,6 +35,7 @@
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
   - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
   - [ProxySU](https://github.com/proxysu/ProxySU)
+  - [installReality](https://github.com/BoxXt/installReality)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
