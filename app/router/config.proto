@@ -134,7 +134,9 @@ message BalancingOptimalStrategyConfig {
   uint32 interval = 2;
   string url = 3;
   uint32 count = 4;
-  repeated Weights weights = 5;
+  bool accept_little_diff = 5;
+  double diff_percent = 6;
+  repeated Weights weights = 7;
 }
 
 message BalancingRule {

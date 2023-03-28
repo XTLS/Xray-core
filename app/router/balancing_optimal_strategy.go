@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
@@ -29,17 +30,19 @@ type TagWeight struct {
 
 // OptimalStrategy pick outbound by net speed
 type OptimalStrategy struct {
-	timeout       time.Duration
-	interval      time.Duration
-	url           *url.URL
-	count         uint32
-	obm           outbound.Manager
-	tag           string
-	tags          []string
-	weights       map[string]uint32
-	periodic      *task.Periodic
-	periodicMutex sync.Mutex
-	ctx           context.Context
+	timeout          time.Duration
+	interval         time.Duration
+	url              *url.URL
+	count            uint32
+	acceptLittleDiff bool
+	diffPercent      float64
+	obm              outbound.Manager
+	tag              string
+	tags             []string
+	weights          map[string]uint32
+	periodic         *task.Periodic
+	periodicMutex    sync.Mutex
+	ctx              context.Context
 }
 
 // NewOptimalStrategy creates a new OptimalStrategy
@@ -84,6 +87,17 @@ func NewOptimalStrategy(config *BalancingOptimalStrategyConfig) *OptimalStrategy
 		for _, w := range config.Weights {
 			s.weights[w.Tag] = w.Weight
 		}
+	}
+
+	if config.AcceptLittleDiff {
+		s.acceptLittleDiff = true
+		if config.DiffPercent == float64(0) {
+			s.diffPercent = float64(90.0)
+		} else {
+			s.diffPercent = config.DiffPercent
+		}
+	} else {
+		s.acceptLittleDiff = false
 	}
 
 	return s
@@ -157,9 +171,30 @@ func (s *OptimalStrategy) run() error {
 		return results[i].score > results[j].score
 	})
 
-	if results[0].tag != s.tag {
-		newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s[] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
-		s.tag = results[0].tag
+	if s.acceptLittleDiff {
+		highestScore := results[0]
+		acceptableScore := highestScore.score - highestScore.score*s.diffPercent
+		acceptableResults := make([]optimalStrategyTestResult, 0)
+
+		acceptableResults = append(acceptableResults, results[0])
+
+		for idx, res := range results {
+			if idx != 0 && res.score != 0 && res.score >= acceptableScore {
+				acceptableResults = append(acceptableResults, res)
+			}
+		}
+
+		randomlyChosenResult := acceptableResults[dice.Roll(len(acceptableResults))]
+		if randomlyChosenResult.tag != s.tag {
+			newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s[] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
+			s.tag = results[0].tag
+		}
+
+	} else {
+		if results[0].tag != s.tag {
+			newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s[] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
+			s.tag = results[0].tag
+		}
 	}
 
 	return nil

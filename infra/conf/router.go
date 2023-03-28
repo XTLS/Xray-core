@@ -48,6 +48,7 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	}
 
 	var strategy string
+	optimalStrategyConfig := new(router.BalancingOptimalStrategyConfig)
 	switch strings.ToLower(r.Strategy.Type) {
 	case strategyRandom, "":
 		strategy = strategyRandom
@@ -55,17 +56,12 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		strategy = "leastPing"
 	case strategyOptimal:
 		strategy = "optimal"
+		err := json.Unmarshal(*r.Strategy.Settings, optimalStrategyConfig)
+		if err != nil {
+			return nil, newError("Not valid optimal strategy settings.").Base(err)
+		}
 	default:
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
-	}
-
-	optimalStrategyConfig := &router.BalancingOptimalStrategyConfig{}
-	if r.OptimalStrategyConfig != nil {
-		optimalStrategyConfig.Timeout = r.OptimalStrategyConfig.Timeout
-		optimalStrategyConfig.Interval = r.OptimalStrategyConfig.Interval
-		optimalStrategyConfig.Url = r.OptimalStrategyConfig.URL
-		optimalStrategyConfig.Count = r.OptimalStrategyConfig.Count
-		optimalStrategyConfig.Weights = r.OptimalStrategyConfig.Weights
 	}
 
 	return &router.BalancingRule{
