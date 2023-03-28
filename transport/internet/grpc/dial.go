@@ -54,15 +54,16 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	}
 	client := encoding.NewGRPCServiceClient(conn)
 	if grpcSettings.MultiMode {
-		newError("using gRPC multi mode").AtDebug().WriteToLog()
-		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getNormalizedName())
+		newError("using gRPC multi mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunMultiStreamName() + "`").AtDebug().WriteToLog()
+		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunMultiStreamName())
 		if err != nil {
 			return nil, newError("Cannot dial gRPC").Base(err)
 		}
 		return encoding.NewMultiHunkConn(grpcService, nil), nil
 	}
 
-	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.getNormalizedName())
+	newError("using gRPC tun mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunStreamName() + "`").AtDebug().WriteToLog()
+	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunStreamName())
 	if err != nil {
 		return nil, newError("Cannot dial gRPC").Base(err)
 	}
@@ -148,6 +149,10 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	if grpcSettings.InitialWindowsSize > 0 {
 		dialOptions = append(dialOptions, grpc.WithInitialWindowSize(grpcSettings.InitialWindowsSize))
+	}
+
+	if grpcSettings.UserAgent != "" {
+		dialOptions = append(dialOptions, grpc.WithUserAgent(grpcSettings.UserAgent))
 	}
 
 	var grpcDestHost string
