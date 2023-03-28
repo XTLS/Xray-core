@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	Version_x byte = 1
-	Version_y byte = 8
-	Version_z byte = 0
+	Version_x  byte = 1
+	Version_y  byte = 8
+	Version_z  byte = 0
+	Version_zz byte = 4
 )
 
 var (
@@ -33,7 +34,7 @@ var (
 // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
 // ".z" part may be omitted in regular releases.
 func Version() string {
-	return fmt.Sprintf("%v.%v.%v", Version_x, Version_y, Version_z)
+	return fmt.Sprintf("%v.%v.%v.%v", Version_x, Version_y, Version_z, Version_zz)
 }
 
 // VersionStatement returns a list of strings representing the full version info.
