@@ -220,10 +220,23 @@ func (s *OptimalStrategy) run() error {
 			newError(fmt.Sprintf("The balanced optimal strategy changes balancer outbounds from %s to %s", previousAcceptableTags, s.acceptableTags)).AtWarning().WriteToLog()
 			s.loadBalancingMutex.Unlock()
 		} else {
-			randomlyChosenResult := acceptableResults[dice.Roll(len(acceptableResults))]
-			if randomlyChosenResult.tag != s.tag {
-				newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
-				s.tag = results[0].tag
+
+			var currentOutboundScore optimalStrategyTestResult
+
+			for _, result := range results {
+				if result.tag == s.tag {
+					currentOutboundScore = result
+				}
+			}
+
+			if &currentOutboundScore != nil && currentOutboundScore.score >= acceptableScore {
+				return nil
+			} else {
+				randomlyChosenResult := acceptableResults[dice.Roll(len(acceptableResults))]
+				if randomlyChosenResult.tag != s.tag {
+					newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
+					s.tag = results[0].tag
+				}
 			}
 		}
 
