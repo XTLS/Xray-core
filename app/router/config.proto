@@ -136,7 +136,8 @@ message BalancingOptimalStrategyConfig {
   uint32 count = 4;
   bool accept_little_diff = 5;
   double diff_percent = 6;
-  repeated Weights weights = 7;
+  bool load_balancing = 7;
+  repeated Weights weights = 8;
 }
 
 message BalancingRule {

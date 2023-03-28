@@ -30,19 +30,22 @@ type TagWeight struct {
 
 // OptimalStrategy pick outbound by net speed
 type OptimalStrategy struct {
-	timeout          time.Duration
-	interval         time.Duration
-	url              *url.URL
-	count            uint32
-	acceptLittleDiff bool
-	diffPercent      float64
-	obm              outbound.Manager
-	tag              string
-	tags             []string
-	weights          map[string]uint32
-	periodic         *task.Periodic
-	periodicMutex    sync.Mutex
-	ctx              context.Context
+	timeout            time.Duration
+	interval           time.Duration
+	url                *url.URL
+	count              uint32
+	acceptLittleDiff   bool
+	diffPercent        float64
+	loadBalancing      bool
+	obm                outbound.Manager
+	tag                string
+	tags               []string
+	acceptableTags     []string
+	weights            map[string]uint32
+	periodic           *task.Periodic
+	periodicMutex      sync.Mutex
+	loadBalancingMutex sync.Mutex
+	ctx                context.Context
 }
 
 // NewOptimalStrategy creates a new OptimalStrategy
@@ -90,7 +93,10 @@ func NewOptimalStrategy(config *BalancingOptimalStrategyConfig) *OptimalStrategy
 	}
 
 	if config.AcceptLittleDiff {
+
 		s.acceptLittleDiff = true
+		s.loadBalancing = config.LoadBalancing
+
 		if config.DiffPercent == float64(0) {
 			s.diffPercent = float64(90.0)
 		} else {
@@ -128,7 +134,16 @@ func (s *OptimalStrategy) PickOutbound(tags []string) string {
 		s.periodicMutex.Lock()
 
 		if s.periodic == nil {
-			s.tag = s.tags[0]
+
+			if s.acceptLittleDiff && s.loadBalancing {
+				s.loadBalancingMutex.Lock()
+				s.acceptableTags = nil
+				s.acceptableTags = append(s.acceptableTags, s.tags[0])
+				s.loadBalancingMutex.Unlock()
+			} else {
+				s.tag = s.tags[0]
+			}
+
 			s.periodic = &task.Periodic{
 				Interval: s.interval,
 				Execute:  s.run,
@@ -141,7 +156,18 @@ func (s *OptimalStrategy) PickOutbound(tags []string) string {
 		s.periodicMutex.Unlock()
 	}
 
-	return s.tag
+	if s.acceptLittleDiff && s.loadBalancing {
+		bestTag := s.getBestTag()
+		return bestTag
+	} else {
+		return s.tag
+	}
+}
+
+func (s *OptimalStrategy) getBestTag() string {
+	s.loadBalancingMutex.Lock()
+	defer s.loadBalancingMutex.Unlock()
+	return s.acceptableTags[dice.Roll(len(s.acceptableTags))]
 }
 
 type optimalStrategyTestResult struct {
@@ -184,15 +210,26 @@ func (s *OptimalStrategy) run() error {
 			}
 		}
 
-		randomlyChosenResult := acceptableResults[dice.Roll(len(acceptableResults))]
-		if randomlyChosenResult.tag != s.tag {
-			newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s[] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
-			s.tag = results[0].tag
+		if s.loadBalancing {
+			s.loadBalancingMutex.Lock()
+			previousAcceptableTags := s.acceptableTags
+			s.acceptableTags = nil
+			for _, aresult := range acceptableResults {
+				s.acceptableTags = append(s.acceptableTags, aresult.tag)
+			}
+			newError(fmt.Sprintf("The balanced optimal strategy changes balancer outbounds from %s to %s", previousAcceptableTags, s.acceptableTags)).AtWarning().WriteToLog()
+			s.loadBalancingMutex.Unlock()
+		} else {
+			randomlyChosenResult := acceptableResults[dice.Roll(len(acceptableResults))]
+			if randomlyChosenResult.tag != s.tag {
+				newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
+				s.tag = results[0].tag
+			}
 		}
 
 	} else {
 		if results[0].tag != s.tag {
-			newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s[] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
+			newError(fmt.Sprintf("The balanced optimal strategy changes outbound from [%s] to [%s] in %s", s.tag, results[0].tag, s.tags)).AtWarning().WriteToLog()
 			s.tag = results[0].tag
 		}
 	}
