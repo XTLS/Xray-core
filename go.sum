@@ -141,8 +141,8 @@ github.com/refraction-networking/utls v1.3.1/go.mod h1:kHXvVB66a4BzVRYC4Em7e1HAf
 github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 h1:f/FNXud6gA3MNr8meMVVGxhp+QBTqY91tM8HjEuMjGg=
 github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3/go.mod h1:HgjTstvQsPGkxUsCd2KWxErBblirPizecHcpD3ffK+s=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
-github.com/sagernet/sing v0.2.0 h1:iyc4TaeXG5XYXixl48zSDDTw46C9NOEAVFq6ZE0dA2k=
-github.com/sagernet/sing v0.2.0/go.mod h1:9uHswk2hITw8leDbiLS/xn0t9nzBcbePxzm9PJhwdlw=
+github.com/sagernet/sing v0.2.1 h1:r0STYeyfKBBtoAHsBtW1dQonxG+3Qidde7/1VAMhdn8=
+github.com/sagernet/sing v0.2.1/go.mod h1:9uHswk2hITw8leDbiLS/xn0t9nzBcbePxzm9PJhwdlw=
 github.com/sagernet/sing-shadowsocks v0.2.0 h1:ILDWL7pwWfkPLEbviE/MyCgfjaBmJY/JVVY+5jhSb58=
 github.com/sagernet/sing-shadowsocks v0.2.0/go.mod h1:ysYzszRLpNzJSorvlWRMuzU6Vchsp7sd52q+JNY4axw=
 github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c h1:vK2wyt9aWYHHvNLWniwijBu/n4pySypiKRhN32u/JGo=
