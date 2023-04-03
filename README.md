@@ -24,6 +24,7 @@
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
+  - [sajjaddg/xray-reality](https://github.com/sajjaddg/xray-reality)
 - Web Panel
   - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
   - [Hiddify](https://github.com/hiddify/hiddify-config)
