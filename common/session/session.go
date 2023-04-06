@@ -42,6 +42,8 @@ type Inbound struct {
 	Gateway net.Destination
 	// Tag of the inbound proxy that handles the connection.
 	Tag string
+	// Name of the inbound proxy that handles the connection.
+	Name string
 	// User is the user that authencates for the inbound. May be nil if the protocol allows anounymous traffic.
 	User *protocol.MemoryUser
 	// Conn is actually internet.Connection. May be nil.

@@ -438,6 +438,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "vless"
 	inbound.User = request.User
 
 	account := request.User.Account.(*vless.MemoryAccount)

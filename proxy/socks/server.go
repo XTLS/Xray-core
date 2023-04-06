@@ -64,6 +64,7 @@ func (s *Server) Network() []net.Network {
 // Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		inbound.Name = "socks"
 		inbound.User = &protocol.MemoryUser{
 			Level: s.config.UserLevel,
 		}

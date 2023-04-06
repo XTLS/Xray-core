@@ -59,6 +59,7 @@ func New(opts ...Option) (*Reader, *Writer) {
 		readSignal:  signal.NewNotifier(),
 		writeSignal: signal.NewNotifier(),
 		done:        done.New(),
+		errChan:     make(chan error, 1),
 		option: pipeOption{
 			limit: -1,
 		},

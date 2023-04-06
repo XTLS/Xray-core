@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/sagernet/sing-shadowsocks"
+	shadowsocks "github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
@@ -86,6 +86,10 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	connection, err := dialer.Dial(ctx, serverDestination)
 	if err != nil {
 		return newError("failed to connect to server").Base(err)
+	}
+
+	if session.TimeoutOnlyFromContext(ctx) {
+		ctx, _ = context.WithCancel(context.Background())
 	}
 
 	if network == net.Network_TCP {

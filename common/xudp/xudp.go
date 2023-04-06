@@ -1,30 +1,76 @@
 package xudp
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
+	"lukechampine.com/blake3"
 )
 
-var addrParser = protocol.NewAddressParser(
+var AddrParser = protocol.NewAddressParser(
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv4), net.AddressFamilyIPv4),
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeDomain), net.AddressFamilyDomain),
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv6), net.AddressFamilyIPv6),
 	protocol.PortThenAddress(),
 )
 
-func NewPacketWriter(writer buf.Writer, dest net.Destination) *PacketWriter {
+var (
+	Show    bool
+	BaseKey [32]byte
+)
+
+const (
+	EnvShow    = "XRAY_XUDP_SHOW"
+	EnvBaseKey = "XRAY_XUDP_BASEKEY"
+)
+
+func init() {
+	if strings.ToLower(os.Getenv(EnvShow)) == "true" {
+		Show = true
+	}
+	if raw := os.Getenv(EnvBaseKey); raw != "" {
+		if key, _ := base64.RawURLEncoding.DecodeString(raw); len(key) == len(BaseKey) {
+			copy(BaseKey[:], key)
+			return
+		} else {
+			panic(EnvBaseKey + ": invalid value: " + raw)
+		}
+	}
+	rand.Read(BaseKey[:])
+}
+
+func GetGlobalID(ctx context.Context) (globalID [8]byte) {
+	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.Network == net.Network_UDP &&
+		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks") {
+		h := blake3.New(8, BaseKey[:])
+		h.Write([]byte(inbound.Source.String()))
+		copy(globalID[:], h.Sum(nil))
+		fmt.Printf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)
+	}
+	return
+}
+
+func NewPacketWriter(writer buf.Writer, dest net.Destination, globalID [8]byte) *PacketWriter {
 	return &PacketWriter{
-		Writer: writer,
-		Dest:   dest,
+		Writer:   writer,
+		Dest:     dest,
+		GlobalID: globalID,
 	}
 }
 
 type PacketWriter struct {
-	Writer buf.Writer
-	Dest   net.Destination
+	Writer   buf.Writer
+	Dest     net.Destination
+	GlobalID [8]byte
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -42,14 +88,17 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			eb.WriteByte(1) // New
 			eb.WriteByte(1) // Opt
 			eb.WriteByte(2) // UDP
-			addrParser.WriteAddressPort(eb, w.Dest.Address, w.Dest.Port)
+			AddrParser.WriteAddressPort(eb, w.Dest.Address, w.Dest.Port)
+			if b.UDP != nil { // make sure it's user's proxy request
+				eb.Write(w.GlobalID[:])
+			}
 			w.Dest.Network = net.Network_Unknown
 		} else {
 			eb.WriteByte(2) // Keep
 			eb.WriteByte(1)
 			if b.UDP != nil {
 				eb.WriteByte(2)
-				addrParser.WriteAddressPort(eb, b.UDP.Address, b.UDP.Port)
+				AddrParser.WriteAddressPort(eb, b.UDP.Address, b.UDP.Port)
 			}
 		}
 		l := eb.Len() - 2
@@ -98,7 +147,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		case 2:
 			if l != 4 {
 				b.Advance(5)
-				addr, port, err := addrParser.ReadAddressPort(nil, b)
+				addr, port, err := AddrParser.ReadAddressPort(nil, b)
 				if err != nil {
 					b.Release()
 					return nil, err

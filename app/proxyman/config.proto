@@ -98,4 +98,6 @@ message MultiplexingConfig {
   bool enabled = 1;
   // Max number of concurrent connections that one Mux connection can handle.
   uint32 concurrency = 2;
+  // Both(0), TCP(1), UDP(2).
+  uint32 only = 3;
 }
