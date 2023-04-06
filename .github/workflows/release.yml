@@ -186,12 +186,12 @@ jobs:
       - name: Build Xray
         run: |
           mkdir -p build_assets
-          go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+          go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" -tags with_gvisor ./main
 
       - name: Build background Xray on Windows 
         if: matrix.goos == 'windows'
         run: |
-          go build -v -o build_assets/wxray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
+          go build -v -o build_assets/wxray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" -tags with_gvisor ./main
     
       - name: Build Mips softfloat Xray
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'

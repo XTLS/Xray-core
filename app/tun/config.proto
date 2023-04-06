@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package xray.app.tun;
+option csharp_namespace = "Xray.App.Tun";
+option go_package = "github.com/xtls/xray-core/app/tun";
+option java_package = "com.xray.app.tun";
+option java_multiple_files = true;
+
+message Config {
+  string interface_name = 1;
+  repeated string inet4_address = 2;
+  repeated string inet6_address = 3;
+  uint32 mtu = 4;
+  bool auto_route = 5;
+  bool strict_route = 6;
+  repeated string inet4_route_address = 7;
+  repeated string inet6_route_address = 8;
+  bool endpoint_independent_nat = 9;
+  int64 udp_timeout = 10;
+  string stack = 11;
+  repeated uint32 include_uid = 12;
+  repeated string include_uid_range = 13;
+  repeated uint32 exclude_uid = 14;
+  repeated string exclude_uid_range = 15;
+  repeated int32 include_android_user = 16;
+  repeated string include_package = 17;
+  repeated string exclude_package = 18;
+
+  // for xray
+  bool auto_detect_interface = 100;
+  bool override_android_vpn = 101;
+}

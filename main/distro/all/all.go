@@ -16,6 +16,7 @@ import (
 
 	// Developer preview services
 	_ "github.com/xtls/xray-core/app/observatory/command"
+	_ "github.com/xtls/xray-core/app/tun"
 
 	// Other optional features.
 	_ "github.com/xtls/xray-core/app/dns"

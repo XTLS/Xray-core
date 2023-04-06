@@ -410,6 +410,7 @@ type Config struct {
 	Reverse         *ReverseConfig         `json:"reverse"`
 	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
 	Observatory     *ObservatoryConfig     `json:"observatory"`
+	Tun             *TunConfig             `json:"tun"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -472,6 +473,10 @@ func (c *Config) Override(o *Config, fn string) {
 
 	if o.Observatory != nil {
 		c.Observatory = o.Observatory
+	}
+
+	if o.Tun != nil {
+		c.Tun = o.Tun
 	}
 
 	// deprecated attrs... keep them for now
@@ -631,6 +636,14 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if c.Observatory != nil {
 		r, err := c.Observatory.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.App = append(config.App, serial.ToTypedMessage(r))
+	}
+
+	if c.Tun != nil {
+		r, err := c.Tun.Build()
 		if err != nil {
 			return nil, err
 		}
