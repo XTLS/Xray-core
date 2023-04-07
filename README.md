@@ -90,6 +90,7 @@
 - [sing-box](https://github.com/SagerNet/sing-box)
   - [installReality](https://github.com/BoxXt/installReality)
   - [sing-box-for-ios](https://github.com/SagerNet/sing-box-for-ios)
+  - [Sing-box-Reality](https://github.com/Misaka-blog/Sing-box-Reality)
 
 ## Contributing
 
