@@ -177,6 +177,9 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			// Actually, it won't return an error in Xray-core's implementations.
 			link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 			if err != nil {
+				XUDPManager.Lock()
+				delete(XUDPManager.Map, x.GlobalID)
+				XUDPManager.Unlock()
 				err = newError("failed to dispatch request to ", meta.Target).Base(err)
 				if xudp.Show {
 					fmt.Printf("XUDP new: %v err: %v\n", meta.GlobalID, err)

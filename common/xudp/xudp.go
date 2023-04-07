@@ -25,7 +25,7 @@ var AddrParser = protocol.NewAddressParser(
 
 var (
 	Show    bool
-	BaseKey [32]byte
+	BaseKey []byte
 )
 
 const (
@@ -37,24 +37,24 @@ func init() {
 	if strings.ToLower(os.Getenv(EnvShow)) == "true" {
 		Show = true
 	}
-	if raw := os.Getenv(EnvBaseKey); raw != "" {
-		if key, _ := base64.RawURLEncoding.DecodeString(raw); len(key) == len(BaseKey) {
-			copy(BaseKey[:], key)
+	if raw, found := os.LookupEnv(EnvBaseKey); found {
+		if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
 			return
-		} else {
-			panic(EnvBaseKey + ": invalid value: " + raw)
 		}
+		panic(EnvBaseKey + ": invalid value: " + raw)
 	}
-	rand.Read(BaseKey[:])
+	rand.Read(BaseKey)
 }
 
 func GetGlobalID(ctx context.Context) (globalID [8]byte) {
 	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.Network == net.Network_UDP &&
 		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks") {
-		h := blake3.New(8, BaseKey[:])
+		h := blake3.New(8, BaseKey)
 		h.Write([]byte(inbound.Source.String()))
 		copy(globalID[:], h.Sum(nil))
-		fmt.Printf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)
+		if Show {
+			fmt.Printf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)
+		}
 	}
 	return
 }
