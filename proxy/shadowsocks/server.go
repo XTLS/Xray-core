@@ -113,6 +113,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "shadowsocks"
 
 	var dest *net.Destination
 

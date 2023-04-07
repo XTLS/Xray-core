@@ -82,9 +82,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		})
 		// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
 		bind := &netBindClient{
-			dialer:  dialer,
-			workers: int(h.conf.NumWorkers),
-			dns:     h.dns,
+			dialer:   dialer,
+			workers:  int(h.conf.NumWorkers),
+			dns:      h.dns,
+			reserved: h.conf.Reserved,
 		}
 
 		net, err := h.makeVirtualTun(bind)
@@ -126,10 +127,21 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		addr = net.IPAddress(ips[0])
 	}
 
+	var newCtx context.Context
+	var newCancel context.CancelFunc
+	if session.TimeoutOnlyFromContext(ctx) {
+		newCtx, newCancel = context.WithCancel(context.Background())
+	}
+
 	p := h.policyManager.ForLevel(0)
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, p.Timeouts.ConnectionIdle)
 	addrPort := netip.AddrPortFrom(toNetIpAddr(addr), destination.Port.Value())
 
 	var requestFunc func() error
@@ -163,6 +175,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
+	}
+
+	if newCtx != nil {
+		ctx = newCtx
 	}
 
 	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))

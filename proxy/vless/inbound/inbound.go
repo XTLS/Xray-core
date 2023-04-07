@@ -5,6 +5,7 @@ package inbound
 import (
 	"bytes"
 	"context"
+	gotls "crypto/tls"
 	"io"
 	"reflect"
 	"strconv"
@@ -19,13 +20,12 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
@@ -33,12 +33,10 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
-
-var xtls_show = false
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
@@ -51,13 +49,6 @@ func init() {
 		}
 		return New(ctx, config.(*Config), dc)
 	}))
-
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-
-	xtlsShow := platform.NewEnvFlag("xray.vless.xtls.show").GetValue(func() string { return defaultFlagValue })
-	if xtlsShow == "true" {
-		xtls_show = true
-	}
 }
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
@@ -153,6 +144,19 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	return handler, nil
 }
 
+func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
+	if request.Command != protocol.RequestCommandMux {
+		return false
+	}
+	if first.Len() < 7 {
+		return true
+	}
+	firstBytes := first.Bytes()
+	return !(firstBytes[2] == 0 && // ID high
+		firstBytes[3] == 0 && // ID low
+		firstBytes[6] == 2) // Network type: UDP
+}
+
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
 	return errors.Combine(common.Close(h.validator))
@@ -188,9 +192,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	first := buf.New()
-	defer first.Release()
-
+	first := buf.FromBytes(make([]byte, buf.Size))
+	first.Clear()
 	firstLen, _ := first.ReadFrom(connection)
 	newError("firstLen = ", firstLen).AtInfo().WriteToLog(sid)
 
@@ -227,8 +230,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				alpn = cs.NegotiatedProtocol
 				newError("realName = " + name).AtInfo().WriteToLog(sid)
 				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-			} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-				cs := xtlsConn.ConnectionState()
+			} else if realityConn, ok := iConn.(*reality.Conn); ok {
+				cs := realityConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
 				newError("realName = " + name).AtInfo().WriteToLog(sid)
@@ -435,6 +438,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "vless"
 	inbound.User = request.User
 
 	account := request.User.Account.(*vless.MemoryAccount)
@@ -447,72 +451,52 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	var rawConn syscall.RawConn
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
-	allowNoneFlow := false
-	accountFlow := account.Flow
-	flows := strings.Split(account.Flow, ",")
-	for _, f := range flows {
-		t := strings.TrimSpace(f)
-		if t == "none" {
-			allowNoneFlow = true
-		} else {
-			accountFlow = t
-		}
-	}
+
 	switch requestAddons.Flow {
-	case vless.XRO, vless.XRD, vless.XRV:
-		if accountFlow == requestAddons.Flow {
+	case vless.XRV:
+		if account.Flow == requestAddons.Flow {
 			switch request.Command {
 			case protocol.RequestCommandMux:
 				return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
 			case protocol.RequestCommandTCP:
-				if requestAddons.Flow == vless.XRV {
-					var t reflect.Type
-					var p uintptr
-					if tlsConn, ok := iConn.(*tls.Conn); ok {
-						netConn = tlsConn.NetConn()
-						if pc, ok := netConn.(*proxyproto.Conn); ok {
-							netConn = pc.Raw()
-							// 8192 > 4096, there is no need to process pc's bufReader
-						}
-						if sc, ok := netConn.(syscall.Conn); ok {
-							rawConn, _ = sc.SyscallConn()
-						}
-						t = reflect.TypeOf(tlsConn.Conn).Elem()
-						p = uintptr(unsafe.Pointer(tlsConn.Conn))
-					} else if _, ok := iConn.(*tls.UConn); ok {
-						return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
-					} else if _, ok := iConn.(*xtls.Conn); ok {
-						return newError(`failed to use ` + requestAddons.Flow + `, vision "security" must be "tls"`).AtWarning()
-					} else {
-						return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+				var t reflect.Type
+				var p uintptr
+				if tlsConn, ok := iConn.(*tls.Conn); ok {
+					if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
+						return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 					}
-					i, _ := t.FieldByName("input")
-					r, _ := t.FieldByName("rawInput")
-					input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-					rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
-				} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-					xtlsConn.RPRX = true
-					xtlsConn.SHOW = xtls_show
-					xtlsConn.MARK = "XTLS"
-					if requestAddons.Flow == vless.XRD {
-						xtlsConn.DirectMode = true
-						if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
-							rawConn, _ = sc.SyscallConn()
-						}
-					}
+					netConn = tlsConn.NetConn()
+					t = reflect.TypeOf(tlsConn.Conn).Elem()
+					p = uintptr(unsafe.Pointer(tlsConn.Conn))
+				} else if realityConn, ok := iConn.(*reality.Conn); ok {
+					netConn = realityConn.NetConn()
+					t = reflect.TypeOf(realityConn.Conn).Elem()
+					p = uintptr(unsafe.Pointer(realityConn.Conn))
+				} else if _, ok := iConn.(*tls.UConn); ok {
+					return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
 				} else {
-					return newError(`failed to use ` + requestAddons.Flow + `, maybe "security" is not "xtls"`).AtWarning()
+					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
 				}
+				if pc, ok := netConn.(*proxyproto.Conn); ok {
+					netConn = pc.Raw()
+					// 8192 > 4096, there is no need to process pc's bufReader
+				}
+				if sc, ok := netConn.(syscall.Conn); ok {
+					rawConn, _ = sc.SyscallConn()
+				}
+				i, _ := t.FieldByName("input")
+				r, _ := t.FieldByName("rawInput")
+				input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
+				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 			}
 		} else {
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
-	case "", "none":
-		if accountFlow == vless.XRV && !allowNoneFlow && request.Command == protocol.RequestCommandTCP {
-			return newError(account.ID.String() + " is not able to use " + vless.XRV +
-				". Note the pure tls proxy has certain tls in tls characters. Append \",none\" in flow to suppress").AtWarning()
+	case "":
+		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
+			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
 		return newError("unknown request flow " + requestAddons.Flow).AtWarning()
@@ -562,12 +546,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			}
 			// TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
-			if requestAddons.Flow == vless.XRV {
-				err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
-					&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
-			} else {
-				err = encoding.ReadV(clientReader, serverWriter, timer, iConn.(*xtls.Conn), rawConn, counter, ctx)
-			}
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
+				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -597,11 +577,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		if requestAddons.Flow == vless.XRV {
 			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
-			if isTLS {
-				multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
-				for i, b := range multiBuffer {
-					multiBuffer[i] = encoding.XtlsPadding(b, 0x00, &userUUID, ctx)
-				}
+			multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
+			for i, b := range multiBuffer {
+				multiBuffer[i] = encoding.XtlsPadding(b, encoding.CommandPaddingContinue, &userUUID, isTLS, ctx)
 			}
 		}
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
@@ -618,7 +596,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &userUUID, &numberOfPacketToFilter,
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, netConn, counter, ctx, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer

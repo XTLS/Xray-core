@@ -11,4 +11,5 @@ message Config {
   int32 health_check_timeout = 5;
   bool permit_without_stream = 6;
   int32 initial_windows_size = 7;
+  string user_agent = 8;
 }

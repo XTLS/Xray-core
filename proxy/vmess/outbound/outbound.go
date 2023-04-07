@@ -138,11 +138,22 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
 
+	var newCtx context.Context
+	var newCancel context.CancelFunc
+	if session.TimeoutOnlyFromContext(ctx) {
+		newCtx, newCancel = context.WithCancel(context.Background())
+	}
+
 	session := encoding.NewClientSession(ctx, isAEAD, protocol.DefaultIDHash, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
@@ -164,7 +175,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		bodyWriter2 := bodyWriter
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			bodyWriter = xudp.NewPacketWriter(bodyWriter, target)
+			bodyWriter = xudp.NewPacketWriter(bodyWriter, target, xudp.GetGlobalID(ctx))
 		}
 		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 			return newError("failed to write first payload").Base(err)
@@ -206,6 +217,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
+	}
+
+	if newCtx != nil {
+		ctx = newCtx
 	}
 
 	responseDonePost := task.OnSuccess(responseDone, task.Close(output))

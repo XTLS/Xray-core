@@ -11,10 +11,10 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (
@@ -109,8 +109,9 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 }
 
 type MuxConfig struct {
-	Enabled     bool  `json:"enabled"`
-	Concurrency int16 `json:"concurrency"`
+	Enabled     bool   `json:"enabled"`
+	Concurrency int16  `json:"concurrency"`
+	Only        string `json:"only"`
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
@@ -118,16 +119,23 @@ func (m *MuxConfig) Build() *proxyman.MultiplexingConfig {
 	if m.Concurrency < 0 {
 		return nil
 	}
-
-	var con uint32 = 8
-	if m.Concurrency > 0 {
-		con = uint32(m.Concurrency)
+	if m.Concurrency == 0 {
+		m.Concurrency = 8
 	}
 
-	return &proxyman.MultiplexingConfig{
+	config := &proxyman.MultiplexingConfig{
 		Enabled:     m.Enabled,
-		Concurrency: con,
+		Concurrency: uint32(m.Concurrency),
 	}
+
+	switch strings.ToLower(m.Only) {
+	case "tcp":
+		config.Only = uint32(net.Network_TCP)
+	case "udp":
+		config.Only = uint32(net.Network_UDP)
+	}
+
+	return config
 }
 
 type InboundDetourAllocationConfig struct {
@@ -238,9 +246,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		if ss.SecurityType == serial.GetMessageType(&xtls.Config{}) && !strings.EqualFold(c.Protocol, "vless") && !strings.EqualFold(c.Protocol, "trojan") {
-			return nil, newError("XTLS doesn't supports " + c.Protocol + " for now.")
-		}
 		receiverSettings.StreamSettings = ss
 	}
 	if c.SniffingConfig != nil {
@@ -322,9 +327,6 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		if ss.SecurityType == serial.GetMessageType(&xtls.Config{}) && !strings.EqualFold(c.Protocol, "vless") && !strings.EqualFold(c.Protocol, "trojan") {
-			return nil, newError("XTLS doesn't supports " + c.Protocol + " for now.")
-		}
 		senderSettings.StreamSettings = ss
 	}
 
@@ -349,15 +351,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 
 	if c.MuxSettings != nil {
-		ms := c.MuxSettings.Build()
-		if ms != nil && ms.Enabled {
-			if ss := senderSettings.StreamSettings; ss != nil {
-				if ss.SecurityType == serial.GetMessageType(&xtls.Config{}) {
-					return nil, newError("XTLS doesn't support Mux for now.")
-				}
-			}
-		}
-		senderSettings.MultiplexSettings = ms
+		senderSettings.MultiplexSettings = c.MuxSettings.Build()
 	}
 
 	settings := []byte("{}")

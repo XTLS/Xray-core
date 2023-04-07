@@ -2,14 +2,12 @@ package trojan
 
 import (
 	"context"
-	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
@@ -17,11 +15,9 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 // Client is a inbound handler for trojan protocol
@@ -97,52 +93,20 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		Flow: account.Flow,
 	}
 
-	var rawConn syscall.RawConn
-	var sctx context.Context
-
-	allowUDP443 := false
-	switch connWriter.Flow {
-	case XRO + "-udp443", XRD + "-udp443", XRS + "-udp443":
-		allowUDP443 = true
-		connWriter.Flow = connWriter.Flow[:16]
-		fallthrough
-	case XRO, XRD, XRS:
-		if destination.Address.Family().IsDomain() && destination.Address.Domain() == muxCoolAddress {
-			return newError(connWriter.Flow + " doesn't support Mux").AtWarning()
-		}
-		if destination.Network == net.Network_UDP {
-			if !allowUDP443 && destination.Port == 443 {
-				return newError(connWriter.Flow + " stopped UDP/443").AtInfo()
-			}
-			connWriter.Flow = ""
-		} else { // enable XTLS only if making TCP request
-			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-				xtlsConn.RPRX = true
-				xtlsConn.SHOW = xtls_show
-				xtlsConn.MARK = "XTLS"
-				if connWriter.Flow == XRS {
-					sctx = ctx
-					connWriter.Flow = XRD
-				}
-				if connWriter.Flow == XRD {
-					xtlsConn.DirectMode = true
-					if sc, ok := xtlsConn.NetConn().(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
-					}
-				}
-			} else {
-				return newError(`failed to use ` + connWriter.Flow + `, maybe "security" is not "xtls"`).AtWarning()
-			}
-		}
-	default:
-		if _, ok := iConn.(*xtls.Conn); ok {
-			panic(`To avoid misunderstanding, you must fill in Trojan "flow" when using XTLS.`)
-		}
+	var newCtx context.Context
+	var newCancel context.CancelFunc
+	if session.TimeoutOnlyFromContext(ctx) {
+		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
 	sessionPolicy := c.policyManager.ForLevel(user.Level)
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -193,14 +157,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		} else {
 			reader = buf.NewReader(conn)
 		}
-		if rawConn != nil {
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.ReadCounter
-			}
-			return ReadV(reader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, sctx)
-		}
 		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
+	}
+
+	if newCtx != nil {
+		ctx = newCtx
 	}
 
 	responseDoneAndCloseWriter := task.OnSuccess(getResponse, task.Close(link.Writer))
@@ -215,11 +176,4 @@ func init() {
 	common.Must(common.RegisterConfig((*ClientConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return NewClient(ctx, config.(*ClientConfig))
 	}))
-
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-
-	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
-	if xtlsShow == "true" {
-		xtls_show = true
-	}
 }

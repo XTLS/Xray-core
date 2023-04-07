@@ -1,16 +1,18 @@
 package quic
 
 import (
+	"crypto"
 	"crypto/cipher"
-
-	"github.com/marten-seemann/qtls-go1-18"
+	_ "crypto/tls"
+	_ "unsafe"
 )
 
-type (
-	// A CipherSuiteTLS13 is a cipher suite for TLS 1.3
-	CipherSuiteTLS13 = qtls.CipherSuiteTLS13
-)
-
-func AEADAESGCMTLS13(key, fixedNonce []byte) cipher.AEAD {
-	return qtls.AEADAESGCMTLS13(key, fixedNonce)
+type CipherSuiteTLS13 struct {
+	ID     uint16
+	KeyLen int
+	AEAD   func(key, fixedNonce []byte) cipher.AEAD
+	Hash   crypto.Hash
 }
+
+//go:linkname AEADAESGCMTLS13 crypto/tls.aeadAESGCMTLS13
+func AEADAESGCMTLS13(key, nonceMask []byte) cipher.AEAD

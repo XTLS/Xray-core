@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	gotls "crypto/tls"
+	"io"
 	"net/http"
 	"net/url"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -40,8 +42,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
 	tlsConfigs := tls.ConfigFromStreamSettings(streamSettings)
-	if tlsConfigs == nil {
-		return nil, newError("TLS must be enabled for http transport.").AtWarning()
+	realityConfigs := reality.ConfigFromStreamSettings(streamSettings)
+	if tlsConfigs == nil && realityConfigs == nil {
+		return nil, newError("TLS or REALITY must be enabled for http transport.").AtWarning()
 	}
 	sockopt := streamSettings.SocketSettings
 
@@ -74,8 +77,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
+			if realityConfigs != nil {
+				return reality.UClient(pconn, realityConfigs, ctx, dest)
+			}
+
 			var cn tls.Interface
-			if fingerprint, ok := tls.Fingerprints[tlsConfigs.Fingerprint]; ok {
+			if fingerprint := tls.GetFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
 				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 			} else {
 				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
@@ -99,7 +106,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			}
 			return cn, nil
 		},
-		TLSClientConfig: tlsConfigs.GetTLSConfig(tls.WithDestination(dest)),
+	}
+
+	if tlsConfigs != nil {
+		transport.TLSClientConfig = tlsConfigs.GetTLSConfig(tls.WithDestination(dest))
 	}
 
 	if httpSettings.IdleTimeout > 0 || httpSettings.HealthCheckTimeout > 0 {
@@ -157,23 +167,68 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// Disable any compression method from server.
 	request.Header.Set("Accept-Encoding", "identity")
 
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, newError("failed to dial to ", dest).Base(err).AtWarning()
-	}
-	if response.StatusCode != 200 {
-		return nil, newError("unexpected status", response.StatusCode).AtWarning()
-	}
+	wrc := &WaitReadCloser{Wait: make(chan struct{})}
+	go func() {
+		response, err := client.Do(request)
+		if err != nil {
+			newError("failed to dial to ", dest).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			wrc.Close()
+			return
+		}
+		if response.StatusCode != 200 {
+			newError("unexpected status", response.StatusCode).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			wrc.Close()
+			return
+		}
+		wrc.Set(response.Body)
+	}()
 
 	bwriter := buf.NewBufferedWriter(pwriter)
 	common.Must(bwriter.SetBuffered(false))
 	return cnc.NewConnection(
-		cnc.ConnectionOutput(response.Body),
+		cnc.ConnectionOutput(wrc),
 		cnc.ConnectionInput(bwriter),
-		cnc.ConnectionOnClose(common.ChainedClosable{breader, bwriter, response.Body}),
+		cnc.ConnectionOnClose(common.ChainedClosable{breader, bwriter, wrc}),
 	), nil
 }
 
 func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+}
+
+type WaitReadCloser struct {
+	Wait chan struct{}
+	io.ReadCloser
+}
+
+func (w *WaitReadCloser) Set(rc io.ReadCloser) {
+	w.ReadCloser = rc
+	defer func() {
+		if recover() != nil {
+			rc.Close()
+		}
+	}()
+	close(w.Wait)
+}
+
+func (w *WaitReadCloser) Read(b []byte) (int, error) {
+	if w.ReadCloser == nil {
+		if <-w.Wait; w.ReadCloser == nil {
+			return 0, io.ErrClosedPipe
+		}
+	}
+	return w.ReadCloser.Read(b)
+}
+
+func (w *WaitReadCloser) Close() error {
+	if w.ReadCloser != nil {
+		return w.ReadCloser.Close()
+	}
+	defer func() {
+		if recover() != nil && w.ReadCloser != nil {
+			w.ReadCloser.Close()
+		}
+	}()
+	close(w.Wait)
+	return nil
 }

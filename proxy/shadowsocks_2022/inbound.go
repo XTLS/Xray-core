@@ -3,7 +3,7 @@ package shadowsocks_2022
 import (
 	"context"
 
-	"github.com/sagernet/sing-shadowsocks"
+	shadowsocks "github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
 	B "github.com/sagernet/sing/common/buf"
@@ -50,7 +50,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 	if !C.Contains(shadowaead_2022.List, config.Method) {
 		return nil, newError("unsupported method ", config.Method)
 	}
-	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound)
+	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound, nil)
 	if err != nil {
 		return nil, newError("create service").Base(err)
 	}
@@ -64,6 +64,7 @@ func (i *Inbound) Network() []net.Network {
 
 func (i *Inbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
+	inbound.Name = "shadowsocks-2022"
 
 	var metadata M.Metadata
 	if inbound.Source.IsValid() {

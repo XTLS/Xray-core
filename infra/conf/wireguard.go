@@ -52,6 +52,7 @@ type WireGuardConfig struct {
 	Peers      []*WireGuardPeerConfig `json:"peers"`
 	MTU        int                    `json:"mtu"`
 	NumWorkers int                    `json:"workers"`
+	Reserved   []byte                 `json:"reserved"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -89,6 +90,11 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	// these a fallback code exists in github.com/nanoda0523/wireguard-go code,
 	// we don't need to process fallback manually
 	config.NumWorkers = int32(c.NumWorkers)
+
+	if len(c.Reserved) != 0 && len(c.Reserved) != 3 {
+		return nil, newError(`"reserved" should be empty or 3 bytes`)
+	}
+	config.Reserved = c.Reserved
 
 	return config, nil
 }
