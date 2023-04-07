@@ -91,6 +91,8 @@
   - [installReality](https://github.com/BoxXt/installReality)
   - [sbox-reality](https://github.com/Misaka-blog/sbox-reality)
   - [sing-box-for-ios](https://github.com/SagerNet/sing-box-for-ios)
+  - [chika0801/sing-box-examples](https://github.com/chika0801/sing-box-examples)
+  - [chika0801/sing-box-install](https://github.com/chika0801/sing-box-install)
 
 ## Contributing
 
