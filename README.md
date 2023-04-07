@@ -89,6 +89,7 @@
   - [meta_for_ios](https://t.me/meta_for_ios)
 - [sing-box](https://github.com/SagerNet/sing-box)
   - [installReality](https://github.com/BoxXt/installReality)
+  - [sbox-reality](https://github.com/Misaka-blog/sbox-reality)
   - [sing-box-for-ios](https://github.com/SagerNet/sing-box-for-ios)
 
 ## Contributing
