@@ -15,15 +15,17 @@ type Writer struct {
 	followup     bool
 	hasError     bool
 	transferType protocol.TransferType
+	globalID     [8]byte
 }
 
-func NewWriter(id uint16, dest net.Destination, writer buf.Writer, transferType protocol.TransferType) *Writer {
+func NewWriter(id uint16, dest net.Destination, writer buf.Writer, transferType protocol.TransferType, globalID [8]byte) *Writer {
 	return &Writer{
 		id:           id,
 		dest:         dest,
 		writer:       writer,
 		followup:     false,
 		transferType: transferType,
+		globalID:     globalID,
 	}
 }
 
@@ -40,6 +42,7 @@ func (w *Writer) getNextFrameMeta() FrameMetadata {
 	meta := FrameMetadata{
 		SessionID: w.id,
 		Target:    w.dest,
+		GlobalID:  w.globalID,
 	}
 
 	if w.followup {

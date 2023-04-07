@@ -217,6 +217,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "trojan"
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 

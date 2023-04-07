@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -107,8 +108,9 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 }
 
 type MuxConfig struct {
-	Enabled     bool  `json:"enabled"`
-	Concurrency int16 `json:"concurrency"`
+	Enabled     bool   `json:"enabled"`
+	Concurrency int16  `json:"concurrency"`
+	Only        string `json:"only"`
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
@@ -116,16 +118,23 @@ func (m *MuxConfig) Build() *proxyman.MultiplexingConfig {
 	if m.Concurrency < 0 {
 		return nil
 	}
-
-	var con uint32 = 8
-	if m.Concurrency > 0 {
-		con = uint32(m.Concurrency)
+	if m.Concurrency == 0 {
+		m.Concurrency = 8
 	}
 
-	return &proxyman.MultiplexingConfig{
+	config := &proxyman.MultiplexingConfig{
 		Enabled:     m.Enabled,
-		Concurrency: con,
+		Concurrency: uint32(m.Concurrency),
 	}
+
+	switch strings.ToLower(m.Only) {
+	case "tcp":
+		config.Only = uint32(net.Network_TCP)
+	case "udp":
+		config.Only = uint32(net.Network_UDP)
+	}
+
+	return config
 }
 
 type InboundDetourAllocationConfig struct {

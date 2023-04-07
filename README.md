@@ -1,6 +1,8 @@
 # Project X
 
-[Project X](https://github.com/XTLS) originates from XTLS protocol, provides a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core).
+[Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core) and [REALITY](https://github.com/XTLS/REALITY).
+
+[README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
 
 [README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
 
@@ -29,12 +31,9 @@
   - [Hiddify](https://github.com/hiddify/hiddify-config)
   - [Marzban](https://github.com/Gozargah/Marzban)
 - One Click
-  - [v2ray-agent](https://github.com/mack-a/v2ray-agent)
-  - [Xray-script](https://github.com/kirin10000/Xray-script)
-  - [Xray_onekey](https://github.com/wulabing/Xray_onekey)
-  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
-  - [Xray-yes](https://github.com/jiuqi9997/Xray-yes)
-  - [ProxySU](https://github.com/proxysu/ProxySU)
+  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray-script](https://github.com/zxcvos/Xray-script), [xray_script](https://github.com/tdjnodj/xray_script)
+  - [XTool](https://github.com/LordPenguin666/XTool), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [xray-reality](https://github.com/sajjaddg/xray-reality)
+  - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
   - [Xray4Magisk](https://github.com/CerteKim/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
@@ -75,7 +74,7 @@
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
 
-## Others that support VLESS, XTLS, REALITY...
+## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
@@ -91,7 +90,8 @@
   - [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
   - [meta_for_ios](https://t.me/meta_for_ios)
 - [sing-box](https://github.com/SagerNet/sing-box)
-  - [NekoBox for Android](https://github.com/MatsuriDayo/NekoBoxForAndroid)
+  - [installReality](https://github.com/BoxXt/installReality)
+  - [sbox-reality](https://github.com/Misaka-blog/sbox-reality)
   - [sing-box-for-ios](https://github.com/SagerNet/sing-box-for-ios)
 
 ## Contributing
