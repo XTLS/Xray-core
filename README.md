@@ -77,6 +77,8 @@
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
+  - [Pharos Pro](https://apps.apple.com/app/pharos-pro/id1456610173)
+  - [V2Box](https://apps.apple.com/app/v2box-v2ray-client/id6446814690)
 - API Wrapper
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
 - [XrayR](https://github.com/XrayR-project/XrayR)
