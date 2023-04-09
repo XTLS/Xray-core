@@ -2,7 +2,6 @@ package mux
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/xtls/xray-core/common"
@@ -12,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -148,9 +146,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		} else {
 			if x.Status == Initializing { // nearly impossible
 				XUDPManager.Unlock()
-				if xudp.Show {
-					fmt.Printf("XUDP hit: %v err: conflict\n", meta.GlobalID)
-				}
+				newError("XUDP hit ", meta.GlobalID).Base(errors.New("conflict")).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 				// It's not a good idea to return an err here, so just let client wait.
 				// Client will receive an End frame after sending a Keep frame.
 				return nil
@@ -168,9 +164,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				b.Release()
 				mb = nil
 			}
-			if xudp.Show {
-				fmt.Printf("XUDP hit: %v err: %v\n", meta.GlobalID, err)
-			}
+			newError("XUDP hit ", meta.GlobalID).Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
 		if mb != nil {
 			ctx = session.ContextWithTimeoutOnly(ctx, true)
@@ -180,10 +174,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				XUDPManager.Lock()
 				delete(XUDPManager.Map, x.GlobalID)
 				XUDPManager.Unlock()
-				err = newError("failed to dispatch request to ", meta.Target).Base(err)
-				if xudp.Show {
-					fmt.Printf("XUDP new: %v err: %v\n", meta.GlobalID, err)
-				}
+				err = newError("XUDP new ", meta.GlobalID).Base(errors.New("failed to dispatch request to ", meta.Target).Base(err))
 				return err // it will break the whole Mux connection
 			}
 			link.Writer.WriteMultiBuffer(mb) // it's meaningless to test a new pipe
@@ -191,9 +182,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				input:  link.Reader,
 				output: link.Writer,
 			}
-			if xudp.Show {
-				fmt.Printf("XUDP new: %v err: %v\n", meta.GlobalID, err)
-			}
+			newError("XUDP new ", meta.GlobalID).Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
 		x.Mux = &Session{
 			input:        x.Mux.input,

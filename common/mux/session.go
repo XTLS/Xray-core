@@ -1,7 +1,6 @@
 package mux
 
 import (
-	"fmt"
 	"io"
 	"runtime"
 	"sync"
@@ -11,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -182,9 +180,7 @@ func (s *Session) Close(locked bool) error {
 		if s.XUDP.Status == Active {
 			s.XUDP.Expire = time.Now().Add(time.Minute)
 			s.XUDP.Status = Expiring
-			if xudp.Show {
-				fmt.Printf("XUDP put: %v\n", s.XUDP.GlobalID)
-			}
+			newError("XUDP put ", s.XUDP.GlobalID).AtDebug().WriteToLog()
 		}
 		XUDPManager.Unlock()
 	}
@@ -234,9 +230,7 @@ func init() {
 				if x.Status == Expiring && now.After(x.Expire) {
 					x.Interrupt()
 					delete(XUDPManager.Map, id)
-					if xudp.Show {
-						fmt.Printf("XUDP del: %v\n", id)
-					}
+					newError("XUDP del ", id).AtDebug().WriteToLog()
 				}
 			}
 			XUDPManager.Unlock()
