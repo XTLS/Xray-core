@@ -345,13 +345,16 @@ func TestMuxConfig_Build(t *testing.T) {
 		}},
 		{"empty def", `{}`, &proxyman.MultiplexingConfig{
 			Enabled:     false,
-			Concurrency: 8,
+			Concurrency: 0,
 		}},
 		{"not enable", `{"enabled": false, "concurrency": 4}`, &proxyman.MultiplexingConfig{
 			Enabled:     false,
 			Concurrency: 4,
 		}},
-		{"forbidden", `{"enabled": false, "concurrency": -1}`, nil},
+		{"forbidden", `{"enabled": false, "concurrency": -1}`, &proxyman.MultiplexingConfig{
+			Enabled:     false,
+			Concurrency: -1,
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
