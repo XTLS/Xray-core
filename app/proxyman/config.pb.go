@@ -595,7 +595,7 @@ type MultiplexingConfig struct {
 	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	// Max number of concurrent connections that one Mux connection can handle.
 	Concurrency uint32 `protobuf:"varint,2,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	// Both(0), TCP(1), UDP(2).
+	// Both(0), TCP(net.Network_TCP), UDP(net.Network_UDP).
 	Only uint32 `protobuf:"varint,3,opt,name=only,proto3" json:"only,omitempty"`
 }
 

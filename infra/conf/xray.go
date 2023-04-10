@@ -114,9 +114,9 @@ type MuxConfig struct {
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
-func (m *MuxConfig) Build() *proxyman.MultiplexingConfig {
+func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	if m.Concurrency < 0 {
-		return nil
+		return nil, nil
 	}
 	if m.Concurrency == 0 {
 		m.Concurrency = 8
@@ -128,13 +128,16 @@ func (m *MuxConfig) Build() *proxyman.MultiplexingConfig {
 	}
 
 	switch strings.ToLower(m.Only) {
+	case "", "both":
 	case "tcp":
 		config.Only = uint32(net.Network_TCP)
 	case "udp":
 		config.Only = uint32(net.Network_UDP)
+	default:
+		return nil, newError(`unknown "only": `, m.Only)
 	}
 
-	return config
+	return config, nil
 }
 
 type InboundDetourAllocationConfig struct {
@@ -348,7 +351,11 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 
 	if c.MuxSettings != nil {
-		senderSettings.MultiplexSettings = c.MuxSettings.Build()
+		ms, err := c.MuxSettings.Build()
+		if err != nil {
+			return nil, newError("failed to build Mux config.").Base(err)
+		}
+		senderSettings.MultiplexSettings = ms
 	}
 
 	settings := []byte("{}")

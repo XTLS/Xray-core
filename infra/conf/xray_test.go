@@ -357,7 +357,7 @@ func TestMuxConfig_Build(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &MuxConfig{}
 			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			if got := m.Build(); !reflect.DeepEqual(got, tt.want) {
+			if got, _ := m.Build(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
 			}
 		})
