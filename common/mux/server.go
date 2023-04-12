@@ -132,6 +132,12 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		ctx = log.ContextWithAccessMessage(ctx, msg)
 	}
 
+	if network := session.AllowedNetworkFromContext(ctx); network != net.Network_Unknown {
+		if meta.Target.Network != network {
+			return newError("unexpected network ", meta.Target.Network) // it will break the whole Mux connection
+		}
+	}
+
 	if meta.GlobalID != [8]byte{} {
 		mb, err := NewPacketReader(reader, &meta.Target).ReadMultiBuffer()
 		if err != nil {

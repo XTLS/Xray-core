@@ -495,7 +495,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "":
-		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
+		if account.Flow == vless.XRV && request.Command == protocol.RequestCommandTCP {
 			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
@@ -510,6 +510,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			Reason: "",
 			Email:  request.User.Email,
 		})
+	} else if account.Flow == vless.XRV {
+		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
