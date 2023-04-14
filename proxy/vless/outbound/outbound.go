@@ -136,10 +136,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	case vless.XRV:
 		switch request.Command {
 		case protocol.RequestCommandMux:
-			return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
+			requestAddons.Flow = "" // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandUDP:
 			if !allowUDP443 && request.Port == 443 {
-				return newError(requestAddons.Flow + " stopped UDP/443").AtInfo()
+				return newError("XTLS rejected UDP/443 traffic").AtInfo()
 			}
 			requestAddons.Flow = ""
 		case protocol.RequestCommandTCP:
