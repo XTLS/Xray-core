@@ -58,6 +58,7 @@ type Handler struct {
 	outboundManager outbound.Manager
 	mux             *mux.ClientManager
 	xudp            *mux.ClientManager
+	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 }
@@ -150,6 +151,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 					},
 				}
 			}
+			h.udp443 = config.XudpProxyUDP443
 		}
 	}
 
@@ -173,7 +175,17 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				common.Interrupt(link.Writer)
 			}
 		}
-		if h.xudp != nil && session.OutboundFromContext(ctx).Target.Network == net.Network_UDP {
+		outbound := session.OutboundFromContext(ctx)
+		if outbound.Target.Network == net.Network_UDP && outbound.Target.Port == 443 {
+			switch h.udp443 {
+			case "reject":
+				test(newError("XUDP rejected UDP/443 traffic").AtInfo())
+				return
+			case "skip":
+				goto out
+			}
+		}
+		if h.xudp != nil && outbound.Target.Network == net.Network_UDP {
 			if !h.xudp.Enabled {
 				goto out
 			}

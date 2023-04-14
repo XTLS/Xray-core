@@ -107,17 +107,26 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 }
 
 type MuxConfig struct {
-	Enabled         bool  `json:"enabled"`
-	Concurrency     int16 `json:"concurrency"`
-	XudpConcurrency int16 `json:"xudpConcurrency"`
+	Enabled         bool   `json:"enabled"`
+	Concurrency     int16  `json:"concurrency"`
+	XudpConcurrency int16  `json:"xudpConcurrency"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
 func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
+	switch m.XudpProxyUDP443 {
+	case "":
+		m.XudpProxyUDP443 = "reject"
+	case "reject", "allow", "skip":
+	default:
+		return nil, newError(`unknown "xudpProxyUDP443": `, m.XudpProxyUDP443)
+	}
 	return &proxyman.MultiplexingConfig{
 		Enabled:         m.Enabled,
 		Concurrency:     int32(m.Concurrency),
 		XudpConcurrency: int32(m.XudpConcurrency),
+		XudpProxyUDP443: m.XudpProxyUDP443,
 	}, nil
 }
 

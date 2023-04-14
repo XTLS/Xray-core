@@ -100,4 +100,6 @@ message MultiplexingConfig {
   int32 concurrency = 2;
   // Transport XUDP in another Mux.
   int32 xudpConcurrency = 3;
+  // "reject" (default), "allow" or "skip".
+  string xudpProxyUDP443 = 4;
 }
