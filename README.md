@@ -28,6 +28,7 @@
   - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
   - [Hiddify](https://github.com/hiddify/hiddify-config)
   - [Marzban](https://github.com/Gozargah/Marzban)
+  - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
   - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray-script](https://github.com/zxcvos/Xray-script), [xray_script](https://github.com/tdjnodj/xray_script)
   - [XTool](https://github.com/LordPenguin666/XTool), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [xray-reality](https://github.com/sajjaddg/xray-reality)
