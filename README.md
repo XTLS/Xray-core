@@ -29,7 +29,7 @@
   - [Hiddify](https://github.com/hiddify/hiddify-config)
   - [Marzban](https://github.com/Gozargah/Marzban)
 - One Click
-  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray-script](https://github.com/zxcvos/Xray-script), [xray_script](https://github.com/tdjnodj/xray_script)
+  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray-script](https://github.com/zxcvos/Xray-script), [LetsXray](https://github.com/tdjnodj/LetsXray)
   - [XTool](https://github.com/LordPenguin666/XTool), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [xray-reality](https://github.com/sajjaddg/xray-reality)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
