@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -448,7 +447,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	var netConn net.Conn
-	var rawConn syscall.RawConn
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 
@@ -480,9 +478,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				if pc, ok := netConn.(*proxyproto.Conn); ok {
 					netConn = pc.Raw()
 					// 8192 > 4096, there is no need to process pc's bufReader
-				}
-				if sc, ok := netConn.(syscall.Conn); ok {
-					rawConn, _ = sc.SyscallConn()
 				}
 				i, _ := t.FieldByName("input")
 				r, _ := t.FieldByName("rawInput")
@@ -539,14 +534,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 
-		if rawConn != nil {
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.ReadCounter
-			}
+		if requestAddons.Flow == vless.XRV {
 			// TODO enable splice
 			ctx = session.ContextWithInbound(ctx, nil)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, netConn, input, rawInput, ctx, account.ID.Bytes(),
 				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
@@ -591,7 +582,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		var err error
-		if rawConn != nil && requestAddons.Flow == vless.XRV {
+		if requestAddons.Flow == vless.XRV {
 			var counter stats.Counter
 			if statConn != nil {
 				counter = statConn.WriteCounter

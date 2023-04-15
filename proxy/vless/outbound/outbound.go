@@ -7,7 +7,6 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"reflect"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -122,8 +121,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Flow: account.Flow,
 	}
 
-	var netConn net.Conn
-	var rawConn syscall.RawConn
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	allowUDP443 := false
@@ -145,22 +142,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			var t reflect.Type
 			var p uintptr
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
-				netConn = tlsConn.NetConn()
 				t = reflect.TypeOf(tlsConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(tlsConn.Conn))
 			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-				netConn = utlsConn.NetConn()
 				t = reflect.TypeOf(utlsConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(utlsConn.Conn))
 			} else if realityConn, ok := iConn.(*reality.UConn); ok {
-				netConn = realityConn.NetConn()
 				t = reflect.TypeOf(realityConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(realityConn.Conn))
 			} else {
 				return newError("XTLS only supports TLS and REALITY directly for now.").AtWarning()
-			}
-			if sc, ok := netConn.(syscall.Conn); ok {
-				rawConn, _ = sc.SyscallConn()
 			}
 			i, _ := t.FieldByName("input")
 			r, _ := t.FieldByName("rawInput")
@@ -246,7 +237,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		var err error
-		if rawConn != nil && requestAddons.Flow == vless.XRV {
+		if requestAddons.Flow == vless.XRV {
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
 				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
 					return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
@@ -260,7 +251,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if statConn != nil {
 				counter = statConn.WriteCounter
 			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, netConn, counter, ctx, &numberOfPacketToFilter,
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, conn, counter, ctx, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
@@ -291,12 +282,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			serverReader = xudp.NewPacketReader(conn)
 		}
 
-		if rawConn != nil {
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.ReadCounter
-			}
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, netConn, rawConn, input, rawInput, counter, ctx, account.ID.Bytes(),
+		if requestAddons.Flow == vless.XRV {
+			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, ctx, account.ID.Bytes(),
 				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer

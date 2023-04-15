@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -201,17 +202,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-
-		var reader buf.Reader
 		if destination.Network == net.Network_TCP {
-			reader = buf.NewReader(conn)
-		} else {
-			reader = NewPacketReader(conn, UDPOverride)
+			var writeConn net.Conn
+			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil &&
+			(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "http") {
+				writeConn = inbound.Conn
+			}
+			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, nil, link.Writer, timer)
 		}
+		reader := NewPacketReader(conn, UDPOverride)
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to process response").Base(err)
 		}
-
 		return nil
 	}
 
