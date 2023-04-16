@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	memoryMaxValue  int64
-	memoryLastCheck time.Time
+	memoryMaxValue      int64
+	memoryCheckInterval time.Duration
+	memoryLastCheck     time.Time
 )
 
 func MemoryCheck() error {
@@ -18,7 +19,7 @@ func MemoryCheck() error {
 		return nil
 	}
 	now := time.Now()
-	if now.Sub(memoryLastCheck) < 2*time.Second {
+	if now.Sub(memoryLastCheck) < memoryCheckInterval {
 		return nil
 	}
 	memoryLastCheck = now
@@ -44,11 +45,12 @@ func MemoryCheckEnabled() bool {
 	return checkValue != 0
 }
 
-func InitMemoryCheck(maxMemory int64) {
+func InitMemoryCheck(maxMemory int64, checkInterval time.Duration) {
 	if maxMemory > 0 {
 		debug.SetGCPercent(10)
 		debug.SetMemoryLimit(maxMemory)
 		memoryMaxValue = maxMemory
+		memoryCheckInterval = checkInterval
 		memoryLastCheck = time.Now()
 	}
 }
