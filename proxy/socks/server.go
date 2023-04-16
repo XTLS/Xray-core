@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/memory"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -27,6 +28,7 @@ type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
 	cone          bool
+	memoryCheck   bool
 }
 
 // NewServer creates a new Server object.
@@ -36,6 +38,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		memoryCheck:   memory.MemoryCheckEnabled(),
 	}
 	return s, nil
 }
@@ -63,6 +66,11 @@ func (s *Server) Network() []net.Network {
 
 // Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if s.memoryCheck {
+		if err := memory.MemoryCheck(); err != nil {
+			return err
+		}
+	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.Name = "socks"
 		inbound.User = &protocol.MemoryUser{
