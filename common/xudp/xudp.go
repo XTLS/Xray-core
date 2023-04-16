@@ -150,7 +150,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		case 2:
 			if l != 4 {
 				b.Advance(5)
-				addr, port, err := AddrParser.ReadAddressPort(nil, b)
+				addr, port, err := AddrParser.ReadAddressPort(nil, b) // read addr will read all content and clear b
 				if err != nil {
 					b.Release()
 					return nil, err
