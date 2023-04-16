@@ -138,7 +138,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		}
 	}
 
-	if meta.GlobalID != [8]byte{} {
+	if meta.GlobalID != [8]byte{} { // MUST ignore empty Global ID
 		mb, err := NewPacketReader(reader, &meta.Target).ReadMultiBuffer()
 		if err != nil {
 			return err
