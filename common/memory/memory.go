@@ -1,44 +1,38 @@
 package memory
 
 import (
-	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/xtls/xray-core/common/platform"
 )
 
-var (
-	gcInterval time.Duration
-	preGCTime  time.Time
-)
-
-func GCCheck() {
-	now := time.Now()
-	if now.Sub(preGCTime) < gcInterval {
-		return
-	}
-	preGCTime = now
+func forceFree(interval time.Duration) {
 	go func() {
-		runtime.GC()
-		debug.FreeOSMemory()
-		newError("forceGC").AtInfo().WriteToLog()
+		for {
+			time.Sleep(interval)
+			debug.FreeOSMemory()
+			newError("forceFree").AtInfo().WriteToLog()
+		}
 	}()
 }
 
-func ForceGCEnabled() bool {
-	const key = "xray.inbound.memory.forceGC"
+func readForceFreeInterval() int {
+	const key = "XRAY_MEMORY_FORCEFREE"
 	const defaultValue = 0
-	forceGC := platform.EnvFlag{
+	interval := platform.EnvFlag{
 		Name:    key,
 		AltName: platform.NormalizeEnvName(key),
 	}.GetValueAsInt(defaultValue)
-	return forceGC != 0
+	return interval
 }
 
-func InitGCCheck(maxMemory int64, checkInterval time.Duration) {
+func InitForceFree(maxMemory int64) {
 	debug.SetGCPercent(10)
 	debug.SetMemoryLimit(maxMemory)
-	gcInterval = checkInterval
-	preGCTime = time.Now()
+	interval := readForceFreeInterval()
+	if interval > 0 {
+		duration := time.Duration(interval) * time.Second
+		forceFree(duration)
+	}
 }
