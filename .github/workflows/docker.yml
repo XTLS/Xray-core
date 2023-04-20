@@ -16,7 +16,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ghcr.io/${{ github.actor }}/xray-core
+          images: ghcr.io/${{ github.repository_owner }}/xray-core
           flavor: latest=true
           tags: |
             type=ref,event=branch
@@ -26,7 +26,7 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - # Add support for more platforms with QEMU (optional)
         # https://github.com/docker/setup-qemu-action
