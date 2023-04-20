@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -227,8 +228,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						if ok {
 							iConn = statConn.Connection
 						}
-						if xc, ok := iConn.(*tls.Conn); ok {
-							iConn = xc.NetConn()
+						if tlsConn, ok := iConn.(*tls.Conn); ok {
+							iConn = tlsConn.NetConn()
+						} else if realityConn, ok := iConn.(*reality.Conn); ok {
+							iConn = realityConn.NetConn()
 						}
 						if tc, ok := iConn.(*net.TCPConn); ok {
 							newError("XtlsRead splice").WriteToLog(session.ExportIDToError(ctx))

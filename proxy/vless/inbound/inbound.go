@@ -456,10 +456,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
 			switch request.Command {
-			case protocol.RequestCommandMux:
-				return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
+			case protocol.RequestCommandMux:
+				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
 				var t reflect.Type
 				var p uintptr
@@ -474,10 +474,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					netConn = realityConn.NetConn()
 					t = reflect.TypeOf(realityConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(realityConn.Conn))
-				} else if _, ok := iConn.(*tls.UConn); ok {
-					return newError("XTLS only supports UTLS fingerprint for the outbound.").AtWarning()
 				} else {
-					return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+					return newError("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 				}
 				if pc, ok := netConn.(*proxyproto.Conn); ok {
 					netConn = pc.Raw()
@@ -495,7 +493,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "":
-		if account.Flow == vless.XRV && request.Command == protocol.RequestCommandTCP {
+		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
