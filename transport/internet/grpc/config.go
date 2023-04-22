@@ -22,7 +22,7 @@ func (c *Config) getServiceName() string {
 		return url.PathEscape(c.ServiceName)
 	}
 	// Otherwise new custom paths
-	rawServiceName := c.ServiceName[1:strings.LastIndex(c.ServiceName, "/")] // trim from first to last '/'
+	rawServiceName := c.ServiceName[1:strings.LastIndex(c.ServiceName[1:], "/")] // trim from first to last '/'
 	serviceNameParts := strings.Split(rawServiceName, "/")
 	for i := range serviceNameParts {
 		serviceNameParts[i] = url.PathEscape(serviceNameParts[i])
