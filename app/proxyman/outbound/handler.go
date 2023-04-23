@@ -211,7 +211,7 @@ out:
 		err.WriteToLog(session.ExportIDToError(ctx))
 		common.Interrupt(link.Writer)
 	} else {
-		common.Must(common.Close(link.Writer))
+		common.Close(link.Writer)
 	}
 	common.Interrupt(link.Reader)
 }

@@ -2,7 +2,6 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"io"
 	"runtime"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -93,7 +93,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 
 	if network == net.Network_TCP {
-		serverConn := o.method.DialEarlyConn(connection, toSocksaddr(destination))
+		serverConn := o.method.DialEarlyConn(connection, singbridge.ToSocksaddr(destination))
 		var handshake bool
 		if timeoutReader, isTimeoutReader := link.Reader.(buf.TimeoutReader); isTimeoutReader {
 			mb, err := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 100)
@@ -128,17 +128,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 				return newError("client handshake").Base(err)
 			}
 		}
-		conn := &pipeConnWrapper{
-			W:    link.Writer,
-			Conn: inboundConn,
-		}
-		if ir, ok := link.Reader.(io.Reader); ok {
-			conn.R = ir
-		} else {
-			conn.R = &buf.BufferedReader{Reader: link.Reader}
-		}
-
-		return returnError(bufio.CopyConn(ctx, conn, serverConn))
+		return singbridge.CopyConn(ctx, inboundConn, link, serverConn)
 	} else {
 		var packetConn N.PacketConn
 		if pc, isPacketConn := inboundConn.(N.PacketConn); isPacketConn {
@@ -146,7 +136,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		} else if nc, isNetPacket := inboundConn.(net.PacketConn); isNetPacket {
 			packetConn = bufio.NewPacketConn(nc)
 		} else {
-			packetConn = &packetConnWrapper{
+			packetConn = &singbridge.PacketConnWrapper{
 				Reader: link.Reader,
 				Writer: link.Writer,
 				Conn:   inboundConn,
@@ -155,14 +145,14 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		}
 
 		if o.uotClient != nil {
-			uConn, err := o.uotClient.DialEarlyConn(o.method.DialEarlyConn(connection, uot.RequestDestination(o.uotClient.Version)), false, toSocksaddr(destination))
+			uConn, err := o.uotClient.DialEarlyConn(o.method.DialEarlyConn(connection, uot.RequestDestination(o.uotClient.Version)), false, singbridge.ToSocksaddr(destination))
 			if err != nil {
 				return err
 			}
-			return returnError(bufio.CopyPacketConn(ctx, packetConn, uConn))
+			return singbridge.ReturnError(bufio.CopyPacketConn(ctx, packetConn, uConn))
 		} else {
 			serverConn := o.method.DialPacketConn(connection)
-			return returnError(bufio.CopyPacketConn(ctx, packetConn, serverConn))
+			return singbridge.ReturnError(bufio.CopyPacketConn(ctx, packetConn, serverConn))
 		}
 	}
 }
