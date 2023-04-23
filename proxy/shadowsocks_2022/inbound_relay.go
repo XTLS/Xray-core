@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -66,7 +67,7 @@ func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbou
 		C.MapIndexed(config.Destinations, func(index int, it *RelayDestination) int { return index }),
 		C.Map(config.Destinations, func(it *RelayDestination) string { return it.Key }),
 		C.Map(config.Destinations, func(it *RelayDestination) M.Socksaddr {
-			return toSocksaddr(net.Destination{
+			return singbridge.ToSocksaddr(net.Destination{
 				Address: it.Address.AsAddress(),
 				Port:    net.Port(it.Port),
 			})
@@ -95,7 +96,7 @@ func (i *RelayInbound) Process(ctx context.Context, network net.Network, connect
 	ctx = session.ContextWithDispatcher(ctx, dispatcher)
 
 	if network == net.Network_TCP {
-		return returnError(i.service.NewConnection(ctx, connection, metadata))
+		return singbridge.ReturnError(i.service.NewConnection(ctx, connection, metadata))
 	} else {
 		reader := buf.NewReader(connection)
 		pc := &natPacketConn{connection}
@@ -103,7 +104,7 @@ func (i *RelayInbound) Process(ctx context.Context, network net.Network, connect
 			mb, err := reader.ReadMultiBuffer()
 			if err != nil {
 				buf.ReleaseMulti(mb)
-				return returnError(err)
+				return singbridge.ReturnError(err)
 			}
 			for _, buffer := range mb {
 				packet := B.As(buffer.Bytes()).ToOwned()
@@ -135,16 +136,11 @@ func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadat
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
-	link, err := dispatcher.Dispatch(ctx, toDestination(metadata.Destination, net.Network_TCP))
+	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
 	if err != nil {
 		return err
 	}
-	outConn := &pipeConnWrapper{
-		&buf.BufferedReader{Reader: link.Reader},
-		link.Writer,
-		conn,
-	}
-	return bufio.CopyConn(ctx, conn, outConn)
+	return singbridge.CopyConn(ctx, nil, link, conn)
 }
 
 func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
@@ -163,12 +159,12 @@ func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketCon
 	})
 	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
-	destination := toDestination(metadata.Destination, net.Network_UDP)
+	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
 	}
-	outConn := &packetConnWrapper{
+	outConn := &singbridge.PacketConnWrapper{
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,

@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "unsafe"
 
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -22,6 +23,7 @@ const (
 	trackedConnectionErrorKey
 	dispatcherKey
 	timeoutOnlyKey
+	allowedNetworkKey
 )
 
 // ContextWithID returns a new context with the given ID.
@@ -146,4 +148,15 @@ func TimeoutOnlyFromContext(ctx context.Context) bool {
 		return val
 	}
 	return false
+}
+
+func ContextWithAllowedNetwork(ctx context.Context, network net.Network) context.Context {
+	return context.WithValue(ctx, allowedNetworkKey, network)
+}
+
+func AllowedNetworkFromContext(ctx context.Context) net.Network {
+	if val, ok := ctx.Value(allowedNetworkKey).(net.Network); ok {
+		return val
+	}
+	return net.Network_Unknown
 }
