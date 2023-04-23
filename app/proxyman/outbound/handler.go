@@ -6,12 +6,15 @@ import (
 	"io"
 	"os"
 
+	sing_mux "github.com/sagernet/sing-mux"
+	sing_net "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
@@ -58,6 +61,8 @@ type Handler struct {
 	outboundManager outbound.Manager
 	mux             *mux.ClientManager
 	xudp            *mux.ClientManager
+	smux            *sing_mux.Client
+
 	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
@@ -154,6 +159,21 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 			h.udp443 = config.XudpProxyUDP443
 		}
 	}
+	if h.senderSettings != nil && h.senderSettings.SmuxSettings != nil {
+		if config := h.senderSettings.SmuxSettings; config.Enabled {
+			h.smux, err = sing_mux.NewClient(sing_mux.Options{
+				Dialer:         singbridge.NewOutboundDialer(proxyHandler, h),
+				Protocol:       config.Protocol,
+				MaxConnections: int(config.MaxConnections),
+				MinStreams:     int(config.MinStreams),
+				MaxStreams:     int(config.MaxStreams),
+				Padding:        config.Padding,
+			})
+			if err != nil {
+				return nil, newError("failed to create sing mux client").Base(err)
+			}
+		}
+	}
 
 	h.proxy = proxyHandler
 	return h, nil
@@ -196,6 +216,34 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			test(h.mux.Dispatch(ctx, link))
 			return
 		}
+	}
+	if h.smux != nil {
+		test := func(err error) {
+			if err != nil {
+				err := newError("failed to process mux outbound traffic").Base(err)
+				session.SubmitOutboundErrorToOriginator(ctx, err)
+				err.WriteToLog(session.ExportIDToError(ctx))
+				common.Interrupt(link.Writer)
+			}
+		}
+		inbound := session.InboundFromContext(ctx)
+		outbound := session.OutboundFromContext(ctx)
+		if outbound.Target.Network == net.Network_TCP {
+			conn, err := h.smux.DialContext(ctx, sing_net.NetworkTCP, singbridge.ToSocksaddr(outbound.Target))
+			if err != nil {
+				test(err)
+				return
+			}
+			test(singbridge.CopyConn(ctx, inbound.Conn, link, conn))
+		} else {
+			packetConn, err := h.smux.ListenPacket(ctx, singbridge.ToSocksaddr(outbound.Target))
+			if err != nil {
+				test(err)
+				return
+			}
+			test(singbridge.CopyPacketConn(ctx, inbound.Conn, link, outbound.Target, packetConn))
+		}
+		return
 	}
 out:
 	err := h.proxy.Process(ctx, link, h)

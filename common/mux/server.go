@@ -4,13 +4,17 @@ import (
 	"context"
 	"io"
 
+	sing_mux "github.com/sagernet/sing-mux"
+	"github.com/sagernet/sing/common/metadata"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -38,6 +42,14 @@ func (s *Server) Type() interface{} {
 // Dispatch implements routing.Dispatcher
 func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
 	if dest.Address != muxCoolAddress {
+		if dest.Address.Family() == net.AddressFamilyDomain && dest.Address.Domain() == sing_mux.Destination.Fqdn {
+			opts := pipe.OptionsFromContext(ctx)
+			uplinkReader, uplinkWriter := pipe.New(opts...)
+			downlinkReader, downlinkWriter := pipe.New(opts...)
+			conn := cnc.NewConnection(cnc.ConnectionInputMulti(downlinkWriter), cnc.ConnectionOutputMulti(uplinkReader))
+			go sing_mux.HandleConnection(ctx, singbridge.NewDispatcher(s.dispatcher, newError), singbridge.NewLogger(newError), conn, metadata.Metadata{Destination: singbridge.ToSocksaddr(dest)})
+			return &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}, nil
+		}
 		return s.dispatcher.Dispatch(ctx, dest)
 	}
 
@@ -59,6 +71,10 @@ func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport
 // DispatchLink implements routing.Dispatcher
 func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
 	if dest.Address != muxCoolAddress {
+		if dest.Address.Family() == net.AddressFamilyDomain && dest.Address.Domain() == sing_mux.Destination.Fqdn {
+			conn := cnc.NewConnection(cnc.ConnectionInputMulti(link.Writer), cnc.ConnectionOutputMulti(link.Reader))
+			return sing_mux.HandleConnection(ctx, singbridge.NewDispatcher(s.dispatcher, newError), singbridge.NewLogger(newError), conn, metadata.Metadata{Destination: singbridge.ToSocksaddr(dest)})
+		}
 		return s.dispatcher.DispatchLink(ctx, dest, link)
 	}
 	_, err := NewServerWorker(ctx, s.dispatcher, link)

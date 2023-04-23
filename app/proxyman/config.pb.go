@@ -524,6 +524,7 @@ type SenderConfig struct {
 	StreamSettings    *internet.StreamConfig `protobuf:"bytes,2,opt,name=stream_settings,json=streamSettings,proto3" json:"stream_settings,omitempty"`
 	ProxySettings     *internet.ProxyConfig  `protobuf:"bytes,3,opt,name=proxy_settings,json=proxySettings,proto3" json:"proxy_settings,omitempty"`
 	MultiplexSettings *MultiplexingConfig    `protobuf:"bytes,4,opt,name=multiplex_settings,json=multiplexSettings,proto3" json:"multiplex_settings,omitempty"`
+	SmuxSettings      *SingMultiplexConfig   `protobuf:"bytes,5,opt,name=smux_settings,json=smuxSettings,proto3" json:"smux_settings,omitempty"`
 }
 
 func (x *SenderConfig) Reset() {
@@ -582,6 +583,13 @@ func (x *SenderConfig) GetProxySettings() *internet.ProxyConfig {
 func (x *SenderConfig) GetMultiplexSettings() *MultiplexingConfig {
 	if x != nil {
 		return x.MultiplexSettings
+	}
+	return nil
+}
+
+func (x *SenderConfig) GetSmuxSettings() *SingMultiplexConfig {
+	if x != nil {
+		return x.SmuxSettings
 	}
 	return nil
 }
@@ -661,6 +669,93 @@ func (x *MultiplexingConfig) GetXudpProxyUDP443() string {
 	return ""
 }
 
+type SingMultiplexConfig struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Enabled        bool   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Protocol       string `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	MaxConnections int32  `protobuf:"varint,3,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
+	MinStreams     int32  `protobuf:"varint,4,opt,name=min_streams,json=minStreams,proto3" json:"min_streams,omitempty"`
+	MaxStreams     int32  `protobuf:"varint,5,opt,name=max_streams,json=maxStreams,proto3" json:"max_streams,omitempty"`
+	Padding        bool   `protobuf:"varint,6,opt,name=padding,proto3" json:"padding,omitempty"`
+}
+
+func (x *SingMultiplexConfig) Reset() {
+	*x = SingMultiplexConfig{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_app_proxyman_config_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SingMultiplexConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SingMultiplexConfig) ProtoMessage() {}
+
+func (x *SingMultiplexConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_proxyman_config_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SingMultiplexConfig.ProtoReflect.Descriptor instead.
+func (*SingMultiplexConfig) Descriptor() ([]byte, []int) {
+	return file_app_proxyman_config_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SingMultiplexConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *SingMultiplexConfig) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *SingMultiplexConfig) GetMaxConnections() int32 {
+	if x != nil {
+		return x.MaxConnections
+	}
+	return 0
+}
+
+func (x *SingMultiplexConfig) GetMinStreams() int32 {
+	if x != nil {
+		return x.MinStreams
+	}
+	return 0
+}
+
+func (x *SingMultiplexConfig) GetMaxStreams() int32 {
+	if x != nil {
+		return x.MaxStreams
+	}
+	return 0
+}
+
+func (x *SingMultiplexConfig) GetPadding() bool {
+	if x != nil {
+		return x.Padding
+	}
+	return false
+}
+
 type AllocationStrategy_AllocationStrategyConcurrency struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -672,7 +767,7 @@ type AllocationStrategy_AllocationStrategyConcurrency struct {
 func (x *AllocationStrategy_AllocationStrategyConcurrency) Reset() {
 	*x = AllocationStrategy_AllocationStrategyConcurrency{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_app_proxyman_config_proto_msgTypes[8]
+		mi := &file_app_proxyman_config_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -685,7 +780,7 @@ func (x *AllocationStrategy_AllocationStrategyConcurrency) String() string {
 func (*AllocationStrategy_AllocationStrategyConcurrency) ProtoMessage() {}
 
 func (x *AllocationStrategy_AllocationStrategyConcurrency) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_config_proto_msgTypes[8]
+	mi := &file_app_proxyman_config_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -719,7 +814,7 @@ type AllocationStrategy_AllocationStrategyRefresh struct {
 func (x *AllocationStrategy_AllocationStrategyRefresh) Reset() {
 	*x = AllocationStrategy_AllocationStrategyRefresh{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_app_proxyman_config_proto_msgTypes[9]
+		mi := &file_app_proxyman_config_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -732,7 +827,7 @@ func (x *AllocationStrategy_AllocationStrategyRefresh) String() string {
 func (*AllocationStrategy_AllocationStrategyRefresh) ProtoMessage() {}
 
 func (x *AllocationStrategy_AllocationStrategyRefresh) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_config_proto_msgTypes[9]
+	mi := &file_app_proxyman_config_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +950,7 @@ var file_app_proxyman_config_proto_rawDesc = []byte{
 	0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x73, 0x65, 0x72, 0x69, 0x61, 0x6c, 0x2e, 0x54, 0x79, 0x70, 0x65,
 	0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x0d, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x53,
 	0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0x10, 0x0a, 0x0e, 0x4f, 0x75, 0x74, 0x62, 0x6f,
-	0x75, 0x6e, 0x64, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xb0, 0x02, 0x0a, 0x0c, 0x53, 0x65,
+	0x75, 0x6e, 0x64, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xfd, 0x02, 0x0a, 0x0c, 0x53, 0x65,
 	0x6e, 0x64, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x2d, 0x0a, 0x03, 0x76, 0x69,
 	0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x63,
 	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x6e, 0x65, 0x74, 0x2e, 0x49, 0x50, 0x4f, 0x72, 0x44, 0x6f,
@@ -874,18 +969,36 @@ var file_app_proxyman_config_proto_rawDesc = []byte{
 	0x28, 0x0b, 0x32, 0x25, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x61, 0x70, 0x70, 0x2e, 0x70, 0x72,
 	0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x2e, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78,
 	0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x11, 0x6d, 0x75, 0x6c, 0x74, 0x69,
-	0x70, 0x6c, 0x65, 0x78, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0xa4, 0x01, 0x0a,
-	0x12, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e,
-	0x66, 0x69, 0x67, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x20, 0x0a,
-	0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x05, 0x52, 0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x12,
-	0x28, 0x0a, 0x0f, 0x78, 0x75, 0x64, 0x70, 0x43, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e,
-	0x63, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0f, 0x78, 0x75, 0x64, 0x70, 0x43, 0x6f,
-	0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x12, 0x28, 0x0a, 0x0f, 0x78, 0x75, 0x64,
-	0x70, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x55, 0x44, 0x50, 0x34, 0x34, 0x33, 0x18, 0x04, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x0f, 0x78, 0x75, 0x64, 0x70, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x55, 0x44, 0x50,
-	0x34, 0x34, 0x33, 0x2a, 0x23, 0x0a, 0x0e, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x50, 0x72, 0x6f, 0x74,
+	0x70, 0x6c, 0x65, 0x78, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x12, 0x4b, 0x0a, 0x0d,
+	0x73, 0x6d, 0x75, 0x78, 0x5f, 0x73, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x18, 0x05, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x61, 0x70, 0x70, 0x2e, 0x70,
+	0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61, 0x6e, 0x2e, 0x53, 0x69, 0x6e, 0x67, 0x4d, 0x75, 0x6c, 0x74,
+	0x69, 0x70, 0x6c, 0x65, 0x78, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x0c, 0x73, 0x6d, 0x75,
+	0x78, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x22, 0xa4, 0x01, 0x0a, 0x12, 0x4d, 0x75,
+	0x6c, 0x74, 0x69, 0x70, 0x6c, 0x65, 0x78, 0x69, 0x6e, 0x67, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x20, 0x0a, 0x0b, 0x63, 0x6f,
+	0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52,
+	0x0b, 0x63, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x12, 0x28, 0x0a, 0x0f,
+	0x78, 0x75, 0x64, 0x70, 0x43, 0x6f, 0x6e, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0f, 0x78, 0x75, 0x64, 0x70, 0x43, 0x6f, 0x6e, 0x63, 0x75,
+	0x72, 0x72, 0x65, 0x6e, 0x63, 0x79, 0x12, 0x28, 0x0a, 0x0f, 0x78, 0x75, 0x64, 0x70, 0x50, 0x72,
+	0x6f, 0x78, 0x79, 0x55, 0x44, 0x50, 0x34, 0x34, 0x33, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0f, 0x78, 0x75, 0x64, 0x70, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x55, 0x44, 0x50, 0x34, 0x34, 0x33,
+	0x22, 0xd0, 0x01, 0x0a, 0x13, 0x53, 0x69, 0x6e, 0x67, 0x4d, 0x75, 0x6c, 0x74, 0x69, 0x70, 0x6c,
+	0x65, 0x78, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62,
+	0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c,
+	0x65, 0x64, 0x12, 0x1a, 0x0a, 0x08, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x12, 0x27,
+	0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e,
+	0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0e, 0x6d, 0x61, 0x78, 0x43, 0x6f, 0x6e, 0x6e,
+	0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x1f, 0x0a, 0x0b, 0x6d, 0x69, 0x6e, 0x5f, 0x73,
+	0x74, 0x72, 0x65, 0x61, 0x6d, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0a, 0x6d, 0x69,
+	0x6e, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x73, 0x12, 0x1f, 0x0a, 0x0b, 0x6d, 0x61, 0x78, 0x5f,
+	0x73, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x73, 0x18, 0x05, 0x20, 0x01, 0x28, 0x05, 0x52, 0x0a, 0x6d,
+	0x61, 0x78, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x73, 0x12, 0x18, 0x0a, 0x07, 0x70, 0x61, 0x64,
+	0x64, 0x69, 0x6e, 0x67, 0x18, 0x06, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x70, 0x61, 0x64, 0x64,
+	0x69, 0x6e, 0x67, 0x2a, 0x23, 0x0a, 0x0e, 0x4b, 0x6e, 0x6f, 0x77, 0x6e, 0x50, 0x72, 0x6f, 0x74,
 	0x6f, 0x63, 0x6f, 0x6c, 0x73, 0x12, 0x08, 0x0a, 0x04, 0x48, 0x54, 0x54, 0x50, 0x10, 0x00, 0x12,
 	0x07, 0x0a, 0x03, 0x54, 0x4c, 0x53, 0x10, 0x01, 0x42, 0x55, 0x0a, 0x15, 0x63, 0x6f, 0x6d, 0x2e,
 	0x78, 0x72, 0x61, 0x79, 0x2e, 0x61, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x78, 0x79, 0x6d, 0x61,
@@ -909,7 +1022,7 @@ func file_app_proxyman_config_proto_rawDescGZIP() []byte {
 }
 
 var file_app_proxyman_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_app_proxyman_config_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_app_proxyman_config_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_app_proxyman_config_proto_goTypes = []interface{}{
 	(KnownProtocols)(0),                                      // 0: xray.app.proxyman.KnownProtocols
 	(AllocationStrategy_Type)(0),                             // 1: xray.app.proxyman.AllocationStrategy.Type
@@ -921,35 +1034,37 @@ var file_app_proxyman_config_proto_goTypes = []interface{}{
 	(*OutboundConfig)(nil),                                   // 7: xray.app.proxyman.OutboundConfig
 	(*SenderConfig)(nil),                                     // 8: xray.app.proxyman.SenderConfig
 	(*MultiplexingConfig)(nil),                               // 9: xray.app.proxyman.MultiplexingConfig
-	(*AllocationStrategy_AllocationStrategyConcurrency)(nil), // 10: xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
-	(*AllocationStrategy_AllocationStrategyRefresh)(nil),     // 11: xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
-	(*net.PortList)(nil),                                     // 12: xray.common.net.PortList
-	(*net.IPOrDomain)(nil),                                   // 13: xray.common.net.IPOrDomain
-	(*internet.StreamConfig)(nil),                            // 14: xray.transport.internet.StreamConfig
-	(*serial.TypedMessage)(nil),                              // 15: xray.common.serial.TypedMessage
-	(*internet.ProxyConfig)(nil),                             // 16: xray.transport.internet.ProxyConfig
+	(*SingMultiplexConfig)(nil),                              // 10: xray.app.proxyman.SingMultiplexConfig
+	(*AllocationStrategy_AllocationStrategyConcurrency)(nil), // 11: xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
+	(*AllocationStrategy_AllocationStrategyRefresh)(nil),     // 12: xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
+	(*net.PortList)(nil),                                     // 13: xray.common.net.PortList
+	(*net.IPOrDomain)(nil),                                   // 14: xray.common.net.IPOrDomain
+	(*internet.StreamConfig)(nil),                            // 15: xray.transport.internet.StreamConfig
+	(*serial.TypedMessage)(nil),                              // 16: xray.common.serial.TypedMessage
+	(*internet.ProxyConfig)(nil),                             // 17: xray.transport.internet.ProxyConfig
 }
 var file_app_proxyman_config_proto_depIdxs = []int32{
 	1,  // 0: xray.app.proxyman.AllocationStrategy.type:type_name -> xray.app.proxyman.AllocationStrategy.Type
-	10, // 1: xray.app.proxyman.AllocationStrategy.concurrency:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
-	11, // 2: xray.app.proxyman.AllocationStrategy.refresh:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
-	12, // 3: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
-	13, // 4: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
+	11, // 1: xray.app.proxyman.AllocationStrategy.concurrency:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyConcurrency
+	12, // 2: xray.app.proxyman.AllocationStrategy.refresh:type_name -> xray.app.proxyman.AllocationStrategy.AllocationStrategyRefresh
+	13, // 3: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
+	14, // 4: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
 	3,  // 5: xray.app.proxyman.ReceiverConfig.allocation_strategy:type_name -> xray.app.proxyman.AllocationStrategy
-	14, // 6: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	15, // 6: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
 	0,  // 7: xray.app.proxyman.ReceiverConfig.domain_override:type_name -> xray.app.proxyman.KnownProtocols
 	4,  // 8: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
-	15, // 9: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
-	15, // 10: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
-	13, // 11: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
-	14, // 12: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	16, // 13: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
+	16, // 9: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
+	16, // 10: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
+	14, // 11: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
+	15, // 12: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	17, // 13: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
 	9,  // 14: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 15: xray.app.proxyman.SenderConfig.smux_settings:type_name -> xray.app.proxyman.SingMultiplexConfig
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_config_proto_init() }
@@ -1055,7 +1170,7 @@ func file_app_proxyman_config_proto_init() {
 			}
 		}
 		file_app_proxyman_config_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AllocationStrategy_AllocationStrategyConcurrency); i {
+			switch v := v.(*SingMultiplexConfig); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1067,6 +1182,18 @@ func file_app_proxyman_config_proto_init() {
 			}
 		}
 		file_app_proxyman_config_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AllocationStrategy_AllocationStrategyConcurrency); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_app_proxyman_config_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AllocationStrategy_AllocationStrategyRefresh); i {
 			case 0:
 				return &v.state
@@ -1085,7 +1212,7 @@ func file_app_proxyman_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_app_proxyman_config_proto_rawDesc,
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

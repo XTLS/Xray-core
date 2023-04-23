@@ -13,7 +13,8 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/quic-go/quic-go v0.34.0
 	github.com/refraction-networking/utls v1.3.2
-	github.com/sagernet/sing v0.2.4
+	github.com/sagernet/sing v0.2.5-0.20230423085534-0902e6216207
+	github.com/sagernet/sing-mux v0.0.0-20230424061035-f6a6b7258c29
 	github.com/sagernet/sing-shadowsocks v0.2.1
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
@@ -41,6 +42,7 @@ require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/pprof v0.0.0-20230406165453-00490a63f317 // indirect
+	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.2 // indirect
@@ -48,6 +50,7 @@ require (
 	github.com/quic-go/qtls-go1-19 v0.3.2 // indirect
 	github.com/quic-go/qtls-go1-20 v0.2.2 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
+	github.com/sagernet/smux v0.0.0-20230312102458-337ec2a5af37 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/mod v0.10.0 // indirect

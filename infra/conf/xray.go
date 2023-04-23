@@ -130,6 +130,24 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	}, nil
 }
 
+type SingMuxConfig struct {
+	Enabled        bool   `json:"enabled"`
+	Protocol       string `json:"protocol"`
+	MaxConnections int    `json:"max_connections"`
+	MinStreams     int    `json:"min_streams"`
+	MaxStreams     int    `json:"max_streams"`
+}
+
+func (m *SingMuxConfig) Build() (*proxyman.SingMultiplexConfig, error) {
+	return &proxyman.SingMultiplexConfig{
+		Enabled:        m.Enabled,
+		Protocol:       m.Protocol,
+		MaxConnections: int32(m.MaxConnections),
+		MinStreams:     int32(m.MinStreams),
+		MaxStreams:     int32(m.MaxStreams),
+	}, nil
+}
+
 type InboundDetourAllocationConfig struct {
 	Strategy    string  `json:"strategy"`
 	Concurrency *uint32 `json:"concurrency"`
@@ -278,13 +296,14 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
-	Protocol      string           `json:"protocol"`
-	SendThrough   *Address         `json:"sendThrough"`
-	Tag           string           `json:"tag"`
-	Settings      *json.RawMessage `json:"settings"`
-	StreamSetting *StreamConfig    `json:"streamSettings"`
-	ProxySettings *ProxyConfig     `json:"proxySettings"`
-	MuxSettings   *MuxConfig       `json:"mux"`
+	Protocol        string           `json:"protocol"`
+	SendThrough     *Address         `json:"sendThrough"`
+	Tag             string           `json:"tag"`
+	Settings        *json.RawMessage `json:"settings"`
+	StreamSetting   *StreamConfig    `json:"streamSettings"`
+	ProxySettings   *ProxyConfig     `json:"proxySettings"`
+	MuxSettings     *MuxConfig       `json:"mux"`
+	SingMuxSettings *SingMuxConfig   `json:"smux"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -346,6 +365,13 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 			return nil, newError("failed to build Mux config.").Base(err)
 		}
 		senderSettings.MultiplexSettings = ms
+	}
+	if c.SingMuxSettings != nil {
+		ms, err := c.SingMuxSettings.Build()
+		if err != nil {
+			return nil, newError("failed to build sing-mux config.").Base(err)
+		}
+		senderSettings.SmuxSettings = ms
 	}
 
 	settings := []byte("{}")
