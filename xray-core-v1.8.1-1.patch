@@ -1,0 +1,315 @@
+diff --git a/core/core.go b/core/core.go
+index 07ec158..80554df 100644
+--- a/core/core.go
++++ b/core/core.go
+@@ -12,7 +12,7 @@ package core
+ //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+ 
+ import (
+-	"fmt"
++//	"fmt"
+ 	"runtime"
+ 
+ 	"github.com/xtls/xray-core/common/serial"
+@@ -25,15 +25,20 @@ var (
+ )
+ 
+ var (
++	version  = "1.8.1-1"
+ 	build    = "Custom"
+ 	codename = "Xray, Penetrates Everything."
+ 	intro    = "A unified platform for anti-censorship."
++	handshakefingerprint = "NOT_DEFINED_AT_ALL"
++	commitID = "NOT_DEFINED_AT_ALL"
++	information = "NOT_DEFINED_AT_ALL"
+ )
+ 
+ // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
+ // ".z" part may be omitted in regular releases.
+ func Version() string {
+-	return fmt.Sprintf("%v.%v.%v", Version_x, Version_y, Version_z)
++//	return fmt.Sprintf("%v.%v.%v", Version_x, Version_y, Version_z)
++	return version
+ }
+ 
+ // VersionStatement returns a list of strings representing the full version info.
+@@ -41,5 +46,8 @@ func VersionStatement() []string {
+ 	return []string{
+ 		serial.Concat("Xray ", Version(), " (", codename, ") ", build, " (", runtime.Version(), " ", runtime.GOOS, "/", runtime.GOARCH, ")"),
+ 		intro,
++		handshakefingerprint,
++		commitID,
++		information,
+ 	}
+ }
+diff --git a/go.mod b/go.mod
+index 3673322..4afb41b 100644
+--- a/go.mod
++++ b/go.mod
+@@ -13,7 +13,7 @@ require (
+ 	github.com/pires/go-proxyproto v0.7.0
+ 	github.com/quic-go/quic-go v0.34.0
+ 	github.com/refraction-networking/utls v1.3.2
+-	github.com/sagernet/sing v0.2.3
++	github.com/sagernet/sing v0.2.4-0.20230420044236-72471d9b35b5
+ 	github.com/sagernet/sing-shadowsocks v0.2.1
+ 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
+ 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
+@@ -58,3 +58,7 @@ require (
+ 	gopkg.in/yaml.v2 v2.4.0 // indirect
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+ )
++
++//replace github.com/gorilla/websocket v1.5.0 => github.com/gorilla/websocket v1.5.1-0.20220712153730-af47554f343b
++
++replace github.com/gorilla/websocket v1.5.0 => github.com/rosebe/websocket_hanVie v0.0.2-0.20221107024842-5aa60ffcfe4d
+diff --git a/go.sum b/go.sum
+index 4e681dc..95e53f4 100644
+--- a/go.sum
++++ b/go.sum
+@@ -83,8 +83,6 @@ github.com/google/pprof v0.0.0-20230406165453-00490a63f317/go.mod h1:79YE0hCXdHa
+ github.com/googleapis/gax-go v2.0.0+incompatible/go.mod h1:SFVmujtThgffbyetf+mdk2eWhX2bMyUtNHzFKcPA9HY=
+ github.com/googleapis/gax-go/v2 v2.0.3/go.mod h1:LLvjysVCY1JZeum8Z6l8qUty8fiNwE08qbEPm1M08qg=
+ github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
+-github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
+-github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+ github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
+ github.com/grpc-ecosystem/grpc-gateway v1.5.0/go.mod h1:RSKVYQBd5MCa4OVpNdGskqpgL2+G+NZTnrVHpWWfpdw=
+ github.com/h12w/go-socks5 v0.0.0-20200522160539-76189e178364 h1:5XxdakFhqd9dnXoAZy1Mb2R/DZ6D1e+0bGC/JhucGYI=
+@@ -142,9 +140,11 @@ github.com/refraction-networking/utls v1.3.2 h1:o+AkWB57mkcoW36ET7uJ002CpBWHu0KP
+ github.com/refraction-networking/utls v1.3.2/go.mod h1:fmoaOww2bxzzEpIKOebIsnBvjQpqP7L2vcm/9KUfm/E=
+ github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 h1:f/FNXud6gA3MNr8meMVVGxhp+QBTqY91tM8HjEuMjGg=
+ github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3/go.mod h1:HgjTstvQsPGkxUsCd2KWxErBblirPizecHcpD3ffK+s=
++github.com/rosebe/websocket_hanVie v0.0.2-0.20221107024842-5aa60ffcfe4d h1:TLXwU+lVZPY4pOBuZvZ4k4uwio5ErYbRIFhE8ZHXdeo=
++github.com/rosebe/websocket_hanVie v0.0.2-0.20221107024842-5aa60ffcfe4d/go.mod h1:MGl7srHNDTIjLe+cl6k8X2Ig7DoMxWEsz+QhWWK/ORA=
+ github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
+-github.com/sagernet/sing v0.2.3 h1:V50MvZ4c3Iij2lYFWPlzL1PyipwSzjGeN9x+Ox89vpk=
+-github.com/sagernet/sing v0.2.3/go.mod h1:Ta8nHnDLAwqySzKhGoKk4ZIB+vJ3GTKj7UPrWYvM+4w=
++github.com/sagernet/sing v0.2.4-0.20230420044236-72471d9b35b5 h1:UtihSORXefZYQrGIssu65bP18VEgMGCNHdy60VHc14M=
++github.com/sagernet/sing v0.2.4-0.20230420044236-72471d9b35b5/go.mod h1:Ta8nHnDLAwqySzKhGoKk4ZIB+vJ3GTKj7UPrWYvM+4w=
+ github.com/sagernet/sing-shadowsocks v0.2.1 h1:FvdLQOqpvxHBJUcUe4fvgiYP2XLLwH5i1DtXQviVEPw=
+ github.com/sagernet/sing-shadowsocks v0.2.1/go.mod h1:T/OgurSjsAe+Ug3+6PprXjmgHFmJidjOvQcjXGTKb3I=
+ github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c h1:vK2wyt9aWYHHvNLWniwijBu/n4pySypiKRhN32u/JGo=
+diff --git a/infra/conf/transport_internet.go b/infra/conf/transport_internet.go
+index 976a49d..a068fb2 100644
+--- a/infra/conf/transport_internet.go
++++ b/infra/conf/transport_internet.go
+@@ -148,6 +148,7 @@ type WebSocketConfig struct {
+ 	Path                string            `json:"path"`
+ 	Headers             map[string]string `json:"headers"`
+ 	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
++	UsePathEarlyData    bool              `json:"usePathEarlyData"`
+ }
+ 
+ // Build implements Buildable.
+@@ -174,6 +175,7 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
+ 		Path:   path,
+ 		Header: header,
+ 		Ed:     ed,
++		UsePathEarlyData: c.UsePathEarlyData,
+ 	}
+ 	if c.AcceptProxyProtocol {
+ 		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+diff --git a/transport/internet/websocket/config.pb.go b/transport/internet/websocket/config.pb.go
+index 9ba5c1c..1ae85eb 100644
+--- a/transport/internet/websocket/config.pb.go
++++ b/transport/internet/websocket/config.pb.go
+@@ -85,6 +85,7 @@ type Config struct {
+ 	Header              []*Header `protobuf:"bytes,3,rep,name=header,proto3" json:"header,omitempty"`
+ 	AcceptProxyProtocol bool      `protobuf:"varint,4,opt,name=accept_proxy_protocol,json=acceptProxyProtocol,proto3" json:"accept_proxy_protocol,omitempty"`
+ 	Ed                  uint32    `protobuf:"varint,5,opt,name=ed,proto3" json:"ed,omitempty"`
++	UsePathEarlyData    bool      `protobuf:"varint,6,opt,name=use_path_early_data,json=usePathEarlyData,proto3" json:"use_path_early_data,omitempty"`
+ }
+ 
+ func (x *Config) Reset() {
+@@ -147,6 +148,13 @@ func (x *Config) GetEd() uint32 {
+ 	return 0
+ }
+ 
++func (x *Config) GetUsePathEarlyData() bool {
++	if x != nil {
++		return x.UsePathEarlyData
++	}
++	return false
++}
++
+ var File_transport_internet_websocket_config_proto protoreflect.FileDescriptor
+ 
+ var file_transport_internet_websocket_config_proto_rawDesc = []byte{
+@@ -158,7 +166,7 @@ var file_transport_internet_websocket_config_proto_rawDesc = []byte{
+ 	0x0a, 0x06, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18,
+ 	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61,
+ 	0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
+-	0x22, 0xa9, 0x01, 0x0a, 0x06, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x12, 0x0a, 0x04, 0x70,
++	0x22, 0xd8, 0x01, 0x0a, 0x06, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x12, 0x0a, 0x04, 0x70,
+ 	0x61, 0x74, 0x68, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x74, 0x68, 0x12,
+ 	0x41, 0x0a, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32,
+ 	0x29, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74,
+@@ -168,16 +176,19 @@ var file_transport_internet_websocket_config_proto_rawDesc = []byte{
+ 	0x78, 0x79, 0x5f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x18, 0x04, 0x20, 0x01, 0x28,
+ 	0x08, 0x52, 0x13, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x50, 0x72,
+ 	0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x12, 0x0e, 0x0a, 0x02, 0x65, 0x64, 0x18, 0x05, 0x20, 0x01,
+-	0x28, 0x0d, 0x52, 0x02, 0x65, 0x64, 0x4a, 0x04, 0x08, 0x01, 0x10, 0x02, 0x42, 0x85, 0x01, 0x0a,
+-	0x25, 0x63, 0x6f, 0x6d, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70,
+-	0x6f, 0x72, 0x74, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x65, 0x74, 0x2e, 0x77, 0x65, 0x62,
+-	0x73, 0x6f, 0x63, 0x6b, 0x65, 0x74, 0x50, 0x01, 0x5a, 0x36, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
+-	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x78, 0x74, 0x6c, 0x73, 0x2f, 0x78, 0x72, 0x61, 0x79, 0x2d, 0x63,
+-	0x6f, 0x72, 0x65, 0x2f, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x2f, 0x69, 0x6e,
+-	0x74, 0x65, 0x72, 0x6e, 0x65, 0x74, 0x2f, 0x77, 0x65, 0x62, 0x73, 0x6f, 0x63, 0x6b, 0x65, 0x74,
+-	0xaa, 0x02, 0x21, 0x58, 0x72, 0x61, 0x79, 0x2e, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72,
+-	0x74, 0x2e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x65, 0x74, 0x2e, 0x57, 0x65, 0x62, 0x73, 0x6f,
+-	0x63, 0x6b, 0x65, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
++	0x28, 0x0d, 0x52, 0x02, 0x65, 0x64, 0x12, 0x2d, 0x0a, 0x13, 0x75, 0x73, 0x65, 0x5f, 0x70, 0x61,
++	0x74, 0x68, 0x5f, 0x65, 0x61, 0x72, 0x6c, 0x79, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06, 0x20,
++	0x01, 0x28, 0x08, 0x52, 0x10, 0x75, 0x73, 0x65, 0x50, 0x61, 0x74, 0x68, 0x45, 0x61, 0x72, 0x6c,
++	0x79, 0x44, 0x61, 0x74, 0x61, 0x4a, 0x04, 0x08, 0x01, 0x10, 0x02, 0x42, 0x85, 0x01, 0x0a, 0x25,
++	0x63, 0x6f, 0x6d, 0x2e, 0x78, 0x72, 0x61, 0x79, 0x2e, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f,
++	0x72, 0x74, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x65, 0x74, 0x2e, 0x77, 0x65, 0x62, 0x73,
++	0x6f, 0x63, 0x6b, 0x65, 0x74, 0x50, 0x01, 0x5a, 0x36, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
++	0x63, 0x6f, 0x6d, 0x2f, 0x78, 0x74, 0x6c, 0x73, 0x2f, 0x78, 0x72, 0x61, 0x79, 0x2d, 0x63, 0x6f,
++	0x72, 0x65, 0x2f, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x2f, 0x69, 0x6e, 0x74,
++	0x65, 0x72, 0x6e, 0x65, 0x74, 0x2f, 0x77, 0x65, 0x62, 0x73, 0x6f, 0x63, 0x6b, 0x65, 0x74, 0xaa,
++	0x02, 0x21, 0x58, 0x72, 0x61, 0x79, 0x2e, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74,
++	0x2e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x65, 0x74, 0x2e, 0x57, 0x65, 0x62, 0x73, 0x6f, 0x63,
++	0x6b, 0x65, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+ }
+ 
+ var (
+diff --git a/transport/internet/websocket/config.proto b/transport/internet/websocket/config.proto
+index 85365c3..27e5932 100644
+--- a/transport/internet/websocket/config.proto
++++ b/transport/internet/websocket/config.proto
+@@ -22,4 +22,6 @@ message Config {
+   bool accept_proxy_protocol = 4;
+ 
+   uint32 ed = 5;
++
++  bool use_path_early_data = 6;
+ }
+diff --git a/transport/internet/websocket/dialer.go b/transport/internet/websocket/dialer.go
+index 5017cb5..621fb6f 100644
+--- a/transport/internet/websocket/dialer.go
++++ b/transport/internet/websocket/dialer.go
+@@ -115,10 +115,10 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
+ 	if (protocol == "ws" && dest.Port == 80) || (protocol == "wss" && dest.Port == 443) {
+ 		host = dest.Address.String()
+ 	}
+-	uri := protocol + "://" + host + wsSettings.GetNormalizedPath()
++	uriBase := protocol + "://" + host + wsSettings.GetNormalizedPath()
+ 
+ 	if conns != nil {
+-		data := []byte(uri)
++		data := []byte(uriBase)
+ 		if ed != nil {
+ 			data = append(data, " "+base64.RawURLEncoding.EncodeToString(ed)...)
+ 		}
+@@ -142,18 +142,23 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
+ 	}
+ 
+ 	header := wsSettings.GetRequestHeader()
++	uri := uriBase
+ 	if ed != nil {
+ 		// RawURLEncoding is support by both V2Ray/V2Fly and XRay.
+-		header.Set("Sec-WebSocket-Protocol", base64.RawURLEncoding.EncodeToString(ed))
++		if !wsSettings.UsePathEarlyData {
++		//  header.Set("Sec-WebSocket-Protocol", base64.StdEncoding.EncodeToString(ed)) //origin: StdEncoding. use RawURLEncoding to encode early data
++			header.Set("Sec-WebSocket-Protocol", base64.RawURLEncoding.EncodeToString(ed))	//origin: StdEncoding. use RawURLEncoding to encode early data
++		 } else {
++			uri += base64.RawURLEncoding.EncodeToString(ed)
++		}
+ 	}
+-
+ 	conn, resp, err := dialer.Dial(uri, header)
+ 	if err != nil {
+ 		var reason string
+ 		if resp != nil {
+ 			reason = resp.Status
+ 		}
+-		return nil, newError("failed to dial to (", uri, "): ", reason).Base(err)
++		return nil, newError("failed to dial to (", uriBase, "): ", reason).Base(err)
+ 	}
+ 
+ 	return newConnection(conn, conn.RemoteAddr(), nil), nil
+diff --git a/transport/internet/websocket/hub.go b/transport/internet/websocket/hub.go
+index c0cf344..b48c321 100644
+--- a/transport/internet/websocket/hub.go
++++ b/transport/internet/websocket/hub.go
+@@ -21,8 +21,9 @@ import (
+ )
+ 
+ type requestHandler struct {
+-	path string
+-	ln   *Listener
++	path             string
++	ln               *Listener
++	UsePathEarlyData bool
+ }
+ 
+ var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
+@@ -37,17 +38,29 @@ var upgrader = &websocket.Upgrader{
+ }
+ 
+ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+-	if request.URL.Path != h.path {
+-		writer.WriteHeader(http.StatusNotFound)
+-		return
+-	}
+-
+ 	var extraReader io.Reader
+ 	responseHeader := http.Header{}
+-	if str := request.Header.Get("Sec-WebSocket-Protocol"); str != "" {
+-		if ed, err := base64.RawURLEncoding.DecodeString(replacer.Replace(str)); err == nil && len(ed) > 0 {
+-			extraReader = bytes.NewReader(ed)
+-			responseHeader.Set("Sec-WebSocket-Protocol", str)
++
++	if !h.UsePathEarlyData {
++		if request.URL.Path != h.path {
++			writer.WriteHeader(http.StatusNotFound)
++			return
++		}
++
++		if str := request.Header.Get("Sec-WebSocket-Protocol"); str != "" {
++			if ed, err := base64.RawURLEncoding.DecodeString(replacer.Replace(str)); err == nil && len(ed) > 0 {
++				extraReader = bytes.NewReader(ed)
++				responseHeader.Set("Sec-WebSocket-Protocol", str)
++			}
++		}
++	} else {
++		if strings.HasPrefix(request.URL.RequestURI(), h.path) {
++			if ed, err := base64.RawURLEncoding.DecodeString(request.URL.RequestURI()[len(h.path):]); err == nil && len(ed) > 0 {
++				extraReader = bytes.NewReader(ed)
++			}
++		} else {
++			writer.WriteHeader(http.StatusNotFound)
++			return
+ 		}
+ 	}
+ 
+@@ -130,8 +143,9 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
+ 
+ 	l.server = http.Server{
+ 		Handler: &requestHandler{
+-			path: wsSettings.GetNormalizedPath(),
+-			ln:   l,
++			path:             wsSettings.GetNormalizedPath(),
++			ln:               l,
++			UsePathEarlyData: wsSettings.UsePathEarlyData,
+ 		},
+ 		ReadHeaderTimeout: time.Second * 4,
+ 		MaxHeaderBytes:    4096,
+diff --git a/transport/pipe/reader.go b/transport/pipe/reader.go
+index 79f0ac0..043c58e 100644
+--- a/transport/pipe/reader.go
++++ b/transport/pipe/reader.go
+@@ -26,6 +26,11 @@ func (r *Reader) Interrupt() {
+ 	r.pipe.Interrupt()
+ }
+ 
++// Close implements io.Closer. After the pipe is closed, writing to the pipe will return io.ErrClosedPipe, while reading will return io.EOF.
++func (r *Reader) Close() error {
++	return r.pipe.Close()
++}
++
+ // ReturnAnError makes ReadMultiBuffer return an error, only once.
+ func (r *Reader) ReturnAnError(err error) {
+ 	r.pipe.errChan <- err
