@@ -1,6 +1,6 @@
 module github.com/xtls/xray-core
 
-go 1.20
+go 1.19
 
 require (
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
