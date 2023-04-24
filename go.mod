@@ -14,7 +14,7 @@ require (
 	github.com/quic-go/quic-go v0.34.0
 	github.com/refraction-networking/utls v1.3.2
 	github.com/sagernet/sing v0.2.5-0.20230423085534-0902e6216207
-	github.com/sagernet/sing-mux v0.0.0-20230424061035-f6a6b7258c29
+	github.com/sagernet/sing-mux v0.0.0-20230425054943-ec2a972d0809
 	github.com/sagernet/sing-shadowsocks v0.2.1
 	github.com/sagernet/wireguard-go v0.0.0-20221116151939-c99467f53f2c
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb

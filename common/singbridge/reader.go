@@ -14,6 +14,9 @@ var (
 	_ buf.Reader        = (*Conn)(nil)
 	_ buf.TimeoutReader = (*Conn)(nil)
 	_ buf.Writer        = (*Conn)(nil)
+	_ buf.Reader        = (*PacketConn)(nil)
+	_ buf.TimeoutReader = (*PacketConn)(nil)
+	_ buf.Writer        = (*PacketConn)(nil)
 )
 
 type Conn struct {
@@ -63,4 +66,31 @@ func (c *Conn) WriteMultiBuffer(bufferList buf.MultiBuffer) error {
 		}
 	}
 	return nil
+}
+
+type PacketConn struct {
+	net.Conn
+}
+
+func (c *PacketConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	buffer, err := buf.ReadOneUDP(c.Conn)
+	if err != nil {
+		return nil, err
+	}
+	return buf.MultiBuffer{buffer}, nil
+}
+
+func (c *PacketConn) ReadMultiBufferTimeout(duration time.Duration) (buf.MultiBuffer, error) {
+	err := c.SetReadDeadline(time.Now().Add(duration))
+	if err != nil {
+		return nil, err
+	}
+	defer c.SetReadDeadline(time.Time{})
+	return c.ReadMultiBuffer()
+}
+
+func (c *PacketConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	mb, err := buf.WriteMultiBuffer(c.Conn, mb)
+	buf.ReleaseMulti(mb)
+	return err
 }

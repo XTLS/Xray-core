@@ -7,7 +7,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-func readOneUDP(r io.Reader) (*Buffer, error) {
+func ReadOneUDP(r io.Reader) (*Buffer, error) {
 	b := New()
 	for i := 0; i < 64; i++ {
 		_, err := b.ReadFrom(r)
@@ -166,7 +166,7 @@ type PacketReader struct {
 
 // ReadMultiBuffer implements Reader.
 func (r *PacketReader) ReadMultiBuffer() (MultiBuffer, error) {
-	b, err := readOneUDP(r.Reader)
+	b, err := ReadOneUDP(r.Reader)
 	if err != nil {
 		return nil, err
 	}

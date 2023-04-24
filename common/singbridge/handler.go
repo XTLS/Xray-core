@@ -2,11 +2,10 @@ package singbridge
 
 import (
 	"context"
-	"io"
 
+	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -40,9 +39,10 @@ func (d *Dispatcher) NewConnection(ctx context.Context, conn net.Conn, metadata 
 }
 
 func (d *Dispatcher) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
+	packetConn := &PacketConn{bufio.NewBindPacketConn(conn.(net.PacketConn), metadata.Destination)}
 	return d.upstream.DispatchLink(ctx, ToDestination(metadata.Destination, net.Network_UDP), &transport.Link{
-		Reader: buf.NewPacketReader(conn.(io.Reader)),
-		Writer: buf.NewWriter(conn.(io.Writer)),
+		Reader: packetConn,
+		Writer: packetConn,
 	})
 }
 
