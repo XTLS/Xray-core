@@ -70,13 +70,15 @@ func (c *Conn) WriteMultiBuffer(bufferList buf.MultiBuffer) error {
 
 type PacketConn struct {
 	net.Conn
+	destination net.Destination
 }
 
 func (c *PacketConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	buffer, err := buf.ReadOneUDP(c.Conn)
+	buffer, err := buf.ReadBuffer(c.Conn)
 	if err != nil {
 		return nil, err
 	}
+	buffer.UDP = &c.destination
 	return buf.MultiBuffer{buffer}, nil
 }
 

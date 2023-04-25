@@ -39,7 +39,7 @@ func (d *Dispatcher) NewConnection(ctx context.Context, conn net.Conn, metadata 
 }
 
 func (d *Dispatcher) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	packetConn := &PacketConn{bufio.NewBindPacketConn(conn.(net.PacketConn), metadata.Destination)}
+	packetConn := &PacketConn{bufio.NewBindPacketConn(conn.(net.PacketConn), metadata.Destination), ToDestination(metadata.Destination, net.Network_UDP)}
 	return d.upstream.DispatchLink(ctx, ToDestination(metadata.Destination, net.Network_UDP), &transport.Link{
 		Reader: packetConn,
 		Writer: packetConn,
