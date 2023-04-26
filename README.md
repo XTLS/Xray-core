@@ -66,10 +66,11 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [NapsternetV](https://play.google.com/store/apps/details?id=com.napsternetlabs.napsternetv)
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
   - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
+  - [NapsternetV](https://apps.apple.com/us/app/napsternetv/id1629465476)
 - macOS arm64 & x64
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
