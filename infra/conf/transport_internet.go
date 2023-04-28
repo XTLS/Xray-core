@@ -617,6 +617,7 @@ type SocketConfig struct {
 	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
 	TCPCongestion        string      `json:"tcpCongestion"`
 	TCPWindowClamp       int32       `json:"tcpWindowClamp"`
+	TCPMaxSeg	     int32	 `json:"tcpMaxSeg"`
 	TCPUserTimeout       int32       `json:"tcpUserTimeout"`
 	V6only               bool        `json:"v6only"`
 	Interface            string      `json:"interface"`
@@ -670,6 +671,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
 		TcpCongestion:        c.TCPCongestion,
 		TcpWindowClamp:       c.TCPWindowClamp,
+		TcpMaxSeg:	      c.TCPMaxSeg,
 		TcpUserTimeout:       c.TCPUserTimeout,
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
