@@ -1,18 +1,24 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
+	ltls "crypto/tls"
 	_ "embed"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math/rand"
 	gonet "net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
@@ -24,6 +30,157 @@ import (
 var webpage []byte
 
 var conns chan *websocket.Conn
+
+const RANDOM_CUT = 1
+const SNI = 2
+
+func GetFragmentationIdByName(name string) int {
+	switch strings.ToLower(name) {
+	case "random":
+		return RANDOM_CUT
+	case "sni":
+		return SNI
+	default:
+		return RANDOM_CUT
+	}
+}
+
+type FragmentedClientHelloConn struct {
+	net.Conn
+	clientHelloCount             int
+	maxFragmentSize              int
+	sni                          string
+	mode                         int
+	intervalTimeoutBetweenChunks int64
+}
+
+func (c *FragmentedClientHelloConn) Write(b []byte) (n int, err error) {
+	if len(b) >= 5 && b[0] == 22 && c.clientHelloCount < 2 {
+		n, err = sendFragmentedClientHello(c.Conn, b, c.sni, c.maxFragmentSize, c.intervalTimeoutBetweenChunks, c.mode)
+		if err == nil {
+			c.clientHelloCount++
+			return n, err
+		}
+	}
+
+	return c.Conn.Write(b)
+}
+
+func sendFragmentedClientHello(conn net.Conn, clientHello []byte, sni string, maxFragmentSize int, intervalTimeoutBetweenChunks int64, mode int) (n int, err error) {
+	if len(clientHello) < 5 || clientHello[0] != 22 {
+		return 0, errors.New("not a valid TLS ClientHello message")
+	}
+
+	clientHelloLen := (int(clientHello[3]) << 8) | int(clientHello[4])
+
+	switch mode {
+	case RANDOM_CUT:
+		sendFragmentedClientHelloByRandomCuts(conn, clientHello, clientHelloLen, maxFragmentSize, intervalTimeoutBetweenChunks)
+		if err != nil {
+			return 0, err
+		}
+	case SNI:
+		sendFragmentedClientHelloBySni(conn, clientHello, clientHelloLen, maxFragmentSize, sni, intervalTimeoutBetweenChunks)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return len(clientHello), nil
+}
+
+func sendFragmentedClientHelloByRandomCuts(conn net.Conn, clientHello []byte, clientHelloLen int, maxFragmentSize int, intervalTimeoutBetweenChunks int64) (n int, err error) {
+	clientHelloData := clientHello[5:]
+	for i := 0; i < clientHelloLen; i += maxFragmentSize {
+		fragmentEnd := i + maxFragmentSize
+		if fragmentEnd > clientHelloLen {
+			fragmentEnd = clientHelloLen
+		}
+
+		fragment := clientHelloData[i:fragmentEnd]
+		if intervalTimeoutBetweenChunks != 0 {
+			time.Sleep(time.Duration(intervalTimeoutBetweenChunks) * time.Millisecond)
+		}
+		err = writeFragmentedRecord(conn, 22, fragment)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return 1, nil
+}
+
+func sendFragmentedClientHelloBySni(conn net.Conn, clientHello []byte, clientHelloLen int, maxFragmentSize int, sni string, intervalTimeoutBetweenChunks int64) (n int, err error) {
+	sniIndex := bytes.Index(clientHello, []byte(sni))
+
+	sniFound := false
+	if sniIndex != -1 {
+		sniFound = true
+	}
+
+	if sniFound {
+		clientHelloData := clientHello[5:]
+		originalMaxFragmentSize := maxFragmentSize
+		sniIndexInClientHelloData := sniIndex - 5
+
+		for i := 0; i < clientHelloLen; i = i + maxFragmentSize {
+			if i == sniIndexInClientHelloData {
+				maxFragmentSize = 1
+			}
+			if i < sniIndexInClientHelloData {
+				maxFragmentSize = sniIndexInClientHelloData
+			}
+			if i == sniIndexInClientHelloData+len(sni) {
+				maxFragmentSize = originalMaxFragmentSize
+			}
+
+			fragmentEnd := i + maxFragmentSize
+			if fragmentEnd > clientHelloLen {
+				fragmentEnd = clientHelloLen
+			}
+
+			fragment := clientHelloData[i:fragmentEnd]
+
+			if intervalTimeoutBetweenChunks != 0 {
+				time.Sleep(time.Duration(intervalTimeoutBetweenChunks) * time.Millisecond)
+			}
+
+			err = writeFragmentedRecord(conn, 22, fragment)
+			if err != nil {
+				return 0, err
+			}
+		}
+	} else {
+		sendFragmentedClientHelloByRandomCuts(conn, clientHello, clientHelloLen, maxFragmentSize, intervalTimeoutBetweenChunks)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return 1, nil
+}
+
+func writeFragmentedRecord(conn net.Conn, contentType uint8, data []byte) error {
+	header := make([]byte, 5)
+	header[0] = byte(contentType)
+	binary.BigEndian.PutUint16(header[1:], uint16(ltls.VersionTLS12))
+	binary.BigEndian.PutUint16(header[3:], uint16(len(data)))
+
+	_, err := conn.Write(append(header, data...))
+	return err
+}
+
+func wrapWithFragmentation(conn net.Conn, sniPart string, maxFragmentSize int, intervalTimeoutBetweenChunks int64, mode int) net.Conn {
+	if maxFragmentSize > 0 {
+		return &FragmentedClientHelloConn{
+			Conn:                         conn,
+			maxFragmentSize:              int(maxFragmentSize),
+			sni:                          sniPart,
+			intervalTimeoutBetweenChunks: intervalTimeoutBetweenChunks,
+			mode:                         mode,
+		}
+	}
+	return conn
+}
 
 func init() {
 	if addr := os.Getenv("XRAY_BROWSER_DIALER"); addr != "" {
@@ -94,6 +251,17 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 					return nil, err
 				}
+
+				if wsSettings.Fragmentation != nil && wsSettings.Fragmentation.Enabled {
+					// Wrap the connection with fragmentation logic
+					address := dest.Address.String()
+					if address == "" {
+						address = wsSettings.Fragmentation.Sni
+					}
+					maxFragmentSize := rand.Intn(int(wsSettings.Fragmentation.MaxChunkSize))
+					pconn = wrapWithFragmentation(pconn, address, maxFragmentSize, wsSettings.Fragmentation.FragmentionIntervalTimeout, GetFragmentationIdByName(wsSettings.Fragmentation.Strategy))
+				}
+
 				// TLS and apply the handshake
 				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 				if err := cn.WebsocketHandshake(); err != nil {
@@ -107,6 +275,26 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 					}
 				}
 				return cn, nil
+			}
+		} else {
+			if wsSettings.Fragmentation != nil && wsSettings.Fragmentation.Enabled {
+				originalDialerNetDial := dialer.NetDial
+				dialer.NetDial = func(network, addr string) (net.Conn, error) {
+					conn, err := originalDialerNetDial(network, addr)
+					if err != nil {
+						return nil, err
+					}
+
+					address := dest.Address.String()
+					if address == "" {
+						address = wsSettings.Fragmentation.Sni
+					}
+
+					maxFragmentSize := rand.Intn(int(wsSettings.Fragmentation.MaxChunkSize))
+					conn = wrapWithFragmentation(conn, address, maxFragmentSize, wsSettings.Fragmentation.FragmentionIntervalTimeout, GetFragmentationIdByName(wsSettings.Fragmentation.Strategy))
+
+					return conn, nil
+				}
 			}
 		}
 	}

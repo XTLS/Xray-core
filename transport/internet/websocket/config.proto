@@ -11,6 +11,18 @@ message Header {
   string value = 2;
 }
 
+message Fragmentation {
+  bool enabled = 1;
+
+  int64 fragmention_interval_timeout = 2;
+
+  string strategy = 3;
+
+  int32 max_chunk_size = 4;
+
+  string sni = 5;
+}
+
 message Config {
   reserved 1;
 
@@ -22,4 +34,6 @@ message Config {
   bool accept_proxy_protocol = 4;
 
   uint32 ed = 5;
+
+  Fragmentation fragmentation = 6;
 }

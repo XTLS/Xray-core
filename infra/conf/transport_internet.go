@@ -144,10 +144,28 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type FragmentationConfig struct {
+	Enabled                    bool   `json:"enabled"`
+	FragmentionIntervalTimeout int64  `json:"fragmentationIntervalTimeout"`
+	Strategy                   string `json:"strategy"`
+	MaxChunkSize               int32  `json:"maxChunkSize"`
+	Sni                        string `json:"sni"`
+}
+
+func (c *FragmentationConfig) Build() (*websocket.Fragmentation, error) {
+	return &websocket.Fragmentation{
+		Enabled:                    c.Enabled,
+		FragmentionIntervalTimeout: c.FragmentionIntervalTimeout,
+		Strategy:                   c.Strategy,
+		MaxChunkSize:               c.MaxChunkSize,
+	}, nil
+}
+
 type WebSocketConfig struct {
-	Path                string            `json:"path"`
-	Headers             map[string]string `json:"headers"`
-	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
+	Path                string               `json:"path"`
+	Headers             map[string]string    `json:"headers"`
+	AcceptProxyProtocol bool                 `json:"acceptProxyProtocol"`
+	Fragmentation       *FragmentationConfig `json:"fragmentation"`
 }
 
 // Build implements Buildable.
@@ -177,6 +195,13 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 	}
 	if c.AcceptProxyProtocol {
 		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+	}
+	if c.Fragmentation != nil {
+		fragmentation, err := c.Fragmentation.Build()
+		if err != nil {
+			return nil, newError("Failed to parse fragmentation.").Base(err).AtError()
+		}
+		config.Fragmentation = fragmentation
 	}
 	return config, nil
 }
