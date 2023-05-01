@@ -30,6 +30,7 @@ import (
 	"github.com/sagernet/wireguard-go/device"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -116,15 +117,21 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	addr := destination.Address
 	if addr.Family().IsDomain() {
 		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-			IPv4Enable: h.net.HasV4(),
-			IPv6Enable: h.net.HasV6(),
+			IPv4Enable: h.net.HasV4() && (h.conf.ResolveStrategy == DeviceConfig_NONE || h.conf.ResolveStrategy == DeviceConfig_PREFER_IP4),
+			IPv6Enable: h.net.HasV6() && (h.conf.ResolveStrategy == DeviceConfig_NONE || h.conf.ResolveStrategy == DeviceConfig_PREFER_IP6),
 		})
+		if (len(ips) == 0 || err != nil) && h.conf.ResolveStrategy != DeviceConfig_NONE {
+			ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
+				IPv4Enable: h.net.HasV4() && h.conf.ResolveStrategy != DeviceConfig_PREFER_IP4,
+				IPv6Enable: h.net.HasV6() && h.conf.ResolveStrategy != DeviceConfig_PREFER_IP6,
+			})
+		}
 		if err != nil {
 			return newError("failed to lookup DNS").Base(err)
 		} else if len(ips) == 0 {
 			return dns.ErrEmptyResponse
 		}
-		addr = net.IPAddress(ips[0])
+		addr = net.IPAddress(ips[dice.Roll(len(ips))])
 	}
 
 	var newCtx context.Context

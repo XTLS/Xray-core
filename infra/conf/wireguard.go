@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/proxy/wireguard"
@@ -47,12 +48,13 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 }
 
 type WireGuardConfig struct {
-	SecretKey  string                 `json:"secretKey"`
-	Address    []string               `json:"address"`
-	Peers      []*WireGuardPeerConfig `json:"peers"`
-	MTU        int                    `json:"mtu"`
-	NumWorkers int                    `json:"workers"`
-	Reserved   []byte                 `json:"reserved"`
+	SecretKey       string                 `json:"secretKey"`
+	Address         []string               `json:"address"`
+	Peers           []*WireGuardPeerConfig `json:"peers"`
+	MTU             int                    `json:"mtu"`
+	NumWorkers      int                    `json:"workers"`
+	Reserved        []byte                 `json:"reserved"`
+	ResolveStrategy string                 `json:"resolveStrategy"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -95,6 +97,14 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, newError(`"reserved" should be empty or 3 bytes`)
 	}
 	config.Reserved = c.Reserved
+
+	config.ResolveStrategy = wireguard.DeviceConfig_NONE
+	switch strings.ToLower(c.ResolveStrategy) {
+	case "preferip4", "preferipv4", "prefer_ip4", "prefer_ipv4", "4":
+		config.ResolveStrategy = wireguard.DeviceConfig_PREFER_IP4
+	case "preferip6", "preferipv6", "prefer_ip6", "prefer_ipv6", "6":
+		config.ResolveStrategy = wireguard.DeviceConfig_PREFER_IP6
+	}
 
 	return config, nil
 }
