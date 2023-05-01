@@ -8,7 +8,7 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
-	github.com/miekg/dns v1.1.53
+	github.com/miekg/dns v1.1.54
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/quic-go/quic-go v0.34.0
