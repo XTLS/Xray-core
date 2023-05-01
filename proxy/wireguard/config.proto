@@ -15,10 +15,16 @@ message PeerConfig {
 }
 
 message DeviceConfig {
+    enum ResolveStrategy {
+        NONE = 0;
+        PREFER_IP4 = 1;
+        PREFER_IP6 = 2;
+    }
     string secret_key = 1;
     repeated string endpoint = 2;
     repeated PeerConfig peers = 3;
     int32 mtu = 4;
     int32 num_workers = 5;
     bytes reserved = 6;
+    ResolveStrategy resolve_strategy = 7;
 }
