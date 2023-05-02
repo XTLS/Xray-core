@@ -12,6 +12,12 @@ message DestinationOverride {
   xray.common.protocol.ServerEndpoint server = 1;
 }
 
+message Fragment {
+  int32 delay = 1;
+  int32 divider = 2;
+  int32 packet_number = 3;
+}
+
 message Config {
   enum DomainStrategy {
     AS_IS = 0;
@@ -23,4 +29,5 @@ message Config {
   uint32 timeout = 2 [deprecated = true];
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
+  Fragment fragment = 5;  
 }

@@ -11,10 +11,17 @@ import (
 )
 
 type FreedomConfig struct {
-	DomainStrategy string  `json:"domainStrategy"`
-	Timeout        *uint32 `json:"timeout"`
-	Redirect       string  `json:"redirect"`
-	UserLevel      uint32  `json:"userLevel"`
+	DomainStrategy string    `json:"domainStrategy"`
+	Timeout        *uint32   `json:"timeout"`
+	Redirect       string    `json:"redirect"`
+	UserLevel      uint32    `json:"userLevel"`
+	Fragment       *Fragment `json:"fragment"`
+}
+
+type Fragment struct {
+	Delay        int  `json:"delay"`
+	Divider      int  `json:"divider"`
+	PacketNumber *int `json:"packetNumber"`
 }
 
 // Build implements Buildable
@@ -28,6 +35,21 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		config.DomainStrategy = freedom.Config_USE_IP4
 	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
 		config.DomainStrategy = freedom.Config_USE_IP6
+	}
+
+	if c.Fragment != nil {
+		if c.Fragment.Delay < 0 || c.Fragment.Divider <= 0 {
+			return nil, newError("invalid fragment config:\nDelay: ", c.Fragment.Delay, " Divider: ", c.Fragment.Divider)
+		}
+		config.Fragment = &freedom.Fragment{
+			Delay:   int32(c.Fragment.Delay),
+			Divider: int32(c.Fragment.Divider),
+		}
+		if c.Fragment.PacketNumber != nil {
+			config.Fragment.PacketNumber = int32(*c.Fragment.PacketNumber)
+		} else {
+			config.Fragment.PacketNumber = 1
+		}
 	}
 
 	if c.Timeout != nil {

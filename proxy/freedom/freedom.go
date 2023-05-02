@@ -4,6 +4,7 @@ package freedom
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -169,7 +170,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
-			writer = buf.NewWriter(conn)
+			if h.config.Fragment != nil {
+				writer = buf.NewWriter(
+					&FragmentWriter{
+						Writer:       conn,
+						Divider:      int(h.config.Fragment.Divider),
+						Delay:        time.Duration(h.config.Fragment.Delay) * time.Millisecond,
+						PacketNumber: int(h.config.Fragment.PacketNumber),
+						PacketCount:  0,
+					})
+			} else {
+				writer = buf.NewWriter(conn)
+			}
 		} else {
 			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 		}
@@ -323,4 +335,46 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	return nil
+}
+
+type FragmentWriter struct {
+	io.Writer
+	Divider      int
+	Delay        time.Duration
+	PacketNumber int
+	PacketCount  int
+}
+
+func (w *FragmentWriter) Write(buf []byte) (int, error) {
+	w.PacketCount += 1
+	if !(w.PacketCount == w.PacketNumber || w.PacketNumber == 0) {
+		return w.Writer.Write(buf)
+	}
+
+	divider := w.Divider
+	delay := w.Delay
+	singleBufSize := len(buf) / divider
+	lastByte := len(buf) % divider
+	if singleBufSize == 0 {
+		return w.Writer.Write(buf)
+	}
+
+	var i int
+	var nTotal int
+	for i = 0; i < divider; i++ {
+		n, err := w.Writer.Write(buf[i*singleBufSize : (i+1)*singleBufSize])
+		if err != nil {
+			return n, err
+		}
+		nTotal += n
+		if lastByte > 0 && i == divider-1 {
+			n, err := w.Writer.Write(buf[(i+1)*singleBufSize:])
+			if err != nil {
+				return n, err
+			}
+			nTotal += n
+		}
+		time.Sleep(delay)
+	}
+	return nTotal, nil
 }
