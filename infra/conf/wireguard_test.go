@@ -25,7 +25,7 @@ func TestWireGuardOutbound(t *testing.T) {
 				],
 				"mtu": 1300,
 				"workers": 2,
-				"resolveStrategy": "PreferIPv6"
+				"domainStrategy": "ForceIPv6v4"
 			}`,
 			Parser: loadJSON(creator),
 			Output: &wireguard.DeviceConfig{
@@ -42,9 +42,9 @@ func TestWireGuardOutbound(t *testing.T) {
 						AllowedIps:   []string{"0.0.0.0/0", "::0/0"},
 					},
 				},
-				Mtu:             1300,
-				NumWorkers:      2,
-				ResolveStrategy: wireguard.DeviceConfig_PREFER_IP6,
+				Mtu:            1300,
+				NumWorkers:     2,
+				DomainStrategy: wireguard.DeviceConfig_FORCE_IP64,
 			},
 		},
 	})
