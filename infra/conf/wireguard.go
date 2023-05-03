@@ -48,13 +48,13 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 }
 
 type WireGuardConfig struct {
-	SecretKey       string                 `json:"secretKey"`
-	Address         []string               `json:"address"`
-	Peers           []*WireGuardPeerConfig `json:"peers"`
-	MTU             int                    `json:"mtu"`
-	NumWorkers      int                    `json:"workers"`
-	Reserved        []byte                 `json:"reserved"`
-	ResolveStrategy string                 `json:"resolveStrategy"`
+	SecretKey      string                 `json:"secretKey"`
+	Address        []string               `json:"address"`
+	Peers          []*WireGuardPeerConfig `json:"peers"`
+	MTU            int                    `json:"mtu"`
+	NumWorkers     int                    `json:"workers"`
+	Reserved       []byte                 `json:"reserved"`
+	DomainStrategy string                 `json:"domainStrategy"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -98,12 +98,16 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	}
 	config.Reserved = c.Reserved
 
-	config.ResolveStrategy = wireguard.DeviceConfig_NONE
-	switch strings.ToLower(c.ResolveStrategy) {
-	case "preferip4", "preferipv4", "prefer_ip4", "prefer_ipv4", "4":
-		config.ResolveStrategy = wireguard.DeviceConfig_PREFER_IP4
-	case "preferip6", "preferipv6", "prefer_ip6", "prefer_ipv6", "6":
-		config.ResolveStrategy = wireguard.DeviceConfig_PREFER_IP6
+	config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP
+	switch strings.ToLower(c.DomainStrategy) {
+	case "forceip4", "forceipv4", "force_ip4", "force_ipv4", "force_ip_v4", "force-ip4", "force-ipv4", "force-ip-v4":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP4
+	case "forceip6", "forceipv6", "force_ip6", "force_ipv6", "force_ip_v6", "force-ip6", "force-ipv6", "force-ip-v6":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP6
+	case "forceip46", "forceipv4v6", "force_ip46", "force_ipv4v6", "force_ip_v4v6", "force-ip46", "force-ipv4v6", "force-ip-v4v6":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP46
+	case "forceip64", "forceipv6v4", "force_ip64", "force_ipv6v4", "force_ip_v6v4", "force-ip64", "force-ipv6v4", "force-ip-v6v4":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP64
 	}
 
 	return config, nil
