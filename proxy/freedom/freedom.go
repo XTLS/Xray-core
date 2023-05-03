@@ -60,26 +60,18 @@ func (h *Handler) policy() policy.Session {
 }
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	var option dns.IPOption = dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
-	}
-	if h.config.DomainStrategy == Config_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()) {
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
-		}
-	} else if h.config.DomainStrategy == Config_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()) {
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
+	ips, err := h.dns.LookupIP(domain, dns.IPOption{
+		IPv4Enable: (localAddr == nil || !localAddr.Family().IsIPv6()) && ((localAddr != nil && localAddr.Family().IsIPv4()) || h.config.preferIP4()),
+		IPv6Enable: (localAddr == nil || !localAddr.Family().IsIPv4()) && ((localAddr != nil && localAddr.Family().IsIPv6()) || h.config.preferIP6()),
+	})
+	{ // Resolve fallback
+		if (len(ips) == 0 || err != nil) && h.config.fallbackIP() && localAddr == nil {
+			ips, err = h.dns.LookupIP(domain, dns.IPOption{
+				IPv4Enable: (localAddr != nil && localAddr.Family().IsIPv4()) || !h.config.fallbackIP6(),
+				IPv6Enable: (localAddr != nil && localAddr.Family().IsIPv6()) || h.config.fallbackIP6(),
+			})
 		}
 	}
-
-	ips, err := h.dns.LookupIP(domain, option)
 	if err != nil {
 		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
@@ -133,6 +125,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					Port:    dialDest.Port,
 				}
 				newError("dialing to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
+			} else if h.config.forceIP() {
+				return dns.ErrEmptyResponse
 			}
 		}
 
