@@ -4,7 +4,9 @@ package freedom
 
 import (
 	"context"
+	"crypto/rand"
 	"io"
+	"math/big"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -174,8 +176,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(
 					&FragmentWriter{
 						Writer:       conn,
-						Divider:      int(h.config.Fragment.Divider),
-						Delay:        time.Duration(h.config.Fragment.Delay) * time.Millisecond,
+						minLength:    int(h.config.Fragment.MinLength),
+						maxLength:    int(h.config.Fragment.MaxLength),
+						minInterval:  time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+						maxInterval:  time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
 						PacketNumber: int(h.config.Fragment.PacketNumber),
 						PacketCount:  0,
 					})
@@ -339,8 +343,10 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 type FragmentWriter struct {
 	io.Writer
-	Divider      int
-	Delay        time.Duration
+	minLength    int
+	maxLength    int
+	minInterval  time.Duration
+	maxInterval  time.Duration
 	PacketNumber int
 	PacketCount  int
 }
@@ -351,30 +357,43 @@ func (w *FragmentWriter) Write(buf []byte) (int, error) {
 		return w.Writer.Write(buf)
 	}
 
-	divider := w.Divider
-	delay := w.Delay
-	singleBufSize := len(buf) / divider
-	lastByte := len(buf) % divider
-	if singleBufSize == 0 {
+	if len(buf) <= w.minLength {
 		return w.Writer.Write(buf)
 	}
-
-	var i int
-	var nTotal int
-	for i = 0; i < divider; i++ {
-		n, err := w.Writer.Write(buf[i*singleBufSize : (i+1)*singleBufSize])
-		if err != nil {
-			return n, err
+	nTotal := 0
+	for {
+		if nTotal >= len(buf) {
+			return nTotal, nil
 		}
-		nTotal += n
-		if lastByte > 0 && i == divider-1 {
-			n, err := w.Writer.Write(buf[(i+1)*singleBufSize:])
+		randomByteSize := int(randBetween(int64(w.minLength), int64(w.maxLength)))
+		if nTotal+randomByteSize > len(buf) {
+			n, err := w.Writer.Write(buf[nTotal:])
 			if err != nil {
-				return n, err
+				return nTotal + n, err
 			}
 			nTotal += n
+			return nTotal, nil
 		}
-		time.Sleep(delay)
+		n, err := w.Writer.Write(buf[nTotal : nTotal+randomByteSize])
+		if err != nil {
+			return nTotal + n, err
+		}
+		nTotal += n
+
+		randomInterval := randBetween(int64(w.minInterval), int64(w.maxInterval))
+		time.Sleep(time.Duration(randomInterval))
 	}
-	return nTotal, nil
+}
+
+// stolen from github.com/xtls/xray-core/transport/internet/reality
+func randBetween(left int64, right int64) int64 {
+	if left == right {
+		return left
+	}
+	// swap left and right if left > right so we always get a positive value
+	if left > right {
+		left, right = right, left
+	}
+	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
+	return left + bigInt.Int64()
 }

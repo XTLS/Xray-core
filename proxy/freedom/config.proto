@@ -13,9 +13,11 @@ message DestinationOverride {
 }
 
 message Fragment {
-  int32 delay = 1;
-  int32 divider = 2;
-  int32 packet_number = 3;
+  int32 min_interval = 1;
+  int32 max_interval = 2;
+  int32 min_length = 3;
+  int32 max_length = 4;
+  int32 packet_number = 5;
 }
 
 message Config {

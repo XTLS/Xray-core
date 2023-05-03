@@ -2,6 +2,7 @@ package conf
 
 import (
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -19,9 +20,9 @@ type FreedomConfig struct {
 }
 
 type Fragment struct {
-	Delay        int  `json:"delay"`
-	Divider      int  `json:"divider"`
-	PacketNumber *int `json:"packetNumber"`
+	Interval     string `json:"interval"`
+	Length       string `json:"length"`
+	PacketNumber *int   `json:"packetNumber"`
 }
 
 // Build implements Buildable
@@ -38,13 +39,49 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fragment != nil {
-		if c.Fragment.Delay < 0 || c.Fragment.Divider <= 0 {
-			return nil, newError("invalid fragment config:\nDelay: ", c.Fragment.Delay, " Divider: ", c.Fragment.Divider)
+		if len(c.Fragment.Interval) == 0 || len(c.Fragment.Length) == 0 {
+			return nil, newError("Invalid interval or length")
+		}
+		intervalMinMax := strings.Split(c.Fragment.Interval, "-")
+		var minInterval, maxInterval int64
+		var err, err2 error
+		if len(intervalMinMax) == 2 {
+			minInterval, err = strconv.ParseInt(intervalMinMax[0], 10, 64)
+			maxInterval, err2 = strconv.ParseInt(intervalMinMax[1], 10, 64)
+		} else {
+			minInterval, err = strconv.ParseInt(intervalMinMax[0], 10, 64)
+			maxInterval = minInterval
+		}
+		if err != nil {
+			return nil, newError("Invalid minimum interval: ", err).Base(err)
+		}
+		if err2 != nil {
+			return nil, newError("Invalid maximum interval: ", err2).Base(err2)
+		}
+
+		lengthMinMax := strings.Split(c.Fragment.Length, "-")
+		var minLength, maxLength int64
+		if len(lengthMinMax) == 2 {
+			minLength, err = strconv.ParseInt(lengthMinMax[0], 10, 64)
+			maxLength, err2 = strconv.ParseInt(lengthMinMax[1], 10, 64)
+
+		} else {
+			minLength, err = strconv.ParseInt(lengthMinMax[0], 10, 64)
+			maxLength = minLength
+		}
+		if err != nil {
+			return nil, newError("Invalid minimum length: ", err).Base(err)
+		}
+		if err2 != nil {
+			return nil, newError("Invalid maximum length: ", err2).Base(err2)
 		}
 		config.Fragment = &freedom.Fragment{
-			Delay:   int32(c.Fragment.Delay),
-			Divider: int32(c.Fragment.Divider),
+			MinInterval: int32(minInterval),
+			MaxInterval: int32(maxInterval),
+			MinLength:   int32(minLength),
+			MaxLength:   int32(maxLength),
 		}
+
 		if c.Fragment.PacketNumber != nil {
 			config.Fragment.PacketNumber = int32(*c.Fragment.PacketNumber)
 		} else {
