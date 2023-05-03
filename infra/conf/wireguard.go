@@ -100,13 +100,13 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 
 	config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP
 	switch strings.ToLower(c.DomainStrategy) {
-	case "forceip4", "forceipv4", "force_ip4", "force_ipv4", "force_ip_v4", "force-ip4", "force-ipv4", "force-ip-v4":
+	case "forceip4", "forceipv4", "force_ip4", "force_ipv4":
 		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP4
-	case "forceip6", "forceipv6", "force_ip6", "force_ipv6", "force_ip_v6", "force-ip6", "force-ipv6", "force-ip-v6":
+	case "forceip6", "forceipv6", "force_ip6", "force_ipv6":
 		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP6
-	case "forceip46", "forceipv4v6", "force_ip46", "force_ipv4v6", "force_ip_v4v6", "force-ip46", "force-ipv4v6", "force-ip-v4v6":
+	case "forceip46", "forceipv4v6", "force_ip46", "force_ipv4v6":
 		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP46
-	case "forceip64", "forceipv6v4", "force_ip64", "force_ipv6v4", "force_ip_v6v4", "force-ip64", "force-ipv6v4", "force-ip-v6v4":
+	case "forceip64", "forceipv6v4", "force_ip64", "force_ipv6v4":
 		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP64
 	}
 
