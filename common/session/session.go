@@ -61,6 +61,8 @@ type Outbound struct {
 	Gateway net.Address
 	// Name of the outbound proxy that handles the connection.
 	Name string
+	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings 
+	Conn net.Conn
 }
 
 // SniffingRequest controls the behavior of content sniffing.
