@@ -214,7 +214,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
 	} else {
-		newError("远程 用户ip:port" + connection.RemoteAddr().String()).Base(err).AtInfo().WriteToLog(sid)
 		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
 	}
 
