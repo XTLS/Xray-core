@@ -20,8 +20,8 @@ type RateLimiter struct {
 
 func NewRateLimiter(cpCtx *context.Context, d *DefaultDispatcher, user *protocol.MemoryUser) *RateLimiter {
 	if d.bucket[user.Email] == nil {
-		var limitInt = 1024 * 1024 * user.Level
-		d.bucket[user.Email] = rate.NewLimiter(rate.Limit(limitInt), int(limitInt*2))
+		var limitInt = 1024 * 1024 * int(user.Level)
+		d.bucket[user.Email] = rate.NewLimiter(rate.Limit(limitInt), limitInt*2)
 	}
 	bucket := d.bucket[user.Email]
 	return &RateLimiter{

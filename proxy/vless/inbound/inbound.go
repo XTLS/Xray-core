@@ -59,6 +59,7 @@ type Handler struct {
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
+	ipCount protocol.ExpiringMap
 }
 
 // New creates a new VLess inbound handler.
@@ -69,6 +70,7 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:             new(vless.Validator),
 		dns:                   dc,
+		ipCount:               *protocol.NewExpiringMap(),
 	}
 
 	for _, user := range config.Clients {
@@ -212,6 +214,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
 	} else {
+		newError("远程 用户ip:port" + connection.RemoteAddr().String()).Base(err).AtInfo().WriteToLog(sid)
 		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
 	}
 
@@ -429,6 +432,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
+	if err := setIpCount(sid, request.User, connection.RemoteAddr(), &h.ipCount); err != nil {
+		return err
+	}
+
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
 	}
@@ -620,4 +627,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	return nil
+}
+
+func setIpCount(sid errors.ExportOption, user *protocol.MemoryUser, ip net.Addr, mapString *protocol.ExpiringMap) error {
+	userName := user.Email
+	ss := strings.SplitAfter(ip.String(), ":")
+	slice := ss[0 : len(ss)-1]
+	result := strings.Join(slice, "")
+	ips := result[0 : len(result)-1]
+	mapString.Set(userName, ips, 60*time.Second)
+	ipString, _ := mapString.Get(userName)
+	newError("user[" + user.Email + "] ip [" + ipString + "]").AtInfo().WriteToLog(sid)
+	if len(strings.Split(ipString, ",")) > 2 {
+		return newError("user[" + user.Email + "] ip over[" + ipString + "]").AtWarning()
+	}
+	return nil
+
 }
