@@ -94,6 +94,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("invalid outbound")
 	}
+	outbound.Name = "dns"
 
 	srcNetwork := outbound.Target.Network
 

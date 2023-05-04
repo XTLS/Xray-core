@@ -75,6 +75,12 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	outbound := session.OutboundFromContext(ctx)
+	if outbound == nil || !outbound.Target.IsValid() {
+		return newError("target not specified")
+	}
+	outbound.Name = "wireguard"
+
 	if h.bind == nil || h.bind.dialer != dialer || h.net == nil {
 		log.Record(&log.GeneralMessage{
 			Severity: log.Severity_Info,
@@ -101,10 +107,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		h.bind = bind
 	}
 
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
-		return newError("target not specified")
-	}
 	// Destination of the inner request.
 	destination := outbound.Target
 	command := protocol.RequestCommandTCP

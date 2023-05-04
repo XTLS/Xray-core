@@ -61,6 +61,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	outbound.Name = "socks"
 	// Destination of the inner request.
 	destination := outbound.Target
 

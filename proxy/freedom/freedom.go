@@ -107,6 +107,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	outbound.Name = "freedom"
 	destination := outbound.Target
 	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {

@@ -59,6 +59,8 @@ type Outbound struct {
 	RouteTarget net.Destination
 	// Gateway address
 	Gateway net.Address
+	// Name of the outbound proxy that handles the connection.
+	Name string
 }
 
 // SniffingRequest controls the behavior of content sniffing.

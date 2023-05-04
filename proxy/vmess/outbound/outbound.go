@@ -60,9 +60,14 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	outbound := session.OutboundFromContext(ctx)
+	if outbound == nil || !outbound.Target.IsValid() {
+		return newError("target not specified").AtError()
+	}
+	outbound.Name = "vmess"
+
 	var rec *protocol.ServerSpec
 	var conn stat.Connection
-
 	err := retry.ExponentialBackoff(5, 200).On(func() error {
 		rec = h.serverPicker.PickServer()
 		rawConn, err := dialer.Dial(ctx, rec.Destination())
@@ -77,11 +82,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return newError("failed to find an available destination").Base(err).AtWarning()
 	}
 	defer conn.Close()
-
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
-		return newError("target not specified").AtError()
-	}
 
 	target := outbound.Target
 	newError("tunneling request to ", target, " via ", rec.Destination().NetAddr()).WriteToLog(session.ExportIDToError(ctx))
