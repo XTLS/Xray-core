@@ -12,7 +12,7 @@ func forceFree(interval time.Duration) {
 		for {
 			time.Sleep(interval)
 			debug.FreeOSMemory()
-			newError("forceFree").AtInfo().WriteToLog()
+			newError("forceFree").AtDebug().WriteToLog()
 		}
 	}()
 }
