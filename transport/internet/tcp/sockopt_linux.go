@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package tcp
@@ -7,12 +8,12 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 const SO_ORIGINAL_DST = 80
 
-func GetOriginalDestination(conn internet.Connection) (net.Destination, error) {
+func GetOriginalDestination(conn stat.Connection) (net.Destination, error) {
 	sysrawconn, f := conn.(syscall.Conn)
 	if !f {
 		return net.Destination{}, newError("unable to get syscall.Conn")

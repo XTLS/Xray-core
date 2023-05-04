@@ -16,18 +16,16 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-var (
-	dcList = []net.Address{
-		net.ParseAddress("149.154.175.50"),
-		net.ParseAddress("149.154.167.51"),
-		net.ParseAddress("149.154.175.100"),
-		net.ParseAddress("149.154.167.91"),
-		net.ParseAddress("149.154.171.5"),
-	}
-)
+var dcList = []net.Address{
+	net.ParseAddress("149.154.175.50"),
+	net.ParseAddress("149.154.167.51"),
+	net.ParseAddress("149.154.175.100"),
+	net.ParseAddress("149.154.167.91"),
+	net.ParseAddress("149.154.171.5"),
+}
 
 type Server struct {
 	user    *protocol.User
@@ -63,8 +61,10 @@ func (s *Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP}
 }
 
-var ctype1 = []byte{0xef, 0xef, 0xef, 0xef}
-var ctype2 = []byte{0xee, 0xee, 0xee, 0xee}
+var (
+	ctype1 = []byte{0xef, 0xef, 0xef, 0xef}
+	ctype2 = []byte{0xee, 0xee, 0xee, 0xee}
+)
 
 func isValidConnectionType(c [4]byte) bool {
 	if bytes.Equal(c[:], ctype1) {
@@ -76,7 +76,7 @@ func isValidConnectionType(c [4]byte) bool {
 	return false
 }
 
-func (s *Server) Process(ctx context.Context, network net.Network, conn internet.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	sPolicy := s.policy.ForLevel(s.user.Level)
 
 	if err := conn.SetDeadline(time.Now().Add(sPolicy.Timeouts.Handshake)); err != nil {
@@ -143,7 +143,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 	}
 
-	var responseDoneAndCloseWriter = task.OnSuccess(response, task.Close(link.Writer))
+	responseDoneAndCloseWriter := task.OnSuccess(response, task.Close(link.Writer))
 	if err := task.Run(ctx, request, responseDoneAndCloseWriter); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)

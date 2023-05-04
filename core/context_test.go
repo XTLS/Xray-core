@@ -3,11 +3,12 @@ package core_test
 import (
 	"context"
 	"testing"
+	_ "unsafe"
 
 	. "github.com/xtls/xray-core/core"
 )
 
-func TestContextPanic(t *testing.T) {
+func TestFromContextPanic(t *testing.T) {
 	defer func() {
 		r := recover()
 		if r == nil {

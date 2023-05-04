@@ -90,5 +90,22 @@ message SocketConfig {
   bool accept_proxy_protocol = 7;
 
   DomainStrategy domain_strategy = 8;
+
   string dialer_proxy = 9;
+
+  int32 tcp_keep_alive_interval = 10;
+
+  int32 tcp_keep_alive_idle = 11;
+  
+  string tcp_congestion = 12;
+  
+  string interface = 13;
+
+  bool   v6only = 14;
+
+  int32 tcp_window_clamp = 15;
+
+  int32 tcp_user_timeout = 16;
+
+  int32 tcp_max_seg = 17;
 }

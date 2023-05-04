@@ -68,6 +68,6 @@ func executeAddOutbounds(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("failed to add outbound: %s", err)
 		}
-		showResponese(resp)
+		showJSONResponse(resp)
 	}
 }

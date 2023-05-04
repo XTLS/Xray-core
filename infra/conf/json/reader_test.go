@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
 	"github.com/xtls/xray-core/common"
 	. "github.com/xtls/xray-core/infra/conf/json"
 )
@@ -24,7 +23,8 @@ content 2`,
 			`
 content 
 
-content 2`},
+content 2`,
+		},
 		{`content`, `content`},
 		{" ", " "},
 		{`con/*abcd*/tent`, "content"},

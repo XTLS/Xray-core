@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -54,7 +55,7 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 	return s.SocketSettings.Tproxy
 }
 
-func (w *tcpWorker) callback(conn internet.Connection) {
+func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
@@ -80,7 +81,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 	}
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
-		conn = &internet.StatCouterConnection{
+		conn = &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  w.uplinkCounter,
 			WriteCounter: w.downlinkCounter,
@@ -99,6 +100,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+		content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
@@ -106,9 +108,7 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 	}
 	cancel()
-	if err := conn.Close(); err != nil {
-		newError("failed to close connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
-	}
+	conn.Close()
 }
 
 func (w *tcpWorker) Proxy() proxy.Inbound {
@@ -117,7 +117,7 @@ func (w *tcpWorker) Proxy() proxy.Inbound {
 
 func (w *tcpWorker) Start() error {
 	ctx := context.Background()
-	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn internet.Connection) {
+	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn stat.Connection) {
 		go w.callback(conn)
 	})
 	if err != nil {
@@ -158,6 +158,11 @@ type udpConn struct {
 	done             *done.Instance
 	uplink           stats.Counter
 	downlink         stats.Counter
+	inactive         bool
+}
+
+func (c *udpConn) setInactive() {
+	c.inactive = true
 }
 
 func (c *udpConn) updateActivity() {
@@ -318,13 +323,18 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 				content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 				content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+				content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 			}
 			ctx = session.ContextWithContent(ctx, content)
 			if err := w.proxy.Process(ctx, net.Network_UDP, conn, w.dispatcher); err != nil {
 				newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
 			}
 			conn.Close()
-			w.removeConn(id)
+			// conn not removed by checker TODO may be lock worker here is better
+			if !conn.inactive {
+				conn.setInactive()
+				w.removeConn(id)
+			}
 		}()
 	}
 }
@@ -352,8 +362,11 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 300 {
-			delete(w.activeConn, addr)
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 5*60 { // TODO Timeout too small
+			if !conn.inactive {
+				conn.setInactive()
+				delete(w.activeConn, addr)
+			}
 			conn.Close()
 		}
 	}
@@ -436,13 +449,13 @@ type dsWorker struct {
 	ctx context.Context
 }
 
-func (w *dsWorker) callback(conn internet.Connection) {
+func (w *dsWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
-		conn = &internet.StatCouterConnection{
+		conn = &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  w.uplinkCounter,
 			WriteCounter: w.downlinkCounter,
@@ -461,6 +474,7 @@ func (w *dsWorker) callback(conn internet.Connection) {
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+		content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
@@ -480,9 +494,10 @@ func (w *dsWorker) Proxy() proxy.Inbound {
 func (w *dsWorker) Port() net.Port {
 	return net.Port(0)
 }
+
 func (w *dsWorker) Start() error {
 	ctx := context.Background()
-	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn internet.Connection) {
+	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn stat.Connection) {
 		go w.callback(conn)
 	})
 	if err != nil {

@@ -48,7 +48,7 @@ func (e readError) Error() string {
 	return e.error.Error()
 }
 
-func (e readError) Inner() error {
+func (e readError) Unwrap() error {
 	return e.error
 }
 
@@ -66,7 +66,7 @@ func (e writeError) Error() string {
 	return e.error.Error()
 }
 
-func (e writeError) Inner() error {
+func (e writeError) Unwrap() error {
 	return e.error
 }
 

@@ -26,11 +26,12 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 var (
-	aeadForced = false
+	aeadForced     = false
+	aeadForced2022 = false
 )
 
 type userByEmail struct {
@@ -183,8 +184,10 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSession, request *protocol.RequestHeader, response *protocol.ResponseHeader, input buf.Reader, output *buf.BufferedWriter) error {
 	session.EncodeResponseHeader(response, output)
 
-	bodyWriter := session.EncodeResponseBody(request, output)
-
+	bodyWriter, err := session.EncodeResponseBody(request, output)
+	if err != nil {
+		return newError("failed to start decoding response").Base(err)
+	}
 	{
 		// Optimize for small response packet
 		data, err := input.ReadMultiBuffer()
@@ -205,7 +208,9 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 		return err
 	}
 
-	if request.Option.Has(protocol.RequestOptionChunkStream) {
+	account := request.User.Account.(*vmess.MemoryAccount)
+
+	if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
 		if err := bodyWriter.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 			return err
 		}
@@ -219,14 +224,14 @@ func isInsecureEncryption(s protocol.SecurityType) bool {
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection internet.Connection, dispatcher routing.Dispatcher) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	iConn := connection
-	if statConn, ok := iConn.(*internet.StatCouterConnection); ok {
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
 	_, isDrain := iConn.(*net.TCPConn)
@@ -282,6 +287,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "vmess"
 	inbound.User = request.User
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
@@ -298,7 +304,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		bodyReader := svrSession.DecodeRequestBody(request, reader)
+		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
+		if err != nil {
+			return newError("failed to start decoding").Base(err)
+		}
 		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to transfer request").Base(err)
 		}
@@ -317,7 +326,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
@@ -368,8 +377,17 @@ func init() {
 		return New(ctx, config.(*Config))
 	}))
 
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	defaultFlagValue := "NOT_DEFINED_AT_ALL"
+
+	if time.Now().Year() >= 2022 {
+		defaultFlagValue = "true_by_default_2022"
+	}
 
 	isAeadForced := platform.NewEnvFlag("xray.vmess.aead.forced").GetValue(func() string { return defaultFlagValue })
 	aeadForced = (isAeadForced == "true")
+
+	if isAeadForced == "true_by_default_2022" {
+		aeadForced = true
+		aeadForced2022 = true
+	}
 }

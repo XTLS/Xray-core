@@ -5,11 +5,10 @@ package command
 import (
 	"context"
 
-	grpc "google.golang.org/grpc"
-
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/core"
+	grpc "google.golang.org/grpc"
 )
 
 type LoggerServer struct {

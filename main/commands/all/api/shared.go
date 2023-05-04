@@ -3,10 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
-
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/main/commands/base"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type serviceHandler func(ctx context.Context, conn *grpc.ClientConn, cmd *base.Command, args []string) string
@@ -56,10 +54,10 @@ func loadArg(arg string) (out io.Reader, err error) {
 		data, err = fetchHTTPContent(arg)
 
 	case arg == "stdin:":
-		data, err = ioutil.ReadAll(os.Stdin)
+		data, err = io.ReadAll(os.Stdin)
 
 	default:
-		data, err = ioutil.ReadFile(arg)
+		data, err = os.ReadFile(arg)
 	}
 
 	if err != nil {
@@ -105,25 +103,25 @@ func fetchHTTPContent(target string) ([]byte, error) {
 	return content, nil
 }
 
-func showResponese(m proto.Message) {
+func protoToJSONString(m proto.Message, _, indent string) (string, error) {
+	ops := protojson.MarshalOptions{
+		Indent:          indent,
+		EmitUnpopulated: true,
+	}
+	b, err := ops.Marshal(m)
+	return string(b), err
+}
+
+func showJSONResponse(m proto.Message) {
 	if isNil(m) {
 		return
 	}
-	b := new(strings.Builder)
-	e := json.NewEncoder(b)
-	e.SetIndent("", "    ")
-	e.SetEscapeHTML(false)
-	err := e.Encode(m)
-	msg := ""
+	output, err := protoToJSONString(m, "", "    ")
 	if err != nil {
-		msg = fmt.Sprintf("error: %s\n\n%v", err, m)
-	} else {
-		msg = strings.TrimSpace(b.String())
+		fmt.Fprintf(os.Stdout, "%v\n", m)
+		base.Fatalf("error encode json: %s", err)
 	}
-	if msg == "" {
-		return
-	}
-	fmt.Println(msg)
+	fmt.Println(output)
 }
 
 func isNil(i interface{}) bool {

@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 
 	"github.com/ghodss/yaml"
 	"github.com/pelletier/go-toml"
-
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
@@ -88,7 +86,7 @@ func LoadJSONConfig(reader io.Reader) (*core.Config, error) {
 // DecodeTOMLConfig reads from reader and decode the config into *conf.Config
 // using github.com/pelletier/go-toml and map to convert toml to json.
 func DecodeTOMLConfig(reader io.Reader) (*conf.Config, error) {
-	tomlFile, err := ioutil.ReadAll(reader)
+	tomlFile, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, newError("failed to read config file").Base(err)
 	}
@@ -123,7 +121,7 @@ func LoadTOMLConfig(reader io.Reader) (*core.Config, error) {
 // DecodeYAMLConfig reads from reader and decode the config into *conf.Config
 // using github.com/ghodss/yaml to convert yaml to json.
 func DecodeYAMLConfig(reader io.Reader) (*conf.Config, error) {
-	yamlFile, err := ioutil.ReadAll(reader)
+	yamlFile, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, newError("failed to read config file").Base(err)
 	}

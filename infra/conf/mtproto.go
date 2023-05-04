@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/mtproto"
@@ -60,8 +59,7 @@ func (c *MTProtoServerConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type MTProtoClientConfig struct {
-}
+type MTProtoClientConfig struct{}
 
 func (c *MTProtoClientConfig) Build() (proto.Message, error) {
 	config := new(mtproto.ClientConfig)

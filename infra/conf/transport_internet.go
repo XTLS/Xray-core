@@ -1,25 +1,31 @@
 package conf
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/domainsocket"
+	httpheader "github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/http"
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/quic"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (
@@ -30,6 +36,7 @@ var (
 		"wechat-video": func() interface{} { return new(WechatVideoAuthenticator) },
 		"dtls":         func() interface{} { return new(DTLSAuthenticator) },
 		"wireguard":    func() interface{} { return new(WireguardAuthenticator) },
+		"dns":          func() interface{} { return new(DNSAuthenticator) },
 	}, "type", "")
 
 	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -139,7 +146,6 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 
 type WebSocketConfig struct {
 	Path                string            `json:"path"`
-	Path2               string            `json:"Path"` // The key was misspelled. For backward compatibility, we have to keep track the old key.
 	Headers             map[string]string `json:"headers"`
 	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
 }
@@ -147,9 +153,6 @@ type WebSocketConfig struct {
 // Build implements Buildable.
 func (c *WebSocketConfig) Build() (proto.Message, error) {
 	path := c.Path
-	if path == "" && c.Path2 != "" {
-		path = c.Path2
-	}
 	header := make([]*websocket.Header, 0, 32)
 	for key, value := range c.Headers {
 		header = append(header, &websocket.Header{
@@ -179,17 +182,46 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 }
 
 type HTTPConfig struct {
-	Host *StringList `json:"host"`
-	Path string      `json:"path"`
+	Host               *StringList            `json:"host"`
+	Path               string                 `json:"path"`
+	ReadIdleTimeout    int32                  `json:"read_idle_timeout"`
+	HealthCheckTimeout int32                  `json:"health_check_timeout"`
+	Method             string                 `json:"method"`
+	Headers            map[string]*StringList `json:"headers"`
 }
 
 // Build implements Buildable.
 func (c *HTTPConfig) Build() (proto.Message, error) {
+	if c.ReadIdleTimeout <= 0 {
+		c.ReadIdleTimeout = 0
+	}
+	if c.HealthCheckTimeout <= 0 {
+		c.HealthCheckTimeout = 0
+	}
 	config := &http.Config{
-		Path: c.Path,
+		Path:               c.Path,
+		IdleTimeout:        c.ReadIdleTimeout,
+		HealthCheckTimeout: c.HealthCheckTimeout,
 	}
 	if c.Host != nil {
 		config.Host = []string(*c.Host)
+	}
+	if c.Method != "" {
+		config.Method = c.Method
+	}
+	if len(c.Headers) > 0 {
+		config.Header = make([]*httpheader.Header, 0, len(c.Headers))
+		headerNames := sortMapKeys(c.Headers)
+		for _, key := range headerNames {
+			value := c.Headers[key]
+			if value == nil {
+				return nil, newError("empty HTTP header value: " + key).AtError()
+			}
+			config.Header = append(config.Header, &httpheader.Header{
+				Name:  key,
+				Value: append([]string(nil), (*value)...),
+			})
+		}
 	}
 	return config, nil
 }
@@ -311,17 +343,20 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                 bool             `json:"allowInsecure"`
-	Certs                    []*TLSCertConfig `json:"certificates"`
-	ServerName               string           `json:"serverName"`
-	ALPN                     *StringList      `json:"alpn"`
-	EnableSessionResumption  bool             `json:"enableSessionResumption"`
-	DisableSystemRoot        bool             `json:"disableSystemRoot"`
-	MinVersion               string           `json:"minVersion"`
-	MaxVersion               string           `json:"maxVersion"`
-	CipherSuites             string           `json:"cipherSuites"`
-	PreferServerCipherSuites bool             `json:"preferServerCipherSuites"`
-	Fingerprint              string           `json:"fingerprint"`
+	Insecure                             bool             `json:"allowInsecure"`
+	Certs                                []*TLSCertConfig `json:"certificates"`
+	ServerName                           string           `json:"serverName"`
+	ALPN                                 *StringList      `json:"alpn"`
+	EnableSessionResumption              bool             `json:"enableSessionResumption"`
+	DisableSystemRoot                    bool             `json:"disableSystemRoot"`
+	MinVersion                           string           `json:"minVersion"`
+	MaxVersion                           string           `json:"maxVersion"`
+	CipherSuites                         string           `json:"cipherSuites"`
+	PreferServerCipherSuites             bool             `json:"preferServerCipherSuites"`
+	Fingerprint                          string           `json:"fingerprint"`
+	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
+	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
+	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 }
 
 // Build implements Buildable.
@@ -350,96 +385,200 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.CipherSuites = c.CipherSuites
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
+	if config.Fingerprint != "" && tls.GetFingerprint(config.Fingerprint) == nil {
+		return nil, newError(`unknown fingerprint: `, config.Fingerprint)
+	}
+	config.RejectUnknownSni = c.RejectUnknownSNI
+
+	if c.PinnedPeerCertificateChainSha256 != nil {
+		config.PinnedPeerCertificateChainSha256 = [][]byte{}
+		for _, v := range *c.PinnedPeerCertificateChainSha256 {
+			hashValue, err := base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				return nil, err
+			}
+			config.PinnedPeerCertificateChainSha256 = append(config.PinnedPeerCertificateChainSha256, hashValue)
+		}
+	}
+
+	if c.PinnedPeerCertificatePublicKeySha256 != nil {
+		config.PinnedPeerCertificatePublicKeySha256 = [][]byte{}
+		for _, v := range *c.PinnedPeerCertificatePublicKeySha256 {
+			hashValue, err := base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				return nil, err
+			}
+			config.PinnedPeerCertificatePublicKeySha256 = append(config.PinnedPeerCertificatePublicKeySha256, hashValue)
+		}
+	}
+
 	return config, nil
 }
 
-type XTLSCertConfig struct {
-	CertFile       string   `json:"certificateFile"`
-	CertStr        []string `json:"certificate"`
-	KeyFile        string   `json:"keyFile"`
-	KeyStr         []string `json:"key"`
-	Usage          string   `json:"usage"`
-	OcspStapling   uint64   `json:"ocspStapling"`
-	OneTimeLoading bool     `json:"oneTimeLoading"`
+type REALITYConfig struct {
+	Show         bool            `json:"show"`
+	Dest         json.RawMessage `json:"dest"`
+	Type         string          `json:"type"`
+	Xver         uint64          `json:"xver"`
+	ServerNames  []string        `json:"serverNames"`
+	PrivateKey   string          `json:"privateKey"`
+	MinClientVer string          `json:"minClientVer"`
+	MaxClientVer string          `json:"maxClientVer"`
+	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
+	ShortIds     []string        `json:"shortIds"`
+
+	Fingerprint string `json:"fingerprint"`
+	ServerName  string `json:"serverName"`
+	PublicKey   string `json:"publicKey"`
+	ShortId     string `json:"shortId"`
+	SpiderX     string `json:"spiderX"`
 }
 
-// Build implements Buildable.
-func (c *XTLSCertConfig) Build() (*xtls.Certificate, error) {
-	certificate := new(xtls.Certificate)
-	cert, err := readFileOrString(c.CertFile, c.CertStr)
-	if err != nil {
-		return nil, newError("failed to parse certificate").Base(err)
-	}
-	certificate.Certificate = cert
-	certificate.CertificatePath = c.CertFile
-
-	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
-		key, err := readFileOrString(c.KeyFile, c.KeyStr)
-		if err != nil {
-			return nil, newError("failed to parse key").Base(err)
+func (c *REALITYConfig) Build() (proto.Message, error) {
+	config := new(reality.Config)
+	config.Show = c.Show
+	var err error
+	if c.Dest != nil {
+		var i uint16
+		var s string
+		if err = json.Unmarshal(c.Dest, &i); err == nil {
+			s = strconv.Itoa(int(i))
+		} else {
+			_ = json.Unmarshal(c.Dest, &s)
 		}
-		certificate.Key = key
-		certificate.KeyPath = c.KeyFile
-	}
-
-	switch strings.ToLower(c.Usage) {
-	case "encipherment":
-		certificate.Usage = xtls.Certificate_ENCIPHERMENT
-	case "verify":
-		certificate.Usage = xtls.Certificate_AUTHORITY_VERIFY
-	case "issue":
-		certificate.Usage = xtls.Certificate_AUTHORITY_ISSUE
-	default:
-		certificate.Usage = xtls.Certificate_ENCIPHERMENT
-	}
-	if certificate.KeyPath == "" && certificate.CertificatePath == "" {
-		certificate.OneTimeLoading = true
+		if c.Type == "" && s != "" {
+			switch s[0] {
+			case '@', '/':
+				c.Type = "unix"
+				if s[0] == '@' && len(s) > 1 && s[1] == '@' && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
+					fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path)) // may need padding to work with haproxy
+					copy(fullAddr, s[1:])
+					s = string(fullAddr)
+				}
+			default:
+				if _, err = strconv.Atoi(s); err == nil {
+					s = "127.0.0.1:" + s
+				}
+				if _, _, err = net.SplitHostPort(s); err == nil {
+					c.Type = "tcp"
+				}
+			}
+		}
+		if c.Type == "" {
+			return nil, newError(`please fill in a valid value for "dest"`)
+		}
+		if c.Xver > 2 {
+			return nil, newError(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
+		}
+		if len(c.ServerNames) == 0 {
+			return nil, newError(`empty "serverNames"`)
+		}
+		if c.PrivateKey == "" {
+			return nil, newError(`empty "privateKey"`)
+		}
+		if config.PrivateKey, err = base64.RawURLEncoding.DecodeString(c.PrivateKey); err != nil || len(config.PrivateKey) != 32 {
+			return nil, newError(`invalid "privateKey": `, c.PrivateKey)
+		}
+		if c.MinClientVer != "" {
+			config.MinClientVer = make([]byte, 3)
+			var u uint64
+			for i, s := range strings.Split(c.MinClientVer, ".") {
+				if i == 3 {
+					return nil, newError(`invalid "minClientVer": `, c.MinClientVer)
+				}
+				if u, err = strconv.ParseUint(s, 10, 8); err != nil {
+					return nil, newError(`"minClientVer[`, i, `]" should be lesser than 256`)
+				} else {
+					config.MinClientVer[i] = byte(u)
+				}
+			}
+		}
+		if c.MaxClientVer != "" {
+			config.MaxClientVer = make([]byte, 3)
+			var u uint64
+			for i, s := range strings.Split(c.MaxClientVer, ".") {
+				if i == 3 {
+					return nil, newError(`invalid "maxClientVer": `, c.MaxClientVer)
+				}
+				if u, err = strconv.ParseUint(s, 10, 8); err != nil {
+					return nil, newError(`"maxClientVer[`, i, `]" should be lesser than 256`)
+				} else {
+					config.MaxClientVer[i] = byte(u)
+				}
+			}
+		}
+		if len(c.ShortIds) == 0 {
+			return nil, newError(`empty "shortIds"`)
+		}
+		config.ShortIds = make([][]byte, len(c.ShortIds))
+		for i, s := range c.ShortIds {
+			config.ShortIds[i] = make([]byte, 8)
+			if _, err = hex.Decode(config.ShortIds[i], []byte(s)); err != nil {
+				return nil, newError(`invalid "shortIds[`, i, `]": `, s)
+			}
+		}
+		config.Dest = s
+		config.Type = c.Type
+		config.Xver = c.Xver
+		config.ServerNames = c.ServerNames
+		config.MaxTimeDiff = c.MaxTimeDiff
 	} else {
-		certificate.OneTimeLoading = c.OneTimeLoading
-	}
-	certificate.OcspStapling = c.OcspStapling
-
-	return certificate, nil
-}
-
-type XTLSConfig struct {
-	Insecure                 bool              `json:"allowInsecure"`
-	Certs                    []*XTLSCertConfig `json:"certificates"`
-	ServerName               string            `json:"serverName"`
-	ALPN                     *StringList       `json:"alpn"`
-	EnableSessionResumption  bool              `json:"enableSessionResumption"`
-	DisableSystemRoot        bool              `json:"disableSystemRoot"`
-	MinVersion               string            `json:"minVersion"`
-	MaxVersion               string            `json:"maxVersion"`
-	CipherSuites             string            `json:"cipherSuites"`
-	PreferServerCipherSuites bool              `json:"preferServerCipherSuites"`
-}
-
-// Build implements Buildable.
-func (c *XTLSConfig) Build() (proto.Message, error) {
-	config := new(xtls.Config)
-	config.Certificate = make([]*xtls.Certificate, len(c.Certs))
-	for idx, certConf := range c.Certs {
-		cert, err := certConf.Build()
-		if err != nil {
-			return nil, err
+		if c.Fingerprint == "" {
+			return nil, newError(`empty "fingerprint"`)
 		}
-		config.Certificate[idx] = cert
+		if config.Fingerprint = strings.ToLower(c.Fingerprint); tls.GetFingerprint(config.Fingerprint) == nil {
+			return nil, newError(`unknown "fingerprint": `, config.Fingerprint)
+		}
+		if config.Fingerprint == "hellogolang" {
+			return nil, newError(`invalid "fingerprint": `, config.Fingerprint)
+		}
+		if len(c.ServerNames) != 0 {
+			return nil, newError(`non-empty "serverNames", please use "serverName" instead`)
+		}
+		if c.PublicKey == "" {
+			return nil, newError(`empty "publicKey"`)
+		}
+		if config.PublicKey, err = base64.RawURLEncoding.DecodeString(c.PublicKey); err != nil || len(config.PublicKey) != 32 {
+			return nil, newError(`invalid "publicKey": `, c.PublicKey)
+		}
+		if len(c.ShortIds) != 0 {
+			return nil, newError(`non-empty "shortIds", please use "shortId" instead`)
+		}
+		config.ShortId = make([]byte, 8)
+		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
+			return nil, newError(`invalid "shortId": `, c.ShortId)
+		}
+		if c.SpiderX == "" {
+			c.SpiderX = "/"
+		}
+		if c.SpiderX[0] != '/' {
+			return nil, newError(`invalid "spiderX": `, c.SpiderX)
+		}
+		config.SpiderY = make([]int64, 10)
+		u, _ := url.Parse(c.SpiderX)
+		q := u.Query()
+		parse := func(param string, index int) {
+			if q.Get(param) != "" {
+				s := strings.Split(q.Get(param), "-")
+				if len(s) == 1 {
+					config.SpiderY[index], _ = strconv.ParseInt(s[0], 10, 64)
+					config.SpiderY[index+1], _ = strconv.ParseInt(s[0], 10, 64)
+				} else {
+					config.SpiderY[index], _ = strconv.ParseInt(s[0], 10, 64)
+					config.SpiderY[index+1], _ = strconv.ParseInt(s[1], 10, 64)
+				}
+			}
+			q.Del(param)
+		}
+		parse("p", 0) // padding
+		parse("c", 2) // concurrency
+		parse("t", 4) // times
+		parse("i", 6) // interval
+		parse("r", 8) // return
+		u.RawQuery = q.Encode()
+		config.SpiderX = u.String()
+		config.ServerName = c.ServerName
 	}
-	serverName := c.ServerName
-	config.AllowInsecure = c.Insecure
-	if len(c.ServerName) > 0 {
-		config.ServerName = serverName
-	}
-	if c.ALPN != nil && len(*c.ALPN) > 0 {
-		config.NextProtocol = []string(*c.ALPN)
-	}
-	config.EnableSessionResumption = c.EnableSessionResumption
-	config.DisableSystemRoot = c.DisableSystemRoot
-	config.MinVersion = c.MinVersion
-	config.MaxVersion = c.MaxVersion
-	config.CipherSuites = c.CipherSuites
-	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	return config, nil
 }
 
@@ -468,12 +607,20 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type SocketConfig struct {
-	Mark                int32       `json:"mark"`
-	TFO                 interface{} `json:"tcpFastOpen"`
-	TProxy              string      `json:"tproxy"`
-	AcceptProxyProtocol bool        `json:"acceptProxyProtocol"`
-	DomainStrategy      string      `json:"domainStrategy"`
-	DialerProxy         string      `json:"dialerProxy"`
+	Mark                 int32       `json:"mark"`
+	TFO                  interface{} `json:"tcpFastOpen"`
+	TProxy               string      `json:"tproxy"`
+	AcceptProxyProtocol  bool        `json:"acceptProxyProtocol"`
+	DomainStrategy       string      `json:"domainStrategy"`
+	DialerProxy          string      `json:"dialerProxy"`
+	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
+	TCPCongestion        string      `json:"tcpCongestion"`
+	TCPWindowClamp       int32       `json:"tcpWindowClamp"`
+	TCPMaxSeg	     int32	 `json:"tcpMaxSeg"`
+	TCPUserTimeout       int32       `json:"tcpUserTimeout"`
+	V6only               bool        `json:"v6only"`
+	Interface            string      `json:"interface"`
 }
 
 // Build implements Buildable.
@@ -503,7 +650,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		tproxy = internet.SocketConfig_Off
 	}
 
-	var dStrategy = internet.DomainStrategy_AS_IS
+	dStrategy := internet.DomainStrategy_AS_IS
 	switch strings.ToLower(c.DomainStrategy) {
 	case "useip", "use_ip":
 		dStrategy = internet.DomainStrategy_USE_IP
@@ -514,29 +661,37 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}
 
 	return &internet.SocketConfig{
-		Mark:                c.Mark,
-		Tfo:                 tfo,
-		Tproxy:              tproxy,
-		DomainStrategy:      dStrategy,
-		AcceptProxyProtocol: c.AcceptProxyProtocol,
-		DialerProxy:         c.DialerProxy,
+		Mark:                 c.Mark,
+		Tfo:                  tfo,
+		Tproxy:               tproxy,
+		DomainStrategy:       dStrategy,
+		AcceptProxyProtocol:  c.AcceptProxyProtocol,
+		DialerProxy:          c.DialerProxy,
+		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
+		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
+		TcpCongestion:        c.TCPCongestion,
+		TcpWindowClamp:       c.TCPWindowClamp,
+		TcpMaxSeg:	      c.TCPMaxSeg,
+		TcpUserTimeout:       c.TCPUserTimeout,
+		V6Only:               c.V6only,
+		Interface:            c.Interface,
 	}, nil
 }
 
 type StreamConfig struct {
-	Network        *TransportProtocol  `json:"network"`
-	Security       string              `json:"security"`
-	TLSSettings    *TLSConfig          `json:"tlsSettings"`
-	XTLSSettings   *XTLSConfig         `json:"xtlsSettings"`
-	TCPSettings    *TCPConfig          `json:"tcpSettings"`
-	KCPSettings    *KCPConfig          `json:"kcpSettings"`
-	WSSettings     *WebSocketConfig    `json:"wsSettings"`
-	HTTPSettings   *HTTPConfig         `json:"httpSettings"`
-	DSSettings     *DomainSocketConfig `json:"dsSettings"`
-	QUICSettings   *QUICConfig         `json:"quicSettings"`
-	SocketSettings *SocketConfig       `json:"sockopt"`
-	GRPCConfig     *GRPCConfig         `json:"grpcSettings"`
-	GUNConfig      *GRPCConfig         `json:"gunSettings"`
+	Network         *TransportProtocol  `json:"network"`
+	Security        string              `json:"security"`
+	TLSSettings     *TLSConfig          `json:"tlsSettings"`
+	REALITYSettings *REALITYConfig      `json:"realitySettings"`
+	TCPSettings     *TCPConfig          `json:"tcpSettings"`
+	KCPSettings     *KCPConfig          `json:"kcpSettings"`
+	WSSettings      *WebSocketConfig    `json:"wsSettings"`
+	HTTPSettings    *HTTPConfig         `json:"httpSettings"`
+	DSSettings      *DomainSocketConfig `json:"dsSettings"`
+	QUICSettings    *QUICConfig         `json:"quicSettings"`
+	SocketSettings  *SocketConfig       `json:"sockopt"`
+	GRPCConfig      *GRPCConfig         `json:"grpcSettings"`
+	GUNConfig       *GRPCConfig         `json:"gunSettings"`
 }
 
 // Build implements Buildable.
@@ -551,12 +706,11 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.ProtocolName = protocol
 	}
-	if strings.EqualFold(c.Security, "tls") {
+	switch strings.ToLower(c.Security) {
+	case "", "none":
+	case "tls":
 		tlsSettings := c.TLSSettings
 		if tlsSettings == nil {
-			if c.XTLSSettings != nil {
-				return nil, newError(`TLS: Please use "tlsSettings" instead of "xtlsSettings".`)
-			}
 			tlsSettings = &TLSConfig{}
 		}
 		ts, err := tlsSettings.Build()
@@ -566,25 +720,24 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
-	}
-	if strings.EqualFold(c.Security, "xtls") {
-		if config.ProtocolName != "tcp" && config.ProtocolName != "mkcp" && config.ProtocolName != "domainsocket" {
-			return nil, newError("XTLS only supports TCP, mKCP and DomainSocket for now.")
+	case "reality":
+		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "domainsocket" {
+			return nil, newError("REALITY only supports TCP, H2, gRPC and DomainSocket for now.")
 		}
-		xtlsSettings := c.XTLSSettings
-		if xtlsSettings == nil {
-			if c.TLSSettings != nil {
-				return nil, newError(`XTLS: Please use "xtlsSettings" instead of "tlsSettings".`)
-			}
-			xtlsSettings = &XTLSConfig{}
+		if c.REALITYSettings == nil {
+			return nil, newError(`REALITY: Empty "realitySettings".`)
 		}
-		ts, err := xtlsSettings.Build()
+		ts, err := c.REALITYSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build XTLS config.").Base(err)
+			return nil, newError("Failed to build REALITY config.").Base(err)
 		}
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
+	case "xtls":
+		return nil, newError(`Please use VLESS flow "xtls-rprx-vision" with TLS or REALITY.`)
+	default:
+		return nil, newError(`Unknown security "` + c.Security + `".`)
 	}
 	if c.TCPSettings != nil {
 		ts, err := c.TCPSettings.Build()

@@ -2,14 +2,51 @@ package conf_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+	_ "unsafe"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	. "github.com/xtls/xray-core/infra/conf"
 )
+
+func init() {
+	wd, err := os.Getwd()
+	common.Must(err)
+
+	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
+		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "resources", "geoip.dat")))
+	}
+
+	os.Setenv("xray.location.asset", wd)
+}
+
+func TestToCidrList(t *testing.T) {
+	t.Log(os.Getenv("xray.location.asset"))
+
+	common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoiptestrouter.dat"), "geoip.dat"))
+
+	ips := StringList([]string{
+		"geoip:us",
+		"geoip:cn",
+		"geoip:!cn",
+		"ext:geoiptestrouter.dat:!cn",
+		"ext:geoiptestrouter.dat:ca",
+		"ext-ip:geoiptestrouter.dat:!cn",
+		"ext-ip:geoiptestrouter.dat:!ca",
+	})
+
+	_, err := ToCidrList(ips)
+	if err != nil {
+		t.Fatalf("Failed to parse geoip list, got %s", err)
+	}
+}
 
 func TestRouterConfig(t *testing.T) {
 	createParser := func() func(string) (proto.Message, error) {
@@ -69,6 +106,7 @@ func TestRouterConfig(t *testing.T) {
 					{
 						Tag:              "b1",
 						OutboundSelector: []string{"test"},
+						Strategy:         "random",
 					},
 				},
 				Rule: []*router.RoutingRule{

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -209,8 +208,7 @@ func TestUserParsing(t *testing.T) {
 	common.Must(json.Unmarshal([]byte(`{
     "id": "96edb838-6d68-42ef-a933-25f7ac3a9d09",
     "email": "love@example.com",
-    "level": 1,
-    "alterId": 100
+    "level": 1
   }`), user))
 
 	nUser := user.Build()

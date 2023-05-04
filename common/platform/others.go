@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package platform
@@ -21,7 +22,7 @@ func GetToolLocation(file string) string {
 	return filepath.Join(toolPath, file)
 }
 
-// GetAssetLocation search for `file` in certain locations
+// GetAssetLocation searches for `file` in certain locations
 func GetAssetLocation(file string) string {
 	const name = "xray.location.asset"
 	assetPath := NewEnvFlag(name).GetValue(getExecutableDir)

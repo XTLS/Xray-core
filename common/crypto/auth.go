@@ -2,8 +2,8 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"crypto/rand"
 	"io"
-	"math/rand"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -39,8 +39,12 @@ func GenerateIncreasingNonce(nonce []byte) BytesGenerator {
 	}
 }
 
-func GenerateInitialAEADNonce() BytesGenerator {
-	return GenerateIncreasingNonce([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+func GenerateAEADNonceWithSize(nonceSize int) BytesGenerator {
+	c := make([]byte, nonceSize)
+	for i := 0; i < nonceSize; i++ {
+		c[i] = 0xFF
+	}
+	return GenerateIncreasingNonce(c)
 }
 
 type Authenticator interface {
@@ -261,7 +265,8 @@ func (w *AuthenticationWriter) seal(b []byte) (*buf.Buffer, error) {
 		return nil, err
 	}
 	if paddingSize > 0 {
-		// With size of the chunk and padding length encrypted, the content of padding doesn't matter much.
+		// These paddings will send in clear text.
+		// To avoid leakage of PRNG internal state, a cryptographically secure PRNG should be used.
 		paddingBytes := eb.Extend(paddingSize)
 		common.Must2(rand.Read(paddingBytes))
 	}
@@ -290,7 +295,6 @@ func (w *AuthenticationWriter) writeStream(mb buf.MultiBuffer) error {
 		mb = nb
 
 		eb, err := w.seal(rawBytes[:nBytes])
-
 		if err != nil {
 			buf.ReleaseMulti(mb2Write)
 			return err

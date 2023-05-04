@@ -5,33 +5,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
+	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
-var (
-	effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
-)
-
-// InitSystemDialer: It's private method and you are NOT supposed to use this function.
-func InitSystemDialer(dc dns.Client, om outbound.Manager) {
-	effectiveSystemDialer.Init(dc, om)
-}
+var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
-	Init(dc dns.Client, om outbound.Manager)
 }
 
 type DefaultSystemDialer struct {
-	controllers []controller
+	controllers []control.Func
 	dns         dns.Client
 	obm         outbound.Manager
 }
@@ -58,85 +46,8 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 	return sockopt != nil && len(sockopt.BindAddress) > 0 && sockopt.BindPort > 0
 }
 
-func (d *DefaultSystemDialer) lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
-	if d.dns == nil {
-		return nil, nil
-	}
-
-	var option = dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
-	}
-
-	switch {
-	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
-		}
-	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
-		}
-	case strategy == DomainStrategy_AS_IS:
-		return nil, nil
-	}
-
-	return d.dns.LookupIP(domain, option)
-}
-
-func (d *DefaultSystemDialer) canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
-	if sockopt == nil || dst.Address.Family().IsIP() || d.dns == nil {
-		return false
-	}
-	if dst.Address.Domain() == LookupDomainFromContext(ctx) {
-		newError("infinite loop detected").AtError().WriteToLog(session.ExportIDToError(ctx))
-		return false
-	}
-	return sockopt.DomainStrategy != DomainStrategy_AS_IS
-}
-
-func (d *DefaultSystemDialer) redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
-	newError("redirecting request " + dst.String() + " to " + obt).WriteToLog(session.ExportIDToError(ctx))
-	h := d.obm.GetHandler(obt)
-	ctx = session.ContextWithOutbound(ctx, &session.Outbound{dst, nil})
-	if h != nil {
-		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
-		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
-
-		go h.Dispatch(ctx, &transport.Link{ur, dw})
-		nc := cnc.NewConnection(
-			cnc.ConnectionInputMulti(uw),
-			cnc.ConnectionOutputMulti(dr),
-			cnc.ConnectionOnClose(common.ChainedClosable{uw, dw}),
-		)
-		return nc
-	}
-	return nil
-}
-
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	newError("dialing to " + dest.String()).AtDebug().WriteToLog()
-	if d.obm != nil && sockopt != nil && len(sockopt.DialerProxy) > 0 {
-		nc := d.redirect(ctx, dest, sockopt.DialerProxy)
-		if nc != nil {
-			return nc, nil
-		}
-	}
-
-	if d.canLookupIP(ctx, dest, sockopt) {
-		ips, err := d.lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
-		if err == nil && len(ips) > 0 {
-			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
-			newError("replace destination with " + dest.String()).AtInfo().WriteToLog()
-		} else if err != nil {
-			newError("failed to resolve ip").Base(err).AtWarning().WriteToLog()
-		}
-	}
 
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
@@ -155,19 +66,27 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			return nil, err
 		}
 		return &PacketConnWrapper{
-			conn: packetConn,
-			dest: destAddr,
+			Conn: packetConn,
+			Dest: destAddr,
 		}, nil
 	}
-
+	goStdKeepAlive := time.Duration(0)
+	if sockopt != nil && (sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0) {
+		goStdKeepAlive = time.Duration(-1)
+	}
 	dialer := &net.Dialer{
 		Timeout:   time.Second * 16,
-		DualStack: true,
 		LocalAddr: resolveSrcAddr(dest.Network, src),
+		KeepAlive: goStdKeepAlive,
 	}
 
 	if sockopt != nil || len(d.controllers) > 0 {
 		dialer.Control = func(network, address string, c syscall.RawConn) error {
+			for _, ctl := range d.controllers {
+				if err := ctl(network, address, c); err != nil {
+					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				}
+			}
 			return c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
@@ -179,12 +98,6 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 						}
 					}
 				}
-
-				for _, ctl := range d.controllers {
-					if err := ctl(network, address, fd); err != nil {
-						newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
-					}
-				}
 			})
 		}
 	}
@@ -192,55 +105,50 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
 }
 
-func (d *DefaultSystemDialer) Init(dc dns.Client, om outbound.Manager) {
-	d.dns = dc
-	d.obm = om
-}
-
 type PacketConnWrapper struct {
-	conn net.PacketConn
-	dest net.Addr
+	Conn net.PacketConn
+	Dest net.Addr
 }
 
 func (c *PacketConnWrapper) Close() error {
-	return c.conn.Close()
+	return c.Conn.Close()
 }
 
 func (c *PacketConnWrapper) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
+	return c.Conn.LocalAddr()
 }
 
 func (c *PacketConnWrapper) RemoteAddr() net.Addr {
-	return c.dest
+	return c.Dest
 }
 
 func (c *PacketConnWrapper) Write(p []byte) (int, error) {
-	return c.conn.WriteTo(p, c.dest)
+	return c.Conn.WriteTo(p, c.Dest)
 }
 
 func (c *PacketConnWrapper) Read(p []byte) (int, error) {
-	n, _, err := c.conn.ReadFrom(p)
+	n, _, err := c.Conn.ReadFrom(p)
 	return n, err
 }
 
 func (c *PacketConnWrapper) WriteTo(p []byte, d net.Addr) (int, error) {
-	return c.conn.WriteTo(p, d)
+	return c.Conn.WriteTo(p, d)
 }
 
 func (c *PacketConnWrapper) ReadFrom(p []byte) (int, net.Addr, error) {
-	return c.conn.ReadFrom(p)
+	return c.Conn.ReadFrom(p)
 }
 
 func (c *PacketConnWrapper) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
+	return c.Conn.SetDeadline(t)
 }
 
 func (c *PacketConnWrapper) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
+	return c.Conn.SetReadDeadline(t)
 }
 
 func (c *PacketConnWrapper) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.Conn.SetWriteDeadline(t)
 }
 
 type SystemDialerAdapter interface {
@@ -257,8 +165,6 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 	}
 }
 
-func (v *SimpleSystemDialer) Init(_ dns.Client, _ outbound.Manager) {}
-
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
 }
@@ -269,7 +175,7 @@ func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net
 // xray:api:stable
 func UseAlternativeSystemDialer(dialer SystemDialer) {
 	if dialer == nil {
-		effectiveSystemDialer = &DefaultSystemDialer{}
+		dialer = &DefaultSystemDialer{}
 	}
 	effectiveSystemDialer = dialer
 }
@@ -279,7 +185,7 @@ func UseAlternativeSystemDialer(dialer SystemDialer) {
 // It only works when effective dialer is the default dialer.
 //
 // xray:api:beta
-func RegisterDialerController(ctl func(network, address string, fd uintptr) error) error {
+func RegisterDialerController(ctl control.Func) error {
 	if ctl == nil {
 		return newError("nil listener controller")
 	}

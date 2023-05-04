@@ -13,9 +13,11 @@ import (
 )
 
 var (
-	ErrCommandTypeMismatch = newError("Command type mismatch.")
-	ErrUnknownCommand      = newError("Unknown command.")
 	ErrCommandTooLarge     = newError("Command too large.")
+	ErrCommandTypeMismatch = newError("Command type mismatch.")
+	ErrInvalidAuth         = newError("Invalid auth.")
+	ErrInsufficientLength  = newError("Insufficient length.")
+	ErrUnknownCommand      = newError("Unknown command.")
 )
 
 func MarshalCommand(command interface{}, writer io.Writer) error {
@@ -54,12 +56,12 @@ func MarshalCommand(command interface{}, writer io.Writer) error {
 
 func UnmarshalCommand(cmdID byte, data []byte) (protocol.ResponseCommand, error) {
 	if len(data) <= 4 {
-		return nil, newError("insufficient length")
+		return nil, ErrInsufficientLength
 	}
 	expectedAuth := Authenticate(data[4:])
 	actualAuth := binary.BigEndian.Uint32(data[:4])
 	if expectedAuth != actualAuth {
-		return nil, newError("invalid auth")
+		return nil, ErrInvalidAuth
 	}
 
 	var factory CommandFactory
@@ -77,8 +79,7 @@ type CommandFactory interface {
 	Unmarshal(data []byte) (interface{}, error)
 }
 
-type CommandSwitchAccountFactory struct {
-}
+type CommandSwitchAccountFactory struct{}
 
 func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Writer) error {
 	cmd, ok := command.(*protocol.CommandSwitchAccount)
@@ -110,38 +111,38 @@ func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Wri
 func (f *CommandSwitchAccountFactory) Unmarshal(data []byte) (interface{}, error) {
 	cmd := new(protocol.CommandSwitchAccount)
 	if len(data) == 0 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	lenHost := int(data[0])
 	if len(data) < lenHost+1 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	if lenHost > 0 {
 		cmd.Host = net.ParseAddress(string(data[1 : 1+lenHost]))
 	}
 	portStart := 1 + lenHost
 	if len(data) < portStart+2 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	cmd.Port = net.PortFromBytes(data[portStart : portStart+2])
 	idStart := portStart + 2
 	if len(data) < idStart+16 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	cmd.ID, _ = uuid.ParseBytes(data[idStart : idStart+16])
 	alterIDStart := idStart + 16
 	if len(data) < alterIDStart+2 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	cmd.AlterIds = binary.BigEndian.Uint16(data[alterIDStart : alterIDStart+2])
 	levelStart := alterIDStart + 2
 	if len(data) < levelStart+1 {
-		return nil, newError("insufficient length.")
+		return nil, ErrInsufficientLength
 	}
 	cmd.Level = uint32(data[levelStart])
 	timeStart := levelStart + 1
-	if len(data) < timeStart {
-		return nil, newError("insufficient length.")
+	if len(data) < timeStart+1 {
+		return nil, ErrInsufficientLength
 	}
 	cmd.ValidMin = data[timeStart]
 	return cmd, nil

@@ -4,26 +4,30 @@ import (
 	"context"
 	"io"
 	"sync"
-
-	"golang.org/x/net/dns/dnsmessage"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	dns_proto "github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
-		if err := core.RequireFeatures(ctx, func(dnsClient dns.Client) error {
-			return h.Init(config.(*Config), dnsClient)
+		if err := core.RequireFeatures(ctx, func(dnsClient dns.Client, policyManager policy.Manager) error {
+			return h.Init(config.(*Config), dnsClient, policyManager)
 		}); err != nil {
 			return nil, err
 		}
@@ -39,10 +43,13 @@ type Handler struct {
 	client          dns.Client
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
+	timeout         time.Duration
 }
 
-func (h *Handler) Init(config *Config, dnsClient dns.Client) error {
+func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
 	h.client = dnsClient
+	h.timeout = policyManager.ForLevel(config.UserLevel).Timeouts.ConnectionIdle
+
 	if v, ok := dnsClient.(ownLinkVerifier); ok {
 		h.ownLinkVerifier = v
 	}
@@ -104,7 +111,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	newError("handling DNS traffic to ", dest).WriteToLog(session.ExportIDToError(ctx))
 
 	conn := &outboundConn{
-		dialer: func() (internet.Connection, error) {
+		dialer: func() (stat.Connection, error) {
 			return d.Dial(ctx, dest)
 		},
 		connReady: make(chan struct{}, 1),
@@ -142,6 +149,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 		}
 	}
 
+	if session.TimeoutOnlyFromContext(ctx) {
+		ctx, _ = context.WithCancel(context.Background())
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, cancel, h.timeout)
+
 	request := func() error {
 		defer conn.Close()
 
@@ -154,6 +168,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			if err != nil {
 				return err
 			}
+
+			timer.Update()
 
 			if !h.isOwnLink(ctx) {
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
@@ -179,6 +195,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			if err != nil {
 				return err
 			}
+
+			timer.Update()
 
 			if err := writer.WriteMessage(b); err != nil {
 				return err
@@ -215,9 +233,20 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	}
 
 	rcode := dns.RCodeFromError(err)
-	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
+	if rcode == 0 && len(ips) == 0 && !errors.AllEqual(dns.ErrEmptyResponse, errors.Cause(err)) {
 		newError("ip query").Base(err).WriteToLog()
 		return
+	}
+
+	switch qType {
+	case dnsmessage.TypeA:
+		for i, ip := range ips {
+			ips[i] = ip.To4()
+		}
+	case dnsmessage.TypeAAAA:
+		for i, ip := range ips {
+			ips[i] = ip.To16()
+		}
 	}
 
 	b := buf.New()
@@ -266,7 +295,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 
 type outboundConn struct {
 	access sync.Mutex
-	dialer func() (internet.Connection, error)
+	dialer func() (stat.Connection, error)
 
 	conn      net.Conn
 	connReady chan struct{}

@@ -88,7 +88,8 @@ func TestGeoIPMatcher(t *testing.T) {
 		{
 			Input:  "192.0.1.0",
 			Output: false,
-		}, {
+		},
+		{
 			Input:  "0.1.0.0",
 			Output: true,
 		},
@@ -111,6 +112,42 @@ func TestGeoIPMatcher(t *testing.T) {
 		{
 			Input:  "91.108.255.254",
 			Output: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		ip := net.ParseAddress(testCase.Input).IP()
+		actual := matcher.Match(ip)
+		if actual != testCase.Output {
+			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
+		}
+	}
+}
+
+func TestGeoIPReverseMatcher(t *testing.T) {
+	cidrList := router.CIDRList{
+		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
+		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
+	}
+	matcher := &router.GeoIPMatcher{}
+	matcher.SetReverseMatch(true) // Reverse match
+	common.Must(matcher.Init(cidrList))
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "8.8.8.8",
+			Output: false,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
+			Output: true,
+		},
+		{
+			Input:  "91.108.255.254",
+			Output: false,
 		},
 	}
 

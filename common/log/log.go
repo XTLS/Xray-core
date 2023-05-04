@@ -32,11 +32,9 @@ func Record(msg Message) {
 	logHandler.Handle(msg)
 }
 
-var (
-	logHandler syncHandler
-)
+var logHandler syncHandler
 
-// RegisterHandler register a new handler as current log handler. Previous registered handler will be discarded.
+// RegisterHandler registers a new handler as current log handler. Previous registered handler will be discarded.
 func RegisterHandler(handler Handler) {
 	if handler == nil {
 		panic("Log handler is nil")

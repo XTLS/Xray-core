@@ -20,7 +20,53 @@ on:
       - "go.sum"
       - ".github/workflows/*.yml"
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore Cache
+        uses: actions/cache/restore@v3
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Update Geodat
+        id: update
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 60
+          retry_wait_seconds: 60
+          max_attempts: 60
+          command: |
+            [ -d 'resources' ] || mkdir resources
+            LIST=('geoip geoip geoip' 'domain-list-community dlc geosite')
+            for i in "${LIST[@]}"
+            do
+              INFO=($(echo $i | awk 'BEGIN{FS=" ";OFS=" "} {print $1,$2,$3}'))
+              FILE_NAME="${INFO[2]}.dat"
+              echo -e "Verifying HASH key..."
+              HASH="$(curl -sL "https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat.sha256sum" | awk -F ' ' '{print $1}')"
+              if [ -s "./resources/${FILE_NAME}" ] && [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ]; then
+                  continue
+              else
+                  echo -e "Downloading https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat..."
+                  curl -L "https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat" -o ./resources/${FILE_NAME}
+                  echo -e "Verifying HASH key..."
+                  [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ] || { echo -e "The HASH key of ${FILE_NAME} does not match cloud one."; exit 1; }
+                  echo "unhit=true" >> $GITHUB_OUTPUT
+              fi
+            done
+
+      - name: Save Cache
+        uses: actions/cache/save@v3
+        if: ${{ steps.update.outputs.unhit }}
+        with:
+          path: resources
+          key: xray-geodat-${{ github.sha }}-${{ github.run_number }}
+
   build:
+    needs: prepare
+    permissions:
+      contents: write
     strategy:
       matrix:
         # Include amd64 on all platforms.
@@ -52,7 +98,9 @@ jobs:
           - goos: android
             goarch: arm64
           # END Android ARM 8
-          # Windows ARM 7
+          # Windows ARM
+          - goos: windows
+            goarch: arm64
           - goos: windows
             goarch: arm
             goarm: 7
@@ -108,20 +156,19 @@ jobs:
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Show workflow information 
-        id: get_filename
         run: |
           export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
-          echo "::set-output name=ASSET_NAME::$_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: ^1.16
+          go-version: '1.20'
+          check-latest: true
 
       - name: Get project dependencies
         run: go mod download
@@ -140,6 +187,11 @@ jobs:
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/xray -trimpath -ldflags "-s -w -buildid=" ./main
+
+      - name: Build background Xray on Windows 
+        if: matrix.goos == 'windows'
+        run: |
+          go build -v -o build_assets/wxray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
     
       - name: Build Mips softfloat Xray
         if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
@@ -152,31 +204,26 @@ jobs:
           cd ./build_assets || exit 1
           mv xray xray.exe
 
-      - name: Prepare to release
+      - name: Restore Cache
+        uses: actions/cache/restore@v3
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Copy README.md & LICENSE
         run: |
+          mv -f resources/* build_assets
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
-          LIST=('geoip geoip geoip' 'domain-list-community dlc geosite')
-          for i in "${LIST[@]}"
-          do
-            INFO=($(echo $i | awk 'BEGIN{FS=" ";OFS=" "} {print $1,$2,$3}'))
-            LASTEST_TAG="$(curl -sL "https://api.github.com/repos/v2fly/${INFO[0]}/releases" | jq -r ".[0].tag_name" || echo "latest")"
-            FILE_NAME="${INFO[2]}.dat"
-            echo -e "Downloading ${FILE_NAME}..."
-            curl -L "https://github.com/v2fly/${INFO[0]}/releases/download/${LASTEST_TAG}/${INFO[1]}.dat" -o ./build_assets/${FILE_NAME}
-            echo -e "Verifying HASH key..."
-            HASH="$(curl -sL "https://github.com/v2fly/${INFO[0]}/releases/download/${LASTEST_TAG}/${INFO[1]}.dat.sha256sum" | awk -F ' ' '{print $1}')"
-            [ "$(sha256sum "./build_assets/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ] || { echo -e "The HASH key of ${FILE_NAME} does not match cloud one."; exit 1; }
-          done
 
       - name: Create ZIP archive
         shell: bash
         run: |
           pushd build_assets || exit 1
           touch -mt $(date +%Y01010000) *
-          zip -9vr ../Xray-$ASSET_NAME.zip .
+          zip -9vr ../Xray-${{ env.ASSET_NAME }}.zip .
           popd || exit 1
-          FILE=./Xray-$ASSET_NAME.zip
+          FILE=./Xray-${{ env.ASSET_NAME }}.zip
           DGST=$FILE.dgst
           for METHOD in {"md5","sha1","sha256","sha512"}
           do
@@ -185,20 +232,20 @@ jobs:
 
       - name: Change the name
         run: |
-          mv build_assets Xray-$ASSET_NAME
+          mv build_assets Xray-${{ env.ASSET_NAME }}
 
       - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
-          name: Xray-${{ steps.get_filename.outputs.ASSET_NAME }}
+          name: Xray-${{ env.ASSET_NAME }}
           path: |
-            ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}/*
+            ./Xray-${{ env.ASSET_NAME }}/*
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./Xray-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
+          file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true

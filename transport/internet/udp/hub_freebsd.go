@@ -1,3 +1,4 @@
+//go:build freebsd
 // +build freebsd
 
 package udp
@@ -7,6 +8,7 @@ import (
 	"encoding/gob"
 	"io"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -29,7 +31,14 @@ func ReadUDPMsg(conn *net.UDPConn, payload []byte, oob []byte) (int, int, int, *
 	nBytes, addr, err := conn.ReadFromUDP(payload)
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	enc.Encode(conn.LocalAddr().(*net.UDPAddr))
+	udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return 0, 0, 0, nil, errors.New("invalid local address")
+	}
+	if addr == nil {
+		return 0, 0, 0, nil, errors.New("invalid remote address")
+	}
+	enc.Encode(udpAddr)
 	enc.Encode(addr)
 	var reader io.Reader = &buf
 	noob, _ := reader.Read(oob)

@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	. "github.com/xtls/xray-core/transport/internet/websocket"
 )
@@ -20,8 +21,8 @@ func Test_listenWSAndDial(t *testing.T) {
 		ProtocolSettings: &Config{
 			Path: "ws",
 		},
-	}, func(conn internet.Connection) {
-		go func(c internet.Connection) {
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
 			defer c.Close()
 
 			var b [1024]byte
@@ -75,8 +76,8 @@ func TestDialWithRemoteAddr(t *testing.T) {
 		ProtocolSettings: &Config{
 			Path: "ws",
 		},
-	}, func(conn internet.Connection) {
-		go func(c internet.Connection) {
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
 			defer c.Close()
 
 			var b [1024]byte
@@ -129,7 +130,7 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
 		},
 	}
-	listen, err := ListenWS(context.Background(), net.LocalHostIP, 13143, streamSettings, func(conn internet.Connection) {
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, 13143, streamSettings, func(conn stat.Connection) {
 		go func() {
 			_ = conn.Close()
 		}()

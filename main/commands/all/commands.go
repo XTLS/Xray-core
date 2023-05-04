@@ -12,8 +12,9 @@ func init() {
 	base.RootCommand.Commands = append(
 		base.RootCommand.Commands,
 		api.CmdAPI,
-		//cmdConvert,
+		// cmdConvert,
 		tls.CmdTLS,
 		cmdUUID,
+		cmdX25519,
 	)
 }

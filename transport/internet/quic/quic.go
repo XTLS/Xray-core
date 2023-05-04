@@ -13,8 +13,10 @@ import (
 //
 //
 
-const protocolName = "quic"
-const internalDomain = "quic.internal.example.com"
+const (
+	protocolName   = "quic"
+	internalDomain = "quic.internal.example.com"
+)
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {

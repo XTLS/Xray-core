@@ -1,30 +1,79 @@
 package xudp
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
+	"lukechampine.com/blake3"
 )
 
-var addrParser = protocol.NewAddressParser(
+var AddrParser = protocol.NewAddressParser(
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv4), net.AddressFamilyIPv4),
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeDomain), net.AddressFamilyDomain),
 	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv6), net.AddressFamilyIPv6),
 	protocol.PortThenAddress(),
 )
 
-func NewPacketWriter(writer buf.Writer, dest net.Destination) *PacketWriter {
+var (
+	Show    bool
+	BaseKey []byte
+)
+
+const (
+	EnvShow    = "XRAY_XUDP_SHOW"
+	EnvBaseKey = "XRAY_XUDP_BASEKEY"
+)
+
+func init() {
+	if strings.ToLower(os.Getenv(EnvShow)) == "true" {
+		Show = true
+	}
+	if raw, found := os.LookupEnv(EnvBaseKey); found {
+		if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
+			return
+		}
+		panic(EnvBaseKey + ": invalid value: " + raw)
+	}
+	rand.Read(BaseKey)
+}
+
+func GetGlobalID(ctx context.Context) (globalID [8]byte) {
+	if cone := ctx.Value("cone"); cone == nil || !cone.(bool) { // cone is nil only in some unit tests
+		return
+	}
+	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.Network == net.Network_UDP &&
+		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks") {
+		h := blake3.New(8, BaseKey)
+		h.Write([]byte(inbound.Source.String()))
+		copy(globalID[:], h.Sum(nil))
+		if Show {
+			fmt.Printf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)
+		}
+	}
+	return
+}
+
+func NewPacketWriter(writer buf.Writer, dest net.Destination, globalID [8]byte) *PacketWriter {
 	return &PacketWriter{
-		Writer: writer,
-		Dest:   dest,
+		Writer:   writer,
+		Dest:     dest,
+		GlobalID: globalID,
 	}
 }
 
 type PacketWriter struct {
-	Writer buf.Writer
-	Dest   net.Destination
+	Writer   buf.Writer
+	Dest     net.Destination
+	GlobalID [8]byte
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -37,19 +86,22 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 
 		eb := buf.New()
-		eb.Write([]byte{0, 0, 0, 0})
+		eb.Write([]byte{0, 0, 0, 0}) // Meta data length; Mux Session ID
 		if w.Dest.Network == net.Network_UDP {
 			eb.WriteByte(1) // New
 			eb.WriteByte(1) // Opt
 			eb.WriteByte(2) // UDP
-			addrParser.WriteAddressPort(eb, w.Dest.Address, w.Dest.Port)
+			AddrParser.WriteAddressPort(eb, w.Dest.Address, w.Dest.Port)
+			if b.UDP != nil { // make sure it's user's proxy request
+				eb.Write(w.GlobalID[:]) // no need to check whether it's empty
+			}
 			w.Dest.Network = net.Network_Unknown
 		} else {
 			eb.WriteByte(2) // Keep
-			eb.WriteByte(1)
+			eb.WriteByte(1) // Opt
 			if b.UDP != nil {
-				eb.WriteByte(2)
-				addrParser.WriteAddressPort(eb, b.UDP.Address, b.UDP.Port)
+				eb.WriteByte(2) // UDP
+				AddrParser.WriteAddressPort(eb, b.UDP.Address, b.UDP.Port)
 			}
 		}
 		l := eb.Len() - 2
@@ -96,9 +148,10 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		discard := false
 		switch b.Byte(2) {
 		case 2:
-			if l != 4 {
+			if l > 4 && b.Byte(4) == 2 { // MUST check the flag first
 				b.Advance(5)
-				addr, port, err := addrParser.ReadAddressPort(nil, b)
+				// b.Clear() will be called automatically if all data had been read.
+				addr, port, err := AddrParser.ReadAddressPort(nil, b)
 				if err != nil {
 					b.Release()
 					return nil, err
@@ -115,6 +168,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			b.Release()
 			return nil, io.EOF
 		}
+		b.Clear() // in case there is padding (empty bytes) attached
 		if b.Byte(3) == 1 {
 			if _, err := io.ReadFull(r.Reader, r.cache); err != nil {
 				b.Release()
@@ -122,7 +176,6 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			}
 			length := int32(r.cache[0])<<8 | int32(r.cache[1])
 			if length > 0 {
-				b.Clear()
 				if _, err := b.ReadFullFrom(r.Reader, length); err != nil {
 					b.Release()
 					return nil, err

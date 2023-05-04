@@ -5,12 +5,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -22,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/units"
 	core "github.com/xtls/xray-core/core"
 )
 
@@ -101,7 +103,7 @@ func genTestBinaryPath() {
 	testBinaryPathGen.Do(func() {
 		var tempDir string
 		common.Must(retry.Timed(5, 100).On(func() error {
-			dir, err := ioutil.TempDir("", "xray")
+			dir, err := os.MkdirTemp("", "xray")
 			if err != nil {
 				return err
 			}
@@ -139,6 +141,23 @@ func CloseAllServers(servers []*exec.Cmd) {
 	log.Record(&log.GeneralMessage{
 		Severity: log.Severity_Info,
 		Content:  "All server closed.",
+	})
+}
+
+func CloseServer(server *exec.Cmd) {
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "Closing server.",
+	})
+	if runtime.GOOS == "windows" {
+		server.Process.Kill()
+	} else {
+		server.Process.Signal(syscall.SIGTERM)
+	}
+	server.Process.Wait()
+	log.Record(&log.GeneralMessage{
+		Severity: log.Severity_Info,
+		Content:  "Server closed.",
 	})
 }
 
@@ -180,7 +199,18 @@ func testUDPConn(port net.Port, payloadSize int, timeout time.Duration) func() e
 }
 
 func testTCPConn2(conn net.Conn, payloadSize int, timeout time.Duration) func() error {
-	return func() error {
+	return func() (err1 error) {
+		start := time.Now()
+		defer func() {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+			fmt.Println("testConn finishes:", time.Since(start).Milliseconds(), "ms\t",
+				err1, "\tAlloc =", units.ByteSize(m.Alloc).String(),
+				"\tTotalAlloc =", units.ByteSize(m.TotalAlloc).String(),
+				"\tSys =", units.ByteSize(m.Sys).String(),
+				"\tNumGC =", m.NumGC)
+		}()
 		payload := make([]byte, payloadSize)
 		common.Must2(rand.Read(payload))
 
@@ -204,4 +234,21 @@ func testTCPConn2(conn net.Conn, payloadSize int, timeout time.Duration) func() 
 
 		return nil
 	}
+}
+
+func WaitConnAvailableWithTest(t *testing.T, testFunc func() error) bool {
+	for i := 1; ; i++ {
+		if i > 10 {
+			t.Log("All attempts failed to test tcp conn")
+			return false
+		}
+		time.Sleep(time.Millisecond * 10)
+		if err := testFunc(); err != nil {
+			t.Log("err ", err)
+		} else {
+			t.Log("success with", i, "attempts")
+			break
+		}
+	}
+	return true
 }

@@ -40,6 +40,8 @@ type TimedUserValidator struct {
 	behaviorFused bool
 
 	aeadDecoderHolder *aead.AuthIDDecoderHolder
+
+	legacyWarnShown bool
 }
 
 type indexTimePair struct {
@@ -67,6 +69,11 @@ func NewTimedUserValidator(hasher protocol.IDHash) *TimedUserValidator {
 	}
 	common.Must(tuv.task.Start())
 	return tuv
+}
+
+// visible for testing
+func (v *TimedUserValidator) GetBaseTime() protocol.Timestamp {
+	return v.baseTime
 }
 
 func (v *TimedUserValidator) generateNewHashes(nowSec protocol.Timestamp, user *user) {
@@ -243,6 +250,19 @@ func (v *TimedUserValidator) BurnTaintFuse(userHash []byte) error {
 		return ErrTainted
 	}
 	return ErrNotFound
+}
+
+/*
+	ShouldShowLegacyWarn will return whether a Legacy Warning should be shown
+
+Not guaranteed to only return true once for every inbound, but it is okay.
+*/
+func (v *TimedUserValidator) ShouldShowLegacyWarn() bool {
+	if v.legacyWarnShown {
+		return false
+	}
+	v.legacyWarnShown = true
+	return true
 }
 
 var ErrNotFound = newError("Not Found")

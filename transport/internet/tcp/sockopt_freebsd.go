@@ -1,3 +1,4 @@
+//go:build freebsd
 // +build freebsd
 
 package tcp
@@ -5,10 +6,11 @@ package tcp
 import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // GetOriginalDestination from tcp conn
-func GetOriginalDestination(conn internet.Connection) (net.Destination, error) {
+func GetOriginalDestination(conn stat.Connection) (net.Destination, error) {
 	la := conn.LocalAddr()
 	ra := conn.RemoteAddr()
 	ip, port, err := internet.OriginalDst(la, ra)

@@ -122,7 +122,7 @@ var char2Index = []int{
 }
 
 func NewACAutomaton() *ACAutomaton {
-	var ac = new(ACAutomaton)
+	ac := new(ACAutomaton)
 	ac.trie = append(ac.trie, newNode())
 	ac.fail = append(ac.fail, 0)
 	ac.exists = append(ac.exists, MatchType{
@@ -133,9 +133,9 @@ func NewACAutomaton() *ACAutomaton {
 }
 
 func (ac *ACAutomaton) Add(domain string, t Type) {
-	var node = 0
+	node := 0
 	for i := len(domain) - 1; i >= 0; i-- {
-		var idx = char2Index[domain[i]]
+		idx := char2Index[domain[i]]
 		if ac.trie[node][idx].nextNode == 0 {
 			ac.count++
 			if len(ac.trie) < ac.count+1 {
@@ -163,7 +163,7 @@ func (ac *ACAutomaton) Add(domain string, t Type) {
 			matchType: Full,
 			exist:     true,
 		}
-		var idx = char2Index['.']
+		idx := char2Index['.']
 		if ac.trie[node][idx].nextNode == 0 {
 			ac.count++
 			if len(ac.trie) < ac.count+1 {
@@ -190,18 +190,18 @@ func (ac *ACAutomaton) Add(domain string, t Type) {
 }
 
 func (ac *ACAutomaton) Build() {
-	var queue = list.New()
+	queue := list.New()
 	for i := 0; i < validCharCount; i++ {
 		if ac.trie[0][i].nextNode != 0 {
 			queue.PushBack(ac.trie[0][i])
 		}
 	}
 	for {
-		var front = queue.Front()
+		front := queue.Front()
 		if front == nil {
 			break
 		} else {
-			var node = front.Value.(Edge).nextNode
+			node := front.Value.(Edge).nextNode
 			queue.Remove(front)
 			for i := 0; i < validCharCount; i++ {
 				if ac.trie[node][i].nextNode != 0 {
@@ -219,13 +219,13 @@ func (ac *ACAutomaton) Build() {
 }
 
 func (ac *ACAutomaton) Match(s string) bool {
-	var node = 0
-	var fullMatch = true
+	node := 0
+	fullMatch := true
 	// 1. the match string is all through trie edge. FULL MATCH or DOMAIN
 	// 2. the match string is through a fail edge. NOT FULL MATCH
 	// 2.1 Through a fail edge, but there exists a valid node. SUBSTR
 	for i := len(s) - 1; i >= 0; i-- {
-		var idx = char2Index[s[i]]
+		idx := char2Index[s[i]]
 		fullMatch = fullMatch && ac.trie[node][idx].edgeType
 		node = ac.trie[node][idx].nextNode
 		switch ac.exists[node].matchType {

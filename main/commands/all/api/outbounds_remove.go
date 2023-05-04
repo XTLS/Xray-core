@@ -68,6 +68,6 @@ func executeRemoveOutbounds(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("failed to remove outbound: %s", err)
 		}
-		showResponese(resp)
+		showJSONResponse(resp)
 	}
 }

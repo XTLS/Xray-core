@@ -37,7 +37,7 @@ func (l *OutboundListener) Accept() (net.Conn, error) {
 	}
 }
 
-// Close implement net.Listener.
+// Close implements net.Listener.
 func (l *OutboundListener) Close() error {
 	common.Must(l.done.Close())
 L:

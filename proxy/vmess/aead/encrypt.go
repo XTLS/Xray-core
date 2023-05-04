@@ -40,7 +40,6 @@ func SealVMessAEADHeader(key [16]byte, data []byte) []byte {
 		}
 
 		payloadHeaderAEAD, err := cipher.NewGCM(payloadHeaderLengthAEADAESBlock)
-
 		if err != nil {
 			panic(err.Error())
 		}
@@ -61,7 +60,6 @@ func SealVMessAEADHeader(key [16]byte, data []byte) []byte {
 		}
 
 		payloadHeaderAEAD, err := cipher.NewGCM(payloadHeaderAEADAESBlock)
-
 		if err != nil {
 			panic(err.Error())
 		}
@@ -69,7 +67,7 @@ func SealVMessAEADHeader(key [16]byte, data []byte) []byte {
 		payloadHeaderAEADEncrypted = payloadHeaderAEAD.Seal(nil, payloadHeaderAEADNonce, data, generatedAuthID[:])
 	}
 
-	var outputBuffer = bytes.NewBuffer(nil)
+	outputBuffer := bytes.NewBuffer(nil)
 
 	common.Must2(outputBuffer.Write(generatedAuthID[:]))               // 16
 	common.Must2(outputBuffer.Write(payloadHeaderLengthAEADEncrypted)) // 2+16
@@ -112,7 +110,6 @@ func OpenVMessAEADHeader(key [16]byte, authid [16]byte, data io.Reader) ([]byte,
 		}
 
 		payloadHeaderLengthAEAD, err := cipher.NewGCM(payloadHeaderAEADAESBlock)
-
 		if err != nil {
 			panic(err.Error())
 		}
@@ -154,7 +151,6 @@ func OpenVMessAEADHeader(key [16]byte, authid [16]byte, data io.Reader) ([]byte,
 		}
 
 		payloadHeaderAEAD, err := cipher.NewGCM(payloadHeaderAEADAESBlock)
-
 		if err != nil {
 			panic(err.Error())
 		}

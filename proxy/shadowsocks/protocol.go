@@ -1,18 +1,16 @@
 package shadowsocks
 
 import (
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 )
@@ -55,81 +53,55 @@ func (r *FullReader) Read(p []byte) (n int, err error) {
 
 // ReadTCPSession reads a Shadowsocks TCP session from the given reader, returns its header and remaining parts.
 func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHeader, buf.Reader, error) {
+	behaviorSeed := validator.GetBehaviorSeed()
+	drainer, errDrain := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
 
-	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
+	if errDrain != nil {
+		return nil, nil, newError("failed to initialize drainer").Base(errDrain)
+	}
 
-	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))
-
-	behaviorRand := dice.NewDeterministicDice(int64(behaviorSeed))
-	BaseDrainSize := behaviorRand.Roll(3266)
-	RandDrainMax := behaviorRand.Roll(64) + 1
-	RandDrainRolled := dice.Roll(RandDrainMax)
-	DrainSize := BaseDrainSize + 16 + 38 + RandDrainRolled
-	readSizeRemain := DrainSize
-
-	var r2 buf.Reader
+	var r buf.Reader
 	buffer := buf.New()
 	defer buffer.Release()
 
-	var user *protocol.MemoryUser
-	var ivLen int32
-	var err error
+	if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to read 50 bytes").Base(err))
+	}
 
-	count := validator.Count()
-	if count == 0 {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("invalid user")
-	} else if count > 1 {
-		var aead cipher.AEAD
+	bs := buffer.Bytes()
+	user, aead, _, ivLen, err := validator.Get(bs, protocol.RequestCommandTCP)
 
-		if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed to read 50 bytes").Base(err)
-		}
+	switch err {
+	case ErrNotFound:
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to match an user").Base(err))
+	case ErrIVNotUnique:
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed iv check").Base(err))
+	default:
+		reader = &FullReader{reader, bs[ivLen:]}
+		drainer.AcknowledgeReceive(int(ivLen))
 
-		bs := buffer.Bytes()
-		user, aead, _, ivLen, err = validator.Get(bs, protocol.RequestCommandTCP)
-
-		if user != nil {
-			reader = &FullReader{reader, bs[ivLen:]}
+		if aead != nil {
 			auth := &crypto.AEADAuthenticator{
 				AEAD:           aead,
-				NonceGenerator: crypto.GenerateInitialAEADNonce(),
+				NonceGenerator: crypto.GenerateAEADNonceWithSize(aead.NonceSize()),
 			}
-			r2 = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
+			r = crypto.NewAuthenticationReader(auth, &crypto.AEADChunkSizeParser{
 				Auth: auth,
 			}, reader, protocol.TransferTypeStream, nil)
 		} else {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed to match an user").Base(err)
-		}
-	} else {
-		user, ivLen = validator.GetOnlyUser()
-		account := user.Account.(*MemoryAccount)
-		hashkdf.Write(account.Key)
-		var iv []byte
-		if ivLen > 0 {
-			if _, err := buffer.ReadFullFrom(reader, ivLen); err != nil {
-				readSizeRemain -= int(buffer.Len())
-				DrainConnN(reader, readSizeRemain)
-				return nil, nil, newError("failed to read IV").Base(err)
+			account := user.Account.(*MemoryAccount)
+			iv := append([]byte(nil), buffer.BytesTo(ivLen)...)
+			r, err = account.Cipher.NewDecryptionReader(account.Key, iv, reader)
+			if err != nil {
+				return nil, nil, drain.WithError(drainer, reader, newError("failed to initialize decoding stream").Base(err).AtError())
 			}
-			iv = append([]byte(nil), buffer.BytesTo(ivLen)...)
 		}
-
-		r, err := account.Cipher.NewDecryptionReader(account.Key, iv, reader)
-		if err != nil {
-			readSizeRemain -= int(buffer.Len())
-			DrainConnN(reader, readSizeRemain)
-			return nil, nil, newError("failed to initialize decoding stream").Base(err).AtError()
-		}
-		r2 = r
 	}
 
-	br := &buf.BufferedReader{Reader: r2}
+	br := &buf.BufferedReader{Reader: r}
 
 	request := &protocol.RequestHeader{
 		Version: Version,
@@ -137,31 +109,23 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 		Command: protocol.RequestCommandTCP,
 	}
 
-	readSizeRemain -= int(buffer.Len())
 	buffer.Clear()
 
 	addr, port, err := addrParser.ReadAddressPort(buffer, br)
 	if err != nil {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("failed to read address").Base(err)
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("failed to read address").Base(err))
 	}
 
 	request.Address = addr
 	request.Port = port
 
 	if request.Address == nil {
-		readSizeRemain -= int(buffer.Len())
-		DrainConnN(reader, readSizeRemain)
-		return nil, nil, newError("invalid remote address.")
+		drainer.AcknowledgeReceive(int(buffer.Len()))
+		return nil, nil, drain.WithError(drainer, reader, newError("invalid remote address."))
 	}
 
 	return request, br, nil
-}
-
-func DrainConnN(reader io.Reader, n int) error {
-	_, err := io.CopyN(ioutil.Discard, reader, int64(n))
-	return err
 }
 
 // WriteTCPRequest writes Shadowsocks request into the given writer, and returns a writer for body.
@@ -173,7 +137,10 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
-		if err := buf.WriteAllBytes(writer, iv); err != nil {
+		if ivError := account.CheckIV(iv); ivError != nil {
+			return nil, newError("failed to mark outgoing iv").Base(ivError)
+		}
+		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
 			return nil, newError("failed to write IV")
 		}
 	}
@@ -199,12 +166,28 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 func ReadTCPResponse(user *protocol.MemoryUser, reader io.Reader) (buf.Reader, error) {
 	account := user.Account.(*MemoryAccount)
 
+	hashkdf := hmac.New(sha256.New, []byte("SSBSKDF"))
+	hashkdf.Write(account.Key)
+
+	behaviorSeed := crc32.ChecksumIEEE(hashkdf.Sum(nil))
+
+	drainer, err := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
+	if err != nil {
+		return nil, newError("failed to initialize drainer").Base(err)
+	}
+
 	var iv []byte
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
-		if _, err := io.ReadFull(reader, iv); err != nil {
+		if n, err := io.ReadFull(reader, iv); err != nil {
 			return nil, newError("failed to read IV").Base(err)
+		} else { // nolint: golint
+			drainer.AcknowledgeReceive(n)
 		}
+	}
+
+	if ivError := account.CheckIV(iv); ivError != nil {
+		return nil, drain.WithError(drainer, reader, newError("failed iv check").Base(ivError))
 	}
 
 	return account.Cipher.NewDecryptionReader(account.Key, iv, reader)
@@ -218,7 +201,10 @@ func WriteTCPResponse(request *protocol.RequestHeader, writer io.Writer) (buf.Wr
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
-		if err := buf.WriteAllBytes(writer, iv); err != nil {
+		if ivError := account.CheckIV(iv); ivError != nil {
+			return nil, newError("failed to mark outgoing iv").Base(ivError)
+		}
+		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
 			return nil, newError("failed to write IV.").Base(err)
 		}
 	}
@@ -255,34 +241,25 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 		return nil, nil, newError("len(bs) <= 32")
 	}
 
-	var user *protocol.MemoryUser
-	var err error
-
-	count := validator.Count()
-	if count == 0 {
-		return nil, nil, newError("invalid user")
-	} else if count > 1 {
-		var d []byte
-		user, _, d, _, err = validator.Get(bs, protocol.RequestCommandUDP)
-
-		if user != nil {
+	user, _, d, _, err := validator.Get(bs, protocol.RequestCommandUDP)
+	switch err {
+	case ErrIVNotUnique:
+		return nil, nil, newError("failed iv check").Base(err)
+	case ErrNotFound:
+		return nil, nil, newError("failed to match an user").Base(err)
+	default:
+		account := user.Account.(*MemoryAccount)
+		if account.Cipher.IsAEAD() {
 			payload.Clear()
 			payload.Write(d)
 		} else {
-			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
-		}
-	} else {
-		user, _ = validator.GetOnlyUser()
-		account := user.Account.(*MemoryAccount)
-
-		var iv []byte
-		if !account.Cipher.IsAEAD() && account.Cipher.IVSize() > 0 {
-			// Keep track of IV as it gets removed from payload in DecodePacket.
-			iv = make([]byte, account.Cipher.IVSize())
-			copy(iv, payload.BytesTo(account.Cipher.IVSize()))
-		}
-		if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
-			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+			if account.Cipher.IVSize() > 0 {
+				iv := make([]byte, account.Cipher.IVSize())
+				copy(iv, payload.BytesTo(account.Cipher.IVSize()))
+			}
+			if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
+				return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+			}
 		}
 	}
 

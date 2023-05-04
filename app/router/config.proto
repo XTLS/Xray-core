@@ -54,6 +54,7 @@ message CIDR {
 message GeoIP {
   string country_code = 1;
   repeated CIDR cidr = 2;
+  bool reverse_match = 3;
 }
 
 message GeoIPList {
@@ -126,6 +127,7 @@ message RoutingRule {
 message BalancingRule {
   string tag = 1;
   repeated string outbound_selector = 2;
+  string strategy = 3;
 }
 
 message Config {

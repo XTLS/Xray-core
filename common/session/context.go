@@ -1,6 +1,15 @@
 package session
 
-import "context"
+import (
+	"context"
+	_ "unsafe"
+
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/routing"
+)
+
+//go:linkname IndependentCancelCtx context.newCancelCtx
+func IndependentCancelCtx(parent context.Context) context.Context
 
 type sessionKey int
 
@@ -11,6 +20,10 @@ const (
 	contentSessionKey
 	muxPreferedSessionKey
 	sockoptSessionKey
+	trackedConnectionErrorKey
+	dispatcherKey
+	timeoutOnlyKey
+	allowedNetworkKey
 )
 
 // ContextWithID returns a new context with the given ID.
@@ -83,4 +96,67 @@ func SockoptFromContext(ctx context.Context) *Sockopt {
 		return sockopt
 	}
 	return nil
+}
+
+func GetForcedOutboundTagFromContext(ctx context.Context) string {
+	if ContentFromContext(ctx) == nil {
+		return ""
+	}
+	return ContentFromContext(ctx).Attribute("forcedOutboundTag")
+}
+
+func SetForcedOutboundTagToContext(ctx context.Context, tag string) context.Context {
+	if contentFromContext := ContentFromContext(ctx); contentFromContext == nil {
+		ctx = ContextWithContent(ctx, &Content{})
+	}
+	ContentFromContext(ctx).SetAttribute("forcedOutboundTag", tag)
+	return ctx
+}
+
+type TrackedRequestErrorFeedback interface {
+	SubmitError(err error)
+}
+
+func SubmitOutboundErrorToOriginator(ctx context.Context, err error) {
+	if errorTracker := ctx.Value(trackedConnectionErrorKey); errorTracker != nil {
+		errorTracker := errorTracker.(TrackedRequestErrorFeedback)
+		errorTracker.SubmitError(err)
+	}
+}
+
+func TrackedConnectionError(ctx context.Context, tracker TrackedRequestErrorFeedback) context.Context {
+	return context.WithValue(ctx, trackedConnectionErrorKey, tracker)
+}
+
+func ContextWithDispatcher(ctx context.Context, dispatcher routing.Dispatcher) context.Context {
+	return context.WithValue(ctx, dispatcherKey, dispatcher)
+}
+
+func DispatcherFromContext(ctx context.Context) routing.Dispatcher {
+	if dispatcher, ok := ctx.Value(dispatcherKey).(routing.Dispatcher); ok {
+		return dispatcher
+	}
+	return nil
+}
+
+func ContextWithTimeoutOnly(ctx context.Context, only bool) context.Context {
+	return context.WithValue(ctx, timeoutOnlyKey, only)
+}
+
+func TimeoutOnlyFromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(timeoutOnlyKey).(bool); ok {
+		return val
+	}
+	return false
+}
+
+func ContextWithAllowedNetwork(ctx context.Context, network net.Network) context.Context {
+	return context.WithValue(ctx, allowedNetworkKey, network)
+}
+
+func AllowedNetworkFromContext(ctx context.Context) net.Network {
+	if val, ok := ctx.Value(allowedNetworkKey).(net.Network); ok {
+		return val
+	}
+	return net.Network_Unknown
 }

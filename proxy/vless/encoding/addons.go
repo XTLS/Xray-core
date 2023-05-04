@@ -4,7 +4,6 @@ import (
 	"io"
 
 	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/vless"
@@ -12,7 +11,7 @@ import (
 
 func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
 	switch addons.Flow {
-	case vless.XRO, vless.XRD:
+	case vless.XRV:
 		bytes, err := proto.Marshal(addons)
 		if err != nil {
 			return newError("failed to marshal addons protobuf value").Base(err)

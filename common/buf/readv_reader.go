@@ -1,13 +1,14 @@
+//go:build !wasm
 // +build !wasm
 
 package buf
 
 import (
 	"io"
-	"runtime"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 type allocStrategy struct {
@@ -54,17 +55,19 @@ type ReadVReader struct {
 	rawConn syscall.RawConn
 	mr      multiReader
 	alloc   allocStrategy
+	counter stats.Counter
 }
 
 // NewReadVReader creates a new ReadVReader.
-func NewReadVReader(reader io.Reader, rawConn syscall.RawConn) *ReadVReader {
+func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) *ReadVReader {
 	return &ReadVReader{
 		Reader:  reader,
 		rawConn: rawConn,
 		alloc: allocStrategy{
 			current: 1,
 		},
-		mr: newMultiReader(),
+		mr:      newMultiReader(),
+		counter: counter,
 	}
 }
 
@@ -123,10 +126,16 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 		if b.IsFull() {
 			r.alloc.Adjust(1)
 		}
+		if r.counter != nil && b != nil {
+			r.counter.Add(int64(b.Len()))
+		}
 		return MultiBuffer{b}, err
 	}
 
 	mb, err := r.readMulti()
+	if r.counter != nil && mb != nil {
+		r.counter.Add(int64(mb.Len()))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -134,17 +143,13 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return mb, nil
 }
 
-var useReadv = true
+var useReadv bool
 
 func init() {
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
 	value := platform.NewEnvFlag("xray.buf.readv").GetValue(func() string { return defaultFlagValue })
 	switch value {
-	case defaultFlagValue, "auto":
-		if (runtime.GOARCH == "386" || runtime.GOARCH == "amd64" || runtime.GOARCH == "s390x") && (runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows") {
-			useReadv = true
-		}
-	case "enable":
+	case defaultFlagValue, "auto", "enable":
 		useReadv = true
 	}
 }

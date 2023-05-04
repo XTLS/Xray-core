@@ -11,9 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 )
 
-var (
-	_ buf.Writer = (*connection)(nil)
-)
+var _ buf.Writer = (*connection)(nil)
 
 // connection is a wrapper for net.Conn over WebSocket connection.
 type connection struct {

@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -142,7 +143,6 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		Reader: downlinkReader,
 		Writer: upLinkWriter,
 	}, f.Strategy)
-
 	if err != nil {
 		return nil, err
 	}
@@ -175,8 +175,10 @@ type ClientWorker struct {
 	strategy       ClientStrategy
 }
 
-var muxCoolAddress = net.DomainAddress("v1.mux.cool")
-var muxCoolPort = net.Port(9527)
+var (
+	muxCoolAddress = net.DomainAddress("v1.mux.cool")
+	muxCoolPort    = net.Port(9527)
+)
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
@@ -246,22 +248,20 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 		transferType = protocol.TransferTypePacket
 	}
 	s.transferType = transferType
-	writer := NewWriter(s.ID, dest, output, transferType)
-	defer s.Close()
+	writer := NewWriter(s.ID, dest, output, transferType, xudp.GetGlobalID(ctx))
+	defer s.Close(false)
 	defer writer.Close()
 
 	newError("dispatching request to ", dest).WriteToLog(session.ExportIDToError(ctx))
 	if err := writeFirstPayload(s.input, writer); err != nil {
 		newError("failed to write first payload").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		writer.hasError = true
-		common.Interrupt(s.input)
 		return
 	}
 
 	if err := buf.Copy(s.input, writer); err != nil {
 		newError("failed to fetch all input").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		writer.hasError = true
-		common.Interrupt(s.input)
 		return
 	}
 }
@@ -334,15 +334,8 @@ func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 	err := buf.Copy(rr, s.output)
 	if err != nil && buf.IsWriteError(err) {
 		newError("failed to write to downstream. closing session ", s.ID).Base(err).WriteToLog()
-
-		// Notify remote peer to close this session.
-		closingWriter := NewResponseWriter(meta.SessionID, m.link.Writer, protocol.TransferTypeStream)
-		closingWriter.Close()
-
-		drainErr := buf.Copy(rr, buf.Discard)
-		common.Interrupt(s.input)
-		s.Close()
-		return drainErr
+		s.Close(false)
+		return buf.Copy(rr, buf.Discard)
 	}
 
 	return err
@@ -350,11 +343,7 @@ func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 
 func (m *ClientWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReader) error {
 	if s, found := m.sessionManager.Get(meta.SessionID); found {
-		if meta.Option.Has(OptionError) {
-			common.Interrupt(s.input)
-			common.Interrupt(s.output)
-		}
-		s.Close()
+		s.Close(false)
 	}
 	if meta.Option.Has(OptionData) {
 		return buf.Copy(NewStreamReader(reader), buf.Discard)

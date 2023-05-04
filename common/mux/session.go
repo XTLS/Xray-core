@@ -1,12 +1,16 @@
 package mux
 
 import (
+	"io"
+	"runtime"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type SessionManager struct {
@@ -61,21 +65,25 @@ func (m *SessionManager) Allocate() *Session {
 	return s
 }
 
-func (m *SessionManager) Add(s *Session) {
+func (m *SessionManager) Add(s *Session) bool {
 	m.Lock()
 	defer m.Unlock()
 
 	if m.closed {
-		return
+		return false
 	}
 
 	m.count++
 	m.sessions[s.ID] = s
+	return true
 }
 
-func (m *SessionManager) Remove(id uint16) {
-	m.Lock()
-	defer m.Unlock()
+func (m *SessionManager) Remove(locked bool, id uint16) {
+	if !locked {
+		m.Lock()
+		defer m.Unlock()
+	}
+	locked = true
 
 	if m.closed {
 		return
@@ -83,9 +91,11 @@ func (m *SessionManager) Remove(id uint16) {
 
 	delete(m.sessions, id)
 
-	if len(m.sessions) == 0 {
-		m.sessions = make(map[uint16]*Session, 16)
-	}
+	/*
+		if len(m.sessions) == 0 {
+			m.sessions = make(map[uint16]*Session, 16)
+		}
+	*/
 }
 
 func (m *SessionManager) Get(id uint16) (*Session, bool) {
@@ -127,8 +137,7 @@ func (m *SessionManager) Close() error {
 	m.closed = true
 
 	for _, s := range m.sessions {
-		common.Close(s.input)
-		common.Close(s.output)
+		s.Close(true)
 	}
 
 	m.sessions = nil
@@ -142,13 +151,40 @@ type Session struct {
 	parent       *SessionManager
 	ID           uint16
 	transferType protocol.TransferType
+	closed       bool
+	XUDP         *XUDP
 }
 
 // Close closes all resources associated with this session.
-func (s *Session) Close() error {
-	common.Close(s.output)
-	common.Close(s.input)
-	s.parent.Remove(s.ID)
+func (s *Session) Close(locked bool) error {
+	if !locked {
+		s.parent.Lock()
+		defer s.parent.Unlock()
+	}
+	locked = true
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	if s.XUDP == nil {
+		common.Interrupt(s.input)
+		common.Close(s.output)
+	} else {
+		// Stop existing handle(), then trigger writer.Close().
+		// Note that s.output may be dispatcher.SizeStatWriter.
+		s.input.(*pipe.Reader).ReturnAnError(io.EOF)
+		runtime.Gosched()
+		// If the error set by ReturnAnError still exists, clear it.
+		s.input.(*pipe.Reader).Recover()
+		XUDPManager.Lock()
+		if s.XUDP.Status == Active {
+			s.XUDP.Expire = time.Now().Add(time.Minute)
+			s.XUDP.Status = Expiring
+			newError("XUDP put ", s.XUDP.GlobalID).AtDebug().WriteToLog()
+		}
+		XUDPManager.Unlock()
+	}
+	s.parent.Remove(locked, s.ID)
 	return nil
 }
 
@@ -158,4 +194,46 @@ func (s *Session) NewReader(reader *buf.BufferedReader, dest *net.Destination) b
 		return NewStreamReader(reader)
 	}
 	return NewPacketReader(reader, dest)
+}
+
+const (
+	Initializing = 0
+	Active       = 1
+	Expiring     = 2
+)
+
+type XUDP struct {
+	GlobalID [8]byte
+	Status   uint64
+	Expire   time.Time
+	Mux      *Session
+}
+
+func (x *XUDP) Interrupt() {
+	common.Interrupt(x.Mux.input)
+	common.Close(x.Mux.output)
+}
+
+var XUDPManager struct {
+	sync.Mutex
+	Map map[[8]byte]*XUDP
+}
+
+func init() {
+	XUDPManager.Map = make(map[[8]byte]*XUDP)
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			now := time.Now()
+			XUDPManager.Lock()
+			for id, x := range XUDPManager.Map {
+				if x.Status == Expiring && now.After(x.Expire) {
+					x.Interrupt()
+					delete(XUDPManager.Map, id)
+					newError("XUDP del ", id).AtDebug().WriteToLog()
+				}
+			}
+			XUDPManager.Unlock()
+		}
+	}()
 }

@@ -2,11 +2,9 @@ package trojan
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -14,33 +12,25 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 func init() {
 	common.Must(common.RegisterConfig((*ServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return NewServer(ctx, config.(*ServerConfig))
 	}))
-
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-
-	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
-	if xtlsShow == "true" {
-		xtls_show = true
-	}
 }
 
 // Server is an inbound connection handler that handles messages in trojan protocol.
@@ -141,11 +131,11 @@ func (s *Server) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (s *Server) Process(ctx context.Context, network net.Network, conn internet.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	sid := session.ExportIDToError(ctx)
 
 	iConn := conn
-	statConn, ok := iConn.(*internet.StatCouterConnection)
+	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
 		iConn = statConn.Connection
 	}
@@ -155,9 +145,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	first := buf.New()
-	defer first.Release()
-
+	first := buf.FromBytes(make([]byte, buf.Size))
+	first.Clear()
 	firstLen, err := first.ReadFrom(conn)
 	if err != nil {
 		return newError("failed to read first request").Base(err)
@@ -228,44 +217,12 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	if inbound == nil {
 		panic("no inbound metadata")
 	}
+	inbound.Name = "trojan"
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
-	}
-
-	// handle tcp request
-	account, ok := user.Account.(*MemoryAccount)
-	if !ok {
-		return newError("user account is not valid")
-	}
-
-	var rawConn syscall.RawConn
-
-	switch clientReader.Flow {
-	case XRO, XRD:
-		if account.Flow == clientReader.Flow {
-			if destination.Address.Family().IsDomain() && destination.Address.Domain() == muxCoolAddress {
-				return newError(clientReader.Flow + " doesn't support Mux").AtWarning()
-			}
-			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-				xtlsConn.RPRX = true
-				xtlsConn.SHOW = xtls_show
-				xtlsConn.MARK = "XTLS"
-				if clientReader.Flow == XRD {
-					xtlsConn.DirectMode = true
-					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
-					}
-				}
-			} else {
-				return newError(`failed to use ` + clientReader.Flow + `, maybe "security" is not "xtls"`).AtWarning()
-			}
-		} else {
-			return newError(account.Password + " is not able to use " + clientReader.Flow).AtWarning()
-		}
-	case "":
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -277,7 +234,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	})
 
 	newError("received request for ", destination).WriteToLog(sid)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher, iConn, rawConn, statConn)
+	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher, iConn, statConn)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
@@ -343,7 +300,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Session,
 	destination net.Destination,
 	clientReader buf.Reader,
-	clientWriter buf.Writer, dispatcher routing.Dispatcher, iConn internet.Connection, rawConn syscall.RawConn, statConn *internet.StatCouterConnection) error {
+	clientWriter buf.Writer, dispatcher routing.Dispatcher, iConn stat.Connection, statConn *stat.CounterConnection,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
@@ -355,18 +313,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		var err error
-		if rawConn != nil {
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.ReadCounter
-			}
-			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
-		} else {
-			err = buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer))
-		}
-		if err != nil {
+		if buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer)) != nil {
 			return newError("failed to transfer request").Base(err)
 		}
 		return nil
@@ -381,7 +328,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 		return nil
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))
@@ -391,7 +338,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 	return nil
 }
 
-func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection internet.Connection, iConn internet.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
+func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection stat.Connection, iConn stat.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
 	}
@@ -405,8 +352,8 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		alpn = cs.NegotiatedProtocol
 		newError("realName = " + name).AtInfo().WriteToLog(sid)
 		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-	} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-		cs := xtlsConn.ConnectionState()
+	} else if realityConn, ok := iConn.(*reality.Conn); ok {
+		cs := realityConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
 		newError("realName = " + name).AtInfo().WriteToLog(sid)

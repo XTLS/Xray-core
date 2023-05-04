@@ -4,9 +4,6 @@ import (
 	"testing"
 	"time"
 
-	xproxy "golang.org/x/net/proxy"
-	socks4 "h12.io/socks"
-
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
@@ -20,6 +17,8 @@ import (
 	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
+	xproxy "golang.org/x/net/proxy"
+	socks4 "h12.io/socks"
 )
 
 func TestSocksBridgeTCP(t *testing.T) {
@@ -35,8 +34,8 @@ func TestSocksBridgeTCP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
 					AuthType: socks.AuthType_PASSWORD,
@@ -60,8 +59,8 @@ func TestSocksBridgeTCP(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(clientPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
@@ -111,44 +110,71 @@ func TestSocksBridageUDP(t *testing.T) {
 	common.Must(err)
 	defer udpServer.Close()
 
+	retry := 1
 	serverPort := tcp.PickPort()
-	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
-					AuthType: socks.AuthType_PASSWORD,
-					Accounts: map[string]string{
-						"Test Account": "Test Password",
-					},
-					Address:    net.NewIPOrDomain(net.LocalHostIP),
-					UdpEnabled: true,
-				}),
+	for {
+		serverConfig := &core.Config{
+			Inbound: []*core.InboundHandlerConfig{
+				{
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					}),
+					ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
+						AuthType: socks.AuthType_PASSWORD,
+						Accounts: map[string]string{
+							"Test Account": "Test Password",
+						},
+						Address:    net.NewIPOrDomain(net.LocalHostIP),
+						UdpEnabled: true,
+					}),
+				},
+				{
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort + 1)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					}),
+					ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+						Address: net.NewIPOrDomain(dest.Address),
+						Port:    uint32(dest.Port),
+						NetworkList: &net.NetworkList{
+							Network: []net.Network{net.Network_UDP},
+						},
+					}),
+				},
 			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+			Outbound: []*core.OutboundHandlerConfig{
+				{
+					ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				},
 			},
-		},
+		}
+
+		server, _ := InitializeServerConfig(serverConfig)
+		if server != nil && WaitConnAvailableWithTest(t, testUDPConn(serverPort+1, 1024, time.Second*2)) {
+			defer CloseServer(server)
+			break
+		}
+		retry++
+		if retry > 5 {
+			t.Fatal("All attempts failed to start server")
+		}
+		serverPort = tcp.PickPort()
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(clientPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
 					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP, net.Network_UDP},
+						Network: []net.Network{net.Network_UDP},
 					},
 				}),
 			},
@@ -175,12 +201,12 @@ func TestSocksBridageUDP(t *testing.T) {
 		},
 	}
 
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	server, err := InitializeServerConfig(clientConfig)
 	common.Must(err)
-	defer CloseAllServers(servers)
+	defer CloseServer(server)
 
-	if err := testUDPConn(clientPort, 1024, time.Second*5)(); err != nil {
-		t.Error(err)
+	if !WaitConnAvailableWithTest(t, testUDPConn(clientPort, 1024, time.Second*2)) {
+		t.Fail()
 	}
 }
 
@@ -192,58 +218,86 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 	common.Must(err)
 	defer udpServer.Close()
 
+	retry := 1
 	serverPort := tcp.PickPort()
-	serverConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&router.Config{
-				Rule: []*router.RoutingRule{
-					{
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "out",
+	for {
+		serverConfig := &core.Config{
+			App: []*serial.TypedMessage{
+				serial.ToTypedMessage(&router.Config{
+					Rule: []*router.RoutingRule{
+						{
+							TargetTag: &router.RoutingRule_Tag{
+								Tag: "out",
+							},
+							InboundTag: []string{"socks", "dokodemo"},
 						},
-						InboundTag: []string{"socks"},
 					},
+				}),
+			},
+			Inbound: []*core.InboundHandlerConfig{
+				{
+					Tag: "socks",
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					}),
+					ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
+						AuthType:   socks.AuthType_NO_AUTH,
+						Address:    net.NewIPOrDomain(net.LocalHostIP),
+						UdpEnabled: true,
+					}),
 				},
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				Tag: "socks",
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(serverPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
-					AuthType:   socks.AuthType_NO_AUTH,
-					Address:    net.NewIPOrDomain(net.LocalHostIP),
-					UdpEnabled: true,
-				}),
+				{
+					Tag: "dokodemo",
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort + 1)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					}),
+					ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+						Address: net.NewIPOrDomain(dest.Address),
+						Port:    uint32(dest.Port),
+						NetworkList: &net.NetworkList{
+							Network: []net.Network{net.Network_UDP},
+						},
+					}),
+				},
 			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+			Outbound: []*core.OutboundHandlerConfig{
+				{
+					ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+				},
+				{
+					Tag:           "out",
+					ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				},
 			},
-			{
-				Tag:           "out",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
-			},
-		},
+		}
+
+		server, _ := InitializeServerConfig(serverConfig)
+		if server != nil && WaitConnAvailableWithTest(t, testUDPConn(serverPort+1, 1024, time.Second*2)) {
+			defer CloseServer(server)
+			break
+		}
+		retry++
+		if retry > 5 {
+			t.Fatal("All attempts failed to start server")
+		}
+		serverPort = tcp.PickPort()
 	}
 
-	clientPort := tcp.PickPort()
+	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(clientPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
 					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP, net.Network_UDP},
+						Network: []net.Network{net.Network_UDP},
 					},
 				}),
 			},
@@ -262,12 +316,12 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 		},
 	}
 
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	server, err := InitializeServerConfig(clientConfig)
 	common.Must(err)
-	defer CloseAllServers(servers)
+	defer CloseServer(server)
 
-	if err := testUDPConn(clientPort, 1024, time.Second*5)(); err != nil {
-		t.Error(err)
+	if !WaitConnAvailableWithTest(t, testUDPConn(clientPort, 1024, time.Second*2)) {
+		t.Fail()
 	}
 }
 
@@ -285,8 +339,8 @@ func TestSocksConformanceMod(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(authPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(authPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
 					AuthType: socks.AuthType_PASSWORD,
@@ -299,8 +353,8 @@ func TestSocksConformanceMod(t *testing.T) {
 			},
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortRange: net.SinglePortRange(noAuthPort),
-					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(noAuthPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
 					AuthType: socks.AuthType_NO_AUTH,

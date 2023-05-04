@@ -17,7 +17,7 @@ type pkcs8 struct {
 	Version    int
 	Algo       pkix.AlgorithmIdentifier
 	PrivateKey []byte
-	// optional attributes omitted.
+	// Optional attributes omitted.
 }
 
 type pkcs1AdditionalRSAPrime struct {

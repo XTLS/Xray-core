@@ -27,9 +27,7 @@ func (r *CryptionReader) Read(data []byte) (int, error) {
 	return nBytes, err
 }
 
-var (
-	_ buf.Writer = (*CryptionWriter)(nil)
-)
+var _ buf.Writer = (*CryptionWriter)(nil)
 
 type CryptionWriter struct {
 	stream    cipher.Stream
@@ -50,7 +48,7 @@ func NewCryptionWriter(stream cipher.Stream, writer io.Writer) *CryptionWriter {
 func (w *CryptionWriter) Write(data []byte) (int, error) {
 	w.stream.XORKeyStream(data, data)
 
-	if err := buf.WriteAllBytes(w.writer, data); err != nil {
+	if err := buf.WriteAllBytes(w.writer, data, nil); err != nil {
 		return 0, err
 	}
 	return len(data), nil

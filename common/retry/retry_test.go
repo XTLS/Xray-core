@@ -9,9 +9,7 @@ import (
 	. "github.com/xtls/xray-core/common/retry"
 )
 
-var (
-	errorTestOnly = errors.New("this is a fake error")
-)
+var errorTestOnly = errors.New("this is a fake error")
 
 func TestNoRetry(t *testing.T) {
 	startTime := time.Now().Unix()

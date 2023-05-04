@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -28,8 +27,7 @@ func TestRequestSerialization(t *testing.T) {
 	}
 	id := uuid.New()
 	account := &vmess.Account{
-		Id:      id.String(),
-		AlterId: 0,
+		Id: id.String(),
 	}
 	user.Account = toAccount(account)
 
@@ -43,7 +41,7 @@ func TestRequestSerialization(t *testing.T) {
 	}
 
 	buffer := buf.New()
-	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash)
+	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash, 0)
 	common.Must(client.EncodeRequestHeader(expectedRequest, buffer))
 
 	buffer2 := buf.New()
@@ -78,8 +76,7 @@ func TestInvalidRequest(t *testing.T) {
 	}
 	id := uuid.New()
 	account := &vmess.Account{
-		Id:      id.String(),
-		AlterId: 0,
+		Id: id.String(),
 	}
 	user.Account = toAccount(account)
 
@@ -93,7 +90,7 @@ func TestInvalidRequest(t *testing.T) {
 	}
 
 	buffer := buf.New()
-	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash)
+	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash, 0)
 	common.Must(client.EncodeRequestHeader(expectedRequest, buffer))
 
 	buffer2 := buf.New()
@@ -120,8 +117,7 @@ func TestMuxRequest(t *testing.T) {
 	}
 	id := uuid.New()
 	account := &vmess.Account{
-		Id:      id.String(),
-		AlterId: 0,
+		Id: id.String(),
 	}
 	user.Account = toAccount(account)
 
@@ -134,7 +130,7 @@ func TestMuxRequest(t *testing.T) {
 	}
 
 	buffer := buf.New()
-	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash)
+	client := NewClientSession(context.TODO(), true, protocol.DefaultIDHash, 0)
 	common.Must(client.EncodeRequestHeader(expectedRequest, buffer))
 
 	buffer2 := buf.New()

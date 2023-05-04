@@ -68,6 +68,6 @@ func executeAddInbounds(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("failed to add inbound: %s", err)
 		}
-		showResponese(resp)
+		showJSONResponse(resp)
 	}
 }

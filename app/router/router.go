@@ -29,7 +29,7 @@ type Route struct {
 }
 
 // Init initializes the Router.
-func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error {
+func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm outbound.Manager) error {
 	r.domainStrategy = config.DomainStrategy
 	r.dns = d
 
@@ -39,6 +39,7 @@ func (r *Router) Init(config *Config, d dns.Client, ohm outbound.Manager) error 
 		if err != nil {
 			return err
 		}
+		balancer.InjectContext(ctx)
 		r.balancers[rule.Tag] = balancer
 	}
 
@@ -80,7 +81,12 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
-	if r.domainStrategy == Config_IpOnDemand {
+	// SkipDNSResolve is set from DNS module.
+	// the DOH remote server maybe a domain name,
+	// this prevents cycle resolving dead loop
+	skipDNSResolve := ctx.GetSkipDNSResolve()
+
+	if r.domainStrategy == Config_IpOnDemand && !skipDNSResolve {
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
@@ -90,7 +96,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		}
 	}
 
-	if r.domainStrategy != Config_IpIfNonMatch || len(ctx.GetTargetDomain()) == 0 {
+	if r.domainStrategy != Config_IpIfNonMatch || len(ctx.GetTargetDomain()) == 0 || skipDNSResolve {
 		return nil, ctx, common.ErrNoClue
 	}
 
@@ -116,7 +122,7 @@ func (*Router) Close() error {
 	return nil
 }
 
-// Type implement common.HasType.
+// Type implements common.HasType.
 func (*Router) Type() interface{} {
 	return routing.RouterType()
 }
@@ -135,7 +141,7 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		r := new(Router)
 		if err := core.RequireFeatures(ctx, func(d dns.Client, ohm outbound.Manager) error {
-			return r.Init(config.(*Config), d, ohm)
+			return r.Init(ctx, config.(*Config), d, ohm)
 		}); err != nil {
 			return nil, err
 		}

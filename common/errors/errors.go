@@ -2,7 +2,6 @@
 package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
-	"os"
 	"reflect"
 	"strings"
 
@@ -13,8 +12,8 @@ import (
 const trim = len("github.com/xtls/xray-core/")
 
 type hasInnerError interface {
-	// Inner returns the underlying error of this one.
-	Inner() error
+	// Unwrap returns the underlying error of this one.
+	Unwrap() error
 }
 
 type hasSeverity interface {
@@ -72,8 +71,8 @@ func (err *Error) Error() string {
 	return builder.String()
 }
 
-// Inner implements hasInnerError.Inner()
-func (err *Error) Inner() error {
+// Unwrap implements hasInnerError.Unwrap()
+func (err *Error) Unwrap() error {
 	if err.inner == nil {
 		return nil
 	}
@@ -171,20 +170,10 @@ L:
 	for {
 		switch inner := err.(type) {
 		case hasInnerError:
-			if inner.Inner() == nil {
+			if inner.Unwrap() == nil {
 				break L
 			}
-			err = inner.Inner()
-		case *os.PathError:
-			if inner.Err == nil {
-				break L
-			}
-			err = inner.Err
-		case *os.SyscallError:
-			if inner.Err == nil {
-				break L
-			}
-			err = inner.Err
+			err = inner.Unwrap()
 		default:
 			break L
 		}

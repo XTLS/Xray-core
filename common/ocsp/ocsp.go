@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 
-	"golang.org/x/crypto/ocsp"
-
 	"github.com/xtls/xray-core/common/platform/filesystem"
+	"golang.org/x/crypto/ocsp"
 )
 
 func GetOCSPForFile(path string) ([]byte, error) {
@@ -56,7 +55,6 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 	pemBundle := bundle.Bytes()
 
 	certificates, err := parsePEMBundle(pemBundle)
-
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +72,7 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 		}
 		defer resp.Body.Close()
 
-		issuerBytes, errC := ioutil.ReadAll(resp.Body)
+		issuerBytes, errC := io.ReadAll(resp.Body)
 		if errC != nil {
 			return nil, newError(errC)
 		}
@@ -98,13 +96,11 @@ func GetOCSPForCert(cert [][]byte) ([]byte, error) {
 		return nil, newError(err)
 	}
 	defer req.Body.Close()
-	ocspResBytes, err := ioutil.ReadAll(req.Body)
-
+	ocspResBytes, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, newError(err)
 	}
 	return ocspResBytes, nil
-
 }
 
 // parsePEMBundle parses a certificate bundle from top to bottom and returns

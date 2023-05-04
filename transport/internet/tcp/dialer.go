@@ -7,12 +7,13 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 // Dial dials a new TCP connection to the given destination.
-func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (internet.Connection, error) {
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	newError("dialing TCP to ", dest).WriteToLog(session.ExportIDToError(ctx))
 	conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
@@ -21,7 +22,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
-		if fingerprint, ok := tls.Fingerprints[config.Fingerprint]; ok {
+		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
 			if err := conn.(*tls.UConn).Handshake(); err != nil {
 				return nil, err
@@ -29,9 +30,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		} else {
 			conn = tls.Client(conn, tlsConfig)
 		}
-	} else if config := xtls.ConfigFromStreamSettings(streamSettings); config != nil {
-		xtlsConfig := config.GetXTLSConfig(xtls.WithDestination(dest))
-		conn = xtls.Client(conn, xtlsConfig)
+	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
+		if conn, err = reality.UClient(conn, config, ctx, dest); err != nil {
+			return nil, err
+		}
 	}
 
 	tcpSettings := streamSettings.ProtocolSettings.(*Config)
@@ -46,7 +48,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		conn = auth.Client(conn)
 	}
-	return internet.Connection(conn), nil
+	return stat.Connection(conn), nil
 }
 
 func init() {
