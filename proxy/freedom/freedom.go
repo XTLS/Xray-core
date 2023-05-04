@@ -65,9 +65,9 @@ func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Ad
 		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && ((localAddr != nil && localAddr.Family().IsIPv6()) || h.config.preferIP6()),
 	})
 	{ // Resolve fallback
-		if (len(ips) == 0 || err != nil) && h.config.fallbackIP() && localAddr == nil {
+		if (len(ips) == 0 || err != nil) && h.config.hasFallback() && localAddr == nil {
 			ips, err = h.dns.LookupIP(domain, dns.IPOption{
-				IPv4Enable: !h.config.fallbackIP6(),
+				IPv4Enable: h.config.fallbackIP4(),
 				IPv6Enable: h.config.fallbackIP6(),
 			})
 		}
@@ -116,7 +116,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
-		if h.config.useIP() && dialDest.Address.Family().IsDomain() {
+		if h.config.hasStrategy() && dialDest.Address.Family().IsDomain() {
 			ip := h.resolveIP(ctx, dialDest.Address.Domain(), dialer.Address())
 			if ip != nil {
 				dialDest = net.Destination{
@@ -292,7 +292,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.UDPOverride.Port != 0 {
 				b.UDP.Port = w.UDPOverride.Port
 			}
-			if w.Handler.config.useIP() && b.UDP.Address.Family().IsDomain() {
+			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
 				ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
 				if ip != nil {
 					b.UDP.Address = ip
