@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -515,7 +514,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, setUser(&ctx, cancel), sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
@@ -621,15 +620,4 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	return nil
-}
-
-func setUser(ctx *context.Context, cancel context.CancelFunc) context.CancelFunc {
-	atomic.AddInt32(&session.InboundFromContext(*ctx).User.Count, 1)
-
-	return func() {
-		_ = cancel
-		atomic.AddInt32(&session.InboundFromContext(*ctx).User.Count, -1)
-		//user := session.InboundFromContext(ctx).User
-		//fmt.Println(user.Email + "连接数" + strconv.Itoa(int(user.Count)))
-	}
 }

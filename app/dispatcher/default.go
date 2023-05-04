@@ -299,9 +299,6 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		Target: destination,
 	}
 	ctx = session.ContextWithOutbound(ctx, ob)
-
-	inbound, outbound := d.getLink(ctx)
-	inbound, outbound = d.rateLimiter(ctx, inbound, outbound)
 	content := session.ContentFromContext(ctx)
 	if content == nil {
 		content = new(session.Content)
@@ -310,6 +307,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx, destination.Network, sniffingRequest)
+	inbound, outbound = d.rateLimiter(ctx, inbound, outbound)
 	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
@@ -385,7 +383,6 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	defer payload.Release()
 
 	sniffer := NewSniffer(ctx)
-
 	metaresult, metadataErr := sniffer.SniffMetadata(ctx)
 
 	if metadataOnly {
