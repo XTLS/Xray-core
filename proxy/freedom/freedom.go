@@ -61,14 +61,14 @@ func (h *Handler) policy() policy.Session {
 
 func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
 	ips, err := h.dns.LookupIP(domain, dns.IPOption{
-		IPv4Enable: (localAddr == nil || !localAddr.Family().IsIPv6()) && ((localAddr != nil && localAddr.Family().IsIPv4()) || h.config.preferIP4()),
-		IPv6Enable: (localAddr == nil || !localAddr.Family().IsIPv4()) && ((localAddr != nil && localAddr.Family().IsIPv6()) || h.config.preferIP6()),
+		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && ((localAddr != nil && localAddr.Family().IsIPv4()) || h.config.preferIP4()),
+		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && ((localAddr != nil && localAddr.Family().IsIPv6()) || h.config.preferIP6()),
 	})
 	{ // Resolve fallback
 		if (len(ips) == 0 || err != nil) && h.config.fallbackIP() && localAddr == nil {
 			ips, err = h.dns.LookupIP(domain, dns.IPOption{
-				IPv4Enable: (localAddr != nil && localAddr.Family().IsIPv4()) || !h.config.fallbackIP6(),
-				IPv6Enable: (localAddr != nil && localAddr.Family().IsIPv6()) || h.config.fallbackIP6(),
+				IPv4Enable: !h.config.fallbackIP6(),
+				IPv6Enable: h.config.fallbackIP6(),
 			})
 		}
 	}
