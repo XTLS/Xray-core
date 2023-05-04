@@ -340,24 +340,35 @@ func TestMuxConfig_Build(t *testing.T) {
 		want   *proxyman.MultiplexingConfig
 	}{
 		{"default", `{"enabled": true, "concurrency": 16}`, &proxyman.MultiplexingConfig{
-			Enabled:     true,
-			Concurrency: 16,
+			Enabled:         true,
+			Concurrency:     16,
+			XudpConcurrency: 0,
+			XudpProxyUDP443: "reject",
 		}},
 		{"empty def", `{}`, &proxyman.MultiplexingConfig{
-			Enabled:     false,
-			Concurrency: 8,
+			Enabled:         false,
+			Concurrency:     0,
+			XudpConcurrency: 0,
+			XudpProxyUDP443: "reject",
 		}},
 		{"not enable", `{"enabled": false, "concurrency": 4}`, &proxyman.MultiplexingConfig{
-			Enabled:     false,
-			Concurrency: 4,
+			Enabled:         false,
+			Concurrency:     4,
+			XudpConcurrency: 0,
+			XudpProxyUDP443: "reject",
 		}},
-		{"forbidden", `{"enabled": false, "concurrency": -1}`, nil},
+		{"forbidden", `{"enabled": false, "concurrency": -1}`, &proxyman.MultiplexingConfig{
+			Enabled:         false,
+			Concurrency:     -1,
+			XudpConcurrency: 0,
+			XudpProxyUDP443: "reject",
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &MuxConfig{}
 			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			if got := m.Build(); !reflect.DeepEqual(got, tt.want) {
+			if got, _ := m.Build(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
 			}
 		})

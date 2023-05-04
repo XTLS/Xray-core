@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -109,33 +108,27 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 }
 
 type MuxConfig struct {
-	Enabled     bool   `json:"enabled"`
-	Concurrency int16  `json:"concurrency"`
-	Only        string `json:"only"`
+	Enabled         bool   `json:"enabled"`
+	Concurrency     int16  `json:"concurrency"`
+	XudpConcurrency int16  `json:"xudpConcurrency"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
-func (m *MuxConfig) Build() *proxyman.MultiplexingConfig {
-	if m.Concurrency < 0 {
-		return nil
+func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
+	switch m.XudpProxyUDP443 {
+	case "":
+		m.XudpProxyUDP443 = "reject"
+	case "reject", "allow", "skip":
+	default:
+		return nil, newError(`unknown "xudpProxyUDP443": `, m.XudpProxyUDP443)
 	}
-	if m.Concurrency == 0 {
-		m.Concurrency = 8
-	}
-
-	config := &proxyman.MultiplexingConfig{
-		Enabled:     m.Enabled,
-		Concurrency: uint32(m.Concurrency),
-	}
-
-	switch strings.ToLower(m.Only) {
-	case "tcp":
-		config.Only = uint32(net.Network_TCP)
-	case "udp":
-		config.Only = uint32(net.Network_UDP)
-	}
-
-	return config
+	return &proxyman.MultiplexingConfig{
+		Enabled:         m.Enabled,
+		Concurrency:     int32(m.Concurrency),
+		XudpConcurrency: int32(m.XudpConcurrency),
+		XudpProxyUDP443: m.XudpProxyUDP443,
+	}, nil
 }
 
 type InboundDetourAllocationConfig struct {
@@ -351,7 +344,11 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 
 	if c.MuxSettings != nil {
-		senderSettings.MultiplexSettings = c.MuxSettings.Build()
+		ms, err := c.MuxSettings.Build()
+		if err != nil {
+			return nil, newError("failed to build Mux config.").Base(err)
+		}
+		senderSettings.MultiplexSettings = ms
 	}
 
 	settings := []byte("{}")

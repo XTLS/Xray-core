@@ -215,7 +215,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 			newError("failed to lookup ip for domain ", domain, " at server ", client.Name()).Base(err).WriteToLog()
 			errs = append(errs, err)
 		}
-		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch {
+		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch && err != dns.ErrEmptyResponse {
 			return nil, err
 		}
 	}

@@ -24,7 +24,6 @@ import (
 type ClientManager struct {
 	Enabled bool // wheather mux is enabled from user config
 	Picker  WorkerPicker
-	Only    uint32
 }
 
 func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) error {

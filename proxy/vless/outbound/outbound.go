@@ -135,13 +135,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		fallthrough
 	case vless.XRV:
 		switch request.Command {
-		case protocol.RequestCommandMux:
-			return newError(requestAddons.Flow + " doesn't support Mux").AtWarning()
 		case protocol.RequestCommandUDP:
 			if !allowUDP443 && request.Port == 443 {
-				return newError(requestAddons.Flow + " stopped UDP/443").AtInfo()
+				return newError("XTLS rejected UDP/443 traffic").AtInfo()
 			}
 			requestAddons.Flow = ""
+		case protocol.RequestCommandMux:
+			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP:
 			var t reflect.Type
 			var p uintptr
@@ -158,7 +158,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				t = reflect.TypeOf(realityConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(realityConn.Conn))
 			} else {
-				return newError("XTLS only supports TCP, mKCP and DomainSocket for now.").AtWarning()
+				return newError("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 			}
 			if sc, ok := netConn.(syscall.Conn); ok {
 				rawConn, _ = sc.SyscallConn()

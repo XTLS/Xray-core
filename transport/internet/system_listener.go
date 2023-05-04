@@ -10,21 +10,26 @@ import (
 	"time"
 
 	"github.com/pires/go-proxyproto"
+	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 )
 
 var effectiveListener = DefaultListener{}
 
-type controller func(network, address string, fd uintptr) error
-
 type DefaultListener struct {
-	controllers []controller
+	controllers []control.Func
 }
 
-func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []controller) func(network, address string, c syscall.RawConn) error {
+func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []control.Func) func(network, address string, c syscall.RawConn) error {
 	return func(network, address string, c syscall.RawConn) error {
 		return c.Control(func(fd uintptr) {
+			for _, controller := range controllers {
+				if err := controller(network, address, c); err != nil {
+					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				}
+			}
+
 			if sockopt != nil {
 				if err := applyInboundSocketOptions(network, fd, sockopt); err != nil {
 					newError("failed to apply socket options to incoming connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
@@ -32,12 +37,6 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 			}
 
 			setReusePort(fd)
-
-			for _, controller := range controllers {
-				if err := controller(network, address, fd); err != nil {
-					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
-				}
-			}
 		})
 	}
 }
@@ -117,7 +116,7 @@ func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sock
 // The controller can be used to operate on file descriptors before they are put into use.
 //
 // xray:api:beta
-func RegisterListenerController(controller func(network, address string, fd uintptr) error) error {
+func RegisterListenerController(controller control.Func) error {
 	if controller == nil {
 		return newError("nil listener controller")
 	}
