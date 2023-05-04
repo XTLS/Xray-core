@@ -20,9 +20,9 @@ type FreedomConfig struct {
 }
 
 type Fragment struct {
-	Interval     string `json:"interval"`
-	Length       string `json:"length"`
-	PacketNumber *int   `json:"packetNumber"`
+	Packets  string `json:"packets"`
+	Length   string `json:"length"`
+	Interval string `json:"interval"`
 }
 
 // Build implements Buildable
@@ -82,10 +82,33 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			MaxLength:   int32(maxLength),
 		}
 
-		if c.Fragment.PacketNumber != nil {
-			config.Fragment.PacketNumber = int32(*c.Fragment.PacketNumber)
+		if len(c.Fragment.Packets) > 0 {
+			packetRange := strings.Split(c.Fragment.Packets, "-")
+			var startPacket, endPacket int64
+			if len(packetRange) == 2 {
+				startPacket, err = strconv.ParseInt(packetRange[0], 10, 64)
+				endPacket, err2 = strconv.ParseInt(packetRange[1], 10, 64)
+			} else {
+				startPacket, err = strconv.ParseInt(packetRange[0], 10, 64)
+				endPacket = startPacket
+			}
+			if err != nil {
+				return nil, newError("Invalid start packet: ", err).Base(err)
+			}
+			if err2 != nil {
+				return nil, newError("Invalid end packet: ", err2).Base(err2)
+			}
+			if startPacket > endPacket {
+				return nil, newError("Invalid packet range: ", c.Fragment.Packets)
+			}
+			if startPacket < 1 {
+				return nil, newError("Cannot start from packet 0")
+			}
+			config.Fragment.StartPacket = int32(startPacket)
+			config.Fragment.EndPacket = int32(endPacket)
 		} else {
-			config.Fragment.PacketNumber = 1
+			config.Fragment.StartPacket = 0
+			config.Fragment.EndPacket = 0
 		}
 	}
 

@@ -175,13 +175,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if h.config.Fragment != nil {
 				writer = buf.NewWriter(
 					&FragmentWriter{
-						Writer:       conn,
-						minLength:    int(h.config.Fragment.MinLength),
-						maxLength:    int(h.config.Fragment.MaxLength),
-						minInterval:  time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
-						maxInterval:  time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
-						PacketNumber: int(h.config.Fragment.PacketNumber),
-						PacketCount:  0,
+						Writer:      conn,
+						minLength:   int(h.config.Fragment.MinLength),
+						maxLength:   int(h.config.Fragment.MaxLength),
+						minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+						maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+						startPacket: int(h.config.Fragment.StartPacket),
+						endPacket:   int(h.config.Fragment.EndPacket),
+						PacketCount: 0,
 					})
 			} else {
 				writer = buf.NewWriter(conn)
@@ -343,17 +344,18 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 type FragmentWriter struct {
 	io.Writer
-	minLength    int
-	maxLength    int
-	minInterval  time.Duration
-	maxInterval  time.Duration
-	PacketNumber int
-	PacketCount  int
+	minLength   int
+	maxLength   int
+	minInterval time.Duration
+	maxInterval time.Duration
+	startPacket int
+	endPacket   int
+	PacketCount int
 }
 
 func (w *FragmentWriter) Write(buf []byte) (int, error) {
 	w.PacketCount += 1
-	if !(w.PacketCount == w.PacketNumber || w.PacketNumber == 0) {
+	if !((w.PacketCount >= w.startPacket && w.PacketCount <= w.endPacket) || w.startPacket == 0) {
 		return w.Writer.Write(buf)
 	}
 
