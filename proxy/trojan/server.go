@@ -214,10 +214,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
 	inbound.Name = "trojan"
+	inbound.SetCanSpliceCopy(3)
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 

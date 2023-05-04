@@ -218,11 +218,13 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	if !destination.IsValid() {
 		panic("Dispatcher: Invalid destination.")
 	}
-	ob := &session.Outbound{
-		OriginalTarget: destination,
-		Target:         destination,
+	ob := session.OutboundFromContext(ctx)
+	if ob == nil {
+		ob = &session.Outbound{}
+		ctx = session.ContextWithOutbound(ctx, ob)
 	}
-	ctx = session.ContextWithOutbound(ctx, ob)
+	ob.OriginalTarget = destination
+	ob.Target = destination
 	content := session.ContentFromContext(ctx)
 	if content == nil {
 		content = new(session.Content)
@@ -271,11 +273,13 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	if !destination.IsValid() {
 		return newError("Dispatcher: Invalid destination.")
 	}
-	ob := &session.Outbound{
-		OriginalTarget: destination,
-		Target:         destination,
+	ob := session.OutboundFromContext(ctx)
+	if ob == nil {
+		ob = &session.Outbound{}
+		ctx = session.ContextWithOutbound(ctx, ob)
 	}
-	ctx = session.ContextWithOutbound(ctx, ob)
+	ob.OriginalTarget = destination
+	ob.Target = destination
 	content := session.ContentFromContext(ctx)
 	if content == nil {
 		content = new(session.Content)

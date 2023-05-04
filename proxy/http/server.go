@@ -84,11 +84,10 @@ type readerOnly struct {
 
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.Name = "http"
-		inbound.User = &protocol.MemoryUser{
-			Level: s.config.UserLevel,
-		}
+	inbound.Name = "http"
+	inbound.SetCanSpliceCopy(2)
+	inbound.User = &protocol.MemoryUser{
+		Level: s.config.UserLevel,
 	}
 
 	reader := bufio.NewReaderSize(readerOnly{conn}, buf.Size)

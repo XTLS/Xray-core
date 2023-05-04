@@ -8,9 +8,7 @@ import (
 	"crypto/rand"
 	"io"
 	"math/big"
-	"runtime"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -20,10 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
-	"github.com/xtls/xray-core/transport/internet/reality"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 const (
@@ -206,13 +202,11 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, rawConn syscall.RawConn,
-	input *bytes.Reader, rawInput *bytes.Buffer,
-	counter stats.Counter, ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool,
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer,
+	ctx context.Context, userUUID []byte, numberOfPacketToFilter *int, enableXtls *bool,
 	isTLS12orAbove *bool, isTLS *bool, cipher *uint16, remainingServerHello *int32,
 ) error {
 	err := func() error {
-		var ct stats.Counter
 		withinPaddingBuffers := true
 		shouldSwitchToDirectCopy := false
 		var remainingContent int32 = -1
@@ -220,40 +214,14 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 		currentCommand := 0
 		for {
 			if shouldSwitchToDirectCopy {
-				shouldSwitchToDirectCopy = false
-				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
-					if _, ok := inbound.User.Account.(*vless.MemoryAccount); inbound.User.Account == nil || ok {
-						iConn := inbound.Conn
-						statConn, ok := iConn.(*stat.CounterConnection)
-						if ok {
-							iConn = statConn.Connection
-						}
-						if tlsConn, ok := iConn.(*tls.Conn); ok {
-							iConn = tlsConn.NetConn()
-						} else if realityConn, ok := iConn.(*reality.Conn); ok {
-							iConn = realityConn.NetConn()
-						}
-						if tc, ok := iConn.(*net.TCPConn); ok {
-							newError("XtlsRead splice").WriteToLog(session.ExportIDToError(ctx))
-							runtime.Gosched() // necessary
-							w, err := tc.ReadFrom(conn)
-							if counter != nil {
-								counter.Add(w)
-							}
-							if statConn != nil && statConn.WriteCounter != nil {
-								statConn.WriteCounter.Add(w)
-							}
-							return err
-						}
+				var writerConn net.Conn
+				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
+					writerConn = inbound.Conn
+					if inbound.CanSpliceCopy == 2 {
+						inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
 					}
 				}
-				if rawConn != nil {
-					reader = buf.NewReadVReader(conn, rawConn, nil)
-				} else {
-					reader = buf.NewReader(conn)
-				}
-				ct = counter
-				newError("XtlsRead readV").WriteToLog(session.ExportIDToError(ctx))
+				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer)
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
@@ -292,9 +260,6 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 				if *numberOfPacketToFilter > 0 {
 					XtlsFilterTls(buffer, numberOfPacketToFilter, enableXtls, isTLS12orAbove, isTLS, cipher, remainingServerHello, ctx)
 				}
-				if ct != nil {
-					ct.Add(int64(buffer.Len()))
-				}
 				timer.Update()
 				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 					return werr
@@ -312,7 +277,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter,
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn,
 	ctx context.Context, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
 	cipher *uint16, remainingServerHello *int32,
 ) error {
@@ -349,18 +314,21 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 					}
 					if shouldSwitchToDirectCopy {
 						encryptBuffer, directBuffer := buf.SplitMulti(buffer, xtlsSpecIndex+1)
-						length := encryptBuffer.Len()
 						if !encryptBuffer.IsEmpty() {
 							timer.Update()
 							if werr := writer.WriteMultiBuffer(encryptBuffer); werr != nil {
 								return werr
 							}
 						}
-						buffer = directBuffer
-						writer = buf.NewWriter(conn)
-						ct = counter
-						newError("XtlsWrite writeV ", xtlsSpecIndex, " ", length, " ", buffer.Len()).WriteToLog(session.ExportIDToError(ctx))
 						time.Sleep(5 * time.Millisecond) // for some device, the first xtls direct packet fails without this delay
+						
+						if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.CanSpliceCopy == 2 {
+							inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
+						}
+						buffer = directBuffer
+						rawConn, _, writerCounter := proxy.UnwrapRawConn(conn)
+						writer = buf.NewWriter(rawConn)
+						ct = writerCounter
 					}
 				}
 				if !buffer.IsEmpty() {
