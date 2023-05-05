@@ -94,6 +94,18 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return newError("failed to set TCP_USER_TIMEOUT", err)
 			}
 		}
+
+		if config.TcpMaxSeg > 0 {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+				return newError("failed to set TCP_MAXSEG", err)
+			}
+		}
+
+		if config.TcpNoDelay {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
+				return newError("failed to set TCP_NODELAY", err)
+			}
+		}
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -154,6 +166,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if config.TcpUserTimeout > 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(config.TcpUserTimeout)); err != nil {
 				return newError("failed to set TCP_USER_TIMEOUT", err)
+			}
+		}
+
+		if config.TcpMaxSeg > 0 {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+				return newError("failed to set TCP_MAXSEG", err)
 			}
 		}
 	}
