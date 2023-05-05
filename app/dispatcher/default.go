@@ -470,13 +470,6 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		}
 	}
 
-	addNet := session.OutboundFromContext(ctx).Target.NetAddr()
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		Status: log.AccessAccepted,
-		Reason: "",
-		Email:  session.InboundFromContext(ctx).User.Email + " " + addNet + " " + session.InboundFromContext(ctx).Source.NetAddr() + " " + session.InboundFromContext(ctx).Source.String(),
-	})
-
 	//todo 删除
 	//fmt.Println(session.InboundFromContext(ctx).User.Email + " " + addNet + " " + session.InboundFromContext(ctx).Source.NetAddr() + " " + session.InboundFromContext(ctx).Source.String())
 
@@ -513,7 +506,9 @@ func (d *DefaultDispatcher) rateLimiter(ctx context.Context, in *transport.Link,
 	sessionInbound := session.InboundFromContext(ctx)
 	var user *protocol.MemoryUser
 	if sessionInbound != nil {
+		addNet := session.OutboundFromContext(ctx).Target.NetAddr()
 		user = sessionInbound.User
+		newError("user[" + user.Email + "] add[" + addNet + "] " + sessionInbound.Source.String()).AtInfo().WriteToLog(session.ExportIDToError(ctx))
 		var bucket *RateLimiter
 		bucket = NewRateLimiter(&ctx, d, user)
 		in.Writer = RateWriter(in.Writer, bucket)

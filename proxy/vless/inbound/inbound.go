@@ -636,7 +636,7 @@ func setIpCount(sid errors.ExportOption, user *protocol.MemoryUser, ip net.Addr,
 	ips := result[0 : len(result)-1]
 	mapString.Set(userName, ips, 60*time.Second)
 	ipString, _ := mapString.Get(userName)
-	newError("user[" + user.Email + "] ip [" + ipString + "]").AtInfo().WriteToLog(sid)
+	newError("user[" + user.Email + "] ip[" + ipString + "]").AtInfo().WriteToLog(sid)
 	if len(strings.Split(ipString, ",")) > 2 {
 		return newError("user[" + user.Email + "] ip over[" + ipString + "]").AtWarning()
 	}
