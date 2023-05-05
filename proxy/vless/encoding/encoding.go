@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 )
@@ -214,7 +213,6 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 		currentCommand := 0
 		for {
 			if shouldSwitchToDirectCopy {
-				shouldSwitchToDirectCopy = false
 				var writerConn net.Conn
 				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil &&
 				(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "http" || inbound.Name == "trojan" || inbound.Name == "vless") {
@@ -276,15 +274,22 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, counter stats.Counter,
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn,
 	ctx context.Context, numberOfPacketToFilter *int, enableXtls *bool, isTLS12orAbove *bool, isTLS *bool,
 	cipher *uint16, remainingServerHello *int32,
 ) error {
 	err := func() error {
-		var ct stats.Counter
 		isPadding := true
 		shouldSwitchToDirectCopy := false
 		for {
+			if shouldSwitchToDirectCopy {
+				var readerConn net.Conn
+				if outbound := session.OutboundFromContext(ctx); outbound != nil && outbound.Conn != nil &&
+				(outbound.Name == "freedom" || outbound.Name == "socks" || outbound.Name == "http" || outbound.Name == "trojan") {
+					readerConn = outbound.Conn
+				}
+				return proxy.CopyRawConnIfExist(ctx, readerConn, conn, reader, nil, timer)
+			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				if *numberOfPacketToFilter > 0 {
@@ -319,16 +324,17 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 								return werr
 							}
 						}
-						buffer = directBuffer
-						writer = buf.NewWriter(conn)
-						ct = counter
 						time.Sleep(5 * time.Millisecond) // for some device, the first xtls direct packet fails without this delay
+						
+						buffer = directBuffer
+						rawConn, _, ct := proxy.UnwrapRawConn(conn)
+						writer = buf.NewWriter(rawConn)
+						if ct != nil {
+							ct.Add(int64(buffer.Len()))
+						}
 					}
 				}
 				if !buffer.IsEmpty() {
-					if ct != nil {
-						ct.Add(int64(buffer.Len()))
-					}
 					timer.Update()
 					if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 						return werr

@@ -11,6 +11,7 @@ import (
 	"io"
 	"runtime"
 
+	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -58,41 +59,39 @@ type GetOutbound interface {
 	GetOutbound() Outbound
 }
 
+// UnwrapRawConn support unwrap stats, tls, utls, reality and proxyproto conn and get raw tcp conn from it
+func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
+	var readCounter, writerCounter stats.Counter
+	if conn != nil {
+		statConn, ok := conn.(*stat.CounterConnection)
+		if ok {
+			conn = statConn.Connection
+			readCounter = statConn.ReadCounter
+			writerCounter = statConn.WriteCounter
+		}
+		if xc, ok := conn.(*gotls.Conn); ok {
+			conn = xc.NetConn()
+		} else if utlsConn, ok := conn.(*tls.UConn); ok {
+			conn = utlsConn.NetConn()
+		} else if realityConn, ok := conn.(*reality.Conn); ok {
+			conn = realityConn.NetConn()
+		} else if realityUConn, ok := conn.(*reality.UConn); ok {
+			conn = realityUConn.NetConn()
+		}
+		if pc, ok := conn.(*proxyproto.Conn); ok {
+			conn = pc.Raw()
+			// 8192 > 4096, there is no need to process pc's bufReader
+		}
+	}
+	return conn, readCounter, writerCounter
+}
+
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
 // - reader and writer are from *transport.Link, one of them must be nil (idicate the direction of copy)
 func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater) error {
-	var readCounter stats.Counter
-	if readerConn != nil {
-		statConn, ok := readerConn.(*stat.CounterConnection)
-		if ok {
-			readerConn = statConn.Connection
-			readCounter = statConn.ReadCounter
-		}
-		if xc, ok := readerConn.(*gotls.Conn); ok {
-			readerConn = xc.NetConn()
-		} else if utlsConn, ok := readerConn.(*tls.UConn); ok {
-			readerConn = utlsConn.NetConn()
-		} else if realityConn, ok := readerConn.(*reality.Conn); ok {
-			readerConn = realityConn.NetConn()
-		}
-	}
-	var writeCounter stats.Counter
-	if writerConn != nil {
-		statConn, ok := writerConn.(*stat.CounterConnection)
-		if ok {
-			writerConn = statConn.Connection
-			writeCounter = statConn.WriteCounter
-		}
-		if xc, ok := writerConn.(*gotls.Conn); ok {
-			writerConn = xc.NetConn()
-		} else if utlsConn, ok := writerConn.(*tls.UConn); ok {
-			writerConn = utlsConn.NetConn()
-		} else if realityConn, ok := writerConn.(*reality.Conn); ok {
-			writerConn = realityConn.NetConn()
-		}
-	}
-
+	readerConn, readCounter, _ := UnwrapRawConn(readerConn)
+	writerConn, _, writeCounter := UnwrapRawConn(writerConn)
 	if tc, ok := writerConn.(*net.TCPConn); ok && readerConn != nil && writerConn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
 		newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
 		runtime.Gosched() // necessary

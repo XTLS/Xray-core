@@ -22,7 +22,6 @@ import (
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport"
@@ -92,8 +91,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	defer conn.Close()
 
 	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
 	target := outbound.Target
@@ -247,11 +245,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version).AtWarning()
 				}
 			}
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.WriteCounter
-			}
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, conn, counter, ctx, &numberOfPacketToFilter,
+			ctx = session.ContextWithOutbound(ctx, nil) // TODO enable splice
+			err = encoding.XtlsWrite(clientReader, serverWriter, timer, conn, ctx, &numberOfPacketToFilter,
 				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer

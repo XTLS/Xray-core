@@ -271,7 +271,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
 	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil {
+	if outbound != nil {
 		outbound.Conn = conn
 	}
 	return conn, err
