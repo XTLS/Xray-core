@@ -508,7 +508,11 @@ func (d *DefaultDispatcher) rateLimiter(ctx context.Context, in *transport.Link,
 	if sessionInbound != nil {
 		addNet := session.OutboundFromContext(ctx).Target.NetAddr()
 		user = sessionInbound.User
-		newError("user[" + user.Email + "] add[" + addNet + "] " + sessionInbound.Source.String()).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+		//newError("user[" + user.Email + "] add[" + addNet + "] " + sessionInbound.Source.String()).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+		log.Record(&log.AccessMessage{
+			Status: log.AccessAccepted,
+			Reason: "user[" + user.Email + "] add[" + addNet + "] " + sessionInbound.Source.String(),
+		})
 		var bucket *RateLimiter
 		bucket = NewRateLimiter(&ctx, d, user)
 		in.Writer = RateWriter(in.Writer, bucket)

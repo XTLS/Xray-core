@@ -636,9 +636,18 @@ func setIpCount(sid errors.ExportOption, user *protocol.MemoryUser, ip net.Addr,
 	ips := result[0 : len(result)-1]
 	mapString.Set(userName, ips, 60*time.Second)
 	ipString, _ := mapString.Get(userName)
-	newError("user[" + user.Email + "] ip[" + ipString + "]").AtInfo().WriteToLog(sid)
+
 	if len(strings.Split(ipString, ",")) > 2 {
+		log.Record(&log.AccessMessage{
+			Status: log.AccessRejected,
+			Reason: "user[" + user.Email + "] ip[" + ipString + "]",
+		})
 		return newError("user[" + user.Email + "] ip over[" + ipString + "]").AtWarning()
+	} else {
+		log.Record(&log.AccessMessage{
+			Status: log.AccessAccepted,
+			Reason: "user[" + user.Email + "] ip[" + ipString + "]",
+		})
 	}
 	return nil
 
