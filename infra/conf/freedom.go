@@ -75,6 +75,14 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		if err2 != nil {
 			return nil, newError("Invalid maximum length: ", err2).Base(err2)
 		}
+
+		if minInterval > maxInterval {
+			minInterval, maxInterval = maxInterval, minInterval
+		}
+		if minLength > maxLength {
+			minLength, maxLength = maxLength, minLength
+		}
+
 		config.Fragment = &freedom.Fragment{
 			MinInterval: int32(minInterval),
 			MaxInterval: int32(maxInterval),

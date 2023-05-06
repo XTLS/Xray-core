@@ -355,20 +355,14 @@ type FragmentWriter struct {
 
 func (w *FragmentWriter) Write(buf []byte) (int, error) {
 	w.PacketCount += 1
-	if !((w.PacketCount >= w.startPacket && w.PacketCount <= w.endPacket) || w.startPacket == 0) {
+	if !((w.PacketCount >= w.startPacket && w.PacketCount <= w.endPacket) || w.startPacket == 0) || len(buf) <= w.minLength {
 		return w.Writer.Write(buf)
 	}
 
-	if len(buf) <= w.minLength {
-		return w.Writer.Write(buf)
-	}
 	nTotal := 0
 	for {
-		if nTotal >= len(buf) {
-			return nTotal, nil
-		}
-		randomByteSize := int(randBetween(int64(w.minLength), int64(w.maxLength)))
-		if nTotal+randomByteSize > len(buf) {
+		randomByteSize := int(randBetween(int64(w.minLength), int64(w.maxLength))) + nTotal
+		if randomByteSize > len(buf) {
 			n, err := w.Writer.Write(buf[nTotal:])
 			if err != nil {
 				return nTotal + n, err
@@ -376,11 +370,15 @@ func (w *FragmentWriter) Write(buf []byte) (int, error) {
 			nTotal += n
 			return nTotal, nil
 		}
-		n, err := w.Writer.Write(buf[nTotal : nTotal+randomByteSize])
+		n, err := w.Writer.Write(buf[nTotal:randomByteSize])
 		if err != nil {
 			return nTotal + n, err
 		}
 		nTotal += n
+
+		if nTotal >= len(buf) {
+			return nTotal, nil
+		}
 
 		randomInterval := randBetween(int64(w.minInterval), int64(w.maxInterval))
 		time.Sleep(time.Duration(randomInterval))
@@ -391,10 +389,6 @@ func (w *FragmentWriter) Write(buf []byte) (int, error) {
 func randBetween(left int64, right int64) int64 {
 	if left == right {
 		return left
-	}
-	// swap left and right if left > right so we always get a positive value
-	if left > right {
-		left, right = right, left
 	}
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
 	return left + bigInt.Int64()
