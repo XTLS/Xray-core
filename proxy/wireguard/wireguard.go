@@ -117,19 +117,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	addr := destination.Address
 	if addr.Family().IsDomain() {
 		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-			IPv4Enable: h.net.HasV4() && (h.conf.DomainStrategy == DeviceConfig_FORCE_IP ||
-				h.conf.DomainStrategy == DeviceConfig_FORCE_IP4 ||
-				h.conf.DomainStrategy == DeviceConfig_FORCE_IP46),
-
-			IPv6Enable: h.net.HasV6() && (h.conf.DomainStrategy == DeviceConfig_FORCE_IP ||
-				h.conf.DomainStrategy == DeviceConfig_FORCE_IP6 ||
-				h.conf.DomainStrategy == DeviceConfig_FORCE_IP64),
+			IPv4Enable: h.net.HasV4() && h.conf.preferIP4(),
+			IPv6Enable: h.net.HasV6() && h.conf.preferIP6(),
 		})
 		{ // Resolve fallback
-			if (len(ips) == 0 || err != nil) && (h.conf.DomainStrategy == DeviceConfig_FORCE_IP46 || h.conf.DomainStrategy == DeviceConfig_FORCE_IP64) {
+			if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
 				ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
-					IPv4Enable: h.net.HasV4() && h.conf.DomainStrategy != DeviceConfig_FORCE_IP46,
-					IPv6Enable: h.net.HasV6() && h.conf.DomainStrategy != DeviceConfig_FORCE_IP64,
+					IPv4Enable: h.net.HasV4() && h.conf.fallbackIP4(),
+					IPv6Enable: h.net.HasV6() && h.conf.fallbackIP6(),
 				})
 			}
 		}
