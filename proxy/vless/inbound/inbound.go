@@ -431,7 +431,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
-	if err := setIpCount(sid, request.User, connection.RemoteAddr(), &h.ipCount); err != nil {
+	if err := setIpCount(request.User, connection.RemoteAddr(), &h.ipCount); err != nil {
 		return err
 	}
 
@@ -628,8 +628,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	return nil
 }
 
-func setIpCount(sid errors.ExportOption, user *protocol.MemoryUser, ip net.Addr, mapString *protocol.ExpiringMap) error {
+func setIpCount(user *protocol.MemoryUser, ip net.Addr, mapString *protocol.ExpiringMap) error {
+	if user == nil {
+		return nil
+	}
 	userName := user.Email
+	if len(userName) == 0 || userName == "" {
+		return nil
+	}
 	ss := strings.SplitAfter(ip.String(), ":")
 	slice := ss[0 : len(ss)-1]
 	result := strings.Join(slice, "")
