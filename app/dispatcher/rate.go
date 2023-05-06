@@ -5,6 +5,8 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
 	"golang.org/x/time/rate"
+	"strconv"
+	"strings"
 )
 
 type Writer struct {
@@ -20,7 +22,10 @@ type RateLimiter struct {
 
 func NewRateLimiter(cpCtx *context.Context, d *DefaultDispatcher, user *protocol.MemoryUser) *RateLimiter {
 	if d.bucket[user.Email] == nil {
-		var limitInt = 1024 * 1024 * int(user.Level)
+		// xui没有 user.Level 试用email字段 加 - 等级
+		levelString := strings.Split(user.Email, "-")[1]
+		level, _ := strconv.Atoi(levelString)
+		var limitInt = 1024 * 1024 * level
 		d.bucket[user.Email] = rate.NewLimiter(rate.Limit(limitInt), limitInt*2)
 	}
 	bucket := d.bucket[user.Email]
