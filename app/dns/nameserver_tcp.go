@@ -3,6 +3,7 @@ package dns
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"net/url"
 	"sync"
@@ -36,6 +37,31 @@ type TCPNameServer struct {
 	dial        func(context.Context) (net.Conn, error)
 }
 
+// NewTCPTLSNameServer creates DNS over TCP server object for remote resolving.
+func NewTCPTLSNameServer(url *url.URL, dispatcher routing.Dispatcher) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCP")
+	if err != nil {
+		return nil, err
+	}
+
+	s.dial = func(ctx context.Context) (net.Conn, error) {
+		link, err := dispatcher.Dispatch(toDnsContext(ctx, s.destination.String()), *s.destination)
+		if err != nil {
+			return nil, err
+		}
+
+		conn := cnc.NewConnection(
+			cnc.ConnectionInputMulti(link.Writer),
+			cnc.ConnectionOutputMulti(link.Reader),
+		)
+		return tls.Client(conn, &tls.Config{
+			InsecureSkipVerify: false,
+		})
+	}
+
+	return s, nil
+}
+
 // NewTCPNameServer creates DNS over TCP server object for remote resolving.
 func NewTCPNameServer(url *url.URL, dispatcher routing.Dispatcher) (*TCPNameServer, error) {
 	s, err := baseTCPNameServer(url, "TCP")
@@ -53,6 +79,26 @@ func NewTCPNameServer(url *url.URL, dispatcher routing.Dispatcher) (*TCPNameServ
 			cnc.ConnectionInputMulti(link.Writer),
 			cnc.ConnectionOutputMulti(link.Reader),
 		), nil
+	}
+
+	return s, nil
+}
+
+// NewTCPTLSLocalNameServer creates DNS over TCP client object for local resolving
+func NewTCPTLSLocalNameServer(url *url.URL) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCPL")
+	if err != nil {
+		return nil, err
+	}
+
+	s.dial = func(ctx context.Context) (net.Conn, error) {
+		conn,err := internet.DialSystem(ctx, *s.destination, nil)
+		if err != nil {
+			return nil, err
+		}
+		return tls.Client(conn, &tls.Config{
+			InsecureSkipVerify: false,
+		})
 	}
 
 	return s, nil
