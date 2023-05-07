@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
@@ -27,6 +28,8 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
+var useSplice bool
+
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
@@ -37,6 +40,12 @@ func init() {
 		}
 		return h, nil
 	}))
+	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	value := platform.NewEnvFlag("xray.buf.splice").GetValue(func() string { return defaultFlagValue })
+	switch value {
+	case defaultFlagValue, "auto", "enable":
+		useSplice = true
+	}
 }
 
 // Handler handles Freedom connections.
@@ -204,7 +213,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 		if destination.Network == net.Network_TCP {
 			var writeConn net.Conn
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil &&
+			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && useSplice &&
 			(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "http") {
 				writeConn = inbound.Conn
 			}
