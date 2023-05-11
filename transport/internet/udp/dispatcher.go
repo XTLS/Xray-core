@@ -142,12 +142,14 @@ type dispatcherConn struct {
 	dispatcher *Dispatcher
 	cache      chan *udp.Packet
 	done       *done.Instance
+	ctx        context.Context
 }
 
 func DialDispatcher(ctx context.Context, dispatcher routing.Dispatcher) (net.PacketConn, error) {
 	c := &dispatcherConn{
 		cache: make(chan *udp.Packet, 16),
 		done:  done.New(),
+		ctx:   ctx,
 	}
 
 	d := &Dispatcher{
@@ -197,8 +199,7 @@ func (c *dispatcherConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	n := copy(raw, p)
 	buffer.Resize(0, int32(n))
 
-	ctx := context.Background()
-	c.dispatcher.Dispatch(ctx, net.DestinationFromAddr(addr), buffer)
+	c.dispatcher.Dispatch(c.ctx, net.DestinationFromAddr(addr), buffer)
 	return n, nil
 }
 
