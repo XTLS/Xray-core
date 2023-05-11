@@ -16,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport"
@@ -42,8 +41,8 @@ type OptimalStrategy struct {
 	tags               []string
 	acceptableTags     []string
 	weights            map[string]uint32
-	periodic           *task.Periodic
-	periodicMutex      sync.Mutex
+	nextTimeCheck      int64
+	periodMutex        sync.Mutex
 	loadBalancingMutex sync.Mutex
 	ctx                context.Context
 }
@@ -130,11 +129,9 @@ func (s *OptimalStrategy) PickOutbound(tags []string) string {
 
 	s.tags = tags
 
-	if s.periodic == nil {
-		s.periodicMutex.Lock()
-
-		if s.periodic == nil {
-
+	if s.nextTimeCheck == 0 || s.nextTimeCheck <= time.Now().UnixMilli() {
+		s.periodMutex.Lock()
+		if s.nextTimeCheck == 0 {
 			if s.acceptLittleDiff && s.loadBalancing {
 				s.loadBalancingMutex.Lock()
 				s.acceptableTags = nil
@@ -144,16 +141,11 @@ func (s *OptimalStrategy) PickOutbound(tags []string) string {
 				s.tag = s.tags[0]
 			}
 
-			s.periodic = &task.Periodic{
-				Interval: s.interval,
-				Execute:  s.run,
-			}
-
-			go s.periodic.Start()
-
+			go s.run()
+		} else {
+			go s.run()
 		}
-
-		s.periodicMutex.Unlock()
+		s.periodMutex.Unlock()
 	}
 
 	if s.acceptLittleDiff && s.loadBalancing {
@@ -179,6 +171,8 @@ type optimalStrategyTestResult struct {
 func (s *OptimalStrategy) run() error {
 	tags := s.tags
 	count := s.count
+
+	s.nextTimeCheck = time.Now().UnixMilli() + s.interval.Milliseconds()
 
 	results := make([]optimalStrategyTestResult, len(tags))
 
