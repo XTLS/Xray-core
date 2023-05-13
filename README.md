@@ -75,6 +75,10 @@
 - macOS arm64 & x64
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
+- Linux
+  - [NekoRay](https://github.com/MatsuriDayo/nekoray)
+  - [v2rayA](https://github.com/v2rayA/v2rayA)
+  - [Qv2ray](https://github.com/Qv2ray/Qv2ray)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
