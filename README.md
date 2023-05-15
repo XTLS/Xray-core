@@ -71,7 +71,8 @@
   - [X-flutter](https://github.com/XTLS/X-flutter)
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
-  - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
+  - [Wings X](https://apps.apple.com/app/wings-x/id6446119727) (The program appears to have been removed from the App Store)
+  - [V2Box](https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690)
 - macOS arm64 & x64
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
