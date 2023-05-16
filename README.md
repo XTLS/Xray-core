@@ -71,10 +71,10 @@
   - [X-flutter](https://github.com/XTLS/X-flutter)
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
-  - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
+  - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
 - macOS arm64 & x64
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
-  - [Wings X](https://apps.apple.com/app/wings-x/id6446119727)
+  - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
 
