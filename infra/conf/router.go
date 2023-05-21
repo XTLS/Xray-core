@@ -504,17 +504,17 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList  `json:"domain"`
-		Domains    *StringList  `json:"domains"`
-		IP         *StringList  `json:"ip"`
-		Port       *PortList    `json:"port"`
-		Network    *NetworkList `json:"network"`
-		SourceIP   *StringList  `json:"source"`
-		SourcePort *PortList    `json:"sourcePort"`
-		User       *StringList  `json:"user"`
-		InboundTag *StringList  `json:"inboundTag"`
-		Protocols  *StringList  `json:"protocol"`
-		Attributes string       `json:"attrs"`
+		Domain     *StringList       `json:"domain"`
+		Domains    *StringList       `json:"domains"`
+		IP         *StringList       `json:"ip"`
+		Port       *PortList         `json:"port"`
+		Network    *NetworkList      `json:"network"`
+		SourceIP   *StringList       `json:"source"`
+		SourcePort *PortList         `json:"sourcePort"`
+		User       *StringList       `json:"user"`
+		InboundTag *StringList       `json:"inboundTag"`
+		Protocols  *StringList       `json:"protocol"`
+		Attributes map[string]string `json:"attrs"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
