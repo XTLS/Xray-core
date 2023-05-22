@@ -28,3 +28,20 @@ func Combine(maybeError ...error) error {
 	}
 	return errs
 }
+
+func AllEqual(expected error, actual error) bool {
+	switch errs := actual.(type) {
+	case multiError:
+		if len(errs) == 0 {
+			return false
+		}
+		for _, err := range errs {
+			if err != expected {
+				return false
+			}
+		}
+		return true
+	default:
+		return errs == expected
+	}
+}
