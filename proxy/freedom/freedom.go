@@ -355,22 +355,17 @@ type FragmentWriter struct {
 
 func (w *FragmentWriter) Write(buf []byte) (int, error) {
 	w.PacketCount += 1
-	if !((w.PacketCount >= w.startPacket && w.PacketCount <= w.endPacket) || w.startPacket == 0) || len(buf) <= w.minLength {
+	if (w.startPacket != 0 && (w.PacketCount < w.startPacket || w.PacketCount > w.endPacket)) || len(buf) <= w.minLength {
 		return w.Writer.Write(buf)
 	}
 
 	nTotal := 0
 	for {
-		randomByteSize := int(randBetween(int64(w.minLength), int64(w.maxLength))) + nTotal
-		if randomByteSize > len(buf) {
-			n, err := w.Writer.Write(buf[nTotal:])
-			if err != nil {
-				return nTotal + n, err
-			}
-			nTotal += n
-			return nTotal, nil
+		randomBytesTo := int(randBetween(int64(w.minLength), int64(w.maxLength))) + nTotal
+		if randomBytesTo > len(buf) {
+			randomBytesTo = len(buf)
 		}
-		n, err := w.Writer.Write(buf[nTotal:randomByteSize])
+		n, err := w.Writer.Write(buf[nTotal:randomBytesTo])
 		if err != nil {
 			return nTotal + n, err
 		}
