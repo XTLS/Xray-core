@@ -22,7 +22,11 @@ type RateLimiter struct {
 func NewRateLimiter(cpCtx *context.Context, d *DefaultDispatcher, userEmail string) *RateLimiter {
 	if d.bucket[userEmail] == nil {
 		// xui没有 user.Level 试用email字段 加 - 等级
-		levelString := strings.Split(userEmail, "-")[1]
+		getMail := strings.Split(userEmail, "-")
+		var levelString = "2"
+		if len(getMail) >= 2 {
+			levelString = getMail[1]
+		}
 		level, _ := strconv.Atoi(levelString)
 		var limitInt = 1024 * 1024 * level
 		d.bucket[userEmail] = rate.NewLimiter(rate.Limit(limitInt), limitInt*2)
