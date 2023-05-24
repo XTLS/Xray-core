@@ -27,7 +27,7 @@
 - Web Panel
   - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
   - [Xray-UI](https://github.com/qist/xray-ui), [X-UI](https://github.com/sing-web/x-ui)
-  - [Hiddify](https://github.com/hiddify/hiddify-config)
+  - [Hiddify](https://github.com/hiddify/hiddify-config) \[Half open Source, Containing binary packages, Security Risks [#2132](https://github.com/XTLS/Xray-core/issues/2132)]
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
@@ -63,11 +63,11 @@
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
-  - [HiddifyN](https://github.com/hiddify/HiddifyN)
+  - [HiddifyN](https://github.com/hiddify/HiddifyN) \[Half open Source, Containing binary packages, Security Risks [#2132](https://github.com/XTLS/Xray-core/issues/2132)]
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [HiddifyNG](https://github.com/hiddify/HiddifyNG)
+  - [HiddifyNG](https://github.com/hiddify/HiddifyNG) \[Half open Source, Containing binary packages, Security Risks [#2132](https://github.com/XTLS/Xray-core/issues/2132)]
   - [X-flutter](https://github.com/XTLS/X-flutter)
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
