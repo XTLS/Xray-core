@@ -4,6 +4,9 @@ package freedom
 
 import (
 	"context"
+	"crypto/rand"
+	"io"
+	"math/big"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -169,7 +172,21 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
-			writer = buf.NewWriter(conn)
+			if h.config.Fragment != nil {
+				writer = buf.NewWriter(
+					&FragmentWriter{
+						Writer:      conn,
+						minLength:   int(h.config.Fragment.MinLength),
+						maxLength:   int(h.config.Fragment.MaxLength),
+						minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+						maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+						startPacket: int(h.config.Fragment.StartPacket),
+						endPacket:   int(h.config.Fragment.EndPacket),
+						PacketCount: 0,
+					})
+			} else {
+				writer = buf.NewWriter(conn)
+			}
 		} else {
 			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 		}
@@ -323,4 +340,51 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	return nil
+}
+
+type FragmentWriter struct {
+	io.Writer
+	minLength   int
+	maxLength   int
+	minInterval time.Duration
+	maxInterval time.Duration
+	startPacket int
+	endPacket   int
+	PacketCount int
+}
+
+func (w *FragmentWriter) Write(buf []byte) (int, error) {
+	w.PacketCount += 1
+	if (w.startPacket != 0 && (w.PacketCount < w.startPacket || w.PacketCount > w.endPacket)) || len(buf) <= w.minLength {
+		return w.Writer.Write(buf)
+	}
+
+	nTotal := 0
+	for {
+		randomBytesTo := int(randBetween(int64(w.minLength), int64(w.maxLength))) + nTotal
+		if randomBytesTo > len(buf) {
+			randomBytesTo = len(buf)
+		}
+		n, err := w.Writer.Write(buf[nTotal:randomBytesTo])
+		if err != nil {
+			return nTotal + n, err
+		}
+		nTotal += n
+
+		if nTotal >= len(buf) {
+			return nTotal, nil
+		}
+
+		randomInterval := randBetween(int64(w.minInterval), int64(w.maxInterval))
+		time.Sleep(time.Duration(randomInterval))
+	}
+}
+
+// stolen from github.com/xtls/xray-core/transport/internet/reality
+func randBetween(left int64, right int64) int64 {
+	if left == right {
+		return left
+	}
+	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
+	return left + bigInt.Int64()
 }
