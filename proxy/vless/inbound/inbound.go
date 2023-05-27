@@ -448,6 +448,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	switch requestAddons.Flow {
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
+			inbound.SetCanSpliceCopy(2)
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
@@ -477,6 +478,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "":
+		inbound.SetCanSpliceCopy(3)
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
@@ -524,8 +526,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		var err error
 
 		if requestAddons.Flow == vless.XRV {
-			ctx = session.ContextWithInbound(ctx, nil) // TODO enable splice
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, ctx, account.ID.Bytes(),
+			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, ctx1, account.ID.Bytes(),
 				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer

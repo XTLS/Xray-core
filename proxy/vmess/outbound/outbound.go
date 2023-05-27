@@ -65,6 +65,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return newError("target not specified").AtError()
 	}
 	outbound.Name = "vmess"
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
+		inbound.SetCanSpliceCopy(3)
+	}
 
 	var rec *protocol.ServerSpec
 	var conn stat.Connection

@@ -50,6 +50,16 @@ type Inbound struct {
 	Conn net.Conn
 	// Timer of the inbound buf copier. May be nil.
 	Timer *signal.ActivityTimer
+	// CanSpliceCopy is a property for this connection, set by both inbound and outbound
+	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
+	CanSpliceCopy int
+}
+
+func(i *Inbound) SetCanSpliceCopy(canSpliceCopy int) int {
+	if canSpliceCopy > i.CanSpliceCopy {
+		i.CanSpliceCopy = canSpliceCopy
+	}
+	return i.CanSpliceCopy
 }
 
 // Outbound is the metadata of an outbound connection.

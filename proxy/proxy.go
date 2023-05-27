@@ -88,36 +88,47 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
-// - reader and writer are from *transport.Link, one of them must be nil (idicate the direction of copy)
-func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater) error {
+// - writer are from *transport.Link
+func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer signal.ActivityUpdater) error {
 	readerConn, readCounter, _ := UnwrapRawConn(readerConn)
 	writerConn, _, writeCounter := UnwrapRawConn(writerConn)
-	if tc, ok := writerConn.(*net.TCPConn); ok && readerConn != nil && writerConn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
-		newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
-		runtime.Gosched() // necessary
-		w, err := tc.ReadFrom(readerConn)
-		if readCounter != nil {
-			readCounter.Add(w)
+	reader := buf.NewReader(readerConn)
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		if tc, ok := writerConn.(*net.TCPConn); ok && readerConn != nil && writerConn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
+			for inbound.CanSpliceCopy != 3 {
+				if inbound.CanSpliceCopy == 1 {
+					newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
+					runtime.Gosched() // necessary
+					w, err := tc.ReadFrom(readerConn)
+					if readCounter != nil {
+						readCounter.Add(w)
+					}
+					if writeCounter != nil {
+						writeCounter.Add(w)
+					}
+					if err != nil && errors.Cause(err) != io.EOF {
+						return err
+					}
+					return nil
+				}
+				buffer, err := reader.ReadMultiBuffer()
+				if !buffer.IsEmpty() {
+					if readCounter != nil {
+						readCounter.Add(int64(buffer.Len()))
+					}
+					timer.Update()
+					if werr := writer.WriteMultiBuffer(buffer); werr != nil {
+						return werr
+					}
+				}
+				if err != nil {
+					return err
+				}
+			}
 		}
-		if writeCounter != nil {
-			writeCounter.Add(w)
-		}
-		if err != nil && errors.Cause(err) != io.EOF {
-			return err
-		}
-		return nil
 	}
-	if reader == nil {
-		newError("CopyRawConn copy from readerConn to *transport.Link.Writer").WriteToLog(session.ExportIDToError(ctx))
-		reader = buf.NewReader(readerConn)
-		writeCounter = nil
-	}
-	if writer == nil {
-		newError("CopyRawConn copy from *transport.Link.Reader to writerConn").WriteToLog(session.ExportIDToError(ctx))
-		writer = buf.NewWriter(writerConn)
-		readCounter = nil
-	}
-	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter), buf.AddToStatCounter(writeCounter)); err != nil {
+	newError("CopyRawConn readv").WriteToLog(session.ExportIDToError(ctx))
+	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
 		return newError("failed to process response").Base(err)
 	}
 	return nil

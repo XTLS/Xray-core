@@ -80,6 +80,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return newError("target not specified")
 	}
 	outbound.Name = "wireguard"
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
+		inbound.SetCanSpliceCopy(3)
+	}
 
 	if h.bind == nil || h.bind.dialer != dialer || h.net == nil {
 		log.Record(&log.GeneralMessage{

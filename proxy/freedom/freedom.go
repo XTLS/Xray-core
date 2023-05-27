@@ -118,6 +118,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return newError("target not specified.")
 	}
 	outbound.Name = "freedom"
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
+		inbound.SetCanSpliceCopy(1)
+	}
 	destination := outbound.Target
 	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {
@@ -213,11 +217,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 		if destination.Network == net.Network_TCP {
 			var writeConn net.Conn
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && useSplice &&
-			(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "http") {
+			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && useSplice {
 				writeConn = inbound.Conn
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, nil, link.Writer, timer)
+			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer)
 		}
 		reader := NewPacketReader(conn, UDPOverride)
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {

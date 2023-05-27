@@ -66,6 +66,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
 		inboundConn = inbound.Conn
+		inbound.SetCanSpliceCopy(3)
 	}
 
 	outbound := session.OutboundFromContext(ctx)
