@@ -101,6 +101,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 
+		if config.TcpNoDelay {
+			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
+				return newError("failed to set TCP_NODELAY", err)
+			}
+		}
+
 	}
 
 	if config.Tproxy.IsEnabled() {
