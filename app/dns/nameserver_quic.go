@@ -373,7 +373,7 @@ func (s *QUICNameServer) openConnection() (quic.Connection, error) {
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout: handshakeTimeout,
 	}
-
+	tlsConfig.ServerName = s.destination.Address.String()
 	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
 	log.Record(&log.AccessMessage{
 		From:   "DNS",
