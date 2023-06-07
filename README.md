@@ -84,6 +84,7 @@
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Stash](https://apps.apple.com/app/stash/id1596063349)
 - Xray Wrapper
+  - [libxray](https://github.com/XTLS/libxray)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [XrayKit](https://github.com/arror/XrayKit)
