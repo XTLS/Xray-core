@@ -115,7 +115,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	handler := &Handler{
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
-		clients:               vmess.NewTimedUserValidator(protocol.DefaultIDHash),
+		clients:               vmess.NewTimedUserValidator(),
 		detours:               config.Detour,
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
@@ -139,7 +139,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 // Close implements common.Closable.
 func (h *Handler) Close() error {
 	return errors.Combine(
-		h.clients.Close(),
 		h.sessionHistory.Close(),
 		common.Close(h.usersByEmail))
 }

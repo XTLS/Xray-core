@@ -1,9 +1,7 @@
 package protocol
 
 import (
-	"crypto/hmac"
 	"crypto/md5"
-	"hash"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/uuid"
@@ -12,12 +10,6 @@ import (
 const (
 	IDBytesLen = 16
 )
-
-type IDHash func(key []byte) hash.Hash
-
-func DefaultIDHash(key []byte) hash.Hash {
-	return hmac.New(md5.New, key)
-}
 
 // The ID of en entity, in the form of a UUID.
 type ID struct {

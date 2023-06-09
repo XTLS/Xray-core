@@ -50,7 +50,7 @@ func TestRequestSerialization(t *testing.T) {
 	sessionHistory := NewSessionHistory()
 	defer common.Close(sessionHistory)
 
-	userValidator := vmess.NewTimedUserValidator(protocol.DefaultIDHash)
+	userValidator := vmess.NewTimedUserValidator()
 	userValidator.Add(user)
 	defer common.Close(userValidator)
 
@@ -99,7 +99,7 @@ func TestInvalidRequest(t *testing.T) {
 	sessionHistory := NewSessionHistory()
 	defer common.Close(sessionHistory)
 
-	userValidator := vmess.NewTimedUserValidator(protocol.DefaultIDHash)
+	userValidator := vmess.NewTimedUserValidator()
 	userValidator.Add(user)
 	defer common.Close(userValidator)
 
@@ -139,7 +139,7 @@ func TestMuxRequest(t *testing.T) {
 	sessionHistory := NewSessionHistory()
 	defer common.Close(sessionHistory)
 
-	userValidator := vmess.NewTimedUserValidator(protocol.DefaultIDHash)
+	userValidator := vmess.NewTimedUserValidator()
 	userValidator.Add(user)
 	defer common.Close(userValidator)
 
