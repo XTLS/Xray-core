@@ -16,7 +16,6 @@ func TestSwitchAccount(t *testing.T) {
 	sa := &protocol.CommandSwitchAccount{
 		Port:     1234,
 		ID:       uuid.New(),
-		AlterIds: 1024,
 		Level:    128,
 		ValidMin: 16,
 	}
@@ -40,7 +39,6 @@ func TestSwitchAccountBugOffByOne(t *testing.T) {
 	sa := &protocol.CommandSwitchAccount{
 		Port:     1234,
 		ID:       uuid.New(),
-		AlterIds: 1024,
 		Level:    128,
 		ValidMin: 16,
 	}

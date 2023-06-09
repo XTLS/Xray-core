@@ -6,7 +6,6 @@ import (
 	"hash/crc64"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -40,8 +39,6 @@ type TimedUserValidator struct {
 	behaviorFused bool
 
 	aeadDecoderHolder *aead.AuthIDDecoderHolder
-
-	legacyWarnShown bool
 }
 
 type indexTimePair struct {
@@ -101,9 +98,6 @@ func (v *TimedUserValidator) generateNewHashes(nowSec protocol.Timestamp, user *
 	account := user.user.Account.(*MemoryAccount)
 
 	genHashForID(account.ID)
-	for _, id := range account.AlterIDs {
-		genHashForID(id)
-	}
 	user.lastSec = genEndSec
 }
 
@@ -157,25 +151,6 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 	v.aeadDecoderHolder.AddUser(cmdkeyfl, u)
 
 	return nil
-}
-
-func (v *TimedUserValidator) Get(userHash []byte) (*protocol.MemoryUser, protocol.Timestamp, bool, error) {
-	v.RLock()
-	defer v.RUnlock()
-
-	v.behaviorFused = true
-
-	var fixedSizeHash [16]byte
-	copy(fixedSizeHash[:], userHash)
-	pair, found := v.userHash[fixedSizeHash]
-	if found {
-		user := pair.user.user
-		if atomic.LoadUint32(pair.taintedFuse) == 0 {
-			return &user, protocol.Timestamp(pair.timeInc) + v.baseTime, true, nil
-		}
-		return nil, 0, false, ErrTainted
-	}
-	return nil, 0, false, ErrNotFound
 }
 
 func (v *TimedUserValidator) GetAEAD(userHash []byte) (*protocol.MemoryUser, bool, error) {
@@ -233,36 +208,6 @@ func (v *TimedUserValidator) GetBehaviorSeed() uint64 {
 		v.behaviorSeed = dice.RollUint64()
 	}
 	return v.behaviorSeed
-}
-
-func (v *TimedUserValidator) BurnTaintFuse(userHash []byte) error {
-	v.RLock()
-	defer v.RUnlock()
-
-	var userHashFL [16]byte
-	copy(userHashFL[:], userHash)
-
-	pair, found := v.userHash[userHashFL]
-	if found {
-		if atomic.CompareAndSwapUint32(pair.taintedFuse, 0, 1) {
-			return nil
-		}
-		return ErrTainted
-	}
-	return ErrNotFound
-}
-
-/*
-	ShouldShowLegacyWarn will return whether a Legacy Warning should be shown
-
-Not guaranteed to only return true once for every inbound, but it is okay.
-*/
-func (v *TimedUserValidator) ShouldShowLegacyWarn() bool {
-	if v.legacyWarnShown {
-		return false
-	}
-	v.legacyWarnShown = true
-	return true
 }
 
 var ErrNotFound = newError("Not Found")

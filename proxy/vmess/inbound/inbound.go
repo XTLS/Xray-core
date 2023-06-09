@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
@@ -27,11 +26,6 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport/internet/stat"
-)
-
-var (
-	aeadForced     = false
-	aeadForced2022 = false
 )
 
 type userByEmail struct {
@@ -241,7 +235,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(connection)}
 	svrSession := encoding.NewServerSession(h.clients, h.sessionHistory)
-	svrSession.SetAEADForced(aeadForced)
 	request, err := svrSession.DecodeRequestHeader(reader, isDrain)
 	if err != nil {
 		if errors.Cause(err) != io.EOF {
@@ -361,7 +354,6 @@ func (h *Handler) generateCommand(ctx context.Context, request *protocol.Request
 				return &protocol.CommandSwitchAccount{
 					Port:     port,
 					ID:       account.ID.UUID(),
-					AlterIds: uint16(len(account.AlterIDs)),
 					Level:    user.Level,
 					ValidMin: byte(availableMin),
 				}
@@ -376,18 +368,4 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*Config))
 	}))
-
-	defaultFlagValue := "NOT_DEFINED_AT_ALL"
-
-	if time.Now().Year() >= 2022 {
-		defaultFlagValue = "true_by_default_2022"
-	}
-
-	isAeadForced := platform.NewEnvFlag("xray.vmess.aead.forced").GetValue(func() string { return defaultFlagValue })
-	aeadForced = (isAeadForced == "true")
-
-	if isAeadForced == "true_by_default_2022" {
-		aeadForced = true
-		aeadForced2022 = true
-	}
 }

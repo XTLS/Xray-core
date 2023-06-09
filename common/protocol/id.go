@@ -55,28 +55,3 @@ func NewID(uuid uuid.UUID) *ID {
 	md5hash.Sum(id.cmdKey[:0])
 	return id
 }
-
-func nextID(u *uuid.UUID) uuid.UUID {
-	md5hash := md5.New()
-	common.Must2(md5hash.Write(u.Bytes()))
-	common.Must2(md5hash.Write([]byte("16167dc8-16b6-4e6d-b8bb-65dd68113a81")))
-	var newid uuid.UUID
-	for {
-		md5hash.Sum(newid[:0])
-		if !newid.Equals(u) {
-			return newid
-		}
-		common.Must2(md5hash.Write([]byte("533eff8a-4113-4b10-b5ce-0f5d76b98cd2")))
-	}
-}
-
-func NewAlterIDs(primary *ID, alterIDCount uint16) []*ID {
-	alterIDs := make([]*ID, alterIDCount)
-	prevID := primary.UUID()
-	for idx := range alterIDs {
-		newid := nextID(&prevID)
-		alterIDs[idx] = NewID(newid)
-		prevID = newid
-	}
-	return alterIDs
-}
