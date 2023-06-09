@@ -24,7 +24,6 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 	if !ok {
 		return false
 	}
-	// TODO: handle AlterIds difference
 	return a.ID.Equals(vmessAccount.ID)
 }
 

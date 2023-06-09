@@ -131,19 +131,6 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 		}
 
 		return buf.NewWriter(writer), nil
-	case protocol.SecurityType_LEGACY:
-		aesStream := crypto.NewAesEncryptionStream(c.requestBodyKey[:], c.requestBodyIV[:])
-		cryptionWriter := crypto.NewCryptionWriter(aesStream, writer)
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationWriter(auth, sizeParser, cryptionWriter, request.Command.TransferType(), padding), nil
-		}
-
-		return &buf.SequentialWriter{Writer: cryptionWriter}, nil
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(c.requestBodyKey[:])
 		auth := &crypto.AEADAuthenticator{
@@ -299,17 +286,6 @@ func (c *ClientSession) DecodeResponseBody(request *protocol.RequestHeader, read
 		}
 
 		return buf.NewReader(reader), nil
-	case protocol.SecurityType_LEGACY:
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationReader(auth, sizeParser, c.responseReader, request.Command.TransferType(), padding), nil
-		}
-
-		return buf.NewReader(c.responseReader), nil
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(c.responseBodyKey[:])
 

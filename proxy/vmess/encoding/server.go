@@ -117,7 +117,7 @@ func parseSecurityType(b byte) protocol.SecurityType {
 		st := protocol.SecurityType(b)
 		// For backward compatibility.
 		if st == protocol.SecurityType_UNKNOWN {
-			st = protocol.SecurityType_LEGACY
+			st = protocol.SecurityType_AUTO
 		}
 		return st
 	}
@@ -278,19 +278,6 @@ func (s *ServerSession) DecodeRequestBody(request *protocol.RequestHeader, reade
 		}
 		return buf.NewReader(reader), nil
 
-	case protocol.SecurityType_LEGACY:
-		aesStream := crypto.NewAesDecryptionStream(s.requestBodyKey[:], s.requestBodyIV[:])
-		cryptionReader := crypto.NewCryptionReader(aesStream, reader)
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationReader(auth, sizeParser, cryptionReader, request.Command.TransferType(), padding), nil
-		}
-		return buf.NewReader(cryptionReader), nil
-
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(s.requestBodyKey[:])
 		auth := &crypto.AEADAuthenticator{
@@ -414,17 +401,6 @@ func (s *ServerSession) EncodeResponseBody(request *protocol.RequestHeader, writ
 			return crypto.NewAuthenticationWriter(auth, sizeParser, writer, protocol.TransferTypePacket, padding), nil
 		}
 		return buf.NewWriter(writer), nil
-
-	case protocol.SecurityType_LEGACY:
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationWriter(auth, sizeParser, s.responseWriter, request.Command.TransferType(), padding), nil
-		}
-		return &buf.SequentialWriter{Writer: s.responseWriter}, nil
 
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(s.responseBodyKey[:])

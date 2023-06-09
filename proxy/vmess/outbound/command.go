@@ -13,7 +13,7 @@ func (h *Handler) handleSwitchAccount(cmd *protocol.CommandSwitchAccount) {
 	rawAccount := &vmess.Account{
 		Id:      cmd.ID.String(),
 		SecuritySettings: &protocol.SecurityConfig{
-			Type: protocol.SecurityType_LEGACY,
+			Type: protocol.SecurityType_AUTO,
 		},
 	}
 

@@ -32,14 +32,12 @@ type userByEmail struct {
 	sync.Mutex
 	cache           map[string]*protocol.MemoryUser
 	defaultLevel    uint32
-	defaultAlterIDs uint16
 }
 
 func newUserByEmail(config *DefaultConfig) *userByEmail {
 	return &userByEmail{
 		cache:           make(map[string]*protocol.MemoryUser),
 		defaultLevel:    config.Level,
-		defaultAlterIDs: uint16(config.AlterId),
 	}
 }
 
@@ -71,7 +69,6 @@ func (v *userByEmail) Get(email string) (*protocol.MemoryUser, bool) {
 		id := uuid.New()
 		rawAccount := &vmess.Account{
 			Id:      id.String(),
-			AlterId: uint32(v.defaultAlterIDs),
 		}
 		account, err := rawAccount.AsAccount()
 		common.Must(err)
@@ -106,7 +103,6 @@ type Handler struct {
 	usersByEmail          *userByEmail
 	detours               *DetourConfig
 	sessionHistory        *encoding.SessionHistory
-	secure                bool
 }
 
 // New creates a new VMess inbound handler.
@@ -119,7 +115,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		detours:               config.Detour,
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
-		secure:                config.SecureEncryptionOnly,
 	}
 
 	for _, user := range config.User {
@@ -212,10 +207,6 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 	return nil
 }
 
-func isInsecureEncryption(s protocol.SecurityType) bool {
-	return s == protocol.SecurityType_NONE || s == protocol.SecurityType_LEGACY || s == protocol.SecurityType_UNKNOWN
-}
-
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -246,17 +237,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
 		}
 		return err
-	}
-
-	if h.secure && isInsecureEncryption(request.Security) {
-		log.Record(&log.AccessMessage{
-			From:   connection.RemoteAddr(),
-			To:     "",
-			Status: log.AccessRejected,
-			Reason: "Insecure encryption",
-			Email:  request.User.Email,
-		})
-		return newError("client is using insecure encryption: ", request.Security)
 	}
 
 	if request.Command != protocol.RequestCommandMux {
