@@ -13,7 +13,6 @@ message DetourConfig {
 }
 
 message DefaultConfig {
-  uint32 alter_id = 1;
   uint32 level = 2;
 }
 
@@ -21,5 +20,5 @@ message Config {
   repeated xray.common.protocol.User user = 1;
   DefaultConfig default = 2;
   DetourConfig detour = 3;
-  bool secure_encryption_only = 4;
+  // 4 is for legacy setting
 }

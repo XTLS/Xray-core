@@ -12,9 +12,8 @@ import (
 func (h *Handler) handleSwitchAccount(cmd *protocol.CommandSwitchAccount) {
 	rawAccount := &vmess.Account{
 		Id:      cmd.ID.String(),
-		AlterId: uint32(cmd.AlterIds),
 		SecuritySettings: &protocol.SecurityConfig{
-			Type: protocol.SecurityType_LEGACY,
+			Type: protocol.SecurityType_AUTO,
 		},
 	}
 
