@@ -23,7 +23,7 @@ require (
 	golang.org/x/crypto v0.9.0
 	golang.org/x/net v0.10.0
 	golang.org/x/sync v0.2.0
-	golang.org/x/sys v0.8.0
+	golang.org/x/sys v0.9.0
 	google.golang.org/grpc v1.55.0
 	google.golang.org/protobuf v1.30.0
 	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
