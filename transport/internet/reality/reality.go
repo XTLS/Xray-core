@@ -126,16 +126,17 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	{
 		uConn.BuildHandshakeState()
 		hello := uConn.HandshakeState.Hello
-		rawSessionID := hello.Raw[39 : 39+32] // the location of session ID
-		for i := range rawSessionID {         // https://github.com/golang/go/issues/5373
-			rawSessionID[i] = 0
+		hello.Random = hello.Raw[39 : 39+32] // the fixed location of `Session ID`
+		for i := range hello.Random {        // https://github.com/golang/go/issues/5373
+			hello.Random[i] = 0
 		}
-		copy(hello.SessionId[8:], config.ShortId)
-		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
+		hello.Random = hello.Raw[6 : 6+32] // the fixed location of `Random`
 		hello.SessionId[0] = core.Version_x
 		hello.SessionId[1] = core.Version_y
 		hello.SessionId[2] = core.Version_z
 		hello.SessionId[3] = 0 // reserved
+		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
+		copy(hello.SessionId[8:], config.ShortId)
 		if config.Show {
 			fmt.Printf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16])
 		}
