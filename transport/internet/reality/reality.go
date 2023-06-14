@@ -30,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/net/http2"
 )
@@ -74,9 +75,15 @@ func (c *UConn) HandshakeAddress() net.Address {
 	return net.ParseAddress(state.ServerName)
 }
 
+var pOffset uintptr
+
+func init() {
+	p, _ := reflect.TypeOf((*utls.Conn)(nil)).Elem().FieldByName("peerCertificates")
+	pOffset = p.Offset
+}
+
 func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	p, _ := reflect.TypeOf(c.Conn).Elem().FieldByName("peerCertificates")
-	certs := *(*([]*x509.Certificate))(unsafe.Pointer(uintptr(unsafe.Pointer(c.Conn)) + p.Offset))
+	certs := *(*[]*x509.Certificate)(unsafe.Add(unsafe.Pointer(c.Conn), pOffset))
 	if pub, ok := certs[0].PublicKey.(ed25519.PublicKey); ok {
 		h := hmac.New(sha512.New, c.AuthKey)
 		h.Write(pub)
@@ -119,13 +126,16 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	{
 		uConn.BuildHandshakeState()
 		hello := uConn.HandshakeState.Hello
-		hello.SessionId = make([]byte, 32)
-		copy(hello.Raw[39:], hello.SessionId) // the location of session ID
+		rawSessionID := hello.Raw[39 : 39+32] // the location of session ID
+		for i := range rawSessionID {         // https://github.com/golang/go/issues/5373
+			rawSessionID[i] = 0
+		}
+		copy(hello.SessionId[8:], config.ShortId)
+		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
 		hello.SessionId[0] = core.Version_x
 		hello.SessionId[1] = core.Version_y
 		hello.SessionId[2] = core.Version_z
-		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
-		copy(hello.SessionId[8:], config.ShortId)
+		hello.SessionId[3] = 0 // reserved
 		if config.Show {
 			fmt.Printf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16])
 		}
@@ -136,11 +146,16 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		if _, err := hkdf.New(sha256.New, uConn.AuthKey, hello.Random[:20], []byte("REALITY")).Read(uConn.AuthKey); err != nil {
 			return nil, err
 		}
-		if config.Show {
-			fmt.Printf("REALITY localAddr: %v\tuConn.AuthKey[:16]: %v\n", localAddr, uConn.AuthKey[:16])
+		var aead cipher.AEAD
+		if aesgcmPreferred(hello.CipherSuites) {
+			block, _ := aes.NewCipher(uConn.AuthKey)
+			aead, _ = cipher.NewGCM(block)
+		} else {
+			aead, _ = chacha20poly1305.New(uConn.AuthKey)
 		}
-		block, _ := aes.NewCipher(uConn.AuthKey)
-		aead, _ := cipher.NewGCM(block)
+		if config.Show {
+			fmt.Printf("REALITY localAddr: %v\tuConn.AuthKey[:16]: %v\tAEAD: %T\n", localAddr, uConn.AuthKey[:16], aead)
+		}
 		aead.Seal(hello.SessionId[:0], hello.Random[20:], hello.SessionId[:16], hello.Raw)
 		copy(hello.Raw[39:], hello.SessionId)
 	}
