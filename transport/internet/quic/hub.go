@@ -109,7 +109,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		MaxIncomingStreams:    32,
 		MaxIncomingUniStreams: -1,
 		Tracer: func(ctx context.Context, p logging.Perspective, ci quic.ConnectionID) logging.ConnectionTracer {
-			return qlog.NewConnectionTracer( &QlogWriter{connID: ci}, p, ci);
+			return qlog.NewConnectionTracer(&QlogWriter{connID: ci}, p, ci)
 		},
 	}
 

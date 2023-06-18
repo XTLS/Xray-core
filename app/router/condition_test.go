@@ -307,8 +307,8 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Protocol:   []string{"http"},
-				Attributes: map[string]string {
+				Protocol: []string{"http"},
+				Attributes: map[string]string{
 					":path": "/test",
 				},
 			},

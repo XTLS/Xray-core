@@ -17,7 +17,7 @@ func Authenticate(b []byte) uint32 {
 	return fnv1hash.Sum32()
 }
 
-// [DEPRECATED 2023-06] 
+// [DEPRECATED 2023-06]
 type NoOpAuthenticator struct{}
 
 func (NoOpAuthenticator) NonceSize() int {

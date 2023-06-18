@@ -37,7 +37,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 		st = protocol.SecurityType_AUTO
 	}
 	return &vmess.Account{
-		Id:      a.ID,
+		Id: a.ID,
 		SecuritySettings: &protocol.SecurityConfig{
 			Type: st,
 		},
@@ -61,7 +61,7 @@ type FeaturesConfig struct {
 }
 
 type VMessDefaultConfig struct {
-	Level    byte   `json:"level"`
+	Level byte `json:"level"`
 }
 
 // Build implements Buildable

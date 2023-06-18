@@ -15,7 +15,7 @@ import (
 // TimedUserValidator is a user Validator based on time.
 type TimedUserValidator struct {
 	sync.RWMutex
-	users    []*protocol.MemoryUser
+	users []*protocol.MemoryUser
 
 	behaviorSeed  uint64
 	behaviorFused bool

@@ -30,14 +30,14 @@ import (
 
 type userByEmail struct {
 	sync.Mutex
-	cache           map[string]*protocol.MemoryUser
-	defaultLevel    uint32
+	cache        map[string]*protocol.MemoryUser
+	defaultLevel uint32
 }
 
 func newUserByEmail(config *DefaultConfig) *userByEmail {
 	return &userByEmail{
-		cache:           make(map[string]*protocol.MemoryUser),
-		defaultLevel:    config.Level,
+		cache:        make(map[string]*protocol.MemoryUser),
+		defaultLevel: config.Level,
 	}
 }
 
@@ -68,7 +68,7 @@ func (v *userByEmail) Get(email string) (*protocol.MemoryUser, bool) {
 	if !found {
 		id := uuid.New()
 		rawAccount := &vmess.Account{
-			Id:      id.String(),
+			Id: id.String(),
 		}
 		account, err := rawAccount.AsAccount()
 		common.Must(err)

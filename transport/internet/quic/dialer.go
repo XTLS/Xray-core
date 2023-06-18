@@ -143,7 +143,7 @@ func (s *clientConnections) openConnection(ctx context.Context, destAddr net.Add
 		HandshakeIdleTimeout: time.Second * 8,
 		MaxIdleTimeout:       time.Second * 300,
 		Tracer: func(ctx context.Context, p logging.Perspective, ci quic.ConnectionID) logging.ConnectionTracer {
-			return qlog.NewConnectionTracer( &QlogWriter{connID: ci}, p, ci);
+			return qlog.NewConnectionTracer(&QlogWriter{connID: ci}, p, ci)
 		},
 	}
 	udpConn, _ := rawConn.(*net.UDPConn)
