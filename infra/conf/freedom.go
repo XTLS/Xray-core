@@ -90,7 +90,17 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			MaxLength:   int32(maxLength),
 		}
 
-		if len(c.Fragment.Packets) > 0 {
+		switch strings.ToLower(c.Fragment.Packets) {
+		case "tlshello":
+			// TLS Hello Fragmentation (into multiple handshake messages)
+			config.Fragment.StartPacket = 0
+			config.Fragment.EndPacket = 1
+		case "":
+			// TCP Segmentation (all packets)
+			config.Fragment.StartPacket = 0
+			config.Fragment.EndPacket = 0
+		default:
+			// TCP Segmentation (range)
 			packetRange := strings.Split(c.Fragment.Packets, "-")
 			var startPacket, endPacket int64
 			if len(packetRange) == 2 {
@@ -114,9 +124,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			}
 			config.Fragment.StartPacket = int32(startPacket)
 			config.Fragment.EndPacket = int32(endPacket)
-		} else {
-			config.Fragment.StartPacket = 0
-			config.Fragment.EndPacket = 0
 		}
 	}
 
