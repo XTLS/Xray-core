@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"io"
 	"math/big"
 	"time"
 
@@ -173,16 +174,29 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
-
 			if h.config.Fragment != nil {
-				newError("FRAGMENT", int(h.config.Fragment.MaxLength)).WriteToLog(session.ExportIDToError(ctx))
-				writer = buf.NewWriter(
-					&FragmentedClientHelloConn{
-						Conn:        conn,
-						maxLength:   int(h.config.Fragment.MaxLength),
-						minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
-						maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
-					})
+				if h.config.Fragment.StartPacket == 0 && h.config.Fragment.EndPacket == 1 {
+					newError("FRAGMENT", int(h.config.Fragment.MaxLength)).WriteToLog(session.ExportIDToError(ctx))
+					writer = buf.NewWriter(
+						&FragmentedClientHelloConn{
+							Conn:        conn,
+							maxLength:   int(h.config.Fragment.MaxLength),
+							minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+							maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+						})
+				} else {
+					writer = buf.NewWriter(
+						&FragmentWriter{
+							Writer:      conn,
+							minLength:   int(h.config.Fragment.MinLength),
+							maxLength:   int(h.config.Fragment.MaxLength),
+							minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+							maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+							startPacket: int(h.config.Fragment.StartPacket),
+							endPacket:   int(h.config.Fragment.EndPacket),
+							PacketCount: 0,
+						})
+				}
 			} else {
 				writer = buf.NewWriter(conn)
 			}
@@ -341,6 +355,44 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return nil
 }
 
+type FragmentWriter struct {
+	io.Writer
+	minLength   int
+	maxLength   int
+	minInterval time.Duration
+	maxInterval time.Duration
+	startPacket int
+	endPacket   int
+	PacketCount int
+}
+
+func (w *FragmentWriter) Write(buf []byte) (int, error) {
+	w.PacketCount += 1
+	if (w.startPacket != 0 && (w.PacketCount < w.startPacket || w.PacketCount > w.endPacket)) || len(buf) <= w.minLength {
+		return w.Writer.Write(buf)
+	}
+
+	nTotal := 0
+	for {
+		randomBytesTo := int(randBetween(int64(w.minLength), int64(w.maxLength))) + nTotal
+		if randomBytesTo > len(buf) {
+			randomBytesTo = len(buf)
+		}
+		n, err := w.Writer.Write(buf[nTotal:randomBytesTo])
+		if err != nil {
+			return nTotal + n, err
+		}
+		nTotal += n
+
+		if nTotal >= len(buf) {
+			return nTotal, nil
+		}
+
+		randomInterval := randBetween(int64(w.minInterval), int64(w.maxInterval))
+		time.Sleep(time.Duration(randomInterval))
+	}
+}
+
 // stolen from github.com/xtls/xray-core/transport/internet/reality
 func randBetween(left int64, right int64) int64 {
 	if left == right {
@@ -361,7 +413,7 @@ type FragmentedClientHelloConn struct {
 
 func (c *FragmentedClientHelloConn) Write(b []byte) (n int, err error) {
 	if len(b) >= 5 && b[0] == 22 && c.PacketCount == 0 {
-		n, err = sendFragmentedClientHello(c, b, c.maxLength)
+		n, err = sendFragmentedClientHello(c, b, c.minLength, c.maxLength)
 
 		if err == nil {
 			c.PacketCount++
@@ -372,7 +424,7 @@ func (c *FragmentedClientHelloConn) Write(b []byte) (n int, err error) {
 	return c.Conn.Write(b)
 }
 
-func sendFragmentedClientHello(conn *FragmentedClientHelloConn, clientHello []byte, maxFragmentSize int) (n int, err error) {
+func sendFragmentedClientHello(conn *FragmentedClientHelloConn, clientHello []byte, minFragmentSize, maxFragmentSize int) (n int, err error) {
 	if len(clientHello) < 5 || clientHello[0] != 22 {
 		return 0, errors.New("not a valid TLS ClientHello message")
 	}
@@ -380,13 +432,14 @@ func sendFragmentedClientHello(conn *FragmentedClientHelloConn, clientHello []by
 	clientHelloLen := (int(clientHello[3]) << 8) | int(clientHello[4])
 
 	clientHelloData := clientHello[5:]
-	for i := 0; i < clientHelloLen; i += maxFragmentSize {
-		fragmentEnd := i + maxFragmentSize
+	for i := 0; i < clientHelloLen; {
+		fragmentEnd := i + int(randBetween(int64(minFragmentSize), int64(maxFragmentSize)))
 		if fragmentEnd > clientHelloLen {
 			fragmentEnd = clientHelloLen
 		}
 
 		fragment := clientHelloData[i:fragmentEnd]
+		i = fragmentEnd
 
 		err = writeFragmentedRecord(conn, 22, fragment, clientHello)
 		if err != nil {
