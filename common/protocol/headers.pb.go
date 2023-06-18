@@ -27,7 +27,7 @@ const (
 	SecurityType_AUTO              SecurityType = 2
 	SecurityType_AES128_GCM        SecurityType = 3
 	SecurityType_CHACHA20_POLY1305 SecurityType = 4
-	SecurityType_NONE              SecurityType = 5
+	SecurityType_NONE              SecurityType = 5 // [DEPRECATED 2023-06]
 	SecurityType_ZERO              SecurityType = 6
 )
 
