@@ -32,5 +32,6 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	default:
 		return nil, newError(`unknown "nonIPQuery": `, c.NonIPQuery)
 	}
+	config.Non_IPQuery = c.NonIPQuery
 	return config, nil
 }
