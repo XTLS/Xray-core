@@ -539,7 +539,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 
-		if rawConn != nil {
+		if requestAddons.Flow == vless.XRV {
 			var counter stats.Counter
 			if statConn != nil {
 				counter = statConn.ReadCounter
@@ -591,7 +591,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		var err error
-		if rawConn != nil && requestAddons.Flow == vless.XRV {
+		if requestAddons.Flow == vless.XRV {
 			var counter stats.Counter
 			if statConn != nil {
 				counter = statConn.WriteCounter

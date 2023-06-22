@@ -247,7 +247,11 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 						}
 					}
 				}
-				reader = buf.NewReadVReader(conn, rawConn, nil)
+				if rawConn != nil {
+					reader = buf.NewReadVReader(conn, rawConn, nil)
+				} else {
+					reader = buf.NewReader(conn)
+				}
 				ct = counter
 				newError("XtlsRead readV").WriteToLog(session.ExportIDToError(ctx))
 			}
