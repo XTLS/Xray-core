@@ -36,7 +36,7 @@ func NewDNS(ctx context.Context, config interface{}) (interface{}, error) {
 
 	buf := make([]byte, 0x100)
 
-	off1, err := packDomainName(config.(*Config).Domain + ".", buf)
+	off1, err := packDomainName(config.(*Config).Domain+".", buf)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +62,8 @@ func packDomainName(s string, msg []byte) (off1 int, err error) {
 
 	// Emit sequence of counted strings, chopping at dots.
 	var (
-		begin     int
-		bs        []byte
+		begin int
+		bs    []byte
 	)
 	for i := 0; i < ls; i++ {
 		var c byte

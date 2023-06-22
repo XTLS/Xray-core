@@ -363,7 +363,7 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 5*60 { // TODO Timeout too small
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
 			if !conn.inactive {
 				conn.setInactive()
 				delete(w.activeConn, addr)

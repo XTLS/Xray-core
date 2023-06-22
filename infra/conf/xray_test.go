@@ -221,7 +221,8 @@ func TestXrayConfig(t *testing.T) {
 							},
 						}),
 						ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-							Server: &net.Endpoint{},
+							Server:      &net.Endpoint{},
+							Non_IPQuery: "drop",
 						}),
 					},
 				},

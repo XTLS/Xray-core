@@ -5,6 +5,7 @@ package freedom
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"io"
 	"math/big"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
@@ -173,17 +175,28 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
 			if h.config.Fragment != nil {
-				writer = buf.NewWriter(
-					&FragmentWriter{
-						Writer:      conn,
-						minLength:   int(h.config.Fragment.MinLength),
-						maxLength:   int(h.config.Fragment.MaxLength),
-						minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
-						maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
-						startPacket: int(h.config.Fragment.StartPacket),
-						endPacket:   int(h.config.Fragment.EndPacket),
-						PacketCount: 0,
-					})
+				if h.config.Fragment.StartPacket == 0 && h.config.Fragment.EndPacket == 1 {
+					newError("FRAGMENT", int(h.config.Fragment.MaxLength)).WriteToLog(session.ExportIDToError(ctx))
+					writer = buf.NewWriter(
+						&FragmentedClientHelloConn{
+							Conn:        conn,
+							maxLength:   int(h.config.Fragment.MaxLength),
+							minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+							maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+						})
+				} else {
+					writer = buf.NewWriter(
+						&FragmentWriter{
+							Writer:      conn,
+							minLength:   int(h.config.Fragment.MinLength),
+							maxLength:   int(h.config.Fragment.MaxLength),
+							minInterval: time.Duration(h.config.Fragment.MinInterval) * time.Millisecond,
+							maxInterval: time.Duration(h.config.Fragment.MaxInterval) * time.Millisecond,
+							startPacket: int(h.config.Fragment.StartPacket),
+							endPacket:   int(h.config.Fragment.EndPacket),
+							PacketCount: 0,
+						})
+				}
 			} else {
 				writer = buf.NewWriter(conn)
 			}
@@ -387,4 +400,67 @@ func randBetween(left int64, right int64) int64 {
 	}
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
 	return left + bigInt.Int64()
+}
+
+type FragmentedClientHelloConn struct {
+	net.Conn
+	PacketCount int
+	minLength   int
+	maxLength   int
+	minInterval time.Duration
+	maxInterval time.Duration
+}
+
+func (c *FragmentedClientHelloConn) Write(b []byte) (n int, err error) {
+	if len(b) >= 5 && b[0] == 22 && c.PacketCount == 0 {
+		n, err = sendFragmentedClientHello(c, b, c.minLength, c.maxLength)
+
+		if err == nil {
+			c.PacketCount++
+			return n, err
+		}
+	}
+
+	return c.Conn.Write(b)
+}
+
+func sendFragmentedClientHello(conn *FragmentedClientHelloConn, clientHello []byte, minFragmentSize, maxFragmentSize int) (n int, err error) {
+	if len(clientHello) < 5 || clientHello[0] != 22 {
+		return 0, errors.New("not a valid TLS ClientHello message")
+	}
+
+	clientHelloLen := (int(clientHello[3]) << 8) | int(clientHello[4])
+
+	clientHelloData := clientHello[5:]
+	for i := 0; i < clientHelloLen; {
+		fragmentEnd := i + int(randBetween(int64(minFragmentSize), int64(maxFragmentSize)))
+		if fragmentEnd > clientHelloLen {
+			fragmentEnd = clientHelloLen
+		}
+
+		fragment := clientHelloData[i:fragmentEnd]
+		i = fragmentEnd
+
+		err = writeFragmentedRecord(conn, 22, fragment, clientHello)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return len(clientHello), nil
+}
+
+func writeFragmentedRecord(c *FragmentedClientHelloConn, contentType uint8, data []byte, clientHello []byte) error {
+	header := make([]byte, 5)
+	header[0] = byte(clientHello[0])
+
+	tlsVersion := (int(clientHello[1]) << 8) | int(clientHello[2])
+	binary.BigEndian.PutUint16(header[1:], uint16(tlsVersion))
+
+	binary.BigEndian.PutUint16(header[3:], uint16(len(data)))
+	_, err := c.Conn.Write(append(header, data...))
+	randomInterval := randBetween(int64(c.minInterval), int64(c.maxInterval))
+	time.Sleep(time.Duration(randomInterval))
+
+	return err
 }

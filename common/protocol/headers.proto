@@ -8,11 +8,10 @@ option java_multiple_files = true;
 
 enum SecurityType {
   UNKNOWN = 0;
-  LEGACY = 1;
   AUTO = 2;
   AES128_GCM = 3;
   CHACHA20_POLY1305 = 4;
-  NONE = 5;
+  NONE = 5; // [DEPRECATED 2023-06] 
   ZERO = 6;
 }
 

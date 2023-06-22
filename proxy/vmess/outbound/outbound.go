@@ -128,11 +128,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	input := link.Reader
 	output := link.Writer
 
-	isAEAD := false
-	if !aeadDisabled && len(account.AlterIDs) == 0 {
-		isAEAD = true
-	}
-
 	hashkdf := hmac.New(sha256.New, []byte("VMessBF"))
 	hashkdf.Write(account.ID.Bytes())
 
@@ -144,7 +139,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
-	session := encoding.NewClientSession(ctx, isAEAD, protocol.DefaultIDHash, int64(behaviorSeed))
+	session := encoding.NewClientSession(ctx, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -233,7 +228,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 var (
 	enablePadding = false
-	aeadDisabled  = false
 )
 
 func shouldEnablePadding(s protocol.SecurityType) bool {
@@ -250,10 +244,5 @@ func init() {
 	paddingValue := platform.NewEnvFlag("xray.vmess.padding").GetValue(func() string { return defaultFlagValue })
 	if paddingValue != defaultFlagValue {
 		enablePadding = true
-	}
-
-	isAeadDisabled := platform.NewEnvFlag("xray.vmess.aead.disabled").GetValue(func() string { return defaultFlagValue })
-	if isAeadDisabled == "true" {
-		aeadDisabled = true
 	}
 }

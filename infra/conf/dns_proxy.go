@@ -7,10 +7,11 @@ import (
 )
 
 type DNSOutboundConfig struct {
-	Network   Network  `json:"network"`
-	Address   *Address `json:"address"`
-	Port      uint16   `json:"port"`
-	UserLevel uint32   `json:"userLevel"`
+	Network    Network  `json:"network"`
+	Address    *Address `json:"address"`
+	Port       uint16   `json:"port"`
+	UserLevel  uint32   `json:"userLevel"`
+	NonIPQuery string   `json:"nonIPQuery"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
@@ -24,5 +25,13 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	if c.Address != nil {
 		config.Server.Address = c.Address.Build()
 	}
+	switch c.NonIPQuery {
+	case "":
+		c.NonIPQuery = "drop"
+	case "drop", "skip":
+	default:
+		return nil, newError(`unknown "nonIPQuery": `, c.NonIPQuery)
+	}
+	config.Non_IPQuery = c.NonIPQuery
 	return config, nil
 }

@@ -1,6 +1,8 @@
 package router
 
 import (
+	"strings"
+
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
@@ -143,11 +145,11 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Attributes) > 0 {
-		cond, err := NewAttributeMatcher(rr.Attributes)
-		if err != nil {
-			return nil, err
+		configuredKeys := make(map[string]string)
+		for key, value := range rr.Attributes {
+			configuredKeys[strings.ToLower(key)] = strings.ToLower(value)
 		}
-		conds.Add(cond)
+		conds.Add(&AttributeMatcher{configuredKeys})
 	}
 
 	if conds.Len() == 0 && rr.GetTargetTag().(*RoutingRule_Tag).Tag[0] != '@' {
