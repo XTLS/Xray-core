@@ -34,6 +34,11 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return newError("failed to unset SO_KEEPALIVE", err)
 			}
 		}
+		if config.TcpNoDelay {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1); err != nil {
+				return newError("failed to set TCP_NODELAY", err)
+			}
+		}
 	}
 
 	return nil
