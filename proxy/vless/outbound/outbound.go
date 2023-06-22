@@ -247,7 +247,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		var err error
-		if rawConn != nil && requestAddons.Flow == vless.XRV {
+		if requestAddons.Flow == vless.XRV {
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
 				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
 					return newError(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
@@ -292,7 +292,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			serverReader = xudp.NewPacketReader(conn)
 		}
 
-		if rawConn != nil {
+		if requestAddons.Flow == vless.XRV {
 			var counter stats.Counter
 			if statConn != nil {
 				counter = statConn.ReadCounter
