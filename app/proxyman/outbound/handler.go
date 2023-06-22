@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -80,7 +79,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		if err != nil {
 			return nil, err
 		}
-		switch s := senderSettings.(type) {
+		switch s := interface{}(senderSettings).(type) {
 		case *proxyman.SenderConfig:
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
