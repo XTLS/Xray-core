@@ -294,9 +294,7 @@ func (m *AttributeMatcher) Match(attrs map[string]string) bool {
 		httpHeaders[strings.ToLower(key)] = value
 	}
 	for key, regex := range m.configuredKeys {
-		if a, ok := httpHeaders[key]; !ok {
-			return false
-		} else if match := regex.MatchString(a); !match {
+		if a, ok := httpHeaders[key]; !ok || !regex.MatchString(a) {
 			return false
 		}
 	}
