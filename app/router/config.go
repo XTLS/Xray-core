@@ -146,10 +146,9 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Attributes) > 0 {
-		configuredKeys := make(map[string]string)
+		configuredKeys := make(map[string]*regexp.Regexp)
 		for key, value := range rr.Attributes {
-			regexp.MustCompile(value)
-			configuredKeys[strings.ToLower(key)] = value
+			configuredKeys[strings.ToLower(key)] = regexp.MustCompile(value)
 		}
 		conds.Add(&AttributeMatcher{configuredKeys})
 	}

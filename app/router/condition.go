@@ -283,7 +283,7 @@ func (m *ProtocolMatcher) Apply(ctx routing.Context) bool {
 }
 
 type AttributeMatcher struct {
-	configuredKeys map[string]string
+	configuredKeys map[string]*regexp.Regexp
 }
 
 // Match implements attributes matching.
@@ -293,10 +293,10 @@ func (m *AttributeMatcher) Match(attrs map[string]string) bool {
 	for key, value := range attrs {
 		httpHeaders[strings.ToLower(key)] = value
 	}
-	for key, value := range m.configuredKeys {
+	for key, regex := range m.configuredKeys {
 		if a, ok := httpHeaders[key]; !ok {
 			return false
-		} else if match, _ := regexp.MatchString(value, a); !match {
+		} else if match := regex.MatchString(a); !match {
 			return false
 		}
 	}
