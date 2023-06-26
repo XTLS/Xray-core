@@ -1,6 +1,7 @@
 package router
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/xtls/xray-core/common/net"
@@ -287,13 +288,15 @@ type AttributeMatcher struct {
 
 // Match implements attributes matching.
 func (m *AttributeMatcher) Match(attrs map[string]string) bool {
-	// headers are insensitive most likely. So we do a convert
+	// header keys are case insensitive most likely. So we do a convert
 	httpHeaders := make(map[string]string)
 	for key, value := range attrs {
-		httpHeaders[strings.ToLower(key)] = strings.ToLower(value)
+		httpHeaders[strings.ToLower(key)] = value
 	}
 	for key, value := range m.configuredKeys {
-		if a, ok := httpHeaders[key]; !ok || !strings.Contains(a, value) {
+		if a, ok := httpHeaders[key]; !ok {
+			return false
+		} else if match, _ := regexp.MatchString(value, a); !match {
 			return false
 		}
 	}
