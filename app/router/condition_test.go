@@ -319,6 +319,19 @@ func TestRoutingRule(t *testing.T) {
 				},
 			},
 		},
+		{
+			rule: &RoutingRule{
+				Attributes: map[string]string{
+					"Custom": "p([a-z]+)ch",
+				},
+			},
+			test: []ruleTest{
+				{
+					input:  withContent(&session.Content{Attributes: map[string]string{"custom": "peach"}}),
+					output: true,
+				},
+			},
+		},
 	}
 
 	for _, test := range cases {
