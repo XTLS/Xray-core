@@ -449,22 +449,21 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	if (request.User.IpLimit > 0) {
 		addr := connection.RemoteAddr().(*net.TCPAddr)
-		user := account.ID.String()
 
 		uniqueIps := make(map[string]bool)
 		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
 		for _, conn := range *usrIpRstrct {
-			if conn.User == user && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
+			if conn.User == request.User.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
 				uniqueIps[conn.IpAddress.String()] = true
 			}
 		}
 
 		if (len(uniqueIps) >= int(request.User.IpLimit)) {
-			return newError("User ", user, " has exceeded their allowed IPs.").AtWarning()
+			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
 		}
 
 		connIp.IpAddress = addr.IP
-		connIp.User = user
+		connIp.User = request.User.Email
 		connIp.Time = time.Now().Unix()
 	}
 
