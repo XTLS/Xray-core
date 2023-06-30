@@ -131,7 +131,7 @@ func (s *Server) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*stat.UserIpRestriction, connIp *stat.UserIpRestriction) error {
 	sid := session.ExportIDToError(ctx)
 
 	iConn := conn
@@ -220,6 +220,26 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.Name = "trojan"
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
+
+	if (user.IpLimit > 0) {
+		addr := conn.RemoteAddr().(*net.TCPAddr)
+
+		uniqueIps := make(map[string]bool)
+		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
+		for _, conn := range *usrIpRstrct {
+			if conn.User == user.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
+				uniqueIps[conn.IpAddress.String()] = true
+			}
+		}
+
+		if (len(uniqueIps) >= int(user.IpLimit)) {
+			return newError("User ", user, " has exceeded their allowed IPs.").AtWarning()
+		}
+
+		connIp.IpAddress = addr.IP
+		connIp.User = user.Email
+		connIp.Time = time.Now().Unix()
+	}
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
