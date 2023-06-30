@@ -208,7 +208,7 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*stat.UserIpRestriction, connIp *stat.UserIpRestriction) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
@@ -263,6 +263,26 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.User = request.User
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
+
+	if (request.User.IpLimit > 0) {
+		addr := connection.RemoteAddr().(*net.TCPAddr)
+
+		uniqueIps := make(map[string]bool)
+		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
+		for _, conn := range *usrIpRstrct {
+			if conn.User == request.User.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
+				uniqueIps[conn.IpAddress.String()] = true
+			}
+		}
+
+		if (len(uniqueIps) >= int(request.User.IpLimit)) {
+			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
+		}
+
+		connIp.IpAddress = addr.IP
+		connIp.User = request.User.Email
+		connIp.Time = time.Now().Unix()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
