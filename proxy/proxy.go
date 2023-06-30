@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -22,7 +23,7 @@ type Inbound interface {
 	Network() []net.Network
 
 	// Process processes a connection of given network. If necessary, the Inbound can dispatch the connection to an Outbound.
-	Process(context.Context, net.Network, stat.Connection, routing.Dispatcher) error
+	Process(context.Context, net.Network, stat.Connection, routing.Dispatcher, *map[session.ID]*stat.UserIpRestriction, *stat.UserIpRestriction) error
 }
 
 // An Outbound process outbound connections.

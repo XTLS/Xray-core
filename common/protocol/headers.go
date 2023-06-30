@@ -75,6 +75,7 @@ type CommandSwitchAccount struct {
 	Port     net.Port
 	ID       uuid.UUID
 	Level    uint32
+	IpLimit  uint32
 	ValidMin byte
 }
 

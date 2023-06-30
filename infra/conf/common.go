@@ -231,13 +231,15 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 }
 
 type User struct {
-	EmailString string `json:"email"`
-	LevelByte   byte   `json:"level"`
+	EmailString   string `json:"email"`
+	LevelByte     byte   `json:"level"`
+	IpLimitByte   byte   `json:"ips"`
 }
 
 func (v *User) Build() *protocol.User {
 	return &protocol.User{
 		Email: v.EmailString,
 		Level: uint32(v.LevelByte),
+		IpLimit: uint32(v.IpLimitByte),
 	}
 }

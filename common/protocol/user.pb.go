@@ -32,6 +32,8 @@ type User struct {
 	// Protocol specific account information. Must be the account proto in one of
 	// the proxies.
 	Account *serial.TypedMessage `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
+	
+	IpLimit uint32 `protobuf:"varint,4,opt,name=ips,proto3" json:"ips,omitempty"`
 }
 
 func (x *User) Reset() {
@@ -78,6 +80,13 @@ func (x *User) GetEmail() string {
 		return x.Email
 	}
 	return ""
+}
+
+func (x *User) GetIpLimit() uint32 {
+	if x != nil {
+		return x.IpLimit
+	}
+	return 0
 }
 
 func (x *User) GetAccount() *serial.TypedMessage {
