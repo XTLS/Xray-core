@@ -77,20 +77,10 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	defer conn.Close()
 
-	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
-		iConn = statConn.Connection
-	}
-
 	user := server.PickUser()
 	account, ok := user.Account.(*MemoryAccount)
 	if !ok {
 		return newError("user account is not valid")
-	}
-
-	connWriter := &ConnWriter{
-		Flow: account.Flow,
 	}
 
 	var newCtx context.Context
@@ -113,9 +103,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
 
-		connWriter.Writer = bufferWriter
-		connWriter.Target = destination
-		connWriter.Account = account
+		connWriter := &ConnWriter{
+			Writer:  bufferWriter,
+			Target:  destination,
+			Account: account,
+		}
 
 		var bodyWriter buf.Writer
 		if destination.Network == net.Network_UDP {
