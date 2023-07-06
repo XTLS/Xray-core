@@ -13,12 +13,12 @@ message DestinationOverride {
 }
 
 message Fragment {
-  int32 min_interval = 1;
-  int32 max_interval = 2;
-  int32 min_length = 3;
-  int32 max_length = 4;
-  int32 start_packet = 5;
-  int32 end_packet = 6;
+  uint64 packets_from = 1;
+  uint64 packets_to = 2;
+  uint64 length_min = 3;
+  uint64 length_max = 4;
+  uint64 interval_min = 5;
+  uint64 interval_max = 6;
 }
 
 message Config {
