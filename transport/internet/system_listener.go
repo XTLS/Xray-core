@@ -21,6 +21,19 @@ type DefaultListener struct {
 	controllers []control.Func
 }
 
+type combinedListener struct {
+	net.Listener
+	locker *FileLocker // for unix domain socket
+}
+
+func (cl *combinedListener) Close() error {
+	if cl.locker != nil {
+		cl.locker.Release()
+		cl.locker = nil
+	}
+	return cl.Listener.Close()
+}
+
 func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []control.Func) func(network, address string, c syscall.RawConn) error {
 	return func(network, address string, c syscall.RawConn) error {
 		return c.Control(func(fd uintptr) {
@@ -88,11 +101,17 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 			locker := &FileLocker{
 				path: address + ".lock",
 			}
-			err := locker.Acquire()
-			if err != nil {
+			if err := locker.Acquire(); err != nil {
 				return nil, err
 			}
-			ctx = context.WithValue(ctx, address, locker)
+			// combine listener and unix domain socket locker
+			defer func(locker *FileLocker) {
+				if err == nil {
+					l = &combinedListener{Listener: l, locker: locker}
+				} else {
+					locker.Release()
+				}
+			}(locker)
 		}
 	}
 
