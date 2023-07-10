@@ -237,9 +237,9 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 
 func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
 	bs := payload.Bytes()
-	if len(bs) <= 32 {
-		return nil, nil, newError("len(bs) <= 32")
-	}
+	// if len(bs) <= 32 {
+	// 	return nil, nil, newError("len(bs) <= 32")
+	// }
 
 	user, _, d, _, err := validator.Get(bs, protocol.RequestCommandUDP)
 	switch err {
