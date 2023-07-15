@@ -172,6 +172,10 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 	inbound := session.InboundFromContext(ctx)
 	outbound := session.OutboundFromContext(ctx)
 
+	if inbound == nil || outbound == nil {
+		return nil, newError("missing inbound or outbound metadata from context")
+	}
+
 	data := struct {
 		Source net.Destination
 		Target net.Destination
