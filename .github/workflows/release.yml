@@ -105,12 +105,14 @@ jobs:
             goarch: arm
             goarm: 7
           # BEGIN Other architectures
-          # BEGIN riscv64 & ARM64
+          # BEGIN riscv64 & ARM64 & LOONG64
           - goos: linux
             goarch: arm64
           - goos: linux
             goarch: riscv64
-          # END riscv64 & ARM64
+          - goos: linux
+            goarch: loong64
+          # END riscv64 & ARM64 & LOONG64
           # BEGIN MIPS
           - goos: linux
             goarch: mips64
