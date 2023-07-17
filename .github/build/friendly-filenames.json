@@ -22,6 +22,7 @@
   "linux-ppc64le": { "friendlyName": "linux-ppc64le" },
   "linux-ppc64": { "friendlyName": "linux-ppc64" },
   "linux-riscv64": { "friendlyName": "linux-riscv64" },
+  "linux-loong64": { "friendlyName": "linux-loong64" },
   "linux-s390x": { "friendlyName": "linux-s390x" },
   "openbsd-386": { "friendlyName": "openbsd-32" },
   "openbsd-amd64": { "friendlyName": "openbsd-64" },
