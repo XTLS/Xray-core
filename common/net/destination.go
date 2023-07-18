@@ -113,7 +113,7 @@ func (d Destination) String() string {
 
 // IsValid returns true if this Destination is valid.
 func (d Destination) IsValid() bool {
-	return d.Address != nil && d.Network != Network_Unknown
+	return d.Network != Network_Unknown
 }
 
 // AsDestination converts current Endpoint into Destination.
