@@ -204,7 +204,12 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
-	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
+	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
+	if !destination.IsValid() {
+		return newError("invalid destination")
+	}
+
+	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
 	}
