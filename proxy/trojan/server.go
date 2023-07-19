@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -35,6 +36,8 @@ func init() {
 
 // Server is an inbound connection handler that handles messages in trojan protocol.
 type Server struct {
+	sync.Mutex
+
 	policyManager policy.Manager
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
@@ -225,12 +228,15 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		addr := conn.RemoteAddr().(*net.TCPAddr)
 
 		uniqueIps := make(map[string]bool)
+
+		s.Lock()
 		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
 		for _, conn := range *usrIpRstrct {
 			if conn.User == user.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
 				uniqueIps[conn.IpAddress.String()] = true
 			}
 		}
+		s.Unlock()
 
 		if (len(uniqueIps) >= int(user.IpLimit)) {
 			return newError("User ", user, " has exceeded their allowed IPs.").AtWarning()

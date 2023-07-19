@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -53,6 +54,8 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
+	sync.Mutex
+
 	inboundHandlerManager feature_inbound.Manager
 	policyManager         policy.Manager
 	validator             *vless.Validator
@@ -451,12 +454,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		addr := connection.RemoteAddr().(*net.TCPAddr)
 
 		uniqueIps := make(map[string]bool)
+
+		h.Lock()
 		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
 		for _, conn := range *usrIpRstrct {
 			if conn.User == request.User.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
 				uniqueIps[conn.IpAddress.String()] = true
 			}
 		}
+		h.Unlock()
 
 		if (len(uniqueIps) >= int(request.User.IpLimit)) {
 			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
