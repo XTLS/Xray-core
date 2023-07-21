@@ -173,6 +173,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil {
 			newError("failed to dial to ", dest).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 			wrc.Close()
+			{
+				// Abandon `client` if `client.Do(request)` failed
+				// See https://github.com/golang/go/issues/30702
+				globalDialerAccess.Lock()
+				if globalDialerMap[dialerConf{dest, streamSettings}] == client {
+					delete(globalDialerMap, dialerConf{dest, streamSettings})
+				}
+				globalDialerAccess.Unlock()
+			}
 			return
 		}
 		if response.StatusCode != 200 {
