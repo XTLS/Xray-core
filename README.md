@@ -102,6 +102,7 @@
   - [installReality](https://github.com/BoxXt/installReality)
   - [sbox-reality](https://github.com/Misaka-blog/sbox-reality)
   - [sing-box-for-ios](https://github.com/SagerNet/sing-box-for-ios)
+  - [NekoBox for Android](https://github.com/MatsuriDayo/NekoBoxForAndroid)
 
 ## Contributing
 
