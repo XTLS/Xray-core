@@ -268,7 +268,8 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		return newError("Dispatcher: Invalid destination.")
 	}
 	ob := &session.Outbound{
-		Target: destination,
+		OriginalTarget: destination,
+		Target:         destination,
 	}
 	ctx = session.ContextWithOutbound(ctx, ob)
 	content := session.ContentFromContext(ctx)
