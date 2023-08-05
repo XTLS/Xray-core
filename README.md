@@ -64,6 +64,7 @@
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [HiddifyN](https://github.com/hiddify/HiddifyN)
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
@@ -76,10 +77,12 @@
 - macOS arm64 & x64
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
@@ -90,6 +93,7 @@
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [XrayKit](https://github.com/arror/XrayKit)
+  - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
