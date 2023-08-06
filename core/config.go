@@ -57,7 +57,7 @@ func GetFormatByExtension(ext string) string {
 		return "yaml"
 	case "toml":
 		return "toml"
-	case "json":
+	case "json", "jsonc":
 		return "json"
 	default:
 		return ""
