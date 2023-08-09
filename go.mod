@@ -26,7 +26,7 @@ require (
 	golang.org/x/sys v0.11.0
 	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.31.0
-	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
+	gvisor.dev/gvisor v0.0.0-20230808193359-821459c94264
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.2.1
 )
