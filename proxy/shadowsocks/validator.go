@@ -80,6 +80,11 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 
 	for _, user := range v.users {
 		if account := user.Account.(*MemoryAccount); account.Cipher.IsAEAD() {
+			// AEAD payload decoding requires the payload to be over 32 bytes
+			if len(bs) < 32 {
+				continue
+			}
+
 			aeadCipher := account.Cipher.(*AEADCipher)
 			ivLen = aeadCipher.IVSize()
 			iv := bs[:ivLen]
