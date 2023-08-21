@@ -51,6 +51,7 @@
   - [XTLS/Xray-examples](https://github.com/XTLS/Xray-examples)
   - [chika0801/Xray-examples](https://github.com/chika0801/Xray-examples)
   - [lxhao61/integrated-examples](https://github.com/lxhao61/integrated-examples)
+  - [Xray REALITY with 'steal oneself'](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
 - Tutorial
   - [XTLS Vision](https://github.com/chika0801/Xray-install)
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
