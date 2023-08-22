@@ -225,7 +225,11 @@ func (ac *ACAutomaton) Match(s string) bool {
 	// 2. the match string is through a fail edge. NOT FULL MATCH
 	// 2.1 Through a fail edge, but there exists a valid node. SUBSTR
 	for i := len(s) - 1; i >= 0; i-- {
-		idx := char2Index[s[i]]
+		chr := int(s[i])
+		if chr >= len(char2Index) {
+			return false
+		}
+		idx := char2Index[chr]
 		fullMatch = fullMatch && ac.trie[node][idx].edgeType
 		node = ac.trie[node][idx].nextNode
 		switch ac.exists[node].matchType {
