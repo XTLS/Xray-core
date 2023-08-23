@@ -12,9 +12,11 @@ import (
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -31,7 +33,8 @@ type Server struct {
 	device     *device.Device
 	bindServer *netBindServer
 
-	info routingInfo
+	info          routingInfo
+	policyManager policy.Manager
 }
 
 type routingInfo struct {
@@ -65,6 +68,7 @@ func NewServer(ctx context.Context, config *DeviceConfig) (*Server, error) {
 				},
 			},
 		},
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
 	server.setConnectionHandler(tnet.stack)
@@ -149,10 +153,11 @@ func (s *Server) setConnectionHandler(stack *stack.Stack) {
 		}
 		r.Complete(false)
 
+		// enable tcp keep-alive to prevent hanging connections
 		ep.SocketOptions().SetKeepAlive(true)
 
 		// local address is actually destination
-		go forwardConnection(s.info, net.TCPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
+		go s.forwardConnection(s.info, net.TCPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
 	})
 	stack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
@@ -173,19 +178,21 @@ func (s *Server) setConnectionHandler(stack *stack.Stack) {
 			Timeout: 15 * time.Second,
 		})
 
-		go forwardConnection(s.info, net.UDPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
+		go s.forwardConnection(s.info, net.UDPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
 	})
 	stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
 }
 
-func forwardConnection(info routingInfo, dest net.Destination, conn net.Conn) {
+func (s *Server) forwardConnection(info routingInfo, dest net.Destination, conn net.Conn) {
 	if info.dispatcher == nil {
 		newError("unexpected: dispatcher == nil").AtError().WriteToLog()
 		return
 	}
+	defer conn.Close()
 
 	ctx, cancel := context.WithCancel(core.ToBackgroundDetachedContext(info.ctx))
-	defer cancel()
+	plcy := s.policyManager.ForLevel(0)
+	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   nullDestination,
@@ -211,7 +218,8 @@ func forwardConnection(info routingInfo, dest net.Destination, conn net.Conn) {
 	defer cancel()
 
 	requestDone := func() error {
-		if err := buf.Copy(buf.NewReader(conn), link.Writer); err != nil {
+		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
+		if err := buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to transport all TCP request").Base(err)
 		}
 
@@ -219,7 +227,8 @@ func forwardConnection(info routingInfo, dest net.Destination, conn net.Conn) {
 	}
 
 	responseDone := func() error {
-		if err := buf.Copy(link.Reader, buf.NewWriter(conn)); err != nil {
+		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
+		if err := buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to transport all TCP response").Base(err)
 		}
 
