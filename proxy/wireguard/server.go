@@ -138,47 +138,54 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 }
 
 func (s *Server) setConnectionHandler(stack *stack.Stack) {
-	tcpForwarder := tcp.NewForwarder(stack, 0, 2048, func(r *tcp.ForwarderRequest) {
-		var (
-			wq waiter.Queue
-			id = r.ID()
-		)
+	tcpForwarder := tcp.NewForwarder(stack, 0, 65535, func(r *tcp.ForwarderRequest) {
+		go func(r *tcp.ForwarderRequest) {
+			var (
+				wq waiter.Queue
+				id = r.ID()
+			)
 
-		// Perform a TCP three-way handshake.
-		ep, err := r.CreateEndpoint(&wq)
-		if err != nil {
-			newError(err.String()).AtError().WriteToLog()
-			r.Complete(true)
-			return
-		}
-		r.Complete(false)
+			// Perform a TCP three-way handshake.
+			ep, err := r.CreateEndpoint(&wq)
+			if err != nil {
+				newError(err.String()).AtError().WriteToLog()
+				r.Complete(true)
+				return
+			}
+			r.Complete(false)
+			defer ep.Close()
 
-		// enable tcp keep-alive to prevent hanging connections
-		ep.SocketOptions().SetKeepAlive(true)
+			// enable tcp keep-alive to prevent hanging connections
+			ep.SocketOptions().SetKeepAlive(true)
 
-		// local address is actually destination
-		go s.forwardConnection(s.info, net.TCPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
+			// local address is actually destination
+			s.forwardConnection(s.info, net.TCPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
+		}(r)
 	})
 	stack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
 	udpForwarder := udp.NewForwarder(stack, func(r *udp.ForwarderRequest) {
-		var (
-			wq waiter.Queue
-			id = r.ID()
-		)
+		go func(r *udp.ForwarderRequest) {
+			var (
+				wq waiter.Queue
+				id = r.ID()
+			)
 
-		ep, err := r.CreateEndpoint(&wq)
-		if err != nil {
-			newError(err.String()).AtError().WriteToLog()
-			return
-		}
-		// prevents hanging connections and ensure timely release
-		ep.SocketOptions().SetLinger(tcpip.LingerOption{
-			Enabled: true,
-			Timeout: 15 * time.Second,
-		})
+			ep, err := r.CreateEndpoint(&wq)
+			if err != nil {
+				newError(err.String()).AtError().WriteToLog()
+				return
+			}
+			defer ep.Close()
 
-		go s.forwardConnection(s.info, net.UDPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
+			// prevents hanging connections and ensure timely release
+			ep.SocketOptions().SetLinger(tcpip.LingerOption{
+				Enabled: true,
+				Timeout: 15 * time.Second,
+			})
+
+			s.forwardConnection(s.info, net.UDPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
+		}(r)
 	})
 	stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
 }
