@@ -7,7 +7,7 @@ import (
 	"github.com/xtls/xray-core/proxy/wireguard"
 )
 
-func TestWireGuardOutbound(t *testing.T) {
+func TestWireGuardConfig(t *testing.T) {
 	creator := func() Buildable {
 		return new(WireGuardConfig)
 	}
@@ -34,11 +34,10 @@ func TestWireGuardOutbound(t *testing.T) {
 				Peers: []*wireguard.PeerConfig{
 					{
 						// also can read from hex form directly
-						PublicKey:    "6e65ce0be17517110c17d77288ad87e7fd5252dcc7d09b95a39d61db03df832a",
-						PreSharedKey: "0000000000000000000000000000000000000000000000000000000000000000",
-						Endpoint:     "127.0.0.1:1234",
-						KeepAlive:    0,
-						AllowedIps:   []string{"0.0.0.0/0", "::0/0"},
+						PublicKey:  "6e65ce0be17517110c17d77288ad87e7fd5252dcc7d09b95a39d61db03df832a",
+						Endpoint:   "127.0.0.1:1234",
+						KeepAlive:  0,
+						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
 					},
 				},
 				Mtu:        1300,

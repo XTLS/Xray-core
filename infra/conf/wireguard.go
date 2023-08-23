@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"google.golang.org/protobuf/proto"
@@ -12,7 +13,7 @@ type WireGuardPeerConfig struct {
 	PublicKey    string   `json:"publicKey"`
 	PreSharedKey string   `json:"preSharedKey"`
 	Endpoint     string   `json:"endpoint"`
-	KeepAlive    int      `json:"keepAlive"`
+	KeepAlive    uint32   `json:"keepAlive"`
 	AllowedIPs   []string `json:"allowedIPs,omitempty"`
 }
 
@@ -20,9 +21,11 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 	var err error
 	config := new(wireguard.PeerConfig)
 
-	config.PublicKey, err = parseWireGuardKey(c.PublicKey)
-	if err != nil {
-		return nil, err
+	if c.PublicKey != "" {
+		config.PublicKey, err = parseWireGuardKey(c.PublicKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if c.PreSharedKey != "" {
@@ -30,13 +33,11 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		config.PreSharedKey = "0000000000000000000000000000000000000000000000000000000000000000"
 	}
 
 	config.Endpoint = c.Endpoint
 	// default 0
-	config.KeepAlive = int32(c.KeepAlive)
+	config.KeepAlive = c.KeepAlive
 	if c.AllowedIPs == nil {
 		config.AllowedIps = []string{"0.0.0.0/0", "::0/0"}
 	} else {
@@ -47,11 +48,13 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 }
 
 type WireGuardConfig struct {
+	IsClient bool `json:""`
+
 	SecretKey  string                 `json:"secretKey"`
 	Address    []string               `json:"address"`
 	Peers      []*WireGuardPeerConfig `json:"peers"`
-	MTU        int                    `json:"mtu"`
-	NumWorkers int                    `json:"workers"`
+	MTU        uint32                 `json:"mtu"`
+	NumWorkers uint32                 `json:"workers"`
 	Reserved   []byte                 `json:"reserved"`
 }
 
@@ -85,33 +88,42 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	if c.MTU == 0 {
 		config.Mtu = 1420
 	} else {
-		config.Mtu = int32(c.MTU)
+		config.Mtu = c.MTU
 	}
-	// these a fallback code exists in github.com/nanoda0523/wireguard-go code,
+	// these a fallback code exists in github.com/sagernet/wireguard-go code,
 	// we don't need to process fallback manually
-	config.NumWorkers = int32(c.NumWorkers)
+	config.NumWorkers = c.NumWorkers
 
 	if len(c.Reserved) != 0 && len(c.Reserved) != 3 {
 		return nil, newError(`"reserved" should be empty or 3 bytes`)
 	}
 	config.Reserved = c.Reserved
 
+	config.IsClient = c.IsClient
+
 	return config, nil
 }
 
 func parseWireGuardKey(str string) (string, error) {
-	if len(str) != 64 {
-		// may in base64 form
-		dat, err := base64.StdEncoding.DecodeString(str)
-		if err != nil {
-			return "", err
+	var err error
+
+	if len(str)%2 == 0 {
+		_, err = hex.DecodeString(str)
+		if err == nil {
+			return str, nil
 		}
-		if len(dat) != 32 {
-			return "", newError("key should be 32 bytes: " + str)
-		}
-		return hex.EncodeToString(dat), err
-	} else {
-		// already hex form
-		return str, nil
 	}
+
+	var dat []byte
+	str = strings.TrimSuffix(str, "=")
+	if strings.ContainsRune(str, '+') || strings.ContainsRune(str, '/') {
+		dat, err = base64.RawStdEncoding.DecodeString(str)
+	} else {
+		dat, err = base64.RawURLEncoding.DecodeString(str)
+	}
+	if err == nil {
+		return hex.EncodeToString(dat), nil
+	}
+
+	return "", newError("failed to deserialize key").Base(err)
 }

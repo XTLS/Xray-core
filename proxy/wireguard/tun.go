@@ -13,7 +13,6 @@ import (
 	"os"
 
 	"github.com/sagernet/wireguard-go/tun"
-	"github.com/xtls/xray-core/features/dns"
 	"gvisor.dev/gvisor/pkg/bufferv2"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -32,24 +31,22 @@ type netTun struct {
 	events         chan tun.Event
 	incomingPacket chan *bufferv2.View
 	mtu            int
-	dnsClient      dns.Client
 	hasV4, hasV6   bool
 }
 
 type Net netTun
 
-func CreateNetTUN(localAddresses []netip.Addr, dnsClient dns.Client, mtu int) (tun.Device, *Net, error) {
+func CreateNetTUN(localAddresses []netip.Addr, mtu int, handleLocal bool) (tun.Device, *Net, error) {
 	opts := stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, ipv6.NewProtocol},
 		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol},
-		HandleLocal:        true,
+		HandleLocal:        handleLocal,
 	}
 	dev := &netTun{
 		ep:             channel.New(1024, uint32(mtu), ""),
 		stack:          stack.New(opts),
 		events:         make(chan tun.Event, 10),
 		incomingPacket: make(chan *bufferv2.View),
-		dnsClient:      dnsClient,
 		mtu:            mtu,
 	}
 	dev.ep.AddNotify(dev)
@@ -84,23 +81,36 @@ func CreateNetTUN(localAddresses []netip.Addr, dnsClient dns.Client, mtu int) (t
 	if dev.hasV6 {
 		dev.stack.AddRoute(tcpip.Route{Destination: header.IPv6EmptySubnet, NIC: 1})
 	}
+	if !handleLocal {
+		// enable promiscuous mode to handle all packets processed by netstack
+		dev.stack.SetPromiscuousMode(1, true)
+		dev.stack.SetSpoofing(1, true)
+	}
+
+	// disable tcp delay
+	opt := tcpip.TCPDelayEnabled(false)
+	dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
 
 	dev.events <- tun.EventUp
 	return dev, (*Net)(dev), nil
 }
 
+// Name implements tun.Device
 func (tun *netTun) Name() (string, error) {
 	return "go", nil
 }
 
+// File implements tun.Device
 func (tun *netTun) File() *os.File {
 	return nil
 }
 
+// Events implements tun.Device
 func (tun *netTun) Events() chan tun.Event {
 	return tun.events
 }
 
+// Read implements tun.Device
 func (tun *netTun) Read(buf []byte, offset int) (int, error) {
 	view, ok := <-tun.incomingPacket
 	if !ok {
@@ -110,6 +120,7 @@ func (tun *netTun) Read(buf []byte, offset int) (int, error) {
 	return view.Read(buf[offset:])
 }
 
+// Write implements tun.Device
 func (tun *netTun) Write(buf []byte, offset int) (int, error) {
 	packet := buf[offset:]
 	if len(packet) == 0 {
@@ -127,9 +138,10 @@ func (tun *netTun) Write(buf []byte, offset int) (int, error) {
 	return len(buf), nil
 }
 
+// WriteNotify implements channel.Notification
 func (tun *netTun) WriteNotify() {
 	pkt := tun.ep.Read()
-	if pkt == nil {
+	if pkt.IsNil() {
 		return
 	}
 
@@ -139,10 +151,12 @@ func (tun *netTun) WriteNotify() {
 	tun.incomingPacket <- view
 }
 
+// Flush  implements tun.Device
 func (tun *netTun) Flush() error {
 	return nil
 }
 
+// Close implements tun.Device
 func (tun *netTun) Close() error {
 	tun.stack.RemoveNIC(1)
 
@@ -159,6 +173,7 @@ func (tun *netTun) Close() error {
 	return nil
 }
 
+// MTU  implements tun.Device
 func (tun *netTun) MTU() (int, error) {
 	return tun.mtu, nil
 }
@@ -259,45 +274,4 @@ func (n *Net) HasV4() bool {
 
 func (n *Net) HasV6() bool {
 	return n.hasV6
-}
-
-func IsDomainName(s string) bool {
-	l := len(s)
-	if l == 0 || l > 254 || l == 254 && s[l-1] != '.' {
-		return false
-	}
-	last := byte('.')
-	nonNumeric := false
-	partlen := 0
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		default:
-			return false
-		case 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_':
-			nonNumeric = true
-			partlen++
-		case '0' <= c && c <= '9':
-			partlen++
-		case c == '-':
-			if last == '.' {
-				return false
-			}
-			partlen++
-			nonNumeric = true
-		case c == '.':
-			if last == '.' || last == '-' {
-				return false
-			}
-			if partlen > 63 || partlen == 0 {
-				return false
-			}
-			partlen = 0
-		}
-		last = c
-	}
-	if last == '-' || partlen > 63 {
-		return false
-	}
-	return nonNumeric
 }
