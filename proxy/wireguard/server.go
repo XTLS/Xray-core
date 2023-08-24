@@ -159,7 +159,7 @@ func (s *Server) setConnectionHandler(stack *stack.Stack) {
 			ep.SocketOptions().SetKeepAlive(true)
 
 			// local address is actually destination
-			s.forwardConnection(s.info, net.TCPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
+			s.forwardConnection(s.info, net.TCPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
 		}(r)
 	})
 	stack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
@@ -184,7 +184,7 @@ func (s *Server) setConnectionHandler(stack *stack.Stack) {
 				Timeout: 15 * time.Second,
 			})
 
-			s.forwardConnection(s.info, net.UDPDestination(net.IPAddress([]byte(id.LocalAddress)), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
+			s.forwardConnection(s.info, net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
 		}(r)
 	})
 	stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
