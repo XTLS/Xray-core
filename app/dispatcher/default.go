@@ -250,7 +250,11 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				if resComp, ok := result.(SnifferResultComposite); ok {
 					protocol = resComp.ProtocolForDomainResult()
 				}
-				if sniffingRequest.RouteOnly && protocol != "fakedns" {
+				isFakeIP := false
+				if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && ob.Target.Address.Family().IsIP() && fkr0.IsIPInIPPool(ob.Target.Address) {
+					isFakeIP = true
+				}
+				if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 					ob.RouteTarget = destination
 				} else {
 					ob.Target = destination
@@ -297,7 +301,11 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			if resComp, ok := result.(SnifferResultComposite); ok {
 				protocol = resComp.ProtocolForDomainResult()
 			}
-			if sniffingRequest.RouteOnly && protocol != "fakedns" {
+			isFakeIP := false
+			if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && ob.Target.Address.Family().IsIP() && fkr0.IsIPInIPPool(ob.Target.Address) {
+				isFakeIP = true
+			}
+			if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 				ob.RouteTarget = destination
 			} else {
 				ob.Target = destination
