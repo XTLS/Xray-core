@@ -156,7 +156,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		aead.Seal(hello.SessionId[:0], hello.Random[20:], hello.SessionId[:16], hello.Raw)
 		copy(hello.Raw[39:], hello.SessionId)
 	}
-	if err := uConn.Handshake(); err != nil {
+	if err := uConn.HandshakeContext(ctx); err != nil {
 		return nil, err
 	}
 	if config.Show {
