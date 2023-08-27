@@ -53,7 +53,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	transport := &http2.Transport{
-		DialTLS: func(network string, addr string, tlsConfig *gotls.Config) (net.Conn, error) {
+		DialTLSContext: func(hctx context.Context, string, addr string, tlsConfig *gotls.Config) (net.Conn, error) {
 			rawHost, rawPort, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, err
@@ -67,18 +67,18 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			}
 			address := net.ParseAddress(rawHost)
 
-			dctx := context.Background()
-			dctx = session.ContextWithID(dctx, session.IDFromContext(ctx))
-			dctx = session.ContextWithOutbound(dctx, session.OutboundFromContext(ctx))
+			hctx = session.ContextWithID(hctx, session.IDFromContext(ctx))
+			hctx = session.ContextWithOutbound(hctx, session.OutboundFromContext(ctx))
+			hctx = session.ContextWithTimeoutOnly(hctx, true)
 
-			pconn, err := internet.DialSystem(dctx, net.TCPDestination(address, port), sockopt)
+			pconn, err := internet.DialSystem(hctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
 				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
 
 			if realityConfigs != nil {
-				return reality.UClient(pconn, realityConfigs, ctx, dest)
+				return reality.UClient(pconn, realityConfigs, hctx, dest)
 			}
 
 			var cn tls.Interface
@@ -173,6 +173,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil {
 			newError("failed to dial to ", dest).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 			wrc.Close()
+			{
+				// Abandon `client` if `client.Do(request)` failed
+				// See https://github.com/golang/go/issues/30702
+				globalDialerAccess.Lock()
+				if globalDialerMap[dialerConf{dest, streamSettings}] == client {
+					delete(globalDialerMap, dialerConf{dest, streamSettings})
+				}
+				globalDialerAccess.Unlock()
+			}
 			return
 		}
 		if response.StatusCode != 200 {

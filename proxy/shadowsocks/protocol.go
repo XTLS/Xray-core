@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"hash/crc32"
 	"io"
 
@@ -236,37 +237,37 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 }
 
 func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
-	bs := payload.Bytes()
-	if len(bs) <= 32 {
-		return nil, nil, newError("len(bs) <= 32")
-	}
+	rawPayload := payload.Bytes()
+	user, _, d, _, err := validator.Get(rawPayload, protocol.RequestCommandUDP)
 
-	user, _, d, _, err := validator.Get(bs, protocol.RequestCommandUDP)
-	switch err {
-	case ErrIVNotUnique:
+	if errors.Is(err, ErrIVNotUnique) {
 		return nil, nil, newError("failed iv check").Base(err)
-	case ErrNotFound:
-		return nil, nil, newError("failed to match an user").Base(err)
-	default:
-		account := user.Account.(*MemoryAccount)
-		if account.Cipher.IsAEAD() {
-			payload.Clear()
-			payload.Write(d)
-		} else {
-			if account.Cipher.IVSize() > 0 {
-				iv := make([]byte, account.Cipher.IVSize())
-				copy(iv, payload.BytesTo(account.Cipher.IVSize()))
-			}
-			if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
-				return nil, nil, newError("failed to decrypt UDP payload").Base(err)
-			}
-		}
 	}
 
-	request := &protocol.RequestHeader{
-		Version: Version,
-		User:    user,
-		Command: protocol.RequestCommandUDP,
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil, newError("failed to match an user").Base(err)
+	}
+
+	if err != nil {
+		return nil, nil, newError("unexpected error").Base(err)
+	}
+
+	account, ok := user.Account.(*MemoryAccount)
+	if !ok {
+		return nil, nil, newError("expected MemoryAccount returned from validator")
+	}
+
+	if account.Cipher.IsAEAD() {
+		payload.Clear()
+		payload.Write(d)
+	} else {
+		if account.Cipher.IVSize() > 0 {
+			iv := make([]byte, account.Cipher.IVSize())
+			copy(iv, payload.BytesTo(account.Cipher.IVSize()))
+		}
+		if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
+			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+		}
 	}
 
 	payload.SetByte(0, payload.Byte(0)&0x0F)
@@ -276,8 +277,13 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 		return nil, nil, newError("failed to parse address").Base(err)
 	}
 
-	request.Address = addr
-	request.Port = port
+	request := &protocol.RequestHeader{
+		Version: Version,
+		User:    user,
+		Command: protocol.RequestCommandUDP,
+		Address: addr,
+		Port:    port,
+	}
 
 	return request, payload, nil
 }
