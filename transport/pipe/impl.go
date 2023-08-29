@@ -24,7 +24,6 @@ const (
 type pipeOption struct {
 	limit           int32 // maximum buffer size in bytes
 	discardOverflow bool
-	onTransmission  func(buffer buf.MultiBuffer) buf.MultiBuffer
 }
 
 func (o *pipeOption) isFull(curSize int32) bool {
@@ -139,10 +138,6 @@ func (p *pipe) writeMultiBufferInternal(mb buf.MultiBuffer) error {
 func (p *pipe) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if mb.IsEmpty() {
 		return nil
-	}
-
-	if p.option.onTransmission != nil {
-		mb = p.option.onTransmission(mb)
 	}
 
 	for {
