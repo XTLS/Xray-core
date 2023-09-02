@@ -28,6 +28,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -510,13 +511,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
-	enableXtls := false
-	isTLS12orAbove := false
-	isTLS := false
-	var cipher uint16 = 0
-	var remainingServerHello int32 = -1
-	numberOfPacketToFilter := 8
-
+	trafficState := proxy.NewTrafficState(account.ID.Bytes())
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
@@ -527,8 +522,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, ctx1, account.ID.Bytes(),
-				&numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -557,10 +551,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return err1 // ...
 		}
 		if requestAddons.Flow == vless.XRV {
-			encoding.XtlsFilterTls(multiBuffer, &numberOfPacketToFilter, &enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello, ctx)
-			multiBuffer = encoding.ReshapeMultiBuffer(ctx, multiBuffer)
+			proxy.XtlsFilterTls(multiBuffer, trafficState, ctx)
+			multiBuffer = proxy.ReshapeMultiBuffer(ctx, multiBuffer)
 			for i, b := range multiBuffer {
-				multiBuffer[i] = encoding.XtlsPadding(b, encoding.CommandPaddingContinue, &userUUID, isTLS, ctx)
+				multiBuffer[i] = proxy.XtlsPadding(b, proxy.CommandPaddingContinue, &userUUID, trafficState.IsTLS, ctx)
 			}
 		}
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
@@ -573,8 +567,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, ctx, &numberOfPacketToFilter,
-				&enableXtls, &isTLS12orAbove, &isTLS, &cipher, &remainingServerHello)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
