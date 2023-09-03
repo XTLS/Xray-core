@@ -19,7 +19,7 @@ type netReadInfo struct {
 	// status
 	waiter sync.WaitGroup
 	// param
-	buff []byte
+	buff [][]byte
 	// result
 	bytes    int
 	endpoint conn.Endpoint
@@ -79,11 +79,10 @@ func (n *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
 func (bind *netBindClient) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
 
-	fun := func(buff []byte) (cap int, ep conn.Endpoint, err error) {
+	fun := func(buff [][]byte, sizes []int, eps []conn.Endpoint) (count int, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				cap = 0
-				ep = nil
+				count = 0
 				err = errors.New("channel closed")
 			}
 		}()
@@ -94,7 +93,7 @@ func (bind *netBindClient) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error
 		r.waiter.Add(1)
 		bind.readQueue <- r
 		r.waiter.Wait() // wait read goroutine done, or we will miss the result
-		return r.bytes, r.endpoint, r.err
+		return r.bytes, r.err
 	}
 	workers := bind.workers
 	if workers <= 0 {
@@ -128,12 +127,13 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 			if !ok {
 				return
 			}
-			i, err := c.Read(v.buff)
+			b := v.buff[0]
+			i, err := c.Read(b)
 
 			if i > 3 {
-				v.buff[1] = 0
-				v.buff[2] = 0
-				v.buff[3] = 0
+				b[1] = 0
+				b[2] = 0
+				b[3] = 0
 			}
 
 			v.bytes = i
@@ -150,7 +150,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	return nil
 }
 
-func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
+func (bind *netBindClient) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 
 	nend, ok := endpoint.(*netEndpoint)
@@ -165,17 +165,21 @@ func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
 		}
 	}
 
-	if len(buff) > 3 && len(bind.reserved) == 3 {
-		copy(buff[1:], bind.reserved)
+	if len(buff[0]) > 3 && len(bind.reserved) == 3 {
+		copy(buff[0][1:], bind.reserved)
 	}
 
-	_, err = nend.conn.Write(buff)
+	_, err = nend.conn.Write(buff[0])
 
 	return err
 }
 
 func (bind *netBindClient) SetMark(mark uint32) error {
 	return nil
+}
+
+func (bind *netBindClient) BatchSize() int {
+	return 1
 }
 
 type netEndpoint struct {

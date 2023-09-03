@@ -97,34 +97,36 @@ func (tun *netTun) File() *os.File {
 	return nil
 }
 
-func (tun *netTun) Events() chan tun.Event {
+func (tun *netTun) Events() <-chan tun.Event {
 	return tun.events
 }
 
-func (tun *netTun) Read(buf []byte, offset int) (int, error) {
+func (tun *netTun) Read(buf [][]byte, sizes []int, offset int) (int, error) {
 	view, ok := <-tun.incomingPacket
 	if !ok {
 		return 0, os.ErrClosed
 	}
 
-	return view.Read(buf[offset:])
+	return view.Read(buf[0][offset:])
 }
 
-func (tun *netTun) Write(buf []byte, offset int) (int, error) {
-	packet := buf[offset:]
-	if len(packet) == 0 {
-		return 0, nil
-	}
+func (tun *netTun) Write(buf [][]byte, offset int) (count int, err error) {
+	for _, b := range buf {
+		packet := b[offset:]
+		if len(packet) == 0 {
+			continue
+		}
 
-	pkb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(packet)})
-	switch packet[0] >> 4 {
-	case 4:
-		tun.ep.InjectInbound(header.IPv4ProtocolNumber, pkb)
-	case 6:
-		tun.ep.InjectInbound(header.IPv6ProtocolNumber, pkb)
+		pkb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(packet)})
+		switch packet[0] >> 4 {
+		case 4:
+			tun.ep.InjectInbound(header.IPv4ProtocolNumber, pkb)
+		case 6:
+			tun.ep.InjectInbound(header.IPv6ProtocolNumber, pkb)
+		}
+		count++
 	}
-
-	return len(buf), nil
+	return
 }
 
 func (tun *netTun) WriteNotify() {
@@ -161,6 +163,10 @@ func (tun *netTun) Close() error {
 
 func (tun *netTun) MTU() (int, error) {
 	return tun.mtu, nil
+}
+
+func (tun *netTun) BatchSize() int {
+	return 1
 }
 
 func convertToFullAddr(endpoint netip.AddrPort) (tcpip.FullAddress, tcpip.NetworkProtocolNumber) {

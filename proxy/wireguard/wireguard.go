@@ -249,7 +249,7 @@ func (h *Handler) makeVirtualTun(bind *netBindClient) (*Net, error) {
 	bind.dnsOption.IPv6Enable = tnet.HasV6()
 
 	// dev := device.NewDevice(tun, conn.NewDefaultBind(), nil /* device.NewLogger(device.LogLevelVerbose, "") */)
-	dev := device.NewDevice(tun, bind, &device.Logger{
+	dev := device.NewDevice(context.Background(), tun, bind, &device.Logger{
 		Verbosef: func(format string, args ...any) {
 			log.Record(&log.GeneralMessage{
 				Severity: log.Severity_Debug,
