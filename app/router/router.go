@@ -112,6 +112,23 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	return nil, ctx, common.ErrNoClue
 }
 
+func (r *Router) ListBalancerSelectors(balancerTag string) ([]string, error) {
+	balancer, ok := r.balancers[balancerTag]
+	if !ok {
+		return []string{}, newError("balancer not found", balancerTag)
+	}
+	return balancer.selectors, nil
+}
+
+func (r *Router) SetBalancerSelectors(balancerTag string, selectors []string) error {
+	balancer, ok := r.balancers[balancerTag]
+	if !ok {
+		return newError("balancer not found", balancerTag)
+	}
+	balancer.selectors = selectors
+	return nil
+}
+
 // Start implements common.Runnable.
 func (*Router) Start() error {
 	return nil

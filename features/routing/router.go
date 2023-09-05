@@ -13,6 +13,8 @@ type Router interface {
 
 	// PickRoute returns a route decision based on the given routing context.
 	PickRoute(ctx Context) (Route, error)
+	ListBalancerSelectors(balancerTag string) ([]string, error)
+	SetBalancerSelectors(balancerTag string, selectors []string) error
 }
 
 // Route is the routing result of Router feature.
@@ -47,6 +49,14 @@ func (DefaultRouter) Type() interface{} {
 // PickRoute implements Router.
 func (DefaultRouter) PickRoute(ctx Context) (Route, error) {
 	return nil, common.ErrNoClue
+}
+
+func (DefaultRouter) ListBalancerSelectors(balancerTag string) ([]string, error) {
+	return []string{}, common.ErrNoClue
+}
+
+func (DefaultRouter) SetBalancerSelectors(balancerTag string, selectors []string) error {
+	return common.ErrNoClue
 }
 
 // Start implements common.Runnable.
