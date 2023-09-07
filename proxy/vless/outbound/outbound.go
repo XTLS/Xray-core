@@ -200,22 +200,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons)
+		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 		}
-		userUUID := account.ID.Bytes()
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
 		if ok {
 			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
 			if err1 == nil {
-				if requestAddons.Flow == vless.XRV {
-					proxy.XtlsFilterTls(multiBuffer, trafficState, ctx)
-					multiBuffer = proxy.ReshapeMultiBuffer(ctx, multiBuffer)
-					for i, b := range multiBuffer {
-						multiBuffer[i] = proxy.XtlsPadding(b, proxy.CommandPaddingContinue, &userUUID, trafficState.IsTLS, ctx)
-					}
-				}
 				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
 					return err // ...
 				}
@@ -223,10 +215,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				return err1
 			} else if requestAddons.Flow == vless.XRV {
 				mb := make(buf.MultiBuffer, 1)
-				mb[0] = proxy.XtlsPadding(nil, proxy.CommandPaddingContinue, &userUUID, true, ctx) // we do a long padding to hide vless header
 				newError("Insert padding with empty content to camouflage VLESS header ", mb.Len()).WriteToLog(session.ExportIDToError(ctx))
 				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
-					return err
+					return err // ...
 				}
 			}
 		} else {

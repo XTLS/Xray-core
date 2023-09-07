@@ -180,15 +180,19 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 // Note Vision probably only make sense as the inner most layer of writer, since it need assess traffic state from origin proxy traffic
 type VisionWriter struct {
 	buf.Writer
-	trafficState *TrafficState
-	ctx          context.Context
+	trafficState      *TrafficState
+	ctx               context.Context
+	writeOnceUserUUID []byte
 }
 
 func NewVisionWriter(writer buf.Writer, state *TrafficState, context context.Context) *VisionWriter {
+	w := make([]byte, len(state.UserUUID))
+	copy(w, state.UserUUID)
 	return &VisionWriter{
-		Writer:       writer,
-		trafficState: state,
-		ctx:          context,
+		Writer:            writer,
+		trafficState:      state,
+		ctx:               context,
+		writeOnceUserUUID: w,
 	}
 }
 
@@ -197,6 +201,10 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		XtlsFilterTls(mb, w.trafficState, w.ctx)
 	}
 	if w.trafficState.IsPadding {
+		if len(mb) == 1 && mb[0] == nil {
+			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx) // we do a long padding to hide vless header
+			return w.Writer.WriteMultiBuffer(mb)
+		}
 		mb = ReshapeMultiBuffer(w.ctx, mb)
 		longPadding := w.trafficState.IsTLS
 		for i, b := range mb {
@@ -211,13 +219,13 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						command = CommandPaddingDirect
 					}
 				}
-				mb[i] = XtlsPadding(b, command, nil, true, w.ctx)
+				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx)
 				w.trafficState.IsPadding = false // padding going to end
 				longPadding = false
 				continue
 			} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
 				w.trafficState.IsPadding = false
-				mb[i] = XtlsPadding(b, CommandPaddingEnd, nil, longPadding, w.ctx)
+				mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx)
 				break
 			}
 			var command byte = CommandPaddingContinue
@@ -227,7 +235,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					command = CommandPaddingDirect
 				}
 			}
-			mb[i] = XtlsPadding(b, command, nil, longPadding, w.ctx)
+			mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx)
 		}
 	}
 	return w.Writer.WriteMultiBuffer(mb)
@@ -381,6 +389,9 @@ func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte,
 // XtlsFilterTls filter and recognize tls 1.3 and other info
 func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx context.Context) {
 	for _, b := range buffer {
+		if b == nil {
+			continue
+		}
 		trafficState.NumberOfPacketToFilter--
 		if b.Len() >= 6 {
 			startsBytes := b.BytesTo(6)

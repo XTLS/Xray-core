@@ -544,18 +544,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons)
-		userUUID := account.ID.Bytes()
+		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...
-		}
-		if requestAddons.Flow == vless.XRV {
-			proxy.XtlsFilterTls(multiBuffer, trafficState, ctx)
-			multiBuffer = proxy.ReshapeMultiBuffer(ctx, multiBuffer)
-			for i, b := range multiBuffer {
-				multiBuffer[i] = proxy.XtlsPadding(b, proxy.CommandPaddingContinue, &userUUID, trafficState.IsTLS, ctx)
-			}
 		}
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
 			return err // ...
