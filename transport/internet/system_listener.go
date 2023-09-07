@@ -67,8 +67,13 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		network = addr.Network()
 		address = addr.String()
 		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
-		if sockopt != nil && (sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0) {
-			lc.KeepAlive = time.Duration(-1)
+		if sockopt != nil {
+			if sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0 {
+				lc.KeepAlive = time.Duration(-1)
+			}
+			if sockopt.TcpMptcp {
+				lc.SetMultipathTCP(true)
+			}
 		}
 	case *net.UnixAddr:
 		lc.Control = nil
