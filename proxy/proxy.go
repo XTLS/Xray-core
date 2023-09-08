@@ -101,6 +101,7 @@ type TrafficState struct {
 	// reader link state
 	WithinPaddingBuffers     bool
 	ReaderSwitchToDirectCopy bool
+	RemainingCommand		 int32
 	RemainingContent         int32
 	RemainingPadding         int32
 	CurrentCommand           int
@@ -121,6 +122,7 @@ func NewTrafficState(userUUID []byte) *TrafficState {
 		RemainingServerHello:     -1,
 		WithinPaddingBuffers:     true,
 		ReaderSwitchToDirectCopy: false,
+		RemainingCommand:         -1,
 		RemainingContent:         -1,
 		RemainingPadding:         -1,
 		CurrentCommand:           0,
@@ -149,12 +151,17 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	buffer, err := w.Reader.ReadMultiBuffer()
 	if !buffer.IsEmpty() {
 		if w.trafficState.WithinPaddingBuffers || w.trafficState.NumberOfPacketToFilter > 0 {
-			buffer = XtlsUnpadding(w.ctx, buffer, w.trafficState.UserUUID, &w.trafficState.RemainingContent, &w.trafficState.RemainingPadding, &w.trafficState.CurrentCommand)
+			mb2 := make(buf.MultiBuffer, 0, len(buffer))
+			for _, b := range buffer {
+				newbuffer := XtlsUnpadding(b, w.trafficState, w.ctx)
+				if newbuffer.Len() > 0 {
+					mb2 = append(mb2, newbuffer)
+				}
+			}
+			buffer = mb2
 			if w.trafficState.RemainingContent == 0 && w.trafficState.RemainingPadding == 0 {
 				if w.trafficState.CurrentCommand == 1 {
 					w.trafficState.WithinPaddingBuffers = false
-					w.trafficState.RemainingContent = -1
-					w.trafficState.RemainingPadding = -1 // set to initial state to parse the next padding
 				} else if w.trafficState.CurrentCommand == 2 {
 					w.trafficState.WithinPaddingBuffers = false
 					w.trafficState.ReaderSwitchToDirectCopy = true
@@ -316,74 +323,72 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 }
 
 // XtlsUnpadding remove padding and parse command
-func XtlsUnpadding(ctx context.Context, buffer buf.MultiBuffer, userUUID []byte, remainingContent *int32, remainingPadding *int32, currentCommand *int) buf.MultiBuffer {
-	posindex := 0
-	var posByte int32 = 0
-	if *remainingContent == -1 && *remainingPadding == -1 {
-		for i, b := range buffer {
-			if b.Len() >= 21 && bytes.Equal(userUUID, b.BytesTo(16)) {
-				posindex = i
-				posByte = 16
-				*remainingContent = 0
-				*remainingPadding = 0
-				*currentCommand = 0
+func XtlsUnpadding(b *buf.Buffer, s *TrafficState, ctx context.Context) *buf.Buffer {
+	if s.RemainingCommand == -1 && s.RemainingContent == -1 && s.RemainingPadding == -1 { // inital state
+		if b.Len() >= 21 && bytes.Equal(s.UserUUID, b.BytesTo(16)) {
+			b.Advance(16)
+			s.RemainingCommand = 5
+		} else {
+			return b
+		}
+	}
+	newbuffer := buf.New()
+	for b.Len() > 0 {
+		if s.RemainingCommand > 0 {
+			data, err := b.ReadByte()
+			if err != nil {
+				return newbuffer
+			}
+			switch s.RemainingCommand {
+			case 5:
+				s.CurrentCommand = int(data)
+			case 4:
+				s.RemainingContent = int32(data)<<8
+			case 3:
+				s.RemainingContent = s.RemainingContent | int32(data)
+			case 2:
+				s.RemainingPadding = int32(data)<<8
+			case 1:
+				s.RemainingPadding = s.RemainingPadding | int32(data)
+				newError("Xtls Unpadding new block, content ", s.RemainingContent, " padding ", s.RemainingPadding, " command ", s.CurrentCommand).WriteToLog(session.ExportIDToError(ctx))
+			}
+			s.RemainingCommand--
+		} else if s.RemainingContent > 0 {
+			len := s.RemainingContent
+			if b.Len() < len {
+				len = b.Len()
+			}
+			data, err := b.ReadBytes(len)
+			if err != nil {
+				return newbuffer
+			}
+			newbuffer.Write(data)
+			s.RemainingContent -= len
+		} else { // remainingPadding > 0
+			len := s.RemainingPadding
+			if b.Len() < len {
+				len = b.Len()
+			}
+			b.Advance(len)
+			s.RemainingPadding -= len
+		}
+		if s.RemainingCommand <= 0 && s.RemainingContent <= 0 && s.RemainingPadding <= 0 { // this block done
+			if s.CurrentCommand == 0 {
+				s.RemainingCommand = 5
+			} else {
+				s.RemainingCommand = -1 // set to initial state
+				s.RemainingContent = -1
+				s.RemainingPadding = -1
+				if b.Len() > 0 { // shouldn't happen
+					newbuffer.Write(b.Bytes())
+				}
 				break
 			}
 		}
 	}
-	if *remainingContent == -1 && *remainingPadding == -1 {
-		return buffer
-	}
-	mb2 := make(buf.MultiBuffer, 0, len(buffer))
-	for i := 0; i < posindex; i++ {
-		newbuffer := buf.New()
-		newbuffer.Write(buffer[i].Bytes())
-		mb2 = append(mb2, newbuffer)
-	}
-	for i := posindex; i < len(buffer); i++ {
-		b := buffer[i]
-		for posByte < b.Len() {
-			if *remainingContent <= 0 && *remainingPadding <= 0 {
-				if *currentCommand == 1 { // possible buffer after padding, no need to worry about xtls (command 2)
-					len := b.Len() - posByte
-					newbuffer := buf.New()
-					newbuffer.Write(b.BytesRange(posByte, posByte+len))
-					mb2 = append(mb2, newbuffer)
-					posByte += len
-				} else {
-					paddingInfo := b.BytesRange(posByte, posByte+5)
-					*currentCommand = int(paddingInfo[0])
-					*remainingContent = int32(paddingInfo[1])<<8 | int32(paddingInfo[2])
-					*remainingPadding = int32(paddingInfo[3])<<8 | int32(paddingInfo[4])
-					newError("Xtls Unpadding new block", i, " ", posByte, " content ", *remainingContent, " padding ", *remainingPadding, " ", paddingInfo[0]).WriteToLog(session.ExportIDToError(ctx))
-					posByte += 5
-				}
-			} else if *remainingContent > 0 {
-				len := *remainingContent
-				if b.Len() < posByte+*remainingContent {
-					len = b.Len() - posByte
-				}
-				newbuffer := buf.New()
-				newbuffer.Write(b.BytesRange(posByte, posByte+len))
-				mb2 = append(mb2, newbuffer)
-				*remainingContent -= len
-				posByte += len
-			} else { // remainingPadding > 0
-				len := *remainingPadding
-				if b.Len() < posByte+*remainingPadding {
-					len = b.Len() - posByte
-				}
-				*remainingPadding -= len
-				posByte += len
-			}
-			if posByte == b.Len() {
-				posByte = 0
-				break
-			}
-		}
-	}
-	buf.ReleaseMulti(buffer)
-	return mb2
+	b.Release()
+	b = nil
+	return newbuffer
 }
 
 // XtlsFilterTls filter and recognize tls 1.3 and other info
