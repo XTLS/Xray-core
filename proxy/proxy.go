@@ -159,21 +159,15 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 				}
 			}
 			buffer = mb2
-			if w.trafficState.RemainingContent == 0 && w.trafficState.RemainingPadding == 0 {
-				if w.trafficState.CurrentCommand == 1 {
-					w.trafficState.WithinPaddingBuffers = false
-				} else if w.trafficState.CurrentCommand == 2 {
-					w.trafficState.WithinPaddingBuffers = false
-					w.trafficState.ReaderSwitchToDirectCopy = true
-				} else if w.trafficState.CurrentCommand == 0 {
-					w.trafficState.WithinPaddingBuffers = true
-				} else {
-					newError("XtlsRead unknown command ", w.trafficState.CurrentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(w.ctx))
-				}
-			} else if w.trafficState.RemainingContent > 0 || w.trafficState.RemainingPadding > 0 {
+			if w.trafficState.RemainingContent > 0 || w.trafficState.RemainingPadding > 0 || w.trafficState.CurrentCommand == 0 {
 				w.trafficState.WithinPaddingBuffers = true
-			} else {
+			} else if w.trafficState.CurrentCommand == 1 {
 				w.trafficState.WithinPaddingBuffers = false
+			} else if w.trafficState.CurrentCommand == 2 {
+				w.trafficState.WithinPaddingBuffers = false
+				w.trafficState.ReaderSwitchToDirectCopy = true
+			} else {
+				newError("XtlsRead unknown command ", w.trafficState.CurrentCommand, buffer.Len()).WriteToLog(session.ExportIDToError(w.ctx))
 			}
 		}
 		if w.trafficState.NumberOfPacketToFilter > 0 {
