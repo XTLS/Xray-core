@@ -121,22 +121,21 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	return conds, nil
 }
 
-func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
+func (br *BalancingRule) Build(ohm outbound.Manager) (balancer *Balancer, err error) {
 	switch br.Strategy {
 	case "leastPing":
-		return &Balancer{
-			selectors: br.OutboundSelector,
-			strategy:  &LeastPingStrategy{},
-			ohm:       ohm,
-		}, nil
+		balancer = &Balancer{
+			strategy: &LeastPingStrategy{},
+			ohm:      ohm,
+		}
 	case "random":
 		fallthrough
 	default:
-		return &Balancer{
-			selectors: br.OutboundSelector,
-			strategy:  &RandomStrategy{},
-			ohm:       ohm,
-		}, nil
-
+		balancer = &Balancer{
+			strategy: &RandomStrategy{},
+			ohm:      ohm,
+		}
 	}
+	balancer.selectors.Store(&br.OutboundSelector)
+	return
 }

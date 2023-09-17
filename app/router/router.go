@@ -118,9 +118,7 @@ func (r *Router) ListBalancerSelectors(balancerTag string) (tags []string, err e
 		err = newError("balancer not found", balancerTag)
 		return
 	}
-	balancer.rwlock.RLock()
-	tags = balancer.selectors
-	balancer.rwlock.RUnlock()
+	tags = *balancer.selectors.Load()
 	return
 }
 
@@ -129,9 +127,7 @@ func (r *Router) SetBalancerSelectors(balancerTag string, selectors []string) er
 	if !ok {
 		return newError("balancer not found", balancerTag)
 	}
-	balancer.rwlock.Lock()
-	balancer.selectors = selectors
-	balancer.rwlock.Unlock()
+	balancer.selectors.Store(&selectors)
 	return nil
 }
 

@@ -2,7 +2,7 @@ package router
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/features/extension"
@@ -25,10 +25,9 @@ func (s *RandomStrategy) PickOutbound(tags []string) string {
 }
 
 type Balancer struct {
-	selectors []string
+	selectors atomic.Pointer[[]string]
 	strategy  BalancingStrategy
 	ohm       outbound.Manager
-	rwlock    sync.RWMutex
 }
 
 func (b *Balancer) PickOutbound() (string, error) {
@@ -36,9 +35,7 @@ func (b *Balancer) PickOutbound() (string, error) {
 	if !ok {
 		return "", newError("outbound.Manager is not a HandlerSelector")
 	}
-	b.rwlock.RLock()
-	tags := hs.Select(b.selectors)
-	b.rwlock.RUnlock()
+	tags := hs.Select(*b.selectors.Load())
 	if len(tags) == 0 {
 		return "", newError("no available outbounds selected")
 	}
