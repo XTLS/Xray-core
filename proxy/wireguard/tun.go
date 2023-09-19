@@ -45,7 +45,7 @@ func CreateNetTUN(localAddresses []netip.Addr, mtu int, handleLocal bool) (tun.D
 	dev := &netTun{
 		ep:             channel.New(1024, uint32(mtu), ""),
 		stack:          stack.New(opts),
-		events:         make(chan tun.Event, 10),
+		events:         make(chan tun.Event, 1),
 		incomingPacket: make(chan *buffer.View),
 		mtu:            mtu,
 	}
@@ -87,9 +87,10 @@ func CreateNetTUN(localAddresses []netip.Addr, mtu int, handleLocal bool) (tun.D
 		dev.stack.SetSpoofing(1, true)
 	}
 
-	// disable tcp delay
-	opt := tcpip.TCPDelayEnabled(false)
-	dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
+	opt := tcpip.CongestionControlOption("cubic")
+	if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &opt); err != nil {
+		return nil, nil, fmt.Errorf("SetTransportProtocolOption(%d, &%T(%s)): %s", tcp.ProtocolNumber, opt, opt, err)
+	}
 
 	dev.events <- tun.EventUp
 	return dev, (*Net)(dev), nil
@@ -135,7 +136,7 @@ func (tun *netTun) Write(buf []byte, offset int) (int, error) {
 		tun.ep.InjectInbound(header.IPv6ProtocolNumber, pkb)
 	}
 
-	return len(buf), nil
+	return len(packet), nil
 }
 
 // WriteNotify implements channel.Notification
@@ -218,18 +219,18 @@ func (net *Net) DialTCP(addr *net.TCPAddr) (*gonet.TCPConn, error) {
 	return net.DialTCPAddrPort(netip.AddrPortFrom(ip, uint16(addr.Port)))
 }
 
-func (net *Net) ListenTCPAddrPort(addr netip.AddrPort) (*gonet.TCPListener, error) {
-	fa, pn := convertToFullAddr(addr)
-	return gonet.ListenTCP(net.stack, fa, pn)
-}
+// func (net *Net) ListenTCPAddrPort(addr netip.AddrPort) (*gonet.TCPListener, error) {
+// 	fa, pn := convertToFullAddr(addr)
+// 	return gonet.ListenTCP(net.stack, fa, pn)
+// }
 
-func (net *Net) ListenTCP(addr *net.TCPAddr) (*gonet.TCPListener, error) {
-	if addr == nil {
-		return net.ListenTCPAddrPort(netip.AddrPort{})
-	}
-	ip, _ := netip.AddrFromSlice(addr.IP)
-	return net.ListenTCPAddrPort(netip.AddrPortFrom(ip, uint16(addr.Port)))
-}
+// func (net *Net) ListenTCP(addr *net.TCPAddr) (*gonet.TCPListener, error) {
+// 	if addr == nil {
+// 		return net.ListenTCPAddrPort(netip.AddrPort{})
+// 	}
+// 	ip, _ := netip.AddrFromSlice(addr.IP)
+// 	return net.ListenTCPAddrPort(netip.AddrPortFrom(ip, uint16(addr.Port)))
+// }
 
 func (net *Net) DialUDPAddrPort(laddr, raddr netip.AddrPort) (*gonet.UDPConn, error) {
 	var lfa, rfa *tcpip.FullAddress
@@ -247,9 +248,9 @@ func (net *Net) DialUDPAddrPort(laddr, raddr netip.AddrPort) (*gonet.UDPConn, er
 	return gonet.DialUDP(net.stack, lfa, rfa, pn)
 }
 
-func (net *Net) ListenUDPAddrPort(laddr netip.AddrPort) (*gonet.UDPConn, error) {
-	return net.DialUDPAddrPort(laddr, netip.AddrPort{})
-}
+// func (net *Net) ListenUDPAddrPort(laddr netip.AddrPort) (*gonet.UDPConn, error) {
+// 	return net.DialUDPAddrPort(laddr, netip.AddrPort{})
+// }
 
 func (net *Net) DialUDP(laddr, raddr *net.UDPAddr) (*gonet.UDPConn, error) {
 	var la, ra netip.AddrPort
@@ -264,9 +265,9 @@ func (net *Net) DialUDP(laddr, raddr *net.UDPAddr) (*gonet.UDPConn, error) {
 	return net.DialUDPAddrPort(la, ra)
 }
 
-func (net *Net) ListenUDP(laddr *net.UDPAddr) (*gonet.UDPConn, error) {
-	return net.DialUDP(laddr, nil)
-}
+// func (net *Net) ListenUDP(laddr *net.UDPAddr) (*gonet.UDPConn, error) {
+// 	return net.DialUDP(laddr, nil)
+// }
 
 func (n *Net) HasV4() bool {
 	return n.hasV4
