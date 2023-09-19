@@ -28,6 +28,7 @@ message NameServer {
   repeated PriorityDomain prioritized_domain = 2;
   repeated xray.app.router.GeoIP geoip = 3;
   repeated OriginalRule original_rules = 4;
+  QueryStrategy query_strategy = 7;
 }
 
 enum DomainMatchingType {
