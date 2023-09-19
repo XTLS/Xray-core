@@ -26,6 +26,7 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	outbound.Name = "loopback"
 	destination := outbound.Target
 
 	newError("opening connection to ", destination).WriteToLog(session.ExportIDToError(ctx))
