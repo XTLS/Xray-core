@@ -42,37 +42,29 @@ func (bind *netBind) SetMark(mark uint32) error {
 
 // ParseEndpoint implements conn.Bind
 func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
-	ipStr, port, _, err := splitAddrPort(s)
+	ipStr, port, err := net.SplitHostPort(s)
+	if err != nil {
+		return nil, err
+	}
+	portNum, err := strconv.Atoi(port)
 	if err != nil {
 		return nil, err
 	}
 
-	var addr net.IP
-	if IsDomainName(ipStr) {
-		ips, err := n.dns.LookupIP(ipStr, n.dnsOption)
+	addr := xnet.ParseAddress(ipStr)
+	if addr.Family() == xnet.AddressFamilyDomain {
+		ips, err := n.dns.LookupIP(addr.Domain(), n.dnsOption)
 		if err != nil {
 			return nil, err
 		} else if len(ips) == 0 {
 			return nil, dns.ErrEmptyResponse
 		}
-		addr = ips[0]
-	} else {
-		addr = net.ParseIP(ipStr)
-	}
-	if addr == nil {
-		return nil, errors.New("failed to parse ip: " + ipStr)
-	}
-
-	var ip xnet.Address
-	if p4 := addr.To4(); len(p4) == net.IPv4len {
-		ip = xnet.IPAddress(p4[:])
-	} else {
-		ip = xnet.IPAddress(addr[:])
+		addr = xnet.IPAddress(ips[0])
 	}
 
 	dst := xnet.Destination{
-		Address: ip,
-		Port:    xnet.Port(port),
+		Address: addr,
+		Port:    xnet.Port(portNum),
 		Network: xnet.Network_UDP,
 	}
 
@@ -255,84 +247,4 @@ func toNetIpAddr(addr xnet.Address) netip.Addr {
 		}
 		return netip.AddrFrom16(arr)
 	}
-}
-
-func stringsLastIndexByte(s string, b byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == b {
-			return i
-		}
-	}
-	return -1
-}
-
-func splitAddrPort(s string) (ip string, port uint16, v6 bool, err error) {
-	i := stringsLastIndexByte(s, ':')
-	if i == -1 {
-		return "", 0, false, errors.New("not an ip:port")
-	}
-
-	ip = s[:i]
-	portStr := s[i+1:]
-	if len(ip) == 0 {
-		return "", 0, false, errors.New("no IP")
-	}
-	if len(portStr) == 0 {
-		return "", 0, false, errors.New("no port")
-	}
-	port64, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return "", 0, false, errors.New("invalid port " + strconv.Quote(portStr) + " parsing " + strconv.Quote(s))
-	}
-	port = uint16(port64)
-	if ip[0] == '[' {
-		if len(ip) < 2 || ip[len(ip)-1] != ']' {
-			return "", 0, false, errors.New("missing ]")
-		}
-		ip = ip[1 : len(ip)-1]
-		v6 = true
-	}
-
-	return ip, port, v6, nil
-}
-
-func IsDomainName(s string) bool {
-	l := len(s)
-	if l == 0 || l > 254 || l == 254 && s[l-1] != '.' {
-		return false
-	}
-	last := byte('.')
-	nonNumeric := false
-	partlen := 0
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		default:
-			return false
-		case 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_':
-			nonNumeric = true
-			partlen++
-		case '0' <= c && c <= '9':
-			partlen++
-		case c == '-':
-			if last == '.' {
-				return false
-			}
-			partlen++
-			nonNumeric = true
-		case c == '.':
-			if last == '.' || last == '-' {
-				return false
-			}
-			if partlen > 63 || partlen == 0 {
-				return false
-			}
-			partlen = 0
-		}
-		last = c
-	}
-	if last == '-' || partlen > 63 {
-		return false
-	}
-	return nonNumeric
 }
