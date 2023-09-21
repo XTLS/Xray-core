@@ -147,13 +147,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			newCancel()
 		}
 	}, p.Timeouts.ConnectionIdle)
-	addrPort := netip.AddrPortFrom(toNetIpAddr(addr), destination.Port.Value())
 
 	var requestFunc func() error
 	var responseFunc func() error
 
 	if command == protocol.RequestCommandTCP {
-		conn, err := h.net.DialContextTCPAddrPort(ctx, addrPort)
+		conn, err := h.net.DialContextTCP(ctx, addr, destination.Port)
 		if err != nil {
 			return newError("failed to create TCP connection").Base(err)
 		}
@@ -168,7 +167,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	} else if command == protocol.RequestCommandUDP {
-		conn, err := h.net.DialUDPAddrPort(netip.AddrPort{}, addrPort)
+		conn, err := h.net.DialUDP(addr, destination.Port)
 		if err != nil {
 			return newError("failed to create UDP connection").Base(err)
 		}

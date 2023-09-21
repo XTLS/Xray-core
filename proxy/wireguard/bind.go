@@ -209,7 +209,7 @@ type netEndpoint struct {
 func (netEndpoint) ClearSrc() {}
 
 func (e netEndpoint) DstIP() netip.Addr {
-	return toNetIpAddr(e.dst.Address)
+	return netip.Addr{}
 }
 
 func (e netEndpoint) SrcIP() netip.Addr {
@@ -233,18 +233,4 @@ func (e netEndpoint) DstToString() string {
 
 func (e netEndpoint) SrcToString() string {
 	return ""
-}
-
-func toNetIpAddr(addr xnet.Address) netip.Addr {
-	if addr.Family().IsIPv4() {
-		ip := addr.IP()
-		return netip.AddrFrom4([4]byte{ip[0], ip[1], ip[2], ip[3]})
-	} else {
-		ip := addr.IP()
-		arr := [16]byte{}
-		for i := 0; i < 16; i++ {
-			arr[i] = ip[i]
-		}
-		return netip.AddrFrom16(arr)
-	}
 }
