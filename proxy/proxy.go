@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	gotls "crypto/tls"
 	"io"
 	"math/big"
 	"runtime"
@@ -449,7 +448,7 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			readCounter = statConn.ReadCounter
 			writerCounter = statConn.WriteCounter
 		}
-		if xc, ok := conn.(*gotls.Conn); ok {
+		if xc, ok := conn.(*tls.Conn); ok {
 			conn = xc.NetConn()
 		} else if utlsConn, ok := conn.(*tls.UConn); ok {
 			conn = utlsConn.NetConn()
