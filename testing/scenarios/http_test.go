@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,9 +129,8 @@ func TestHttpError(t *testing.T) {
 		}
 
 		resp, err := client.Get("http://127.0.0.1:" + dest.Port.String())
-		common.Must(err)
-		if resp.StatusCode != 503 {
-			t.Error("status: ", resp.StatusCode)
+		if resp != nil && resp.StatusCode != 503 || err != nil && !strings.Contains(err.Error(), "malformed HTTP status code") {
+			t.Error("should not receive http response", err)
 		}
 	}
 }

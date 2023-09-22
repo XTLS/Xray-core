@@ -13,4 +13,5 @@ message Config {
   // original one.
   xray.common.net.Endpoint server = 1;
   uint32 user_level = 2;
+  string non_IP_query = 3;
 }

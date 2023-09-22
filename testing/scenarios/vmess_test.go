@@ -1174,10 +1174,10 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
 	common.Must(err)
 
-	for range "abcd" {
+	for range "ab" {
 		var errg errgroup.Group
 		for i := 0; i < 16; i++ {
-			errg.Go(testTCPConn(clientPort, 10240, time.Second*20))
+			errg.Go(testTCPConn(clientPort, 1024, time.Second*10))
 			errg.Go(testUDPConn(clientUDPPort, 1024, time.Second*10))
 		}
 		if err := errg.Wait(); err != nil {

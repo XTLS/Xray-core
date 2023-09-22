@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"google.golang.org/protobuf/proto"
 )
 
 type FreedomConfig struct {
@@ -39,84 +39,89 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fragment != nil {
-		if len(c.Fragment.Interval) == 0 || len(c.Fragment.Length) == 0 {
-			return nil, newError("Invalid interval or length")
-		}
-		intervalMinMax := strings.Split(c.Fragment.Interval, "-")
-		var minInterval, maxInterval int64
+		config.Fragment = new(freedom.Fragment)
 		var err, err2 error
-		if len(intervalMinMax) == 2 {
-			minInterval, err = strconv.ParseInt(intervalMinMax[0], 10, 64)
-			maxInterval, err2 = strconv.ParseInt(intervalMinMax[1], 10, 64)
-		} else {
-			minInterval, err = strconv.ParseInt(intervalMinMax[0], 10, 64)
-			maxInterval = minInterval
-		}
-		if err != nil {
-			return nil, newError("Invalid minimum interval: ", err).Base(err)
-		}
-		if err2 != nil {
-			return nil, newError("Invalid maximum interval: ", err2).Base(err2)
-		}
 
-		lengthMinMax := strings.Split(c.Fragment.Length, "-")
-		var minLength, maxLength int64
-		if len(lengthMinMax) == 2 {
-			minLength, err = strconv.ParseInt(lengthMinMax[0], 10, 64)
-			maxLength, err2 = strconv.ParseInt(lengthMinMax[1], 10, 64)
-
-		} else {
-			minLength, err = strconv.ParseInt(lengthMinMax[0], 10, 64)
-			maxLength = minLength
-		}
-		if err != nil {
-			return nil, newError("Invalid minimum length: ", err).Base(err)
-		}
-		if err2 != nil {
-			return nil, newError("Invalid maximum length: ", err2).Base(err2)
-		}
-
-		if minInterval > maxInterval {
-			minInterval, maxInterval = maxInterval, minInterval
-		}
-		if minLength > maxLength {
-			minLength, maxLength = maxLength, minLength
-		}
-
-		config.Fragment = &freedom.Fragment{
-			MinInterval: int32(minInterval),
-			MaxInterval: int32(maxInterval),
-			MinLength:   int32(minLength),
-			MaxLength:   int32(maxLength),
-		}
-
-		if len(c.Fragment.Packets) > 0 {
-			packetRange := strings.Split(c.Fragment.Packets, "-")
-			var startPacket, endPacket int64
-			if len(packetRange) == 2 {
-				startPacket, err = strconv.ParseInt(packetRange[0], 10, 64)
-				endPacket, err2 = strconv.ParseInt(packetRange[1], 10, 64)
+		switch strings.ToLower(c.Fragment.Packets) {
+		case "tlshello":
+			// TLS Hello Fragmentation (into multiple handshake messages)
+			config.Fragment.PacketsFrom = 0
+			config.Fragment.PacketsTo = 1
+		case "":
+			// TCP Segmentation (all packets)
+			config.Fragment.PacketsFrom = 0
+			config.Fragment.PacketsTo = 0
+		default:
+			// TCP Segmentation (range)
+			packetsFromTo := strings.Split(c.Fragment.Packets, "-")
+			if len(packetsFromTo) == 2 {
+				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
+				config.Fragment.PacketsTo, err2 = strconv.ParseUint(packetsFromTo[1], 10, 64)
 			} else {
-				startPacket, err = strconv.ParseInt(packetRange[0], 10, 64)
-				endPacket = startPacket
+				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
+				config.Fragment.PacketsTo = config.Fragment.PacketsFrom
 			}
 			if err != nil {
-				return nil, newError("Invalid start packet: ", err).Base(err)
+				return nil, newError("Invalid PacketsFrom").Base(err)
 			}
 			if err2 != nil {
-				return nil, newError("Invalid end packet: ", err2).Base(err2)
+				return nil, newError("Invalid PacketsTo").Base(err2)
 			}
-			if startPacket > endPacket {
-				return nil, newError("Invalid packet range: ", c.Fragment.Packets)
+			if config.Fragment.PacketsFrom > config.Fragment.PacketsTo {
+				config.Fragment.PacketsFrom, config.Fragment.PacketsTo = config.Fragment.PacketsTo, config.Fragment.PacketsFrom
 			}
-			if startPacket < 1 {
-				return nil, newError("Cannot start from packet 0")
+			if config.Fragment.PacketsFrom == 0 {
+				return nil, newError("PacketsFrom can't be 0")
 			}
-			config.Fragment.StartPacket = int32(startPacket)
-			config.Fragment.EndPacket = int32(endPacket)
-		} else {
-			config.Fragment.StartPacket = 0
-			config.Fragment.EndPacket = 0
+		}
+
+		{
+			if c.Fragment.Length == "" {
+				return nil, newError("Length can't be empty")
+			}
+			lengthMinMax := strings.Split(c.Fragment.Length, "-")
+			if len(lengthMinMax) == 2 {
+				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
+				config.Fragment.LengthMax, err2 = strconv.ParseUint(lengthMinMax[1], 10, 64)
+			} else {
+				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
+				config.Fragment.LengthMax = config.Fragment.LengthMin
+			}
+			if err != nil {
+				return nil, newError("Invalid LengthMin").Base(err)
+			}
+			if err2 != nil {
+				return nil, newError("Invalid LengthMax").Base(err2)
+			}
+			if config.Fragment.LengthMin > config.Fragment.LengthMax {
+				config.Fragment.LengthMin, config.Fragment.LengthMax = config.Fragment.LengthMax, config.Fragment.LengthMin
+			}
+			if config.Fragment.LengthMin == 0 {
+				return nil, newError("LengthMin can't be 0")
+			}
+		}
+
+		{
+			if c.Fragment.Interval == "" {
+				return nil, newError("Interval can't be empty")
+			}
+			intervalMinMax := strings.Split(c.Fragment.Interval, "-")
+			if len(intervalMinMax) == 2 {
+				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
+				config.Fragment.IntervalMax, err2 = strconv.ParseUint(intervalMinMax[1], 10, 64)
+			} else {
+				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
+				config.Fragment.IntervalMax = config.Fragment.IntervalMin
+			}
+			if err != nil {
+				return nil, newError("Invalid IntervalMin").Base(err)
+			}
+			if err2 != nil {
+				return nil, newError("Invalid IntervalMax").Base(err2)
+			}
+			if config.Fragment.IntervalMin > config.Fragment.IntervalMax {
+				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
+			}
 		}
 	}
 

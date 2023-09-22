@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -18,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -307,12 +307,27 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Protocol:   []string{"http"},
-				Attributes: "attrs[':path'].startswith('/test')",
+				Protocol: []string{"http"},
+				Attributes: map[string]string{
+					":path": "/test",
+				},
 			},
 			test: []ruleTest{
 				{
 					input:  withContent(&session.Content{Protocol: "http/1.1", Attributes: map[string]string{":path": "/test/1"}}),
+					output: true,
+				},
+			},
+		},
+		{
+			rule: &RoutingRule{
+				Attributes: map[string]string{
+					"Custom": "p([a-z]+)ch",
+				},
+			},
+			test: []ruleTest{
+				{
+					input:  withContent(&session.Content{Attributes: map[string]string{"custom": "peach"}}),
 					output: true,
 				},
 			},

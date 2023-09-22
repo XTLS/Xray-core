@@ -119,7 +119,7 @@ message RoutingRule {
   repeated string inbound_tag = 8;
   repeated string protocol = 9;
 
-  string attributes = 15;
+  map<string, string> attributes = 15;
 
   string domain_matcher = 17;
 }

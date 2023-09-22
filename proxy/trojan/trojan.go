@@ -1,5 +1,3 @@
 package trojan
 
-const (
-	muxCoolAddress = "v1.mux.cool"
-)
+//go:generate go run github.com/xtls/xray-core/common/errors/errorgen

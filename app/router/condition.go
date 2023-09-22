@@ -1,13 +1,12 @@
 package router
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/routing"
-	"go.starlark.net/starlark"
-	"go.starlark.net/syntax"
 )
 
 type Condition interface {
@@ -284,44 +283,22 @@ func (m *ProtocolMatcher) Apply(ctx routing.Context) bool {
 }
 
 type AttributeMatcher struct {
-	program *starlark.Program
-}
-
-func NewAttributeMatcher(code string) (*AttributeMatcher, error) {
-	starFile, err := syntax.Parse("attr.star", "satisfied=("+code+")", 0)
-	if err != nil {
-		return nil, newError("attr rule").Base(err)
-	}
-	p, err := starlark.FileProgram(starFile, func(name string) bool {
-		return name == "attrs"
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &AttributeMatcher{
-		program: p,
-	}, nil
+	configuredKeys map[string]*regexp.Regexp
 }
 
 // Match implements attributes matching.
 func (m *AttributeMatcher) Match(attrs map[string]string) bool {
-	attrsDict := new(starlark.Dict)
+	// header keys are case insensitive most likely. So we do a convert
+	httpHeaders := make(map[string]string)
 	for key, value := range attrs {
-		attrsDict.SetKey(starlark.String(key), starlark.String(value))
+		httpHeaders[strings.ToLower(key)] = value
 	}
-
-	predefined := make(starlark.StringDict)
-	predefined["attrs"] = attrsDict
-
-	thread := &starlark.Thread{
-		Name: "matcher",
+	for key, regex := range m.configuredKeys {
+		if a, ok := httpHeaders[key]; !ok || !regex.MatchString(a) {
+			return false
+		}
 	}
-	results, err := m.program.Init(thread, predefined)
-	if err != nil {
-		newError("attr matcher").Base(err).WriteToLog()
-	}
-	satisfied := results["satisfied"]
-	return satisfied != nil && bool(satisfied.Truth())
+	return true
 }
 
 // Apply implements Condition.

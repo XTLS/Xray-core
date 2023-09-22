@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
@@ -30,11 +31,15 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/net/http2"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+
+//go:linkname aesgcmPreferred github.com/refraction-networking/utls.aesgcmPreferred
+func aesgcmPreferred(ciphers []uint16) bool
 
 type Conn struct {
 	*reality.Conn
@@ -120,31 +125,38 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		uConn.BuildHandshakeState()
 		hello := uConn.HandshakeState.Hello
 		hello.SessionId = make([]byte, 32)
-		copy(hello.Raw[39:], hello.SessionId) // the location of session ID
+		copy(hello.Raw[39:], hello.SessionId) // the fixed location of `Session ID`
 		hello.SessionId[0] = core.Version_x
 		hello.SessionId[1] = core.Version_y
 		hello.SessionId[2] = core.Version_z
+		hello.SessionId[3] = 0 // reserved
 		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
 		copy(hello.SessionId[8:], config.ShortId)
 		if config.Show {
 			fmt.Printf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16])
 		}
-		uConn.AuthKey = uConn.HandshakeState.State13.EcdheParams.SharedKey(config.PublicKey)
+		publicKey, _ := ecdh.X25519().NewPublicKey(config.PublicKey)
+		uConn.AuthKey, _ = uConn.HandshakeState.State13.EcdheKey.ECDH(publicKey)
 		if uConn.AuthKey == nil {
 			return nil, errors.New("REALITY: SharedKey == nil")
 		}
 		if _, err := hkdf.New(sha256.New, uConn.AuthKey, hello.Random[:20], []byte("REALITY")).Read(uConn.AuthKey); err != nil {
 			return nil, err
 		}
-		if config.Show {
-			fmt.Printf("REALITY localAddr: %v\tuConn.AuthKey[:16]: %v\n", localAddr, uConn.AuthKey[:16])
+		var aead cipher.AEAD
+		if aesgcmPreferred(hello.CipherSuites) {
+			block, _ := aes.NewCipher(uConn.AuthKey)
+			aead, _ = cipher.NewGCM(block)
+		} else {
+			aead, _ = chacha20poly1305.New(uConn.AuthKey)
 		}
-		block, _ := aes.NewCipher(uConn.AuthKey)
-		aead, _ := cipher.NewGCM(block)
+		if config.Show {
+			fmt.Printf("REALITY localAddr: %v\tuConn.AuthKey[:16]: %v\tAEAD: %T\n", localAddr, uConn.AuthKey[:16], aead)
+		}
 		aead.Seal(hello.SessionId[:0], hello.Random[20:], hello.SessionId[:16], hello.Raw)
 		copy(hello.Raw[39:], hello.SessionId)
 	}
-	if err := uConn.Handshake(); err != nil {
+	if err := uConn.HandshakeContext(ctx); err != nil {
 		return nil, err
 	}
 	if config.Show {

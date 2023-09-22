@@ -23,6 +23,7 @@
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
+  - [iamybj/docker-xray](https://hub.docker.com/r/iamybj/docker-xray)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - Web Panel
   - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
@@ -31,8 +32,8 @@
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
-  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray-REALITY](https://github.com/zxcvos/Xray-script), [LetsXray](https://github.com/tdjnodj/LetsXray)
-  - [XTool](https://github.com/LordPenguin666/XTool), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [xray-reality](https://github.com/sajjaddg/xray-reality)
+  - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
+  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
   - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
@@ -54,6 +55,7 @@
   - [XTLS Vision](https://github.com/chika0801/Xray-install)
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
   - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
+  - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
 
 ## GUI Clients
 
@@ -63,6 +65,8 @@
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
+  - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [HiddifyN](https://github.com/hiddify/HiddifyN)
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
@@ -72,21 +76,27 @@
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
+  - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
 - macOS arm64 & x64
+  - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
+  - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
-  - [Stash](https://apps.apple.com/app/stash/id1596063349)
 - Xray Wrapper
+  - [XTLS/libXray](https://github.com/XTLS/libXray)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [XrayKit](https://github.com/arror/XrayKit)
+  - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
@@ -106,23 +116,8 @@
 
 ## Credits
 
-This repo relies on the following third-party projects:
-
-- Special thanks:
-  - [v2fly/v2ray-core](https://github.com/v2fly/v2ray-core)
-- In production:
-  - [ghodss/yaml](https://github.com/ghodss/yaml)
-  - [gorilla/websocket](https://github.com/gorilla/websocket)
-  - [quic-go/quic-go](https://github.com/quic-go/quic-go)
-  - [pelletier/go-toml](https://github.com/pelletier/go-toml)
-  - [pires/go-proxyproto](https://github.com/pires/go-proxyproto)
-  - [refraction-networking/utls](https://github.com/refraction-networking/utls)
-  - [seiflotfy/cuckoofilter](https://github.com/seiflotfy/cuckoofilter)
-  - [google/starlark-go](https://github.com/google/starlark-go)
-- For testing only:
-  - [miekg/dns](https://github.com/miekg/dns)
-  - [stretchr/testify](https://github.com/stretchr/testify)
-  - [h12w/socks](https://github.com/h12w/socks)
+- [Xray-core v1.0.0](https://github.com/XTLS/Xray-core/releases/tag/v1.0.0) was forked from [v2fly-core 9a03cc5](https://github.com/v2fly/v2ray-core/commit/9a03cc5c98d04cc28320fcee26dbc236b3291256), and we have made & accumulated a huge number of enhancements over time, check [the release notes for each version](https://github.com/XTLS/Xray-core/releases).
+- For third-party projects used in [Xray-core](https://github.com/XTLS/Xray-core), check your local or [the latest go.mod](https://github.com/XTLS/Xray-core/blob/main/go.mod).
 
 ## Compilation
 

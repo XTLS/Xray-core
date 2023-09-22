@@ -3,7 +3,6 @@ package core_test
 import (
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -19,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
 	"github.com/xtls/xray-core/testing/servers/tcp"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestXrayDependency(t *testing.T) {

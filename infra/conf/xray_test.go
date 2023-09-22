@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
@@ -27,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/http"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestXrayConfig(t *testing.T) {
@@ -221,7 +221,8 @@ func TestXrayConfig(t *testing.T) {
 							},
 						}),
 						ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-							Server: &net.Endpoint{},
+							Server:      &net.Endpoint{},
+							Non_IPQuery: "drop",
 						}),
 					},
 				},
