@@ -101,7 +101,7 @@ func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Wri
 
 	idBytes := cmd.ID.Bytes()
 	common.Must2(writer.Write(idBytes))
-	common.Must2(serial.WriteUint16(writer, cmd.AlterIds))
+	common.Must2(serial.WriteUint16(writer, 0)) // compatible with legacy alterId
 	common.Must2(writer.Write([]byte{byte(cmd.Level)}))
 
 	common.Must2(writer.Write([]byte{cmd.ValidMin}))
@@ -130,12 +130,7 @@ func (f *CommandSwitchAccountFactory) Unmarshal(data []byte) (interface{}, error
 		return nil, ErrInsufficientLength
 	}
 	cmd.ID, _ = uuid.ParseBytes(data[idStart : idStart+16])
-	alterIDStart := idStart + 16
-	if len(data) < alterIDStart+2 {
-		return nil, ErrInsufficientLength
-	}
-	cmd.AlterIds = binary.BigEndian.Uint16(data[alterIDStart : alterIDStart+2])
-	levelStart := alterIDStart + 2
+	levelStart := idStart + 16 + 2
 	if len(data) < levelStart+1 {
 		return nil, ErrInsufficientLength
 	}

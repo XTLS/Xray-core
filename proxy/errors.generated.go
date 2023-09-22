@@ -1,4 +1,4 @@
-package mtproto
+package proxy
 
 import "github.com/xtls/xray-core/common/errors"
 

@@ -27,6 +27,7 @@ func TestDnsProxyConfig(t *testing.T) {
 					Address: net.NewIPOrDomain(net.IPAddress([]byte{8, 8, 8, 8})),
 					Port:    53,
 				},
+				Non_IPQuery: "drop",
 			},
 		},
 	})

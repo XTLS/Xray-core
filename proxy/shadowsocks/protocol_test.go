@@ -23,37 +23,80 @@ func equalRequestHeader(x, y *protocol.RequestHeader) bool {
 	}))
 }
 
-func TestUDPEncoding(t *testing.T) {
-	request := &protocol.RequestHeader{
-		Version: Version,
-		Command: protocol.RequestCommandUDP,
-		Address: net.LocalHostIP,
-		Port:    1234,
-		User: &protocol.MemoryUser{
-			Email: "love@example.com",
-			Account: toAccount(&Account{
-				Password:   "password",
-				CipherType: CipherType_AES_128_GCM,
-			}),
+func TestUDPEncodingDecoding(t *testing.T) {
+	testRequests := []protocol.RequestHeader{
+		{
+			Version: Version,
+			Command: protocol.RequestCommandUDP,
+			Address: net.LocalHostIP,
+			Port:    1234,
+			User: &protocol.MemoryUser{
+				Email: "love@example.com",
+				Account: toAccount(&Account{
+					Password:   "password",
+					CipherType: CipherType_AES_128_GCM,
+				}),
+			},
+		},
+		{
+			Version: Version,
+			Command: protocol.RequestCommandUDP,
+			Address: net.LocalHostIP,
+			Port:    1234,
+			User: &protocol.MemoryUser{
+				Email: "love@example.com",
+				Account: toAccount(&Account{
+					Password:   "123",
+					CipherType: CipherType_NONE,
+				}),
+			},
 		},
 	}
 
-	data := buf.New()
-	common.Must2(data.WriteString("test string"))
-	encodedData, err := EncodeUDPPacket(request, data.Bytes())
-	common.Must(err)
+	for _, request := range testRequests {
+		data := buf.New()
+		common.Must2(data.WriteString("test string"))
+		encodedData, err := EncodeUDPPacket(&request, data.Bytes())
+		common.Must(err)
 
-	validator := new(Validator)
-	validator.Add(request.User)
-	decodedRequest, decodedData, err := DecodeUDPPacket(validator, encodedData)
-	common.Must(err)
+		validator := new(Validator)
+		validator.Add(request.User)
+		decodedRequest, decodedData, err := DecodeUDPPacket(validator, encodedData)
+		common.Must(err)
 
-	if r := cmp.Diff(decodedData.Bytes(), data.Bytes()); r != "" {
-		t.Error("data: ", r)
+		if r := cmp.Diff(decodedData.Bytes(), data.Bytes()); r != "" {
+			t.Error("data: ", r)
+		}
+
+		if equalRequestHeader(decodedRequest, &request) == false {
+			t.Error("different request")
+		}
+	}
+}
+
+func TestUDPDecodingWithPayloadTooShort(t *testing.T) {
+	testAccounts := []protocol.Account{
+		toAccount(&Account{
+			Password:   "password",
+			CipherType: CipherType_AES_128_GCM,
+		}),
+		toAccount(&Account{
+			Password:   "password",
+			CipherType: CipherType_NONE,
+		}),
 	}
 
-	if equalRequestHeader(decodedRequest, request) == false {
-		t.Error("different request")
+	for _, account := range testAccounts {
+		data := buf.New()
+		data.WriteString("short payload")
+		validator := new(Validator)
+		validator.Add(&protocol.MemoryUser{
+			Account: account,
+		})
+		_, _, err := DecodeUDPPacket(validator, data)
+		if err == nil {
+			t.Fatal("expected error")
+		}
 	}
 }
 

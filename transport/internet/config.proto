@@ -110,4 +110,6 @@ message SocketConfig {
   int32 tcp_max_seg = 17;
 
   bool tcp_no_delay = 18;
+
+  bool tcp_mptcp = 19;
 }

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common"
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -19,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport/internet/tagged"
+	"google.golang.org/protobuf/proto"
 )
 
 type Observer struct {

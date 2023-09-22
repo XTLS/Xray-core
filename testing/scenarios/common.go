@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -25,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/units"
 	core "github.com/xtls/xray-core/core"
+	"google.golang.org/protobuf/proto"
 )
 
 func xor(b []byte) []byte {
