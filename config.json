@@ -1,8 +1,8 @@
 {
     "stats": {},
     "log":{
-        "access":"D:\\temp\\v2ray_acc.log",
-        "error": "D:\\temp\\v2ray_err.log",
+        "access":"D:\\temp1\\v2ray_acc.log",
+        "error": "D:\\temp1\\v2ray_err.log",
         "loglevel":"info"
     },
     "api": {
