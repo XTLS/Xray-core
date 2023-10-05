@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -18,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {

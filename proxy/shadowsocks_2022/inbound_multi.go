@@ -155,6 +155,7 @@ func (i *MultiUserInbound) Network() []net.Network {
 func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022-multi"
+	inbound.SetCanSpliceCopy(3)
 
 	var metadata M.Metadata
 	if inbound.Source.IsValid() {
@@ -204,7 +205,12 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	})
 	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
 	dispatcher := session.DispatcherFromContext(ctx)
-	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
+	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
+	if !destination.IsValid() {
+		return newError("invalid destination")
+	}
+
+	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
 	}

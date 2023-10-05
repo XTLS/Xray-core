@@ -18,19 +18,25 @@ func ToNetwork(network string) net.Network {
 }
 
 func ToDestination(socksaddr M.Socksaddr, network net.Network) net.Destination {
+	// IsFqdn() implicitly checks if the domain name is valid
 	if socksaddr.IsFqdn() {
 		return net.Destination{
 			Network: network,
 			Address: net.DomainAddress(socksaddr.Fqdn),
 			Port:    net.Port(socksaddr.Port),
 		}
-	} else {
+	}
+
+	// IsIP() implicitly checks if the IP address is valid
+	if socksaddr.IsIP() {
 		return net.Destination{
 			Network: network,
 			Address: net.IPAddress(socksaddr.Addr.AsSlice()),
 			Port:    net.Port(socksaddr.Port),
 		}
 	}
+
+	return net.Destination{}
 }
 
 func ToSocksaddr(destination net.Destination) M.Socksaddr {

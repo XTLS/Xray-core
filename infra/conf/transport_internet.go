@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
@@ -26,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -622,6 +622,7 @@ type SocketConfig struct {
 	TCPUserTimeout       int32       `json:"tcpUserTimeout"`
 	V6only               bool        `json:"v6only"`
 	Interface            string      `json:"interface"`
+	TcpMptcp             bool        `json:"tcpMptcp"`
 }
 
 // Build implements Buildable.
@@ -677,6 +678,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpUserTimeout:       c.TCPUserTimeout,
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
+		TcpMptcp:             c.TcpMptcp,
 	}, nil
 }
 
