@@ -33,10 +33,10 @@ func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, error) {
 		if parsed != nil {
 			parsedIPs = append(parsedIPs, parsed.IP())
 		}
-		if len(ip) == net.IPv4len {
+		if ip.To4() != nil {
 			ipv4 = append(ipv4, ip)
 		}
-		if len(ip) == net.IPv6len {
+		if ip.To16() != nil {
 			ipv6 = append(ipv6, ip)
 		}
 	}
