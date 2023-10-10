@@ -61,6 +61,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
+	outbound.Name = "socks"
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
+		inbound.SetCanSpliceCopy(2)
+	}
 	// Destination of the inner request.
 	destination := outbound.Target
 

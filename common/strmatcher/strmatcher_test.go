@@ -217,6 +217,10 @@ func TestACAutomaton(t *testing.T) {
 				pattern: "vvgoogle.com",
 				res:     true,
 			},
+			{
+				pattern: "½",
+				res:     false,
+			},
 		}
 		for _, test := range cases2Output {
 			if m := ac.Match(test.pattern); m != test.res {
@@ -224,7 +228,6 @@ func TestACAutomaton(t *testing.T) {
 			}
 		}
 	}
-
 	{
 		cases3Input := []struct {
 			pattern string

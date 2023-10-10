@@ -75,7 +75,6 @@ type Listener struct {
 	listener net.Listener
 	config   *Config
 	addConn  internet.ConnHandler
-	locker   *internet.FileLocker // for unix domain socket
 }
 
 func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
@@ -101,10 +100,6 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, newError("failed to listen unix domain socket(for WS) on ", address).Base(err)
 		}
 		newError("listening unix domain socket(for WS) on ", address).WriteToLog(session.ExportIDToError(ctx))
-		locker := ctx.Value(address.Domain())
-		if locker != nil {
-			l.locker = locker.(*internet.FileLocker)
-		}
 	} else { // tcp
 		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
 			IP:   address.IP(),
@@ -153,9 +148,6 @@ func (ln *Listener) Addr() net.Addr {
 
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
-	if ln.locker != nil {
-		ln.locker.Release()
-	}
 	return ln.listener.Close()
 }
 

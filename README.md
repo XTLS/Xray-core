@@ -81,6 +81,7 @@ ___
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
+  - [iamybj/docker-xray](https://hub.docker.com/r/iamybj/docker-xray)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - Web Panel
   - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
@@ -112,6 +113,7 @@ ___
   - [XTLS Vision](https://github.com/chika0801/Xray-install)
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
   - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
+  - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
 
 ## GUI Clients
 
@@ -121,6 +123,8 @@ ___
   - [luci-app-xray](https://github.com/yichya/luci-app-xray) ([openwrt-xray](https://github.com/yichya/openwrt-xray))
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
+  - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [HiddifyN](https://github.com/hiddify/HiddifyN)
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
@@ -130,11 +134,16 @@ ___
 - iOS & macOS arm64
   - [Mango](https://github.com/arror/Mango)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
+  - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
 - macOS arm64 & x64
+  - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
+  - [Furious](https://github.com/LorenEteval/Furious)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
+  - [NekoRay](https://github.com/Matsuridayo/nekoray)
+  - [Furious](https://github.com/LorenEteval/Furious)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
@@ -145,6 +154,7 @@ ___
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [XrayKit](https://github.com/arror/XrayKit)
+  - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)

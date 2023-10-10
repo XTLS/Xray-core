@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
@@ -134,7 +135,8 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		if config.Show {
 			fmt.Printf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16])
 		}
-		uConn.AuthKey = uConn.HandshakeState.State13.EcdheParams.SharedKey(config.PublicKey)
+		publicKey, _ := ecdh.X25519().NewPublicKey(config.PublicKey)
+		uConn.AuthKey, _ = uConn.HandshakeState.State13.EcdheKey.ECDH(publicKey)
 		if uConn.AuthKey == nil {
 			return nil, errors.New("REALITY: SharedKey == nil")
 		}
@@ -154,7 +156,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		aead.Seal(hello.SessionId[:0], hello.Random[20:], hello.SessionId[:16], hello.Raw)
 		copy(hello.Raw[39:], hello.SessionId)
 	}
-	if err := uConn.Handshake(); err != nil {
+	if err := uConn.HandshakeContext(ctx); err != nil {
 		return nil, err
 	}
 	if config.Show {

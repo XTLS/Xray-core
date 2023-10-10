@@ -3,7 +3,6 @@ package conf
 import (
 	"sort"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/transport/internet/headers/dns"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
@@ -12,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/headers/utp"
 	"github.com/xtls/xray-core/transport/internet/headers/wechat"
 	"github.com/xtls/xray-core/transport/internet/headers/wireguard"
+	"google.golang.org/protobuf/proto"
 )
 
 type NoOpAuthenticator struct{}

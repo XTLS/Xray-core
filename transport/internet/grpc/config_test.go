@@ -1,8 +1,9 @@
 package grpc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConfig_GetServiceName(t *testing.T) {
@@ -30,6 +31,11 @@ func TestConfig_GetServiceName(t *testing.T) {
 			TestName:    "escape absolute path",
 			ServiceName: "/hello /world!/a|b",
 			Expected:    "hello%20/world%21",
+		},
+		{
+			TestName:    "path with only one '/'",
+			ServiceName: "/foo",
+			Expected:    "",
 		},
 	}
 	for _, test := range tests {

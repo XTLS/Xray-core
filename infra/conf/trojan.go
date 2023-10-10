@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/trojan"
+	"google.golang.org/protobuf/proto"
 )
 
 // TrojanServerTarget is configuration of a single trojan server
@@ -30,13 +30,14 @@ type TrojanClientConfig struct {
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
-	config := new(trojan.ClientConfig)
-
 	if len(c.Servers) == 0 {
 		return nil, newError("0 Trojan server configured.")
 	}
 
-	serverSpecs := make([]*protocol.ServerEndpoint, len(c.Servers))
+	config := &trojan.ClientConfig{
+		Server: make([]*protocol.ServerEndpoint, len(c.Servers)),
+	}
+
 	for idx, rec := range c.Servers {
 		if rec.Address == nil {
 			return nil, newError("Trojan server address is not set.")
@@ -47,33 +48,24 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 		if rec.Password == "" {
 			return nil, newError("Trojan password is not specified.")
 		}
-		account := &trojan.Account{
-			Password: rec.Password,
-			Flow:     rec.Flow,
+		if rec.Flow != "" {
+			return nil, newError(`Trojan doesn't support "flow" anymore.`)
 		}
 
-		switch account.Flow {
-		case "":
-		default:
-			return nil, newError(`Trojan servers: "flow" doesn't support "` + account.Flow + `" in this version`)
-		}
-
-		trojan := &protocol.ServerEndpoint{
+		config.Server[idx] = &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
 			User: []*protocol.User{
 				{
-					Level:   uint32(rec.Level),
-					Email:   rec.Email,
-					Account: serial.ToTypedMessage(account),
+					Level: uint32(rec.Level),
+					Email: rec.Email,
+					Account: serial.ToTypedMessage(&trojan.Account{
+						Password: rec.Password,
+					}),
 				},
 			},
 		}
-
-		serverSpecs[idx] = trojan
 	}
-
-	config.Server = serverSpecs
 
 	return config, nil
 }
@@ -105,25 +97,22 @@ type TrojanServerConfig struct {
 
 // Build implements Buildable
 func (c *TrojanServerConfig) Build() (proto.Message, error) {
-	config := new(trojan.ServerConfig)
-	config.Users = make([]*protocol.User, len(c.Clients))
+	config := &trojan.ServerConfig{
+		Users: make([]*protocol.User, len(c.Clients)),
+	}
+
 	for idx, rawUser := range c.Clients {
-		user := new(protocol.User)
-		account := &trojan.Account{
-			Password: rawUser.Password,
-			Flow:     rawUser.Flow,
+		if rawUser.Flow != "" {
+			return nil, newError(`Trojan doesn't support "flow" anymore.`)
 		}
 
-		switch account.Flow {
-		case "":
-		default:
-			return nil, newError(`Trojan clients: "flow" doesn't support "` + account.Flow + `" in this version`)
+		config.Users[idx] = &protocol.User{
+			Level: uint32(rawUser.Level),
+			Email: rawUser.Email,
+			Account: serial.ToTypedMessage(&trojan.Account{
+				Password: rawUser.Password,
+			}),
 		}
-
-		user.Email = rawUser.Email
-		user.Level = uint32(rawUser.Level)
-		user.Account = serial.ToTypedMessage(account)
-		config.Users[idx] = user
 	}
 
 	if c.Fallback != nil {

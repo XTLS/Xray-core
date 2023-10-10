@@ -31,19 +31,20 @@ import (
 type DoHNameServer struct {
 	dispatcher routing.Dispatcher
 	sync.RWMutex
-	ips        map[string]*record
-	pub        *pubsub.Service
-	cleanup    *task.Periodic
-	reqID      uint32
-	httpClient *http.Client
-	dohURL     string
-	name       string
+	ips           map[string]*record
+	pub           *pubsub.Service
+	cleanup       *task.Periodic
+	reqID         uint32
+	httpClient    *http.Client
+	dohURL        string
+	name          string
+	queryStrategy QueryStrategy
 }
 
 // NewDoHNameServer creates DOH server object for remote resolving.
-func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher) (*DoHNameServer, error) {
+func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, queryStrategy QueryStrategy) (*DoHNameServer, error) {
 	newError("DNS: created Remote DOH client for ", url.String()).AtInfo().WriteToLog()
-	s := baseDOHNameServer(url, "DOH")
+	s := baseDOHNameServer(url, "DOH", queryStrategy)
 
 	s.dispatcher = dispatcher
 	tr := &http.Transport{
@@ -90,9 +91,9 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher) (*DoHNameServ
 }
 
 // NewDoHLocalNameServer creates DOH client object for local resolving
-func NewDoHLocalNameServer(url *url.URL) *DoHNameServer {
+func NewDoHLocalNameServer(url *url.URL, queryStrategy QueryStrategy) *DoHNameServer {
 	url.Scheme = "https"
-	s := baseDOHNameServer(url, "DOHL")
+	s := baseDOHNameServer(url, "DOHL", queryStrategy)
 	tr := &http.Transport{
 		IdleConnTimeout:   90 * time.Second,
 		ForceAttemptHTTP2: true,
@@ -122,12 +123,13 @@ func NewDoHLocalNameServer(url *url.URL) *DoHNameServer {
 	return s
 }
 
-func baseDOHNameServer(url *url.URL, prefix string) *DoHNameServer {
+func baseDOHNameServer(url *url.URL, prefix string, queryStrategy QueryStrategy) *DoHNameServer {
 	s := &DoHNameServer{
-		ips:    make(map[string]*record),
-		pub:    pubsub.NewService(),
-		name:   prefix + "//" + url.Host,
-		dohURL: url.String(),
+		ips:           make(map[string]*record),
+		pub:           pubsub.NewService(),
+		name:          prefix + "//" + url.Host,
+		dohURL:        url.String(),
+		queryStrategy: queryStrategy,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -353,6 +355,10 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 // QueryIP implements Server.
 func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) { // nolint: dupl
 	fqdn := Fqdn(domain)
+	option = ResolveIpOptionOverride(s.queryStrategy, option)
+	if !option.IPv4Enable && !option.IPv6Enable {
+		return nil, dns_feature.ErrEmptyResponse
+	}
 
 	if disableCache {
 		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()

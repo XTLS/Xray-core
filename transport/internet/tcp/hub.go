@@ -24,7 +24,6 @@ type Listener struct {
 	authConfig    internet.ConnectionAuthenticator
 	config        *Config
 	addConn       internet.ConnHandler
-	locker        *internet.FileLocker // for unix domain socket
 }
 
 // ListenTCP creates a new Listener based on configurations.
@@ -51,10 +50,6 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			return nil, newError("failed to listen Unix Domain Socket on ", address).Base(err)
 		}
 		newError("listening Unix Domain Socket on ", address).WriteToLog(session.ExportIDToError(ctx))
-		locker := ctx.Value(address.Domain())
-		if locker != nil {
-			l.locker = locker.(*internet.FileLocker)
-		}
 	} else {
 		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
 			IP:   address.IP(),
@@ -133,9 +128,6 @@ func (v *Listener) Addr() net.Addr {
 
 // Close implements internet.Listener.Close.
 func (v *Listener) Close() error {
-	if v.locker != nil {
-		v.locker.Release()
-	}
 	return v.listener.Close()
 }
 
