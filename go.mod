@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/miekg/dns v1.1.56
 	github.com/pelletier/go-toml v1.9.5
