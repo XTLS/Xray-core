@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
@@ -170,7 +171,20 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbound := session.OutboundFromContext(ctx)
 	if outbound.Target.Network == net.Network_UDP && outbound.OriginalTarget.Address != nil && outbound.OriginalTarget.Address != outbound.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: outbound.Target.Address, OriginalDest: outbound.OriginalTarget.Address}
-		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: outbound.Target.Address, OriginalDest: outbound.OriginalTarget.Address}
+
+		var fakeDNSEngine dns.FakeDNSEngine
+		{
+			fakeDNSEngineFeat := core.MustFromContext(ctx).GetFeature((*dns.FakeDNSEngine)(nil))
+			if fakeDNSEngineFeat != nil {
+				fakeDNSEngine = fakeDNSEngineFeat.(dns.FakeDNSEngine)
+			}
+		}
+		var isinpool bool
+		if fkr0, ok := fakeDNSEngine.(dns.FakeDNSEngineRev0); ok {
+			isinpool = fkr0.IsIPInIPPool(outbound.OriginalTarget.Address)
+		}
+
+		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: outbound.Target.Address, OriginalDest: outbound.OriginalTarget.Address, FakeIP: isinpool}
 	}
 	if h.mux != nil {
 		test := func(err error) {

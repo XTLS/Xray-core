@@ -26,11 +26,12 @@ type EndpointOverrideWriter struct {
 	Writer
 	Dest         net.Address
 	OriginalDest net.Address
+	FakeIP       bool
 }
 
 func (w *EndpointOverrideWriter) WriteMultiBuffer(mb MultiBuffer) error {
 	for _, b := range mb {
-		if b.UDP != nil && b.UDP.Address == w.Dest {
+		if b.UDP != nil && (b.UDP.Address == w.Dest || w.FakeIP) {
 			b.UDP.Address = w.OriginalDest
 		}
 	}
