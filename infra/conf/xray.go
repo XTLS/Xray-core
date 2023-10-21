@@ -492,11 +492,11 @@ func (c *Config) Override(o *Config, fn string) {
 		for i := range o.InboundConfigs {
 			if idx := c.findInboundTag(o.InboundConfigs[i].Tag); idx > -1 {
 				c.InboundConfigs[idx] = o.InboundConfigs[i]
-				ctllog.Println("[", fn, "] updated inbound with tag: ", o.InboundConfigs[0].Tag)
+				newError("[", fn, "] updated inbound with tag: ", o.InboundConfigs[i].Tag).AtInfo().WriteToLog()
 
 			} else {
 				c.InboundConfigs = append(c.InboundConfigs, o.InboundConfigs[i])
-				ctllog.Println("[", fn, "] appended inbound with tag: ", o.InboundConfigs[0].Tag)
+				newError("[", fn, "] appended inbound with tag: ", o.InboundConfigs[i].Tag).AtInfo().WriteToLog()
 			}
 
 		}
