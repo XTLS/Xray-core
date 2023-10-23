@@ -504,24 +504,23 @@ func (c *Config) Override(o *Config, fn string) {
 
 	// update the Outbound in slice if the only one in overide config has same tag
 	if len(o.OutboundConfigs) > 0 {
-		outboundPrepends := o.OutboundConfigs
+		outboundPrepends := []OutboundDetourConfig{}
 		for i := range o.OutboundConfigs {
 			if idx := c.findOutboundTag(o.OutboundConfigs[i].Tag); idx > -1 {
 				c.OutboundConfigs[idx] = o.OutboundConfigs[i]
-				outboundPrepends = append(c.OutboundConfigs[:idx], c.OutboundConfigs[idx+1:]...)
 				newError("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 			} else {
 				if strings.Contains(strings.ToLower(fn), "tail") {
 					c.OutboundConfigs = append(c.OutboundConfigs, o.OutboundConfigs[i])
 					newError("[", fn, "] appended outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				} else {
-					// last item
-					if i == len(o.OutboundConfigs)-1 {
-						c.OutboundConfigs = append(o.OutboundConfigs, outboundPrepends...)
-						newError("[", fn, "] prepended outbounds ").AtInfo().WriteToLog()
-					}
+					outboundPrepends = append(outboundPrepends, o.OutboundConfigs[i])
+					newError("[", fn, "] prepend outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				}
 			}
+		}
+		if !strings.Contains(strings.ToLower(fn), "tail") && len(outboundPrepends) > 0 {
+			c.OutboundConfigs = append(outboundPrepends, c.OutboundConfigs...)
 		}
 	}
 }
