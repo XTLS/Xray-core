@@ -508,15 +508,18 @@ func (c *Config) Override(o *Config, fn string) {
 		for i := range o.OutboundConfigs {
 			if idx := c.findOutboundTag(o.OutboundConfigs[i].Tag); idx > -1 {
 				c.OutboundConfigs[idx] = o.OutboundConfigs[i]
-				newError("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				outboundPrepends = append(c.OutboundConfigs[:idx], c.OutboundConfigs[idx+1:]...)
+				newError("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 			} else {
 				if strings.Contains(strings.ToLower(fn), "tail") {
 					c.OutboundConfigs = append(c.OutboundConfigs, o.OutboundConfigs[i])
 					newError("[", fn, "] appended outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				} else {
-					c.OutboundConfigs = append(o.OutboundConfigs, outboundPrepends...)
-					newError("[", fn, "] prepended outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
+					// last item
+					if i == len(o.OutboundConfigs)-1 {
+						c.OutboundConfigs = append(o.OutboundConfigs, outboundPrepends...)
+						newError("[", fn, "] prepended outbounds ").AtInfo().WriteToLog()
+					}
 				}
 			}
 		}
