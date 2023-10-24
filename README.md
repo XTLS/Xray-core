@@ -91,6 +91,8 @@
 
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+- Xray Tools
+  - [xray-knife](https://github.com/lilendian0x00/xray-knife)
 - Xray Wrapper
   - [XTLS/libXray](https://github.com/XTLS/libXray)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
