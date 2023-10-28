@@ -17,13 +17,13 @@ func LineSeparator() string {
 }
 
 func GetToolLocation(file string) string {
-	toolPath := NewEnvFlag(UnixToolLocation).GetValue(getExecutableDir)
+	toolPath := NewEnvFlag(ToolLocation).GetValue(getExecutableDir)
 	return filepath.Join(toolPath, file)
 }
 
 // GetAssetLocation searches for `file` in certain locations
 func GetAssetLocation(file string) string {
-	assetPath := NewEnvFlag(UnixAssetLocation).GetValue(getExecutableDir)
+	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
 	defPath := filepath.Join(assetPath, file)
 	for _, p := range []string{
 		defPath,
