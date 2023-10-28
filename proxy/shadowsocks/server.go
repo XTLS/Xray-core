@@ -71,6 +71,10 @@ func (s *Server) Network() []net.Network {
 }
 
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	inbound := session.InboundFromContext(ctx)
+	inbound.Name = "shadowsocks"
+	inbound.SetCanSpliceCopy(3)
+	
 	switch network {
 	case net.Network_TCP:
 		return s.handleConnection(ctx, conn, dispatcher)
@@ -110,13 +114,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	})
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
-	inbound.Name = "shadowsocks"
-
 	var dest *net.Destination
-
 	reader := buf.NewPacketReader(conn)
 	for {
 		mpayload, err := reader.ReadMultiBuffer()
