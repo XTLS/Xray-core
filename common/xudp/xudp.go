@@ -6,11 +6,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"lukechampine.com/blake3"
@@ -28,20 +28,15 @@ var (
 	BaseKey []byte
 )
 
-const (
-	EnvShow    = "XRAY_XUDP_SHOW"
-	EnvBaseKey = "XRAY_XUDP_BASEKEY"
-)
-
 func init() {
-	if strings.ToLower(os.Getenv(EnvShow)) == "true" {
+	if strings.ToLower(platform.NewEnvFlag(platform.XUDPLog).GetValue(func() string { return "" })) == "true" {
 		Show = true
 	}
-	if raw, found := os.LookupEnv(EnvBaseKey); found {
+	if raw := platform.NewEnvFlag(platform.XUDPBaseKey).GetValue(func() string { return "" }); raw != "" {
 		if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
 			return
 		}
-		panic(EnvBaseKey + ": invalid value: " + raw)
+		panic(platform.XUDPBaseKey + ": invalid value: " + raw)
 	}
 	rand.Read(BaseKey)
 }

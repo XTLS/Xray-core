@@ -8,12 +8,12 @@ import (
 	"io"
 	gonet "net"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -26,7 +26,8 @@ var webpage []byte
 var conns chan *websocket.Conn
 
 func init() {
-	if addr := os.Getenv("XRAY_BROWSER_DIALER"); addr != "" {
+	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+	if addr != "" {
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/websocket" {

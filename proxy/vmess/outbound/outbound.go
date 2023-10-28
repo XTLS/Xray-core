@@ -245,7 +245,7 @@ func init() {
 
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
 
-	paddingValue := platform.NewEnvFlag("xray.vmess.padding").GetValue(func() string { return defaultFlagValue })
+	paddingValue := platform.NewEnvFlag(platform.UseVmessPadding).GetValue(func() string { return defaultFlagValue })
 	if paddingValue != defaultFlagValue {
 		enablePadding = true
 	}

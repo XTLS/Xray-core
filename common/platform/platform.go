@@ -84,3 +84,17 @@ func GetConfDirPath() string {
 	configPath := NewEnvFlag(name).GetValue(func() string { return "" })
 	return configPath
 }
+
+const (
+	UnixToolLocation     = "xray.location.tool"
+	UnixAssetLocation    = "xray.location.asset"
+
+	UseReadV             = "xray.buf.readv"
+	UseFreedomSplice     = "xray.buf.splice"
+	UseVmessPadding      = "xray.vmess.padding"
+	UseCone              = "xray.cone.disabled"
+
+	BrowserDialerAddress = "xray.browser.dialer"
+	XUDPLog              = "xray.xudp.show"
+	XUDPBaseKey          = "xray.xudp.basekey"
+)

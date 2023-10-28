@@ -147,7 +147,7 @@ var useReadv bool
 
 func init() {
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-	value := platform.NewEnvFlag("xray.buf.readv").GetValue(func() string { return defaultFlagValue })
+	value := platform.NewEnvFlag(platform.UseReadV).GetValue(func() string { return defaultFlagValue })
 	switch value {
 	case defaultFlagValue, "auto", "enable":
 		useReadv = true
