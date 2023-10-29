@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
-	"fmt"
 	"io"
 	gonet "net"
 	"net/http"
@@ -34,7 +33,7 @@ func init() {
 				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
 					conns <- conn
 				} else {
-					fmt.Println("unexpected error")
+					newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
 				}
 			} else {
 				w.Write(webpage)

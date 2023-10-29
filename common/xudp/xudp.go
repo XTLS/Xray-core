@@ -51,7 +51,7 @@ func GetGlobalID(ctx context.Context) (globalID [8]byte) {
 		h.Write([]byte(inbound.Source.String()))
 		copy(globalID[:], h.Sum(nil))
 		if Show {
-			fmt.Printf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)
+			newError(fmt.Sprintf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}
 	return
