@@ -487,7 +487,7 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	// deprecated attrs
 
-	// update the Inbound in slice if the only one in overide config has same tag
+	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
 		for i := range o.InboundConfigs {
 			if idx := c.findInboundTag(o.InboundConfigs[i].Tag); idx > -1 {
@@ -502,7 +502,7 @@ func (c *Config) Override(o *Config, fn string) {
 		}
 	}
 
-	// update the Outbound in slice if the only one in overide config has same tag
+	// update the Outbound in slice if the only one in override config has same tag
 	if len(o.OutboundConfigs) > 0 {
 		outboundPrepends := []OutboundDetourConfig{}
 		for i := range o.OutboundConfigs {
