@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/proxy/wireguard"
+	"google.golang.org/protobuf/proto"
 )
 
 type WireGuardPeerConfig struct {

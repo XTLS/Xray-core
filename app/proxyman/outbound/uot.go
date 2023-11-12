@@ -11,6 +11,9 @@ import (
 )
 
 func (h *Handler) getUoTConnection(ctx context.Context, dest net.Destination) (stat.Connection, error) {
+	if dest.Address == nil {
+		return nil, newError("nil destination address")
+	}
 	if !dest.Address.Family().IsDomain() {
 		return nil, os.ErrInvalid
 	}

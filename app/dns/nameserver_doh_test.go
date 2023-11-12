@@ -17,7 +17,7 @@ func TestDOHNameServer(t *testing.T) {
 	url, err := url.Parse("https+local://1.1.1.1/dns-query")
 	common.Must(err)
 
-	s := NewDoHLocalNameServer(url)
+	s := NewDoHLocalNameServer(url, QueryStrategy_USE_IP)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
@@ -34,7 +34,7 @@ func TestDOHNameServerWithCache(t *testing.T) {
 	url, err := url.Parse("https+local://1.1.1.1/dns-query")
 	common.Must(err)
 
-	s := NewDoHLocalNameServer(url)
+	s := NewDoHLocalNameServer(url, QueryStrategy_USE_IP)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
@@ -55,5 +55,51 @@ func TestDOHNameServerWithCache(t *testing.T) {
 	common.Must(err)
 	if r := cmp.Diff(ips2, ips); r != "" {
 		t.Fatal(r)
+	}
+}
+
+func TestDOHNameServerWithIPv4Override(t *testing.T) {
+	url, err := url.Parse("https+local://1.1.1.1/dns-query")
+	common.Must(err)
+
+	s := NewDoHLocalNameServer(url, QueryStrategy_USE_IP4)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+	}, false)
+	cancel()
+	common.Must(err)
+	if len(ips) == 0 {
+		t.Error("expect some ips, but got 0")
+	}
+
+	for _, ip := range ips {
+		if len(ip) != net.IPv4len {
+			t.Error("expect only IPv4 response from DNS query")
+		}
+	}
+}
+
+func TestDOHNameServerWithIPv6Override(t *testing.T) {
+	url, err := url.Parse("https+local://1.1.1.1/dns-query")
+	common.Must(err)
+
+	s := NewDoHLocalNameServer(url, QueryStrategy_USE_IP6)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+		IPv4Enable: true,
+		IPv6Enable: true,
+	}, false)
+	cancel()
+	common.Must(err)
+	if len(ips) == 0 {
+		t.Error("expect some ips, but got 0")
+	}
+
+	for _, ip := range ips {
+		if len(ip) != net.IPv6len {
+			t.Error("expect only IPv6 response from DNS query")
+		}
 	}
 }

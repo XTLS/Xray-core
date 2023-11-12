@@ -30,11 +30,10 @@ func (c RequestCommand) TransferType() TransferType {
 }
 
 const (
-	// RequestOptionChunkStream indicates request payload is chunked. Each chunk consists of length, authentication and payload.
+	// [DEPRECATED 2023-06] RequestOptionChunkStream indicates request payload is chunked. Each chunk consists of length, authentication and payload.
 	RequestOptionChunkStream bitmask.Byte = 0x01
 
-	// RequestOptionConnectionReuse indicates client side expects to reuse the connection.
-	RequestOptionConnectionReuse bitmask.Byte = 0x02
+	// 0x02 legacy setting
 
 	RequestOptionChunkMasking bitmask.Byte = 0x04
 
@@ -76,7 +75,6 @@ type CommandSwitchAccount struct {
 	Port     net.Port
 	ID       uuid.UUID
 	Level    uint32
-	AlterIds uint16
 	ValidMin byte
 }
 

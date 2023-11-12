@@ -134,14 +134,20 @@ func (h *Handler) processWireGuard(dialer internet.Dialer) (err error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	if err := h.processWireGuard(dialer); err != nil {
-		return err
-	}
-
 	outbound := session.OutboundFromContext(ctx)
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified")
 	}
+	outbound.Name = "wireguard"
+	inbound := session.InboundFromContext(ctx)
+	if inbound != nil {
+		inbound.SetCanSpliceCopy(3)
+	}
+
+	if err := h.processWireGuard(dialer); err != nil {
+		return err
+	}
+
 	// Destination of the inner request.
 	destination := outbound.Target
 	command := protocol.RequestCommandTCP
@@ -189,6 +195,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return newError("failed to create TCP connection").Base(err)
 		}
+		defer conn.Close()
 
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
@@ -203,6 +210,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return newError("failed to create UDP connection").Base(err)
 		}
+		defer conn.Close()
 
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
@@ -220,6 +228,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
 	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
 		return newError("connection ends").Base(err)
 	}
 

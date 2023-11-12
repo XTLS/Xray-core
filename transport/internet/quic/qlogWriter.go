@@ -1,7 +1,9 @@
 package quic
 
+import "github.com/quic-go/quic-go"
+
 type QlogWriter struct {
-	connID []byte
+	connID quic.ConnectionID
 }
 
 func (w *QlogWriter) Write(b []byte) (int, error) {

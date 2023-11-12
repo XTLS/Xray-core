@@ -1,12 +1,14 @@
 package encoding
 
 import (
+	"context"
 	"io"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
+	"google.golang.org/protobuf/proto"
 )
 
 func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
@@ -58,14 +60,19 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 }
 
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, addons *Addons) buf.Writer {
-	switch addons.Flow {
-	default:
-		if request.Command == protocol.RequestCommandUDP {
-			return NewMultiLengthPacketWriter(writer.(buf.Writer))
+func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
+	if request.Command == protocol.RequestCommandUDP {
+		w := writer.(buf.Writer)
+		if requestAddons.Flow == vless.XRV {
+			w = proxy.NewVisionWriter(w, state, context)
 		}
+		return NewMultiLengthPacketWriter(w)
 	}
-	return buf.NewWriter(writer)
+	w := buf.NewWriter(writer)
+	if requestAddons.Flow == vless.XRV {
+		w = proxy.NewVisionWriter(w, state, context)
+	}
+	return w
 }
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.

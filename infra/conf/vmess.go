@@ -4,18 +4,17 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
+	"google.golang.org/protobuf/proto"
 )
 
 type VMessAccount struct {
 	ID          string `json:"id"`
-	AlterIds    uint16 `json:"alterId"`
 	Security    string `json:"security"`
 	Experiments string `json:"experiments"`
 }
@@ -38,8 +37,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 		st = protocol.SecurityType_AUTO
 	}
 	return &vmess.Account{
-		Id:      a.ID,
-		AlterId: uint32(a.AlterIds),
+		Id: a.ID,
 		SecuritySettings: &protocol.SecurityConfig{
 			Type: st,
 		},
@@ -63,14 +61,12 @@ type FeaturesConfig struct {
 }
 
 type VMessDefaultConfig struct {
-	AlterIDs uint16 `json:"alterId"`
-	Level    byte   `json:"level"`
+	Level byte `json:"level"`
 }
 
 // Build implements Buildable
 func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 	config := new(inbound.DefaultConfig)
-	config.AlterId = uint32(c.AlterIDs)
 	config.Level = uint32(c.Level)
 	return config
 }
@@ -80,14 +76,11 @@ type VMessInboundConfig struct {
 	Features     *FeaturesConfig     `json:"features"`
 	Defaults     *VMessDefaultConfig `json:"default"`
 	DetourConfig *VMessDetourConfig  `json:"detour"`
-	SecureOnly   bool                `json:"disableInsecureEncryption"`
 }
 
 // Build implements Buildable
 func (c *VMessInboundConfig) Build() (proto.Message, error) {
-	config := &inbound.Config{
-		SecureEncryptionOnly: c.SecureOnly,
-	}
+	config := &inbound.Config{}
 
 	if c.Defaults != nil {
 		config.Default = c.Defaults.Build()

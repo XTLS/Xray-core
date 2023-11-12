@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/dns"
@@ -18,7 +19,7 @@ type SystemDialer interface {
 }
 
 type DefaultSystemDialer struct {
-	controllers []controller
+	controllers []control.Func
 	dns         dns.Client
 	obm         outbound.Manager
 }
@@ -80,7 +81,15 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	}
 
 	if sockopt != nil || len(d.controllers) > 0 {
+		if sockopt != nil && sockopt.TcpMptcp {
+			dialer.SetMultipathTCP(true)
+		}
 		dialer.Control = func(network, address string, c syscall.RawConn) error {
+			for _, ctl := range d.controllers {
+				if err := ctl(network, address, c); err != nil {
+					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				}
+			}
 			return c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
@@ -90,12 +99,6 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 						if err := bindAddr(fd, sockopt.BindAddress, sockopt.BindPort); err != nil {
 							newError("failed to bind source address to ", sockopt.BindAddress).Base(err).WriteToLog(session.ExportIDToError(ctx))
 						}
-					}
-				}
-
-				for _, ctl := range d.controllers {
-					if err := ctl(network, address, fd); err != nil {
-						newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
 					}
 				}
 			})
@@ -185,7 +188,7 @@ func UseAlternativeSystemDialer(dialer SystemDialer) {
 // It only works when effective dialer is the default dialer.
 //
 // xray:api:beta
-func RegisterDialerController(ctl func(network, address string, fd uintptr) error) error {
+func RegisterDialerController(ctl control.Func) error {
 	if ctl == nil {
 		return newError("nil listener controller")
 	}

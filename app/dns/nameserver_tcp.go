@@ -27,18 +27,23 @@ import (
 // TCPNameServer implemented DNS over TCP (RFC7766).
 type TCPNameServer struct {
 	sync.RWMutex
-	name        string
-	destination *net.Destination
-	ips         map[string]*record
-	pub         *pubsub.Service
-	cleanup     *task.Periodic
-	reqID       uint32
-	dial        func(context.Context) (net.Conn, error)
+	name          string
+	destination   *net.Destination
+	ips           map[string]*record
+	pub           *pubsub.Service
+	cleanup       *task.Periodic
+	reqID         uint32
+	dial          func(context.Context) (net.Conn, error)
+	queryStrategy QueryStrategy
 }
 
 // NewTCPNameServer creates DNS over TCP server object for remote resolving.
-func NewTCPNameServer(url *url.URL, dispatcher routing.Dispatcher) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCP")
+func NewTCPNameServer(
+	url *url.URL,
+	dispatcher routing.Dispatcher,
+	queryStrategy QueryStrategy,
+) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCP", queryStrategy)
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +64,8 @@ func NewTCPNameServer(url *url.URL, dispatcher routing.Dispatcher) (*TCPNameServ
 }
 
 // NewTCPLocalNameServer creates DNS over TCP client object for local resolving
-func NewTCPLocalNameServer(url *url.URL) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCPL")
+func NewTCPLocalNameServer(url *url.URL, queryStrategy QueryStrategy) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCPL", queryStrategy)
 	if err != nil {
 		return nil, err
 	}
@@ -72,22 +77,22 @@ func NewTCPLocalNameServer(url *url.URL) (*TCPNameServer, error) {
 	return s, nil
 }
 
-func baseTCPNameServer(url *url.URL, prefix string) (*TCPNameServer, error) {
-	var err error
+func baseTCPNameServer(url *url.URL, prefix string, queryStrategy QueryStrategy) (*TCPNameServer, error) {
 	port := net.Port(53)
 	if url.Port() != "" {
-		port, err = net.PortFromString(url.Port())
-		if err != nil {
+		var err error
+		if port, err = net.PortFromString(url.Port()); err != nil {
 			return nil, err
 		}
 	}
 	dest := net.TCPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &TCPNameServer{
-		destination: &dest,
-		ips:         make(map[string]*record),
-		pub:         pubsub.NewService(),
-		name:        prefix + "//" + dest.NetAddr(),
+		destination:   &dest,
+		ips:           make(map[string]*record),
+		pub:           pubsub.NewService(),
+		name:          prefix + "//" + dest.NetAddr(),
+		queryStrategy: queryStrategy,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -308,6 +313,10 @@ func (s *TCPNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 // QueryIP implements Server.
 func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) {
 	fqdn := Fqdn(domain)
+	option = ResolveIpOptionOverride(s.queryStrategy, option)
+	if !option.IPv4Enable && !option.IPv6Enable {
+		return nil, dns_feature.ErrEmptyResponse
+	}
 
 	if disableCache {
 		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()

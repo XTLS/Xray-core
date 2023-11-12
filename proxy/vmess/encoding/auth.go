@@ -17,6 +17,7 @@ func Authenticate(b []byte) uint32 {
 	return fnv1hash.Sum32()
 }
 
+// [DEPRECATED 2023-06]
 type NoOpAuthenticator struct{}
 
 func (NoOpAuthenticator) NonceSize() int {
@@ -35,34 +36,6 @@ func (NoOpAuthenticator) Seal(dst, nonce, plaintext, additionalData []byte) []by
 // Open implements AEAD.Open().
 func (NoOpAuthenticator) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
 	return append(dst[:0], ciphertext...), nil
-}
-
-// FnvAuthenticator is an AEAD based on Fnv hash.
-type FnvAuthenticator struct{}
-
-// NonceSize implements AEAD.NonceSize().
-func (*FnvAuthenticator) NonceSize() int {
-	return 0
-}
-
-// Overhead impelements AEAD.Overhead().
-func (*FnvAuthenticator) Overhead() int {
-	return 4
-}
-
-// Seal implements AEAD.Seal().
-func (*FnvAuthenticator) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
-	dst = append(dst, 0, 0, 0, 0)
-	binary.BigEndian.PutUint32(dst, Authenticate(plaintext))
-	return append(dst, plaintext...)
-}
-
-// Open implements AEAD.Open().
-func (*FnvAuthenticator) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
-	if binary.BigEndian.Uint32(ciphertext[:4]) != Authenticate(ciphertext[4:]) {
-		return dst, newError("invalid authentication")
-	}
-	return append(dst, ciphertext[4:]...), nil
 }
 
 // GenerateChacha20Poly1305Key generates a 32-byte key from a given 16-byte array.

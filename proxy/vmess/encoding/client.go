@@ -5,11 +5,9 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"hash"
 	"hash/fnv"
 	"io"
 
@@ -20,24 +18,13 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/vmess"
 	vmessaead "github.com/xtls/xray-core/proxy/vmess/aead"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func hashTimestamp(h hash.Hash, t protocol.Timestamp) []byte {
-	common.Must2(serial.WriteUint64(h, uint64(t)))
-	common.Must2(serial.WriteUint64(h, uint64(t)))
-	common.Must2(serial.WriteUint64(h, uint64(t)))
-	common.Must2(serial.WriteUint64(h, uint64(t)))
-	return h.Sum(nil)
-}
-
 // ClientSession stores connection session info for VMess client.
 type ClientSession struct {
-	isAEAD          bool
-	idHash          protocol.IDHash
 	requestBodyKey  [16]byte
 	requestBodyIV   [16]byte
 	responseBodyKey [16]byte
@@ -49,11 +36,8 @@ type ClientSession struct {
 }
 
 // NewClientSession creates a new ClientSession.
-func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash, behaviorSeed int64) *ClientSession {
-	session := &ClientSession{
-		isAEAD: isAEAD,
-		idHash: idHash,
-	}
+func NewClientSession(ctx context.Context, behaviorSeed int64) *ClientSession {
+	session := &ClientSession{}
 
 	randomBytes := make([]byte, 33) // 16 + 16 + 1
 	common.Must2(rand.Read(randomBytes))
@@ -61,15 +45,10 @@ func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash, 
 	copy(session.requestBodyIV[:], randomBytes[16:32])
 	session.responseHeader = randomBytes[32]
 
-	if !session.isAEAD {
-		session.responseBodyKey = md5.Sum(session.requestBodyKey[:])
-		session.responseBodyIV = md5.Sum(session.requestBodyIV[:])
-	} else {
-		BodyKey := sha256.Sum256(session.requestBodyKey[:])
-		copy(session.responseBodyKey[:], BodyKey[:16])
-		BodyIV := sha256.Sum256(session.requestBodyIV[:])
-		copy(session.responseBodyIV[:], BodyIV[:16])
-	}
+	BodyKey := sha256.Sum256(session.requestBodyKey[:])
+	copy(session.responseBodyKey[:], BodyKey[:16])
+	BodyIV := sha256.Sum256(session.requestBodyIV[:])
+	copy(session.responseBodyIV[:], BodyIV[:16])
 	{
 		var err error
 		session.readDrainer, err = drain.NewBehaviorSeedLimitedDrainer(behaviorSeed, 18, 3266, 64)
@@ -83,13 +62,7 @@ func NewClientSession(ctx context.Context, isAEAD bool, idHash protocol.IDHash, 
 }
 
 func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writer io.Writer) error {
-	timestamp := protocol.NewTimestampGenerator(protocol.NowTime(), 30)()
 	account := header.User.Account.(*vmess.MemoryAccount)
-	if !c.isAEAD {
-		idHash := c.idHash(account.AnyValidID().Bytes())
-		common.Must2(serial.WriteUint64(idHash, uint64(timestamp)))
-		common.Must2(writer.Write(idHash.Sum(nil)))
-	}
 
 	buffer := buf.New()
 	defer buffer.Release()
@@ -121,17 +94,10 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 		fnv1a.Sum(hashBytes[:0])
 	}
 
-	if !c.isAEAD {
-		iv := hashTimestamp(md5.New(), timestamp)
-		aesStream := crypto.NewAesEncryptionStream(account.ID.CmdKey(), iv)
-		aesStream.XORKeyStream(buffer.Bytes(), buffer.Bytes())
-		common.Must2(writer.Write(buffer.Bytes()))
-	} else {
-		var fixedLengthCmdKey [16]byte
-		copy(fixedLengthCmdKey[:], account.ID.CmdKey())
-		vmessout := vmessaead.SealVMessAEADHeader(fixedLengthCmdKey, buffer.Bytes())
-		common.Must2(io.Copy(writer, bytes.NewReader(vmessout)))
-	}
+	var fixedLengthCmdKey [16]byte
+	copy(fixedLengthCmdKey[:], account.ID.CmdKey())
+	vmessout := vmessaead.SealVMessAEADHeader(fixedLengthCmdKey, buffer.Bytes())
+	common.Must2(io.Copy(writer, bytes.NewReader(vmessout)))
 
 	return nil
 }
@@ -165,19 +131,6 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 		}
 
 		return buf.NewWriter(writer), nil
-	case protocol.SecurityType_LEGACY:
-		aesStream := crypto.NewAesEncryptionStream(c.requestBodyKey[:], c.requestBodyIV[:])
-		cryptionWriter := crypto.NewCryptionWriter(aesStream, writer)
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationWriter(auth, sizeParser, cryptionWriter, request.Command.TransferType(), padding), nil
-		}
-
-		return &buf.SequentialWriter{Writer: cryptionWriter}, nil
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(c.requestBodyKey[:])
 		auth := &crypto.AEADAuthenticator{
@@ -225,53 +178,48 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 }
 
 func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.ResponseHeader, error) {
-	if !c.isAEAD {
-		aesStream := crypto.NewAesDecryptionStream(c.responseBodyKey[:], c.responseBodyIV[:])
-		c.responseReader = crypto.NewCryptionReader(aesStream, reader)
-	} else {
-		aeadResponseHeaderLengthEncryptionKey := vmessaead.KDF16(c.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderLenKey)
-		aeadResponseHeaderLengthEncryptionIV := vmessaead.KDF(c.responseBodyIV[:], vmessaead.KDFSaltConstAEADRespHeaderLenIV)[:12]
+	aeadResponseHeaderLengthEncryptionKey := vmessaead.KDF16(c.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderLenKey)
+	aeadResponseHeaderLengthEncryptionIV := vmessaead.KDF(c.responseBodyIV[:], vmessaead.KDFSaltConstAEADRespHeaderLenIV)[:12]
 
-		aeadResponseHeaderLengthEncryptionKeyAESBlock := common.Must2(aes.NewCipher(aeadResponseHeaderLengthEncryptionKey)).(cipher.Block)
-		aeadResponseHeaderLengthEncryptionAEAD := common.Must2(cipher.NewGCM(aeadResponseHeaderLengthEncryptionKeyAESBlock)).(cipher.AEAD)
+	aeadResponseHeaderLengthEncryptionKeyAESBlock := common.Must2(aes.NewCipher(aeadResponseHeaderLengthEncryptionKey)).(cipher.Block)
+	aeadResponseHeaderLengthEncryptionAEAD := common.Must2(cipher.NewGCM(aeadResponseHeaderLengthEncryptionKeyAESBlock)).(cipher.AEAD)
 
-		var aeadEncryptedResponseHeaderLength [18]byte
-		var decryptedResponseHeaderLength int
-		var decryptedResponseHeaderLengthBinaryDeserializeBuffer uint16
+	var aeadEncryptedResponseHeaderLength [18]byte
+	var decryptedResponseHeaderLength int
+	var decryptedResponseHeaderLengthBinaryDeserializeBuffer uint16
 
-		if n, err := io.ReadFull(reader, aeadEncryptedResponseHeaderLength[:]); err != nil {
-			c.readDrainer.AcknowledgeReceive(n)
-			return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Len").Base(err))
-		} else { // nolint: golint
-			c.readDrainer.AcknowledgeReceive(n)
-		}
-		if decryptedResponseHeaderLengthBinaryBuffer, err := aeadResponseHeaderLengthEncryptionAEAD.Open(nil, aeadResponseHeaderLengthEncryptionIV, aeadEncryptedResponseHeaderLength[:], nil); err != nil {
-			return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Length").Base(err))
-		} else { // nolint: golint
-			common.Must(binary.Read(bytes.NewReader(decryptedResponseHeaderLengthBinaryBuffer), binary.BigEndian, &decryptedResponseHeaderLengthBinaryDeserializeBuffer))
-			decryptedResponseHeaderLength = int(decryptedResponseHeaderLengthBinaryDeserializeBuffer)
-		}
+	if n, err := io.ReadFull(reader, aeadEncryptedResponseHeaderLength[:]); err != nil {
+		c.readDrainer.AcknowledgeReceive(n)
+		return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Len").Base(err))
+	} else { // nolint: golint
+		c.readDrainer.AcknowledgeReceive(n)
+	}
+	if decryptedResponseHeaderLengthBinaryBuffer, err := aeadResponseHeaderLengthEncryptionAEAD.Open(nil, aeadResponseHeaderLengthEncryptionIV, aeadEncryptedResponseHeaderLength[:], nil); err != nil {
+		return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Length").Base(err))
+	} else { // nolint: golint
+		common.Must(binary.Read(bytes.NewReader(decryptedResponseHeaderLengthBinaryBuffer), binary.BigEndian, &decryptedResponseHeaderLengthBinaryDeserializeBuffer))
+		decryptedResponseHeaderLength = int(decryptedResponseHeaderLengthBinaryDeserializeBuffer)
+	}
 
-		aeadResponseHeaderPayloadEncryptionKey := vmessaead.KDF16(c.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderPayloadKey)
-		aeadResponseHeaderPayloadEncryptionIV := vmessaead.KDF(c.responseBodyIV[:], vmessaead.KDFSaltConstAEADRespHeaderPayloadIV)[:12]
+	aeadResponseHeaderPayloadEncryptionKey := vmessaead.KDF16(c.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderPayloadKey)
+	aeadResponseHeaderPayloadEncryptionIV := vmessaead.KDF(c.responseBodyIV[:], vmessaead.KDFSaltConstAEADRespHeaderPayloadIV)[:12]
 
-		aeadResponseHeaderPayloadEncryptionKeyAESBlock := common.Must2(aes.NewCipher(aeadResponseHeaderPayloadEncryptionKey)).(cipher.Block)
-		aeadResponseHeaderPayloadEncryptionAEAD := common.Must2(cipher.NewGCM(aeadResponseHeaderPayloadEncryptionKeyAESBlock)).(cipher.AEAD)
+	aeadResponseHeaderPayloadEncryptionKeyAESBlock := common.Must2(aes.NewCipher(aeadResponseHeaderPayloadEncryptionKey)).(cipher.Block)
+	aeadResponseHeaderPayloadEncryptionAEAD := common.Must2(cipher.NewGCM(aeadResponseHeaderPayloadEncryptionKeyAESBlock)).(cipher.AEAD)
 
-		encryptedResponseHeaderBuffer := make([]byte, decryptedResponseHeaderLength+16)
+	encryptedResponseHeaderBuffer := make([]byte, decryptedResponseHeaderLength+16)
 
-		if n, err := io.ReadFull(reader, encryptedResponseHeaderBuffer); err != nil {
-			c.readDrainer.AcknowledgeReceive(n)
-			return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Data").Base(err))
-		} else { // nolint: golint
-			c.readDrainer.AcknowledgeReceive(n)
-		}
+	if n, err := io.ReadFull(reader, encryptedResponseHeaderBuffer); err != nil {
+		c.readDrainer.AcknowledgeReceive(n)
+		return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Data").Base(err))
+	} else { // nolint: golint
+		c.readDrainer.AcknowledgeReceive(n)
+	}
 
-		if decryptedResponseHeaderBuffer, err := aeadResponseHeaderPayloadEncryptionAEAD.Open(nil, aeadResponseHeaderPayloadEncryptionIV, encryptedResponseHeaderBuffer, nil); err != nil {
-			return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Payload").Base(err))
-		} else { // nolint: golint
-			c.responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
-		}
+	if decryptedResponseHeaderBuffer, err := aeadResponseHeaderPayloadEncryptionAEAD.Open(nil, aeadResponseHeaderPayloadEncryptionIV, encryptedResponseHeaderBuffer, nil); err != nil {
+		return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Payload").Base(err))
+	} else { // nolint: golint
+		c.responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
 	}
 
 	buffer := buf.StackNew()
@@ -302,10 +250,8 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 			header.Command = command
 		}
 	}
-	if c.isAEAD {
-		aesStream := crypto.NewAesDecryptionStream(c.responseBodyKey[:], c.responseBodyIV[:])
-		c.responseReader = crypto.NewCryptionReader(aesStream, reader)
-	}
+	aesStream := crypto.NewAesDecryptionStream(c.responseBodyKey[:], c.responseBodyIV[:])
+	c.responseReader = crypto.NewCryptionReader(aesStream, reader)
 	return header, nil
 }
 
@@ -340,17 +286,6 @@ func (c *ClientSession) DecodeResponseBody(request *protocol.RequestHeader, read
 		}
 
 		return buf.NewReader(reader), nil
-	case protocol.SecurityType_LEGACY:
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(FnvAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationReader(auth, sizeParser, c.responseReader, request.Command.TransferType(), padding), nil
-		}
-
-		return buf.NewReader(c.responseReader), nil
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(c.responseBodyKey[:])
 

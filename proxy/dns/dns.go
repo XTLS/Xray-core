@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	dns_proto "github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
@@ -43,6 +44,7 @@ type Handler struct {
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 	timeout         time.Duration
+	nonIPQuery      string
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -56,6 +58,7 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 	if config.Server != nil {
 		h.server = config.Server.AsDestination()
 	}
+	h.nonIPQuery = config.Non_IPQuery
 	return nil
 }
 
@@ -93,6 +96,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("invalid outbound")
 	}
+	outbound.Name = "dns"
 
 	srcNetwork := outbound.Target.Network
 
@@ -174,6 +178,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
 				if isIPQuery {
 					go h.handleIPQuery(id, qType, domain, writer)
+				}
+				if isIPQuery || h.nonIPQuery == "drop" {
+					b.Release()
 					continue
 				}
 			}
@@ -232,7 +239,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	}
 
 	rcode := dns.RCodeFromError(err)
-	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
+	if rcode == 0 && len(ips) == 0 && !errors.AllEqual(dns.ErrEmptyResponse, errors.Cause(err)) {
 		newError("ip query").Base(err).WriteToLog()
 		return
 	}

@@ -11,12 +11,13 @@ import (
 )
 
 type NameServerConfig struct {
-	Address      *Address
-	ClientIP     *Address
-	Port         uint16
-	SkipFallback bool
-	Domains      []string
-	ExpectIPs    StringList
+	Address       *Address
+	ClientIP      *Address
+	Port          uint16
+	SkipFallback  bool
+	Domains       []string
+	ExpectIPs     StringList
+	QueryStrategy string
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
@@ -27,12 +28,13 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address      *Address   `json:"address"`
-		ClientIP     *Address   `json:"clientIp"`
-		Port         uint16     `json:"port"`
-		SkipFallback bool       `json:"skipFallback"`
-		Domains      []string   `json:"domains"`
-		ExpectIPs    StringList `json:"expectIps"`
+		Address       *Address   `json:"address"`
+		ClientIP      *Address   `json:"clientIp"`
+		Port          uint16     `json:"port"`
+		SkipFallback  bool       `json:"skipFallback"`
+		Domains       []string   `json:"domains"`
+		ExpectIPs     StringList `json:"expectIps"`
+		QueryStrategy string     `json:"queryStrategy"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -41,6 +43,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.SkipFallback = advanced.SkipFallback
 		c.Domains = advanced.Domains
 		c.ExpectIPs = advanced.ExpectIPs
+		c.QueryStrategy = advanced.QueryStrategy
 		return nil
 	}
 
@@ -112,6 +115,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		PrioritizedDomain: domains,
 		Geoip:             geoipList,
 		OriginalRules:     originalRules,
+		QueryStrategy:     resolveQueryStrategy(c.QueryStrategy),
 	}, nil
 }
 
@@ -311,6 +315,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableCache:           c.DisableCache,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
+		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 
 	if c.ClientIP != nil {
@@ -318,16 +323,6 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 			return nil, newError("not an IP address:", c.ClientIP.String())
 		}
 		config.ClientIp = []byte(c.ClientIP.IP())
-	}
-
-	config.QueryStrategy = dns.QueryStrategy_USE_IP
-	switch strings.ToLower(c.QueryStrategy) {
-	case "useip", "use_ip", "use-ip":
-		config.QueryStrategy = dns.QueryStrategy_USE_IP
-	case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
-		config.QueryStrategy = dns.QueryStrategy_USE_IP4
-	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
-		config.QueryStrategy = dns.QueryStrategy_USE_IP6
 	}
 
 	for _, server := range c.Servers {
@@ -347,4 +342,17 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	}
 
 	return config, nil
+}
+
+func resolveQueryStrategy(queryStrategy string) dns.QueryStrategy {
+	switch strings.ToLower(queryStrategy) {
+	case "useip", "use_ip", "use-ip":
+		return dns.QueryStrategy_USE_IP
+	case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
+		return dns.QueryStrategy_USE_IP4
+	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
+		return dns.QueryStrategy_USE_IP6
+	default:
+		return dns.QueryStrategy_USE_IP
+	}
 }

@@ -105,7 +105,6 @@ func TestVMessInbound(t *testing.T) {
 				Detour: &inbound.DetourConfig{
 					To: "tag_to_detour",
 				},
-				SecureEncryptionOnly: true,
 			},
 		},
 	})

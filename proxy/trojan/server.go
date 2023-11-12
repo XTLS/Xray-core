@@ -214,10 +214,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
 	inbound.Name = "trojan"
+	inbound.SetCanSpliceCopy(3)
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
@@ -234,7 +232,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	})
 
 	newError("received request for ", destination).WriteToLog(sid)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher, iConn, statConn)
+	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
@@ -300,7 +298,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Session,
 	destination net.Destination,
 	clientReader buf.Reader,
-	clientWriter buf.Writer, dispatcher routing.Dispatcher, iConn stat.Connection, statConn *stat.CounterConnection,
+	clientWriter buf.Writer, dispatcher routing.Dispatcher,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)

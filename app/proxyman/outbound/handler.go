@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -166,6 +167,11 @@ func (h *Handler) Tag() string {
 
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
+	outbound := session.OutboundFromContext(ctx)
+	if outbound.Target.Network == net.Network_UDP && outbound.OriginalTarget.Address != nil && outbound.OriginalTarget.Address != outbound.Target.Address {
+		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: outbound.Target.Address, OriginalDest: outbound.OriginalTarget.Address}
+		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: outbound.Target.Address, OriginalDest: outbound.OriginalTarget.Address}
+	}
 	if h.mux != nil {
 		test := func(err error) {
 			if err != nil {
@@ -175,7 +181,6 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				common.Interrupt(link.Writer)
 			}
 		}
-		outbound := session.OutboundFromContext(ctx)
 		if outbound.Target.Network == net.Network_UDP && outbound.Target.Port == 443 {
 			switch h.udp443 {
 			case "reject":
@@ -211,7 +216,7 @@ out:
 		err.WriteToLog(session.ExportIDToError(ctx))
 		common.Interrupt(link.Writer)
 	} else {
-		common.Must(common.Close(link.Writer))
+		common.Close(link.Writer)
 	}
 	common.Interrupt(link.Reader)
 }
@@ -269,7 +274,12 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
-	return h.getStatCouterConnection(conn), err
+	conn = h.getStatCouterConnection(conn)
+	outbound := session.OutboundFromContext(ctx)
+	if outbound != nil {
+		outbound.Conn = conn
+	}
+	return conn, err
 }
 
 func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {

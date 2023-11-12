@@ -31,17 +31,18 @@ const handshakeTimeout = time.Second * 8
 // QUICNameServer implemented DNS over QUIC
 type QUICNameServer struct {
 	sync.RWMutex
-	ips         map[string]*record
-	pub         *pubsub.Service
-	cleanup     *task.Periodic
-	reqID       uint32
-	name        string
-	destination *net.Destination
-	connection  quic.Connection
+	ips           map[string]*record
+	pub           *pubsub.Service
+	cleanup       *task.Periodic
+	reqID         uint32
+	name          string
+	destination   *net.Destination
+	connection    quic.Connection
+	queryStrategy QueryStrategy
 }
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
-func NewQUICNameServer(url *url.URL) (*QUICNameServer, error) {
+func NewQUICNameServer(url *url.URL, queryStrategy QueryStrategy) (*QUICNameServer, error) {
 	newError("DNS: created Local DNS-over-QUIC client for ", url.String()).AtInfo().WriteToLog()
 
 	var err error
@@ -55,10 +56,11 @@ func NewQUICNameServer(url *url.URL) (*QUICNameServer, error) {
 	dest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &QUICNameServer{
-		ips:         make(map[string]*record),
-		pub:         pubsub.NewService(),
-		name:        url.String(),
-		destination: &dest,
+		ips:           make(map[string]*record),
+		pub:           pubsub.NewService(),
+		name:          url.String(),
+		destination:   &dest,
+		queryStrategy: queryStrategy,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -269,6 +271,10 @@ func (s *QUICNameServer) findIPsForDomain(domain string, option dns_feature.IPOp
 // QueryIP is called from dns.Server->queryIPTimeout
 func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) {
 	fqdn := Fqdn(domain)
+	option = ResolveIpOptionOverride(s.queryStrategy, option)
+	if !option.IPv4Enable && !option.IPv6Enable {
+		return nil, dns_feature.ErrEmptyResponse
+	}
 
 	if disableCache {
 		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
@@ -373,8 +379,8 @@ func (s *QUICNameServer) openConnection() (quic.Connection, error) {
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout: handshakeTimeout,
 	}
-
-	conn, err := quic.DialAddrContext(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
+	tlsConfig.ServerName = s.destination.Address.String()
+	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
 	log.Record(&log.AccessMessage{
 		From:   "DNS",
 		To:     s.destination,

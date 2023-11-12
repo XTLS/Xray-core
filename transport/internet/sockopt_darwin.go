@@ -1,6 +1,7 @@
 package internet
 
 import (
+	network "net"
 	"os"
 	"syscall"
 	"unsafe"
@@ -106,6 +107,14 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return err
 			}
 		}
+		if config.Interface != "" {
+			InterfaceIndex := getInterfaceIndexByName(config.Interface)
+			if InterfaceIndex != 0 {
+				if err := unix.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, InterfaceIndex); err != nil {
+					return newError("failed to set Interface").Base(err)
+				}
+			}
+		}
 
 		if config.TcpKeepAliveIdle > 0 || config.TcpKeepAliveInterval > 0 {
 			if config.TcpKeepAliveIdle > 0 {
@@ -126,6 +135,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return newError("failed to unset SO_KEEPALIVE", err)
 			}
 		}
+
+		if config.TcpNoDelay {
+			if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
+				return newError("failed to set TCP_NODELAY", err)
+			}
+		}
 	}
 
 	return nil
@@ -142,6 +157,15 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				return err
 			}
 		}
+		if config.Interface != "" {
+			InterfaceIndex := getInterfaceIndexByName(config.Interface)
+			if InterfaceIndex != 0 {
+				if err := unix.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, InterfaceIndex); err != nil {
+					return newError("failed to set Interface").Base(err)
+				}
+			}
+		}
+
 		if config.TcpKeepAliveIdle > 0 || config.TcpKeepAliveInterval > 0 {
 			if config.TcpKeepAliveIdle > 0 {
 				if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_KEEPALIVE, int(config.TcpKeepAliveInterval)); err != nil {
@@ -167,13 +191,62 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 }
 
 func bindAddr(fd uintptr, address []byte, port uint32) error {
-	return nil
+	setReuseAddr(fd)
+	setReusePort(fd)
+
+	var sockaddr unix.Sockaddr
+
+	switch len(address) {
+	case net.IPv4len:
+		a4 := &unix.SockaddrInet4{
+			Port: int(port),
+		}
+		copy(a4.Addr[:], address)
+		sockaddr = a4
+	case net.IPv6len:
+		a6 := &unix.SockaddrInet6{
+			Port: int(port),
+		}
+		copy(a6.Addr[:], address)
+		sockaddr = a6
+	default:
+		return newError("unexpected length of ip")
+	}
+
+	return unix.Bind(int(fd), sockaddr)
 }
 
 func setReuseAddr(fd uintptr) error {
+	if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
+		return newError("failed to set SO_REUSEADDR").Base(err).AtWarning()
+	}
 	return nil
 }
 
 func setReusePort(fd uintptr) error {
+	if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
+		return newError("failed to set SO_REUSEPORT").Base(err).AtWarning()
+	}
 	return nil
+}
+func getInterfaceIndexByName(name string) int {
+	ifaces, err := network.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if (iface.Flags&network.FlagUp == network.FlagUp) && (iface.Flags&network.FlagLoopback != network.FlagLoopback) {
+				addrs, _ := iface.Addrs()
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*network.IPNet); ok && !ipnet.IP.IsLoopback() {
+						if ipnet.IP.To4() != nil {
+							if iface.Name == name {
+								return iface.Index
+							}
+						}
+					}
+				}
+			}
+
+		}
+	}
+	return 0
 }
