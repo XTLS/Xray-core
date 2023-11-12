@@ -31,6 +31,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -159,15 +160,23 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	addr := destination.Address
 	if addr.Family().IsDomain() {
 		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-			IPv4Enable: h.hasIPv4,
-			IPv6Enable: h.hasIPv6,
+			IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
+			IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
 		})
+		{ // Resolve fallback
+			if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
+				ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
+					IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
+					IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
+				})
+			}
+		}
 		if err != nil {
 			return newError("failed to lookup DNS").Base(err)
 		} else if len(ips) == 0 {
 			return dns.ErrEmptyResponse
 		}
-		addr = net.IPAddress(ips[0])
+		addr = net.IPAddress(ips[dice.Roll(len(ips))])
 	}
 
 	var newCtx context.Context
