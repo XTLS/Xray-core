@@ -239,7 +239,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 // creates a tun interface on netstack given a configuration
 func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
-	t, err := CreateTun(h.endpoints, int(h.conf.Mtu), nil)
+	t, err := h.conf.createTun()(h.endpoints, int(h.conf.Mtu), nil)
 	if err != nil {
 		return nil, err
 	}

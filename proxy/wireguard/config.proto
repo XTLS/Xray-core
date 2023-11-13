@@ -30,4 +30,5 @@ message DeviceConfig {
   bytes reserved = 6;
   DomainStrategy domain_strategy = 7;
   bool is_client = 8;
+  bool kernel_mode = 9;
 }

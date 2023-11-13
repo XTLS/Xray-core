@@ -69,9 +69,9 @@ func (d *deviceNet) Close() (err error) {
 	return errors.Join(errs...)
 }
 
-func CreateTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
+func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
 	if handler != nil {
-		panic("TODO: support promiscuous mode")
+		return nil, newError("TODO: support promiscuous mode")
 	}
 
 	var v4, v6 *netip.Addr

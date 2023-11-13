@@ -36,10 +36,10 @@ type routingInfo struct {
 	contentTag  *session.Content
 }
 
-func NewServer(ctx context.Context, config *DeviceConfig) (*Server, error) {
+func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
 
-	endpoints, hasIPv4, hasIPv6, err := parseEndpoints(config)
+	endpoints, hasIPv4, hasIPv6, err := parseEndpoints(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +57,12 @@ func NewServer(ctx context.Context, config *DeviceConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
-	tun, err := CreateTun(endpoints, int(config.Mtu), server.forwardConnection)
+	tun, err := conf.createTun()(endpoints, int(conf.Mtu), server.forwardConnection)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = tun.BuildDevice(createIPCRequest(config), server.bindServer); err != nil {
+	if err = tun.BuildDevice(createIPCRequest(conf), server.bindServer); err != nil {
 		_ = tun.Close()
 		return nil, err
 	}
