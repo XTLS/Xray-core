@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	gotls "crypto/tls"
 	"io"
 	"math/big"
 	"runtime"
@@ -258,7 +257,7 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 	for i, buffer1 := range buffer {
 		if buffer1.Len() >= buf.Size-21 {
 			index := int32(bytes.LastIndex(buffer1.Bytes(), TlsApplicationDataStart))
-			if index <= 0 || index > buf.Size-21 {
+			if index < 21 || index > buf.Size-21 {
 				index = buf.Size / 2
 			}
 			buffer2 := buf.New()
@@ -449,7 +448,7 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			readCounter = statConn.ReadCounter
 			writerCounter = statConn.WriteCounter
 		}
-		if xc, ok := conn.(*gotls.Conn); ok {
+		if xc, ok := conn.(*tls.Conn); ok {
 			conn = xc.NetConn()
 		} else if utlsConn, ok := conn.(*tls.UConn); ok {
 			conn = utlsConn.NetConn()

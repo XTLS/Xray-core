@@ -50,12 +50,13 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 type WireGuardConfig struct {
 	IsClient bool `json:""`
 
-	SecretKey  string                 `json:"secretKey"`
-	Address    []string               `json:"address"`
-	Peers      []*WireGuardPeerConfig `json:"peers"`
-	MTU        uint32                 `json:"mtu"`
-	NumWorkers uint32                 `json:"workers"`
-	Reserved   []byte                 `json:"reserved"`
+	SecretKey      string                 `json:"secretKey"`
+	Address        []string               `json:"address"`
+	Peers          []*WireGuardPeerConfig `json:"peers"`
+	MTU            int32                  `json:"mtu"`
+	NumWorkers     int32                  `json:"workers"`
+	Reserved       []byte                 `json:"reserved"`
+	DomainStrategy string                 `json:"domainStrategy"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -98,6 +99,21 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, newError(`"reserved" should be empty or 3 bytes`)
 	}
 	config.Reserved = c.Reserved
+
+	switch strings.ToLower(c.DomainStrategy) {
+	case "forceip", "":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP
+	case "forceipv4":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP4
+	case "forceipv6":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP6
+	case "forceipv4v6":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP46
+	case "forceipv6v4":
+		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP64
+	default:
+		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
+	}
 
 	config.IsClient = c.IsClient
 

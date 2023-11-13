@@ -1,212 +1,105 @@
-/* SPDX-License-Identifier: MIT
- *
- * Copyright (C) 2017-2022 WireGuard LLC. All Rights Reserved.
- */
-
 package wireguard
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/netip"
-	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
 
-	"github.com/sagernet/wireguard-go/tun"
-	xnet "github.com/xtls/xray-core/common/net"
-	"gvisor.dev/gvisor/pkg/buffer"
-	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/header"
-	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
-	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
-	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
-	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
-	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
+	"github.com/xtls/xray-core/common/log"
+
+	"golang.zx2c4.com/wireguard/conn"
+	"golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
-type netTun struct {
-	ep             *channel.Endpoint
-	stack          *stack.Stack
-	events         chan tun.Event
-	incomingPacket chan *buffer.View
-	mtu            int
-	hasV4, hasV6   bool
+type Tunnel interface {
+	BuildDevice(ipc string, bind conn.Bind) error
+	DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
+	DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error)
+	Close() error
 }
 
-type Net netTun
-
-func CreateNetTUN(localAddresses []netip.Addr, mtu int, handleLocal bool) (tun.Device, *Net, error) {
-	opts := stack.Options{
-		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, ipv6.NewProtocol},
-		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol},
-		HandleLocal:        handleLocal,
-	}
-	dev := &netTun{
-		ep:             channel.New(1024, uint32(mtu), ""),
-		stack:          stack.New(opts),
-		events:         make(chan tun.Event, 1),
-		incomingPacket: make(chan *buffer.View),
-		mtu:            mtu,
-	}
-	dev.ep.AddNotify(dev)
-	tcpipErr := dev.stack.CreateNIC(1, dev.ep)
-	if tcpipErr != nil {
-		return nil, nil, fmt.Errorf("CreateNIC: %v", tcpipErr)
-	}
-	for _, ip := range localAddresses {
-		var protoNumber tcpip.NetworkProtocolNumber
-		if ip.Is4() {
-			protoNumber = ipv4.ProtocolNumber
-		} else if ip.Is6() {
-			protoNumber = ipv6.ProtocolNumber
-		}
-		protoAddr := tcpip.ProtocolAddress{
-			Protocol:          protoNumber,
-			AddressWithPrefix: tcpip.AddrFromSlice(ip.AsSlice()).WithPrefix(),
-		}
-		tcpipErr := dev.stack.AddProtocolAddress(1, protoAddr, stack.AddressProperties{})
-		if tcpipErr != nil {
-			return nil, nil, fmt.Errorf("AddProtocolAddress(%v): %v", ip, tcpipErr)
-		}
-		if ip.Is4() {
-			dev.hasV4 = true
-		} else if ip.Is6() {
-			dev.hasV6 = true
-		}
-	}
-	if dev.hasV4 {
-		dev.stack.AddRoute(tcpip.Route{Destination: header.IPv4EmptySubnet, NIC: 1})
-	}
-	if dev.hasV6 {
-		dev.stack.AddRoute(tcpip.Route{Destination: header.IPv6EmptySubnet, NIC: 1})
-	}
-	if !handleLocal {
-		// enable promiscuous mode to handle all packets processed by netstack
-		dev.stack.SetPromiscuousMode(1, true)
-		dev.stack.SetSpoofing(1, true)
-	}
-
-	opt := tcpip.CongestionControlOption("cubic")
-	if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &opt); err != nil {
-		return nil, nil, fmt.Errorf("SetTransportProtocolOption(%d, &%T(%s)): %s", tcp.ProtocolNumber, opt, opt, err)
-	}
-
-	dev.events <- tun.EventUp
-	return dev, (*Net)(dev), nil
+type tunnel struct {
+	tun    tun.Device
+	device *device.Device
+	rw     sync.Mutex
 }
 
-// Name implements tun.Device
-func (tun *netTun) Name() (string, error) {
-	return "go", nil
-}
+func (t *tunnel) BuildDevice(ipc string, bind conn.Bind) (err error) {
+	t.rw.Lock()
+	defer t.rw.Unlock()
 
-// File implements tun.Device
-func (tun *netTun) File() *os.File {
+	if t.device != nil {
+		return errors.New("device is already initialized")
+	}
+
+	logger := &device.Logger{
+		Verbosef: func(format string, args ...any) {
+			log.Record(&log.GeneralMessage{
+				Severity: log.Severity_Debug,
+				Content:  fmt.Sprintf(format, args...),
+			})
+		},
+		Errorf: func(format string, args ...any) {
+			log.Record(&log.GeneralMessage{
+				Severity: log.Severity_Error,
+				Content:  fmt.Sprintf(format, args...),
+			})
+		},
+	}
+
+	t.device = device.NewDevice(t.tun, bind, logger)
+	if err = t.device.IpcSet(ipc); err != nil {
+		return err
+	}
+	if err = t.device.Up(); err != nil {
+		return err
+	}
 	return nil
 }
 
-// Events implements tun.Device
-func (tun *netTun) Events() chan tun.Event {
-	return tun.events
-}
+func (t *tunnel) Close() (err error) {
+	t.rw.Lock()
+	defer t.rw.Unlock()
 
-// Read implements tun.Device
-func (tun *netTun) Read(buf []byte, offset int) (int, error) {
-	view, ok := <-tun.incomingPacket
-	if !ok {
-		return 0, os.ErrClosed
+	if t.device == nil {
+		return nil
 	}
 
-	return view.Read(buf[offset:])
+	t.device.Close()
+	t.device = nil
+	err = t.tun.Close()
+	t.tun = nil
+	return nil
 }
 
-// Write implements tun.Device
-func (tun *netTun) Write(buf []byte, offset int) (int, error) {
-	packet := buf[offset:]
-	if len(packet) == 0 {
-		return 0, nil
+func CalculateInterfaceName(name string) (tunName string) {
+	if runtime.GOOS == "darwin" {
+		tunName = "utun"
+	} else if name != "" {
+		tunName = name
+	} else {
+		tunName = "tun"
 	}
-
-	pkb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(packet)})
-	switch packet[0] >> 4 {
-	case 4:
-		tun.ep.InjectInbound(header.IPv4ProtocolNumber, pkb)
-	case 6:
-		tun.ep.InjectInbound(header.IPv6ProtocolNumber, pkb)
-	}
-
-	return len(packet), nil
-}
-
-// WriteNotify implements channel.Notification
-func (tun *netTun) WriteNotify() {
-	pkt := tun.ep.Read()
-	if pkt.IsNil() {
+	interfaces, err := net.Interfaces()
+	if err != nil {
 		return
 	}
-
-	view := pkt.ToView()
-	pkt.DecRef()
-
-	tun.incomingPacket <- view
-}
-
-// Flush implements tun.Device
-func (tun *netTun) Flush() error {
-	return nil
-}
-
-// Close implements tun.Device
-func (tun *netTun) Close() error {
-	tun.stack.RemoveNIC(1)
-
-	if tun.events != nil {
-		close(tun.events)
+	var tunIndex int
+	for _, netInterface := range interfaces {
+		if strings.HasPrefix(netInterface.Name, tunName) {
+			index, parseErr := strconv.ParseInt(netInterface.Name[len(tunName):], 10, 16)
+			if parseErr == nil {
+				tunIndex = int(index) + 1
+			}
+		}
 	}
-
-	tun.ep.Close()
-
-	if tun.incomingPacket != nil {
-		close(tun.incomingPacket)
-	}
-
-	return nil
-}
-
-// MTU implements tun.Device
-func (tun *netTun) MTU() (int, error) {
-	return tun.mtu, nil
-}
-
-func convertToFullAddr(addr xnet.Address, port xnet.Port) (tcpip.FullAddress, tcpip.NetworkProtocolNumber) {
-	var protoNumber tcpip.NetworkProtocolNumber
-	if addr.Family().IsIPv4() {
-		protoNumber = ipv4.ProtocolNumber
-	} else {
-		protoNumber = ipv6.ProtocolNumber
-	}
-	return tcpip.FullAddress{
-		NIC:  1,
-		Addr: tcpip.AddrFromSlice(addr.IP()),
-		Port: port.Value(),
-	}, protoNumber
-}
-
-func (net *Net) DialContextTCP(ctx context.Context, addr xnet.Address, port xnet.Port) (*gonet.TCPConn, error) {
-	fa, pn := convertToFullAddr(addr, port)
-	return gonet.DialContextTCP(ctx, net.stack, fa, pn)
-}
-
-func (net *Net) DialUDP(addr xnet.Address, port xnet.Port) (*gonet.UDPConn, error) {
-	fa, pn := convertToFullAddr(addr, port)
-	return gonet.DialUDP(net.stack, nil, &fa, pn)
-}
-
-func (n *Net) HasV4() bool {
-	return n.hasV4
-}
-
-func (n *Net) HasV6() bool {
-	return n.hasV6
+	tunName = fmt.Sprintf("%s%d", tunName, tunIndex)
+	return
 }

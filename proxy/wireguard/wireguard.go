@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/sagernet/wireguard-go/device"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
+	"golang.zx2c4.com/wireguard/device"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
@@ -34,7 +34,8 @@ func init() {
 		if deviceConfig.IsClient {
 			return New(ctx, deviceConfig)
 		} else {
-			return NewServer(ctx, deviceConfig)
+			// return NewServer(ctx, deviceConfig)
+			panic("todo")
 		}
 	}))
 }

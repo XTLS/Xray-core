@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/sagernet/wireguard-go/conn"
+	"golang.zx2c4.com/wireguard/conn"
+
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
@@ -77,22 +78,22 @@ func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
 
-	fun := func(buff []byte) (cap int, ep conn.Endpoint, err error) {
+	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				cap = 0
-				ep = nil
+				n = 0
 				err = errors.New("channel closed")
 			}
 		}()
 
 		r := &netReadInfo{
-			buff: buff,
+			buff: bufs[0],
 		}
 		r.waiter.Add(1)
 		bind.readQueue <- r
 		r.waiter.Wait() // wait read goroutine done, or we will miss the result
-		return r.bytes, r.endpoint, r.err
+		sizes[0], eps[0] = r.bytes, r.endpoint
+		return 1, r.err
 	}
 	workers := bind.workers
 	if workers <= 0 {
@@ -156,7 +157,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	return nil
 }
 
-func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
+func (bind *netBindClient) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 
 	nend, ok := endpoint.(*netEndpoint)
@@ -171,13 +172,15 @@ func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
 		}
 	}
 
-	if len(buff) > 3 && len(bind.reserved) == 3 {
-		copy(buff[1:], bind.reserved)
+	for _, buff := range buff {
+		if len(buff) > 3 && len(bind.reserved) == 3 {
+			copy(buff[1:], bind.reserved)
+		}
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
 	}
-
-	_, err = nend.conn.Write(buff)
-
-	return err
+	return nil
 }
 
 type netBindServer struct {
@@ -199,6 +202,10 @@ func (bind *netBindServer) Send(buff []byte, endpoint conn.Endpoint) error {
 	_, err = nend.conn.Write(buff)
 
 	return err
+}
+
+func (bind *netBindClient) BatchSize() int {
+	return 1
 }
 
 type netEndpoint struct {
@@ -233,4 +240,18 @@ func (e netEndpoint) DstToString() string {
 
 func (e netEndpoint) SrcToString() string {
 	return ""
+}
+
+func toNetIpAddr(addr xnet.Address) netip.Addr {
+	if addr.Family().IsIPv4() {
+		ip := addr.IP()
+		return netip.AddrFrom4([4]byte{ip[0], ip[1], ip[2], ip[3]})
+	} else {
+		ip := addr.IP()
+		arr := [16]byte{}
+		for i := 0; i < 16; i++ {
+			arr[i] = ip[i]
+		}
+		return netip.AddrFrom16(arr)
+	}
 }
