@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"time"
 
-	"github.com/sagernet/wireguard-go/device"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/log"
@@ -19,18 +17,11 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
-	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
-	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
-	"gvisor.dev/gvisor/pkg/waiter"
 )
 
 var nullDestination = net.TCPDestination(net.AnyIP, 0)
 
 type Server struct {
-	device     *device.Device
 	bindServer *netBindServer
 
 	info          routingInfo
@@ -48,12 +39,7 @@ type routingInfo struct {
 func NewServer(ctx context.Context, config *DeviceConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
 
-	endpoints, err := parseEndpoints(config)
-	if err != nil {
-		return nil, err
-	}
-
-	tun, tnet, err := CreateNetTUN(endpoints, int(config.Mtu), false)
+	endpoints, hasIPv4, hasIPv6, err := parseEndpoints(config)
 	if err != nil {
 		return nil, err
 	}
@@ -63,27 +49,23 @@ func NewServer(ctx context.Context, config *DeviceConfig) (*Server, error) {
 			netBind: netBind{
 				dns: v.GetFeature(dns.ClientType()).(dns.Client),
 				dnsOption: dns.IPOption{
-					IPv4Enable: tnet.HasV4(),
-					IPv6Enable: tnet.HasV6(),
+					IPv4Enable: hasIPv4,
+					IPv6Enable: hasIPv6,
 				},
 			},
 		},
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
-	server.setConnectionHandler(tnet.stack)
-
-	dev := device.NewDevice(tun, server.bindServer, wgLogger, int(config.NumWorkers))
-	err = dev.IpcSet(createIPCRequest(config))
-	if err != nil {
-		return nil, err
-	}
-	err = dev.Up()
+	tun, err := CreateTun(endpoints, int(config.Mtu), server.forwardConnection)
 	if err != nil {
 		return nil, err
 	}
 
-	server.device = dev
+	if err = tun.BuildDevice(createIPCRequest(config), server.bindServer); err != nil {
+		_ = tun.Close()
+		return nil, err
+	}
 
 	return server, nil
 }
@@ -137,67 +119,14 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 }
 
-func (s *Server) setConnectionHandler(stack *stack.Stack) {
-	tcpForwarder := tcp.NewForwarder(stack, 0, 65535, func(r *tcp.ForwarderRequest) {
-		go func(r *tcp.ForwarderRequest) {
-			var (
-				wq waiter.Queue
-				id = r.ID()
-			)
-
-			// Perform a TCP three-way handshake.
-			ep, err := r.CreateEndpoint(&wq)
-			if err != nil {
-				newError(err.String()).AtError().WriteToLog()
-				r.Complete(true)
-				return
-			}
-			r.Complete(false)
-			defer ep.Close()
-
-			// enable tcp keep-alive to prevent hanging connections
-			ep.SocketOptions().SetKeepAlive(true)
-
-			// local address is actually destination
-			s.forwardConnection(s.info, net.TCPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
-		}(r)
-	})
-	stack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
-
-	udpForwarder := udp.NewForwarder(stack, func(r *udp.ForwarderRequest) {
-		go func(r *udp.ForwarderRequest) {
-			var (
-				wq waiter.Queue
-				id = r.ID()
-			)
-
-			ep, err := r.CreateEndpoint(&wq)
-			if err != nil {
-				newError(err.String()).AtError().WriteToLog()
-				return
-			}
-			defer ep.Close()
-
-			// prevents hanging connections and ensure timely release
-			ep.SocketOptions().SetLinger(tcpip.LingerOption{
-				Enabled: true,
-				Timeout: 15 * time.Second,
-			})
-
-			s.forwardConnection(s.info, net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
-		}(r)
-	})
-	stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
-}
-
-func (s *Server) forwardConnection(info routingInfo, dest net.Destination, conn net.Conn) {
-	if info.dispatcher == nil {
+func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
+	if s.info.dispatcher == nil {
 		newError("unexpected: dispatcher == nil").AtError().WriteToLog()
 		return
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithCancel(core.ToBackgroundDetachedContext(info.ctx))
+	ctx, cancel := context.WithCancel(core.ToBackgroundDetachedContext(s.info.ctx))
 	plcy := s.policyManager.ForLevel(0)
 	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
 
@@ -208,17 +137,17 @@ func (s *Server) forwardConnection(info routingInfo, dest net.Destination, conn 
 		Reason: "",
 	})
 
-	if info.inboundTag != nil {
-		ctx = session.ContextWithInbound(ctx, info.inboundTag)
+	if s.info.inboundTag != nil {
+		ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
 	}
-	if info.outboundTag != nil {
-		ctx = session.ContextWithOutbound(ctx, info.outboundTag)
+	if s.info.outboundTag != nil {
+		ctx = session.ContextWithOutbound(ctx, s.info.outboundTag)
 	}
-	if info.contentTag != nil {
-		ctx = session.ContextWithContent(ctx, info.contentTag)
+	if s.info.contentTag != nil {
+		ctx = session.ContextWithContent(ctx, s.info.contentTag)
 	}
 
-	link, err := info.dispatcher.Dispatch(ctx, dest)
+	link, err := s.info.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
 		newError("dispatch connection").Base(err).AtError().WriteToLog()
 	}

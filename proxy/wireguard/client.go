@@ -59,19 +59,9 @@ type Handler struct {
 func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 
-	endpoints, err := parseEndpoints(conf)
+	endpoints, hasIPv4, hasIPv6, err := parseEndpoints(conf)
 	if err != nil {
 		return nil, err
-	}
-
-	hasIPv4, hasIPv6 := false, false
-	for _, e := range endpoints {
-		if e.Is4() {
-			hasIPv4 = true
-		}
-		if e.Is6() {
-			hasIPv6 = true
-		}
 	}
 
 	d := v.GetFeature(dns.ClientType()).(dns.Client)
@@ -249,7 +239,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 // creates a tun interface on netstack given a configuration
 func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
-	t, err := CreateTun(h.endpoints, int(h.conf.Mtu))
+	t, err := CreateTun(h.endpoints, int(h.conf.Mtu), nil)
 	if err != nil {
 		return nil, err
 	}

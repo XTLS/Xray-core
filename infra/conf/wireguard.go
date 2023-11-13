@@ -91,7 +91,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	} else {
 		config.Mtu = c.MTU
 	}
-	// these a fallback code exists in github.com/sagernet/wireguard-go code,
+	// these a fallback code exists in wireguard-go code,
 	// we don't need to process fallback manually
 	config.NumWorkers = c.NumWorkers
 

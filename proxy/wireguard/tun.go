@@ -12,11 +12,14 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common/log"
+	xnet "github.com/xtls/xray-core/common/net"
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
 )
+
+type promiscuousModeHandler func(dest xnet.Destination, conn net.Conn)
 
 type Tunnel interface {
 	BuildDevice(ipc string, bind conn.Bind) error

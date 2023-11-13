@@ -74,6 +74,11 @@ func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	}, nil
 }
 
+// BatchSize implements conn.Bind
+func (bind *netBind) BatchSize() int {
+	return 1
+}
+
 // Open implements conn.Bind
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
@@ -187,7 +192,7 @@ type netBindServer struct {
 	netBind
 }
 
-func (bind *netBindServer) Send(buff []byte, endpoint conn.Endpoint) error {
+func (bind *netBindServer) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 
 	nend, ok := endpoint.(*netEndpoint)
@@ -199,13 +204,13 @@ func (bind *netBindServer) Send(buff []byte, endpoint conn.Endpoint) error {
 		return newError("connection not open yet")
 	}
 
-	_, err = nend.conn.Write(buff)
+	for _, buff := range buff {
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
+	}
 
 	return err
-}
-
-func (bind *netBindClient) BatchSize() int {
-	return 1
 }
 
 type netEndpoint struct {
