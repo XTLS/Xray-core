@@ -1,5 +1,5 @@
-//go:build js || dragonfly || netbsd || openbsd || solaris
-// +build js dragonfly netbsd openbsd solaris
+//go:build js || netbsd || openbsd || solaris
+// +build js netbsd openbsd solaris
 
 package internet
 

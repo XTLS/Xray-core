@@ -28,14 +28,31 @@ type Fragment struct {
 // Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
 	config := new(freedom.Config)
-	config.DomainStrategy = freedom.Config_AS_IS
 	switch strings.ToLower(c.DomainStrategy) {
-	case "useip", "use_ip", "use-ip":
+	case "asis", "":
+		config.DomainStrategy = freedom.Config_AS_IS
+	case "useip":
 		config.DomainStrategy = freedom.Config_USE_IP
-	case "useip4", "useipv4", "use_ip4", "use_ipv4", "use_ip_v4", "use-ip4", "use-ipv4", "use-ip-v4":
+	case "useipv4":
 		config.DomainStrategy = freedom.Config_USE_IP4
-	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
+	case "useipv6":
 		config.DomainStrategy = freedom.Config_USE_IP6
+	case "useipv4v6":
+		config.DomainStrategy = freedom.Config_USE_IP46
+	case "useipv6v4":
+		config.DomainStrategy = freedom.Config_USE_IP64
+	case "forceip":
+		config.DomainStrategy = freedom.Config_FORCE_IP
+	case "forceipv4":
+		config.DomainStrategy = freedom.Config_FORCE_IP4
+	case "forceipv6":
+		config.DomainStrategy = freedom.Config_FORCE_IP6
+	case "forceipv4v6":
+		config.DomainStrategy = freedom.Config_FORCE_IP46
+	case "forceipv6v4":
+		config.DomainStrategy = freedom.Config_FORCE_IP64
+	default:
+		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
 	if c.Fragment != nil {

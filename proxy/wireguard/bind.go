@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/sagernet/wireguard-go/conn"
+	"golang.zx2c4.com/wireguard/conn"
+
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
@@ -36,7 +37,7 @@ type netBindClient struct {
 	readQueue chan *netReadInfo
 }
 
-func (n *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
+func (bind *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
 	ipStr, port, _, err := splitAddrPort(s)
 	if err != nil {
 		return nil, err
@@ -44,7 +45,7 @@ func (n *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
 
 	var addr net.IP
 	if IsDomainName(ipStr) {
-		ips, err := n.dns.LookupIP(ipStr, n.dnsOption)
+		ips, err := bind.dns.LookupIP(ipStr, bind.dnsOption)
 		if err != nil {
 			return nil, err
 		} else if len(ips) == 0 {
@@ -79,22 +80,22 @@ func (n *netBindClient) ParseEndpoint(s string) (conn.Endpoint, error) {
 func (bind *netBindClient) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
 
-	fun := func(buff []byte) (cap int, ep conn.Endpoint, err error) {
+	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				cap = 0
-				ep = nil
+				n = 0
 				err = errors.New("channel closed")
 			}
 		}()
 
 		r := &netReadInfo{
-			buff: buff,
+			buff: bufs[0],
 		}
 		r.waiter.Add(1)
 		bind.readQueue <- r
 		r.waiter.Wait() // wait read goroutine done, or we will miss the result
-		return r.bytes, r.endpoint, r.err
+		sizes[0], eps[0] = r.bytes, r.endpoint
+		return 1, r.err
 	}
 	workers := bind.workers
 	if workers <= 0 {
@@ -150,7 +151,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	return nil
 }
 
-func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
+func (bind *netBindClient) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 
 	nend, ok := endpoint.(*netEndpoint)
@@ -165,17 +166,23 @@ func (bind *netBindClient) Send(buff []byte, endpoint conn.Endpoint) error {
 		}
 	}
 
-	if len(buff) > 3 && len(bind.reserved) == 3 {
-		copy(buff[1:], bind.reserved)
+	for _, buff := range buff {
+		if len(buff) > 3 && len(bind.reserved) == 3 {
+			copy(buff[1:], bind.reserved)
+		}
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
 	}
-
-	_, err = nend.conn.Write(buff)
-
-	return err
+	return nil
 }
 
 func (bind *netBindClient) SetMark(mark uint32) error {
 	return nil
+}
+
+func (bind *netBindClient) BatchSize() int {
+	return 1
 }
 
 type netEndpoint struct {
@@ -263,4 +270,45 @@ func splitAddrPort(s string) (ip string, port uint16, v6 bool, err error) {
 	}
 
 	return ip, port, v6, nil
+}
+
+func IsDomainName(s string) bool {
+	l := len(s)
+	if l == 0 || l > 254 || l == 254 && s[l-1] != '.' {
+		return false
+	}
+	last := byte('.')
+	nonNumeric := false
+	partlen := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		default:
+			return false
+		case 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_':
+			nonNumeric = true
+			partlen++
+		case '0' <= c && c <= '9':
+			partlen++
+		case c == '-':
+			if last == '.' {
+				return false
+			}
+			partlen++
+			nonNumeric = true
+		case c == '.':
+			if last == '.' || last == '-' {
+				return false
+			}
+			if partlen > 63 || partlen == 0 {
+				return false
+			}
+			partlen = 0
+		}
+		last = c
+	}
+	if last == '-' || partlen > 63 {
+		return false
+	}
+	return nonNumeric
 }
