@@ -227,3 +227,11 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 	out.tun = wgt
 	return out, nil
 }
+
+func NativeTunSupported() bool {
+	// run a superuser permission check to check
+	// if the current user has the sufficient permission
+	// to create a tun device.
+
+	return unix.Geteuid() == 0 // 0 means root
+}

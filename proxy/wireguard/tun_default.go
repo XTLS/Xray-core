@@ -10,3 +10,7 @@ import (
 func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
 	return nil, errors.New("not implemented")
 }
+
+func NativeTunSupported() bool {
+	return false
+}
