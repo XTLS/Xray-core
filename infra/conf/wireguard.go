@@ -119,11 +119,11 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	config.IsClient = c.IsClient
 	if c.KernelMode != nil {
 		config.KernelMode = *c.KernelMode
-		if config.KernelMode && !wireguard.NativeTunSupported() {
+		if config.KernelMode && !wireguard.KernelTunSupported() {
 			newError("kernel mode is not supported on your OS or permission is insufficient").AtWarning().WriteToLog()
 		}
 	} else {
-		config.KernelMode = wireguard.NativeTunSupported()
+		config.KernelMode = wireguard.KernelTunSupported()
 		if config.KernelMode {
 			newError("kernel mode is enabled as it's supported and permission is sufficient").AtDebug().WriteToLog()
 		}

@@ -228,7 +228,7 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 	return out, nil
 }
 
-func NativeTunSupported() bool {
+func KernelTunSupported() bool {
 	// run a superuser permission check to check
 	// if the current user has the sufficient permission
 	// to create a tun device.
