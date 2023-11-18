@@ -77,6 +77,10 @@ func (*Server) Network() []net.Network {
 
 // Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	inbound := session.InboundFromContext(ctx)
+	inbound.Name = "wireguard"
+	inbound.SetCanSpliceCopy(3)
+
 	s.info = routingInfo{
 		ctx:         core.ToBackgroundDetachedContext(ctx),
 		dispatcher:  dispatcher,
