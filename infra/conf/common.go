@@ -2,10 +2,10 @@ package conf
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 )
 
@@ -46,7 +46,7 @@ func (v *Address) UnmarshalJSON(data []byte) error {
 		return newError("invalid address: ", string(data)).Base(err)
 	}
 	if strings.HasPrefix(rawStr, "env:") {
-		rawStr = os.Getenv(rawStr[4:])
+		rawStr = platform.NewEnvFlag(rawStr[4:]).GetValue(func() string { return "" })
 	}
 	v.Address = net.ParseAddress(rawStr)
 
@@ -118,7 +118,7 @@ func parseIntPort(data []byte) (net.Port, error) {
 
 func parseStringPort(s string) (net.Port, net.Port, error) {
 	if strings.HasPrefix(s, "env:") {
-		s = os.Getenv(s[4:])
+		s = platform.NewEnvFlag(s[4:]).GetValue(func() string { return "" })
 	}
 
 	pair := strings.SplitN(s, "-", 2)

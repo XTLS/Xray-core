@@ -146,10 +146,19 @@ func (s *clientConnections) openConnection(ctx context.Context, destAddr net.Add
 			return qlog.NewConnectionTracer(&QlogWriter{connID: ci}, p, ci)
 		},
 	}
-	udpConn, _ := rawConn.(*net.UDPConn)
-	if udpConn == nil {
-		udpConn = rawConn.(*internet.PacketConnWrapper).Conn.(*net.UDPConn)
+
+	var udpConn *net.UDPConn
+	switch conn := rawConn.(type) {
+	case *net.UDPConn:
+		udpConn = conn
+	case *internet.PacketConnWrapper:
+		udpConn = conn.Conn.(*net.UDPConn)
+	default:
+		// TODO: Support sockopt for QUIC
+		rawConn.Close()
+		return nil, newError("QUIC with sockopt is unsupported").AtWarning()
 	}
+
 	sysConn, err := wrapSysConn(udpConn, config)
 	if err != nil {
 		rawConn.Close()

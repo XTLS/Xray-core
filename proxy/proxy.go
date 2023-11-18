@@ -257,7 +257,7 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 	for i, buffer1 := range buffer {
 		if buffer1.Len() >= buf.Size-21 {
 			index := int32(bytes.LastIndex(buffer1.Bytes(), TlsApplicationDataStart))
-			if index <= 0 || index > buf.Size-21 {
+			if index < 21 || index > buf.Size-21 {
 				index = buf.Size / 2
 			}
 			buffer2 := buf.New()

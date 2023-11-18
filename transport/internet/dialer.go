@@ -78,37 +78,27 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 		return nil, nil
 	}
 
-	option := dns.IPOption{
-		IPv4Enable: true,
-		IPv6Enable: true,
-		FakeEnable: false,
+	ips, err := dnsClient.LookupIP(domain, dns.IPOption{
+		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && strategy.preferIP4(),
+		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && strategy.preferIP6(),
+	})
+	{ // Resolve fallback
+		if (len(ips) == 0 || err != nil) && strategy.hasFallback() && localAddr == nil {
+			ips, err = dnsClient.LookupIP(domain, dns.IPOption{
+				IPv4Enable: strategy.fallbackIP4(),
+				IPv6Enable: strategy.fallbackIP6(),
+			})
+		}
 	}
 
-	switch {
-	case strategy == DomainStrategy_USE_IP4 || (localAddr != nil && localAddr.Family().IsIPv4()):
-		option = dns.IPOption{
-			IPv4Enable: true,
-			IPv6Enable: false,
-			FakeEnable: false,
-		}
-	case strategy == DomainStrategy_USE_IP6 || (localAddr != nil && localAddr.Family().IsIPv6()):
-		option = dns.IPOption{
-			IPv4Enable: false,
-			IPv6Enable: true,
-			FakeEnable: false,
-		}
-	case strategy == DomainStrategy_AS_IS:
-		return nil, nil
-	}
-
-	return dnsClient.LookupIP(domain, option)
+	return ips, err
 }
 
 func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
 	if dst.Address.Family().IsIP() || dnsClient == nil {
 		return false
 	}
-	return sockopt.DomainStrategy != DomainStrategy_AS_IS
+	return sockopt.DomainStrategy.hasStrategy()
 }
 
 func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
