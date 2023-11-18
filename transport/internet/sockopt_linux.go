@@ -1,10 +1,18 @@
 package internet
 
 import (
+	"encoding/binary"
+	"golang.org/x/sys/unix"
 	"net"
 	"syscall"
+)
 
-	"golang.org/x/sys/unix"
+const (
+	TCP_CONGESTION    = 13
+	TCP_BRUTAL_PARAMS = 23301
+
+	DEFAULT_PORT        = 65432
+	DEFAULT_BUFFER_SIZE = 65536
 )
 
 func bindAddr(fd uintptr, ip []byte, port uint32) error {
@@ -155,6 +163,16 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if config.TcpCongestion != "" {
 			if err := syscall.SetsockoptString(int(fd), syscall.SOL_TCP, syscall.TCP_CONGESTION, config.TcpCongestion); err != nil {
 				return newError("failed to set TCP_CONGESTION", err)
+			}
+
+			newError("now try set tc").AtInfo().WriteToLog()
+			cwndGain := uint32(config.CwndGain)
+			brutalParamsValue := make([]byte, 12)
+			binary.LittleEndian.PutUint64(brutalParamsValue, config.Rate)
+			binary.LittleEndian.PutUint32(brutalParamsValue[8:], cwndGain)
+			newError("Try to set brutal config : cwnd", cwndGain, " rate ", config.Rate, "struct len ", len(string(brutalParamsValue)), brutalParamsValue).AtInfo().WriteToLog()
+			if err := syscall.SetsockoptString(int(fd), 6, 23301, string(brutalParamsValue)); err != nil {
+				return newError("failed to set brutal config ", err)
 			}
 		}
 

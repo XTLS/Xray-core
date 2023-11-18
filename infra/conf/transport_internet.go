@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"math"
@@ -616,6 +617,8 @@ type SocketConfig struct {
 	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
 	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
 	TCPCongestion        string      `json:"tcpCongestion"`
+	Rate                 uint64      `json:"rate"`
+	CwndGain             uint32      `json:"cwnd_gain"`
 	TCPWindowClamp       int32       `json:"tcpWindowClamp"`
 	TCPMaxSeg            int32       `json:"tcpMaxSeg"`
 	TcpNoDelay           bool        `json:"tcpNoDelay"`
@@ -642,6 +645,10 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 			return nil, newError("tcpFastOpen: only boolean and integer value is acceptable")
 		}
 	}
+	brutalParamsValue := make([]byte, 12)
+	binary.BigEndian.PutUint64(brutalParamsValue, c.Rate)
+	binary.BigEndian.PutUint32(brutalParamsValue[8:], uint32(c.CwndGain))
+	newError("Try to set brutal config : cwnd ", c.CwndGain, " rate ", c.Rate, " struct len ", len(string(brutalParamsValue)),brutalParamsValue).AtInfo().WriteToLog()
 	var tproxy internet.SocketConfig_TProxyMode
 	switch strings.ToLower(c.TProxy) {
 	case "tproxy":
@@ -690,6 +697,8 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
 		TcpCongestion:        c.TCPCongestion,
+		Rate:                 c.Rate,
+		CwndGain:             c.CwndGain,
 		TcpWindowClamp:       c.TCPWindowClamp,
 		TcpMaxSeg:            c.TCPMaxSeg,
 		TcpNoDelay:           c.TcpNoDelay,
