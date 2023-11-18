@@ -23,3 +23,10 @@ func (c *DeviceConfig) fallbackIP4() bool {
 func (c *DeviceConfig) fallbackIP6() bool {
 	return c.DomainStrategy == DeviceConfig_FORCE_IP46
 }
+
+func (c *DeviceConfig) createTun() tunCreator {
+	if c.KernelMode {
+		return createKernelTun
+	}
+	return createGVisorTun
+}
