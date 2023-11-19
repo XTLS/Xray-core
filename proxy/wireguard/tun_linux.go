@@ -1,3 +1,5 @@
+//go:build linux && !android
+
 package wireguard
 
 import (
@@ -69,7 +71,11 @@ func (d *deviceNet) Close() (err error) {
 	return errors.Join(errs...)
 }
 
-func CreateTun(localAddresses []netip.Addr, mtu int) (t Tunnel, err error) {
+func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
+	if handler != nil {
+		return nil, newError("TODO: support promiscuous mode")
+	}
+
 	var v4, v6 *netip.Addr
 	for _, prefixes := range localAddresses {
 		if v4 == nil && prefixes.Is4() {
@@ -220,4 +226,12 @@ func CreateTun(localAddresses []netip.Addr, mtu int) (t Tunnel, err error) {
 	}
 	out.tun = wgt
 	return out, nil
+}
+
+func KernelTunSupported() bool {
+	// run a superuser permission check to check
+	// if the current user has the sufficient permission
+	// to create a tun device.
+
+	return unix.Geteuid() == 0 // 0 means root
 }
