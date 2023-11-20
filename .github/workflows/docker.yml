@@ -19,11 +19,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/xray-core
+           # generate Docker tags based on the following events/attributes
+           #   main, pr-2, 1.2.3, 1.2, 1
           flavor: latest=true
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
