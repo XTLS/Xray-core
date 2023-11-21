@@ -60,11 +60,12 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled         bool        `json:"enabled"`
-	DestOverride    *StringList `json:"destOverride"`
-	DomainsExcluded *StringList `json:"domainsExcluded"`
-	MetadataOnly    bool        `json:"metadataOnly"`
-	RouteOnly       bool        `json:"routeOnly"`
+	Enabled                 bool        `json:"enabled"`
+	DestOverride            *StringList `json:"destOverride"`
+	DomainsExcluded         *StringList `json:"domainsExcluded"`
+	MetadataOnly            bool        `json:"metadataOnly"`
+	RouteOnly               bool        `json:"routeOnly"`
+	ExcludeRouteOnlyDomains *StringList `json:"ExcludeRouteOnlyDomains"`
 }
 
 // Build implements Buildable.
@@ -96,12 +97,20 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		}
 	}
 
+	var ed []string
+	if c.ExcludeRouteOnlyDomains != nil {
+		for _, domain := range *c.ExcludeRouteOnlyDomains {
+			ed = append(d, strings.ToLower(domain))
+		}
+	}
+
 	return &proxyman.SniffingConfig{
-		Enabled:             c.Enabled,
-		DestinationOverride: p,
-		DomainsExcluded:     d,
-		MetadataOnly:        c.MetadataOnly,
-		RouteOnly:           c.RouteOnly,
+		Enabled:                 c.Enabled,
+		DestinationOverride:     p,
+		DomainsExcluded:         d,
+		MetadataOnly:            c.MetadataOnly,
+		RouteOnly:               c.RouteOnly,
+		ExcludeRouteOnlyDomains: ed,
 	}, nil
 }
 

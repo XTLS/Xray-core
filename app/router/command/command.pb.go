@@ -163,19 +163,18 @@ func (x *RoutingContext) GetOutboundTag() string {
 // opened by xray-core.
 // * FieldSelectors selects a subset of fields in routing statistics to return.
 // Valid selectors:
-//   - inbound: Selects connection's inbound tag.
-//   - network: Selects connection's network.
-//   - ip: Equivalent as "ip_source" and "ip_target", selects both source and
-//     target IP.
-//   - port: Equivalent as "port_source" and "port_target", selects both source
-//     and target port.
-//   - domain: Selects target domain.
-//   - protocol: Select connection's protocol.
-//   - user: Select connection's inbound user email.
-//   - attributes: Select connection's additional attributes.
-//   - outbound: Equivalent as "outbound" and "outbound_group", select both
-//     outbound tag and outbound group tags.
-//
+//  - inbound: Selects connection's inbound tag.
+//  - network: Selects connection's network.
+//  - ip: Equivalent as "ip_source" and "ip_target", selects both source and
+//  target IP.
+//  - port: Equivalent as "port_source" and "port_target", selects both source
+//  and target port.
+//  - domain: Selects target domain.
+//  - protocol: Select connection's protocol.
+//  - user: Select connection's inbound user email.
+//  - attributes: Select connection's additional attributes.
+//  - outbound: Equivalent as "outbound" and "outbound_group", select both
+//  outbound tag and outbound group tags.
 // * If FieldSelectors is left empty, all fields will be returned.
 type SubscribeRoutingStatsRequest struct {
 	state         protoimpl.MessageState

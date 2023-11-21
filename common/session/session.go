@@ -83,6 +83,7 @@ type SniffingRequest struct {
 	Enabled                        bool
 	MetadataOnly                   bool
 	RouteOnly                      bool
+	ExcludeRouteOnlyDomains        []string
 }
 
 // Content is the metadata of the connection content.

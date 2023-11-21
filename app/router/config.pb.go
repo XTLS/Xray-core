@@ -477,7 +477,6 @@ type RoutingRule struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to TargetTag:
-	//
 	//	*RoutingRule_Tag
 	//	*RoutingRule_BalancingTag
 	TargetTag isRoutingRule_TargetTag `protobuf_oneof:"target_tag"`
@@ -835,7 +834,6 @@ type Domain_Attribute struct {
 
 	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// Types that are assignable to TypedValue:
-	//
 	//	*Domain_Attribute_BoolValue
 	//	*Domain_Attribute_IntValue
 	TypedValue isDomain_Attribute_TypedValue `protobuf_oneof:"typed_value"`

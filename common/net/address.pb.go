@@ -28,7 +28,6 @@ type IPOrDomain struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Address:
-	//
 	//	*IPOrDomain_Ip
 	//	*IPOrDomain_Domain
 	Address isIPOrDomain_Address `protobuf_oneof:"address"`

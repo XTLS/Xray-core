@@ -199,14 +199,14 @@ type Config struct {
 	Fingerprint      string `protobuf:"bytes,11,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	RejectUnknownSni bool   `protobuf:"varint,12,opt,name=reject_unknown_sni,json=rejectUnknownSni,proto3" json:"reject_unknown_sni,omitempty"`
 	// @Document A pinned certificate chain sha256 hash.
-	// @Document If the server's hash does not match this value, the connection will be aborted.
-	// @Document This value replace allow_insecure.
-	// @Critical
+	//@Document If the server's hash does not match this value, the connection will be aborted.
+	//@Document This value replace allow_insecure.
+	//@Critical
 	PinnedPeerCertificateChainSha256 [][]byte `protobuf:"bytes,13,rep,name=pinned_peer_certificate_chain_sha256,json=pinnedPeerCertificateChainSha256,proto3" json:"pinned_peer_certificate_chain_sha256,omitempty"`
 	// @Document A pinned certificate public key sha256 hash.
-	// @Document If the server's public key hash does not match this value, the connection will be aborted.
-	// @Document This value replace allow_insecure.
-	// @Critical
+	//@Document If the server's public key hash does not match this value, the connection will be aborted.
+	//@Document This value replace allow_insecure.
+	//@Critical
 	PinnedPeerCertificatePublicKeySha256 [][]byte `protobuf:"bytes,14,rep,name=pinned_peer_certificate_public_key_sha256,json=pinnedPeerCertificatePublicKeySha256,proto3" json:"pinned_peer_certificate_public_key_sha256,omitempty"`
 }
 

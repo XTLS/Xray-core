@@ -213,6 +213,20 @@ func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResu
 	return false
 }
 
+func (d *DefaultDispatcher) shouldBeExcluded(ctx context.Context, result SniffResult, request session.SniffingRequest) bool {
+	domain := result.Domain()
+	if domain == "" {
+		return true
+	}
+	for _, d := range request.ExcludeRouteOnlyDomains {
+		if strings.ToLower(domain) == d {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Dispatch implements routing.Dispatcher.
 func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destination) (*transport.Link, error) {
 	if !destination.IsValid() {
@@ -256,7 +270,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && ob.Target.Address.Family().IsIP() && fkr0.IsIPInIPPool(ob.Target.Address) {
 					isFakeIP = true
 				}
-				if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
+				if sniffingRequest.RouteOnly && d.shouldBeExcluded(ctx, result, sniffingRequest) && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 					ob.RouteTarget = destination
 				} else {
 					ob.Target = destination
@@ -309,7 +323,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && ob.Target.Address.Family().IsIP() && fkr0.IsIPInIPPool(ob.Target.Address) {
 				isFakeIP = true
 			}
-			if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
+			if sniffingRequest.RouteOnly && d.shouldBeExcluded(ctx, result, sniffingRequest) && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 				ob.RouteTarget = destination
 			} else {
 				ob.Target = destination
