@@ -100,7 +100,7 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	var ed []string
 	if c.ExcludeRouteOnlyDomains != nil {
 		for _, domain := range *c.ExcludeRouteOnlyDomains {
-			ed = append(d, strings.ToLower(domain))
+			ed = append(ed, strings.ToLower(domain))
 		}
 	}
 
