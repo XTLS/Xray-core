@@ -3,15 +3,14 @@ package kcp
 import (
 	"context"
 	"crypto/cipher"
-	gotls "crypto/tls"
 	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
@@ -24,14 +23,14 @@ type ConnectionID struct {
 // Listener defines a server listening for connections
 type Listener struct {
 	sync.Mutex
-	sessions  map[ConnectionID]*Connection
-	hub       *udp.Hub
-	tlsConfig *gotls.Config
-	config    *Config
-	reader    PacketReader
-	header    internet.PacketHeader
-	security  cipher.AEAD
-	addConn   internet.ConnHandler
+	sessions map[ConnectionID]*Connection
+	hub      *udp.Hub
+	securer  securer.ConnectionSecurer
+	config   *Config
+	reader   PacketReader
+	header   internet.PacketHeader
+	security cipher.AEAD
+	addConn  internet.ConnHandler
 }
 
 func NewListener(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (*Listener, error) {
@@ -47,6 +46,7 @@ func NewListener(ctx context.Context, address net.Address, port net.Port, stream
 	l := &Listener{
 		header:   header,
 		security: security,
+		securer:  securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""),
 		reader: &KCPPacketReader{
 			Header:   header,
 			Security: security,
@@ -54,10 +54,6 @@ func NewListener(ctx context.Context, address net.Address, port net.Port, stream
 		sessions: make(map[ConnectionID]*Connection),
 		config:   kcpSettings,
 		addConn:  addConn,
-	}
-
-	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.tlsConfig = config.GetTLSConfig()
 	}
 
 	hub, err := udp.ListenUDP(ctx, address, port, streamSettings, udp.HubCapacity(1024))
@@ -129,8 +125,12 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 			Writer:   writer,
 		}, writer, l.config)
 		var netConn stat.Connection = conn
-		if l.tlsConfig != nil {
-			netConn = tls.Server(conn, l.tlsConfig)
+		if l.securer != nil {
+			var err error
+			if netConn, err = l.securer.Server(netConn); err != nil {
+				newError(err).AtInfo().WriteToLog()
+				return
+			}
 		}
 
 		l.addConn(netConn)

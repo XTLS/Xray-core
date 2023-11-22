@@ -9,18 +9,23 @@ import (
 )
 
 type tlsConnectionSecurer struct {
+	goTlsConfig      *gotls.Config
 	tlsConfig        *tls.Config
 	expectedProtocol string
-	nextProtos       []string
 }
 
-func (s tlsConnectionSecurer) SecureClient(ctx context.Context, dest net.Destination, conn net.Conn) (net.Conn, error) {
-	var goTlsConfig *gotls.Config
-	if s.nextProtos != nil {
-		goTlsConfig = s.tlsConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto(s.nextProtos...))
-	} else {
-		goTlsConfig = s.tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+func NewTLSConnectionSecurer(config *tls.Config, expectedProtocol string, tlsOptions ...tls.Option) ConnectionSecurer {
+	return &tlsConnectionSecurer{
+		tlsConfig:        config,
+		expectedProtocol: expectedProtocol,
+		goTlsConfig:      config.GetTLSConfig(tlsOptions...),
 	}
+}
+
+func (s *tlsConnectionSecurer) Client(ctx context.Context, dest net.Destination, conn net.Conn) (net.Conn, error) {
+	goTlsConfig := s.goTlsConfig.Clone()
+
+	tls.WithDestination(dest)(goTlsConfig)
 
 	var cn tls.Interface
 	if fingerprint := tls.GetFingerprint(s.tlsConfig.Fingerprint); fingerprint != nil {
@@ -42,4 +47,8 @@ func (s tlsConnectionSecurer) SecureClient(ctx context.Context, dest net.Destina
 	}
 
 	return cn, nil
+}
+
+func (s *tlsConnectionSecurer) Server(conn net.Conn) (net.Conn, error) {
+	return tls.Server(conn, s.goTlsConfig), nil
 }

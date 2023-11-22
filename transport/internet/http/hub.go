@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -16,7 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -141,22 +140,14 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	}
 
 	var server *http.Server
-	config := tls.ConfigFromStreamSettings(streamSettings)
-	if config == nil {
-		h2s := &http2.Server{}
+	s := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS, tls.WithNextProto(http2.NextProtoTLS))
 
-		server = &http.Server{
-			Addr:              serial.Concat(address, ":", port),
-			Handler:           h2c.NewHandler(listener, h2s),
-			ReadHeaderTimeout: time.Second * 4,
-		}
-	} else {
-		server = &http.Server{
-			Addr:              serial.Concat(address, ":", port),
-			TLSConfig:         config.GetTLSConfig(tls.WithNextProto("h2")),
-			Handler:           listener,
-			ReadHeaderTimeout: time.Second * 4,
-		}
+	h2s := &http2.Server{}
+	// since the h2c handler is able to handle h2 preface, we can use it to handle h2c and h2
+	server = &http.Server{
+		Addr:              serial.Concat(address, ":", port),
+		Handler:           h2c.NewHandler(listener, h2s),
+		ReadHeaderTimeout: time.Second * 4,
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
@@ -187,19 +178,13 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 			}
 		}
 
-		if config == nil {
-			if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
-				streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
-			}
-			err = server.Serve(streamListener)
-			if err != nil {
-				newError("stopping serving H2C or REALITY H2").Base(err).WriteToLog(session.ExportIDToError(ctx))
-			}
-		} else {
-			err = server.ServeTLS(streamListener, "", "")
-			if err != nil {
-				newError("stopping serving TLS H2").Base(err).WriteToLog(session.ExportIDToError(ctx))
-			}
+		if s != nil {
+			streamListener = securer.NewListener(streamListener, s)
+		}
+
+		err = server.Serve(streamListener)
+		if err != nil {
+			newError("stopping serving").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
 	}()
 

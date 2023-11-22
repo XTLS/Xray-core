@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 //go:embed dialer.html
@@ -82,7 +83,9 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	protocol := "ws"
 
-	if securer := securer.NewConnectionSecurerFromStreamSettingsWithNextProtos(streamSettings, "http/1.1", []string{"http/1.1"}); securer != nil {
+	if tlsConfig := tls.ConfigFromStreamSettings(streamSettings); tlsConfig != nil {
+		securer := securer.NewTLSConnectionSecurer(tlsConfig, "http/1.1", tls.WithNextProto("http/1.1"))
+
 		protocol = "wss"
 		dialer.NetDialTLSContext = func(ctx context.Context, _, addr string) (gonet.Conn, error) {
 			// Like the NetDial in the dialer
@@ -92,7 +95,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
-			return securer.SecureClient(ctx, dest, pconn)
+			return securer.Client(ctx, dest, pconn)
 		}
 	}
 

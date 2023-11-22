@@ -11,9 +11,10 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -75,14 +76,8 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 
 	listener.ctx = ctx
 
-	config := tls.ConfigFromStreamSettings(settings)
-
 	var options []grpc.ServerOption
 	var s *grpc.Server
-	if config != nil {
-		// gRPC server may silently ignore TLS errors
-		options = append(options, grpc.Creds(credentials.NewTLS(config.GetTLSConfig(tls.WithNextProto("h2")))))
-	}
 	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 {
 		options = append(options, grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    time.Second * time.Duration(grpcSettings.IdleTimeout),
@@ -92,10 +87,6 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 
 	s = grpc.NewServer(options...)
 	listener.s = s
-
-	if settings.SocketSettings != nil && settings.SocketSettings.AcceptProxyProtocol {
-		newError("accepting PROXY protocol").AtWarning().WriteToLog(session.ExportIDToError(ctx))
-	}
 
 	go func() {
 		var streamListener net.Listener
@@ -123,6 +114,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 		newError("gRPC listen for service name `" + grpcSettings.getServiceName() + "` tun `" + grpcSettings.getTunStreamName() + "` multi tun `" + grpcSettings.getTunMultiStreamName() + "`").AtDebug().WriteToLog()
 		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.getServiceName(), grpcSettings.getTunStreamName(), grpcSettings.getTunMultiStreamName())
 
+		if s := securer.NewConnectionSecurerFromStreamSettings(settings, http2.NextProtoTLS, tls.WithNextProto(http2.NextProtoTLS)); s != nil {
+			streamListener = securer.NewListener(streamListener, s)
+		}
 		if config := reality.ConfigFromStreamSettings(settings); config != nil {
 			streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
 		}

@@ -13,33 +13,19 @@ import (
 
 type ConnectionSecurer interface {
 	// secures the given connection with security protocols such as TLS, REALITY, etc.
-	SecureClient(ctx context.Context, dest net.Destination, conn net.Conn) (net.Conn, error)
+	Client(ctx context.Context, dest net.Destination, conn net.Conn) (net.Conn, error)
+	// secures the given connection with security protocols such as TLS, REALITY, etc.
+	Server(conn net.Conn) (net.Conn, error)
 }
 
-func NewConnectionSecurerFromStreamSettings(streamSettings *internet.MemoryStreamConfig, expectedProtocol string) ConnectionSecurer {
+func NewConnectionSecurerFromStreamSettings(streamSettings *internet.MemoryStreamConfig, expectedProtocol string, tlsOptions ...tls.Option) ConnectionSecurer {
 	if tlsConfig := tls.ConfigFromStreamSettings(streamSettings); tlsConfig != nil {
-		return &tlsConnectionSecurer{
-			tlsConfig:        tlsConfig,
-			expectedProtocol: expectedProtocol,
-		}
+		return NewTLSConnectionSecurer(tlsConfig, expectedProtocol)
 	}
 
 	if realityConfig := reality.ConfigFromStreamSettings(streamSettings); realityConfig != nil {
-		return &realityConnectionSecurer{
-			realityConfig:    realityConfig,
-			expectedProtocol: expectedProtocol,
-		}
+		return NewRealityConnectionSecurer(realityConfig, expectedProtocol)
 	}
 
 	return nil
-}
-
-func NewConnectionSecurerFromStreamSettingsWithNextProtos(streamSettings *internet.MemoryStreamConfig, expectedProtocol string, nextProtos []string) ConnectionSecurer {
-	securer := NewConnectionSecurerFromStreamSettings(streamSettings, expectedProtocol)
-
-	if tlsSecurer, ok := securer.(*tlsConnectionSecurer); ok {
-		tlsSecurer.nextProtos = nextProtos
-	}
-
-	return securer
 }

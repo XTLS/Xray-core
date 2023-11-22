@@ -85,7 +85,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 	var iConn stat.Connection = session
 
 	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
-		return securer.SecureClient(ctx, dest, iConn)
+		return securer.Client(ctx, dest, iConn)
 	}
 
 	return iConn, nil

@@ -26,7 +26,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
-		return securer.SecureClient(ctx, dest, conn)
+		return securer.Client(ctx, dest, conn)
 	}
 
 	return conn, nil

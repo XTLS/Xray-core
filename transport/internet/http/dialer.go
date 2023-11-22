@@ -79,7 +79,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			if securer == nil {
 				return pconn, nil
 			} else {
-				return securer.SecureClient(hctx, dest, pconn)
+				return securer.Client(hctx, dest, pconn)
 			}
 		},
 	}

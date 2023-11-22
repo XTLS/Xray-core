@@ -123,7 +123,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
 			if err == nil && securer != nil {
-				return securer.SecureClient(gctx, dest, c)
+				return securer.Client(gctx, dest, c)
 			}
 			return c, err
 		}),
