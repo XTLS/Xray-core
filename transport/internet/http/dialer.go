@@ -15,9 +15,8 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
 	"golang.org/x/net/http2"
 )
@@ -41,12 +40,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
-	tlsConfigs := tls.ConfigFromStreamSettings(streamSettings)
-	realityConfigs := reality.ConfigFromStreamSettings(streamSettings)
-	if tlsConfigs == nil && realityConfigs == nil {
+	sockopt := streamSettings.SocketSettings
+
+	securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS)
+	if securer == nil {
 		return nil, newError("TLS or REALITY must be enabled for http transport.").AtWarning()
 	}
-	sockopt := streamSettings.SocketSettings
 
 	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
 		return client, nil
@@ -77,39 +76,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
-			if realityConfigs != nil {
-				return reality.UClient(pconn, realityConfigs, hctx, dest)
-			}
-
-			var cn tls.Interface
-			if fingerprint := tls.GetFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
-				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
+			if securer == nil {
+				return pconn, nil
 			} else {
-				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
+				return securer.SecureClient(hctx, dest, pconn)
 			}
-			if err := cn.Handshake(); err != nil {
-				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
-				return nil, err
-			}
-			if !tlsConfig.InsecureSkipVerify {
-				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
-					return nil, err
-				}
-			}
-			negotiatedProtocol, negotiatedProtocolIsMutual := cn.NegotiatedProtocol()
-			if negotiatedProtocol != http2.NextProtoTLS {
-				return nil, newError("http2: unexpected ALPN protocol " + negotiatedProtocol + "; want q" + http2.NextProtoTLS).AtError()
-			}
-			if !negotiatedProtocolIsMutual {
-				return nil, newError("http2: could not negotiate protocol mutually").AtError()
-			}
-			return cn, nil
 		},
-	}
-
-	if tlsConfigs != nil {
-		transport.TLSClientConfig = tlsConfigs.GetTLSConfig(tls.WithDestination(dest))
 	}
 
 	if httpSettings.IdleTimeout > 0 || httpSettings.HealthCheckTimeout > 0 {

@@ -9,9 +9,8 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
@@ -26,10 +25,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, newError("failed to dial unix: ", settings.Path).Base(err).AtWarning()
 	}
 
-	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		return tls.Client(conn, config.GetTLSConfig(tls.WithDestination(dest))), nil
-	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
-		return reality.UClient(conn, config, ctx, dest)
+	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
+		return securer.SecureClient(ctx, dest, conn)
 	}
 
 	return conn, nil

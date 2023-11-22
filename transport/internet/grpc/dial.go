@@ -11,13 +11,13 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
-	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -78,10 +78,10 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if globalDialerMap == nil {
 		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
 	}
-	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
+
+	securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS)
 
 	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
 		return client, nil
@@ -122,24 +122,14 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
-			if err == nil && realityConfig != nil {
-				return reality.UClient(c, realityConfig, gctx, dest)
+			if err == nil && securer != nil {
+				return securer.SecureClient(gctx, dest, c)
 			}
 			return c, err
 		}),
 	}
 
-	if tlsConfig != nil {
-		var transportCredential credentials.TransportCredentials
-		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-			transportCredential = tls.NewGrpcUtls(tlsConfig.GetTLSConfig(), fingerprint)
-		} else { // Fallback to normal gRPC TLS
-			transportCredential = credentials.NewTLS(tlsConfig.GetTLSConfig())
-		}
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(transportCredential))
-	} else {
-		dialOptions = append(dialOptions, grpc.WithInsecure())
-	}
+	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 || grpcSettings.PermitWithoutStream {
 		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{

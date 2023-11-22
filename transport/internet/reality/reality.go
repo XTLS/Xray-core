@@ -104,6 +104,11 @@ func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x50
 	return nil
 }
 
+func (c *UConn) NegotiatedProtocol() string {
+	state := c.ConnectionState()
+	return state.NegotiatedProtocol
+}
+
 func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destination) (net.Conn, error) {
 	localAddr := c.LocalAddr().String()
 	uConn := &UConn{}
