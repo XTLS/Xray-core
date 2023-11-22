@@ -82,7 +82,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	protocol := "ws"
 
-	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
+	if securer := securer.NewConnectionSecurerFromStreamSettingsWithNextProtos(streamSettings, "http/1.1", []string{"http/1.1"}); securer != nil {
 		protocol = "wss"
 		dialer.NetDialTLSContext = func(ctx context.Context, _, addr string) (gonet.Conn, error) {
 			// Like the NetDial in the dialer

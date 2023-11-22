@@ -2,6 +2,7 @@ package securer
 
 import (
 	"context"
+	gotls "crypto/tls"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -10,10 +11,16 @@ import (
 type tlsConnectionSecurer struct {
 	tlsConfig        *tls.Config
 	expectedProtocol string
+	nextProtos       []string
 }
 
 func (s tlsConnectionSecurer) SecureClient(ctx context.Context, dest net.Destination, conn net.Conn) (net.Conn, error) {
-	goTlsConfig := s.tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+	var goTlsConfig *gotls.Config
+	if s.nextProtos != nil {
+		goTlsConfig = s.tlsConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto(s.nextProtos...))
+	} else {
+		goTlsConfig = s.tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+	}
 
 	var cn tls.Interface
 	if fingerprint := tls.GetFingerprint(s.tlsConfig.Fingerprint); fingerprint != nil {

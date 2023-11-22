@@ -18,18 +18,28 @@ type ConnectionSecurer interface {
 
 func NewConnectionSecurerFromStreamSettings(streamSettings *internet.MemoryStreamConfig, expectedProtocol string) ConnectionSecurer {
 	if tlsConfig := tls.ConfigFromStreamSettings(streamSettings); tlsConfig != nil {
-		return tlsConnectionSecurer{
+		return &tlsConnectionSecurer{
 			tlsConfig:        tlsConfig,
 			expectedProtocol: expectedProtocol,
 		}
 	}
 
 	if realityConfig := reality.ConfigFromStreamSettings(streamSettings); realityConfig != nil {
-		return realityConnectionSecurer{
+		return &realityConnectionSecurer{
 			realityConfig:    realityConfig,
 			expectedProtocol: expectedProtocol,
 		}
 	}
 
 	return nil
+}
+
+func NewConnectionSecurerFromStreamSettingsWithNextProtos(streamSettings *internet.MemoryStreamConfig, expectedProtocol string, nextProtos []string) ConnectionSecurer {
+	securer := NewConnectionSecurerFromStreamSettings(streamSettings, expectedProtocol)
+
+	if tlsSecurer, ok := securer.(*tlsConnectionSecurer); ok {
+		tlsSecurer.nextProtos = nextProtos
+	}
+
+	return securer
 }
