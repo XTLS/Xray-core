@@ -427,5 +427,5 @@ func (s *Config) Client(ctx context.Context, dest net.Destination, conn net.Conn
 }
 
 func (s *Config) Server(conn net.Conn) (net.Conn, error) {
-	return tls.Server(conn, s.GetTLSConfig()), nil
+	return Server(conn, s.GetTLSConfig()), nil
 }
