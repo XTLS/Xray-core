@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -84,8 +83,8 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	var iConn stat.Connection = session
 
-	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
-		return securer.Client(ctx, dest, iConn)
+	if streamSettings.SecuritySettings != nil {
+		return streamSettings.SecuritySettings.Client(ctx, dest, iConn, "")
 	}
 
 	return iConn, nil

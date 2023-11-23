@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -25,8 +24,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, newError("failed to dial unix: ", settings.Path).Base(err).AtWarning()
 	}
 
-	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
-		return securer.Client(ctx, dest, conn)
+	if streamSettings.SecuritySettings != nil {
+		return streamSettings.SecuritySettings.Client(ctx, dest, conn, "")
 	}
 
 	return conn, nil

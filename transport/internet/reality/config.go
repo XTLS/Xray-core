@@ -1,10 +1,12 @@
 package reality
 
 import (
+	"context"
 	"net"
 	"time"
 
 	"github.com/xtls/reality"
+	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -46,4 +48,25 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 		return nil
 	}
 	return config
+}
+
+func (s *Config) Client(ctx context.Context, dest xnet.Destination, conn net.Conn, expectedProtocol string) (net.Conn, error) {
+	conn, err := UClient(conn, s, ctx, dest)
+	if err != nil {
+		return nil, err
+	}
+
+	if expectedProtocol != "" {
+		cn := conn.(*UConn)
+
+		if cn.NegotiatedProtocol() != expectedProtocol {
+			return nil, newError("unexpected ALPN protocol " + cn.NegotiatedProtocol() + "; required " + expectedProtocol).AtError()
+		}
+	}
+
+	return conn, nil
+}
+
+func (s *Config) Server(conn net.Conn) (net.Conn, error) {
+	return Server(conn, s.GetREALITYConfig())
 }

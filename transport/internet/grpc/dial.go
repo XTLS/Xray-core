@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
@@ -81,8 +80,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS)
-
 	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
 		return client, nil
 	}
@@ -122,8 +119,8 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
-			if err == nil && securer != nil {
-				return securer.Client(gctx, dest, c)
+			if err == nil && streamSettings.SecuritySettings != nil {
+				return streamSettings.SecuritySettings.Client(gctx, dest, c, http2.NextProtoTLS)
 			}
 			return c, err
 		}),

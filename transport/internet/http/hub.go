@@ -15,8 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
-	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -140,7 +138,6 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	}
 
 	var server *http.Server
-	s := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS, tls.WithNextProto(http2.NextProtoTLS))
 
 	h2s := &http2.Server{}
 	// since the h2c handler is able to handle h2 preface, we can use it to handle h2c and h2
@@ -178,9 +175,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 			}
 		}
 
-		if s != nil {
-			streamListener = securer.NewListener(streamListener, s)
-		}
+		streamListener = streamSettings.ToSecuredListener(streamListener)
 
 		err = server.Serve(streamListener)
 		if err != nil {

@@ -9,17 +9,16 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // Listener is an internet.Listener that listens for TCP connections.
 type Listener struct {
-	listener   net.Listener
-	securer    securer.ConnectionSecurer
-	authConfig internet.ConnectionAuthenticator
-	config     *Config
-	addConn    internet.ConnHandler
+	listener         net.Listener
+	securitySettings internet.SecuritySettings
+	authConfig       internet.ConnectionAuthenticator
+	config           *Config
+	addConn          internet.ConnHandler
 }
 
 // ListenTCP creates a new Listener based on configurations.
@@ -58,7 +57,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	}
 
 	l.listener = listener
-	l.securer = securer.NewConnectionSecurerFromStreamSettings(streamSettings, "")
+	l.securitySettings = streamSettings.SecuritySettings
 
 	if tcpSettings.HeaderSettings != nil {
 		headerConfig, err := tcpSettings.HeaderSettings.GetInstance()
@@ -91,8 +90,8 @@ func (v *Listener) keepAccepting() {
 			continue
 		}
 		go func() {
-			if v.securer != nil {
-				if conn, err = v.securer.Server(conn); err != nil {
+			if v.securitySettings != nil {
+				if conn, err = v.securitySettings.Server(conn); err != nil {
 					newError(err).AtInfo().WriteToLog()
 					return
 				}

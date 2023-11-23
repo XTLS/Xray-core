@@ -11,18 +11,17 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"golang.org/x/sys/unix"
 )
 
 type Listener struct {
-	addr    *net.UnixAddr
-	ln      net.Listener
-	securer securer.ConnectionSecurer
-	config  *Config
-	addConn internet.ConnHandler
-	locker  *fileLocker
+	addr             *net.UnixAddr
+	ln               net.Listener
+	securitySettings internet.SecuritySettings
+	config           *Config
+	addConn          internet.ConnHandler
+	locker           *fileLocker
 }
 
 func Listen(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
@@ -54,7 +53,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		}
 	}
 
-	ln.securer = securer.NewConnectionSecurerFromStreamSettings(streamSettings, "")
+	ln.securitySettings = streamSettings.SecuritySettings
 
 	go ln.run()
 
@@ -83,8 +82,8 @@ func (ln *Listener) run() {
 			continue
 		}
 		go func() {
-			if ln.securer != nil {
-				if conn, err = ln.securer.Server(conn); err != nil {
+			if ln.securitySettings != nil {
+				if conn, err = ln.securitySettings.Server(conn); err != nil {
 					newError(err).AtInfo().WriteToLog()
 					return
 				}

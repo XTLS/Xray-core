@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/tls"
 	"crypto/x509"
@@ -398,4 +399,33 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 		return nil
 	}
 	return config
+}
+
+func (s *Config) Client(ctx context.Context, dest net.Destination, conn net.Conn, expectedProtocol string) (net.Conn, error) {
+	goTlsConfig := s.GetTLSConfig(WithDestination(dest))
+
+	var cn Interface
+	if fingerprint := GetFingerprint(s.Fingerprint); fingerprint != nil {
+		cn = UClient(conn, goTlsConfig, fingerprint).(*UConn)
+	} else {
+		cn = Client(conn, goTlsConfig).(*Conn)
+	}
+	if err := cn.Handshake(); err != nil {
+		return nil, err
+	}
+	if !goTlsConfig.InsecureSkipVerify {
+		if err := cn.VerifyHostname(goTlsConfig.ServerName); err != nil {
+			return nil, err
+		}
+	}
+
+	if expectedProtocol != "" && cn.NegotiatedProtocol() != expectedProtocol {
+		return nil, newError("unexpected ALPN protocol " + cn.NegotiatedProtocol() + "; required " + expectedProtocol).AtError()
+	}
+
+	return cn, nil
+}
+
+func (s *Config) Server(conn net.Conn) (net.Conn, error) {
+	return tls.Server(conn, s.GetTLSConfig()), nil
 }

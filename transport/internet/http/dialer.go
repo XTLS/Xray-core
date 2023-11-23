@@ -15,7 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/pipe"
 	"golang.org/x/net/http2"
@@ -42,8 +41,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
 	sockopt := streamSettings.SocketSettings
 
-	securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, http2.NextProtoTLS)
-	if securer == nil {
+	if streamSettings.SecuritySettings == nil {
 		return nil, newError("TLS or REALITY must be enabled for http transport.").AtWarning()
 	}
 
@@ -76,10 +74,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return nil, err
 			}
 
-			if securer == nil {
+			if streamSettings.SecuritySettings == nil {
 				return pconn, nil
 			} else {
-				return securer.Client(hctx, dest, pconn)
+				return streamSettings.SecuritySettings.Client(hctx, dest, pconn, http2.NextProtoTLS)
 			}
 		},
 	}

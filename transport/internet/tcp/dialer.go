@@ -7,7 +7,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -19,14 +18,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
-	if securer := securer.NewConnectionSecurerFromStreamSettings(streamSettings, ""); securer != nil {
-		conn, err = securer.Client(ctx, dest, conn)
+	conn = stat.Connection(conn)
+
+	if streamSettings.SecuritySettings != nil {
+		conn, err = streamSettings.SecuritySettings.Client(ctx, dest, conn, "")
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return stat.Connection(conn), nil
+	return conn, nil
 }
 
 func init() {
