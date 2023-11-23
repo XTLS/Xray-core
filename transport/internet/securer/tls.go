@@ -4,21 +4,22 @@ import (
 	"context"
 	gotls "crypto/tls"
 
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type tlsConnectionSecurer struct {
 	goTlsConfig      *gotls.Config
-	tlsConfig        *tls.Config
+	fingerprint      *utls.ClientHelloID
 	expectedProtocol string
 }
 
-func NewTLSConnectionSecurer(config *tls.Config, expectedProtocol string, tlsOptions ...tls.Option) ConnectionSecurer {
+func NewTLSConnectionSecurer(config *tls.Config, expectedProtocol string) ConnectionSecurer {
 	return &tlsConnectionSecurer{
-		tlsConfig:        config,
+		goTlsConfig:      config.GetTLSConfig(),
+		fingerprint:      tls.GetFingerprint(config.Fingerprint),
 		expectedProtocol: expectedProtocol,
-		goTlsConfig:      config.GetTLSConfig(tlsOptions...),
 	}
 }
 
@@ -28,8 +29,8 @@ func (s *tlsConnectionSecurer) Client(ctx context.Context, dest net.Destination,
 	tls.WithDestination(dest)(goTlsConfig)
 
 	var cn tls.Interface
-	if fingerprint := tls.GetFingerprint(s.tlsConfig.Fingerprint); fingerprint != nil {
-		cn = tls.UClient(conn, goTlsConfig, fingerprint).(*tls.UConn)
+	if s.fingerprint != nil {
+		cn = tls.UClient(conn, goTlsConfig, s.fingerprint).(*tls.UConn)
 	} else {
 		cn = tls.Client(conn, goTlsConfig).(*tls.Conn)
 	}

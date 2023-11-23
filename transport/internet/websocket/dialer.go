@@ -15,7 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/securer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -83,19 +82,32 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	protocol := "ws"
 
-	if tlsConfig := tls.ConfigFromStreamSettings(streamSettings); tlsConfig != nil {
-		securer := securer.NewTLSConnectionSecurer(tlsConfig, "http/1.1", tls.WithNextProto("http/1.1"))
-
+	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		protocol = "wss"
-		dialer.NetDialTLSContext = func(ctx context.Context, _, addr string) (gonet.Conn, error) {
-			// Like the NetDial in the dialer
-			pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-			if err != nil {
-				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
-				return nil, err
+		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
+		dialer.TLSClientConfig = tlsConfig
+		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
+			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (gonet.Conn, error) {
+				// Like the NetDial in the dialer
+				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				if err != nil {
+					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+					return nil, err
+				}
+				// TLS and apply the handshake
+				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
+				if err := cn.WebsocketHandshake(); err != nil {
+					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+					return nil, err
+				}
+				if !tlsConfig.InsecureSkipVerify {
+					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+						newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+						return nil, err
+					}
+				}
+				return cn, nil
 			}
-
-			return securer.Client(ctx, dest, pconn)
 		}
 	}
 
