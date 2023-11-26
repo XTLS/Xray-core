@@ -116,19 +116,25 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
-	config.IsClient = c.IsClient
-	if c.KernelMode != nil {
-		config.KernelMode = *c.KernelMode
-		if config.KernelMode && !wireguard.KernelTunSupported() {
-			newError("kernel mode is not supported on your OS or permission is insufficient").AtWarning().WriteToLog()
-		}
-	} else {
-		config.KernelMode = wireguard.KernelTunSupported()
-		if config.KernelMode {
-			newError("kernel mode is enabled as it's supported and permission is sufficient").AtDebug().WriteToLog()
-		}
+	// check device exist for wireguard setup
+	// module "golang.zx2c4.com/wireguard" only support linux and require /dev/net/tun
+	if wireguard.IsLinux() && !wireguard.CheckUnixKernelTunDeviceEnabled() {
+		return nil, newError("wireguard module require device /dev/net/tun")
 	}
 
+	config.IsClient = c.IsClient
+	if c.IsClient {
+		if support := wireguard.CheckUnixKernelTunSupported(); c.KernelMode == nil {
+			config.KernelMode = support
+		} else if *c.KernelMode && support {
+			config.KernelMode = true
+		} else {
+			config.KernelMode = false
+		}
+	}
+	if !c.IsClient {
+		config.KernelMode = false
+	}
 	return config, nil
 }
 

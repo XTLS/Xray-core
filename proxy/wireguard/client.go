@@ -79,7 +79,6 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 func (h *Handler) processWireGuard(dialer internet.Dialer) (err error) {
 	h.wgLock.Lock()
 	defer h.wgLock.Unlock()
-
 	if h.bind != nil && h.bind.dialer == dialer && h.net != nil {
 		return nil
 	}
@@ -127,6 +126,10 @@ func (h *Handler) processWireGuard(dialer internet.Dialer) (err error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	if err := h.processWireGuard(dialer); err != nil {
+		return err
+	}
+
 	outbound := session.OutboundFromContext(ctx)
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified")
@@ -135,10 +138,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
 		inbound.SetCanSpliceCopy(3)
-	}
-
-	if err := h.processWireGuard(dialer); err != nil {
-		return err
 	}
 
 	// Destination of the inner request.
