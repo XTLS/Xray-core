@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -363,6 +364,11 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
+
+	if (c.EnableMasterKeyLog) {
+		writer, _ := os.OpenFile("master.log", os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+		config.KeyLogWriter = writer
+	}
 
 	return config
 }
