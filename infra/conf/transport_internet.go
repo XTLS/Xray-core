@@ -357,7 +357,7 @@ type TLSConfig struct {
 	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
 	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
-	EnableMasterKeyLog                   bool             `json:"enableMasterKeyLog"`
+	MasterKeyLog                         string           `json:"masterKeyLog"`
 }
 
 // Build implements Buildable.
@@ -413,7 +413,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	config.EnableMasterKeyLog = c.EnableMasterKeyLog
+	config.MasterKeyLog = c.MasterKeyLog
 
 	return config, nil
 }
