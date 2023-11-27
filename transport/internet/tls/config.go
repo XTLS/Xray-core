@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -363,6 +364,15 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
+
+	if (len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none") {
+		writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+		if err != nil {
+			newError("failed to open ", c.MasterKeyLog, " as master key log").AtError().Base(err).WriteToLog()
+		} else {
+			config.KeyLogWriter = writer
+		}
+	}
 
 	return config
 }
