@@ -46,12 +46,12 @@ func CheckUnixKernelIPv6IsEnabled() bool {
 // CheckUnixKernelTunSupported returns true if kernel tun is supported.
 // 1. check if the current process has CAP_NET_ADMIN capability
 // 2. check if /proc/sys/net/ipv4/conf/all/src_valid_mark exists and is set to 1
-// 3. check if /dev/net/tun exists
+// 3. check if wireguard kernel module is enabled
 // 4. check if iptables is available
 func CheckUnixKernelTunSupported() bool {
 	if !CheckUnixKernelNetAdminCapEnabled() ||
 		!CheckUnixKernelIPv4SrcValidMarkEnabled() ||
-		!CheckUnixKernelTunDeviceEnabled() {
+		!CheckUnixWireGuardKernelModuleEnabled() {
 		return false
 	}
 	outCmd := exec.Command("sh", "-c", "command -v iptables")
@@ -61,4 +61,10 @@ func CheckUnixKernelTunSupported() bool {
 	}
 	iptablesPath := strings.TrimSpace(string(outBuffer))
 	return iptablesPath != ""
+}
+
+// CheckUnixWireGuardKernelModuleEnabled returns true if wireguard kernel module is enabled.
+func CheckUnixWireGuardKernelModuleEnabled() bool {
+	_, err := os.Stat("/sys/module/wireguard/version")
+	return err == nil
 }

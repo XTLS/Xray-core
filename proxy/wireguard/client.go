@@ -246,7 +246,7 @@ func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
 	bind.dnsOption.IPv4Enable = h.hasIPv4
 	bind.dnsOption.IPv6Enable = h.hasIPv6
 
-	if err = t.BuildDevice(h.ipc, bind); err != nil {
+	if err = t.BuildDevice(h.conf, h.ipc, bind); err != nil {
 		_ = t.Close()
 		return nil, err
 	}

@@ -132,7 +132,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 
 	// check device exist for wireguard setup
 	// module "golang.zx2c4.com/wireguard" on linux require /dev/net/tun for userspace implementation
-	if wireguard.IsLinux() && !wireguard.CheckUnixKernelTunDeviceEnabled() {
+	if wireguard.IsLinux() && !config.KernelMode && !wireguard.CheckUnixKernelTunDeviceEnabled() {
 		return nil, newError(`wireguard userspace mode require device "/dev/net/tun"`)
 	}
 	return config, nil

@@ -25,3 +25,7 @@ func CheckUnixKernelIPv4SrcValidMarkEnabled() bool {
 func CheckUnixKernelTunSupported() bool {
 	return false
 }
+
+func CheckUnixWireGuardKernelModuleEnabled() bool {
+	return false
+}
