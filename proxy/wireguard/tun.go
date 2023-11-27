@@ -37,6 +37,7 @@ type Tunnel interface {
 	Close() error
 }
 
+// tunnel is a wrapper of wireguard device and tun device for gvisorNet and deviceNet
 type tunnel struct {
 	tun    tun.Device
 	device *device.Device
