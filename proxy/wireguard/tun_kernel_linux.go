@@ -218,17 +218,17 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		}
 	}()
 
-	ipv4TableIndex := 3000
+	ipv4TableIndex := -1
 	if v4Enable {
-		ipv4TableIndex, err = out.handle.EmptyRouteTableIndex(netlink.FAMILY_V4, ipv4TableIndex)
+		ipv4TableIndex, err = out.handle.EmptyRouteTableIndex(netlink.FAMILY_V4)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	ipv6TableIndex := 3000
+	ipv6TableIndex := -1
 	if v6Enable {
-		ipv6TableIndex, err = out.handle.EmptyRouteTableIndex(netlink.FAMILY_V6, ipv6TableIndex)
+		ipv6TableIndex, err = out.handle.EmptyRouteTableIndex(netlink.FAMILY_V6)
 		if err != nil {
 			return nil, err
 		}
