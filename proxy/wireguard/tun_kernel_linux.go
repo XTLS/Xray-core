@@ -4,7 +4,7 @@ package wireguard
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -46,7 +46,7 @@ func newDeviceNet(interfaceName string) *deviceNet {
 }
 
 func (d *deviceNet) BuildDevice(conf *DeviceConfig, ipc string, bind conn.Bind) error {
-	privateKey, err := base64.StdEncoding.DecodeString(conf.SecretKey)
+	privateKey, err := hex.DecodeString(conf.SecretKey)
 	if err != nil {
 		return fmt.Errorf("failed to decode private key: %w", err)
 	}
@@ -102,7 +102,7 @@ func (d *deviceNet) BuildDevice(conf *DeviceConfig, ipc string, bind conn.Bind) 
 
 		var peerConf enetlink.WireGuardPeer
 		if peer.PublicKey != "" {
-			publicKey, err := base64.StdEncoding.DecodeString(peer.PublicKey)
+			publicKey, err := hex.DecodeString(peer.PublicKey)
 			if err != nil {
 				return fmt.Errorf("failed to decode public key: %w", err)
 			}
@@ -110,7 +110,7 @@ func (d *deviceNet) BuildDevice(conf *DeviceConfig, ipc string, bind conn.Bind) 
 			peerConf.Flags |= enetlink.WGPEER_HAS_PUBLIC_KEY
 		}
 		if peer.PreSharedKey != "" {
-			preSharedKey, err := base64.StdEncoding.DecodeString(peer.PreSharedKey)
+			preSharedKey, err := hex.DecodeString(peer.PreSharedKey)
 			if err != nil {
 				return fmt.Errorf("failed to decode preshared key: %w", err)
 			}
