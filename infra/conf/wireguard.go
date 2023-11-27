@@ -116,12 +116,6 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
-	// check device exist for wireguard setup
-	// module "golang.zx2c4.com/wireguard" only support linux and require /dev/net/tun
-	if wireguard.IsLinux() && !wireguard.CheckUnixKernelTunDeviceEnabled() {
-		return nil, newError("wireguard module require device /dev/net/tun")
-	}
-
 	config.IsClient = c.IsClient
 	if c.IsClient {
 		if support := wireguard.CheckUnixKernelTunSupported(); c.KernelMode == nil {
@@ -134,6 +128,12 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	}
 	if !c.IsClient {
 		config.KernelMode = false
+	}
+
+	// check device exist for wireguard setup
+	// module "golang.zx2c4.com/wireguard" on linux require /dev/net/tun for userspace implementation
+	if wireguard.IsLinux() && !wireguard.CheckUnixKernelTunDeviceEnabled() {
+		return nil, newError(`wireguard userspace mode require device "/dev/net/tun"`)
 	}
 	return config, nil
 }
