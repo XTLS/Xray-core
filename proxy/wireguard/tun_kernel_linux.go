@@ -18,6 +18,8 @@ import (
 	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 
+var _ Tunnel = (*deviceNet)(nil)
+
 type deviceNet struct {
 	tunnel
 	dialer net.Dialer
@@ -61,6 +63,11 @@ func (d *deviceNet) Close() (err error) {
 	for _, route := range d.routes {
 		if err = d.handle.RouteDel(route); err != nil {
 			errs = append(errs, fmt.Errorf("failed to delete route: %w", err))
+		}
+	}
+	for _, rule := range d.iptManglePreRoutingRules {
+		if err = d.ipt.DeleteRule(iptables.TableMangle, iptables.ChainPrerouting, rule...); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete iptables rule: %w", err))
 		}
 	}
 	if err = d.tunnel.Close(); err != nil {
@@ -233,7 +240,7 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		_, err = out.ipt.EnsureRule(iptables.Append, iptables.TableMangle,
 			iptables.ChainPrerouting, rule...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to add rule %s: %w", rule, err)
+			return nil, fmt.Errorf("failed to add iptable rule %s: %w", rule, err)
 		}
 	}
 	out.tun = wgt
