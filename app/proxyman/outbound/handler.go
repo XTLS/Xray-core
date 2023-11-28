@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	common_errors "github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -48,6 +49,21 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	}
 
 	return uplinkCounter, downlinkCounter
+}
+
+func removeStatCounter(v *core.Instance, tag string) (err error) {
+	policy := v.GetFeature(policy.ManagerType()).(policy.Manager)
+	if len(tag) > 0 && policy.ForSystem().Stats.OutboundUplink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "outbound>>>" + tag + ">>>traffic>>>uplink"
+		err = statsManager.UnregisterCounter(name)
+	}
+	if len(tag) > 0 && policy.ForSystem().Stats.OutboundDownlink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "outbound>>>" + tag + ">>>traffic>>>downlink"
+		err = common_errors.Combine(err, statsManager.UnregisterCounter(name))
+	}
+	return
 }
 
 // Handler is an implements of outbound.Handler.
@@ -306,5 +322,6 @@ func (h *Handler) Start() error {
 // Close implements common.Closable.
 func (h *Handler) Close() error {
 	common.Close(h.mux)
+	common.Close(h.xudp)
 	return nil
 }

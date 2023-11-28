@@ -125,19 +125,24 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 }
 
 // RemoveHandler implements outbound.Manager.
-func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
+func (m *Manager) RemoveHandler(ctx context.Context, tag string) (err error) {
 	if tag == "" {
 		return common.ErrNoClue
 	}
 	m.access.Lock()
 	defer m.access.Unlock()
 
+	v := core.FromContext(ctx)
+	if v != nil {
+		err = removeStatCounter(v, tag)
+	}
+	common.Close(m.taggedHandler[tag])
 	delete(m.taggedHandler, tag)
 	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
 		m.defaultHandler = nil
 	}
 
-	return nil
+	return
 }
 
 // Select implements outbound.HandlerSelector.
