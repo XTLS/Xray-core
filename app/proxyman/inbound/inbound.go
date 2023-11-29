@@ -70,7 +70,7 @@ func (m *Manager) GetHandler(ctx context.Context, tag string) (inbound.Handler, 
 }
 
 // RemoveHandler implements inbound.Manager.
-func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
+func (m *Manager) RemoveHandler(ctx context.Context, tag string) (err error) {
 	if tag == "" {
 		return common.ErrNoClue
 	}
@@ -79,8 +79,12 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	defer m.access.Unlock()
 
 	if handler, found := m.taggedHandlers[tag]; found {
-		if err := handler.Close(); err != nil {
+		if err = handler.Close(); err != nil {
 			newError("failed to close handler ", tag).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		}
+		v := core.FromContext(ctx)
+		if v != nil {
+			err = removeStatCounter(v, tag)
 		}
 		delete(m.taggedHandlers, tag)
 		return nil

@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	common_errors "github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
@@ -39,6 +40,21 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	}
 
 	return uplinkCounter, downlinkCounter
+}
+
+func removeStatCounter(v *core.Instance, tag string) (err error) {
+	policy := v.GetFeature(policy.ManagerType()).(policy.Manager)
+	if len(tag) > 0 && policy.ForSystem().Stats.OutboundUplink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + tag + ">>>traffic>>>uplink"
+		err = statsManager.UnregisterCounter(name)
+	}
+	if len(tag) > 0 && policy.ForSystem().Stats.OutboundDownlink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + tag + ">>>traffic>>>downlink"
+		err = common_errors.Combine(err, statsManager.UnregisterCounter(name))
+	}
+	return
 }
 
 type AlwaysOnInboundHandler struct {
