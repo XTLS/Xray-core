@@ -83,4 +83,6 @@ message Config {
      @Critical
   */
   repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
+
+  string master_key_log = 15;
 }
