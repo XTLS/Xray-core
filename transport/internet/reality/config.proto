@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport.internet.reality;
 option csharp_namespace = "Xray.Transport.Internet.Reality";
-option go_package = "github.com/xtls/xray-core/transport/internet/reality";
+option go_package = "github.com/4nd3r5on/Xray-core/transport/internet/reality";
 option java_package = "com.xray.transport.internet.reality";
 option java_multiple_files = true;
 

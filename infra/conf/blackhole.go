@@ -3,8 +3,8 @@ package conf
 import (
 	"encoding/json"
 
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/proxy/blackhole"
+	"github.com/4nd3r5on/Xray-core/common/serial"
+	"github.com/4nd3r5on/Xray-core/proxy/blackhole"
 	"google.golang.org/protobuf/proto"
 )
 

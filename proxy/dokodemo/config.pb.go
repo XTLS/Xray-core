@@ -7,7 +7,7 @@
 package dokodemo
 
 import (
-	net "github.com/xtls/xray-core/common/net"
+	net "github.com/4nd3r5on/Xray-core/common/net"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

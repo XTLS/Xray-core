@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport;
 option csharp_namespace = "Xray.Transport.Global";
-option go_package = "github.com/xtls/xray-core/transport/global";
+option go_package = "github.com/4nd3r5on/Xray-core/transport/global";
 option java_package = "com.xray.transport.global";
 option java_multiple_files = true;
 

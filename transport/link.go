@@ -1,6 +1,6 @@
 package transport
 
-import "github.com/xtls/xray-core/common/buf"
+import "github.com/4nd3r5on/Xray-core/common/buf"
 
 // Link is a utility for connecting between an inbound and an outbound proxy handler.
 type Link struct {

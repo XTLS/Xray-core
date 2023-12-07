@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	. "github.com/xtls/xray-core/common/net"
+	. "github.com/4nd3r5on/Xray-core/common/net"
 )
 
 func TestDestinationProperty(t *testing.T) {

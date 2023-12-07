@@ -1,7 +1,7 @@
 package shadowsocks_2022
 
 import (
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/4nd3r5on/Xray-core/common/protocol"
 )
 
 // MemoryAccount is an account type converted from Account.

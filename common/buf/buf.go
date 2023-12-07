@@ -1,4 +1,4 @@
 // Package buf provides a light-weight memory allocation mechanism.
-package buf // import "github.com/xtls/xray-core/common/buf"
+package buf // import "github.com/4nd3r5on/Xray-core/common/buf"
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/4nd3r5on/Xray-core/common/errors/errorgen

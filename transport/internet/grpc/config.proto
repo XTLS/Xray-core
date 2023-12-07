@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package xray.transport.internet.grpc.encoding;
-option go_package = "github.com/xtls/xray-core/transport/internet/grpc";
+option go_package = "github.com/4nd3r5on/Xray-core/transport/internet/grpc";
 
 message Config {
   string host = 1;

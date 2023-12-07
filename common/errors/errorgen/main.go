@@ -26,7 +26,7 @@ func main() {
 
 	fmt.Fprintf(file, `package %s
 
-import "github.com/xtls/xray-core/common/errors"
+import "github.com/4nd3r5on/Xray-core/common/errors"
 
 type errPathObjHolder struct{}
 

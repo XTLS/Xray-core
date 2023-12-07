@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/xtls/xray-core/common"
+	"github.com/4nd3r5on/Xray-core/common"
 )
 
 // SimpleAuthenticator is a legacy AEAD used for KCP encryption.
