@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -32,13 +34,16 @@ func init() {
 	if strings.ToLower(platform.NewEnvFlag(platform.XUDPLog).GetValue(func() string { return "" })) == "true" {
 		Show = true
 	}
-	if raw := platform.NewEnvFlag(platform.XUDPBaseKey).GetValue(func() string { return "" }); raw != "" {
-		if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
-			return
-		}
-		panic(platform.XUDPBaseKey + ": invalid value: " + raw)
-	}
 	rand.Read(BaseKey)
+	go func() {
+		time.Sleep(100 * time.Millisecond) // this is not nice, but need to give some time for Android to setup ENV 
+		if raw := platform.NewEnvFlag(platform.XUDPBaseKey).GetValue(func() string { return "" }); raw != "" {
+			if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
+				return
+			}
+			panic(platform.XUDPBaseKey + ": invalid value (BaseKey must be 32 bytes): " + raw + " len " + strconv.Itoa(len(BaseKey)))
+		}
+	}()
 }
 
 func GetGlobalID(ctx context.Context) (globalID [8]byte) {
