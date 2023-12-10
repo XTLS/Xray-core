@@ -97,24 +97,24 @@ func (v *userByEmail) Remove(email string) bool {
 
 // Handler is an inbound connection handler that handles messages in VMess protocol.
 type Handler struct {
-	policyManager         policy.Manager
-	inboundHandlerManager feature_inbound.Manager
-	clients               *vmess.TimedUserValidator
+	PolicyManager         policy.Manager
+	InboundHandlerManager feature_inbound.Manager
+	Clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	detours               *DetourConfig
-	sessionHistory        *encoding.SessionHistory
+	SessionHistory        *encoding.SessionHistory
 }
 
 // New creates a new VMess inbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
-		clients:               vmess.NewTimedUserValidator(),
+		PolicyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
+		InboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
+		Clients:               vmess.NewTimedUserValidator(),
 		detours:               config.Detour,
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
-		sessionHistory:        encoding.NewSessionHistory(),
+		SessionHistory:        encoding.NewSessionHistory(),
 	}
 
 	for _, user := range config.User {
@@ -134,7 +134,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 // Close implements common.Closable.
 func (h *Handler) Close() error {
 	return errors.Combine(
-		h.sessionHistory.Close(),
+		h.SessionHistory.Close(),
 		common.Close(h.usersByEmail))
 }
 
@@ -143,10 +143,18 @@ func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
+func (h *Handler) GetPolicyManager() policy.Manager {
+	return h.PolicyManager
+}
+
+func (h *Handler) GetInboundHandlerManager() {
+
+}
+
 func (h *Handler) GetUser(email string) *protocol.MemoryUser {
 	user, existing := h.usersByEmail.Get(email)
 	if !existing {
-		h.clients.Add(user)
+		h.Clients.Add(user)
 	}
 	return user
 }
@@ -155,7 +163,7 @@ func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error 
 	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
 		return newError("User ", user.Email, " already exists.")
 	}
-	return h.clients.Add(user)
+	return h.Clients.Add(user)
 }
 
 func (h *Handler) RemoveUser(ctx context.Context, email string) error {
@@ -165,7 +173,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if !h.usersByEmail.Remove(email) {
 		return newError("User ", email, " not found.")
 	}
-	h.clients.Remove(email)
+	h.Clients.Remove(email)
 	return nil
 }
 
@@ -209,7 +217,7 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
-	sessionPolicy := h.policyManager.ForLevel(0)
+	sessionPolicy := h.PolicyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
@@ -224,7 +232,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(connection)}
-	svrSession := encoding.NewServerSession(h.clients, h.sessionHistory)
+	svrSession := encoding.NewServerSession(h.Clients, h.SessionHistory)
 	request, err := svrSession.DecodeRequestHeader(reader, isDrain)
 	if err != nil {
 		if errors.Cause(err) != io.EOF {
@@ -260,7 +268,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.SetCanSpliceCopy(3)
 	inbound.User = request.User
 
-	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
+	sessionPolicy = h.PolicyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
@@ -309,8 +317,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	if h.detours != nil {
 		tag := h.detours.To
-		if h.inboundHandlerManager != nil {
-			handler, err := h.inboundHandlerManager.GetHandler(ctx, tag)
+		if h.InboundHandlerManager != nil {
+			handler, err := h.InboundHandlerManager.GetHandler(ctx, tag)
 			if err != nil {
 				newError("failed to get detour handler: ", tag).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 				return nil

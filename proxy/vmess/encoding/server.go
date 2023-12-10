@@ -44,7 +44,7 @@ func NewSessionHistory() *SessionHistory {
 	}
 	h.task = &task.Periodic{
 		Interval: time.Second * 30,
-		Execute:  h.removeExpiredEntries,
+		Execute:  h.RemoveExpiredEntries,
 	}
 	return h
 }
@@ -68,7 +68,7 @@ func (h *SessionHistory) addIfNotExits(session sessionID) bool {
 	return true
 }
 
-func (h *SessionHistory) removeExpiredEntries() error {
+func (h *SessionHistory) RemoveExpiredEntries() error {
 	now := time.Now()
 
 	h.Lock()

@@ -30,6 +30,7 @@ import (
 	"github.com/4nd3r5on/Xray-core/features/routing"
 	"github.com/4nd3r5on/Xray-core/proxy"
 	"github.com/4nd3r5on/Xray-core/proxy/vless"
+	xray_vless_callback "github.com/4nd3r5on/Xray-core/proxy/vless/callback"
 	"github.com/4nd3r5on/Xray-core/proxy/vless/encoding"
 	"github.com/4nd3r5on/Xray-core/transport/internet/reality"
 	"github.com/4nd3r5on/Xray-core/transport/internet/stat"
@@ -51,21 +52,22 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
-	inboundHandlerManager feature_inbound.Manager
-	policyManager         policy.Manager
-	validator             *vless.Validator
+	InboundHandlerManager feature_inbound.Manager
+	PolicyManager         policy.Manager
+	Validator             *vless.Validator
+	Callbacks             xray_vless_callback.CallbackManager
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
-	// regexps               map[string]*regexp.Regexp       // or nil
+	// regexps            map[string]*regexp.Regexp       // or nil
 }
 
 // New creates a new VLess inbound handler.
 func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
-		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:             new(vless.Validator),
+		InboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
+		PolicyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
+		Validator:             new(vless.Validator),
 		dns:                   dc,
 	}
 
@@ -157,18 +159,23 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	return errors.Combine(common.Close(h.validator))
+	return errors.Combine(common.Close(h.Validator))
 }
 
 // AddUser implements proxy.UserManager.AddUser().
 func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
-	return h.validator.Add(u)
+	return h.Validator.Add(u)
 }
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
-	return h.validator.Del(e)
+	return h.Validator.Del(e)
 }
+
+// TODO
+// func (h *Handler) GetUsers() error {
+// 	return errors.New("Not implemented")
+// }
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
@@ -184,7 +191,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		iConn = statConn.Connection
 	}
 
-	sessionPolicy := h.policyManager.ForLevel(0)
+	sessionPolicy := h.PolicyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
@@ -209,7 +216,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
 	} else {
-		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.Validator)
 	}
 
 	if err != nil {
@@ -499,7 +506,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
-	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
+	sessionPolicy = h.PolicyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
