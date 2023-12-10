@@ -46,7 +46,7 @@ func TestMetrics(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "metrics_in",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -60,7 +60,7 @@ func TestMetrics(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				Tag:           "default-outbound",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),

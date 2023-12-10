@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/4nd3r5on/Xray-core/app/dispatcher"
 	"github.com/4nd3r5on/Xray-core/app/proxyman"
 	"github.com/4nd3r5on/Xray-core/common"
@@ -17,6 +16,7 @@ import (
 	"github.com/4nd3r5on/Xray-core/proxy/freedom"
 	"github.com/4nd3r5on/Xray-core/testing/servers/tcp"
 	"github.com/4nd3r5on/Xray-core/testing/servers/udp"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -50,7 +50,7 @@ func TestXrayDial(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -100,7 +100,7 @@ func TestXrayDialUDPConn(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -167,7 +167,7 @@ func TestXrayDialUDP(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},

@@ -42,7 +42,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 	userID := protocol.NewID(uuid.New())
 	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -69,7 +69,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -78,7 +78,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -93,7 +93,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: []*protocol.ServerEndpoint{
@@ -153,7 +153,7 @@ func TestDomainSocket(t *testing.T) {
 	userID := protocol.NewID(uuid.New())
 	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -181,7 +181,7 @@ func TestDomainSocket(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -190,7 +190,7 @@ func TestDomainSocket(t *testing.T) {
 
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -205,7 +205,7 @@ func TestDomainSocket(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: []*protocol.ServerEndpoint{
@@ -265,7 +265,7 @@ func TestVMessQuic(t *testing.T) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -296,7 +296,7 @@ func TestVMessQuic(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -311,7 +311,7 @@ func TestVMessQuic(t *testing.T) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -326,7 +326,7 @@ func TestVMessQuic(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{

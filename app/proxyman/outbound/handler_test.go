@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/4nd3r5on/Xray-core/app/policy"
+	"github.com/4nd3r5on/Xray-core/app/proxyman"
 	. "github.com/4nd3r5on/Xray-core/app/proxyman/outbound"
 	"github.com/4nd3r5on/Xray-core/app/stats"
 	"github.com/4nd3r5on/Xray-core/common/net"
@@ -39,7 +40,7 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
-	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
+	h, _ := NewHandler(ctx, &proxyman.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 	})
@@ -68,7 +69,7 @@ func TestOutboundWithStatCounter(t *testing.T) {
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
-	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
+	h, _ := NewHandler(ctx, &proxyman.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 	})

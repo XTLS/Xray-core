@@ -65,7 +65,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new Handler based on the given configuration.
-func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbound.Handler, error) {
+func NewHandler(ctx context.Context, config *proxyman.OutboundHandlerConfig) (outbound.Handler, error) {
 	v := core.MustFromContext(ctx)
 	uplinkCounter, downlinkCounter := getStatCounter(v, config.Tag)
 	h := &Handler{

@@ -61,7 +61,7 @@ func TestCommanderRemoveHandler(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "d",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -87,7 +87,7 @@ func TestCommanderRemoveHandler(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				Tag:           "default-outbound",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
@@ -169,7 +169,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "v",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -199,7 +199,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -220,7 +220,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "d",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -236,7 +236,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: []*protocol.ServerEndpoint{
@@ -359,7 +359,7 @@ func TestCommanderStats(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "vmess",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -393,7 +393,7 @@ func TestCommanderStats(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -402,7 +402,7 @@ func TestCommanderStats(t *testing.T) {
 
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -417,7 +417,7 @@ func TestCommanderStats(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: []*protocol.ServerEndpoint{

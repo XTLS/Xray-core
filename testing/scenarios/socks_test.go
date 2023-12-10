@@ -31,7 +31,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 
 	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -47,7 +47,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -56,7 +56,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -71,7 +71,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&socks.ClientConfig{
 					Server: []*protocol.ServerEndpoint{
@@ -114,7 +114,7 @@ func TestSocksBridageUDP(t *testing.T) {
 	serverPort := tcp.PickPort()
 	for {
 		serverConfig := &core.Config{
-			Inbound: []*core.InboundHandlerConfig{
+			Inbound: []*proxyman.InboundHandlerConfig{
 				{
 					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -143,7 +143,7 @@ func TestSocksBridageUDP(t *testing.T) {
 					}),
 				},
 			},
-			Outbound: []*core.OutboundHandlerConfig{
+			Outbound: []*proxyman.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 				},
@@ -164,7 +164,7 @@ func TestSocksBridageUDP(t *testing.T) {
 
 	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -179,7 +179,7 @@ func TestSocksBridageUDP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&socks.ClientConfig{
 					Server: []*protocol.ServerEndpoint{
@@ -234,7 +234,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 					},
 				}),
 			},
-			Inbound: []*core.InboundHandlerConfig{
+			Inbound: []*proxyman.InboundHandlerConfig{
 				{
 					Tag: "socks",
 					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -262,7 +262,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 					}),
 				},
 			},
-			Outbound: []*core.OutboundHandlerConfig{
+			Outbound: []*proxyman.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
 				},
@@ -287,7 +287,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 
 	clientPort := udp.PickPort()
 	clientConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -302,7 +302,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&socks.ClientConfig{
 					Server: []*protocol.ServerEndpoint{
@@ -336,7 +336,7 @@ func TestSocksConformanceMod(t *testing.T) {
 	authPort := tcp.PickPort()
 	noAuthPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(authPort)}},
@@ -366,7 +366,7 @@ func TestSocksConformanceMod(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},

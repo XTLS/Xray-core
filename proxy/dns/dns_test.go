@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/miekg/dns"
 	"github.com/4nd3r5on/Xray-core/app/dispatcher"
 	dnsapp "github.com/4nd3r5on/Xray-core/app/dns"
 	"github.com/4nd3r5on/Xray-core/app/policy"
@@ -21,6 +19,8 @@ import (
 	"github.com/4nd3r5on/Xray-core/proxy/dokodemo"
 	"github.com/4nd3r5on/Xray-core/testing/servers/tcp"
 	"github.com/4nd3r5on/Xray-core/testing/servers/udp"
+	"github.com/google/go-cmp/cmp"
+	"github.com/miekg/dns"
 )
 
 type staticHandler struct{}
@@ -108,7 +108,7 @@ func TestUDPDNSTunnel(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&policy.Config{}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address:  net.NewIPOrDomain(net.LocalHostIP),
@@ -121,7 +121,7 @@ func TestUDPDNSTunnel(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{}),
 			},
@@ -227,7 +227,7 @@ func TestTCPDNSTunnel(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&policy.Config{}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address:  net.NewIPOrDomain(net.LocalHostIP),
@@ -240,7 +240,7 @@ func TestTCPDNSTunnel(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{}),
 			},
@@ -313,7 +313,7 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&policy.Config{}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address:  net.NewIPOrDomain(net.LocalHostIP),
@@ -326,7 +326,7 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
 					Server: &net.Endpoint{

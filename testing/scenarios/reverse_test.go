@@ -68,7 +68,7 @@ func TestReverseProxy(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "external",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -99,7 +99,7 @@ func TestReverseProxy(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
 			},
@@ -136,7 +136,7 @@ func TestReverseProxy(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -151,7 +151,7 @@ func TestReverseProxy(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
@@ -251,7 +251,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				Tag: "external",
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -282,7 +282,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
 			},
@@ -333,7 +333,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 				},
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -348,7 +348,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),

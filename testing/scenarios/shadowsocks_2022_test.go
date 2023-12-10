@@ -58,7 +58,7 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -71,7 +71,7 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -86,7 +86,7 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
@@ -99,7 +99,7 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&shadowsocks_2022.ClientConfig{
 					Address: net.NewIPOrDomain(net.LocalHostIP),
@@ -141,7 +141,7 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -154,7 +154,7 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -169,7 +169,7 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(udpClientPort)}},
@@ -182,7 +182,7 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&shadowsocks_2022.ClientConfig{
 					Address: net.NewIPOrDomain(net.LocalHostIP),

@@ -35,8 +35,8 @@ func init() {
 
 // Server is an inbound connection handler that handles messages in trojan protocol.
 type Server struct {
-	policyManager policy.Manager
-	validator     *Validator
+	PolicyManager policy.Manager
+	Validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
 }
@@ -57,8 +57,8 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 
 	v := core.MustFromContext(ctx)
 	server := &Server{
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:     validator,
+		PolicyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		Validator:     validator,
 		cone:          ctx.Value("cone").(bool),
 	}
 
@@ -117,12 +117,12 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 
 // AddUser implements proxy.UserManager.AddUser().
 func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
-	return s.validator.Add(u)
+	return s.Validator.Add(u)
 }
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
-	return s.validator.Del(e)
+	return s.Validator.Del(e)
 }
 
 // Network implements proxy.Inbound.Network().
@@ -140,7 +140,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		iConn = statConn.Connection
 	}
 
-	sessionPolicy := s.policyManager.ForLevel(0)
+	sessionPolicy := s.PolicyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
 	}
@@ -176,7 +176,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 		shouldFallback = true
 	} else {
-		user = s.validator.Get(hexString(first.BytesTo(56)))
+		user = s.Validator.Get(hexString(first.BytesTo(56)))
 		if user == nil {
 			// invalid user, let's fallback
 			err = newError("not a valid user")
@@ -217,7 +217,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.Name = "trojan"
 	inbound.SetCanSpliceCopy(3)
 	inbound.User = user
-	sessionPolicy = s.policyManager.ForLevel(user.Level)
+	sessionPolicy = s.PolicyManager.ForLevel(user.Level)
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)

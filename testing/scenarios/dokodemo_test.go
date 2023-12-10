@@ -40,7 +40,7 @@ func TestDokodemoTCP(t *testing.T) {
 				ErrorLogType:  log.LogType_Console,
 			}),
 		},
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -57,7 +57,7 @@ func TestDokodemoTCP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -78,7 +78,7 @@ func TestDokodemoTCP(t *testing.T) {
 					ErrorLogType:  log.LogType_Console,
 				}),
 			},
-			Inbound: []*core.InboundHandlerConfig{
+			Inbound: []*proxyman.InboundHandlerConfig{
 				{
 					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 						PortList: &net.PortList{Range: []*net.PortRange{{From: clientPort, To: clientPort + clientPortRange}}},
@@ -93,7 +93,7 @@ func TestDokodemoTCP(t *testing.T) {
 					}),
 				},
 			},
-			Outbound: []*core.OutboundHandlerConfig{
+			Outbound: []*proxyman.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&outbound.Config{
 						Receiver: []*protocol.ServerEndpoint{
@@ -144,7 +144,7 @@ func TestDokodemoUDP(t *testing.T) {
 	userID := protocol.NewID(uuid.New())
 	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*core.InboundHandlerConfig{
+		Inbound: []*proxyman.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -161,7 +161,7 @@ func TestDokodemoUDP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*core.OutboundHandlerConfig{
+		Outbound: []*proxyman.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -176,7 +176,7 @@ func TestDokodemoUDP(t *testing.T) {
 	clientPort := uint32(udp.PickPort())
 	for {
 		clientConfig := &core.Config{
-			Inbound: []*core.InboundHandlerConfig{
+			Inbound: []*proxyman.InboundHandlerConfig{
 				{
 					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 						PortList: &net.PortList{Range: []*net.PortRange{{From: clientPort, To: clientPort + clientPortRange}}},
@@ -191,7 +191,7 @@ func TestDokodemoUDP(t *testing.T) {
 					}),
 				},
 			},
-			Outbound: []*core.OutboundHandlerConfig{
+			Outbound: []*proxyman.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&outbound.Config{
 						Receiver: []*protocol.ServerEndpoint{

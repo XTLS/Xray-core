@@ -10,7 +10,6 @@ import (
 	"github.com/4nd3r5on/Xray-core/app/proxyman"
 	"github.com/4nd3r5on/Xray-core/common"
 	"github.com/4nd3r5on/Xray-core/common/errors"
-	"github.com/4nd3r5on/Xray-core/core"
 	"github.com/4nd3r5on/Xray-core/features/outbound"
 )
 
@@ -167,7 +166,7 @@ func init() {
 	common.Must(common.RegisterConfig((*proxyman.OutboundConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*proxyman.OutboundConfig))
 	}))
-	common.Must(common.RegisterConfig((*core.OutboundHandlerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		return NewHandler(ctx, config.(*core.OutboundHandlerConfig))
+	common.Must(common.RegisterConfig((*proxyman.OutboundHandlerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		return NewHandler(ctx, config.(*proxyman.OutboundHandlerConfig))
 	}))
 }

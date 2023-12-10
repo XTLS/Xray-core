@@ -77,13 +77,34 @@ message ReceiverConfig {
   SniffingConfig sniffing_settings = 8;
 }
 
+message OutboundConfig {}
+
+// InboundHandlerConfig is the configuration for inbound handler.
 message InboundHandlerConfig {
+  // Tag of the inbound handler. The tag must be unique among all inbound
+  // handlers
   string tag = 1;
+  // Settings for how this inbound proxy is handled.
   xray.common.serial.TypedMessage receiver_settings = 2;
+  // Settings for inbound proxy. Must be one of the inbound proxies.
   xray.common.serial.TypedMessage proxy_settings = 3;
+  // Manager for callbacks, used for statistics mostly.
+  xray.common.serial.TypedMessage callback_manager = 4;
 }
 
-message OutboundConfig {}
+// OutboundHandlerConfig is the configuration for outbound handler.
+message OutboundHandlerConfig {
+  // Tag of this outbound handler.
+  string tag = 1;
+  // Settings for how to dial connection for this outbound handler.
+  xray.common.serial.TypedMessage sender_settings = 2;
+  // Settings for this outbound proxy. Must be one of the outbound proxies.
+  xray.common.serial.TypedMessage proxy_settings = 3;
+  // If not zero, this outbound will be expired in seconds. Not used for now.
+  int64 expire = 4;
+  // Comment of this outbound handler. Not used for now.
+  string comment = 5;
+}
 
 message SenderConfig {
   // Send traffic through the given IP. Only IP is allowed.

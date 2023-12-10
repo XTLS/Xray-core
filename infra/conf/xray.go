@@ -176,7 +176,7 @@ type InboundDetourConfig struct {
 }
 
 // Build implements Buildable.
-func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
+func (c *InboundDetourConfig) Build() (*proxyman.InboundHandlerConfig, error) {
 	receiverSettings := &proxyman.ReceiverConfig{}
 
 	if c.ListenOn == nil {
@@ -269,7 +269,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		return nil, err
 	}
 
-	return &core.InboundHandlerConfig{
+	return &proxyman.InboundHandlerConfig{
 		Tag:              c.Tag,
 		ReceiverSettings: serial.ToTypedMessage(receiverSettings),
 		ProxySettings:    serial.ToTypedMessage(ts),
@@ -297,7 +297,7 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 }
 
 // Build implements Buildable.
-func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
+func (c *OutboundDetourConfig) Build() (*proxyman.OutboundHandlerConfig, error) {
 	senderSettings := &proxyman.SenderConfig{}
 	if err := c.checkChainProxyConfig(); err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, err
 	}
 
-	return &core.OutboundHandlerConfig{
+	return &proxyman.OutboundHandlerConfig{
 		SenderSettings: serial.ToTypedMessage(senderSettings),
 		Tag:            c.Tag,
 		ProxySettings:  serial.ToTypedMessage(ts),

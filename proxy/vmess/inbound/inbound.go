@@ -100,7 +100,7 @@ type Handler struct {
 	PolicyManager         policy.Manager
 	InboundHandlerManager feature_inbound.Manager
 	Clients               *vmess.TimedUserValidator
-	usersByEmail          *userByEmail
+	UsersByEmail          *userByEmail
 	detours               *DetourConfig
 	SessionHistory        *encoding.SessionHistory
 }
@@ -113,7 +113,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		InboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		Clients:               vmess.NewTimedUserValidator(),
 		detours:               config.Detour,
-		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
+		UsersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		SessionHistory:        encoding.NewSessionHistory(),
 	}
 
@@ -135,7 +135,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Close() error {
 	return errors.Combine(
 		h.SessionHistory.Close(),
-		common.Close(h.usersByEmail))
+		common.Close(h.UsersByEmail))
 }
 
 // Network implements proxy.Inbound.Network().
@@ -152,7 +152,7 @@ func (h *Handler) GetInboundHandlerManager() {
 }
 
 func (h *Handler) GetUser(email string) *protocol.MemoryUser {
-	user, existing := h.usersByEmail.Get(email)
+	user, existing := h.UsersByEmail.Get(email)
 	if !existing {
 		h.Clients.Add(user)
 	}
@@ -160,7 +160,7 @@ func (h *Handler) GetUser(email string) *protocol.MemoryUser {
 }
 
 func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
-	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
+	if len(user.Email) > 0 && !h.UsersByEmail.Add(user) {
 		return newError("User ", user.Email, " already exists.")
 	}
 	return h.Clients.Add(user)
@@ -170,7 +170,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
 		return newError("Email must not be empty.")
 	}
-	if !h.usersByEmail.Remove(email) {
+	if !h.UsersByEmail.Remove(email) {
 		return newError("User ", email, " not found.")
 	}
 	h.Clients.Remove(email)

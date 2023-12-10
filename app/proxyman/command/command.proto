@@ -8,7 +8,7 @@ option java_multiple_files = true;
 
 import "common/protocol/user.proto";
 import "common/serial/typed_message.proto";
-import "core/config.proto";
+import "app/proxyman/config.proto";
 
 message AddUserOperation {
   xray.common.protocol.User user = 1;
@@ -19,7 +19,7 @@ message RemoveUserOperation {
 }
 
 message AddInboundRequest {
-  core.InboundHandlerConfig inbound = 1;
+  xray.app.proxyman.InboundHandlerConfig inbound = 1;
 }
 
 message AddInboundResponse {}
@@ -38,7 +38,7 @@ message AlterInboundRequest {
 message AlterInboundResponse {}
 
 message AddOutboundRequest {
-  core.OutboundHandlerConfig outbound = 1;
+  xray.app.proxyman.OutboundHandlerConfig outbound = 1;
 }
 
 message AddOutboundResponse {}

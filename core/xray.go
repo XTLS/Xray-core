@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/4nd3r5on/Xray-core/app/proxyman"
 	"github.com/4nd3r5on/Xray-core/common"
 	"github.com/4nd3r5on/Xray-core/common/platform"
 	"github.com/4nd3r5on/Xray-core/common/serial"
@@ -96,7 +97,7 @@ type Instance struct {
 	ctx context.Context
 }
 
-func AddInboundHandler(server *Instance, config *InboundHandlerConfig) error {
+func AddInboundHandler(server *Instance, config *proxyman.InboundHandlerConfig) error {
 	inboundManager := server.GetFeature(inbound.ManagerType()).(inbound.Manager)
 	rawHandler, err := CreateObject(server, config)
 	if err != nil {
@@ -112,7 +113,7 @@ func AddInboundHandler(server *Instance, config *InboundHandlerConfig) error {
 	return nil
 }
 
-func addInboundHandlers(server *Instance, configs []*InboundHandlerConfig) error {
+func addInboundHandlers(server *Instance, configs []*proxyman.InboundHandlerConfig) error {
 	for _, inboundConfig := range configs {
 		if err := AddInboundHandler(server, inboundConfig); err != nil {
 			return err
@@ -122,7 +123,7 @@ func addInboundHandlers(server *Instance, configs []*InboundHandlerConfig) error
 	return nil
 }
 
-func AddOutboundHandler(server *Instance, config *OutboundHandlerConfig) error {
+func AddOutboundHandler(server *Instance, config *proxyman.OutboundHandlerConfig) error {
 	outboundManager := server.GetFeature(outbound.ManagerType()).(outbound.Manager)
 	rawHandler, err := CreateObject(server, config)
 	if err != nil {
@@ -138,7 +139,7 @@ func AddOutboundHandler(server *Instance, config *OutboundHandlerConfig) error {
 	return nil
 }
 
-func addOutboundHandlers(server *Instance, configs []*OutboundHandlerConfig) error {
+func addOutboundHandlers(server *Instance, configs []*proxyman.OutboundHandlerConfig) error {
 	for _, outboundConfig := range configs {
 		if err := AddOutboundHandler(server, outboundConfig); err != nil {
 			return err
@@ -181,15 +182,8 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
-	server.ctx = context.WithValue(server.ctx, "cone", 
+	server.ctx = context.WithValue(server.ctx, "cone",
 		platform.NewEnvFlag(platform.UseCone).GetValue(func() string { return "" }) != "true")
-
-	if config.Transport != nil {
-		features.PrintDeprecatedFeatureWarning("global transport settings")
-	}
-	if err := config.Transport.Apply(); err != nil {
-		return true, err
-	}
 
 	for _, appSettings := range config.App {
 		settings, err := appSettings.GetInstance()

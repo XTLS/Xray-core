@@ -10,7 +10,6 @@ import (
 	"github.com/4nd3r5on/Xray-core/common"
 	"github.com/4nd3r5on/Xray-core/common/serial"
 	"github.com/4nd3r5on/Xray-core/common/session"
-	"github.com/4nd3r5on/Xray-core/core"
 	"github.com/4nd3r5on/Xray-core/features/inbound"
 )
 
@@ -137,7 +136,7 @@ func (m *Manager) Close() error {
 }
 
 // NewHandler creates a new inbound.Handler based on the given config.
-func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound.Handler, error) {
+func NewHandler(ctx context.Context, config *proxyman.InboundHandlerConfig) (inbound.Handler, error) {
 	rawReceiverSettings, err := config.ReceiverSettings.GetInstance()
 	if err != nil {
 		return nil, err
@@ -175,7 +174,7 @@ func init() {
 	common.Must(common.RegisterConfig((*proxyman.InboundConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*proxyman.InboundConfig))
 	}))
-	common.Must(common.RegisterConfig((*core.InboundHandlerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		return NewHandler(ctx, config.(*core.InboundHandlerConfig))
+	common.Must(common.RegisterConfig((*proxyman.InboundHandlerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		return NewHandler(ctx, config.(*proxyman.InboundHandlerConfig))
 	}))
 }

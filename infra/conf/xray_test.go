@@ -169,7 +169,7 @@ func TestXrayConfig(t *testing.T) {
 						},
 					}),
 				},
-				Outbound: []*core.OutboundHandlerConfig{
+				Outbound: []*proxyman.OutboundHandlerConfig{
 					{
 						SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 							StreamSettings: &internet.StreamConfig{
@@ -226,7 +226,7 @@ func TestXrayConfig(t *testing.T) {
 						}),
 					},
 				},
-				Inbound: []*core.InboundHandlerConfig{
+				Inbound: []*proxyman.InboundHandlerConfig{
 					{
 						ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 							PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(443)}},
