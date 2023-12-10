@@ -17,6 +17,6 @@ Original XRay-core code has a lot of private values in the structures. I want to
 Will start to work on it when callbacks are fully implemented and tested
 
 ### Remove protobuf configuration and just use structures for configurations
-**Status**: waiting for responses in [discussion XRay]() and [discussion V2Ray]()
+**Status**: waiting for responses in [discussion XRay](https://github.com/XTLS/Xray-core/discussions/2789) and [discussion V2Ray](https://github.com/v2fly/v2ray-core/discussions/2802)
 
 All in all I don't see any reason to use protobuf for configuration. IMO it overcomplicate things and overall don't make much good impact.
