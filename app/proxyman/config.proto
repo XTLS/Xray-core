@@ -10,6 +10,7 @@ import "common/net/address.proto";
 import "common/net/port.proto";
 import "transport/internet/config.proto";
 import "common/serial/typed_message.proto";
+import "google/protobuf/any.proto";
 
 message InboundConfig {}
 
@@ -89,7 +90,7 @@ message InboundHandlerConfig {
   // Settings for inbound proxy. Must be one of the inbound proxies.
   xray.common.serial.TypedMessage proxy_settings = 3;
   // Manager for callbacks, used for statistics mostly.
-  xray.common.serial.TypedMessage callback_manager = 4;
+  google.protobuf.Any callback_manager = 4;
 }
 
 // OutboundHandlerConfig is the configuration for outbound handler.

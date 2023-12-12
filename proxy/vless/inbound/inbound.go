@@ -30,7 +30,7 @@ import (
 	"github.com/4nd3r5on/Xray-core/features/routing"
 	"github.com/4nd3r5on/Xray-core/proxy"
 	"github.com/4nd3r5on/Xray-core/proxy/vless"
-	xray_vless_callback "github.com/4nd3r5on/Xray-core/proxy/vless/callback"
+	xray_vless_callbacks "github.com/4nd3r5on/Xray-core/proxy/vless/callbacks"
 	"github.com/4nd3r5on/Xray-core/proxy/vless/encoding"
 	"github.com/4nd3r5on/Xray-core/transport/internet/reality"
 	"github.com/4nd3r5on/Xray-core/transport/internet/stat"
@@ -55,7 +55,7 @@ type Handler struct {
 	InboundHandlerManager feature_inbound.Manager
 	PolicyManager         policy.Manager
 	Validator             *vless.Validator
-	Callbacks             xray_vless_callback.CallbackManager
+	CallbackManager       *xray_vless_callbacks.CallbackManager
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps            map[string]*regexp.Regexp       // or nil
@@ -64,9 +64,11 @@ type Handler struct {
 // New creates a new VLess inbound handler.
 func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	v := core.MustFromContext(ctx)
+	cm := xray_vless_callbacks.NewCallbackManager()
 	handler := &Handler{
 		InboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		PolicyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
+		CallbackManager:       cm,
 		Validator:             new(vless.Validator),
 		dns:                   dc,
 	}
@@ -446,6 +448,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.User = request.User
 
 	account := request.User.Account.(*vless.MemoryAccount)
+
+	if callbackID, err := h.CallbackManager.ExecOnProcess(account); err != nil {
+		return newError("callback failed. Callback ID: ", callbackID).Base(err).AtWarning()
+	}
 
 	responseAddons := &encoding.Addons{
 		// Flow: requestAddons.Flow,
