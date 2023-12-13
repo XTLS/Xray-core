@@ -25,6 +25,7 @@ var (
 		"vless":         func() interface{} { return new(VLessInboundConfig) },
 		"vmess":         func() interface{} { return new(VMessInboundConfig) },
 		"trojan":        func() interface{} { return new(TrojanServerConfig) },
+		"wireguard":     func() interface{} { return &WireGuardConfig{IsClient: false} },
 	}, "protocol", "settings")
 
 	outboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -38,7 +39,7 @@ var (
 		"vmess":       func() interface{} { return new(VMessOutboundConfig) },
 		"trojan":      func() interface{} { return new(TrojanClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
-		"wireguard":   func() interface{} { return new(WireGuardConfig) },
+		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
 	}, "protocol", "settings")
 
 	ctllog = log.New(os.Stderr, "xctl> ", 0)
@@ -490,38 +491,40 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	// deprecated attrs
 
-	// update the Inbound in slice if the only one in overide config has same tag
+	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
-		if len(c.InboundConfigs) > 0 && len(o.InboundConfigs) == 1 {
-			if idx := c.findInboundTag(o.InboundConfigs[0].Tag); idx > -1 {
-				c.InboundConfigs[idx] = o.InboundConfigs[0]
-				ctllog.Println("[", fn, "] updated inbound with tag: ", o.InboundConfigs[0].Tag)
+		for i := range o.InboundConfigs {
+			if idx := c.findInboundTag(o.InboundConfigs[i].Tag); idx > -1 {
+				c.InboundConfigs[idx] = o.InboundConfigs[i]
+				newError("[", fn, "] updated inbound with tag: ", o.InboundConfigs[i].Tag).AtInfo().WriteToLog()
+
 			} else {
-				c.InboundConfigs = append(c.InboundConfigs, o.InboundConfigs[0])
-				ctllog.Println("[", fn, "] appended inbound with tag: ", o.InboundConfigs[0].Tag)
+				c.InboundConfigs = append(c.InboundConfigs, o.InboundConfigs[i])
+				newError("[", fn, "] appended inbound with tag: ", o.InboundConfigs[i].Tag).AtInfo().WriteToLog()
 			}
-		} else {
-			c.InboundConfigs = o.InboundConfigs
+
 		}
 	}
 
-	// update the Outbound in slice if the only one in overide config has same tag
+	// update the Outbound in slice if the only one in override config has same tag
 	if len(o.OutboundConfigs) > 0 {
-		if len(c.OutboundConfigs) > 0 && len(o.OutboundConfigs) == 1 {
-			if idx := c.findOutboundTag(o.OutboundConfigs[0].Tag); idx > -1 {
-				c.OutboundConfigs[idx] = o.OutboundConfigs[0]
-				ctllog.Println("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[0].Tag)
+		outboundPrepends := []OutboundDetourConfig{}
+		for i := range o.OutboundConfigs {
+			if idx := c.findOutboundTag(o.OutboundConfigs[i].Tag); idx > -1 {
+				c.OutboundConfigs[idx] = o.OutboundConfigs[i]
+				newError("[", fn, "] updated outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 			} else {
 				if strings.Contains(strings.ToLower(fn), "tail") {
-					c.OutboundConfigs = append(c.OutboundConfigs, o.OutboundConfigs[0])
-					ctllog.Println("[", fn, "] appended outbound with tag: ", o.OutboundConfigs[0].Tag)
+					c.OutboundConfigs = append(c.OutboundConfigs, o.OutboundConfigs[i])
+					newError("[", fn, "] appended outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				} else {
-					c.OutboundConfigs = append(o.OutboundConfigs, c.OutboundConfigs...)
-					ctllog.Println("[", fn, "] prepended outbound with tag: ", o.OutboundConfigs[0].Tag)
+					outboundPrepends = append(outboundPrepends, o.OutboundConfigs[i])
+					newError("[", fn, "] prepend outbound with tag: ", o.OutboundConfigs[i].Tag).AtInfo().WriteToLog()
 				}
 			}
-		} else {
-			c.OutboundConfigs = o.OutboundConfigs
+		}
+		if !strings.Contains(strings.ToLower(fn), "tail") && len(outboundPrepends) > 0 {
+			c.OutboundConfigs = append(outboundPrepends, c.OutboundConfigs...)
 		}
 	}
 }
