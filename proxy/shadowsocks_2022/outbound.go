@@ -102,7 +102,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			if err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 				return newError("read payload").Base(err)
 			}
-			_payload := B.StackNew()
+			_payload := B.New()
 			payload := C.Dup(_payload)
 			defer payload.Release()
 			for {

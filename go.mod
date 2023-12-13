@@ -12,7 +12,7 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/quic-go/quic-go v0.40.0
 	github.com/refraction-networking/utls v1.5.4
-	github.com/sagernet/sing v0.2.18
+	github.com/sagernet/sing v0.2.19
 	github.com/sagernet/sing-shadowsocks v0.2.6
 	github.com/seiflotfy/cuckoofilter v0.0.0-20220411075957-e3b120b3f5fb
 	github.com/stretchr/testify v1.8.4
@@ -25,7 +25,7 @@ require (
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.15.0
 	golang.zx2c4.com/wireguard v0.0.0-20231022001213-2e0774f246fb
-	google.golang.org/grpc v1.59.0
+	google.golang.org/grpc v1.60.0
 	google.golang.org/protobuf v1.31.0
 	gvisor.dev/gvisor v0.0.0-20231208071044-f4b851067a3a
 	h12.io/socks v1.0.3
