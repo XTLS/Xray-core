@@ -32,17 +32,16 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			return newError("failed to find the interface").Base(err)
 		}
 		isV4 := (network == "tcp4")
-		handle := syscall.Handle(fd)
 		if isV4 {
 			var bytes [4]byte
 			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))
 			idx := *(*uint32)(unsafe.Pointer(&bytes[0]))
-			if err := syscall.SetsockoptInt(handle, syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
-				return newError("failed to set Interface").Base(err)
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
+				return newError("failed to set IP_UNICAST_IF").Base(err)
 			}
 		} else {
-			if err := syscall.SetsockoptInt(handle, syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
-				return newError("failed to set Interface").Base(err)
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
+				return newError("failed to set IPV6_UNICAST_IF").Base(err)
 			}
 		}
 	}
