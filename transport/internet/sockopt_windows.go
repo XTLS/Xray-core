@@ -1,11 +1,16 @@
 package internet
 
 import (
+	"encoding/binary"
+	"net"
 	"syscall"
+	"unsafe"
 )
 
 const (
-	TCP_FASTOPEN = 15
+	TCP_FASTOPEN    = 15
+	IP_UNICAST_IF   = 31
+	IPV6_UNICAST_IF = 31
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
@@ -21,6 +26,26 @@ func setTFO(fd syscall.Handle, tfo int) error {
 }
 
 func applyOutboundSocketOptions(network string, address string, fd uintptr, config *SocketConfig) error {
+	if config.Interface != "" {
+		inf, err := net.InterfaceByName(config.Interface)
+		if err != nil {
+			return newError("failed to find the interface").Base(err)
+		}
+		isV4 := (network == "tcp4")
+		if isV4 {
+			var bytes [4]byte
+			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))
+			idx := *(*uint32)(unsafe.Pointer(&bytes[0]))
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
+				return newError("failed to set IP_UNICAST_IF").Base(err)
+			}
+		} else {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
+				return newError("failed to set IPV6_UNICAST_IF").Base(err)
+			}
+		}
+	}
+
 	if isTCPSocket(network) {
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
