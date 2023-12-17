@@ -115,7 +115,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 func (r *Router) ListBalancerSelectors(balancerTag string) (tags []string, err error) {
 	balancer, ok := r.balancers[balancerTag]
 	if !ok {
-		err = newError("balancer not found", balancerTag)
+		err = newError("balancer ", balancerTag, " not found")
 		return
 	}
 	tags = *balancer.selectors.Load()
@@ -125,7 +125,7 @@ func (r *Router) ListBalancerSelectors(balancerTag string) (tags []string, err e
 func (r *Router) SetBalancerSelectors(balancerTag string, selectors []string) error {
 	balancer, ok := r.balancers[balancerTag]
 	if !ok {
-		return newError("balancer not found", balancerTag)
+		return newError("balancer ", balancerTag, " not found")
 	}
 	balancer.selectors.Store(&selectors)
 	return nil
