@@ -60,11 +60,11 @@ func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
 }
 
 type SniffingConfig struct {
-	Enabled         bool        `json:"enabled"`
-	DestOverride    *StringList `json:"destOverride"`
-	DomainsExcluded *StringList `json:"domainsExcluded"`
-	MetadataOnly    bool        `json:"metadataOnly"`
-	RouteOnly       bool        `json:"routeOnly"`
+	Enabled         bool        `json:"enabled,omitempty"`
+	DestOverride    *StringList `json:"destOverride,omitempty"`
+	DomainsExcluded *StringList `json:"domainsExcluded,omitempty"`
+	MetadataOnly    bool        `json:"metadataOnly,omitempty"`
+	RouteOnly       bool        `json:"routeOnly,omitempty"`
 }
 
 // Build implements Buildable.
@@ -106,10 +106,10 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 }
 
 type MuxConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Concurrency     int16  `json:"concurrency"`
-	XudpConcurrency int16  `json:"xudpConcurrency"`
-	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
+	Enabled         bool   `json:"enabled,omitempty"`
+	Concurrency     int16  `json:"concurrency,omitempty"`
+	XudpConcurrency int16  `json:"xudpConcurrency,omitempty"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443,omitempty"`
 }
 
 // Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
@@ -130,9 +130,9 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 }
 
 type InboundDetourAllocationConfig struct {
-	Strategy    string  `json:"strategy"`
-	Concurrency *uint32 `json:"concurrency"`
-	RefreshMin  *uint32 `json:"refresh"`
+	Strategy    string  `json:"strategy,omitempty"`
+	Concurrency *uint32 `json:"concurrency,omitempty"`
+	RefreshMin  *uint32 `json:"refresh,omitempty"`
 }
 
 // Build implements Buildable.
@@ -164,15 +164,15 @@ func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, e
 }
 
 type InboundDetourConfig struct {
-	Protocol       string                         `json:"protocol"`
-	PortList       *PortList                      `json:"port"`
-	ListenOn       *Address                       `json:"listen"`
-	Settings       *json.RawMessage               `json:"settings"`
-	Tag            string                         `json:"tag"`
-	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
-	StreamSetting  *StreamConfig                  `json:"streamSettings"`
-	DomainOverride *StringList                    `json:"domainOverride"`
-	SniffingConfig *SniffingConfig                `json:"sniffing"`
+	Protocol       string                         `json:"protocol,omitempty"`
+	PortList       *PortList                      `json:"port,omitempty"`
+	ListenOn       *Address                       `json:"listen,omitempty"`
+	Settings       *json.RawMessage               `json:"settings,omitempty"`
+	Tag            string                         `json:"tag,omitempty"`
+	Allocation     *InboundDetourAllocationConfig `json:"allocate,omitempty"`
+	StreamSetting  *StreamConfig                  `json:"streamSettings,omitempty"`
+	DomainOverride *StringList                    `json:"domainOverride,omitempty"`
+	SniffingConfig *SniffingConfig                `json:"sniffing,omitempty"`
 }
 
 // Build implements Buildable.
@@ -277,13 +277,13 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
-	Protocol      string           `json:"protocol"`
-	SendThrough   *Address         `json:"sendThrough"`
-	Tag           string           `json:"tag"`
-	Settings      *json.RawMessage `json:"settings"`
-	StreamSetting *StreamConfig    `json:"streamSettings"`
-	ProxySettings *ProxyConfig     `json:"proxySettings"`
-	MuxSettings   *MuxConfig       `json:"mux"`
+	Protocol      string           `json:"protocol,omitempty"`
+	SendThrough   *Address         `json:"sendThrough,omitempty"`
+	Tag           string           `json:"tag,omitempty"`
+	Settings      *json.RawMessage `json:"settings,omitempty"`
+	StreamSetting *StreamConfig    `json:"streamSettings,omitempty"`
+	ProxySettings *ProxyConfig     `json:"proxySettings,omitempty"`
+	MuxSettings   *MuxConfig       `json:"mux,omitempty"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -378,37 +378,37 @@ type Config struct {
 	// Port of this Point server.
 	// Deprecated: Port exists for historical compatibility
 	// and should not be used.
-	Port uint16 `json:"port"`
+	Port uint16 `json:"port,omitempty"`
 
 	// Deprecated: InboundConfig exists for historical compatibility
 	// and should not be used.
-	InboundConfig *InboundDetourConfig `json:"inbound"`
+	InboundConfig *InboundDetourConfig `json:"inbound,omitempty"`
 
 	// Deprecated: OutboundConfig exists for historical compatibility
 	// and should not be used.
-	OutboundConfig *OutboundDetourConfig `json:"outbound"`
+	OutboundConfig *OutboundDetourConfig `json:"outbound,omitempty"`
 
 	// Deprecated: InboundDetours exists for historical compatibility
 	// and should not be used.
-	InboundDetours []InboundDetourConfig `json:"inboundDetour"`
+	InboundDetours []InboundDetourConfig `json:"inboundDetour,omitempty"`
 
 	// Deprecated: OutboundDetours exists for historical compatibility
 	// and should not be used.
-	OutboundDetours []OutboundDetourConfig `json:"outboundDetour"`
+	OutboundDetours []OutboundDetourConfig `json:"outboundDetour,omitempty"`
 
-	LogConfig       *LogConfig             `json:"log"`
-	RouterConfig    *RouterConfig          `json:"routing"`
-	DNSConfig       *DNSConfig             `json:"dns"`
-	InboundConfigs  []InboundDetourConfig  `json:"inbounds"`
-	OutboundConfigs []OutboundDetourConfig `json:"outbounds"`
-	Transport       *TransportConfig       `json:"transport"`
-	Policy          *PolicyConfig          `json:"policy"`
-	API             *APIConfig             `json:"api"`
-	Metrics         *MetricsConfig         `json:"metrics"`
-	Stats           *StatsConfig           `json:"stats"`
-	Reverse         *ReverseConfig         `json:"reverse"`
-	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
-	Observatory     *ObservatoryConfig     `json:"observatory"`
+	LogConfig       *LogConfig             `json:"log,omitempty"`
+	RouterConfig    *RouterConfig          `json:"routing,omitempty"`
+	DNSConfig       *DNSConfig             `json:"dns,omitempty"`
+	InboundConfigs  []InboundDetourConfig  `json:"inbounds,omitempty"`
+	OutboundConfigs []OutboundDetourConfig `json:"outbounds,omitempty"`
+	Transport       *TransportConfig       `json:"transport,omitempty"`
+	Policy          *PolicyConfig          `json:"policy,omitempty"`
+	API             *APIConfig             `json:"api,omitempty"`
+	Metrics         *MetricsConfig         `json:"metrics,omitempty"`
+	Stats           *StatsConfig           `json:"stats,omitempty"`
+	Reverse         *ReverseConfig         `json:"reverse,omitempty"`
+	FakeDNS         *FakeDNSConfig         `json:"fakeDns,omitempty"`
+	Observatory     *ObservatoryConfig     `json:"observatory,omitempty"`
 }
 
 func (c *Config) findInboundTag(tag string) int {

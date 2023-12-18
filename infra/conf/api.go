@@ -12,8 +12,8 @@ import (
 )
 
 type APIConfig struct {
-	Tag      string   `json:"tag"`
-	Services []string `json:"services"`
+	Tag      string   `json:"tag,omitempty"`
+	Services []string `json:"services,omitempty"`
 }
 
 func (c *APIConfig) Build() (*commander.Config, error) {

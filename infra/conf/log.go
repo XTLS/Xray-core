@@ -16,10 +16,10 @@ func DefaultLogConfig() *log.Config {
 }
 
 type LogConfig struct {
-	AccessLog string `json:"access"`
-	ErrorLog  string `json:"error"`
-	LogLevel  string `json:"loglevel"`
-	DNSLog    bool   `json:"dnsLog"`
+	AccessLog string `json:"access,omitempty"`
+	ErrorLog  string `json:"error,omitempty"`
+	LogLevel  string `json:"loglevel,omitempty"`
+	DNSLog    bool   `json:"dnsLog,omitempty"`
 }
 
 func (v *LogConfig) Build() *log.Config {

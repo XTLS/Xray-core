@@ -15,17 +15,17 @@ import (
 
 // TrojanServerTarget is configuration of a single trojan server
 type TrojanServerTarget struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
-	Level    byte     `json:"level"`
-	Flow     string   `json:"flow"`
+	Address  *Address `json:"address,omitempty"`
+	Port     uint16   `json:"port,omitempty"`
+	Password string   `json:"password,omitempty"`
+	Email    string   `json:"email,omitempty"`
+	Level    byte     `json:"level,omitempty"`
+	Flow     string   `json:"flow,omitempty"`
 }
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
-	Servers []*TrojanServerTarget `json:"servers"`
+	Servers []*TrojanServerTarget `json:"servers,omitempty"`
 }
 
 // Build implements Buildable
@@ -72,27 +72,27 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 
 // TrojanInboundFallback is fallback configuration
 type TrojanInboundFallback struct {
-	Name string          `json:"name"`
-	Alpn string          `json:"alpn"`
-	Path string          `json:"path"`
-	Type string          `json:"type"`
-	Dest json.RawMessage `json:"dest"`
-	Xver uint64          `json:"xver"`
+	Name string          `json:"name,omitempty"`
+	Alpn string          `json:"alpn,omitempty"`
+	Path string          `json:"path,omitempty"`
+	Type string          `json:"type,omitempty"`
+	Dest json.RawMessage `json:"dest,omitempty"`
+	Xver uint64          `json:"xver,omitempty"`
 }
 
 // TrojanUserConfig is user configuration
 type TrojanUserConfig struct {
-	Password string `json:"password"`
-	Level    byte   `json:"level"`
-	Email    string `json:"email"`
-	Flow     string `json:"flow"`
+	Password string `json:"password,omitempty"`
+	Level    byte   `json:"level,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Flow     string `json:"flow,omitempty"`
 }
 
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
-	Clients   []*TrojanUserConfig      `json:"clients"`
-	Fallback  *TrojanInboundFallback   `json:"fallback"`
-	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
+	Clients   []*TrojanUserConfig      `json:"clients,omitempty"`
+	Fallback  *TrojanInboundFallback   `json:"fallback,omitempty"`
+	Fallbacks []*TrojanInboundFallback `json:"fallbacks,omitempty"`
 }
 
 // Build implements Buildable

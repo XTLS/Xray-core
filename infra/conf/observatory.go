@@ -7,10 +7,10 @@ import (
 )
 
 type ObservatoryConfig struct {
-	SubjectSelector   []string          `json:"subjectSelector"`
-	ProbeURL          string            `json:"probeURL"`
-	ProbeInterval     duration.Duration `json:"probeInterval"`
-	EnableConcurrency bool              `json:"enableConcurrency"`
+	SubjectSelector   []string          `json:"subjectSelector,omitempty"`
+	ProbeURL          string            `json:"probeURL,omitempty"`
+	ProbeInterval     duration.Duration `json:"probeInterval,omitempty"`
+	EnableConcurrency bool              `json:"enableConcurrency,omitempty"`
 }
 
 func (o *ObservatoryConfig) Build() (proto.Message, error) {

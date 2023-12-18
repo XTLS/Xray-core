@@ -6,8 +6,8 @@ import (
 )
 
 type BridgeConfig struct {
-	Tag    string `json:"tag"`
-	Domain string `json:"domain"`
+	Tag    string `json:"tag,omitempty"`
+	Domain string `json:"domain,omitempty"`
 }
 
 func (c *BridgeConfig) Build() (*reverse.BridgeConfig, error) {
@@ -18,8 +18,8 @@ func (c *BridgeConfig) Build() (*reverse.BridgeConfig, error) {
 }
 
 type PortalConfig struct {
-	Tag    string `json:"tag"`
-	Domain string `json:"domain"`
+	Tag    string `json:"tag,omitempty"`
+	Domain string `json:"domain,omitempty"`
 }
 
 func (c *PortalConfig) Build() (*reverse.PortalConfig, error) {
@@ -30,8 +30,8 @@ func (c *PortalConfig) Build() (*reverse.PortalConfig, error) {
 }
 
 type ReverseConfig struct {
-	Bridges []BridgeConfig `json:"bridges"`
-	Portals []PortalConfig `json:"portals"`
+	Bridges []BridgeConfig `json:"bridges,omitempty"`
+	Portals []PortalConfig `json:"portals,omitempty"`
 }
 
 func (c *ReverseConfig) Build() (proto.Message, error) {

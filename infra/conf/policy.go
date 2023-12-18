@@ -5,13 +5,13 @@ import (
 )
 
 type Policy struct {
-	Handshake         *uint32 `json:"handshake"`
-	ConnectionIdle    *uint32 `json:"connIdle"`
-	UplinkOnly        *uint32 `json:"uplinkOnly"`
-	DownlinkOnly      *uint32 `json:"downlinkOnly"`
-	StatsUserUplink   bool    `json:"statsUserUplink"`
-	StatsUserDownlink bool    `json:"statsUserDownlink"`
-	BufferSize        *int32  `json:"bufferSize"`
+	Handshake         *uint32 `json:"handshake,omitempty"`
+	ConnectionIdle    *uint32 `json:"connIdle,omitempty"`
+	UplinkOnly        *uint32 `json:"uplinkOnly,omitempty"`
+	DownlinkOnly      *uint32 `json:"downlinkOnly,omitempty"`
+	StatsUserUplink   bool    `json:"statsUserUplink,omitempty"`
+	StatsUserDownlink bool    `json:"statsUserDownlink,omitempty"`
+	BufferSize        *int32  `json:"bufferSize,omitempty"`
 }
 
 func (t *Policy) Build() (*policy.Policy, error) {
@@ -51,10 +51,10 @@ func (t *Policy) Build() (*policy.Policy, error) {
 }
 
 type SystemPolicy struct {
-	StatsInboundUplink    bool `json:"statsInboundUplink"`
-	StatsInboundDownlink  bool `json:"statsInboundDownlink"`
-	StatsOutboundUplink   bool `json:"statsOutboundUplink"`
-	StatsOutboundDownlink bool `json:"statsOutboundDownlink"`
+	StatsInboundUplink    bool `json:"statsInboundUplink,omitempty"`
+	StatsInboundDownlink  bool `json:"statsInboundDownlink,omitempty"`
+	StatsOutboundUplink   bool `json:"statsOutboundUplink,omitempty"`
+	StatsOutboundDownlink bool `json:"statsOutboundDownlink,omitempty"`
 }
 
 func (p *SystemPolicy) Build() (*policy.SystemPolicy, error) {
@@ -69,8 +69,8 @@ func (p *SystemPolicy) Build() (*policy.SystemPolicy, error) {
 }
 
 type PolicyConfig struct {
-	Levels map[uint32]*Policy `json:"levels"`
-	System *SystemPolicy      `json:"system"`
+	Levels map[uint32]*Policy `json:"levels,omitempty"`
+	System *SystemPolicy      `json:"system,omitempty"`
 }
 
 func (c *PolicyConfig) Build() (*policy.Config, error) {

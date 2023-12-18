@@ -6,13 +6,13 @@ import (
 )
 
 type GRPCConfig struct {
-	ServiceName         string `json:"serviceName" `
-	MultiMode           bool   `json:"multiMode"`
-	IdleTimeout         int32  `json:"idle_timeout"`
-	HealthCheckTimeout  int32  `json:"health_check_timeout"`
-	PermitWithoutStream bool   `json:"permit_without_stream"`
-	InitialWindowsSize  int32  `json:"initial_windows_size"`
-	UserAgent           string `json:"user_agent"`
+	ServiceName         string `json:"serviceName,omitempty"`
+	MultiMode           bool   `json:"multiMode,omitempty"`
+	IdleTimeout         int32  `json:"idle_timeout,omitempty"`
+	HealthCheckTimeout  int32  `json:"health_check_timeout,omitempty"`
+	PermitWithoutStream bool   `json:"permit_without_stream,omitempty"`
+	InitialWindowsSize  int32  `json:"initial_windows_size,omitempty"`
+	UserAgent           string `json:"user_agent,omitempty"`
 }
 
 func (g *GRPCConfig) Build() (proto.Message, error) {

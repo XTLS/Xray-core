@@ -14,9 +14,9 @@ import (
 )
 
 type VMessAccount struct {
-	ID          string `json:"id"`
-	Security    string `json:"security"`
-	Experiments string `json:"experiments"`
+	ID          string `json:"id,omitempty"`
+	Security    string `json:"security,omitempty"`
+	Experiments string `json:"experiments,omitempty"`
 }
 
 // Build implements Buildable
@@ -46,7 +46,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 }
 
 type VMessDetourConfig struct {
-	ToTag string `json:"to"`
+	ToTag string `json:"to,omitempty"`
 }
 
 // Build implements Buildable
@@ -57,11 +57,11 @@ func (c *VMessDetourConfig) Build() *inbound.DetourConfig {
 }
 
 type FeaturesConfig struct {
-	Detour *VMessDetourConfig `json:"detour"`
+	Detour *VMessDetourConfig `json:"detour,omitempty"`
 }
 
 type VMessDefaultConfig struct {
-	Level byte `json:"level"`
+	Level byte `json:"level,omitempty"`
 }
 
 // Build implements Buildable
@@ -72,10 +72,10 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 }
 
 type VMessInboundConfig struct {
-	Users        []json.RawMessage   `json:"clients"`
-	Features     *FeaturesConfig     `json:"features"`
-	Defaults     *VMessDefaultConfig `json:"default"`
-	DetourConfig *VMessDetourConfig  `json:"detour"`
+	Users        []json.RawMessage   `json:"clients,omitempty"`
+	Features     *FeaturesConfig     `json:"features,omitempty"`
+	Defaults     *VMessDefaultConfig `json:"default,omitempty"`
+	DetourConfig *VMessDetourConfig  `json:"detour,omitempty"`
 }
 
 // Build implements Buildable
@@ -117,13 +117,13 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VMessOutboundTarget struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address          `json:"address,omitempty"`
+	Port    uint16            `json:"port,omitempty"`
+	Users   []json.RawMessage `json:"users,omitempty"`
 }
 
 type VMessOutboundConfig struct {
-	Receivers []*VMessOutboundTarget `json:"vnext"`
+	Receivers []*VMessOutboundTarget `json:"vnext,omitempty"`
 }
 
 // Build implements Buildable

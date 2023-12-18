@@ -7,11 +7,11 @@ import (
 )
 
 type DNSOutboundConfig struct {
-	Network    Network  `json:"network"`
-	Address    *Address `json:"address"`
-	Port       uint16   `json:"port"`
-	UserLevel  uint32   `json:"userLevel"`
-	NonIPQuery string   `json:"nonIPQuery"`
+	Network    Network  `json:"network,omitempty"`
+	Address    *Address `json:"address,omitempty"`
+	Port       uint16   `json:"port,omitempty"`
+	UserLevel  uint32   `json:"userLevel,omitempty"`
+	NonIPQuery string   `json:"nonIPQuery,omitempty"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {

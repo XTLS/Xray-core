@@ -17,19 +17,19 @@ import (
 )
 
 type VLessInboundFallback struct {
-	Name string          `json:"name"`
-	Alpn string          `json:"alpn"`
-	Path string          `json:"path"`
-	Type string          `json:"type"`
-	Dest json.RawMessage `json:"dest"`
-	Xver uint64          `json:"xver"`
+	Name string          `json:"name,omitempty"`
+	Alpn string          `json:"alpn,omitempty"`
+	Path string          `json:"path,omitempty"`
+	Type string          `json:"type,omitempty"`
+	Dest json.RawMessage `json:"dest,omitempty"`
+	Xver uint64          `json:"xver,omitempty"`
 }
 
 type VLessInboundConfig struct {
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallback   *VLessInboundFallback   `json:"fallback"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
+	Clients    []json.RawMessage       `json:"clients,omitempty"`
+	Decryption string                  `json:"decryption,omitempty"`
+	Fallback   *VLessInboundFallback   `json:"fallback,omitempty"`
+	Fallbacks  []*VLessInboundFallback `json:"fallbacks,omitempty"`
 }
 
 // Build implements Buildable
@@ -134,13 +134,13 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VLessOutboundVnext struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address          `json:"address,omitempty"`
+	Port    uint16            `json:"port,omitempty"`
+	Users   []json.RawMessage `json:"users,omitempty"`
 }
 
 type VLessOutboundConfig struct {
-	Vnext []*VLessOutboundVnext `json:"vnext"`
+	Vnext []*VLessOutboundVnext `json:"vnext,omitempty"`
 }
 
 // Build implements Buildable

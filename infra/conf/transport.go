@@ -7,14 +7,14 @@ import (
 )
 
 type TransportConfig struct {
-	TCPConfig  *TCPConfig          `json:"tcpSettings"`
-	KCPConfig  *KCPConfig          `json:"kcpSettings"`
-	WSConfig   *WebSocketConfig    `json:"wsSettings"`
-	HTTPConfig *HTTPConfig         `json:"httpSettings"`
-	DSConfig   *DomainSocketConfig `json:"dsSettings"`
-	QUICConfig *QUICConfig         `json:"quicSettings"`
-	GRPCConfig *GRPCConfig         `json:"grpcSettings"`
-	GUNConfig  *GRPCConfig         `json:"gunSettings"`
+	TCPConfig  *TCPConfig          `json:"tcpSettings,omitempty"`
+	KCPConfig  *KCPConfig          `json:"kcpSettings,omitempty"`
+	WSConfig   *WebSocketConfig    `json:"wsSettings,omitempty"`
+	HTTPConfig *HTTPConfig         `json:"httpSettings,omitempty"`
+	DSConfig   *DomainSocketConfig `json:"dsSettings,omitempty"`
+	QUICConfig *QUICConfig         `json:"quicSettings,omitempty"`
+	GRPCConfig *GRPCConfig         `json:"grpcSettings,omitempty"`
+	GUNConfig  *GRPCConfig         `json:"gunSettings,omitempty"`
 }
 
 // Build implements Buildable.

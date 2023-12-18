@@ -6,7 +6,7 @@ import (
 )
 
 type LoopbackConfig struct {
-	InboundTag string `json:"inboundTag"`
+	InboundTag string `json:"inboundTag,omitempty"`
 }
 
 func (l LoopbackConfig) Build() (proto.Message, error) {
