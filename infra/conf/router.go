@@ -520,7 +520,7 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
-		RouterRule `json:"router_rule,omitempty"`
+		RouterRule
 		Domain     *StringList       `json:"domain,omitempty"`
 		Domains    *StringList       `json:"domains,omitempty"`
 		IP         *StringList       `json:"ip,omitempty"`
