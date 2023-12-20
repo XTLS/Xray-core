@@ -73,9 +73,9 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [HiddifyNG](https://github.com/hiddify/HiddifyNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [MahsaNG](https://play.google.com/store/apps/details?id=com.MahsaNet.MahsaNG)
 - iOS & macOS arm64
-  - [Mango](https://github.com/arror/Mango)
+  - [V2Box](https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
 - macOS arm64 & x64
