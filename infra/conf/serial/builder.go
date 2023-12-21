@@ -3,12 +3,25 @@ package serial
 import (
 	"io"
 
+	creflect "github.com/xtls/xray-core/common/reflect"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/main/confloader"
 )
 
-func BuildConfig(files []string, formats []string) (*core.Config, error) {
+func MergeConfigFromFiles(files []string, formats []string) (string, error) {
+	c, err := mergeConfigs(files, formats)
+	if err != nil {
+		return "", err
+	}
+
+	if j, ok := creflect.MarshalToJson(c); ok {
+		return j, nil
+	}
+	return "", newError("marshal to json failed.").AtError()
+}
+
+func mergeConfigs(files []string, formats []string) (*conf.Config, error) {
 	cf := &conf.Config{}
 	for i, file := range files {
 		newError("Reading config: ", file).AtInfo().WriteToLog()
@@ -26,7 +39,15 @@ func BuildConfig(files []string, formats []string) (*core.Config, error) {
 		}
 		cf.Override(c, file)
 	}
-	return cf.Build()
+	return cf, nil
+}
+
+func BuildConfig(files []string, formats []string) (*core.Config, error) {
+	config, err := mergeConfigs(files, formats)
+	if err != nil {
+		return nil, err
+	}
+	return config.Build()
 }
 
 type readerDecoder func(io.Reader) (*conf.Config, error)
@@ -39,4 +60,5 @@ func init() {
 	ReaderDecoderByFormat["toml"] = DecodeTOMLConfig
 
 	core.ConfigBuilderForFiles = BuildConfig
+	core.ConfigMergedFormFiles = MergeConfigFromFiles
 }
