@@ -129,6 +129,12 @@ func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
 			strategy:  &LeastPingStrategy{},
 			ohm:       ohm,
 		}, nil
+	case "roundRobin":
+		return &Balancer{
+			selectors: br.OutboundSelector,
+			strategy:  &RoundRobinStrategy{},
+			ohm:       ohm,
+		}, nil
 	case "random":
 		fallthrough
 	default:
