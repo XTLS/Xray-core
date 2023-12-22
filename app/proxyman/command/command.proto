@@ -43,6 +43,18 @@ message AddOutboundRequest {
 
 message AddOutboundResponse {}
 
+message GetAllInboundsResponse {
+  string configs = 1;
+}
+
+message GetAllInboundsRequest {}
+
+message GetAllOutboundsResponse {
+  string configs = 1;
+}
+
+message GetAllOutboundsRequest {}
+
 message RemoveOutboundRequest {
   string tag = 1;
 }
@@ -57,11 +69,15 @@ message AlterOutboundRequest {
 message AlterOutboundResponse {}
 
 service HandlerService {
+  rpc GetAllInbounds(GetAllInboundsRequest) returns (GetAllInboundsResponse) {}
+
   rpc AddInbound(AddInboundRequest) returns (AddInboundResponse) {}
 
   rpc RemoveInbound(RemoveInboundRequest) returns (RemoveInboundResponse) {}
 
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
+
+  rpc GetAllOutbounds(GetAllOutboundsRequest) returns (GetAllOutboundsResponse) {}
 
   rpc AddOutbound(AddOutboundRequest) returns (AddOutboundResponse) {}
 

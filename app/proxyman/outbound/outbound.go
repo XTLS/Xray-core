@@ -4,6 +4,7 @@ package outbound
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -124,6 +125,19 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 	return nil
 }
 
+func (m *Manager) GetAllTaggedConfigs(ctx context.Context) string {
+	m.access.RLock()
+	defer m.access.RUnlock()
+	arr := make([]string, 0)
+	for _, handler := range m.taggedHandler {
+		if c, ok := common.GetConfig(handler); ok {
+			arr = append(arr, c)
+		}
+	}
+	var r = strings.Join(arr, ",\n")
+	return fmt.Sprintf("[%s]", r)
+}
+
 // RemoveHandler implements outbound.Manager.
 func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	if tag == "" {
@@ -132,6 +146,9 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	m.access.Lock()
 	defer m.access.Unlock()
 
+	if handler, ok := m.taggedHandler[tag]; ok {
+		common.RemoveConfig(handler)
+	}
 	delete(m.taggedHandler, tag)
 	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
 		m.defaultHandler = nil

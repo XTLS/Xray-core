@@ -30,6 +30,9 @@ type Manager interface {
 	GetHandler(tag string) Handler
 	// GetDefaultHandler returns the default outbound.Handler. It is usually the first outbound.Handler specified in the configuration.
 	GetDefaultHandler() Handler
+	// GetAllTaggedConfigs returns all tagged outbounds config.
+	GetAllTaggedConfigs(ctx context.Context) string
+
 	// AddHandler adds a handler into this outbound.Manager.
 	AddHandler(ctx context.Context, handler Handler) error
 

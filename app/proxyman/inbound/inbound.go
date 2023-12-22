@@ -4,6 +4,8 @@ package inbound
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/xtls/xray-core/app/proxyman"
@@ -33,6 +35,19 @@ func New(ctx context.Context, config *proxyman.InboundConfig) (*Manager, error) 
 // Type implements common.HasType.
 func (*Manager) Type() interface{} {
 	return inbound.ManagerType()
+}
+
+func (m *Manager) GetAllTaggedConfigs(ctx context.Context) string {
+	m.access.RLock()
+	defer m.access.RUnlock()
+	arr := make([]string, 0)
+	for _, handler := range m.taggedHandlers {
+		if c, ok := common.GetConfig(handler); ok {
+			arr = append(arr, c)
+		}
+	}
+	var r = strings.Join(arr, ",\n")
+	return fmt.Sprintf("[%s]", r)
 }
 
 // AddHandler implements inbound.Manager.
@@ -79,6 +94,7 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	defer m.access.Unlock()
 
 	if handler, found := m.taggedHandlers[tag]; found {
+		common.RemoveConfig(handler)
 		if err := handler.Close(); err != nil {
 			newError("failed to close handler ", tag).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 		}

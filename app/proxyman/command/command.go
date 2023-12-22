@@ -67,6 +67,13 @@ type handlerServer struct {
 	ohm outbound.Manager
 }
 
+func (s *handlerServer) GetAllInbounds(ctx context.Context, request *GetAllInboundsRequest) (*GetAllInboundsResponse, error) {
+	c := s.ihm.GetAllTaggedConfigs(ctx)
+	return &GetAllInboundsResponse{
+		Configs: c,
+	}, nil
+}
+
 func (s *handlerServer) AddInbound(ctx context.Context, request *AddInboundRequest) (*AddInboundResponse, error) {
 	if err := core.AddInboundHandler(s.s, request.Inbound); err != nil {
 		return nil, err
@@ -95,6 +102,13 @@ func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundR
 	}
 
 	return &AlterInboundResponse{}, operation.ApplyInbound(ctx, handler)
+}
+
+func (s *handlerServer) GetAllOutbounds(ctx context.Context, request *GetAllOutboundsRequest) (*GetAllOutboundsResponse, error) {
+	c := s.ohm.GetAllTaggedConfigs(ctx)
+	return &GetAllOutboundsResponse{
+		Configs: c,
+	}, nil
 }
 
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
