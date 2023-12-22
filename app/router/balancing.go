@@ -25,7 +25,6 @@ func (s *RandomStrategy) PickOutbound(tags []string) string {
 }
 
 type RoundRobinStrategy struct {
-	ctx        context.Context
 	mu         sync.Mutex
 	tags       []string
 	index      int
