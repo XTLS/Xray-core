@@ -245,6 +245,10 @@ func (h *Handler) Address() net.Address {
 	return h.senderSettings.Via.AsAddress()
 }
 
+func (h *Handler) DestIpAddress() net.IP {
+	return internet.DestIpAddress()
+}
+
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil {
