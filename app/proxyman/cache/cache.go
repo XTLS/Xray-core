@@ -5,37 +5,49 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xtls/xray-core/common"
 	creflect "github.com/xtls/xray-core/common/reflect"
 )
 
-type ConfigCache interface {
-	Add(key interface{}, config interface{})
-	Get(key interface{}) (string, bool)
-	Remove(key interface{})
-	GetAll() string
-}
-
-func NewConfigCache() ConfigCache {
-	return &configCache{
-		m:      new(sync.Mutex),
-		ifaces: make(map[interface{}]interface{}, 0),
-		strs:   make(map[interface{}]string),
-	}
+var ConfigCache = &configCache{
+	m:       new(sync.Mutex),
+	ifaces:  make(map[interface{}]interface{}),
+	strs:    make(map[interface{}]string),
+	stopped: false,
+	enable:  false,
 }
 
 type configCache struct {
-	m      *sync.Mutex
-	ifaces map[interface{}]interface{}
-	strs   map[interface{}]string
+	m       *sync.Mutex
+	ifaces  map[interface{}]interface{}
+	strs    map[interface{}]string
+	stopped bool
+	enable  bool
+}
+
+func (cc *configCache) Activate() {
+	cc.enable = true
+	cc.stopped = false
 }
 
 func (cc *configCache) Add(key interface{}, config interface{}) {
+	if cc.stopped {
+		return
+	}
+
 	cc.m.Lock()
 	defer cc.m.Unlock()
+	// double check
+	if cc.stopped {
+		return
+	}
 	cc.ifaces[key] = config
 }
 
 func (cc *configCache) Get(key interface{}) (string, bool) {
+	if cc.stopped {
+		return "", false
+	}
 	cc.m.Lock()
 	defer cc.m.Unlock()
 	return cc.getConfigUnsafe(key)
@@ -49,6 +61,10 @@ func (cc *configCache) Remove(key interface{}) {
 }
 
 func (cc *configCache) GetAll() string {
+	if cc.stopped {
+		return "[]"
+	}
+
 	cc.m.Lock()
 	defer cc.m.Unlock()
 
@@ -70,17 +86,33 @@ func (cc *configCache) GetAll() string {
 	return fmt.Sprintf("[%s]", strings.Join(arr, ",\n"))
 }
 
+func (cc *configCache) Refresh() {
+	if cc.enable {
+		return
+	}
+
+	cc.stopped = true
+	cc.m.Lock()
+	defer cc.m.Unlock()
+
+	cc.ifaces = make(map[interface{}]interface{})
+	cc.strs = make(map[interface{}]string)
+}
+
 func (cc *configCache) getConfigUnsafe(key interface{}) (string, bool) {
 	if s, ok := cc.strs[key]; ok {
 		return s, true
 	}
+	defer delete(cc.ifaces, key)
 	if iface, ok := cc.ifaces[key]; ok {
 		if s, ok := creflect.MarshalToJson(iface); ok {
 			cc.strs[key] = s
 			return s, true
-		} else {
-			delete(cc.ifaces, key)
 		}
 	}
 	return "", false
+}
+
+func init() {
+	common.InterceptConfig = ConfigCache.Add
 }

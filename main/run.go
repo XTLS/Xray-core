@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xtls/xray-core/app/proxyman/cache"
 	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
@@ -192,5 +193,6 @@ func startXray() (core.Server, error) {
 		return nil, newError("failed to create server").Base(err)
 	}
 
+	cache.ConfigCache.Refresh()
 	return server, nil
 }

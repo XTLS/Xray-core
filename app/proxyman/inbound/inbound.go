@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/app/proxyman/cache"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -42,7 +43,7 @@ func (m *Manager) GetAllTaggedConfigs(ctx context.Context) string {
 	defer m.access.RUnlock()
 	arr := make([]string, 0)
 	for _, handler := range m.taggedHandlers {
-		if c, ok := common.GetConfig(handler); ok {
+		if c, ok := cache.ConfigCache.Get(handler); ok {
 			arr = append(arr, c)
 		}
 	}
@@ -94,7 +95,7 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	defer m.access.Unlock()
 
 	if handler, found := m.taggedHandlers[tag]; found {
-		common.RemoveConfig(handler)
+		cache.ConfigCache.Remove(handler)
 		if err := handler.Close(); err != nil {
 			newError("failed to close handler ", tag).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
 		}

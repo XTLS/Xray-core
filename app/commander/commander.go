@@ -7,7 +7,10 @@ import (
 	"net"
 	"sync"
 
+	"github.com/xtls/xray-core/app/proxyman/cache"
+	handlerservice "github.com/xtls/xray-core/app/proxyman/command"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/signal/done"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
@@ -33,6 +36,7 @@ func NewCommander(ctx context.Context, config *Config) (*Commander, error) {
 		c.ohm = om
 	}))
 
+	tm := serial.ToTypedMessage(&handlerservice.Config{})
 	for _, rawConfig := range config.Service {
 		config, err := rawConfig.GetInstance()
 		if err != nil {
@@ -45,6 +49,9 @@ func NewCommander(ctx context.Context, config *Config) (*Commander, error) {
 		service, ok := rawService.(Service)
 		if !ok {
 			return nil, newError("not a Service.")
+		}
+		if rawConfig.Type == tm.Type {
+			cache.ConfigCache.Activate()
 		}
 		c.services = append(c.services, service)
 	}
