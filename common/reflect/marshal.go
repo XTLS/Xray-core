@@ -18,6 +18,9 @@ func MarshalToJson(v interface{}) (string, bool) {
 }
 
 func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool) interface{} {
+	if v == nil {
+		return nil
+	}
 	tmsg, err := v.GetInstance()
 	if err != nil {
 		return nil
