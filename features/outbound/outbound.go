@@ -26,10 +26,16 @@ type HandlerSelector interface {
 // xray:api:stable
 type Manager interface {
 	features.Feature
+
 	// GetHandler returns an outbound.Handler for the given tag.
 	GetHandler(tag string) Handler
+
 	// GetDefaultHandler returns the default outbound.Handler. It is usually the first outbound.Handler specified in the configuration.
 	GetDefaultHandler() Handler
+
+	// GetAllHandlers return all handlers.
+	GetAllHandlers(ctx context.Context) ([]Handler, error)
+
 	// AddHandler adds a handler into this outbound.Manager.
 	AddHandler(ctx context.Context, handler Handler) error
 

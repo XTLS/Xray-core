@@ -35,6 +35,22 @@ func (*Manager) Type() interface{} {
 	return inbound.ManagerType()
 }
 
+// GetAllHandlers returns all handlers.
+func (m *Manager) GetAllHandlers(ctx context.Context) ([]inbound.Handler, error) {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	if size := len(m.untaggedHandler) + len(m.taggedHandlers); size > 0 {
+		hs := make([]inbound.Handler, 0)
+		hs = append(hs, m.untaggedHandler...)
+		for _, h := range m.taggedHandlers {
+			hs = append(hs, h)
+		}
+		return hs, nil
+	}
+	return nil, newError("no handler found")
+}
+
 // AddHandler implements inbound.Manager.
 func (m *Manager) AddHandler(ctx context.Context, handler inbound.Handler) error {
 	m.access.Lock()

@@ -20,6 +20,8 @@ func RegisterConfig(config interface{}, configCreator ConfigCreator) error {
 	return nil
 }
 
+var ConfigIntercepterFn func(key interface{}, config interface{})
+
 // CreateObject creates an object by its config. The config type must be registered through RegisterConfig().
 func CreateObject(ctx context.Context, config interface{}) (interface{}, error) {
 	configType := reflect.TypeOf(config)
@@ -27,5 +29,14 @@ func CreateObject(ctx context.Context, config interface{}) (interface{}, error) 
 	if !found {
 		return nil, newError(configType.String() + " is not registered").AtError()
 	}
-	return creator(ctx, config)
+
+	inst, err := creator(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	if ConfigIntercepterFn != nil {
+		ConfigIntercepterFn(inst, config)
+	}
+	return inst, nil
 }

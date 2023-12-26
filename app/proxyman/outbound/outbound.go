@@ -124,6 +124,22 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 	return nil
 }
 
+// GetAllHandlers returns all handlers.
+func (m *Manager) GetAllHandlers(ctx context.Context) ([]outbound.Handler, error) {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	if size := len(m.untaggedHandlers) + len(m.taggedHandler); size > 0 {
+		hs := make([]outbound.Handler, 0)
+		hs = append(hs, m.untaggedHandlers...)
+		for _, h := range m.taggedHandler {
+			hs = append(hs, h)
+		}
+		return hs, nil
+	}
+	return nil, newError("no handler found")
+}
+
 // RemoveHandler implements outbound.Manager.
 func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	if tag == "" {
