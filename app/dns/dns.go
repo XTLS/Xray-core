@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	dns_lib "github.com/miekg/dns"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -215,7 +216,10 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 			newError("failed to lookup ip for domain ", domain, " at server ", client.Name()).Base(err).WriteToLog()
 			errs = append(errs, err)
 		}
-		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch && err != dns.ErrEmptyResponse {
+		if dns.RCodeFromError(err) == dns_lib.RcodeRefused {
+			newError("DNS request for domain", domain, "got refused by server ", client.Name()).Base(err).AtError().WriteToLog()
+		}
+		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch && err != dns.ErrEmptyResponse && dns.RCodeFromError(err) != dns_lib.RcodeRefused {
 			return nil, err
 		}
 	}
