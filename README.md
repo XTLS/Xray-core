@@ -125,16 +125,8 @@
 
 ## Compilation
 
-### Windows
-
 ```bash
-go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
-```
-
-### Linux / macOS
-
-```bash
-go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+make
 ```
 
 ## Stargazers over time
