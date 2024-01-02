@@ -125,8 +125,6 @@
 
 ## Compilation
 
-### Windows
-
 ```bash
 make
 ```
