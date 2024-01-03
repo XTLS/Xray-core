@@ -1,4 +1,4 @@
-//go:build !linux || android
+//go:build !linux
 
 package wireguard
 
@@ -8,9 +8,5 @@ import (
 )
 
 func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
-	return nil, errors.New("not implemented")
-}
-
-func KernelTunSupported() bool {
-	return false
+	return nil, errors.New("not implemented kernel tunnel for non-linux system")
 }

@@ -1,4 +1,4 @@
-//go:build linux && !android
+//go:build linux
 
 package wireguard
 
@@ -8,14 +8,17 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/sagernet/sing/common/control"
 	"github.com/vishvananda/netlink"
+	"github.com/xtls/xray-core/proxy/wireguard/iptables"
+	iptexec "github.com/xtls/xray-core/proxy/wireguard/iptables/exec"
 	wgtun "golang.zx2c4.com/wireguard/tun"
 )
+
+var _ Tunnel = (*deviceNet)(nil)
 
 type deviceNet struct {
 	tunnel
@@ -25,6 +28,10 @@ type deviceNet struct {
 	linkAddrs []netlink.Addr
 	routes    []*netlink.Route
 	rules     []*netlink.Rule
+
+	ipt iptables.Interface
+
+	iptManglePreRoutingRules [][]string
 }
 
 func newDeviceNet(interfaceName string) *deviceNet {
@@ -58,6 +65,11 @@ func (d *deviceNet) Close() (err error) {
 			errs = append(errs, fmt.Errorf("failed to delete route: %w", err))
 		}
 	}
+	for _, rule := range d.iptManglePreRoutingRules {
+		if err = d.ipt.DeleteRule(iptables.TableMangle, iptables.ChainPrerouting, rule...); err != nil {
+			errs = append(errs, fmt.Errorf("failed to delete iptables rule: %w", err))
+		}
+	}
 	if err = d.tunnel.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to close tunnel: %w", err))
 	}
@@ -82,35 +94,9 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 			x := prefixes
 			v4 = &x
 		}
-		if v6 == nil && prefixes.Is6() {
+		if v6 == nil && prefixes.Is6() && CheckUnixKernelIPv6IsEnabled() {
 			x := prefixes
 			v6 = &x
-		}
-	}
-
-	writeSysctlZero := func(path string) error {
-		_, err := os.Stat(path)
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(path, []byte("0"), 0o644)
-	}
-
-	// system configs.
-	if v4 != nil {
-		if err = writeSysctlZero("/proc/sys/net/ipv4/conf/all/rp_filter"); err != nil {
-			return nil, fmt.Errorf("failed to disable ipv4 rp_filter for all: %w", err)
-		}
-	}
-	if v6 != nil {
-		if err = writeSysctlZero("/proc/sys/net/ipv6/conf/all/disable_ipv6"); err != nil {
-			return nil, fmt.Errorf("failed to enable ipv6: %w", err)
-		}
-		if err = writeSysctlZero("/proc/sys/net/ipv6/conf/all/rp_filter"); err != nil {
-			return nil, fmt.Errorf("failed to disable ipv6 rp_filter for all: %w", err)
 		}
 	}
 
@@ -125,16 +111,18 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		}
 	}()
 
-	// disable linux rp_filter for tunnel device to avoid packet drop.
-	// the operation require root privilege on container require '--privileged' flag.
+	ipv4TableIndex := 1023
 	if v4 != nil {
-		if err = writeSysctlZero("/proc/sys/net/ipv4/conf/" + n + "/rp_filter"); err != nil {
-			return nil, fmt.Errorf("failed to disable ipv4 rp_filter for tunnel: %w", err)
-		}
-	}
-	if v6 != nil {
-		if err = writeSysctlZero("/proc/sys/net/ipv6/conf/" + n + "/rp_filter"); err != nil {
-			return nil, fmt.Errorf("failed to disable ipv6 rp_filter for tunnel: %w", err)
+		r := &netlink.Route{Table: ipv4TableIndex}
+		for {
+			routeList, fErr := netlink.RouteListFiltered(netlink.FAMILY_V4, r, netlink.RT_FILTER_TABLE)
+			if len(routeList) == 0 || fErr != nil {
+				break
+			}
+			ipv4TableIndex--
+			if ipv4TableIndex < 0 {
+				return nil, fmt.Errorf("failed to find available ipv4 table index")
+			}
 		}
 	}
 
@@ -164,6 +152,11 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		}
 	}()
 
+	out.ipt = iptables.New(iptexec.New(), iptables.ProtocolIPv4)
+	if exist := out.ipt.Present(); !exist {
+		return nil, fmt.Errorf("iptables is not available")
+	}
+
 	l, err := netlink.LinkByName(n)
 	if err != nil {
 		return nil, err
@@ -177,6 +170,25 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 			},
 		}
 		out.linkAddrs = append(out.linkAddrs, addr)
+
+		rt := &netlink.Route{
+			LinkIndex: l.Attrs().Index,
+			Dst: &net.IPNet{
+				IP:   net.IPv4zero,
+				Mask: net.CIDRMask(0, 32),
+			},
+			Table: ipv4TableIndex,
+		}
+		out.routes = append(out.routes, rt)
+
+		r := netlink.NewRule()
+		r.Table, r.Family, r.Mark = ipv4TableIndex, unix.AF_INET, ipv4TableIndex
+		out.rules = append(out.rules, r)
+
+		// -i wg0 -j MARK --set-xmark 0x334/0xffffffff
+		out.iptManglePreRoutingRules = append(out.iptManglePreRoutingRules, []string{
+			"-i", n, "-j", "MARK", "--set-xmark", fmt.Sprintf("0x%x/0xffffffff", ipv4TableIndex),
+		})
 	}
 	if v6 != nil {
 		addr := netlink.Addr{
@@ -224,14 +236,13 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 			return nil, fmt.Errorf("failed to add rule %s: %w", rule, err)
 		}
 	}
+	for _, rule := range out.iptManglePreRoutingRules {
+		_, err = out.ipt.EnsureRule(iptables.Append, iptables.TableMangle,
+			iptables.ChainPrerouting, rule...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add iptable rule %s: %w", rule, err)
+		}
+	}
 	out.tun = wgt
 	return out, nil
-}
-
-func KernelTunSupported() bool {
-	// run a superuser permission check to check
-	// if the current user has the sufficient permission
-	// to create a tun device.
-
-	return unix.Geteuid() == 0 // 0 means root
 }

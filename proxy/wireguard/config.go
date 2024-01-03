@@ -25,7 +25,7 @@ func (c *DeviceConfig) fallbackIP6() bool {
 }
 
 func (c *DeviceConfig) createTun() tunCreator {
-	if c.KernelMode {
+	if c.IsClient && c.KernelMode {
 		return createKernelTun
 	}
 	return createGVisorTun
