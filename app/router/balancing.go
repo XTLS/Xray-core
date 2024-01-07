@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	reflect "reflect"
 	sync "sync"
 
 	"github.com/xtls/xray-core/common/dice"
@@ -49,7 +50,7 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 	if len(tags) == 0 {
 		panic("0 tags")
 	}
-	if s.roundRobin == nil {
+	if s.roundRobin == nil || !reflect.DeepEqual(s.roundRobin.tags, tags) {
 		s.roundRobin = NewRoundRobin(tags)
 	}
 	tag := s.roundRobin.NextTag()
