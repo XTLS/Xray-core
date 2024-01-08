@@ -152,6 +152,7 @@ func (m *Manager) Select(selectors []string) []string {
 		for _, selector := range selectors {
 			if strings.HasPrefix(tag, selector) {
 				tags = append(tags, tag)
+				break
 			}
 		}
 	}
