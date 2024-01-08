@@ -4,7 +4,6 @@ package outbound
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -157,8 +156,6 @@ func (m *Manager) Select(selectors []string) []string {
 		}
 	}
 	sort.Strings(tags)
-	fmt.Printf("tags: %v\n", tags)
-
 	return tags
 }
 
