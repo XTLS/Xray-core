@@ -28,8 +28,8 @@ type requestHandler struct {
 var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
 
 var upgrader = &websocket.Upgrader{
-	ReadBufferSize:   4 * 1024,
-	WriteBufferSize:  4 * 1024,
+	ReadBufferSize:   0,
+	WriteBufferSize:  0,
 	HandshakeTimeout: time.Second * 4,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
