@@ -148,15 +148,10 @@ func (m *Manager) Select(selectors []string) []string {
 	tags := make([]string, 0, len(selectors))
 
 	for tag := range m.taggedHandler {
-		match := false
 		for _, selector := range selectors {
 			if strings.HasPrefix(tag, selector) {
-				match = true
-				break
+				tags = append(tags, tag)
 			}
-		}
-		if match {
-			tags = append(tags, tag)
 		}
 	}
 
