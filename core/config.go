@@ -2,7 +2,6 @@ package core
 
 import (
 	"io"
-	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -60,9 +59,12 @@ func GetMergedConfig(args cmdarg.Arg) (string, error) {
 	supported := []string{"json", "yaml", "toml"}
 	for _, file := range args {
 		format := getFormat(file)
-		if slices.Contains(supported, format) {
-			files = append(files, file)
-			formats = append(formats, format)
+		for _, s := range supported {
+			if s == format {
+				files = append(files, file)
+				formats = append(formats, format)
+				break
+			}
 		}
 	}
 	return ConfigMergedFormFiles(files, formats)
