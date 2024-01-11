@@ -169,8 +169,6 @@ func (m *Manager) Select(selectors []string) []string {
 	}
 
 	sort.Strings(tags)
-
-	m.tagsCache = make(map[string][]string)
 	m.tagsCache[key] = tags
 
 	return tags
