@@ -1,7 +1,9 @@
 package reality
 
 import (
+	"io"
 	"net"
+	"os"
 	"time"
 
 	"github.com/xtls/reality"
@@ -25,6 +27,8 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 
 		NextProtos:             nil, // should be nil
 		SessionTicketsDisabled: true,
+
+		KeyLogWriter: KeyLogWriterFromConfig(c),
 	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {
@@ -35,6 +39,19 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		config.ShortIds[*(*[8]byte)(shortId)] = true
 	}
 	return config
+}
+
+func KeyLogWriterFromConfig(c *Config) io.Writer {
+	if len(c.MasterKeyLog) <= 0 || c.MasterKeyLog == "none" {
+		return nil
+	}
+
+	writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	if err != nil {
+		newError("failed to open ", c.MasterKeyLog, " as master key log").AtError().Base(err).WriteToLog()
+	}
+
+	return writer
 }
 
 func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
