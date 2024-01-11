@@ -24,4 +24,5 @@ message Config {
   bytes short_id = 24;
   string spider_x = 25;
   repeated int64 spider_y = 26;
+  string master_key_log = 27;
 }

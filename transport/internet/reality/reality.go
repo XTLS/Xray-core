@@ -112,6 +112,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		ServerName:             config.ServerName,
 		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
+		KeyLogWriter:           KeyLogWriterFromConfig(config),
 	}
 	if utlsConfig.ServerName == "" {
 		utlsConfig.ServerName = dest.Address.String()
