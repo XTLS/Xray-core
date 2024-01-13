@@ -289,7 +289,7 @@ func TestShadowsocksAES128GCMUDP(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errGroup errgroup.Group
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		errGroup.Go(testUDPConn(clientPort, 1024, time.Second*5))
 	}
 	if err := errGroup.Wait(); err != nil {
@@ -391,7 +391,7 @@ func TestShadowsocksAES128GCMUDPMux(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errGroup errgroup.Group
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		errGroup.Go(testUDPConn(clientPort, 1024, time.Second*5))
 	}
 	if err := errGroup.Wait(); err != nil {

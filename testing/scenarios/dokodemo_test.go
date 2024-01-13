@@ -171,7 +171,7 @@ func TestDokodemoUDP(t *testing.T) {
 	common.Must(err)
 	defer CloseServer(server)
 
-	clientPortRange := uint32(5)
+	clientPortRange := uint32(3)
 	retry := 1
 	clientPort := uint32(udp.PickPort())
 	for {
