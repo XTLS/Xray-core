@@ -118,6 +118,7 @@ func copyConfig(c *tls.Config) *utls.Config {
 		ServerName:            c.ServerName,
 		InsecureSkipVerify:    c.InsecureSkipVerify,
 		VerifyPeerCertificate: c.VerifyPeerCertificate,
+		KeyLogWriter:	       c.KeyLogWriter,
 	}
 }
 

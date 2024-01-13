@@ -43,6 +43,8 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		strategy = strategyRandom
 	case strategyLeastPing:
 		strategy = "leastPing"
+	case strategyRoundRobin:
+		strategy = "roundRobin"
 	default:
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
 	}
@@ -636,7 +638,7 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	if err != nil {
 		return nil, newError("invalid router rule").Base(err)
 	}
-	if strings.EqualFold(rawRule.Type, "field") {
+	if rawRule.Type == "" || strings.EqualFold(rawRule.Type, "field") {
 		fieldrule, err := parseFieldRule(msg)
 		if err != nil {
 			return nil, newError("invalid field rule").Base(err)

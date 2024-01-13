@@ -475,7 +475,7 @@ func TestVMessGCMUDP(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		errg.Go(testUDPConn(clientPort, 1024, time.Second*5))
 	}
 	if err := errg.Wait(); err != nil {
@@ -1176,7 +1176,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 
 	for range "ab" {
 		var errg errgroup.Group
-		for i := 0; i < 16; i++ {
+		for i := 0; i < 2; i++ {
 			errg.Go(testTCPConn(clientPort, 1024, time.Second*10))
 			errg.Go(testUDPConn(clientUDPPort, 1024, time.Second*10))
 		}

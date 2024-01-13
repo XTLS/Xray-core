@@ -208,12 +208,21 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			IP:   dest.Address.IP(),
 			Port: int(dest.Port),
 		}
-	} else {
-		addr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
-		if err != nil {
-			return nil, err
+	}  else {
+		dialerIp := internet.DestIpAddress()
+		if dialerIp != nil {
+			destAddr = &net.UDPAddr{
+				IP:   dialerIp,
+				Port: int(dest.Port),
+			}
+			newError("quic Dial use dialer dest addr: ", destAddr).WriteToLog()
+		} else {
+			addr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
+			if err != nil {
+				return nil, err
+			}
+			destAddr = addr
 		}
-		destAddr = addr
 	}
 
 	config := streamSettings.ProtocolSettings.(*Config)

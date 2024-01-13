@@ -16,6 +16,7 @@ var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)
+	DestIpAddress() net.IP
 }
 
 type DefaultSystemDialer struct {
@@ -108,6 +109,10 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
 }
 
+func (d *DefaultSystemDialer) DestIpAddress() net.IP {
+	return nil
+}
+
 type PacketConnWrapper struct {
 	Conn net.PacketConn
 	Dest net.Addr
@@ -170,6 +175,10 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
+}
+
+func (d *SimpleSystemDialer) DestIpAddress() net.IP {
+	return nil
 }
 
 // UseAlternativeSystemDialer replaces the current system dialer with a given one.

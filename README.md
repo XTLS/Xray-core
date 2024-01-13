@@ -81,6 +81,7 @@ ___
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
+  - Official: [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) 
   - [iamybj/docker-xray](https://hub.docker.com/r/iamybj/docker-xray)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - Web Panel
@@ -182,16 +183,8 @@ ___
 
 ## Compilation
 
-### Windows
-
 ```bash
-go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
-```
-
-### Linux / macOS
-
-```bash
-go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+make
 ```
 
 ## Stargazers over time

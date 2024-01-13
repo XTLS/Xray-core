@@ -109,13 +109,13 @@ func (i *RelayInbound) Process(ctx context.Context, network net.Network, connect
 			}
 			for _, buffer := range mb {
 				packet := B.As(buffer.Bytes()).ToOwned()
+				buffer.Release()
 				err = i.service.NewPacket(ctx, pc, packet, metadata)
 				if err != nil {
 					packet.Release()
 					buf.ReleaseMulti(mb)
 					return err
 				}
-				buffer.Release()
 			}
 		}
 	}
