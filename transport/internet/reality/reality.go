@@ -112,6 +112,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		ServerName:             config.ServerName,
 		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
+		KeyLogWriter:           KeyLogWriterFromConfig(config),
 	}
 	if utlsConfig.ServerName == "" {
 		utlsConfig.ServerName = dest.Address.String()
@@ -136,7 +137,10 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		if config.Show {
 			newError(fmt.Sprintf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16])).WriteToLog(session.ExportIDToError(ctx))
 		}
-		publicKey, _ := ecdh.X25519().NewPublicKey(config.PublicKey)
+		publicKey, err := ecdh.X25519().NewPublicKey(config.PublicKey)
+		if err != nil {
+			return nil, errors.New("REALITY: publicKey == nil")
+		}
 		uConn.AuthKey, _ = uConn.HandshakeState.State13.EcdheKey.ECDH(publicKey)
 		if uConn.AuthKey == nil {
 			return nil, errors.New("REALITY: SharedKey == nil")

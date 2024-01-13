@@ -43,7 +43,7 @@ func NewOutboundDialer(outbound proxy.Outbound, dialer internet.Dialer) *XrayOut
 }
 
 func (d *XrayOutboundDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx = session.ContextWithOutbound(context.Background(), &session.Outbound{
+	ctx = session.ContextWithOutbound(ctx, &session.Outbound{
 		Target: ToDestination(destination, ToNetwork(network)),
 	})
 	opts := []pipe.Option{pipe.WithSizeLimit(64 * 1024)}
