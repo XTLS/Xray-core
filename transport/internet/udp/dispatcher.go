@@ -129,6 +129,9 @@ func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, cal
 		}
 		timer.Update()
 		for _, b := range mb {
+			if b.UDP != nil {
+				dest = *b.UDP
+			}
 			callback(ctx, &udp.Packet{
 				Payload: b,
 				Source:  dest,
@@ -197,7 +200,9 @@ func (c *dispatcherConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	n := copy(raw, p)
 	buffer.Resize(0, int32(n))
 
-	c.dispatcher.Dispatch(c.ctx, net.DestinationFromAddr(addr), buffer)
+	destination := net.DestinationFromAddr(addr)
+	buffer.UDP = &destination
+	c.dispatcher.Dispatch(c.ctx, destination, buffer)
 	return n, nil
 }
 
