@@ -35,7 +35,7 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v4
       - name: Restore Cache
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: resources
           key: xray-geodat-
