@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Restore Cache
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: resources
           key: xray-geodat-
@@ -57,7 +57,7 @@ jobs:
             done
 
       - name: Save Cache
-        uses: actions/cache/save@v3
+        uses: actions/cache/save@v4
         if: ${{ steps.update.outputs.unhit }}
         with:
           path: resources
@@ -180,7 +180,7 @@ jobs:
           find . -maxdepth 1 -type f -regex '.*\(wxray\|xray\|xray_softfloat\)\(\|.exe\)' -exec mv {} ./build_assets/ \;
 
       - name: Restore Cache
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: resources
           key: xray-geodat-
