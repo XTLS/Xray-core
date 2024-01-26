@@ -13,7 +13,6 @@ import (
 	"math/big"
 	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common/buf"
@@ -479,7 +478,6 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 				if inbound.CanSpliceCopy == 1 {
 					newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
 					runtime.Gosched() // necessary
-					time.Sleep(time.Millisecond) // without this, there will be a rare ssl error for freedom splice
 					w, err := tc.ReadFrom(readerConn)
 					if readCounter != nil {
 						readCounter.Add(w)
