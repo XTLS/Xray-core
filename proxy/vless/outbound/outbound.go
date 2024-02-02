@@ -138,7 +138,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if !allowUDP443 && request.Port == 443 {
 				return newError("XTLS rejected UDP/443 traffic").AtInfo()
 			}
-			requestAddons.Flow = ""
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP:
@@ -185,7 +184,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
-	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
+	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
