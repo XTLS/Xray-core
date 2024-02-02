@@ -522,6 +522,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
+			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
 			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer

@@ -265,8 +265,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
+		if requestAddons.Flow == vless.XRV {
+			serverReader = proxy.NewVisionReader(serverReader, trafficState, ctx)
+		}
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			serverReader = xudp.NewPacketReader(conn)
+			if requestAddons.Flow == vless.XRV {
+				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
+			} else {
+				serverReader = xudp.NewPacketReader(conn)
+			}
 		}
 
 		if requestAddons.Flow == vless.XRV {
