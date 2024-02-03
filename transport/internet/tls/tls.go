@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"math/big"
+	"time"
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/buf"
@@ -23,6 +24,16 @@ var _ buf.Writer = (*Conn)(nil)
 
 type Conn struct {
 	*tls.Conn
+}
+
+const tlsCloseTimeout = 250 * time.Millisecond
+
+func (c *Conn) Close() error {
+	timer := time.AfterFunc(tlsCloseTimeout, func() {
+		c.Conn.NetConn().Close()
+	})
+	defer timer.Stop()
+	return c.Conn.Close()
 }
 
 func (c *Conn) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -62,6 +73,14 @@ func Server(c net.Conn, config *tls.Config) net.Conn {
 
 type UConn struct {
 	*utls.UConn
+}
+
+func (c *UConn) Close() error {
+	timer := time.AfterFunc(tlsCloseTimeout, func() {
+		c.Conn.NetConn().Close()
+	})
+	defer timer.Stop()
+	return c.Conn.Close()
 }
 
 func (c *UConn) HandshakeAddress() net.Address {
