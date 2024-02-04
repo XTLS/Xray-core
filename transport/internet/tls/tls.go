@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"math/big"
@@ -15,7 +16,7 @@ import (
 
 type Interface interface {
 	net.Conn
-	Handshake() error
+	HandshakeContext(ctx context.Context) error
 	VerifyHostname(host string) error
 	NegotiatedProtocol() (name string, mutual bool)
 }
@@ -43,8 +44,8 @@ func (c *Conn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return err
 }
 
-func (c *Conn) HandshakeAddress() net.Address {
-	if err := c.Handshake(); err != nil {
+func (c *Conn) HandshakeContextAddress(ctx context.Context) net.Address {
+	if err := c.HandshakeContext(ctx); err != nil {
 		return nil
 	}
 	state := c.ConnectionState()
@@ -83,8 +84,8 @@ func (c *UConn) Close() error {
 	return c.Conn.Close()
 }
 
-func (c *UConn) HandshakeAddress() net.Address {
-	if err := c.Handshake(); err != nil {
+func (c *UConn) HandshakeContextAddress(ctx context.Context) net.Address {
+	if err := c.HandshakeContext(ctx); err != nil {
 		return nil
 	}
 	state := c.ConnectionState()
@@ -96,7 +97,7 @@ func (c *UConn) HandshakeAddress() net.Address {
 
 // WebsocketHandshake basically calls UConn.Handshake inside it but it will only send
 // http/1.1 in its ALPN.
-func (c *UConn) WebsocketHandshake() error {
+func (c *UConn) WebsocketHandshakeContext(ctx context.Context) error {
 	// Build the handshake state. This will apply every variable of the TLS of the
 	// fingerprint in the UConn
 	if err := c.BuildHandshakeState(); err != nil {
@@ -118,7 +119,7 @@ func (c *UConn) WebsocketHandshake() error {
 	if err := c.BuildHandshakeState(); err != nil {
 		return err
 	}
-	return c.Handshake()
+	return c.HandshakeContext(ctx)
 }
 
 func (c *UConn) NegotiatedProtocol() (name string, mutual bool) {
@@ -137,7 +138,7 @@ func copyConfig(c *tls.Config) *utls.Config {
 		ServerName:            c.ServerName,
 		InsecureSkipVerify:    c.InsecureSkipVerify,
 		VerifyPeerCertificate: c.VerifyPeerCertificate,
-		KeyLogWriter:	       c.KeyLogWriter,
+		KeyLogWriter:          c.KeyLogWriter,
 	}
 }
 

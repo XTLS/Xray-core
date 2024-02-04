@@ -308,7 +308,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 
 	nextProto := ""
 	if tlsConn, ok := iConn.(*tls.Conn); ok {
-		if err := tlsConn.Handshake(); err != nil {
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			rawConn.Close()
 			return nil, err
 		}

@@ -65,7 +65,7 @@ func (c *grpcUtls) ClientHandshake(ctx context.Context, authority string, rawCon
 	conn := UClient(rawConn, cfg, c.fingerprint).(*UConn)
 	errChannel := make(chan error, 1)
 	go func() {
-		errChannel <- conn.Handshake()
+		errChannel <- conn.HandshakeContext(ctx)
 		close(errChannel)
 	}()
 	select {

@@ -87,7 +87,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			} else {
 				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
 			}
-			if err := cn.Handshake(); err != nil {
+			if err := cn.HandshakeContext(ctx); err != nil {
 				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
 				return nil, err
 			}
