@@ -147,7 +147,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		header.Set("Sec-WebSocket-Protocol", base64.RawURLEncoding.EncodeToString(ed))
 	}
 
-	conn, resp, err := dialer.Dial(uri, header)
+	conn, resp, err := dialer.DialContext(ctx, uri, header)
 	if err != nil {
 		var reason string
 		if resp != nil {
