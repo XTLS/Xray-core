@@ -21,6 +21,9 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	RoutingService_SubscribeRoutingStats_FullMethodName = "/xray.app.router.command.RoutingService/SubscribeRoutingStats"
 	RoutingService_TestRoute_FullMethodName             = "/xray.app.router.command.RoutingService/TestRoute"
+	RoutingService_GetBalancers_FullMethodName          = "/xray.app.router.command.RoutingService/GetBalancers"
+	RoutingService_CheckBalancers_FullMethodName        = "/xray.app.router.command.RoutingService/CheckBalancers"
+	RoutingService_OverrideSelecting_FullMethodName     = "/xray.app.router.command.RoutingService/OverrideSelecting"
 )
 
 // RoutingServiceClient is the client API for RoutingService service.
@@ -85,7 +88,7 @@ func (c *routingServiceClient) TestRoute(ctx context.Context, in *TestRouteReque
 
 func (c *routingServiceClient) GetBalancers(ctx context.Context, in *GetBalancersRequest, opts ...grpc.CallOption) (*GetBalancersResponse, error) {
 	out := new(GetBalancersResponse)
-	err := c.cc.Invoke(ctx, "/v2ray.core.app.router.command.RoutingService/GetBalancers", in, out, opts...)
+	err := c.cc.Invoke(ctx, RoutingService_GetBalancers_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +97,7 @@ func (c *routingServiceClient) GetBalancers(ctx context.Context, in *GetBalancer
 
 func (c *routingServiceClient) CheckBalancers(ctx context.Context, in *CheckBalancersRequest, opts ...grpc.CallOption) (*CheckBalancersResponse, error) {
 	out := new(CheckBalancersResponse)
-	err := c.cc.Invoke(ctx, "/v2ray.core.app.router.command.RoutingService/CheckBalancers", in, out, opts...)
+	err := c.cc.Invoke(ctx, RoutingService_CheckBalancers_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +106,7 @@ func (c *routingServiceClient) CheckBalancers(ctx context.Context, in *CheckBala
 
 func (c *routingServiceClient) OverrideSelecting(ctx context.Context, in *OverrideSelectingRequest, opts ...grpc.CallOption) (*OverrideSelectingResponse, error) {
 	out := new(OverrideSelectingResponse)
-	err := c.cc.Invoke(ctx, "/v2ray.core.app.router.command.RoutingService/OverrideSelecting", in, out, opts...)
+	err := c.cc.Invoke(ctx, RoutingService_OverrideSelecting_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +206,7 @@ func _RoutingService_GetBalancers_Handler(srv interface{}, ctx context.Context, 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/v2ray.core.app.router.command.RoutingService/GetBalancers",
+		FullMethod: RoutingService_GetBalancers_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RoutingServiceServer).GetBalancers(ctx, req.(*GetBalancersRequest))
@@ -221,7 +224,7 @@ func _RoutingService_CheckBalancers_Handler(srv interface{}, ctx context.Context
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/v2ray.core.app.router.command.RoutingService/CheckBalancers",
+		FullMethod: RoutingService_CheckBalancers_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RoutingServiceServer).CheckBalancers(ctx, req.(*CheckBalancersRequest))
@@ -239,7 +242,7 @@ func _RoutingService_OverrideSelecting_Handler(srv interface{}, ctx context.Cont
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/v2ray.core.app.router.command.RoutingService/OverrideSelecting",
+		FullMethod: RoutingService_OverrideSelecting_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RoutingServiceServer).OverrideSelecting(ctx, req.(*OverrideSelectingRequest))
