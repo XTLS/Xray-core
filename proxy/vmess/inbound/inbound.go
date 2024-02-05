@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
+	"github.com/xtls/xray-core/transport/internet/restriction"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -210,7 +211,7 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*stat.UserIpRestriction, connIp *stat.UserIpRestriction) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*restriction.UserMaxIp, connIp *restriction.UserMaxIp) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return newError("unable to set read deadline").Base(err).AtWarning()
@@ -264,7 +265,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
-	if (request.User.IpLimit > 0) {
+	if sessionPolicy.Restriction.MaxIPs > 0 {
 		addr := connection.RemoteAddr().(*net.TCPAddr)
 
 		uniqueIps := make(map[string]bool)
@@ -277,7 +278,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		h.Unlock()
 
-		if (len(uniqueIps) >= int(request.User.IpLimit)) {
+		if len(uniqueIps) >= int(sessionPolicy.Restriction.MaxIPs) {
 			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
 		}
 

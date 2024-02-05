@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/restriction"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -60,7 +61,7 @@ type Inbound interface {
 	Network() []net.Network
 
 	// Process processes a connection of given network. If necessary, the Inbound can dispatch the connection to an Outbound.
-	Process(context.Context, net.Network, stat.Connection, routing.Dispatcher, *map[session.ID]*stat.UserIpRestriction, *stat.UserIpRestriction) error
+	Process(context.Context, net.Network, stat.Connection, routing.Dispatcher, *map[session.ID]*restriction.UserMaxIp, *restriction.UserMaxIp) error
 }
 
 // An Outbound process outbound connections.

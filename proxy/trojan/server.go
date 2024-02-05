@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/restriction"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -134,7 +135,7 @@ func (s *Server) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*stat.UserIpRestriction, connIp *stat.UserIpRestriction) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*restriction.UserMaxIp, connIp *restriction.UserMaxIp) error {
 	sid := session.ExportIDToError(ctx)
 
 	iConn := conn
@@ -222,7 +223,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
-	if (user.IpLimit > 0) {
+	if sessionPolicy.Restriction.MaxIPs > 0 {
 		addr := conn.RemoteAddr().(*net.TCPAddr)
 
 		uniqueIps := make(map[string]bool)
@@ -236,7 +237,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 		s.Unlock()
 
-		if (len(uniqueIps) >= int(user.IpLimit)) {
+		if len(uniqueIps) >= int(sessionPolicy.Restriction.MaxIPs) {
 			return newError("User ", user, " has exceeded their allowed IPs.").AtWarning()
 		}
 

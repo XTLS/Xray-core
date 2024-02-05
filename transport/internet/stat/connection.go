@@ -6,12 +6,6 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 )
 
-type UserIpRestriction struct {
-	User string
-	IpAddress net.IP
-	Time int64
-}
-
 type Connection interface {
 	net.Conn
 }

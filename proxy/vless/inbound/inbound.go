@@ -33,6 +33,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/restriction"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -179,13 +180,14 @@ func (*Handler) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*stat.UserIpRestriction, connIp *stat.UserIpRestriction) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*restriction.UserMaxIp, connIp *restriction.UserMaxIp) error {
 	sid := session.ExportIDToError(ctx)
 
 	iConn := connection
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
+
 
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
@@ -447,7 +449,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
-	if (request.User.IpLimit > 0) {
+	if sessionPolicy.Restriction.MaxIPs > 0 {
 		addr := connection.RemoteAddr().(*net.TCPAddr)
 
 		uniqueIps := make(map[string]bool)
@@ -461,30 +463,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		h.Unlock()
 
-		if (len(uniqueIps) >= int(request.User.IpLimit)) {
-			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
-		}
-
-		connIp.IpAddress = addr.IP
-		connIp.User = request.User.Email
-		connIp.Time = time.Now().Unix()
-	}
-
-	if (request.User.IpLimit > 0) {
-		addr := connection.RemoteAddr().(*net.TCPAddr)
-
-		uniqueIps := make(map[string]bool)
-
-		h.Lock()
-		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
-		for _, conn := range *usrIpRstrct {
-			if conn.User == request.User.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
-				uniqueIps[conn.IpAddress.String()] = true
-			}
-		}
-		h.Unlock()
-
-		if (len(uniqueIps) >= int(request.User.IpLimit)) {
+		if len(uniqueIps) >= int(sessionPolicy.Restriction.MaxIPs) {
 			return newError("User ", request.User.Email, " has exceeded their allowed IPs.").AtWarning()
 		}
 
