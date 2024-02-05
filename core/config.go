@@ -24,10 +24,14 @@ type ConfigLoader func(input interface{}) (*Config, error)
 // ConfigBuilder is a builder to build core.Config from filenames and formats
 type ConfigBuilder func(files []string, formats []string) (*Config, error)
 
+// ConfigMerger merge multiple json configs into on config
+type ConfigsMerger func(files []string, formats []string) (string, error)
+
 var (
 	configLoaderByName    = make(map[string]*ConfigFormat)
 	configLoaderByExt     = make(map[string]*ConfigFormat)
 	ConfigBuilderForFiles ConfigBuilder
+	ConfigMergedFormFiles ConfigsMerger
 )
 
 // RegisterConfigLoader add a new ConfigLoader.
@@ -47,6 +51,23 @@ func RegisterConfigLoader(format *ConfigFormat) error {
 	}
 
 	return nil
+}
+
+func GetMergedConfig(args cmdarg.Arg) (string, error) {
+	files := make([]string, 0)
+	formats := make([]string, 0)
+	supported := []string{"json", "yaml", "toml"}
+	for _, file := range args {
+		format := getFormat(file)
+		for _, s := range supported {
+			if s == format {
+				files = append(files, file)
+				formats = append(formats, format)
+				break
+			}
+		}
+	}
+	return ConfigMergedFormFiles(files, formats)
 }
 
 func GetFormatByExtension(ext string) string {

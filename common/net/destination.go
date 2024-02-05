@@ -97,6 +97,35 @@ func (d Destination) NetAddr() string {
 	return addr
 }
 
+// RawNetAddr converts a net.Addr from its Destination presentation.
+func (d Destination) RawNetAddr() net.Addr {
+	var addr net.Addr
+	switch d.Network {
+	case Network_TCP:
+		if d.Address.Family().IsIP() {
+			addr = &net.TCPAddr{
+				IP:   d.Address.IP(),
+				Port: int(d.Port),
+			}
+		}
+	case Network_UDP:
+		if d.Address.Family().IsIP() {
+			addr = &net.UDPAddr{
+				IP:   d.Address.IP(),
+				Port: int(d.Port),
+			}
+		}
+	case Network_UNIX:
+		if d.Address.Family().IsDomain() {
+			addr = &net.UnixAddr{
+				Name: d.Address.String(),
+				Net:  d.Network.SystemString(),
+			}
+		}
+	}
+	return addr
+}
+
 // String returns the strings form of this Destination.
 func (d Destination) String() string {
 	prefix := "unknown:"

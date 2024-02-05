@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	sync "sync"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/features/extension"
@@ -21,6 +22,24 @@ func (s *RandomStrategy) PickOutbound(tags []string) string {
 	}
 
 	return tags[dice.Roll(n)]
+}
+
+type RoundRobinStrategy struct {
+	mu    sync.Mutex
+	index int
+}
+
+func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
+	n := len(tags)
+	if n == 0 {
+		panic("0 tags")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tag := tags[s.index%n]
+	s.index = (s.index + 1) % n
+	return tag
 }
 
 type Balancer struct {

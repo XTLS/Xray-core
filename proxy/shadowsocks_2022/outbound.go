@@ -2,7 +2,6 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"runtime"
 	"time"
 
 	shadowsocks "github.com/sagernet/sing-shadowsocks"
@@ -102,27 +101,25 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			if err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 				return newError("read payload").Base(err)
 			}
-			_payload := B.StackNew()
-			payload := C.Dup(_payload)
-			defer payload.Release()
+			payload := B.New()
 			for {
-				payload.FullReset()
+				payload.Reset()
 				nb, n := buf.SplitBytes(mb, payload.FreeBytes())
 				if n > 0 {
 					payload.Truncate(n)
 					_, err = serverConn.Write(payload.Bytes())
 					if err != nil {
+						payload.Release()
 						return newError("write payload").Base(err)
 					}
 					handshake = true
 				}
 				if nb.IsEmpty() {
 					break
-				} else {
-					mb = nb
 				}
+				mb = nb
 			}
-			runtime.KeepAlive(_payload)
+			payload.Release()
 		}
 		if !handshake {
 			_, err = serverConn.Write(nil)

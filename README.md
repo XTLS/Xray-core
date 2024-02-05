@@ -23,17 +23,18 @@
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
 - Docker
+  - Official: [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) 
   - [iamybj/docker-xray](https://hub.docker.com/r/iamybj/docker-xray)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
 - Web Panel
-  - [X-UI](https://github.com/FranzKafkaYu/x-ui), [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
+  - [X-UI-English](https://github.com/NidukaAkalanka/x-ui-english), [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [X-UI](https://github.com/diditra/x-ui)
   - [Xray-UI](https://github.com/qist/xray-ui), [X-UI](https://github.com/sing-web/x-ui)
   - [Hiddify](https://github.com/hiddify/hiddify-config)
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
   - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
-  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
   - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
@@ -56,6 +57,7 @@
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
   - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
   - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
+  - [Xray with WireGuard inbound (English)](https://g800.pages.dev/wireguard)
 
 ## GUI Clients
 
@@ -123,16 +125,23 @@
 
 ## Compilation
 
-### Windows
+### Windows (PowerShell)
 
-```bash
+```powershell
+$env:CGO_ENABLED=0
 go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
 ```
 
 ### Linux / macOS
 
 ```bash
-go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+```
+
+### Reproducible Releases
+
+```bash
+make
 ```
 
 ## Stargazers over time

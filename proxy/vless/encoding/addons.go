@@ -62,11 +62,7 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
 func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
 	if request.Command == protocol.RequestCommandUDP {
-		w := writer.(buf.Writer)
-		if requestAddons.Flow == vless.XRV {
-			w = proxy.NewVisionWriter(w, state, context)
-		}
-		return NewMultiLengthPacketWriter(w)
+		return NewMultiLengthPacketWriter(writer.(buf.Writer))
 	}
 	w := buf.NewWriter(writer)
 	if requestAddons.Flow == vless.XRV {

@@ -27,6 +27,11 @@ type generalLogger struct {
 	done    *done.Instance
 }
 
+type serverityLogger struct {
+	inner    *generalLogger
+	logLevel Severity
+}
+
 // NewLogger returns a generic log handler that can handle all type of messages.
 func NewLogger(logWriterCreator WriterCreator) Handler {
 	return &generalLogger{
@@ -34,6 +39,32 @@ func NewLogger(logWriterCreator WriterCreator) Handler {
 		buffer:  make(chan Message, 16),
 		access:  semaphore.New(1),
 		done:    done.New(),
+	}
+}
+
+func ReplaceWithSeverityLogger(serverity Severity) {
+	w := CreateStdoutLogWriter()
+	g := &generalLogger{
+		creator: w,
+		buffer:  make(chan Message, 16),
+		access:  semaphore.New(1),
+		done:    done.New(),
+	}
+	s := &serverityLogger{
+		inner:    g,
+		logLevel: serverity,
+	}
+	RegisterHandler(s)
+}
+
+func (l *serverityLogger) Handle(msg Message) {
+	switch msg := msg.(type) {
+	case *GeneralMessage:
+		if msg.Severity <= l.logLevel {
+			l.inner.Handle(msg)
+		}
+	default:
+		l.inner.Handle(msg)
 	}
 }
 
@@ -67,6 +98,7 @@ func (l *generalLogger) run() {
 }
 
 func (l *generalLogger) Handle(msg Message) {
+
 	select {
 	case l.buffer <- msg:
 	default:

@@ -39,5 +39,6 @@ message Config {
   uint32 timeout = 2 [deprecated = true];
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
-  Fragment fragment = 5;  
+  Fragment fragment = 5;
+  uint32 proxy_protocol = 6;
 }

@@ -176,7 +176,6 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 // XtlsRead filter and read xtls protocol
 func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ctx context.Context) error {
 	err := func() error {
-		visionReader := proxy.NewVisionReader(reader, trafficState, ctx)
 		for {
 			if trafficState.ReaderSwitchToDirectCopy {
 				var writerConn net.Conn
@@ -188,7 +187,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 				}
 				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer)
 			}
-			buffer, err := visionReader.ReadMultiBuffer()
+			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				timer.Update()
 				if trafficState.ReaderSwitchToDirectCopy {
@@ -225,15 +224,6 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 		var ct stats.Counter
 		for {
 			buffer, err := reader.ReadMultiBuffer()
-			if trafficState.WriterSwitchToDirectCopy {
-				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.CanSpliceCopy == 2 {
-					inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
-				}
-				rawConn, _, writerCounter := proxy.UnwrapRawConn(conn)
-				writer = buf.NewWriter(rawConn)
-				ct = writerCounter
-				trafficState.WriterSwitchToDirectCopy = false
-			}
 			if !buffer.IsEmpty() {
 				if ct != nil {
 					ct.Add(int64(buffer.Len()))
@@ -241,6 +231,15 @@ func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdate
 				timer.Update()
 				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 					return werr
+				}
+				if trafficState.WriterSwitchToDirectCopy {
+					rawConn, _, writerCounter := proxy.UnwrapRawConn(conn)
+					writer = buf.NewWriter(rawConn)
+					ct = writerCounter
+					trafficState.WriterSwitchToDirectCopy = false
+					if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.CanSpliceCopy == 2 {
+						inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
+					}
 				}
 			}
 			if err != nil {
