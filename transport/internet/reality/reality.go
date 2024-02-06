@@ -46,7 +46,7 @@ type Conn struct {
 	*reality.Conn
 }
 
-func (c *Conn) HandshakeContextAddress(ctx context.Context) net.Address {
+func (c *Conn) HandshakeAddressContext(ctx context.Context) net.Address {
 	if err := c.HandshakeContext(ctx); err != nil {
 		return nil
 	}
@@ -80,7 +80,7 @@ func (c *UConn) Close() error {
 	return c.UConn.Close()
 }
 
-func (c *UConn) HandshakeContextAddress(ctx context.Context) net.Address {
+func (c *UConn) HandshakeAddressContext(ctx context.Context) net.Address {
 	if err := c.HandshakeContext(ctx); err != nil {
 		return nil
 	}

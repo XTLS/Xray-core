@@ -71,8 +71,8 @@ func (d *DokodemoDoor) policy() policy.Session {
 	return p
 }
 
-type hasHandshakeContextAddress interface {
-	HandshakeContextAddress(ctx context.Context) net.Address
+type hasHandshakeAddressContext interface {
+	HandshakeAddressContext(ctx context.Context) net.Address
 }
 
 // Process implements proxy.Inbound.
@@ -89,8 +89,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		if outbound := session.OutboundFromContext(ctx); outbound != nil && outbound.Target.IsValid() {
 			dest = outbound.Target
 			destinationOverridden = true
-		} else if handshake, ok := conn.(hasHandshakeContextAddress); ok {
-			addr := handshake.HandshakeContextAddress(ctx)
+		} else if handshake, ok := conn.(hasHandshakeAddressContext); ok {
+			addr := handshake.HandshakeAddressContext(ctx)
 			if addr != nil {
 				dest.Address = addr
 				destinationOverridden = true
