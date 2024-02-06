@@ -83,9 +83,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 			var cn tls.Interface
 			if fingerprint := tls.GetFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
-				cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
+				cn = tls.UClient(pconn, tlsConfig, fingerprint, tlsConfigs.CloseTimeout).(*tls.UConn)
 			} else {
-				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
+				cn = tls.Client(pconn, tlsConfig, tlsConfigs.CloseTimeout).(*tls.Conn)
 			}
 			if err := cn.HandshakeContext(ctx); err != nil {
 				newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()

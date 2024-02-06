@@ -132,7 +132,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if tlsConfig != nil {
 		var transportCredential credentials.TransportCredentials
 		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-			transportCredential = tls.NewGrpcUtls(tlsConfig.GetTLSConfig(), fingerprint)
+			transportCredential = tls.NewGrpcUtls(tlsConfig.GetTLSConfig(), fingerprint, tlsConfig.CloseTimeout)
 		} else { // Fallback to normal gRPC TLS
 			transportCredential = credentials.NewTLS(tlsConfig.GetTLSConfig())
 		}

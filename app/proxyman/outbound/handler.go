@@ -254,7 +254,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 
 				if config := tls.ConfigFromStreamSettings(h.streamSettings); config != nil {
 					tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
-					conn = tls.Client(conn, tlsConfig)
+					conn = tls.Client(conn, tlsConfig, config.CloseTimeout)
 				}
 
 				return h.getStatCouterConnection(conn), nil

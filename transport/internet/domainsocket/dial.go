@@ -27,7 +27,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		return tls.Client(conn, config.GetTLSConfig(tls.WithDestination(dest))), nil
+		return tls.Client(conn, config.GetTLSConfig(tls.WithDestination(dest)), config.CloseTimeout), nil
 	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
 		return reality.UClient(conn, config, ctx, dest)
 	}

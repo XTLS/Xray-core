@@ -25,4 +25,5 @@ message Config {
   string spider_x = 25;
   repeated int64 spider_y = 26;
   string master_key_log = 27;
+  float close_timeout = 28;
 }

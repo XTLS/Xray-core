@@ -25,15 +25,16 @@ var _ buf.Writer = (*Conn)(nil)
 
 type Conn struct {
 	*tls.Conn
+	closeTimeout time.Duration
 }
 
-const tlsCloseTimeout = 250 * time.Millisecond
-
 func (c *Conn) Close() error {
-	timer := time.AfterFunc(tlsCloseTimeout, func() {
-		c.Conn.NetConn().Close()
-	})
-	defer timer.Stop()
+	if c.closeTimeout != 0 {
+		timer := time.AfterFunc(c.closeTimeout, func() {
+			c.Conn.NetConn().Close()
+		})
+		defer timer.Stop()
+	}
 	return c.Conn.Close()
 }
 
@@ -61,9 +62,9 @@ func (c *Conn) NegotiatedProtocol() (name string, mutual bool) {
 }
 
 // Client initiates a TLS client handshake on the given connection.
-func Client(c net.Conn, config *tls.Config) net.Conn {
+func Client(c net.Conn, config *tls.Config, closeTimeout float32) net.Conn {
 	tlsConn := tls.Client(c, config)
-	return &Conn{Conn: tlsConn}
+	return &Conn{Conn: tlsConn, closeTimeout: time.Duration(float32(time.Second) * closeTimeout)}
 }
 
 // Server initiates a TLS server handshake on the given connection.
@@ -74,13 +75,16 @@ func Server(c net.Conn, config *tls.Config) net.Conn {
 
 type UConn struct {
 	*utls.UConn
+	closeTimeout time.Duration
 }
 
 func (c *UConn) Close() error {
-	timer := time.AfterFunc(tlsCloseTimeout, func() {
-		c.Conn.NetConn().Close()
-	})
-	defer timer.Stop()
+	if c.closeTimeout != 0 {
+		timer := time.AfterFunc(c.closeTimeout, func() {
+			c.Conn.NetConn().Close()
+		})
+		defer timer.Stop()
+	}
 	return c.Conn.Close()
 }
 
@@ -127,9 +131,9 @@ func (c *UConn) NegotiatedProtocol() (name string, mutual bool) {
 	return state.NegotiatedProtocol, state.NegotiatedProtocolIsMutual
 }
 
-func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
+func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID, closeTimeout float32) net.Conn {
 	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
-	return &UConn{UConn: utlsConn}
+	return &UConn{UConn: utlsConn, closeTimeout: time.Duration(float32(time.Second) * closeTimeout)}
 }
 
 func copyConfig(c *tls.Config) *utls.Config {
