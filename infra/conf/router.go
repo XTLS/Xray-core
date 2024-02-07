@@ -40,17 +40,11 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		return nil, newError("empty selector list")
 	}
 
-	var strategy string
-	switch strings.ToLower(r.Strategy.Type) {
-	case strategyRandom, "":
+	r.Strategy.Type = strings.ToLower(r.Strategy.Type)
+	switch r.Strategy.Type {
+	case "":
 		r.Strategy.Type = strategyRandom
-		strategy = strategyRandom
-	case strategyLeastLoad:
-		strategy = strategyLeastLoad
-	case strategyLeastPing:
-		strategy = "leastPing"
-	case strategyRoundRobin:
-		strategy = "roundRobin"
+	case strategyRandom, strategyLeastLoad, strategyLeastPing, strategyRoundRobin:
 	default:
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
 	}
@@ -72,7 +66,7 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	}
 
 	return &router.BalancingRule{
-		Strategy:         strategy,
+		Strategy:         r.Strategy.Type,
 		StrategySettings: serial.ToTypedMessage(ts),
 		FallbackTag:      r.FallbackTag,
 		OutboundSelector: r.Selectors,
