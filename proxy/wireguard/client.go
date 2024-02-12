@@ -254,7 +254,6 @@ func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
 	return t, nil
 }
 
-
 // serialize the config into an IPC request
 func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) string {
 	var request strings.Builder
@@ -275,8 +274,11 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 			request.WriteString(fmt.Sprintf("preshared_key=%s\n", peer.PreSharedKey))
 		}
 
-		split := strings.Split(peer.Endpoint, ":")
-		addr := net.ParseAddress(split[0])
+		address, port, err := net.SplitHostPort(peer.Endpoint)
+		if err != nil {
+			newError("failed to split endpoint ", peer.Endpoint, " into address and port").AtError().WriteToLog()
+		}
+		addr := net.ParseAddress(address)
 		if addr.Family().IsDomain() {
 			dialerIp := bind.dialer.DestIpAddress()
 			if dialerIp != nil {
@@ -306,7 +308,7 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 		}
 
 		if peer.Endpoint != "" {
-			request.WriteString(fmt.Sprintf("endpoint=%s:%s\n", addr, split[1]))
+			request.WriteString(fmt.Sprintf("endpoint=%s:%s\n", addr, port))
 		}
 
 		for _, ip := range peer.AllowedIps {
