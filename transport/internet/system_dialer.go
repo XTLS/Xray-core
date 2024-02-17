@@ -2,6 +2,7 @@ package internet
 
 import (
 	"context"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -66,7 +67,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		if err != nil {
 			return nil, err
 		}
-		if sockopt != nil || len(d.controllers) > 0 {
+		if runtime.GOOS != "windows" && (sockopt != nil || len(d.controllers) > 0) {
 			file, err := packetConn.(*net.UDPConn).File()
 			if err != nil {
 				return nil, err
