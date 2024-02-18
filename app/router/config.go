@@ -121,28 +121,45 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	return conds, nil
 }
 
-func (br *BalancingRule) Build(ohm outbound.Manager) (*Balancer, error) {
-	switch br.Strategy {
-	case "leastPing":
+// Build builds the balancing rule
+func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatcher) (*Balancer, error) {
+	switch strings.ToLower(br.Strategy) {
+	case "leastping":
 		return &Balancer{
 			selectors: br.OutboundSelector,
 			strategy:  &LeastPingStrategy{},
 			ohm:       ohm,
 		}, nil
-	case "roundRobin":
+	case "roundrobin":
 		return &Balancer{
 			selectors: br.OutboundSelector,
 			strategy:  &RoundRobinStrategy{},
 			ohm:       ohm,
 		}, nil
-	case "random":
-		fallthrough
-	default:
+	case "leastload":
+		i, err := br.StrategySettings.GetInstance()
+		if err != nil {
+			return nil, err
+		}
+		s, ok := i.(*StrategyLeastLoadConfig)
+		if !ok {
+			return nil, newError("not a StrategyLeastLoadConfig").AtError()
+		}
+		leastLoadStrategy := NewLeastLoadStrategy(s)
 		return &Balancer{
 			selectors: br.OutboundSelector,
-			strategy:  &RandomStrategy{},
-			ohm:       ohm,
+			ohm:       ohm, fallbackTag: br.FallbackTag,
+			strategy: leastLoadStrategy,
 		}, nil
-
+	case "random":
+		fallthrough
+	case "":
+		return &Balancer{
+			selectors: br.OutboundSelector,
+			ohm:       ohm, fallbackTag: br.FallbackTag,
+			strategy: &RandomStrategy{},
+		}, nil
+	default:
+		return nil, newError("unrecognized balancer type")
 	}
 }

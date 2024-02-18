@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	RoutingService_SubscribeRoutingStats_FullMethodName = "/xray.app.router.command.RoutingService/SubscribeRoutingStats"
-	RoutingService_TestRoute_FullMethodName             = "/xray.app.router.command.RoutingService/TestRoute"
+	RoutingService_SubscribeRoutingStats_FullMethodName  = "/xray.app.router.command.RoutingService/SubscribeRoutingStats"
+	RoutingService_TestRoute_FullMethodName              = "/xray.app.router.command.RoutingService/TestRoute"
+	RoutingService_GetBalancerInfo_FullMethodName        = "/xray.app.router.command.RoutingService/GetBalancerInfo"
+	RoutingService_OverrideBalancerTarget_FullMethodName = "/xray.app.router.command.RoutingService/OverrideBalancerTarget"
 )
 
 // RoutingServiceClient is the client API for RoutingService service.
@@ -29,6 +31,8 @@ const (
 type RoutingServiceClient interface {
 	SubscribeRoutingStats(ctx context.Context, in *SubscribeRoutingStatsRequest, opts ...grpc.CallOption) (RoutingService_SubscribeRoutingStatsClient, error)
 	TestRoute(ctx context.Context, in *TestRouteRequest, opts ...grpc.CallOption) (*RoutingContext, error)
+	GetBalancerInfo(ctx context.Context, in *GetBalancerInfoRequest, opts ...grpc.CallOption) (*GetBalancerInfoResponse, error)
+	OverrideBalancerTarget(ctx context.Context, in *OverrideBalancerTargetRequest, opts ...grpc.CallOption) (*OverrideBalancerTargetResponse, error)
 }
 
 type routingServiceClient struct {
@@ -80,12 +84,32 @@ func (c *routingServiceClient) TestRoute(ctx context.Context, in *TestRouteReque
 	return out, nil
 }
 
+func (c *routingServiceClient) GetBalancerInfo(ctx context.Context, in *GetBalancerInfoRequest, opts ...grpc.CallOption) (*GetBalancerInfoResponse, error) {
+	out := new(GetBalancerInfoResponse)
+	err := c.cc.Invoke(ctx, RoutingService_GetBalancerInfo_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) OverrideBalancerTarget(ctx context.Context, in *OverrideBalancerTargetRequest, opts ...grpc.CallOption) (*OverrideBalancerTargetResponse, error) {
+	out := new(OverrideBalancerTargetResponse)
+	err := c.cc.Invoke(ctx, RoutingService_OverrideBalancerTarget_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoutingServiceServer is the server API for RoutingService service.
 // All implementations must embed UnimplementedRoutingServiceServer
 // for forward compatibility
 type RoutingServiceServer interface {
 	SubscribeRoutingStats(*SubscribeRoutingStatsRequest, RoutingService_SubscribeRoutingStatsServer) error
 	TestRoute(context.Context, *TestRouteRequest) (*RoutingContext, error)
+	GetBalancerInfo(context.Context, *GetBalancerInfoRequest) (*GetBalancerInfoResponse, error)
+	OverrideBalancerTarget(context.Context, *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error)
 	mustEmbedUnimplementedRoutingServiceServer()
 }
 
@@ -98,6 +122,12 @@ func (UnimplementedRoutingServiceServer) SubscribeRoutingStats(*SubscribeRouting
 }
 func (UnimplementedRoutingServiceServer) TestRoute(context.Context, *TestRouteRequest) (*RoutingContext, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestRoute not implemented")
+}
+func (UnimplementedRoutingServiceServer) GetBalancerInfo(context.Context, *GetBalancerInfoRequest) (*GetBalancerInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBalancerInfo not implemented")
+}
+func (UnimplementedRoutingServiceServer) OverrideBalancerTarget(context.Context, *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OverrideBalancerTarget not implemented")
 }
 func (UnimplementedRoutingServiceServer) mustEmbedUnimplementedRoutingServiceServer() {}
 
@@ -151,6 +181,42 @@ func _RoutingService_TestRoute_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoutingService_GetBalancerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBalancerInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).GetBalancerInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoutingService_GetBalancerInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).GetBalancerInfo(ctx, req.(*GetBalancerInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_OverrideBalancerTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OverrideBalancerTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).OverrideBalancerTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoutingService_OverrideBalancerTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).OverrideBalancerTarget(ctx, req.(*OverrideBalancerTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoutingService_ServiceDesc is the grpc.ServiceDesc for RoutingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -161,6 +227,14 @@ var RoutingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TestRoute",
 			Handler:    _RoutingService_TestRoute_Handler,
+		},
+		{
+			MethodName: "GetBalancerInfo",
+			Handler:    _RoutingService_GetBalancerInfo_Handler,
+		},
+		{
+			MethodName: "OverrideBalancerTarget",
+			Handler:    _RoutingService_OverrideBalancerTarget_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

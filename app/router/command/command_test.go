@@ -318,7 +318,7 @@ func TestSerivceTestRoute(t *testing.T) {
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 		},
-	}, mocks.NewDNSClient(mockCtl), mocks.NewOutboundManager(mockCtl)))
+	}, mocks.NewDNSClient(mockCtl), mocks.NewOutboundManager(mockCtl), nil))
 
 	lis := bufconn.Listen(1024 * 1024)
 	bufDialer := func(context.Context, string) (net.Conn, error) {

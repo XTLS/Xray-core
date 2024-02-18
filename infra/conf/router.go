@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"google.golang.org/protobuf/proto"
 )
@@ -24,11 +25,13 @@ type StrategyConfig struct {
 }
 
 type BalancingRule struct {
-	Tag       string         `json:"tag"`
-	Selectors StringList     `json:"selector"`
-	Strategy  StrategyConfig `json:"strategy"`
+	Tag         string         `json:"tag"`
+	Selectors   StringList     `json:"selector"`
+	Strategy    StrategyConfig `json:"strategy"`
+	FallbackTag string         `json:"fallbackTag"`
 }
 
+// Build builds the balancing rule
 func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	if r.Tag == "" {
 		return nil, newError("empty balancer tag")
@@ -37,22 +40,37 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		return nil, newError("empty selector list")
 	}
 
-	var strategy string
-	switch strings.ToLower(r.Strategy.Type) {
-	case strategyRandom, "":
-		strategy = strategyRandom
-	case strategyLeastPing:
-		strategy = "leastPing"
-	case strategyRoundRobin:
-		strategy = "roundRobin"
+	r.Strategy.Type = strings.ToLower(r.Strategy.Type)
+	switch r.Strategy.Type {
+	case "":
+		r.Strategy.Type = strategyRandom
+	case strategyRandom, strategyLeastLoad, strategyLeastPing, strategyRoundRobin:
 	default:
 		return nil, newError("unknown balancing strategy: " + r.Strategy.Type)
 	}
 
+	settings := []byte("{}")
+	if r.Strategy.Settings != nil {
+		settings = ([]byte)(*r.Strategy.Settings)
+	}
+	rawConfig, err := strategyConfigLoader.LoadWithID(settings, r.Strategy.Type)
+	if err != nil {
+		return nil, newError("failed to parse to strategy config.").Base(err)
+	}
+	var ts proto.Message
+	if builder, ok := rawConfig.(Buildable); ok {
+		ts, err = builder.Build()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &router.BalancingRule{
+		Strategy:         r.Strategy.Type,
+		StrategySettings: serial.ToTypedMessage(ts),
+		FallbackTag:      r.FallbackTag,
+		OutboundSelector: r.Selectors,
 		Tag:              r.Tag,
-		OutboundSelector: []string(r.Selectors),
-		Strategy:         strategy,
 	}, nil
 }
 

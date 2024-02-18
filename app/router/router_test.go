@@ -43,7 +43,7 @@ func TestSimpleRouter(t *testing.T) {
 	common.Must(r.Init(context.TODO(), config, mockDNS, &mockOutboundManager{
 		Manager:         mockOhm,
 		HandlerSelector: mockHs,
-	}))
+	}, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -84,7 +84,7 @@ func TestSimpleBalancer(t *testing.T) {
 	common.Must(r.Init(context.TODO(), config, mockDNS, &mockOutboundManager{
 		Manager:         mockOhm,
 		HandlerSelector: mockHs,
-	}))
+	}, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -93,6 +93,55 @@ func TestSimpleBalancer(t *testing.T) {
 		t.Error("expect tag 'test', bug actually ", tag)
 	}
 }
+
+/*
+
+Do not work right now: need a full client setup
+
+func TestLeastLoadBalancer(t *testing.T) {
+	config := &Config{
+		Rule: []*RoutingRule{
+			{
+				TargetTag: &RoutingRule_BalancingTag{
+					BalancingTag: "balance",
+				},
+				Networks: []net.Network{net.Network_TCP},
+			},
+		},
+		BalancingRule: []*BalancingRule{
+			{
+				Tag:              "balance",
+				OutboundSelector: []string{"test-"},
+				Strategy:         "leastLoad",
+				StrategySettings: serial.ToTypedMessage(&StrategyLeastLoadConfig{
+					Baselines:   nil,
+					Expected:    1,
+				}),
+			},
+		},
+	}
+
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	mockDNS := mocks.NewDNSClient(mockCtl)
+	mockOhm := mocks.NewOutboundManager(mockCtl)
+	mockHs := mocks.NewOutboundHandlerSelector(mockCtl)
+
+	mockHs.EXPECT().Select(gomock.Eq([]string{"test-"})).Return([]string{"test1"})
+
+	r := new(Router)
+	common.Must(r.Init(context.TODO(), config, mockDNS, &mockOutboundManager{
+		Manager:         mockOhm,
+		HandlerSelector: mockHs,
+	}, nil))
+	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("v2ray.com"), 80)})
+	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
+	common.Must(err)
+	if tag := route.GetOutboundTag(); tag != "test1" {
+		t.Error("expect tag 'test1', bug actually ", tag)
+	}
+}*/
 
 func TestIPOnDemand(t *testing.T) {
 	config := &Config{
@@ -123,7 +172,7 @@ func TestIPOnDemand(t *testing.T) {
 	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
-	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -162,7 +211,7 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 	}).Return([]net.IP{{192, 168, 0, 1}}, nil).AnyTimes()
 
 	r := new(Router)
-	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
@@ -196,7 +245,7 @@ func TestIPIfNonMatchIP(t *testing.T) {
 	mockDNS := mocks.NewDNSClient(mockCtl)
 
 	r := new(Router)
-	common.Must(r.Init(context.TODO(), config, mockDNS, nil))
+	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
 	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.LocalHostIP, 80)})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))

@@ -19,6 +19,41 @@ type routingServer struct {
 	routingStats stats.Channel
 }
 
+func (s *routingServer) GetBalancerInfo(ctx context.Context, request *GetBalancerInfoRequest) (*GetBalancerInfoResponse, error) {
+	var ret GetBalancerInfoResponse
+	ret.Balancer = &BalancerMsg{}
+	if bo, ok := s.router.(routing.BalancerOverrider); ok {
+		{
+			res, err := bo.GetOverrideTarget(request.GetTag())
+			if err != nil {
+				return nil, err
+			}
+			ret.Balancer.Override = &OverrideInfo{
+				Target: res,
+			}
+		}
+	}
+
+	if pt, ok := s.router.(routing.BalancerPrincipleTarget); ok {
+		{
+			res, err := pt.GetPrincipleTarget(request.GetTag())
+			if err != nil {
+				newError("unable to obtain principle target").Base(err).AtInfo().WriteToLog()
+			} else {
+				ret.Balancer.PrincipleTarget = &PrincipleTargetInfo{Tag: res}
+			}
+		}
+	}
+	return &ret, nil
+}
+
+func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error) {
+	if bo, ok := s.router.(routing.BalancerOverrider); ok {
+		return &OverrideBalancerTargetResponse{}, bo.SetOverrideTarget(request.BalancerTag, request.Target)
+	}
+	return nil, newError("unsupported router implementation")
+}
+
 // NewRoutingServer creates a statistics service with statistics manager.
 func NewRoutingServer(router routing.Router, routingStats stats.Channel) RoutingServiceServer {
 	return &routingServer{

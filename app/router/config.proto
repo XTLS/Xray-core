@@ -6,6 +6,7 @@ option go_package = "github.com/xtls/xray-core/app/router";
 option java_package = "com.xray.app.router";
 option java_multiple_files = true;
 
+import "common/serial/typed_message.proto";
 import "common/net/port.proto";
 import "common/net/network.proto";
 
@@ -128,6 +129,27 @@ message BalancingRule {
   string tag = 1;
   repeated string outbound_selector = 2;
   string strategy = 3;
+  xray.common.serial.TypedMessage strategy_settings = 4;
+  string fallback_tag = 5;
+}
+
+message StrategyWeight {
+  bool regexp = 1;
+  string match = 2;
+  float value =3;
+}
+
+message StrategyLeastLoadConfig {
+  // weight settings
+  repeated StrategyWeight costs = 2;
+  // RTT baselines for selecting, int64 values of time.Duration
+  repeated int64 baselines = 3;
+  // expected nodes count to select
+  int32 expected = 4;
+  // max acceptable rtt, filter away high delay nodes. defalut 0
+  int64 maxRTT = 5;
+  // acceptable failure rate
+  float tolerance = 6;
 }
 
 message Config {
