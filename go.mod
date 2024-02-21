@@ -33,6 +33,7 @@ require (
 )
 
 require (
+	github.com/GFW-knocker/wireguard v0.0.0-20240221072816-5567eaed5e4a // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

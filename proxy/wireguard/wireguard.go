@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/GFW-knocker/wireguard/device"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/log"
-	"golang.zx2c4.com/wireguard/device"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen

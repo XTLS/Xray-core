@@ -211,6 +211,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return newError("failed to create UDP connection").Base(err)
 		}
+
 		defer conn.Close()
 
 		requestFunc = func() error {

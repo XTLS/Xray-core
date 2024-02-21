@@ -12,7 +12,7 @@ import (
 	"os"
 	"syscall"
 
-	"golang.zx2c4.com/wireguard/tun"
+	"github.com/GFW-knocker/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"

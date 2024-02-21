@@ -19,6 +19,12 @@ message Fragment {
   uint64 length_max = 4;
   uint64 interval_min = 5;
   uint64 interval_max = 6;
+  bool fake_host = 7;
+  string host1_header = 8;
+  string host1_domain = 9;
+  string host2_header = 10;
+  string host2_domain = 11;
+  
 }
 
 message Config {

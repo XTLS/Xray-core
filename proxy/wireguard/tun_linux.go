@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	wgtun "github.com/GFW-knocker/wireguard/tun"
 	"github.com/sagernet/sing/common/control"
 	"github.com/vishvananda/netlink"
-	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 
 type deviceNet struct {
