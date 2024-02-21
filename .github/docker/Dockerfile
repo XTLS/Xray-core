@@ -10,7 +10,7 @@ WORKDIR /root
 COPY .github/docker/files/config.json /etc/xray/config.json
 COPY --from=build /src/xray /usr/bin/xray
 RUN set -ex \
-	&& apk add --no-cache tzdata ca-certificates \
+	&& apk add --no-cache tzdata ca-certificates iptables \
 	&& mkdir -p /var/log/xray /usr/share/xray \
     && chmod +x /usr/bin/xray \
 	&& wget -O /usr/share/xray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat \

@@ -62,7 +62,7 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	if err = tun.BuildDevice(createIPCRequest(conf), server.bindServer); err != nil {
+	if err = tun.BuildDevice(conf, createIPCRequest(conf), server.bindServer); err != nil {
 		_ = tun.Close()
 		return nil, err
 	}

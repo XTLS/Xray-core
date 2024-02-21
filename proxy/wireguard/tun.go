@@ -31,19 +31,20 @@ type tunCreator func(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 type promiscuousModeHandler func(dest xnet.Destination, conn net.Conn)
 
 type Tunnel interface {
-	BuildDevice(ipc string, bind conn.Bind) error
+	BuildDevice(conf *DeviceConfig, ipc string, bind conn.Bind) error
 	DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
 	DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error)
 	Close() error
 }
 
+// tunnel is a wrapper of wireguard device and tun device for gvisorNet and deviceNet
 type tunnel struct {
 	tun    tun.Device
 	device *device.Device
 	rw     sync.Mutex
 }
 
-func (t *tunnel) BuildDevice(ipc string, bind conn.Bind) (err error) {
+func (t *tunnel) BuildDevice(conf *DeviceConfig, ipc string, bind conn.Bind) (err error) {
 	t.rw.Lock()
 	defer t.rw.Unlock()
 

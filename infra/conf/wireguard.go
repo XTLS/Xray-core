@@ -117,18 +117,24 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	}
 
 	config.IsClient = c.IsClient
-	if c.KernelMode != nil {
-		config.KernelMode = *c.KernelMode
-		if config.KernelMode && !wireguard.KernelTunSupported() {
-			newError("kernel mode is not supported on your OS or permission is insufficient").AtWarning().WriteToLog()
-		}
-	} else {
-		config.KernelMode = wireguard.KernelTunSupported()
-		if config.KernelMode {
-			newError("kernel mode is enabled as it's supported and permission is sufficient").AtDebug().WriteToLog()
+	if c.IsClient {
+		if support := wireguard.CheckUnixKernelTunSupported(); c.KernelMode == nil {
+			config.KernelMode = support
+		} else if *c.KernelMode && support {
+			config.KernelMode = true
+		} else {
+			config.KernelMode = false
 		}
 	}
+	if !c.IsClient {
+		config.KernelMode = false
+	}
 
+	// check device exist for wireguard setup
+	// module "golang.zx2c4.com/wireguard" on linux require /dev/net/tun for userspace implementation
+	if wireguard.IsLinux() && !config.KernelMode && !wireguard.CheckUnixKernelTunDeviceEnabled() {
+		return nil, newError(`wireguard userspace mode require device "/dev/net/tun"`)
+	}
 	return config, nil
 }
 
