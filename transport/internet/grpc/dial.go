@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -141,7 +142,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		}),
 	}
 
-	dialOptions = append(dialOptions, grpc.WithInsecure())
+	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	authority := ""
 	if grpcSettings.Authority != "" {
