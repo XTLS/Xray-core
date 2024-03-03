@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/domainsocket"
 	httpheader "github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/http"
+	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/quic"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -174,6 +175,24 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 		Path:   path,
 		Header: header,
 		Ed:     ed,
+	}
+	if c.AcceptProxyProtocol {
+		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+	}
+	return config, nil
+}
+
+type HttpUpgradeConfig struct {
+	Path                string `json:"path"`
+	Host                string `json:"host"`
+	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+}
+
+// Build implements Buildable.
+func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
+	config := &httpupgrade.Config{
+		Path: c.Path,
+		Host: c.Host,
 	}
 	if c.AcceptProxyProtocol {
 		config.AcceptProxyProtocol = c.AcceptProxyProtocol
@@ -606,6 +625,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "quic", nil
 	case "grpc", "gun":
 		return "grpc", nil
+	case "httpupgrade":
+		return "httpupgrade", nil
 	default:
 		return "", newError("Config: unknown transport protocol: ", p)
 	}
@@ -706,19 +727,20 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 type StreamConfig struct {
-	Network         *TransportProtocol  `json:"network"`
-	Security        string              `json:"security"`
-	TLSSettings     *TLSConfig          `json:"tlsSettings"`
-	REALITYSettings *REALITYConfig      `json:"realitySettings"`
-	TCPSettings     *TCPConfig          `json:"tcpSettings"`
-	KCPSettings     *KCPConfig          `json:"kcpSettings"`
-	WSSettings      *WebSocketConfig    `json:"wsSettings"`
-	HTTPSettings    *HTTPConfig         `json:"httpSettings"`
-	DSSettings      *DomainSocketConfig `json:"dsSettings"`
-	QUICSettings    *QUICConfig         `json:"quicSettings"`
-	SocketSettings  *SocketConfig       `json:"sockopt"`
-	GRPCConfig      *GRPCConfig         `json:"grpcSettings"`
-	GUNConfig       *GRPCConfig         `json:"gunSettings"`
+	Network             *TransportProtocol  `json:"network"`
+	Security            string              `json:"security"`
+	TLSSettings         *TLSConfig          `json:"tlsSettings"`
+	REALITYSettings     *REALITYConfig      `json:"realitySettings"`
+	TCPSettings         *TCPConfig          `json:"tcpSettings"`
+	KCPSettings         *KCPConfig          `json:"kcpSettings"`
+	WSSettings          *WebSocketConfig    `json:"wsSettings"`
+	HTTPSettings        *HTTPConfig         `json:"httpSettings"`
+	DSSettings          *DomainSocketConfig `json:"dsSettings"`
+	QUICSettings        *QUICConfig         `json:"quicSettings"`
+	SocketSettings      *SocketConfig       `json:"sockopt"`
+	GRPCConfig          *GRPCConfig         `json:"grpcSettings"`
+	GUNConfig           *GRPCConfig         `json:"gunSettings"`
+	HTTPUPGRADESettings *HttpUpgradeConfig  `json:"httpupgradeSettings"`
 }
 
 // Build implements Buildable.
@@ -837,6 +859,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "grpc",
 			Settings:     serial.ToTypedMessage(gs),
+		})
+	}
+	if c.HTTPUPGRADESettings != nil {
+		hs, err := c.HTTPUPGRADESettings.Build()
+		if err != nil {
+			return nil, newError("Failed to build HttpUpgrade config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "httpupgrade",
+			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
 	if c.SocketSettings != nil {
