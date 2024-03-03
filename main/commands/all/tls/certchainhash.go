@@ -3,7 +3,7 @@ package tls
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/xtls/xray-core/main/commands/base"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -30,12 +30,11 @@ func executeCertChainHash(cmd *base.Command, args []string) {
 		fmt.Println(err)
 		return
 	}
-	certContent, err := ioutil.ReadFile(*input)
+	certContent, err := os.ReadFile(*input)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	certChainHashB64 := tls.CalculatePEMCertChainSHA256Hash(certContent)
 	fmt.Println(certChainHashB64)
-	return
 }

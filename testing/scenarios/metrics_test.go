@@ -3,7 +3,7 @@ package scenarios
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -80,7 +80,7 @@ func TestMetrics(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Error("unexpected pprof status code")
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestMetrics(t *testing.T) {
 	if resp2.StatusCode != http.StatusOK {
 		t.Error("unexpected expvars status code")
 	}
-	body2, err2 := ioutil.ReadAll(resp2.Body)
+	body2, err2 := io.ReadAll(resp2.Body)
 	if err2 != nil {
 		t.Fatal(err2)
 	}
