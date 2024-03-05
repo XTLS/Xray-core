@@ -176,7 +176,6 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 // XtlsRead filter and read xtls protocol
 func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ctx context.Context) error {
 	err := func() error {
-		visionReader := proxy.NewVisionReader(reader, trafficState, ctx)
 		for {
 			if trafficState.ReaderSwitchToDirectCopy {
 				var writerConn net.Conn
@@ -188,7 +187,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 				}
 				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer)
 			}
-			buffer, err := visionReader.ReadMultiBuffer()
+			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
 				timer.Update()
 				if trafficState.ReaderSwitchToDirectCopy {

@@ -60,10 +60,41 @@ message TestRouteRequest {
   bool PublishResult = 3;
 }
 
+message PrincipleTargetInfo {
+  repeated string tag = 1;
+}
+
+message OverrideInfo {
+  string target = 2;
+}
+
+message BalancerMsg {
+  OverrideInfo override = 5;
+  PrincipleTargetInfo principle_target = 6;
+}
+
+message GetBalancerInfoRequest {
+  string tag = 1;
+}
+
+message GetBalancerInfoResponse {
+  BalancerMsg balancer = 1;
+}
+
+message OverrideBalancerTargetRequest {
+  string balancerTag = 1;
+  string target = 2;
+}
+
+message OverrideBalancerTargetResponse {}
+
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
   rpc TestRoute(TestRouteRequest) returns (RoutingContext) {}
+
+  rpc GetBalancerInfo(GetBalancerInfoRequest) returns (GetBalancerInfoResponse){}
+  rpc OverrideBalancerTarget(OverrideBalancerTargetRequest) returns (OverrideBalancerTargetResponse) {}
 }
 
 message Config {}

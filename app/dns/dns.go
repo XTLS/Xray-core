@@ -181,9 +181,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	}
 
 	// Normalize the FQDN form query
-	if strings.HasSuffix(domain, ".") {
-		domain = domain[:len(domain)-1]
-	}
+	domain = strings.TrimSuffix(domain, ".")
 
 	// Static host lookup
 	switch addrs := s.hosts.Lookup(domain, option); {

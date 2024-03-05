@@ -80,6 +80,7 @@ ___
 
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install)
+  - [team-cloudchaser/tempest](https://github.com/team-cloudchaser/tempest) (For Linux without systemd)
 - Docker
   - Official: [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) 
   - [iamybj/docker-xray](https://hub.docker.com/r/iamybj/docker-xray)
@@ -92,7 +93,7 @@ ___
   - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
   - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
-  - [Xray-script](https://github.com/kirin10000/Xray-script), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
   - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
@@ -182,6 +183,21 @@ ___
 - For third-party projects used in [Xray-core](https://github.com/XTLS/Xray-core), check your local or [the latest go.mod](https://github.com/XTLS/Xray-core/blob/main/go.mod).
 
 ## Compilation
+
+### Windows (PowerShell)
+
+```powershell
+$env:CGO_ENABLED=0
+go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+```
+
+### Linux / macOS
+
+```bash
+CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+```
+
+### Reproducible Releases
 
 ```bash
 make

@@ -27,6 +27,9 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
 		if err := core.RequireFeatures(ctx, func(dnsClient dns.Client, policyManager policy.Manager) error {
+			core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
+				h.fdns = fdns
+			})
 			return h.Init(config.(*Config), dnsClient, policyManager)
 		}); err != nil {
 			return nil, err
@@ -41,6 +44,7 @@ type ownLinkVerifier interface {
 
 type Handler struct {
 	client          dns.Client
+	fdns            dns.FakeDNSEngine
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 	timeout         time.Duration
@@ -179,7 +183,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				if isIPQuery {
 					go h.handleIPQuery(id, qType, domain, writer)
 				}
-				if isIPQuery || h.nonIPQuery == "drop" {
+				if isIPQuery || h.nonIPQuery == "drop" || qType == 65 {
 					b.Release()
 					continue
 				}
@@ -242,6 +246,10 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	if rcode == 0 && len(ips) == 0 && !errors.AllEqual(dns.ErrEmptyResponse, errors.Cause(err)) {
 		newError("ip query").Base(err).WriteToLog()
 		return
+	}
+
+	if fkr0, ok := h.fdns.(dns.FakeDNSEngineRev0); ok && len(ips) > 0 && fkr0.IsIPInIPPool(net.IPAddress(ips[0])) {
+		ttl = 1
 	}
 
 	switch qType {

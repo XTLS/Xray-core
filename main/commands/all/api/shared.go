@@ -12,10 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/main/commands/base"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -24,6 +26,7 @@ type serviceHandler func(ctx context.Context, conn *grpc.ClientConn, cmd *base.C
 var (
 	apiServerAddrPtr string
 	apiTimeout       int
+	apiJSON          bool
 )
 
 func setSharedFlags(cmd *base.Command) {
@@ -31,11 +34,12 @@ func setSharedFlags(cmd *base.Command) {
 	cmd.Flag.StringVar(&apiServerAddrPtr, "server", "127.0.0.1:8080", "")
 	cmd.Flag.IntVar(&apiTimeout, "t", 3, "")
 	cmd.Flag.IntVar(&apiTimeout, "timeout", 3, "")
+	cmd.Flag.BoolVar(&apiJSON, "json", false, "")
 }
 
 func dialAPIServer() (conn *grpc.ClientConn, ctx context.Context, close func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(apiTimeout)*time.Second)
-	conn, err := grpc.DialContext(ctx, apiServerAddrPtr, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, apiServerAddrPtr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		base.Fatalf("failed to dial %s", apiServerAddrPtr)
 	}
@@ -103,13 +107,8 @@ func fetchHTTPContent(target string) ([]byte, error) {
 	return content, nil
 }
 
-func protoToJSONString(m proto.Message, _, indent string) (string, error) {
-	ops := protojson.MarshalOptions{
-		Indent:          indent,
-		EmitUnpopulated: true,
-	}
-	b, err := ops.Marshal(m)
-	return string(b), err
+func protoToJSONString(m proto.Message, prefix, indent string) (string, error) {
+	return strings.TrimSpace(protojson.MarshalOptions{Indent: indent}.Format(m)), nil
 }
 
 func showJSONResponse(m proto.Message) {

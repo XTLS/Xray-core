@@ -24,7 +24,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
-			if err := conn.(*tls.UConn).Handshake(); err != nil {
+			if err := conn.(*tls.UConn).HandshakeContext(ctx); err != nil {
 				return nil, err
 			}
 		} else {

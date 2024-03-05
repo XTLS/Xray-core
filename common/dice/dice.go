@@ -4,7 +4,6 @@ package dice // import "github.com/xtls/xray-core/common/dice"
 
 import (
 	"math/rand"
-	"time"
 )
 
 // Roll returns a non-negative number between 0 (inclusive) and n (exclusive).
@@ -45,8 +44,4 @@ func (dd *DeterministicDice) Roll(n int) int {
 		return 0
 	}
 	return dd.Intn(n)
-}
-
-func init() {
-	rand.Seed(time.Now().Unix())
 }

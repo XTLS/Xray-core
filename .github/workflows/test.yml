@@ -28,15 +28,15 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: go.mod
           check-latest: true
-      - name: Checkout codebase
-        uses: actions/checkout@v4
       - name: Restore Cache
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: resources
           key: xray-geodat-

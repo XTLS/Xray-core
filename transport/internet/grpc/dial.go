@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -122,24 +122,37 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
-			if err == nil && realityConfig != nil {
-				return reality.UClient(c, realityConfig, gctx, dest)
+			if err == nil {
+				if tlsConfig != nil {
+					config := tlsConfig.GetTLSConfig()
+					if config.ServerName == "" && address.Family().IsDomain() {
+						config.ServerName = address.Domain()
+					}
+					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+						return tls.UClient(c, config, fingerprint), nil
+					} else { // Fallback to normal gRPC TLS
+						return tls.Client(c, config), nil
+					}
+				}
+				if realityConfig != nil {
+					return reality.UClient(c, realityConfig, gctx, dest)
+				}
 			}
 			return c, err
 		}),
 	}
 
-	if tlsConfig != nil {
-		var transportCredential credentials.TransportCredentials
-		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-			transportCredential = tls.NewGrpcUtls(tlsConfig.GetTLSConfig(), fingerprint)
-		} else { // Fallback to normal gRPC TLS
-			transportCredential = credentials.NewTLS(tlsConfig.GetTLSConfig())
-		}
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(transportCredential))
-	} else {
-		dialOptions = append(dialOptions, grpc.WithInsecure())
+	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	authority := ""
+	if grpcSettings.Authority != "" {
+		authority = grpcSettings.Authority
+	} else if tlsConfig != nil && tlsConfig.ServerName != "" {
+		authority = tlsConfig.ServerName
+	} else if realityConfig == nil && dest.Address.Family().IsDomain() {
+		authority = dest.Address.Domain()
 	}
+	dialOptions = append(dialOptions, grpc.WithAuthority(authority))
 
 	if grpcSettings.IdleTimeout > 0 || grpcSettings.HealthCheckTimeout > 0 || grpcSettings.PermitWithoutStream {
 		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{

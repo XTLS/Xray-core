@@ -24,6 +24,7 @@ const (
 	dispatcherKey
 	timeoutOnlyKey
 	allowedNetworkKey
+	handlerSessionKey
 )
 
 // ContextWithID returns a new context with the given ID.
