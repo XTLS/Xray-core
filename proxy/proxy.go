@@ -284,14 +284,14 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 	if b != nil {
 		contentLen = b.Len()
 	}
-	if contentLen < 600 && longPadding {
-		l, err := rand.Int(rand.Reader, big.NewInt(3400))
+	if contentLen < 900 && longPadding {
+		l, err := rand.Int(rand.Reader, big.NewInt(500))
 		if err != nil {
 			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
-		paddingLen = int32(l.Int64()) + 600 - contentLen
+		paddingLen = int32(l.Int64()) + 900 - contentLen
 	} else {
-		l, err := rand.Int(rand.Reader, big.NewInt(2000))
+		l, err := rand.Int(rand.Reader, big.NewInt(256))
 		if err != nil {
 			newError("failed to generate padding").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
