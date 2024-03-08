@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pires/go-proxyproto"
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -478,14 +479,18 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			for inbound.CanSpliceCopy != 3 {
 				if inbound.CanSpliceCopy == 1 {
 					newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
+					statWriter, _ := writer.(*dispatcher.SizeStatWriter)
 					//runtime.Gosched() // necessary
 					time.Sleep(time.Millisecond) // without this, there will be a rare ssl error for freedom splice
 					w, err := tc.ReadFrom(readerConn)
 					if readCounter != nil {
-						readCounter.Add(w)
+						readCounter.Add(w) // outbound stats
 					}
 					if writeCounter != nil {
-						writeCounter.Add(w)
+						writeCounter.Add(w) // inbound stats
+					}
+					if statWriter != nil {
+						statWriter.Counter.Add(w) // user stats
 					}
 					if err != nil && errors.Cause(err) != io.EOF {
 						return err
