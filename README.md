@@ -102,6 +102,7 @@
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [XrayKit](https://github.com/arror/XrayKit)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
+  - [xray-api](https://github.com/XVGuardian/xray-api)
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
