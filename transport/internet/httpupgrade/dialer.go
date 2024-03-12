@@ -36,9 +36,9 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		} else {
 			conn = tls.Client(pconn, tlsConfig)
 		}
-
 		requestURL.Scheme = "https"
 	} else {
+		conn = pconn
 		requestURL.Scheme = "http"
 	}
 
