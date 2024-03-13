@@ -649,6 +649,8 @@ type SocketConfig struct {
 	V6only               bool        `json:"v6only"`
 	Interface            string      `json:"interface"`
 	TcpMptcp             bool        `json:"tcpMptcp"`
+	BrutalRate           uint64      `json:"brutalRate"`
+	BrutalGain           uint32      `json:"brutalGain"`
 }
 
 // Build implements Buildable.
@@ -723,6 +725,8 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
+		BrutalRate:           c.BrutalRate,
+		BrutalGain:           c.BrutalGain,
 	}, nil
 }
 

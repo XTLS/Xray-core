@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"time"
+	_ "unsafe"
 
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
@@ -17,17 +18,25 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+//go:linkname GetConnection google.golang.org/grpc/internal/transport.GetConnection
+func GetConnection(ctx context.Context) net.Conn
+
 type Listener struct {
 	encoding.UnimplementedGRPCServiceServer
 	ctx     context.Context
 	handler internet.ConnHandler
 	local   net.Addr
 	config  *Config
+	stream  *internet.MemoryStreamConfig
 
 	s *grpc.Server
 }
 
 func (l Listener) Tun(server encoding.GRPCService_TunServer) error {
+	if l.stream != nil {
+		conn := GetConnection(server.Context())
+		l.stream.ApplyBrutalSettings(conn)
+	}
 	tunCtx, cancel := context.WithCancel(l.ctx)
 	l.handler(encoding.NewHunkConn(server, cancel))
 	<-tunCtx.Done()
@@ -35,6 +44,10 @@ func (l Listener) Tun(server encoding.GRPCService_TunServer) error {
 }
 
 func (l Listener) TunMulti(server encoding.GRPCService_TunMultiServer) error {
+	if l.stream != nil {
+		conn := GetConnection(server.Context())
+		l.stream.ApplyBrutalSettings(conn)
+	}
 	tunCtx, cancel := context.WithCancel(l.ctx)
 	l.handler(encoding.NewMultiHunkConn(server, cancel))
 	<-tunCtx.Done()
@@ -55,6 +68,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 	var listener *Listener
 	if port == net.Port(0) { // unix
 		listener = &Listener{
+			stream:  settings,
 			handler: handler,
 			local: &net.UnixAddr{
 				Name: address.Domain(),
@@ -64,6 +78,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 		}
 	} else { // tcp
 		listener = &Listener{
+			stream:  settings,
 			handler: handler,
 			local: &net.TCPAddr{
 				IP:   address.IP(),

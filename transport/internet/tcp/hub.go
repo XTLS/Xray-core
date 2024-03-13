@@ -24,12 +24,14 @@ type Listener struct {
 	authConfig    internet.ConnectionAuthenticator
 	config        *Config
 	addConn       internet.ConnHandler
+	stream        *internet.MemoryStreamConfig
 }
 
 // ListenTCP creates a new Listener based on configurations.
 func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	l := &Listener{
 		addConn: handler,
+		stream:  streamSettings,
 	}
 	tcpSettings := streamSettings.ProtocolSettings.(*Config)
 	l.config = tcpSettings
@@ -104,6 +106,11 @@ func (v *Listener) keepAccepting() {
 			}
 			continue
 		}
+
+		if v.stream != nil {
+			v.stream.ApplyBrutalSettings(conn)
+		}
+
 		go func() {
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)

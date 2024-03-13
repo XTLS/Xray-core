@@ -119,4 +119,8 @@ message SocketConfig {
   bool tcp_no_delay = 18;
 
   bool tcp_mptcp = 19;
+
+  uint64 brutal_rate = 20;
+
+  uint32 brutal_gain = 21;
 }

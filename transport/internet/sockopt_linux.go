@@ -3,9 +3,18 @@ package internet
 import (
 	"net"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
+
+type TCPBrutalParams struct {
+	Rate uint64
+	Gain uint32
+}
+
+//go:linkname setsockopt syscall.setsockopt
+func setsockopt(s, level, name int, val unsafe.Pointer, vallen uintptr) (err error)
 
 func bindAddr(fd uintptr, ip []byte, port uint32) error {
 	setReuseAddr(fd)
@@ -197,6 +206,18 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		}
 	}
 
+	return nil
+}
+
+func ApplyBrutalParams(fd int, config *SocketConfig) error {
+	var params TCPBrutalParams
+
+	params.Rate = config.BrutalRate
+	params.Gain = config.BrutalGain
+
+	if err := setsockopt(fd, unix.IPPROTO_TCP, 23301, unsafe.Pointer(&params), unsafe.Sizeof(params)); err != nil {
+		return err
+	}
 	return nil
 }
 
