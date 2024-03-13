@@ -15,6 +15,29 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
+type ConnReq struct {
+	net.Conn
+	Req   *http.Request
+	first bool
+}
+
+func (c *ConnReq) Read(b []byte) (int, error) {
+	if c.first {
+		c.first = false
+		// TODO The bufio usage here is unreliable
+		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), c.Req) // nolint:bodyclose
+		if err != nil {
+			return 0, err
+		}
+		if resp.Status != "101 Switching Protocols" ||
+			strings.ToLower(resp.Header.Get("Upgrade")) != "websocket" ||
+			strings.ToLower(resp.Header.Get("Connection")) != "upgrade" {
+			return 0, newError("unrecognized reply")
+		}
+	}
+	return c.Conn.Read(b)
+}
+
 func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 
@@ -58,18 +81,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		return nil, err
 	}
 
-	// TODO The bufio usage here is unreliable
-	resp, err := http.ReadResponse(bufio.NewReader(conn), req) // nolint:bodyclose
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.Status == "101 Switching Protocols" &&
-		strings.ToLower(resp.Header.Get("Upgrade")) == "websocket" &&
-		strings.ToLower(resp.Header.Get("Connection")) == "upgrade" {
-		return conn, nil
-	}
-	return nil, newError("unrecognized reply")
+	return &ConnReq{Conn: conn, Req: req}, nil
 }
 
 func dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
