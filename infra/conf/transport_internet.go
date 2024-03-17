@@ -172,12 +172,10 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 		}
 	}
 	config := &websocket.Config{
-		Path:   path,
-		Header: header,
-		Ed:     ed,
-	}
-	if c.AcceptProxyProtocol {
-		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+		Path:                path,
+		Header:              header,
+		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		Ed:                  ed,
 	}
 	return config, nil
 }
@@ -190,12 +188,22 @@ type HttpUpgradeConfig struct {
 
 // Build implements Buildable.
 func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
-	config := &httpupgrade.Config{
-		Path: c.Path,
-		Host: c.Host,
+	path := c.Path
+	var ed uint32
+	if u, err := url.Parse(path); err == nil {
+		if q := u.Query(); q.Get("ed") != "" {
+			Ed, _ := strconv.Atoi(q.Get("ed"))
+			ed = uint32(Ed)
+			q.Del("ed")
+			u.RawQuery = q.Encode()
+			path = u.String()
+		}
 	}
-	if c.AcceptProxyProtocol {
-		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+	config := &httpupgrade.Config{
+		Path:                path,
+		Host:                c.Host,
+		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		Ed:                  ed,
 	}
 	return config, nil
 }

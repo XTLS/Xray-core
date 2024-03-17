@@ -129,7 +129,7 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 			ln:   l,
 		},
 		ReadHeaderTimeout: time.Second * 4,
-		MaxHeaderBytes:    4096,
+		MaxHeaderBytes:    8192,
 	}
 
 	go func() {
