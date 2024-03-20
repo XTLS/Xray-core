@@ -77,7 +77,6 @@
   - [HiddifyNG](https://github.com/hiddify/HiddifyNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
 - iOS & macOS arm64
-  - [Mango](https://github.com/arror/Mango)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
 - macOS arm64 & x64
