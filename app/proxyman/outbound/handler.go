@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
+	gonet "net"
 	"os"
 
 	"github.com/xtls/xray-core/app/proxyman"
@@ -269,7 +271,11 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				outbound = new(session.Outbound)
 				ctx = session.ContextWithOutbound(ctx, outbound)
 			}
-			outbound.Gateway = h.senderSettings.Via.AsAddress()
+			if h.senderSettings.ViaCidr == "" {
+				outbound.Gateway = h.senderSettings.Via.AsAddress()
+			} else { //Get a random address.
+				outbound.Gateway = ParseRandomIPv6(h.senderSettings.Via.AsAddress(), h.senderSettings.ViaCidr)
+			}
 		}
 	}
 
@@ -311,4 +317,18 @@ func (h *Handler) Start() error {
 func (h *Handler) Close() error {
 	common.Close(h.mux)
 	return nil
+}
+
+// Return random IPv6 in a CIDR block
+func ParseRandomIPv6(address net.Address, prefix string) net.Address {
+	addr := address.IP().String()
+	_, network, _ := gonet.ParseCIDR(addr + "/" + prefix)
+
+	ipv6 := network.IP.To16()
+	prefixLen, _ := network.Mask.Size()
+	for i := prefixLen / 8; i < 16; i++ {
+		ipv6[i] = byte(rand.Intn(256))
+	}
+
+	return net.ParseAddress(gonet.IP(ipv6).String())
 }

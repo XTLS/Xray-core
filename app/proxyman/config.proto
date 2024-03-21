@@ -91,6 +91,7 @@ message SenderConfig {
   xray.transport.internet.StreamConfig stream_settings = 2;
   xray.transport.internet.ProxyConfig proxy_settings = 3;
   MultiplexingConfig multiplex_settings = 4;
+  string via_cidr = 5;
 }
 
 message MultiplexingConfig {
