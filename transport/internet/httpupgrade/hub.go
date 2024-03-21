@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -68,6 +69,20 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 		_ = conn.Close()
 		return nil, err
 	}
+
+	forwardedAddrs := http_proto.ParseXForwardedFor(req.Header)
+	remoteAddr := conn.RemoteAddr()
+	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
+		remoteAddr = &net.TCPAddr{
+			IP:   forwardedAddrs[0].IP(),
+			Port: int(0),
+		}
+	}
+	if remoteAddr == nil {
+		return nil, newError("remoteAddr is nil")
+	}
+
+	conn = newConnection(conn, remoteAddr)
 	return stat.Connection(conn), nil
 }
 
