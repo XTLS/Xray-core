@@ -481,6 +481,10 @@ func (c *Config) Override(o *Config, fn string) {
 		c.Observatory = o.Observatory
 	}
 
+	if o.BurstObservatory != nil {
+		c.BurstObservatory = o.BurstObservatory
+	}
+
 	// deprecated attrs... keep them for now
 	if o.InboundConfig != nil {
 		c.InboundConfig = o.InboundConfig
