@@ -15,4 +15,5 @@ message Config {
   bool accept_proxy_protocol = 4;
 
   uint32 ed = 5;
+  map<string, string> header = 6;
 }
