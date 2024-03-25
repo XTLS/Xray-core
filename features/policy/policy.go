@@ -35,6 +35,12 @@ type Buffer struct {
 	PerConnection int32
 }
 
+// Buffer contains settings for restriction such as ip restriction.
+type Restriction struct {
+	// Maximum allowed ips, -1 for unlimited
+	MaxIPs int32
+}
+
 // SystemStats contains stat policy settings on system level.
 type SystemStats struct {
 	// Whether or not to enable stat counter for uplink traffic in inbound handlers.
@@ -55,9 +61,10 @@ type System struct {
 
 // Session is session based settings for controlling Xray requests. It contains various settings (or limits) that may differ for different users in the context.
 type Session struct {
-	Timeouts Timeout // Timeout settings
-	Stats    Stats
-	Buffer   Buffer
+	Timeouts    Timeout // Timeout settings
+	Stats       Stats
+	Buffer      Buffer
+	Restriction Restriction
 }
 
 // Manager is a feature that provides Policy for the given user by its id or level.
@@ -109,6 +116,12 @@ func defaultBufferPolicy() Buffer {
 	}
 }
 
+func defaultRestrictionPolicy() Restriction {
+	return Restriction{
+		MaxIPs: -1,
+	}
+}
+
 // SessionDefault returns the Policy when user is not specified.
 func SessionDefault() Session {
 	return Session{
@@ -124,7 +137,8 @@ func SessionDefault() Session {
 			UserUplink:   false,
 			UserDownlink: false,
 		},
-		Buffer: defaultBufferPolicy(),
+		Buffer:      defaultBufferPolicy(),
+		Restriction: defaultRestrictionPolicy(),
 	}
 }
 
