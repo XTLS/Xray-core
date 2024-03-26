@@ -54,8 +54,22 @@ func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *Ove
 	return nil, newError("unsupported router implementation")
 }
 
+func (s *routingServer) AddRule(ctx context.Context, request *AddRuleRequest) (*AddRuleResponse, error) {
+	if bo, ok := s.router.(routing.Router); ok {
+		return &AddRuleResponse{}, bo.AddRule(request.Config)
+	}
+	return nil, newError("unsupported router implementation")
+
+}
+func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRuleRequest) (*RemoveRuleResponse, error) {
+	if bo, ok := s.router.(routing.Router); ok {
+		return &RemoveRuleResponse{}, bo.RemoveRule(request.RuleTag)
+	}
+	return nil, newError("unsupported router implementation")
+}
+
 // NewRoutingServer creates a statistics service with statistics manager.
-func NewRoutingServer(router routing.Router, routingStats stats.Channel) RoutingServiceServer {
+func NewRoutingServer(router routing.Router, routingStats stats.Channel, server *core.Instance) RoutingServiceServer {
 	return &routingServer{
 		router:       router,
 		routingStats: routingStats,
@@ -115,7 +129,7 @@ type service struct {
 
 func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		rs := NewRoutingServer(router, nil)
+		rs := NewRoutingServer(router, nil, s.v)
 		RegisterRoutingServiceServer(server, rs)
 
 		// For compatibility purposes

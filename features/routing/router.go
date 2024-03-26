@@ -2,6 +2,7 @@ package routing
 
 import (
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
 
@@ -13,6 +14,8 @@ type Router interface {
 
 	// PickRoute returns a route decision based on the given routing context.
 	PickRoute(ctx Context) (Route, error)
+	AddRule(config *serial.TypedMessage) error
+	RemoveRule(tag string) error
 }
 
 // Route is the routing result of Router feature.
