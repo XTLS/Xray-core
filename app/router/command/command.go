@@ -69,7 +69,7 @@ func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRuleReque
 }
 
 // NewRoutingServer creates a statistics service with statistics manager.
-func NewRoutingServer(router routing.Router, routingStats stats.Channel, server *core.Instance) RoutingServiceServer {
+func NewRoutingServer(router routing.Router, routingStats stats.Channel) RoutingServiceServer {
 	return &routingServer{
 		router:       router,
 		routingStats: routingStats,
@@ -129,7 +129,7 @@ type service struct {
 
 func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(router routing.Router, stats stats.Manager) {
-		rs := NewRoutingServer(router, nil, s.v)
+		rs := NewRoutingServer(router, nil)
 		RegisterRoutingServiceServer(server, rs)
 
 		// For compatibility purposes
