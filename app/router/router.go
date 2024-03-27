@@ -57,7 +57,7 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 		rr := &Rule{
 			Condition: cond,
 			Tag:       rule.GetTag(),
-			RuleTag:   rule.RuleTag,
+			RuleTag:   rule.GetRuleTag(),
 		}
 		btag := rule.GetBalancingTag()
 		if len(btag) > 0 {
@@ -86,6 +86,8 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 	}
 	return &Route{Context: ctx, outboundTag: tag}, nil
 }
+
+// AddRule implements routing.Router.
 func (r *Router) AddRule(config *serial.TypedMessage) error {
 
 	inst, err := config.GetInstance()
@@ -97,13 +99,14 @@ func (r *Router) AddRule(config *serial.TypedMessage) error {
 	}
 	return newError("AddRule: config type error")
 }
+
 func (r *Router) ReloadRules(config *Config) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	for _, rule := range config.Rule {
-		if r.RuleExists(rule.RuleTag) {
-			return newError("duplicate ruleTag ", rule.RuleTag)
+		if r.RuleExists(rule.GetRuleTag()) {
+			return newError("duplicate ruleTag ", rule.GetRuleTag())
 		}
 		cond, err := rule.BuildCondition()
 		if err != nil {
@@ -139,6 +142,8 @@ func (r *Router) RuleExists(tag string) bool {
 	}
 	return false
 }
+
+// RemoveRule implements routing.Router.
 func (r *Router) RemoveRule(tag string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

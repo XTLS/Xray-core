@@ -52,6 +52,16 @@ func (DefaultRouter) PickRoute(ctx Context) (Route, error) {
 	return nil, common.ErrNoClue
 }
 
+// AddRule implements Router.
+func (DefaultRouter) AddRule(config *serial.TypedMessage) error {
+	return common.ErrNoClue
+}
+
+// RemoveRule implements Router.
+func (DefaultRouter) RemoveRule(tag string) error {
+	return common.ErrNoClue
+}
+
 // Start implements common.Runnable.
 func (DefaultRouter) Start() error {
 	return nil
