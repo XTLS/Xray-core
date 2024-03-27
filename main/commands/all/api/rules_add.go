@@ -53,7 +53,7 @@ func executeAddRules(cmd *base.Command, args []string) {
 		rcs = append(rcs, *conf.RouterConfig)
 	}
 	if len(rcs) == 0 {
-		base.Fatalf("no valid rule found")
+		base.Fatalf("no valid rule found in config")
 	}
 	for _, in := range rcs {
 
@@ -71,7 +71,7 @@ func executeAddRules(cmd *base.Command, args []string) {
 		}
 		resp, err := client.AddRule(ctx, ra)
 		if err != nil {
-			base.Fatalf("failed to perform AddBanRule: %s", err)
+			base.Fatalf("failed to perform AddRule: %s", err)
 		}
 		showJSONResponse(resp)
 	}

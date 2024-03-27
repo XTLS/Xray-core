@@ -38,7 +38,7 @@ func executeRemoveRules(cmd *base.Command, args []string) {
 	client := routerService.NewRoutingServiceClient(conn)
 
 	if len(ruleTags) == 0 {
-		base.Fatalf("no valid ruleTag found")
+		base.Fatalf("no valid ruleTag input")
 	}
 	for _, tag := range ruleTags {
 
@@ -47,7 +47,7 @@ func executeRemoveRules(cmd *base.Command, args []string) {
 		}
 		resp, err := client.RemoveRule(ctx, rr)
 		if err != nil {
-			base.Fatalf("failed to perform AddBanRule: %s", err)
+			base.Fatalf("failed to perform RemoveRule: %s", err)
 		}
 		showJSONResponse(resp)
 	}
