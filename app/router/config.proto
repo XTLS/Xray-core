@@ -79,6 +79,7 @@ message RoutingRule {
     // Tag of routing balancer.
     string balancing_tag = 12;
   }
+    string rule_tag = 18;
 
   // List of domains for target domain matching.
   repeated Domain domain = 2;
