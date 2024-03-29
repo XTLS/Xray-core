@@ -154,12 +154,9 @@ type WebSocketConfig struct {
 // Build implements Buildable.
 func (c *WebSocketConfig) Build() (proto.Message, error) {
 	path := c.Path
-	header := make([]*websocket.Header, 0, 32)
+	header := make(map[string]string);
 	for key, value := range c.Headers {
-		header = append(header, &websocket.Header{
-			Key:   key,
-			Value: value,
-		})
+		header[key] = value;
 	}
 	var ed uint32
 	if u, err := url.Parse(path); err == nil {
