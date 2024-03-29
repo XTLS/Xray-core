@@ -91,6 +91,7 @@ message OverrideBalancerTargetResponse {}
 
 message AddRuleRequest {
   xray.common.serial.TypedMessage config = 1;
+  bool shouldAppend = 2;
 }
 message AddRuleResponse {}
 

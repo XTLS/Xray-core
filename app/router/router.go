@@ -22,8 +22,10 @@ type Router struct {
 	balancers      map[string]*Balancer
 	dns            dns.Client
 
-	mu     sync.Mutex
-	config *Config
+	ctx        context.Context
+	ohm        outbound.Manager
+	dispatcher routing.Dispatcher
+	mu         sync.Mutex
 }
 
 // Route is an implementation of routing.Route.
@@ -37,6 +39,9 @@ type Route struct {
 func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm outbound.Manager, dispatcher routing.Dispatcher) error {
 	r.domainStrategy = config.DomainStrategy
 	r.dns = d
+	r.ctx = ctx
+	r.ohm = ohm
+	r.dispatcher = dispatcher
 
 	r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
 	for _, rule := range config.BalancingRule {
@@ -69,7 +74,6 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 		}
 		r.rules = append(r.rules, rr)
 	}
-	r.config = config
 
 	return nil
 }
@@ -88,21 +92,38 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 }
 
 // AddRule implements routing.Router.
-func (r *Router) AddRule(config *serial.TypedMessage) error {
+func (r *Router) AddRule(config *serial.TypedMessage, shouldAppend bool) error {
 
 	inst, err := config.GetInstance()
 	if err != nil {
 		return err
 	}
 	if c, ok := inst.(*Config); ok {
-		return r.ReloadRules(c)
+		return r.ReloadRules(c, shouldAppend)
 	}
 	return newError("AddRule: config type error")
 }
 
-func (r *Router) ReloadRules(config *Config) error {
+func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if !shouldAppend {
+		r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
+		r.rules = make([]*Rule, 0, len(config.Rule))
+	}
+	for _, rule := range config.BalancingRule {
+		_, found := r.balancers[rule.Tag]
+		if found {
+			return newError("duplicate balancer tag")
+		}
+		balancer, err := rule.Build(r.ohm, r.dispatcher)
+		if err != nil {
+			return err
+		}
+		balancer.InjectContext(r.ctx)
+		r.balancers[rule.Tag] = balancer
+	}
 
 	for _, rule := range config.Rule {
 		if r.RuleExists(rule.GetRuleTag()) {
@@ -128,7 +149,6 @@ func (r *Router) ReloadRules(config *Config) error {
 		r.rules = append(r.rules, rr)
 	}
 
-	r.config = config
 	return nil
 }
 

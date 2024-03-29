@@ -21,6 +21,9 @@ Arguments:
 		The API server address. Default 127.0.0.1:8080
 	-t, -timeout
 		Timeout seconds to call API. Default 3
+	-append
+		append or replace config. Default false
+
 Example:
     {{.Exec}} {{.LongName}} --server=127.0.0.1:8080 c1.json c2.json
 `,
@@ -28,8 +31,13 @@ Example:
 }
 
 func executeAddRules(cmd *base.Command, args []string) {
+	var (
+		shouldAppend bool
+	)
 	setSharedFlags(cmd)
+	cmd.Flag.BoolVar(&shouldAppend, "append", false, "")
 	cmd.Flag.Parse(args)
+
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {
 		fmt.Println("reading from stdin:")
@@ -67,7 +75,8 @@ func executeAddRules(cmd *base.Command, args []string) {
 		}
 
 		ra := &routerService.AddRuleRequest{
-			Config: tmsg,
+			Config:       tmsg,
+			ShouldAppend: shouldAppend,
 		}
 		resp, err := client.AddRule(ctx, ra)
 		if err != nil {
