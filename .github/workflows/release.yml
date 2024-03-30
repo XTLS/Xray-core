@@ -2,8 +2,10 @@ name: Build and Release
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      publish:
+        description: 'If you want to publish a new release, type a tag, like "v1.8.10".'
+        required: false
   push:
     branches:
       - main
@@ -218,9 +220,9 @@ jobs:
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'release'
+        if: inputs.publish
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
-          tag: ${{ github.ref }}
+          tag: ${{ inputs.publish }}
           file_glob: true
