@@ -61,19 +61,28 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 	defer close()
 
 	client := routerService.NewRoutingServiceClient(conn)
+
 	jsonIps, err := json.Marshal(unnamedArgs)
 	if err != nil {
 		fmt.Println("Error marshaling JSON:", err)
 		return
 	}
 
+	jsonInbound, err := json.Marshal([]string{inbound})
+	if inbound == "" {
+		jsonInbound, err = json.Marshal([]string{})
+	}
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return
+	}
 	stringConfig := fmt.Sprintf(`
 	{
 		"routing": {
 			"rules": [
 			  {
 				"ruleTag" : "%s",
-				"inboundTag": ["%s"],		
+				"inboundTag": %s,		
 				"outboundTag": "%s",
 				"type": "field",
 				"source": %s
@@ -82,7 +91,7 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 		  }
 	  }
 	  
-	`, ruletag, inbound, outbound, string(jsonIps))
+	`, ruletag, string(jsonInbound), outbound, string(jsonIps))
 
 	conf, err := serial.DecodeJSONConfig(strings.NewReader(stringConfig))
 	if err != nil {
