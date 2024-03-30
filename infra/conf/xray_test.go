@@ -236,6 +236,7 @@ func TestXrayConfig(t *testing.T) {
 									{
 										ProtocolName: "websocket",
 										Settings: serial.ToTypedMessage(&websocket.Config{
+											Host: "example.domain",
 											Header: map[string]string{
 												"host": "example.domain",
 											},
@@ -288,6 +289,7 @@ func TestXrayConfig(t *testing.T) {
 									{
 										ProtocolName: "websocket",
 										Settings: serial.ToTypedMessage(&websocket.Config{
+											Host: "example.domain",
 											Header: map[string]string{
 												"host": "example.domain",
 											},
