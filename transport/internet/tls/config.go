@@ -325,6 +325,11 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.ServerName = sn
 	}
 
+	// If ServerName is set to "nosni", we set it empty.
+	if strings.ToLower(c.parseServerName()) == "nosni" {
+		config.ServerName = ""
+	}
+
 	if len(config.NextProtos) == 0 {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
@@ -365,7 +370,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 
 	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 
-	if (len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none") {
+	if len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none" {
 		writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 		if err != nil {
 			newError("failed to open ", c.MasterKeyLog, " as master key log").AtError().Base(err).WriteToLog()
@@ -381,6 +386,9 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 type Option func(*tls.Config)
 
 // WithDestination sets the server name in TLS config.
+// Due to the incorrect structure of GetTLSConfig(), the config.ServerName will always be empty.
+// So the real logic for SNI is:
+// set it to dest -> overwrite it with servername(if it's len>0).
 func WithDestination(dest net.Destination) Option {
 	return func(config *tls.Config) {
 		if config.ServerName == "" {
