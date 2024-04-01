@@ -7,10 +7,9 @@ option java_package = "com.xray.transport.internet.httpupgrade";
 option java_multiple_files = true;
 
 message Config {
-  reserved 1;
-
+  string host = 1;
   string path = 2;
-  string host = 3;
-
+  map<string, string> header = 3;
   bool accept_proxy_protocol = 4;
+  uint32 ed = 5;
 }

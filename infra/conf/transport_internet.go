@@ -146,6 +146,7 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 }
 
 type WebSocketConfig struct {
+	Host                string            `json:"host"`
 	Path                string            `json:"path"`
 	Headers             map[string]string `json:"headers"`
 	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
@@ -154,13 +155,6 @@ type WebSocketConfig struct {
 // Build implements Buildable.
 func (c *WebSocketConfig) Build() (proto.Message, error) {
 	path := c.Path
-	header := make([]*websocket.Header, 0, 32)
-	for key, value := range c.Headers {
-		header = append(header, &websocket.Header{
-			Key:   key,
-			Value: value,
-		})
-	}
 	var ed uint32
 	if u, err := url.Parse(path); err == nil {
 		if q := u.Query(); q.Get("ed") != "" {
@@ -171,31 +165,58 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 			path = u.String()
 		}
 	}
-	config := &websocket.Config{
-		Path:   path,
-		Header: header,
-		Ed:     ed,
+	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
+	// If we don't do that, http host will be overwritten as address.
+	// Host priority: Host field > headers field > address.
+	if c.Host == "" && c.Headers["host"] != "" {
+		c.Host = c.Headers["host"]
+	} else if c.Host == "" && c.Headers["Host"] != "" {
+		c.Host = c.Headers["Host"]
 	}
-	if c.AcceptProxyProtocol {
-		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+	config := &websocket.Config{
+		Path:                path,
+		Host:                c.Host,
+		Header:              c.Headers,
+		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		Ed:                  ed,
 	}
 	return config, nil
 }
 
 type HttpUpgradeConfig struct {
-	Path                string `json:"path"`
-	Host                string `json:"host"`
-	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+	Host                string            `json:"host"`
+	Path                string            `json:"path"`
+	Headers             map[string]string `json:"headers"`
+	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
 }
 
 // Build implements Buildable.
 func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
-	config := &httpupgrade.Config{
-		Path: c.Path,
-		Host: c.Host,
+	path := c.Path
+	var ed uint32
+	if u, err := url.Parse(path); err == nil {
+		if q := u.Query(); q.Get("ed") != "" {
+			Ed, _ := strconv.Atoi(q.Get("ed"))
+			ed = uint32(Ed)
+			q.Del("ed")
+			u.RawQuery = q.Encode()
+			path = u.String()
+		}
 	}
-	if c.AcceptProxyProtocol {
-		config.AcceptProxyProtocol = c.AcceptProxyProtocol
+	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
+	// If we don't do that, http host will be overwritten as address.
+	// Host priority: Host field > headers field > address.
+	if c.Host == "" && c.Headers["host"] != "" {
+		c.Host = c.Headers["host"]
+	} else if c.Host == "" && c.Headers["Host"] != "" {
+		c.Host = c.Headers["Host"]
+	}
+	config := &httpupgrade.Config{
+		Path:                path,
+		Host:                c.Host,
+		Header:              c.Headers,
+		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		Ed:                  ed,
 	}
 	return config, nil
 }

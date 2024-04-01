@@ -22,9 +22,10 @@ func (c *Config) GetNormalizedPath() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
-	for _, h := range c.Header {
-		header.Add(h.Key, h.Value)
+	for k, v := range c.Header {
+		header.Add(k, v)
 	}
+	header.Set("Host", c.Host)
 	return header
 }
 

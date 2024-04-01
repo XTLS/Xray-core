@@ -73,6 +73,9 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		Host:   transportConfiguration.Host,
 		Header: make(http.Header),
 	}
+	for key, value := range transportConfiguration.Header {
+		req.Header.Add(key, value)
+	}
 	req.Header.Set("Connection", "upgrade")
 	req.Header.Set("Upgrade", "websocket")
 
@@ -81,7 +84,20 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		return nil, err
 	}
 
-	return &ConnRF{Conn: conn, Req: req, First: true}, nil
+	connRF := &ConnRF{
+		Conn:  conn,
+		Req:   req,
+		First: true,
+	}
+
+	if transportConfiguration.Ed == 0 {
+		_, err = connRF.Read([]byte{})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return connRF, nil
 }
 
 func dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {

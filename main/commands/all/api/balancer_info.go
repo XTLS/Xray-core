@@ -43,12 +43,16 @@ Example:
 func executeBalancerInfo(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
 	cmd.Flag.Parse(args)
+	unnamedArgs := cmd.Flag.Args()
+	if len(unnamedArgs) == 0 {
+		fmt.Println("set balancer tag")
+		unnamedArgs = []string{""}
+	}
 
 	conn, ctx, close := dialAPIServer()
 	defer close()
-
 	client := routerService.NewRoutingServiceClient(conn)
-	r := &routerService.GetBalancerInfoRequest{Tag: args[0]}
+	r := &routerService.GetBalancerInfoRequest{Tag: unnamedArgs[0]}
 	resp, err := client.GetBalancerInfo(ctx, r)
 	if err != nil {
 		base.Fatalf("failed to get health information: %s", err)
@@ -75,9 +79,10 @@ func showBalancerInfo(b *routerService.BalancerMsg) {
 	}
 	// Selects
 	sb.WriteString("  - Selects:\n")
-
-	for i, o := range b.PrincipleTarget.Tag {
-		writeRow(sb, tableIndent, i+1, []string{o}, nil)
+	if b.PrincipleTarget != nil {
+		for i, o := range b.PrincipleTarget.Tag {
+			writeRow(sb, tableIndent, i+1, []string{o}, nil)
+		}
 	}
 	os.Stdout.WriteString(sb.String())
 }

@@ -15,6 +15,7 @@ enum TransportProtocol {
   WebSocket = 3;
   HTTP = 4;
   DomainSocket = 5;
+  HTTPUpgrade = 6;
 }
 
 enum DomainStrategy {

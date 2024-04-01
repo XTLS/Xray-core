@@ -7,6 +7,7 @@ option java_package = "com.xray.app.router.command";
 option java_multiple_files = true;
 
 import "common/net/network.proto";
+import "common/serial/typed_message.proto";
 
 // RoutingContext is the context with information relative to routing process.
 // It conforms to the structure of xray.features.routing.Context and
@@ -88,6 +89,18 @@ message OverrideBalancerTargetRequest {
 
 message OverrideBalancerTargetResponse {}
 
+message AddRuleRequest {
+  xray.common.serial.TypedMessage config = 1;
+  bool shouldAppend = 2;
+}
+message AddRuleResponse {}
+
+message RemoveRuleRequest {
+  string ruleTag = 1;
+}
+
+message RemoveRuleResponse {}
+
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
@@ -95,6 +108,9 @@ service RoutingService {
 
   rpc GetBalancerInfo(GetBalancerInfoRequest) returns (GetBalancerInfoResponse){}
   rpc OverrideBalancerTarget(OverrideBalancerTargetRequest) returns (OverrideBalancerTargetResponse) {}
+  
+  rpc AddRule(AddRuleRequest) returns (AddRuleResponse) {}
+  rpc RemoveRule(RemoveRuleRequest) returns (RemoveRuleResponse) {}
 }
 
 message Config {}

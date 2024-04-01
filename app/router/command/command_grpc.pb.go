@@ -23,6 +23,8 @@ const (
 	RoutingService_TestRoute_FullMethodName              = "/xray.app.router.command.RoutingService/TestRoute"
 	RoutingService_GetBalancerInfo_FullMethodName        = "/xray.app.router.command.RoutingService/GetBalancerInfo"
 	RoutingService_OverrideBalancerTarget_FullMethodName = "/xray.app.router.command.RoutingService/OverrideBalancerTarget"
+	RoutingService_AddRule_FullMethodName                = "/xray.app.router.command.RoutingService/AddRule"
+	RoutingService_RemoveRule_FullMethodName             = "/xray.app.router.command.RoutingService/RemoveRule"
 )
 
 // RoutingServiceClient is the client API for RoutingService service.
@@ -33,6 +35,8 @@ type RoutingServiceClient interface {
 	TestRoute(ctx context.Context, in *TestRouteRequest, opts ...grpc.CallOption) (*RoutingContext, error)
 	GetBalancerInfo(ctx context.Context, in *GetBalancerInfoRequest, opts ...grpc.CallOption) (*GetBalancerInfoResponse, error)
 	OverrideBalancerTarget(ctx context.Context, in *OverrideBalancerTargetRequest, opts ...grpc.CallOption) (*OverrideBalancerTargetResponse, error)
+	AddRule(ctx context.Context, in *AddRuleRequest, opts ...grpc.CallOption) (*AddRuleResponse, error)
+	RemoveRule(ctx context.Context, in *RemoveRuleRequest, opts ...grpc.CallOption) (*RemoveRuleResponse, error)
 }
 
 type routingServiceClient struct {
@@ -102,6 +106,24 @@ func (c *routingServiceClient) OverrideBalancerTarget(ctx context.Context, in *O
 	return out, nil
 }
 
+func (c *routingServiceClient) AddRule(ctx context.Context, in *AddRuleRequest, opts ...grpc.CallOption) (*AddRuleResponse, error) {
+	out := new(AddRuleResponse)
+	err := c.cc.Invoke(ctx, RoutingService_AddRule_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routingServiceClient) RemoveRule(ctx context.Context, in *RemoveRuleRequest, opts ...grpc.CallOption) (*RemoveRuleResponse, error) {
+	out := new(RemoveRuleResponse)
+	err := c.cc.Invoke(ctx, RoutingService_RemoveRule_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoutingServiceServer is the server API for RoutingService service.
 // All implementations must embed UnimplementedRoutingServiceServer
 // for forward compatibility
@@ -110,6 +132,8 @@ type RoutingServiceServer interface {
 	TestRoute(context.Context, *TestRouteRequest) (*RoutingContext, error)
 	GetBalancerInfo(context.Context, *GetBalancerInfoRequest) (*GetBalancerInfoResponse, error)
 	OverrideBalancerTarget(context.Context, *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error)
+	AddRule(context.Context, *AddRuleRequest) (*AddRuleResponse, error)
+	RemoveRule(context.Context, *RemoveRuleRequest) (*RemoveRuleResponse, error)
 	mustEmbedUnimplementedRoutingServiceServer()
 }
 
@@ -128,6 +152,12 @@ func (UnimplementedRoutingServiceServer) GetBalancerInfo(context.Context, *GetBa
 }
 func (UnimplementedRoutingServiceServer) OverrideBalancerTarget(context.Context, *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OverrideBalancerTarget not implemented")
+}
+func (UnimplementedRoutingServiceServer) AddRule(context.Context, *AddRuleRequest) (*AddRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddRule not implemented")
+}
+func (UnimplementedRoutingServiceServer) RemoveRule(context.Context, *RemoveRuleRequest) (*RemoveRuleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveRule not implemented")
 }
 func (UnimplementedRoutingServiceServer) mustEmbedUnimplementedRoutingServiceServer() {}
 
@@ -217,6 +247,42 @@ func _RoutingService_OverrideBalancerTarget_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoutingService_AddRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddRuleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).AddRule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoutingService_AddRule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).AddRule(ctx, req.(*AddRuleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoutingService_RemoveRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveRuleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).RemoveRule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoutingService_RemoveRule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).RemoveRule(ctx, req.(*RemoveRuleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoutingService_ServiceDesc is the grpc.ServiceDesc for RoutingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -235,6 +301,14 @@ var RoutingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OverrideBalancerTarget",
 			Handler:    _RoutingService_OverrideBalancerTarget_Handler,
+		},
+		{
+			MethodName: "AddRule",
+			Handler:    _RoutingService_AddRule_Handler,
+		},
+		{
+			MethodName: "RemoveRule",
+			Handler:    _RoutingService_RemoveRule_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

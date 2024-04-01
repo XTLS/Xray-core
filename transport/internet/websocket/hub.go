@@ -21,6 +21,7 @@ import (
 )
 
 type requestHandler struct {
+	host string
 	path string
 	ln   *Listener
 }
@@ -37,6 +38,10 @@ var upgrader = &websocket.Upgrader{
 }
 
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if len(h.host) > 0 && request.Host != h.host {
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
 	if request.URL.Path != h.path {
 		writer.WriteHeader(http.StatusNotFound)
 		return
@@ -125,11 +130,12 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	l.server = http.Server{
 		Handler: &requestHandler{
+			host: wsSettings.Host,
 			path: wsSettings.GetNormalizedPath(),
 			ln:   l,
 		},
 		ReadHeaderTimeout: time.Second * 4,
-		MaxHeaderBytes:    4096,
+		MaxHeaderBytes:    8192,
 	}
 
 	go func() {
