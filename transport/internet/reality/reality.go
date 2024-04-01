@@ -116,6 +116,8 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	}
 	if utlsConfig.ServerName == "" {
 		utlsConfig.ServerName = dest.Address.String()
+	} else if strings.ToLower(utlsConfig.ServerName) == "nosni" { // If ServerName is set to "nosni", we set it empty.
+		utlsConfig.ServerName = ""
 	}
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
