@@ -373,6 +373,9 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			return f.writer.Write(b)
 		}
 		recordLen := 5 + ((int(b[3]) << 8) | int(b[4]))
+		if len(b) < recordLen { // maybe already fragmented somehow
+			return f.writer.Write(b)
+		}
 		data := b[5:recordLen]
 		buf := make([]byte, 1024)
 		for from := 0; ; {
