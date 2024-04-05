@@ -319,20 +319,7 @@ func (h *Handler) Close() error {
 	return nil
 }
 
-// Return random IPv6 in a CIDR block
-//
-//	func ParseRandomIPv6(address net.Address, prefix string) net.Address {
-//		addr := address.IP().String()
-//		_, network, _ := gonet.ParseCIDR(addr + "/" + prefix)
-//
-//		ipv6 := network.IP.To16()
-//		prefixLen, _ := network.Mask.Size()
-//		for i := prefixLen / 8; i < 16; i++ {
-//			ipv6[i] = byte(rand.Intn(256))
-//		}
-//
-//		return net.ParseAddress(gonet.IP(ipv6).String())
-//	}
+
 func ParseRandomIPv6(address net.Address, prefix string) net.Address {
 	_, network, _ := gonet.ParseCIDR(address.IP().String() + "/" + prefix)
 
