@@ -2,12 +2,8 @@ package outbound
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
-	"io"
-	"math/rand"
-	gonet "net"
-	"os"
-
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -25,6 +21,10 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
+	"io"
+	"math/big"
+	gonet "net"
+	"os"
 )
 
 func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter) {
@@ -319,16 +319,21 @@ func (h *Handler) Close() error {
 	return nil
 }
 
-// Return random IPv6 in a CIDR block
+
 func ParseRandomIPv6(address net.Address, prefix string) net.Address {
-	addr := address.IP().String()
-	_, network, _ := gonet.ParseCIDR(addr + "/" + prefix)
+	_, network, _ := gonet.ParseCIDR(address.IP().String() + "/" + prefix)
 
-	ipv6 := network.IP.To16()
-	prefixLen, _ := network.Mask.Size()
-	for i := prefixLen / 8; i < 16; i++ {
-		ipv6[i] = byte(rand.Intn(256))
-	}
+	maskSize, totalBits := network.Mask.Size()
+	subnetSize := big.NewInt(1).Lsh(big.NewInt(1), uint(totalBits-maskSize))
 
-	return net.ParseAddress(gonet.IP(ipv6).String())
+	// random
+	randomBigInt, _ := rand.Int(rand.Reader, subnetSize)
+
+	startIPBigInt := big.NewInt(0).SetBytes(network.IP.To16())
+	randomIPBigInt := big.NewInt(0).Add(startIPBigInt, randomBigInt)
+
+	randomIPBytes := randomIPBigInt.Bytes()
+	randomIPBytes = append(make([]byte, 16-len(randomIPBytes)), randomIPBytes...)
+
+	return net.ParseAddress(gonet.IP(randomIPBytes).String())
 }
