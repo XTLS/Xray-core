@@ -14,11 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/common/cmdarg"
-	clog "github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/main/commands/base"
+	"github.com/GFW-knocker/Xray-core/common/cmdarg"
+	clog "github.com/GFW-knocker/Xray-core/common/log"
+	"github.com/GFW-knocker/Xray-core/common/platform"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/main/commands/base"
 )
 
 var cmdRun = &base.Command{

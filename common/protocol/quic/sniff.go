@@ -8,11 +8,11 @@ import (
 	"io"
 
 	"github.com/quic-go/quic-go/quicvarint"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/bytespool"
-	"github.com/xtls/xray-core/common/errors"
-	ptls "github.com/xtls/xray-core/common/protocol/tls"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/bytespool"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	ptls "github.com/GFW-knocker/Xray-core/common/protocol/tls"
 	"golang.org/x/crypto/hkdf"
 )
 

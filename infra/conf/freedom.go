@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	v2net "github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/proxy/freedom"
+	v2net "github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/proxy/freedom"
 	"google.golang.org/protobuf/proto"
 )
 

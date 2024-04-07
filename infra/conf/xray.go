@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/xtls/xray-core/app/dispatcher"
-	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/app/stats"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
-	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/app/dispatcher"
+	"github.com/GFW-knocker/Xray-core/app/proxyman"
+	"github.com/GFW-knocker/Xray-core/app/stats"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/serial"
+	core "github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
 var (

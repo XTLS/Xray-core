@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.shadowsocks_2022;
 option csharp_namespace = "Xray.Proxy.Shadowsocks2022";
-option go_package = "github.com/xtls/xray-core/proxy/shadowsocks_2022";
+option go_package = "github.com/GFW-knocker/Xray-core/proxy/shadowsocks_2022";
 option java_package = "com.xray.proxy.shadowsocks_2022";
 option java_multiple_files = true;
 

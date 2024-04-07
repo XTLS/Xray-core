@@ -1,8 +1,9 @@
-module github.com/xtls/xray-core
+module github.com/GFW-knocker/Xray-core
 
-go 1.22
+go 1.22.2
 
 require (
+	github.com/GFW-knocker/wireguard v1.0.1
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.6.0
@@ -24,7 +25,6 @@ require (
 	golang.org/x/net v0.23.0
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.18.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	google.golang.org/grpc v1.63.0
 	google.golang.org/protobuf v1.33.0
 	gvisor.dev/gvisor v0.0.0-20231104011432-48a6d7d5bd0b
@@ -57,4 +57,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240308144416-29370a3891b7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+
 )

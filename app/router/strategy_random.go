@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/xtls/xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/dice"
 )
 
 // RandomStrategy represents a random balancing strategy

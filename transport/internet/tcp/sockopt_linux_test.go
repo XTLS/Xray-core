@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/testing/servers/tcp"
-	"github.com/xtls/xray-core/transport/internet"
-	. "github.com/xtls/xray-core/transport/internet/tcp"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/testing/servers/tcp"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	. "github.com/GFW-knocker/Xray-core/transport/internet/tcp"
 )
 
 func TestGetOriginalDestination(t *testing.T) {
