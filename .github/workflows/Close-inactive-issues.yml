@@ -15,6 +15,7 @@ jobs:
           days-before-issue-stale: 30
           days-before-issue-close: 0
           operations-per-run: 500
+          exempt-issue-labels: Need to fix,Proposal
           stale-issue-label: "stale"
           close-issue-message: "This issue was closed because it has been open for 30 days with no activity."
           days-before-pr-stale: -1
