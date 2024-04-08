@@ -81,11 +81,15 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	protocol := "ws"
+	host := dest.Address.String()
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		protocol = "wss"
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		dialer.TLSClientConfig = tlsConfig
+		if tlsConfig.ServerName != "" {
+			host = tlsConfig.ServerName
+		}
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (gonet.Conn, error) {
 				// Like the NetDial in the dialer
@@ -111,9 +115,8 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		}
 	}
 
-	host := dest.NetAddr()
-	if (protocol == "ws" && dest.Port == 80) || (protocol == "wss" && dest.Port == 443) {
-		host = dest.Address.String()
+	if (protocol == "ws" && dest.Port != 80) || (protocol == "wss" && dest.Port != 443) {
+		host += ":" + dest.Port.String()
 	}
 	uri := protocol + "://" + host + wsSettings.GetNormalizedPath()
 
