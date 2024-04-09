@@ -5,8 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
-	"math/rand"
-  "math/big"
+	"math/big"
 	gonet "net"
 	"os"
 
@@ -320,7 +319,6 @@ func (h *Handler) Close() error {
 	common.Close(h.mux)
 	return nil
 }
-
 
 func ParseRandomIPv6(address net.Address, prefix string) net.Address {
 	_, network, _ := gonet.ParseCIDR(address.IP().String() + "/" + prefix)
