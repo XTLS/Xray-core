@@ -1,8 +1,8 @@
 package api
 
 import (
-	routerService "github.com/xtls/xray-core/app/router/command"
-	"github.com/xtls/xray-core/main/commands/base"
+	routerService "github.com/GFW-knocker/Xray-core/app/router/command"
+	"github.com/GFW-knocker/Xray-core/main/commands/base"
 )
 
 var cmdBalancerOverride = &base.Command{

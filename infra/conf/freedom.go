@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	v2net "github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/proxy/freedom"
+	v2net "github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/proxy/freedom"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,9 +21,13 @@ type FreedomConfig struct {
 }
 
 type Fragment struct {
-	Packets  string `json:"packets"`
-	Length   string `json:"length"`
-	Interval string `json:"interval"`
+	Packets      string `json:"packets"`
+	Length       string `json:"length"`
+	Interval     string `json:"interval"`
+	Host1_header string `json:"host1_header"`
+	Host1_domain string `json:"host1_domain"`
+	Host2_header string `json:"host2_header"`
+	Host2_domain string `json:"host2_domain"`
 }
 
 // Build implements Buildable
@@ -60,11 +64,18 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		config.Fragment = new(freedom.Fragment)
 		var err, err2 error
 
+		config.Fragment.FakeHost = false
+
 		switch strings.ToLower(c.Fragment.Packets) {
 		case "tlshello":
 			// TLS Hello Fragmentation (into multiple handshake messages)
 			config.Fragment.PacketsFrom = 0
 			config.Fragment.PacketsTo = 1
+		case "fakehost":
+			// fake host header with no fragmentation
+			config.Fragment.PacketsFrom = 1
+			config.Fragment.PacketsTo = 1
+			config.Fragment.FakeHost = true
 		case "":
 			// TCP Segmentation (all packets)
 			config.Fragment.PacketsFrom = 0
@@ -141,6 +152,33 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
 			}
 		}
+
+		{
+			if c.Fragment.Host1_header == "" {
+				config.Fragment.Host1Header = "Host : "
+			} else {
+				config.Fragment.Host1Header = c.Fragment.Host1_header
+			}
+
+			if c.Fragment.Host1_domain == "" {
+				config.Fragment.Host1Domain = "cloudflare.com"
+			} else {
+				config.Fragment.Host1Domain = c.Fragment.Host1_domain
+			}
+
+			if c.Fragment.Host2_header == "" {
+				config.Fragment.Host2Header = "Host:   "
+			} else {
+				config.Fragment.Host2Header = c.Fragment.Host2_header
+			}
+
+			if c.Fragment.Host2_domain == "" {
+				config.Fragment.Host2Domain = "cloudflare.com"
+			} else {
+				config.Fragment.Host2Domain = c.Fragment.Host2_domain
+			}
+		}
+
 	}
 
 	if c.Timeout != nil {

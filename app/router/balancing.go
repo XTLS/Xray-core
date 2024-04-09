@@ -4,8 +4,8 @@ import (
 	"context"
 	sync "sync"
 
-	"github.com/xtls/xray-core/features/extension"
-	"github.com/xtls/xray-core/features/outbound"
+	"github.com/GFW-knocker/Xray-core/features/extension"
+	"github.com/GFW-knocker/Xray-core/features/outbound"
 )
 
 type BalancingStrategy interface {

@@ -1,32 +1,34 @@
 package freedom
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"io"
 	"math/big"
+	"regexp"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/platform"
+	"github.com/GFW-knocker/Xray-core/common/retry"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/common/signal"
+	"github.com/GFW-knocker/Xray-core/common/task"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/features/dns"
+	"github.com/GFW-knocker/Xray-core/features/policy"
+	"github.com/GFW-knocker/Xray-core/features/stats"
+	"github.com/GFW-knocker/Xray-core/proxy"
+	"github.com/GFW-knocker/Xray-core/transport"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	"github.com/pires/go-proxyproto"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/proxy"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 var useSplice bool
@@ -368,6 +370,31 @@ type FragmentWriter struct {
 func (f *FragmentWriter) Write(b []byte) (int, error) {
 	f.count++
 
+	if f.fragment.FakeHost {
+		if f.count == 1 {
+			h1_header := f.fragment.Host1Header
+			h1_domain := f.fragment.Host1Domain
+			h2_header := f.fragment.Host2Header
+			h2_domain := f.fragment.Host2Domain
+
+			// find the old host case-insensitive
+			re := regexp.MustCompile("(?i)(\r\nHost:.*\r\n)")
+			firstMatch := re.FindSubmatch(b)
+			var new_b []byte
+			if len(firstMatch) > 1 {
+				old_h := firstMatch[1]
+				new_h := []byte("\r\n" + h1_header + h1_domain + string(old_h) + h2_header + h2_domain + "\r\n")
+				new_b = bytes.Replace(b, old_h, new_h, 1)
+			} else {
+				new_b = b
+			}
+			return f.writer.Write(new_b)
+
+		} else {
+			return f.writer.Write(b)
+		}
+	}
+
 	if f.fragment.PacketsFrom == 0 && f.fragment.PacketsTo == 1 {
 		if f.count != 1 || len(b) <= 5 || b[0] != 22 {
 			return f.writer.Write(b)
@@ -426,7 +453,7 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 	}
 }
 
-// stolen from github.com/xtls/xray-core/transport/internet/reality
+// copy from github.com/GFW-knocker/Xray-core/transport/internet/reality
 func randBetween(left int64, right int64) int64 {
 	if left == right {
 		return left

@@ -6,12 +6,12 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/log"
-	"golang.zx2c4.com/wireguard/device"
+	"github.com/GFW-knocker/wireguard/device"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/log"
 )
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 var wgLogger = &device.Logger{
 	Verbosef: func(format string, args ...any) {

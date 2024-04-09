@@ -4,9 +4,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/features/outbound"
+	"github.com/GFW-knocker/Xray-core/features/routing"
 )
 
 type Rule struct {

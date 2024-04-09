@@ -9,13 +9,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
+	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	goreality "github.com/xtls/reality"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/sys/unix"
 )
 
