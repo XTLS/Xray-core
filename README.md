@@ -75,7 +75,6 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [HiddifyNG](https://github.com/hiddify/HiddifyNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
 - iOS & macOS arm64
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -84,6 +83,8 @@
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
+  - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
+  - [NekoRay](https://github.com/Matsuridayo/nekoray)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [NekoRay](https://github.com/Matsuridayo/nekoray)
