@@ -44,7 +44,7 @@ type Inbound struct {
 	Tag string
 	// Name of the inbound proxy that handles the connection.
 	Name string
-	// User is the user that authencates for the inbound. May be nil if the protocol allows anounymous traffic.
+	// User is the user that authenticates for the inbound. May be nil if the protocol allows anonymous traffic.
 	User *protocol.MemoryUser
 	// Conn is actually internet.Connection. May be nil.
 	Conn net.Conn
