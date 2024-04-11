@@ -130,6 +130,8 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 					}
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 						return tls.UClient(c, config, fingerprint), nil
+					} else if ECHConfig := tls.GetEchConfig(streamSettings); ECHConfig != nil {
+						return tls.ECHClient(c, config, ECHConfig), nil
 					} else { // Fallback to normal gRPC TLS
 						return tls.Client(c, config), nil
 					}

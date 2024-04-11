@@ -27,6 +27,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			if err := conn.(*tls.UConn).HandshakeContext(ctx); err != nil {
 				return nil, err
 			}
+		} else if ECHConfig := tls.GetEchConfig(streamSettings); ECHConfig != nil {
+			conn = tls.ECHClient(conn, tlsConfig, ECHConfig)
 		} else {
 			conn = tls.Client(conn, tlsConfig)
 		}

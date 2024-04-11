@@ -119,6 +119,8 @@ github.com/refraction-networking/utls v1.6.3/go.mod h1:yil9+7qSl+gBwJqztoQseO6Pr
 github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 h1:f/FNXud6gA3MNr8meMVVGxhp+QBTqY91tM8HjEuMjGg=
 github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3/go.mod h1:HgjTstvQsPGkxUsCd2KWxErBblirPizecHcpD3ffK+s=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
+github.com/sagernet/cloudflare-tls v0.0.0-20230829051644-4a68352d0c4a h1:wZHruBxZCsQLXHAozWpnJBL3wJ/XufDpz0qKtgpSnA4=
+github.com/sagernet/cloudflare-tls v0.0.0-20230829051644-4a68352d0c4a/go.mod h1:dNV1ZP9y3qx5ltULeKaQZTZWTLHflgW5DES+Ses7cMI=
 github.com/sagernet/sing v0.3.8 h1:gm4JKalPhydMYX2zFOTnnd4TXtM/16WFRqSjMepYQQk=
 github.com/sagernet/sing v0.3.8/go.mod h1:+60H3Cm91RnL9dpVGWDPHt0zTQImO9Vfqt9a4rSambI=
 github.com/sagernet/sing-shadowsocks v0.2.6 h1:xr7ylAS/q1cQYS8oxKKajhuQcchd5VJJ4K4UZrrpp0s=

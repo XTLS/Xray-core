@@ -56,6 +56,8 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 			if err := conn.(*tls.UConn).WebsocketHandshakeContext(ctx); err != nil {
 				return nil, err
 			}
+		} else if ECHConfig := tls.GetEchConfig(streamSettings); ECHConfig != nil {
+			conn = tls.ECHClient(conn, tlsConfig, ECHConfig)
 		} else {
 			conn = tls.Client(pconn, tlsConfig)
 		}

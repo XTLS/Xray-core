@@ -398,6 +398,7 @@ type TLSConfig struct {
 	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 	MasterKeyLog                         string           `json:"masterKeyLog"`
+	ECHConfig                            string           `json:"ECHConfig"`
 }
 
 // Build implements Buildable.
@@ -454,6 +455,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 
 	config.MasterKeyLog = c.MasterKeyLog
+	config.EchConfig = c.ECHConfig
 
 	return config, nil
 }

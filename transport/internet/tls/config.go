@@ -417,3 +417,12 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 	}
 	return config
 }
+
+// To confirm if ECH is enabled.
+func GetEchConfig(settings *internet.MemoryStreamConfig) *string {
+	if settings.SecuritySettings.(*Config).EchConfig != "" {
+		ECHConfig := settings.SecuritySettings.(*Config).EchConfig
+		return &ECHConfig
+	}
+	return nil
+}

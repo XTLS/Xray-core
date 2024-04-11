@@ -46,6 +46,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.16.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
+	github.com/sagernet/cloudflare-tls v0.0.0-20230829051644-4a68352d0c4a // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect

@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"math/big"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
+	cftls "github.com/sagernet/cloudflare-tls"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 )
@@ -65,6 +67,44 @@ func Client(c net.Conn, config *tls.Config) net.Conn {
 	tlsConn := tls.Client(c, config)
 	return &Conn{Conn: tlsConn}
 }
+
+// ←--------ECH part--------→
+// This is a temporary solution before the official GOTLS support ECH.
+// We use Cloudflare's fork.
+
+type ECHConn struct {
+	*cftls.Conn
+}
+
+// We convert tls.Config to cftls.Config.
+// And add ECH config in this step
+func copyECHConfig(c *tls.Config, ECHConfig *string) *cftls.Config {
+	echConfig, err := base64.StdEncoding.DecodeString(*ECHConfig)
+	if err != nil {
+		return nil
+	}
+	echConfigs, err := cftls.UnmarshalECHConfigs(echConfig)
+	if err != nil {
+		return nil
+	}
+	return &cftls.Config{
+		RootCAs:               c.RootCAs,
+		ServerName:            c.ServerName,
+		InsecureSkipVerify:    c.InsecureSkipVerify,
+		VerifyPeerCertificate: c.VerifyPeerCertificate,
+		KeyLogWriter:          c.KeyLogWriter,
+		ECHEnabled:            true,
+		ClientECHConfigs:      echConfigs,
+	}
+}
+
+// Client initiates a *ECH* TLS client handshake on the given connection.
+func ECHClient(c net.Conn, config *tls.Config, ECHConfig *string) net.Conn {
+	tlsConn := cftls.Client(c, copyECHConfig(config, ECHConfig))
+	return &ECHConn{Conn: tlsConn}
+}
+
+// ←--------ECH part--------→
 
 // Server initiates a TLS server handshake on the given connection.
 func Server(c net.Conn, config *tls.Config) net.Conn {
