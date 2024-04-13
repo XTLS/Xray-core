@@ -368,8 +368,6 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
-	config.PreferServerCipherSuites = c.PreferServerCipherSuites
-
 	if len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none" {
 		writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 		if err != nil {

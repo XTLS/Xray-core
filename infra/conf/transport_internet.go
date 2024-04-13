@@ -392,7 +392,6 @@ type TLSConfig struct {
 	MinVersion                           string           `json:"minVersion"`
 	MaxVersion                           string           `json:"maxVersion"`
 	CipherSuites                         string           `json:"cipherSuites"`
-	PreferServerCipherSuites             bool             `json:"preferServerCipherSuites"`
 	Fingerprint                          string           `json:"fingerprint"`
 	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
 	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
@@ -424,7 +423,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MinVersion = c.MinVersion
 	config.MaxVersion = c.MaxVersion
 	config.CipherSuites = c.CipherSuites
-	config.PreferServerCipherSuites = c.PreferServerCipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
 	if config.Fingerprint != "" && tls.GetFingerprint(config.Fingerprint) == nil {
 		return nil, newError(`unknown fingerprint: `, config.Fingerprint)

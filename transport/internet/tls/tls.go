@@ -18,10 +18,11 @@ type Interface interface {
 	net.Conn
 	HandshakeContext(ctx context.Context) error
 	VerifyHostname(host string) error
-	NegotiatedProtocol() (name string, mutual bool)
+	NegotiatedProtocol() string
 }
 
 var _ buf.Writer = (*Conn)(nil)
+var _ Interface = (*Conn)(nil)
 
 type Conn struct {
 	*tls.Conn
@@ -55,9 +56,9 @@ func (c *Conn) HandshakeAddressContext(ctx context.Context) net.Address {
 	return net.ParseAddress(state.ServerName)
 }
 
-func (c *Conn) NegotiatedProtocol() (name string, mutual bool) {
+func (c *Conn) NegotiatedProtocol() string {
 	state := c.ConnectionState()
-	return state.NegotiatedProtocol, state.NegotiatedProtocolIsMutual
+	return state.NegotiatedProtocol
 }
 
 // Client initiates a TLS client handshake on the given connection.
@@ -75,6 +76,8 @@ func Server(c net.Conn, config *tls.Config) net.Conn {
 type UConn struct {
 	*utls.UConn
 }
+
+var _ Interface = (*UConn)(nil)
 
 func (c *UConn) Close() error {
 	timer := time.AfterFunc(tlsCloseTimeout, func() {
@@ -122,9 +125,9 @@ func (c *UConn) WebsocketHandshakeContext(ctx context.Context) error {
 	return c.HandshakeContext(ctx)
 }
 
-func (c *UConn) NegotiatedProtocol() (name string, mutual bool) {
+func (c *UConn) NegotiatedProtocol() string {
 	state := c.ConnectionState()
-	return state.NegotiatedProtocol, state.NegotiatedProtocolIsMutual
+	return state.NegotiatedProtocol
 }
 
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
