@@ -97,12 +97,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 			}
-			negotiatedProtocol, negotiatedProtocolIsMutual := cn.NegotiatedProtocol()
+			negotiatedProtocol := cn.NegotiatedProtocol()
 			if negotiatedProtocol != http2.NextProtoTLS {
 				return nil, newError("http2: unexpected ALPN protocol " + negotiatedProtocol + "; want q" + http2.NextProtoTLS).AtError()
-			}
-			if !negotiatedProtocolIsMutual {
-				return nil, newError("http2: could not negotiate protocol mutually").AtError()
 			}
 			return cn, nil
 		},
