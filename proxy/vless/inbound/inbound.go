@@ -458,6 +458,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	responseAddons := &encoding.Addons{
 		// Flow: requestAddons.Flow,
 	}
+	encoding.PopulateSeed(account.Seed, responseAddons)
+	if check := encoding.CheckSeed(requestAddons, responseAddons); check != nil {
+		return errors.New("Seed configuration mis-match").Base(check).AtWarning()
+	}
 
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
