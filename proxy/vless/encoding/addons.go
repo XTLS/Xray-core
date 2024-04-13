@@ -13,8 +13,7 @@ import (
 )
 
 func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
-	switch addons.Flow {
-	case vless.XRV:
+	if addons.Flow == vless.XRV || len(addons.Seed) > 0 {
 		bytes, err := proto.Marshal(addons)
 		if err != nil {
 			return errors.New("failed to marshal addons protobuf value").Base(err)
@@ -25,12 +24,11 @@ func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
 		if _, err := buffer.Write(bytes); err != nil {
 			return errors.New("failed to write addons protobuf value").Base(err)
 		}
-	default:
+	} else {
 		if err := buffer.WriteByte(0); err != nil {
 			return errors.New("failed to write addons protobuf length").Base(err)
 		}
 	}
-
 	return nil
 }
 
@@ -49,11 +47,6 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 
 		if err := proto.Unmarshal(buffer.Bytes(), addons); err != nil {
 			return nil, errors.New("failed to unmarshal addons protobuf value").Base(err)
-		}
-
-		// Verification.
-		switch addons.Flow {
-		default:
 		}
 	}
 
@@ -74,11 +67,8 @@ func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, request
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
 func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons) buf.Reader {
-	switch addons.Flow {
-	default:
-		if request.Command == protocol.RequestCommandUDP {
-			return NewLengthPacketReader(reader)
-		}
+	if request.Command == protocol.RequestCommandUDP {
+		return NewLengthPacketReader(reader)
 	}
 	return buf.NewReader(reader)
 }
