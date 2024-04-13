@@ -13,7 +13,7 @@ message Addons {
   string Duration = 4;  // "0-8" means apply to number of packets, "1kb-" means start applying once both side exchange 1kb data, counting two-ways
   PaddingConfig Padding = 5;
   DelayConfig Delay = 6;
-  SchedulerConfig SchedulerConfig = 7;
+  SchedulerConfig Scheduler = 7;
 }
 
 enum SeedMode {

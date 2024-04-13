@@ -119,6 +119,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	requestAddons := &encoding.Addons{
 		Flow: account.Flow,
 	}
+	encoding.PopulateSeed(account.Seed, requestAddons)
 
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer

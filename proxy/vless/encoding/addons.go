@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -177,4 +178,65 @@ func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		mb = append(mb, b)
 	}
 	return mb, nil
+}
+
+func PopulateSeed(seed string, addons *Addons) {
+	if len(seed) > 0 {
+		addons.Seed = []byte {1} // only turn on, more TBD
+		addons.Mode = SeedMode_PaddingPlusDelay
+		addons.Duration = "0-8"
+		addons.Padding = &PaddingConfig{
+			RegularMin: 0,
+			RegularMax: 256,
+			LongMin:    900,
+			LongMax:    1400,
+		}
+		addons.Delay = &DelayConfig{
+			IsRandom: true,
+			MinMillis: 100,
+			MaxMillis: 500,
+		}
+		addons.Scheduler = &SchedulerConfig{
+			TimeoutMillis: 600,
+		}
+	}
+}
+
+func CheckSeed(requestAddons *Addons, responseAddons *Addons) error {
+	if !bytes.Equal(requestAddons.Seed, responseAddons.Seed) {
+		return newError("Seed bytes not match", requestAddons.Seed, responseAddons.Seed)
+	}
+	if requestAddons.Mode != responseAddons.Mode {
+		return newError("Mode not match", requestAddons.Mode, responseAddons.Mode)
+	}
+	if requestAddons.Duration != responseAddons.Duration {
+		return newError("Duration not match", requestAddons.Duration, responseAddons.Duration)
+	}
+	if requestAddons.Padding != nil && responseAddons.Padding != nil {
+		if requestAddons.Padding.RegularMin != responseAddons.Padding.RegularMin || 
+		requestAddons.Padding.RegularMax != responseAddons.Padding.RegularMax || 
+		requestAddons.Padding.LongMin != responseAddons.Padding.LongMin || 
+		requestAddons.Padding.LongMax != responseAddons.Padding.LongMax {
+			return newError("Padding not match")
+		}
+	} else if requestAddons.Padding != nil || responseAddons.Padding != nil {
+		return newError("Padding of one is nil but the other is not nil")
+	}
+	if requestAddons.Delay != nil && responseAddons.Delay != nil {
+		if requestAddons.Delay.IsRandom != responseAddons.Delay.IsRandom || 
+		requestAddons.Delay.MinMillis != responseAddons.Delay.MinMillis || 
+		requestAddons.Delay.MaxMillis != responseAddons.Delay.MaxMillis {
+			return newError("Delay not match")
+		}
+	} else if requestAddons.Delay != nil || responseAddons.Delay != nil {
+		return newError("Delay of one is nil but the other is not nil")
+	}
+	if requestAddons.Scheduler != nil && responseAddons.Scheduler != nil {
+		if requestAddons.Scheduler.TimeoutMillis != responseAddons.Scheduler.TimeoutMillis {
+			return newError("Scheduler not match")
+		}
+	} else if requestAddons.Scheduler != nil || responseAddons.Scheduler != nil {
+		return newError("Scheduler of one is nil but the other is not nil")
+	}
+	return nil
 }
