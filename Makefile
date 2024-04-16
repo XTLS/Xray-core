@@ -2,6 +2,15 @@ NAME = xray
 
 VERSION=$(shell git describe --always --dirty)
 
+export GOARCH ?=
+export GOOS ?=
+
+ifdef GOARCH
+	ifeq ($(GOOS),darwin)
+		NAME:=$(NAME)-$(GOARCH)
+	endif
+endif
+
 LDFLAGS = -X github.com/xtls/xray-core/core.build=$(VERSION) -s -w -buildid=
 PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
