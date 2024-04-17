@@ -55,23 +55,21 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 }
 
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
+func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
+	w := proxy.NewVisionWriter(writer, state, context)
 	if request.Command == protocol.RequestCommandUDP {
-		return NewMultiLengthPacketWriter(writer.(buf.Writer))
-	}
-	w := buf.NewWriter(writer)
-	if requestAddons.Flow == vless.XRV {
-		w = proxy.NewVisionWriter(w, state, context)
+		return NewMultiLengthPacketWriter(w)
 	}
 	return w
 }
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
-func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons) buf.Reader {
+func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons, state *proxy.TrafficState, context context.Context) buf.Reader {
+	r := proxy.NewVisionReader(buf.NewReader(reader), state, context)
 	if request.Command == protocol.RequestCommandUDP {
-		return NewLengthPacketReader(reader)
+		return NewLengthPacketReader(&buf.BufferedReader{Reader: r})
 	}
-	return buf.NewReader(reader)
+	return r
 }
 
 func NewMultiLengthPacketWriter(writer buf.Writer) *MultiLengthPacketWriter {
@@ -204,39 +202,39 @@ func PopulateSeed(seed string, addons *Addons) {
 
 func CheckSeed(requestAddons *Addons, responseAddons *Addons) error {
 	if !bytes.Equal(requestAddons.Seed, responseAddons.Seed) {
-		return newError("Seed bytes not match", requestAddons.Seed, responseAddons.Seed)
+		return errors.New("Seed bytes not match", requestAddons.Seed, responseAddons.Seed)
 	}
 	if requestAddons.Mode != responseAddons.Mode {
-		return newError("Mode not match", requestAddons.Mode, responseAddons.Mode)
+		return errors.New("Mode not match", requestAddons.Mode, responseAddons.Mode)
 	}
 	if requestAddons.Duration != responseAddons.Duration {
-		return newError("Duration not match", requestAddons.Duration, responseAddons.Duration)
+		return errors.New("Duration not match", requestAddons.Duration, responseAddons.Duration)
 	}
 	if requestAddons.Padding != nil && responseAddons.Padding != nil {
 		if requestAddons.Padding.RegularMin != responseAddons.Padding.RegularMin || 
 		requestAddons.Padding.RegularMax != responseAddons.Padding.RegularMax || 
 		requestAddons.Padding.LongMin != responseAddons.Padding.LongMin || 
 		requestAddons.Padding.LongMax != responseAddons.Padding.LongMax {
-			return newError("Padding not match")
+			return errors.New("Padding not match")
 		}
 	} else if requestAddons.Padding != nil || responseAddons.Padding != nil {
-		return newError("Padding of one is nil but the other is not nil")
+		return errors.New("Padding of one is nil but the other is not nil")
 	}
 	if requestAddons.Delay != nil && responseAddons.Delay != nil {
 		if requestAddons.Delay.IsRandom != responseAddons.Delay.IsRandom || 
 		requestAddons.Delay.MinMillis != responseAddons.Delay.MinMillis || 
 		requestAddons.Delay.MaxMillis != responseAddons.Delay.MaxMillis {
-			return newError("Delay not match")
+			return errors.New("Delay not match")
 		}
 	} else if requestAddons.Delay != nil || responseAddons.Delay != nil {
-		return newError("Delay of one is nil but the other is not nil")
+		return errors.New("Delay of one is nil but the other is not nil")
 	}
 	if requestAddons.Scheduler != nil && responseAddons.Scheduler != nil {
 		if requestAddons.Scheduler.TimeoutMillis != responseAddons.Scheduler.TimeoutMillis {
-			return newError("Scheduler not match")
+			return errors.New("Scheduler not match")
 		}
 	} else if requestAddons.Scheduler != nil || responseAddons.Scheduler != nil {
-		return newError("Scheduler of one is nil but the other is not nil")
+		return errors.New("Scheduler of one is nil but the other is not nil")
 	}
 	return nil
 }

@@ -179,7 +179,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
-	trafficState := proxy.NewTrafficState(account.ID.Bytes())
+	trafficState := proxy.NewTrafficState(account.ID.Bytes(), account.Flow)
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
@@ -260,16 +260,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		// default: serverReader := buf.NewReader(conn)
-		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
-		if requestAddons.Flow == vless.XRV {
-			serverReader = proxy.NewVisionReader(serverReader, trafficState, ctx)
-		}
+		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons, trafficState, ctx)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			if requestAddons.Flow == vless.XRV {
-				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
-			} else {
-				serverReader = xudp.NewPacketReader(conn)
-			}
+			serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
 		}
 
 		if requestAddons.Flow == vless.XRV {
