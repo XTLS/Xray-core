@@ -142,8 +142,8 @@ type OutboundState struct {
 	UplinkWriterDirectCopy bool
 }
 
-func NewTrafficState(userUUID []byte) *TrafficState {
-	return &TrafficState{
+func NewTrafficState(userUUID []byte, flow string) *TrafficState {
+	var state = TrafficState{
 		UserUUID:               userUUID,
 		StartTime:              time.Time{},
 		ByteSent:               0,
@@ -157,26 +157,29 @@ func NewTrafficState(userUUID []byte) *TrafficState {
 		Cipher:                 0,
 		RemainingServerHello:   -1,
 		Inbound: InboundState{
-			WithinPaddingBuffers:     true,
 			UplinkReaderDirectCopy:   false,
 			RemainingCommand:         -1,
 			RemainingContent:         -1,
 			RemainingPadding:         -1,
 			CurrentCommand:           0,
-			IsPadding:                true,
 			DownlinkWriterDirectCopy: false,
 		},
 		Outbound: OutboundState{
-			WithinPaddingBuffers:     true,
 			DownlinkReaderDirectCopy: false,
 			RemainingCommand:         -1,
 			RemainingContent:         -1,
 			RemainingPadding:         -1,
 			CurrentCommand:           0,
-			IsPadding:                true,
 			UplinkWriterDirectCopy:   false,
 		},
 	}
+	if len(flow) > 0 {
+		state.Inbound.IsPadding = true;
+		state.Outbound.IsPadding = true;
+		state.Inbound.WithinPaddingBuffers = true;
+		state.Outbound.WithinPaddingBuffers = true;
+	}
+	return &state
 }
 
 // VisionReader is used to read xtls vision protocol
