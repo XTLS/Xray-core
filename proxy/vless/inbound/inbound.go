@@ -556,11 +556,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
-	trafficState := proxy.NewTrafficState(userSentID)
-	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
-	if requestAddons.Flow == vless.XRV {
-		clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
-	}
+	trafficState := proxy.NewTrafficState(userSentID, account.Flow)
+	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons, trafficState, true, ctx, connection, input, rawInput, nil)
 
 	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
 	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {

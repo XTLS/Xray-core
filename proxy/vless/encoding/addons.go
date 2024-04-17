@@ -58,21 +58,20 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
 func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, isUplink bool, context context.Context, conn net.Conn, ob *session.Outbound) buf.Writer {
+	w := proxy.NewVisionWriter(writer, state, isUplink, context, conn, ob)
 	if request.Command == protocol.RequestCommandUDP {
-		return NewMultiLengthPacketWriter(writer)
-	}
-	if requestAddons.Flow == vless.XRV {
-		return proxy.NewVisionWriter(writer, state, isUplink, context, conn, ob)
+		return NewMultiLengthPacketWriter(w)
 	}
 	return writer
 }
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
-func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons) buf.Reader {
+func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons, state *proxy.TrafficState, isUplink bool, context context.Context, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, ob *session.Outbound) buf.Reader {
+	r := proxy.NewVisionReader(buf.NewReader(reader), state, isUplink, context, conn, input, rawInput, ob)
 	if request.Command == protocol.RequestCommandUDP {
-		return NewLengthPacketReader(reader)
+		return NewLengthPacketReader(&buf.BufferedReader{Reader: r})
 	}
-	return buf.NewReader(reader)
+	return r
 }
 
 func NewMultiLengthPacketWriter(writer buf.Writer) *MultiLengthPacketWriter {
