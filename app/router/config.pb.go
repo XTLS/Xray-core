@@ -864,7 +864,7 @@ type StrategyLeastLoadConfig struct {
 	Baselines []int64 `protobuf:"varint,3,rep,packed,name=baselines,proto3" json:"baselines,omitempty"`
 	// expected nodes count to select
 	Expected int32 `protobuf:"varint,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	// max acceptable rtt, filter away high delay nodes. defalut 0
+	// max acceptable rtt, filter away high delay nodes. default 0
 	MaxRTT int64 `protobuf:"varint,5,opt,name=maxRTT,proto3" json:"maxRTT,omitempty"`
 	// acceptable failure rate
 	Tolerance float32 `protobuf:"fixed32,6,opt,name=tolerance,proto3" json:"tolerance,omitempty"`
