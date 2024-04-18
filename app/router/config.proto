@@ -147,7 +147,7 @@ message StrategyLeastLoadConfig {
   repeated int64 baselines = 3;
   // expected nodes count to select
   int32 expected = 4;
-  // max acceptable rtt, filter away high delay nodes. defalut 0
+  // max acceptable rtt, filter away high delay nodes. default 0
   int64 maxRTT = 5;
   // acceptable failure rate
   float tolerance = 6;
