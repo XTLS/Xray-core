@@ -3,11 +3,13 @@ module github.com/xtls/xray-core
 go 1.22
 
 require (
+	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
+	github.com/cloudflare/circl v1.3.7
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.6.0
 	github.com/gorilla/websocket v1.5.1
-	github.com/miekg/dns v1.1.58
+	github.com/miekg/dns v1.1.59
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/quic-go/quic-go v0.42.0
@@ -30,12 +32,10 @@ require (
 	gvisor.dev/gvisor v0.0.0-20231104011432-48a6d7d5bd0b
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.2.2
-	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 )
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
