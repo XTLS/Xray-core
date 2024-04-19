@@ -17,7 +17,8 @@ body:
       label: Reproduction
       description: |-
         Provide method to reproduce the bug.
-        Please provide a [minimal] config that can reproduce the problem, including both the server and client, removing unnecessary inbounds, outbounds, route rules, and options. Do not paste a large exported config here.
+        Please provide config that can reproduce the problem, including both the server and client, removing unnecessary inbounds, outbounds, route rules, and options. This cloud help us locate the problem if you really want to get help.
+        Do not paste a large exported config here.
         Even if you are using a GUI/script/panel, please follow the above requirements. We do not have the energy or obligation to find the software and spend time reproducing according to the description.
     validations:
       required: true
@@ -25,6 +26,7 @@ body:
     attributes:
       label: log
       description: |-
-        Remember to set the log level to debug.
+        Set the log level to debug.
         Please Restart Xray-core, and then follow the reproduction method to reduce irrelevant parts in log.
+        Remember to remove personal information such as UUID, IP.
       render: shell
