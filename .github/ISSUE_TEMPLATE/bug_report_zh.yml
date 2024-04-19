@@ -1,6 +1,16 @@
 name: bug反馈
 description: "提交 Xray-core bug"
 body:
+  - type: checkboxes
+    attributes:
+      label: 完整性要求
+      description: |-
+        请勾选以下所有选项以证明您已经阅读并理解了以下要求，否则该 issue 将被关闭。
+      options:
+        - label: 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。
+          required: true
+        - label: 我搜索了issues，没有发现已提出的类似问题。
+          required: true
   - type: textarea
     attributes:
       label: 版本

@@ -1,6 +1,16 @@
 name: Bug report
 description: "Submit Xray-core bug"
 body:
+  - type: checkboxes
+    attributes:
+      label: Integrity requirements
+      description: |-
+        Please check all of the following options to prove that you have read and understood the requirements, otherwise this issue will be closed.
+      options:
+        - label: I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.
+          required: true
+        - label: I searched issues and did not find any similar issues.
+          required: true
   - type: textarea
     attributes:
       label: Version
