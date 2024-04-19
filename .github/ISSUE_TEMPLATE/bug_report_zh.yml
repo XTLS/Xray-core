@@ -1,0 +1,30 @@
+name: bug反馈
+description: "提交 Xray-core 漏洞"
+body:
+  - type: textarea
+    attributes:
+      label: 版本
+      description: 使用的Xray-core版本
+      render: shell
+  - type: textarea
+    attributes:
+      label: 描述
+      description: 请提供错误的详细描述。以及你认为有价值的信息。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 重现方式
+      description: |-
+        提供重现BUG方法。
+        请提供可以重现问题的【最小】配置文件，包括服务端和客户端，去掉无用的出入站、规则、选项，不要在这里黏贴一大段导出的 config 文件。
+        即使你在使用图形客户端/脚本/面板，也请遵照上述要求，我们没有精力也没有义务去找到项目再花时间按描述重新问题。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 日志
+      description: |-
+        请先将日志等级设置为 debug.
+        重启 Xray-core ，再按复现方式操作，尽量减少日志中的无关部分。
+      render: shell
