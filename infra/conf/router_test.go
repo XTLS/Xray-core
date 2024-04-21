@@ -44,7 +44,10 @@ func TestToCidrList(t *testing.T) {
 		"ext-ip:geoiptestrouter.dat:!ca",
 	})
 
-	_, err := ToCidrList(ips)
+	cache := NewGeoCache()
+	defer cache.Clear()
+
+	_, err := cache.ToCidrList(ips)
 	if err != nil {
 		t.Fatalf("Failed to parse geoip list, got %s", err)
 	}

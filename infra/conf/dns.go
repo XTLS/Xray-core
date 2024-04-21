@@ -73,8 +73,11 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	var domains []*dns.NameServer_PriorityDomain
 	var originalRules []*dns.NameServer_OriginalRule
 
+	cache := NewGeoCache()
+	defer cache.Clear()
+
 	for _, rule := range c.Domains {
-		parsedDomain, err := parseDomainRule(rule)
+		parsedDomain, err := cache.ParseDomainRule(rule)
 		if err != nil {
 			return nil, newError("invalid domain rule: ", rule).Base(err)
 		}
@@ -91,7 +94,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	geoipList, err := ToCidrList(c.ExpectIPs)
+	geoipList, err := cache.ToCidrList(c.ExpectIPs)
 	if err != nil {
 		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}
@@ -209,6 +212,9 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 	}
 	sort.Strings(domains)
 
+	cache := newSiteCache()
+	defer cache.reset()
+
 	for _, domain := range domains {
 		switch {
 		case strings.HasPrefix(domain, "domain:"):
@@ -226,7 +232,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 			if len(listName) == 0 {
 				return nil, newError("empty geosite rule: ", domain)
 			}
-			geositeList, err := loadGeositeWithAttr("geosite.dat", listName)
+			geositeList, err := cache.loadGeositeWithAttr("geosite.dat", listName)
 			if err != nil {
 				return nil, newError("failed to load geosite: ", listName).Base(err)
 			}
@@ -287,7 +293,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 			}
 			filename := kv[0]
 			list := kv[1]
-			geositeList, err := loadGeositeWithAttr(filename, list)
+			geositeList, err := cache.loadGeositeWithAttr(filename, list)
 			if err != nil {
 				return nil, newError("failed to load domain list: ", list, " from ", filename).Base(err)
 			}
