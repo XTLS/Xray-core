@@ -26,18 +26,32 @@ var conns chan *websocket.Conn
 
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
-	if addr != "" {
+
+    if addr != "" {
+        allowedOrigin := platform.NewEnvFlag(platform.BrowserDialerOrigin).GetValue(func() string { return "http://" + addr })
+
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/websocket" {
-				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-					conns <- conn
-				} else {
-					newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
-				}
-			} else {
-				w.Write(webpage)
-			}
+			if r.URL.Path != "/websocket" {
+                w.Write(webpage)
+                return
+            }
+
+            origin := r.Header.Get("origin")
+
+            if origin != allowedOrigin {
+                newError("Browser dialer unexpected origin: " + origin + " if this is the expected origin, set XRAY_BROWSER_DIALER_ORIGIN").AtError().WriteToLog()
+                return
+            }
+
+            conn, err := upgrader.Upgrade(w, r, nil)
+
+            if err != nil {
+                newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+                return
+            }
+
+            conns <- conn
 		}))
 	}
 }
