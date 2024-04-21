@@ -200,7 +200,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	var request *protocol.RequestHeader
-	var requestAddons *encoding.Addons
+	var requestAddons *proxy.Addons
 	var err error
 
 	napfb := h.fallbacks
@@ -440,7 +440,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
-	responseAddons := &encoding.Addons{
+	responseAddons := &proxy.Addons{
 		// Flow: requestAddons.Flow,
 	}
 	encoding.PopulateSeed(account.Seed, responseAddons)
@@ -521,7 +521,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		// default: clientReader := reader
-		clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons, trafficState, ctx)
+		clientReader := encoding.DecodeBodyAddons(reader, request, responseAddons, trafficState, ctx)
 
 		var err error
 
@@ -549,7 +549,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
+		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons, trafficState, ctx)
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...

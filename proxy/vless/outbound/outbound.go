@@ -116,7 +116,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
-	requestAddons := &encoding.Addons{
+	requestAddons := &proxy.Addons{
 		Flow: account.Flow,
 	}
 	encoding.PopulateSeed(account.Seed, requestAddons)

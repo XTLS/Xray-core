@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
+func EncodeHeaderAddons(buffer *buf.Buffer, addons *proxy.Addons) error {
 	if addons.Flow == vless.XRV || len(addons.Seed) > 0 {
 		bytes, err := proto.Marshal(addons)
 		if err != nil {
@@ -33,8 +33,8 @@ func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
 	return nil
 }
 
-func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
-	addons := new(Addons)
+func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*proxy.Addons, error) {
+	addons := new(proxy.Addons)
 	buffer.Clear()
 	if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
 		return nil, errors.New("failed to read addons protobuf length").Base(err)
@@ -55,8 +55,8 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 }
 
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
-	w := proxy.NewVisionWriter(writer, state, context)
+func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, addons *proxy.Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
+	w := proxy.NewVisionWriter(writer, addons, state, context)
 	if request.Command == protocol.RequestCommandUDP {
 		return NewMultiLengthPacketWriter(w)
 	}
@@ -64,8 +64,8 @@ func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, reques
 }
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
-func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons, state *proxy.TrafficState, context context.Context) buf.Reader {
-	r := proxy.NewVisionReader(buf.NewReader(reader), state, context)
+func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *proxy.Addons, state *proxy.TrafficState, context context.Context) buf.Reader {
+	r := proxy.NewVisionReader(buf.NewReader(reader), addons, state, context)
 	if request.Command == protocol.RequestCommandUDP {
 		return NewLengthPacketReader(&buf.BufferedReader{Reader: r})
 	}
@@ -178,31 +178,45 @@ func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return mb, nil
 }
 
-func PopulateSeed(seed string, addons *Addons) {
+func PopulateSeed(seed string, addons *proxy.Addons) {
 	if len(seed) > 0 {
 		addons.Seed = []byte {1} // only turn on, more TBD
-		addons.Mode = SeedMode_PaddingPlusDelay
+		addons.Mode = proxy.SeedMode_PaddingPlusDelay
 		addons.Duration = "0-8"
-		addons.Padding = &PaddingConfig{
+		addons.Padding = &proxy.PaddingConfig{
 			RegularMin: 0,
 			RegularMax: 256,
 			LongMin:    900,
 			LongMax:    1400,
 		}
-		addons.Delay = &DelayConfig{
+		addons.Delay = &proxy.DelayConfig{
 			IsRandom: true,
 			MinMillis: 100,
 			MaxMillis: 500,
 		}
-		addons.Scheduler = &SchedulerConfig{
+		addons.Scheduler = &proxy.SchedulerConfig{
 			TimeoutMillis: 600,
+		}
+	} else if addons.Flow == vless.XRV {
+		addons.Seed = []byte {1} // only turn on, more TBD
+		addons.Mode = proxy.SeedMode_PaddingOnly
+		addons.Duration = "0-8"
+		addons.Padding = &proxy.PaddingConfig{
+			RegularMin: 0,
+			RegularMax: 256,
+			LongMin:    900,
+			LongMax:    1400,
 		}
 	}
 }
 
-func CheckSeed(requestAddons *Addons, responseAddons *Addons) error {
+func CheckSeed(requestAddons *proxy.Addons, responseAddons *proxy.Addons) error {
 	if !bytes.Equal(requestAddons.Seed, responseAddons.Seed) {
 		return errors.New("Seed bytes not match", requestAddons.Seed, responseAddons.Seed)
+	}
+	if responseAddons.Flow == vless.XRV && len(responseAddons.Seed) == 0 && requestAddons.Mode == proxy.SeedMode_Unknown {
+		// old vision server config allow empty seed from clients for backwards compatibility
+		return nil
 	}
 	if requestAddons.Mode != responseAddons.Mode {
 		return errors.New("Mode not match", requestAddons.Mode, responseAddons.Mode)
