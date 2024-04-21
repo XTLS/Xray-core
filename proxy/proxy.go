@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -164,6 +165,7 @@ func NewTrafficState(userUUID []byte, flow string) *TrafficState {
 			RemainingPadding:         -1,
 			CurrentCommand:           0,
 			DownlinkWriterDirectCopy: false,
+			IsPadding:                true,
 		},
 		Outbound: OutboundState{
 			DownlinkReaderDirectCopy: false,
@@ -172,11 +174,10 @@ func NewTrafficState(userUUID []byte, flow string) *TrafficState {
 			RemainingPadding:         -1,
 			CurrentCommand:           0,
 			UplinkWriterDirectCopy:   false,
+			IsPadding:                true,
 		},
 	}
 	if len(flow) > 0 {
-		state.Inbound.IsPadding = true;
-		state.Outbound.IsPadding = true;
 		state.Inbound.WithinPaddingBuffers = true;
 		state.Outbound.WithinPaddingBuffers = true;
 	}
@@ -187,6 +188,7 @@ func NewTrafficState(userUUID []byte, flow string) *TrafficState {
 // Note Vision probably only make sense as the inner most layer of reader, since it need assess traffic state from origin proxy traffic
 type VisionReader struct {
 	buf.Reader
+	addons       *Addons
 	trafficState *TrafficState
 	ctx          context.Context
 	isUplink     bool
@@ -199,9 +201,10 @@ type VisionReader struct {
 	directReadCounter stats.Counter
 }
 
-func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, ob *session.Outbound) *VisionReader {
+func NewVisionReader(reader buf.Reader, addon *Addons, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, ob *session.Outbound) *VisionReader {
 	return &VisionReader{
 		Reader:       reader,
+		addons:       addon,
 		trafficState: trafficState,
 		ctx:          ctx,
 		isUplink:     isUplink,
@@ -248,7 +251,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return buffer, err
 	}
 
-	if *withinPaddingBuffers || w.trafficState.NumberOfPacketToFilter > 0 {
+	if *withinPaddingBuffers || !ShouldStopSeed(w.addons, w.trafficState) {
 		mb2 := make(buf.MultiBuffer, 0, len(buffer))
 		for _, b := range buffer {
 			newbuffer := XtlsUnpadding(b, w.trafficState, w.isUplink, w.ctx)
@@ -305,6 +308,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 // Note Vision probably only make sense as the inner most layer of writer, since it need assess traffic state from origin proxy traffic
 type VisionWriter struct {
 	buf.Writer
+	addons       *Addons
 	trafficState *TrafficState
 	ctx          context.Context
 	isUplink     bool
@@ -316,11 +320,12 @@ type VisionWriter struct {
 	directWriteCounter stats.Counter
 }
 
-func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, ob *session.Outbound) *VisionWriter {
+func NewVisionWriter(writer buf.Writer, addon *Addons, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, ob *session.Outbound) *VisionWriter {
 	w := make([]byte, len(trafficState.UserUUID))
 	copy(w, trafficState.UserUUID)
 	return &VisionWriter{
 		Writer:            writer,
+		addons:            addon,
 		trafficState:      trafficState,
 		ctx:               ctx,
 		writeOnceUserUUID: w,
@@ -364,9 +369,9 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		XtlsFilterTls(mb, w.trafficState, w.ctx)
 	}
 
-	if *isPadding {
+	if *isPadding && ShouldStartSeed(w.addons, w.trafficState) {
 		if len(mb) == 1 && mb[0] == nil {
-			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx) // we do a long padding to hide vless header
+			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.addons, w.ctx) // we do a long padding to hide vless header
 		} else {
 			mb = ReshapeMultiBuffer(w.ctx, mb)
 			longPadding := w.trafficState.IsTLS
@@ -376,19 +381,21 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						*switchToDirectCopy = true
 					}
 					var command byte = CommandPaddingContinue
-					if i == len(mb)-1 {
-						command = CommandPaddingEnd
+					if i == len(mb) - 1 {
 						if w.trafficState.EnableXtls {
 							command = CommandPaddingDirect
+							*isPadding = false
+						} else if ShouldStopSeed(w.addons, w.trafficState) {
+							command = CommandPaddingEnd
+							*isPadding = false
 						}
 					}
-					mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx)
-					*isPadding = false // padding going to end
+					mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.addons, w.ctx)
 					longPadding = false
 					continue
-				} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
+				} else if !w.trafficState.IsTLS12orAbove && ShouldStopSeed(w.addons, w.trafficState) {
 					*isPadding = false
-					mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx)
+					mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
 					break
 				}
 				var command byte = CommandPaddingContinue
@@ -398,7 +405,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						command = CommandPaddingDirect
 					}
 				}
-				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx)
+				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
 			}
 		}
 	}
@@ -445,24 +452,24 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 }
 
 // XtlsPadding add padding to eliminate length signature during tls handshake
-func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context) *buf.Buffer {
+func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, addons *Addons, ctx context.Context) *buf.Buffer {
 	var contentLen int32 = 0
 	var paddingLen int32 = 0
 	if b != nil {
 		contentLen = b.Len()
 	}
-	if contentLen < 900 && longPadding {
-		l, err := rand.Int(rand.Reader, big.NewInt(500))
+	if contentLen < int32(addons.Padding.LongMin) && longPadding {
+		l, err := rand.Int(rand.Reader, big.NewInt(int64(addons.Padding.LongMax - addons.Padding.LongMin)))
 		if err != nil {
 			errors.LogDebugInner(ctx, err, "failed to generate padding")
 		}
-		paddingLen = int32(l.Int64()) + 900 - contentLen
+		paddingLen = int32(l.Int64()) + int32(addons.Padding.LongMin) - contentLen
 	} else {
-		l, err := rand.Int(rand.Reader, big.NewInt(256))
+		l, err := rand.Int(rand.Reader, big.NewInt(int64(addons.Padding.RegularMax - addons.Padding.RegularMin)))
 		if err != nil {
 			errors.LogDebugInner(ctx, err, "failed to generate padding")
 		}
-		paddingLen = int32(l.Int64())
+		paddingLen = int32(l.Int64()) + int32(addons.Padding.RegularMin)
 	}
 	if paddingLen > buf.Size-21-contentLen {
 		paddingLen = buf.Size - 21 - contentLen
@@ -758,3 +765,50 @@ func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
 	_, ok3 := iConn.(*internet.UnixConnWrapper)
 	return ok1 || ok2 || ok3
 }
+
+func ShouldStartSeed(addons *Addons, trafficState *TrafficState) bool {
+	if len(addons.Duration) == 0 || len(strings.Split(addons.Duration, "-")) < 2 {
+		return false
+	}
+	start := strings.ToLower(strings.Split(addons.Duration, "-")[0])
+	if len(start) == 0 {
+		return true
+	}
+	if strings.Contains(start, "b") {
+		start = strings.TrimRight(start, "b")
+		i, err := strconv.Atoi(start)
+		if err == nil && i <= int(trafficState.ByteSent + trafficState.ByteSent) {
+			return true
+		}
+	} else {
+		i, err := strconv.Atoi(start)
+		if err == nil && i <= trafficState.NumberOfPacketSent + trafficState.NumberOfPacketReceived {
+			return true
+		}
+	}
+	return false
+}
+
+func ShouldStopSeed(addons *Addons, trafficState *TrafficState) bool {
+	if len(addons.Duration) == 0 || len(strings.Split(addons.Duration, "-")) < 2 {
+		return true
+	}
+	start := strings.ToLower(strings.Split(addons.Duration, "-")[1])
+	if len(start) == 0 { // infinite
+		return false
+	}
+	if strings.Contains(start, "b") {
+		start = strings.TrimRight(start, "b")
+		i, err := strconv.Atoi(start)
+		if err == nil && i > int(trafficState.ByteSent + trafficState.ByteSent) {
+			return false
+		}
+	} else {
+		i, err := strconv.Atoi(start)
+		if err == nil && i > trafficState.NumberOfPacketSent + trafficState.NumberOfPacketReceived {
+			return false
+		}
+	}
+	return true
+}
+
