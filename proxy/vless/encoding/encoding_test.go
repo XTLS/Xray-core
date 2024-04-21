@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	. "github.com/xtls/xray-core/proxy/vless/encoding"
 )
@@ -37,7 +38,7 @@ func TestRequestSerialization(t *testing.T) {
 		Address: net.DomainAddress("www.example.com"),
 		Port:    net.Port(443),
 	}
-	expectedAddons := &Addons{}
+	expectedAddons := &proxy.Addons{}
 
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
@@ -52,7 +53,7 @@ func TestRequestSerialization(t *testing.T) {
 		t.Error(r)
 	}
 
-	addonsComparer := func(x, y *Addons) bool {
+	addonsComparer := func(x, y *proxy.Addons) bool {
 		return (x.Flow == y.Flow) && (cmp.Equal(x.Seed, y.Seed))
 	}
 	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
@@ -78,7 +79,7 @@ func TestInvalidRequest(t *testing.T) {
 		Address: net.DomainAddress("www.example.com"),
 		Port:    net.Port(443),
 	}
-	expectedAddons := &Addons{}
+	expectedAddons := &proxy.Addons{}
 
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
@@ -109,7 +110,7 @@ func TestMuxRequest(t *testing.T) {
 		Command: protocol.RequestCommandMux,
 		Address: net.DomainAddress("v1.mux.cool"),
 	}
-	expectedAddons := &Addons{}
+	expectedAddons := &proxy.Addons{}
 
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
@@ -124,7 +125,7 @@ func TestMuxRequest(t *testing.T) {
 		t.Error(r)
 	}
 
-	addonsComparer := func(x, y *Addons) bool {
+	addonsComparer := func(x, y *proxy.Addons) bool {
 		return (x.Flow == y.Flow) && (cmp.Equal(x.Seed, y.Seed))
 	}
 	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
