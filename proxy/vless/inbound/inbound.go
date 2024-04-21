@@ -456,7 +456,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	account := request.User.Account.(*vless.MemoryAccount)
 
 	responseAddons := &proxy.Addons{
-		// Flow: requestAddons.Flow,
+		Flow: account.Flow,
 	}
 	encoding.PopulateSeed(account.Seed, responseAddons)
 	if check := encoding.CheckSeed(requestAddons, responseAddons); check != nil {
