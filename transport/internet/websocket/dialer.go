@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -26,32 +27,22 @@ var conns chan *websocket.Conn
 
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
-
 	if addr != "" {
-		allowedOrigin := platform.NewEnvFlag(platform.BrowserDialerOrigin).GetValue(func() string { return "http://" + addr })
-
+        csrfToken := uuid.New()
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/websocket" {
+			if r.URL.Path == "/websocket" && r.URL.Query().Get("csrf") == csrfToken.String() {
+				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+					conns <- conn
+				} else {
+					newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+				}
+			} else {
 				w.Write(webpage)
-				return
+                w.Write([]byte("<script>\ncsrfToken = \""))
+                w.Write([]byte(csrfToken.String()))
+                w.Write([]byte("\";\n</script>"))
 			}
-
-			origin := r.Header.Get("origin")
-
-			if origin != allowedOrigin {
-				newError("Browser dialer unexpected origin: " + origin + " if this is the expected origin, set XRAY_BROWSER_DIALER_ORIGIN").AtError().WriteToLog()
-				return
-			}
-
-			conn, err := upgrader.Upgrade(w, r, nil)
-
-			if err != nil {
-				newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
-				return
-			}
-
-			conns <- conn
 		}))
 	}
 }

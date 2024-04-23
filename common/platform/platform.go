@@ -21,7 +21,6 @@ const (
 
 	BufferSize           = "xray.ray.buffer.size"
 	BrowserDialerAddress = "xray.browser.dialer"
-	BrowserDialerOrigin = "xray.browser.dialer.origin"
 	XUDPLog              = "xray.xudp.show"
 	XUDPBaseKey          = "xray.xudp.basekey"
 )
