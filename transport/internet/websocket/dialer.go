@@ -28,7 +28,7 @@ var conns chan *websocket.Conn
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 	if addr != "" {
-        csrfToken := uuid.New()
+		csrfToken := uuid.New()
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/websocket" && r.URL.Query().Get("csrf") == csrfToken.String() {
@@ -39,9 +39,9 @@ func init() {
 				}
 			} else {
 				w.Write(webpage)
-                w.Write([]byte("<script>\ncsrfToken = \""))
-                w.Write([]byte(csrfToken.String()))
-                w.Write([]byte("\";\n</script>"))
+				w.Write([]byte("<script>\ncsrfToken = \""))
+				w.Write([]byte(csrfToken.String()))
+				w.Write([]byte("\";\n</script>"))
 			}
 		}))
 	}
