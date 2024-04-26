@@ -184,7 +184,7 @@ func NewTrafficState(userUUID []byte, flow string) *TrafficState {
 	return &state
 }
 
-// VisionReader is used to read xtls vision protocol
+// VisionReader is used to read seed protocol
 // Note Vision probably only make sense as the inner most layer of reader, since it need assess traffic state from origin proxy traffic
 type VisionReader struct {
 	buf.Reader
@@ -304,7 +304,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buffer, err
 }
 
-// VisionWriter is used to write xtls vision protocol
+// VisionWriter is used to write seed protocol
 // Note Vision probably only make sense as the inner most layer of writer, since it need assess traffic state from origin proxy traffic
 type VisionWriter struct {
 	buf.Writer
@@ -318,6 +318,7 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
+	scheduler          *Scheduler
 }
 
 func NewVisionWriter(writer buf.Writer, addon *Addons, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, ob *session.Outbound) *VisionWriter {
@@ -332,6 +333,7 @@ func NewVisionWriter(writer buf.Writer, addon *Addons, trafficState *TrafficStat
 		isUplink:          isUplink,
 		conn:              conn,
 		ob:                ob,
+		scheduler:         NewScheduler(writer, addon, trafficState, ctx),
 	}
 }
 
@@ -413,7 +415,14 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.trafficState.StartTime.IsZero() {
 		w.trafficState.StartTime = time.Now()
 	}
-	return w.Writer.WriteMultiBuffer(mb)
+	w.scheduler.Buffer <- mb
+	if w.addons.Scheduler == nil {
+		w.scheduler.Trigger <- -1 // send all buffers
+	}
+	if len(w.scheduler.Error) > 0 {
+		return <-w.scheduler.Error
+	}
+	return nil
 }
 
 // ReshapeMultiBuffer prepare multi buffer for padding structure (max 21 bytes)
