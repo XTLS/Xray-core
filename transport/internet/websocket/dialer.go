@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -14,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -27,13 +29,18 @@ var conns chan *websocket.Conn
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 	if addr != "" {
+		token := uuid.New()
+		csrfToken := token.String()
+		webpage = bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/websocket" {
-				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-					conns <- conn
-				} else {
-					newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+				if r.URL.Query().Get("token") == csrfToken {
+					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+						conns <- conn
+					} else {
+						newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+					}
 				}
 			} else {
 				w.Write(webpage)
