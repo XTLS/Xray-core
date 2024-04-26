@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -28,20 +29,21 @@ var conns chan *websocket.Conn
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 	if addr != "" {
-		csrfToken := uuid.New()
+		token := uuid.New()
+		csrfToken := token.String()
+		webpage = bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/websocket" && r.URL.Query().Get("csrf") == csrfToken.String() {
-				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-					conns <- conn
-				} else {
-					newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+			if r.URL.Path == "/websocket" {
+				if r.URL.Query().Get("token") == csrfToken {
+					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+						conns <- conn
+					} else {
+						newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+					}
 				}
 			} else {
 				w.Write(webpage)
-				w.Write([]byte("<script>\ncsrfToken = \""))
-				w.Write([]byte(csrfToken.String()))
-				w.Write([]byte("\";\n</script>"))
 			}
 		}))
 	}
