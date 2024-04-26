@@ -325,11 +325,6 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.ServerName = sn
 	}
 
-	// If ServerName is set to "nosni", we set it empty.
-	if strings.ToLower(c.parseServerName()) == "nosni" {
-		config.ServerName = ""
-	}
-
 	if len(config.NextProtos) == 0 {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
