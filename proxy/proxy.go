@@ -171,7 +171,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			w.trafficState.StartTime = time.Now()
 		}
 		w.trafficState.ByteReceived += int64(buffer.Len())
-		if w.trafficState.WithinPaddingBuffers || !ShouldStopSeed(w.addons, w.trafficState) {
+		if w.trafficState.WithinPaddingBuffers || w.trafficState.NumberOfPacketReceived <= 8 || !ShouldStopSeed(w.addons, w.trafficState) {
 			mb2 := make(buf.MultiBuffer, 0, len(buffer))
 			for _, b := range buffer {
 				newbuffer := XtlsUnpadding(b, w.trafficState, w.ctx)

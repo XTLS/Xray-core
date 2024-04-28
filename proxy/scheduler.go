@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type Scheduler struct {
@@ -47,16 +47,16 @@ func(s *Scheduler) mainLoop() {
 			if s.addons.Delay != nil {
 				l, err := rand.Int(rand.Reader, big.NewInt(int64(s.addons.Delay.MaxMillis - s.addons.Delay.MinMillis)))
 				if err != nil {
-					newError("failed to generate delay", trigger).Base(err).WriteToLog(session.ExportIDToError(s.ctx))
+					errors.LogInfoInner(s.ctx, err, "failed to generate delay", trigger)
 				}
-				d = time.Duration(uint32(l.Int64()) + s.addons.Delay.MinMillis) 
-				time.Sleep(d * time.Millisecond)
+				d = time.Duration(uint32(l.Int64()) + s.addons.Delay.MinMillis) * time.Millisecond
+				time.Sleep(d)
 			}
 
 			s.bufferReadLock.Lock() // guard against multiple trigger threads
 			var sending = len(s.Buffer)
 			if sending > 0 {
-				newError("Scheduler Trigger for ", sending, " buffer(s) with ", d, " ", trigger).AtDebug().WriteToLog(session.ExportIDToError(s.ctx))
+				errors.LogDebug(s.ctx, "Scheduler Trigger for ", sending, " buffer(s) with ", d, " ", trigger)
 			}
 			for i := 0; i<sending; i++ {
 				s.Error <- s.writer.WriteMultiBuffer(<-s.Buffer)
