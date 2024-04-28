@@ -251,7 +251,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return buffer, err
 	}
 
-	if *withinPaddingBuffers || !ShouldStopSeed(w.addons, w.trafficState) {
+	if *withinPaddingBuffers || w.trafficState.NumberOfPacketReceived <= 8 || !ShouldStopSeed(w.addons, w.trafficState) {
 		mb2 := make(buf.MultiBuffer, 0, len(buffer))
 		for _, b := range buffer {
 			newbuffer := XtlsUnpadding(b, w.trafficState, w.isUplink, w.ctx)
