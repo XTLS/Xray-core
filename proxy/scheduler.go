@@ -49,8 +49,8 @@ func(s *Scheduler) mainLoop() {
 				if err != nil {
 					errors.LogWarningInner(s.ctx, err, "failed to generate delay", trigger)
 				}
-				d = time.Duration(uint32(l.Int64()) + s.addons.Delay.MinMillis) 
-				time.Sleep(d * time.Millisecond)
+				d = time.Duration(uint32(l.Int64()) + s.addons.Delay.MinMillis) * time.Millisecond
+				time.Sleep(d)
 			}
 
 			s.bufferReadLock.Lock() // guard against multiple trigger threads
