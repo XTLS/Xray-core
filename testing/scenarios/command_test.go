@@ -33,7 +33,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func TestCommanderLinstenConfigurationItem(t *testing.T) {
+func TestCommanderListenConfigurationItem(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
