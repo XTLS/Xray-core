@@ -53,7 +53,7 @@ func init() {
 type Handler struct {
 	inboundHandlerManager feature_inbound.Manager
 	policyManager         policy.Manager
-	validator             *vless.Validator
+	validator             vless.Validator
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -65,19 +65,20 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	handler := &Handler{
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:             new(vless.Validator),
 		dns:                   dc,
 	}
 
+	validator := new(vless.MemoryValidator)
 	for _, user := range config.Clients {
 		u, err := user.ToMemoryUser()
 		if err != nil {
 			return nil, errors.New("failed to get VLESS user").Base(err).AtError()
 		}
-		if err := handler.AddUser(ctx, u); err != nil {
+		if err := validator.Add(u); err != nil {
 			return nil, errors.New("failed to initiate user").Base(err).AtError()
 		}
 	}
+	handler.validator = validator
 
 	if config.Fallbacks != nil {
 		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
