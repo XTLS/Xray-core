@@ -523,7 +523,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -560,7 +560,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ctx)
+			outbounds := session.OutboundsFromContext(ctx)
+			ob := outbounds[len(outbounds) - 1]
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ob, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
