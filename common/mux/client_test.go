@@ -86,9 +86,9 @@ func TestClientWorkerClose(t *testing.T) {
 	}
 
 	tr1, tw1 := pipe.New(pipe.WithoutSizeLimit())
-	ctx1 := session.ContextWithOutbound(context.Background(), &session.Outbound{
+	ctx1 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	})
+	}})
 	common.Must(manager.Dispatch(ctx1, &transport.Link{
 		Reader: tr1,
 		Writer: tw1,
@@ -103,9 +103,9 @@ func TestClientWorkerClose(t *testing.T) {
 	}
 
 	tr2, tw2 := pipe.New(pipe.WithoutSizeLimit())
-	ctx2 := session.ContextWithOutbound(context.Background(), &session.Outbound{
+	ctx2 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	})
+	}})
 	common.Must(manager.Dispatch(ctx2, &transport.Link{
 		Reader: tr2,
 		Writer: tw2,

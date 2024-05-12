@@ -60,15 +60,13 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified").AtError()
 	}
-	outbound.Name = "vmess"
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.SetCanSpliceCopy(3)
-	}
+	ob.Name = "vmess"
+	ob.CanSpliceCopy = 3
 
 	var rec *protocol.ServerSpec
 	var conn stat.Connection
@@ -87,7 +85,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	defer conn.Close()
 
-	target := outbound.Target
+	target := ob.Target
 	newError("tunneling request to ", target, " via ", rec.Destination().NetAddr()).WriteToLog(session.ExportIDToError(ctx))
 
 	command := protocol.RequestCommandTCP

@@ -68,7 +68,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			address := net.ParseAddress(rawHost)
 
 			hctx = session.ContextWithID(hctx, session.IDFromContext(ctx))
-			hctx = session.ContextWithOutbound(hctx, session.OutboundFromContext(ctx))
+			hctx = session.ContextWithOutbounds(hctx, session.OutboundsFromContext(ctx))
 			hctx = session.ContextWithTimeoutOnly(hctx, true)
 
 			pconn, err := internet.DialSystem(hctx, net.TCPDestination(address, port), sockopt)

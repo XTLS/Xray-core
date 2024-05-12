@@ -45,7 +45,9 @@ func TestSimpleRouter(t *testing.T) {
 		HandlerSelector: mockHs,
 	}, nil))
 
-	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("example.com"), 80),
+	}})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {
@@ -86,7 +88,9 @@ func TestSimpleBalancer(t *testing.T) {
 		HandlerSelector: mockHs,
 	}, nil))
 
-	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("example.com"), 80),
+	}})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {
@@ -174,7 +178,9 @@ func TestIPOnDemand(t *testing.T) {
 	r := new(Router)
 	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
-	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("example.com"), 80),
+	}})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {
@@ -213,7 +219,9 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 	r := new(Router)
 	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
-	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.DomainAddress("example.com"), 80)})
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("example.com"), 80),
+	}})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {
@@ -247,7 +255,9 @@ func TestIPIfNonMatchIP(t *testing.T) {
 	r := new(Router)
 	common.Must(r.Init(context.TODO(), config, mockDNS, nil, nil))
 
-	ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{Target: net.TCPDestination(net.LocalHostIP, 80)})
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.LocalHostIP, 80),
+	}})
 	route, err := r.PickRoute(routing_session.AsRoutingContext(ctx))
 	common.Must(err)
 	if tag := route.GetOutboundTag(); tag != "test" {

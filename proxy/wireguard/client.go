@@ -127,22 +127,20 @@ func (h *Handler) processWireGuard(dialer internet.Dialer) (err error) {
 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified")
 	}
-	outbound.Name = "wireguard"
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.SetCanSpliceCopy(3)
-	}
+	ob.Name = "wireguard"
+	ob.CanSpliceCopy = 3
 
 	if err := h.processWireGuard(dialer); err != nil {
 		return err
 	}
 
 	// Destination of the inner request.
-	destination := outbound.Target
+	destination := ob.Target
 	command := protocol.RequestCommandTCP
 	if destination.Network == net.Network_UDP {
 		command = protocol.RequestCommandUDP

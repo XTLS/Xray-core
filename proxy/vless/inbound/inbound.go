@@ -449,7 +449,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	switch requestAddons.Flow {
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
-			inbound.SetCanSpliceCopy(2)
+			inbound.CanSpliceCopy = 2
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
@@ -479,7 +479,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "":
-		inbound.SetCanSpliceCopy(3)
+		inbound.CanSpliceCopy = 3
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}

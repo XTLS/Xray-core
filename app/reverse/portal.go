@@ -62,12 +62,13 @@ func (p *Portal) Close() error {
 }
 
 func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) error {
-	outboundMeta := session.OutboundFromContext(ctx)
-	if outboundMeta == nil {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if ob == nil {
 		return newError("outbound metadata not found").AtError()
 	}
 
-	if isDomain(outboundMeta.Target, p.domain) {
+	if isDomain(ob.Target, p.domain) {
 		muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
 		if err != nil {
 			return newError("failed to create mux client worker").Base(err).AtWarning()
@@ -206,9 +207,10 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	downlinkReader, downlinkWriter := pipe.New(opt...)
 
 	ctx := context.Background()
-	ctx = session.ContextWithOutbound(ctx, &session.Outbound{
+	outbounds := []*session.Outbound{{
 		Target: net.UDPDestination(net.DomainAddress(internalDomain), 0),
-	})
+	}}
+	ctx = session.ContextWithOutbounds(ctx, outbounds)
 	f := client.Dispatch(ctx, &transport.Link{
 		Reader: uplinkReader,
 		Writer: downlinkWriter,
