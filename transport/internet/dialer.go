@@ -113,7 +113,11 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	newError("redirecting request " + dst.String() + " to " + obt).WriteToLog(session.ExportIDToError(ctx))
 	h := obm.GetHandler(obt)
 	outbounds := session.OutboundsFromContext(ctx)
-    ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{Target: dst, Gateway: nil})) // add another outbound in session ctx
+    ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
+		Target: dst, 
+		Gateway: nil,
+		Tag: obt,
+	})) // add another outbound in session ctx
 	if h != nil {
 		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
 		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)

@@ -245,7 +245,10 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			if handler != nil {
 				newError("proxying to ", tag, " for dest ", dest).AtDebug().WriteToLog(session.ExportIDToError(ctx))
 				outbounds := session.OutboundsFromContext(ctx)
-				ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{Target: dest})) // add another outbound in session ctx
+				ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
+					Target: dest,
+					Tag: tag,
+				})) // add another outbound in session ctx
 				opts := pipe.OptionsFromContext(ctx)
 				uplinkReader, uplinkWriter := pipe.New(opts...)
 				downlinkReader, downlinkWriter := pipe.New(opts...)
