@@ -560,9 +560,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 		if requestAddons.Flow == vless.XRV {
-			outbounds := session.OutboundsFromContext(ctx)
-			ob := outbounds[len(outbounds) - 1]
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ob, ctx)
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, nil, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
