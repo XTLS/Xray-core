@@ -242,7 +242,6 @@ func (c *GeoCache) Clear() {
 }
 
 // newIPCache creates a new ipCache.
-// after use, call close() to release memory.
 func newIPCache() *ipCache {
 	return &ipCache{
 		fileContent: make(map[string][]byte),
@@ -251,7 +250,7 @@ func newIPCache() *ipCache {
 }
 
 // reset remove the content of ipCache.
-// returns true if the cache is not empty.
+// Returns true if the cache is not empty before reset.
 func (c *ipCache) reset() bool {
 	if len(c.fileContent) == 0 && len(c.geoIPs) == 0 {
 		return false
@@ -288,7 +287,6 @@ func (c *ipCache) loadIP(file, code string) ([]*router.CIDR, error) {
 }
 
 // newSiteCache creates a new siteCache.
-// after use, call close() to release memory.
 func newSiteCache() *siteCache {
 	return &siteCache{
 		fileContent: make(map[string][]byte),
@@ -297,7 +295,7 @@ func newSiteCache() *siteCache {
 }
 
 // reset remove the content of siteCache.
-// returns true if the cache is not empty.
+// Returns true if the cache is not empty before reset.
 func (c *siteCache) reset() bool {
 	if len(c.fileContent) == 0 && len(c.geoSites) == 0 {
 		return false
