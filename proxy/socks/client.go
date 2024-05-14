@@ -57,17 +57,15 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 
 // Process implements proxy.Outbound.Process.
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified.")
 	}
-	outbound.Name = "socks"
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.SetCanSpliceCopy(2)
-	}
+	ob.Name = "socks"
+	ob.CanSpliceCopy = 2
 	// Destination of the inner request.
-	destination := outbound.Target
+	destination := ob.Target
 
 	// Outbound server.
 	var server *protocol.ServerSpec

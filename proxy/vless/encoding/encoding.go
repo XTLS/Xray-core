@@ -174,15 +174,18 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ctx context.Context) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ob *session.Outbound, ctx context.Context) error {
 	err := func() error {
 		for {
 			if trafficState.ReaderSwitchToDirectCopy {
 				var writerConn net.Conn
-				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
+				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && ob != nil {
 					writerConn = inbound.Conn
 					if inbound.CanSpliceCopy == 2 {
-						inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
+						inbound.CanSpliceCopy = 1
+					}
+					if ob.CanSpliceCopy == 2 { // ob need to be passed in due to context can change
+						ob.CanSpliceCopy = 1
 					}
 				}
 				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer)
@@ -219,14 +222,19 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater
 }
 
 // XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, trafficState *proxy.TrafficState, ctx context.Context) error {
+func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, trafficState *proxy.TrafficState, ob *session.Outbound, ctx context.Context) error {
 	err := func() error {
 		var ct stats.Counter
 		for {
 			buffer, err := reader.ReadMultiBuffer()
 			if trafficState.WriterSwitchToDirectCopy {
-				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.CanSpliceCopy == 2 {
-					inbound.CanSpliceCopy = 1 // force the value to 1, don't use setter
+				if inbound := session.InboundFromContext(ctx); inbound != nil && ob != nil {
+					if inbound.CanSpliceCopy == 2 {
+						inbound.CanSpliceCopy = 1
+					}
+					if ob.CanSpliceCopy == 2 {
+						ob.CanSpliceCopy = 1
+					}
 				}
 				rawConn, _, writerCounter := proxy.UnwrapRawConn(conn)
 				writer = buf.NewWriter(rawConn)

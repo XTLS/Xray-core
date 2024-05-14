@@ -218,11 +218,12 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	if !destination.IsValid() {
 		panic("Dispatcher: Invalid destination.")
 	}
-	ob := session.OutboundFromContext(ctx)
-	if ob == nil {
-		ob = &session.Outbound{}
-		ctx = session.ContextWithOutbound(ctx, ob)
+	outbounds := session.OutboundsFromContext(ctx)
+	if len(outbounds) == 0 {
+		outbounds = []*session.Outbound{{}}
+		ctx = session.ContextWithOutbounds(ctx, outbounds)
 	}
+	ob := outbounds[len(outbounds) - 1]
 	ob.OriginalTarget = destination
 	ob.Target = destination
 	content := session.ContentFromContext(ctx)
@@ -274,11 +275,12 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	if !destination.IsValid() {
 		return newError("Dispatcher: Invalid destination.")
 	}
-	ob := session.OutboundFromContext(ctx)
-	if ob == nil {
-		ob = &session.Outbound{}
-		ctx = session.ContextWithOutbound(ctx, ob)
+	outbounds := session.OutboundsFromContext(ctx)
+	if len(outbounds) == 0 {
+		outbounds = []*session.Outbound{{}}
+		ctx = session.ContextWithOutbounds(ctx, outbounds)
 	}
+	ob := outbounds[len(outbounds) - 1]
 	ob.OriginalTarget = destination
 	ob.Target = destination
 	content := session.ContentFromContext(ctx)
@@ -368,7 +370,8 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	return contentResult, contentErr
 }
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
-	ob := session.OutboundFromContext(ctx)
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
 	if hosts, ok := d.dns.(dns.HostsLookup); ok && destination.Address.Family().IsDomain() {
 		proxied := hosts.LookupHosts(ob.Target.String())
 		if proxied != nil {
@@ -425,6 +428,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		return
 	}
 
+	ob.Tag = handler.Tag()
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
 		if tag := handler.Tag(); tag != "" {
 			if inTag == "" {

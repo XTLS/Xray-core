@@ -148,9 +148,10 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 	}
 
 	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
-		ctx := session.ContextWithOutbound(context.Background(), &session.Outbound{
+		outbounds := []*session.Outbound{{
 			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
-		})
+		}}
+		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
 		ctx, cancel := context.WithCancel(ctx)
 
 		if err := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); err != nil {
@@ -242,17 +243,18 @@ func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 }
 
 func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
-	dest := session.OutboundFromContext(ctx).Target
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
 	transferType := protocol.TransferTypeStream
-	if dest.Network == net.Network_UDP {
+	if ob.Target.Network == net.Network_UDP {
 		transferType = protocol.TransferTypePacket
 	}
 	s.transferType = transferType
-	writer := NewWriter(s.ID, dest, output, transferType, xudp.GetGlobalID(ctx))
+	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx))
 	defer s.Close(false)
 	defer writer.Close()
 
-	newError("dispatching request to ", dest).WriteToLog(session.ExportIDToError(ctx))
+	newError("dispatching request to ", ob.Target).WriteToLog(session.ExportIDToError(ctx))
 	if err := writeFirstPayload(s.input, writer); err != nil {
 		newError("failed to write first payload").Base(err).WriteToLog(session.ExportIDToError(ctx))
 		writer.hasError = true

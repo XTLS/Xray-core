@@ -50,16 +50,9 @@ type Inbound struct {
 	Conn net.Conn
 	// Timer of the inbound buf copier. May be nil.
 	Timer *signal.ActivityTimer
-	// CanSpliceCopy is a property for this connection, set by both inbound and outbound
+	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
 	CanSpliceCopy int
-}
-
-func(i *Inbound) SetCanSpliceCopy(canSpliceCopy int) int {
-	if canSpliceCopy > i.CanSpliceCopy {
-		i.CanSpliceCopy = canSpliceCopy
-	}
-	return i.CanSpliceCopy
 }
 
 // Outbound is the metadata of an outbound connection.
@@ -70,10 +63,15 @@ type Outbound struct {
 	RouteTarget    net.Destination
 	// Gateway address
 	Gateway net.Address
+	// Tag of the outbound proxy that handles the connection.
+	Tag string
 	// Name of the outbound proxy that handles the connection.
 	Name string
 	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings 
 	Conn net.Conn
+	// CanSpliceCopy is a property for this connection
+	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
+	CanSpliceCopy int
 }
 
 // SniffingRequest controls the behavior of content sniffing.

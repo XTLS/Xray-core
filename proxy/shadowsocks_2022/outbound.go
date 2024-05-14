@@ -65,15 +65,16 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil {
 		inboundConn = inbound.Conn
-		inbound.SetCanSpliceCopy(3)
 	}
 
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified")
 	}
-	outbound.Name = "shadowsocks-2022"
-	destination := outbound.Target
+	ob.Name = "shadowsocks-2022"
+	ob.CanSpliceCopy = 3
+	destination := ob.Target
 	network := destination.Network
 
 	newError("tunneling request to ", destination, " via ", o.server.NetAddr()).WriteToLog(session.ExportIDToError(ctx))

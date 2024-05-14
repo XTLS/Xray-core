@@ -155,7 +155,7 @@ func (i *MultiUserInbound) Network() []net.Network {
 func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022-multi"
-	inbound.SetCanSpliceCopy(3)
+	inbound.CanSpliceCopy = 3
 
 	var metadata M.Metadata
 	if inbound.Source.IsValid() {

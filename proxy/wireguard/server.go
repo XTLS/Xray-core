@@ -79,13 +79,15 @@ func (*Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "wireguard"
-	inbound.SetCanSpliceCopy(3)
+	inbound.CanSpliceCopy = 3
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
 
 	s.info = routingInfo{
 		ctx:         core.ToBackgroundDetachedContext(ctx),
 		dispatcher:  dispatcher,
 		inboundTag:  session.InboundFromContext(ctx),
-		outboundTag: session.OutboundFromContext(ctx),
+		outboundTag: ob,
 		contentTag:  session.ContentFromContext(ctx),
 	}
 
@@ -145,7 +147,7 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
 	}
 	if s.info.outboundTag != nil {
-		ctx = session.ContextWithOutbound(ctx, s.info.outboundTag)
+		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{s.info.outboundTag})
 	}
 	if s.info.contentTag != nil {
 		ctx = session.ContextWithContent(ctx, s.info.contentTag)

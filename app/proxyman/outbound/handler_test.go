@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/proxy/freedom"
@@ -44,6 +45,7 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
+	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
@@ -73,6 +75,7 @@ func TestOutboundWithStatCounter(t *testing.T) {
 	v, _ := core.New(config)
 	v.AddFeature((outbound.Manager)(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
+	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
 		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),

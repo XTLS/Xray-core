@@ -449,7 +449,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	switch requestAddons.Flow {
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
-			inbound.SetCanSpliceCopy(2)
+			inbound.CanSpliceCopy = 2
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return newError(requestAddons.Flow + " doesn't support UDP").AtWarning()
@@ -479,7 +479,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return newError(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
 	case "":
-		inbound.SetCanSpliceCopy(3)
+		inbound.CanSpliceCopy = 3
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return newError(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
@@ -523,7 +523,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
@@ -560,7 +560,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ctx)
+			outbounds := session.OutboundsFromContext(ctx)
+			ob := outbounds[len(outbounds) - 1]
+			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, ob, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
