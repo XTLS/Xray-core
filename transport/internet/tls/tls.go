@@ -130,8 +130,32 @@ func (c *UConn) NegotiatedProtocol() string {
 	return state.NegotiatedProtocol
 }
 
+// UClient initiates a TLS client handshake with UConn with the given connection and fingerprint.
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
-	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
+	// Check for nil inputs to prevent nil pointer dereference
+	if c == nil {
+		panic("net.Conn is nil")
+	}
+
+	if config == nil {
+		panic("tls.Config is nil")
+	}
+
+	if fingerprint == nil {
+		panic("ClientHelloID is nil")
+	}
+
+	// Call copyConfig with nil check
+	copiedConfig := copyConfig(config)
+	if copiedConfig == nil {
+		panic("copyConfig returned nil")
+	}
+
+	utlsConn := utls.UClient(c, copiedConfig, *fingerprint)
+	if utlsConn == nil {
+		panic("uTLS connection creation failed")
+	}
+
 	return &UConn{UConn: utlsConn}
 }
 
