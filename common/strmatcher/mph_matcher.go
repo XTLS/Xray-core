@@ -228,31 +228,67 @@ const (
 var hashkey = [4]uintptr{1, 1, 1, 1}
 
 func memhashFallback(p unsafe.Pointer, seed, s uintptr) uintptr {
+	if p == nil {
+		return 0
+	}
 	h := uint64(seed + s*hashkey[0])
 tail:
 	switch {
 	case s == 0:
 	case s < 4:
+		if p == nil {
+			return 0
+		}
 		h ^= uint64(*(*byte)(p))
+		if add(p, s>>1) == nil {
+			return 0
+		}
 		h ^= uint64(*(*byte)(add(p, s>>1))) << 8
+		if add(p, s-1) == nil {
+			return 0
+		}
 		h ^= uint64(*(*byte)(add(p, s-1))) << 16
 		h = rotl31(h*m1) * m2
 	case s <= 8:
+		if p == nil {
+			return 0
+		}
 		h ^= uint64(readUnaligned32(p))
+		if add(p, s-4) == nil {
+			return 0
+		}
 		h ^= uint64(readUnaligned32(add(p, s-4))) << 32
 		h = rotl31(h*m1) * m2
 	case s <= 16:
+		if p == nil {
+			return 0
+		}
 		h ^= readUnaligned64(p)
 		h = rotl31(h*m1) * m2
+		if add(p, s-8) == nil {
+			return 0
+		}
 		h ^= readUnaligned64(add(p, s-8))
 		h = rotl31(h*m1) * m2
 	case s <= 32:
+		if p == nil {
+			return 0
+		}
 		h ^= readUnaligned64(p)
 		h = rotl31(h*m1) * m2
+		if add(p, 8) == nil {
+			return 0
+		}
 		h ^= readUnaligned64(add(p, 8))
 		h = rotl31(h*m1) * m2
+		if add(p, s-16) == nil {
+			return 0
+		}
 		h ^= readUnaligned64(add(p, s-16))
 		h = rotl31(h*m1) * m2
+		if add(p, s-8) == nil {
+			return 0
+		}
 		h ^= readUnaligned64(add(p, s-8))
 		h = rotl31(h*m1) * m2
 	default:
@@ -261,15 +297,27 @@ tail:
 		v3 := uint64(seed * hashkey[2])
 		v4 := uint64(seed * hashkey[3])
 		for s >= 32 {
+			if p == nil {
+				return 0
+			}
 			v1 ^= readUnaligned64(p)
 			v1 = rotl31(v1*m1) * m2
 			p = add(p, 8)
+			if p == nil {
+				return 0
+			}
 			v2 ^= readUnaligned64(p)
 			v2 = rotl31(v2*m2) * m3
 			p = add(p, 8)
+			if p == nil {
+				return 0
+			}
 			v3 ^= readUnaligned64(p)
 			v3 = rotl31(v3*m3) * m4
 			p = add(p, 8)
+			if p == nil {
+				return 0
+			}
 			v4 ^= readUnaligned64(p)
 			v4 = rotl31(v4*m4) * m1
 			p = add(p, 8)
@@ -284,7 +332,6 @@ tail:
 	h ^= h >> 32
 	return uintptr(h)
 }
-
 func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + x)
 }

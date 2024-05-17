@@ -15,18 +15,26 @@ type Condition interface {
 
 type ConditionChan []Condition
 
+// NewConditionChan creates a new ConditionChan with an initial capacity.
 func NewConditionChan() *ConditionChan {
 	var condChan ConditionChan = make([]Condition, 0, 8)
 	return &condChan
 }
 
+// Add adds a new condition to the ConditionChan.
 func (v *ConditionChan) Add(cond Condition) *ConditionChan {
+	if v == nil {
+		return nil
+	}
 	*v = append(*v, cond)
 	return v
 }
 
 // Apply applies all conditions registered in this chan.
 func (v *ConditionChan) Apply(ctx routing.Context) bool {
+	if v == nil {
+		return false
+	}
 	for _, cond := range *v {
 		if !cond.Apply(ctx) {
 			return false
@@ -35,7 +43,11 @@ func (v *ConditionChan) Apply(ctx routing.Context) bool {
 	return true
 }
 
+// Len returns the number of conditions in the ConditionChan.
 func (v *ConditionChan) Len() int {
+	if v == nil {
+		return 0
+	}
 	return len(*v)
 }
 
@@ -46,7 +58,11 @@ var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 	Domain_Full:   strmatcher.Full,
 }
 
+// domainToMatcher converts a Domain to a strmatcher.Matcher.
 func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
+	if domain == nil {
+		return nil, newError("domain is nil")
+	}
 	matcherType, f := matcherTypeMap[domain.Type]
 	if !f {
 		return nil, newError("unsupported domain type", domain.Type)
@@ -64,9 +80,13 @@ type DomainMatcher struct {
 	matchers strmatcher.IndexMatcher
 }
 
+// NewMphMatcherGroup creates a new DomainMatcher with a MPH matcher group.
 func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	g := strmatcher.NewMphMatcherGroup()
 	for _, d := range domains {
+		if d == nil {
+			continue
+		}
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
 			return nil, newError("unsupported domain type", d.Type)
@@ -82,9 +102,13 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	}, nil
 }
 
+// NewDomainMatcher creates a new DomainMatcher.
 func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
 	g := new(strmatcher.MatcherGroup)
 	for _, d := range domains {
+		if d == nil {
+			continue
+		}
 		m, err := domainToMatcher(d)
 		if err != nil {
 			return nil, err
@@ -97,6 +121,7 @@ func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
 	}, nil
 }
 
+// ApplyDomain checks if the domain matches any of the matchers.
 func (m *DomainMatcher) ApplyDomain(domain string) bool {
 	return len(m.matchers.Match(strings.ToLower(domain))) > 0
 }
@@ -115,9 +140,13 @@ type MultiGeoIPMatcher struct {
 	onSource bool
 }
 
+// NewMultiGeoIPMatcher creates a new MultiGeoIPMatcher.
 func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
 	var matchers []*GeoIPMatcher
 	for _, geoip := range geoips {
+		if geoip == nil {
+			continue
+		}
 		matcher, err := globalGeoIPContainer.Add(geoip)
 		if err != nil {
 			return nil, err
@@ -156,7 +185,7 @@ type PortMatcher struct {
 	onSource bool
 }
 
-// NewPortMatcher create a new port matcher that can match source or destination port
+// NewPortMatcher creates a new port matcher that can match source or destination port.
 func NewPortMatcher(list *net.PortList, onSource bool) *PortMatcher {
 	return &PortMatcher{
 		port:     net.PortListFromProto(list),
@@ -177,6 +206,7 @@ type NetworkMatcher struct {
 	list [8]bool
 }
 
+// NewNetworkMatcher creates a new NetworkMatcher.
 func NewNetworkMatcher(network []net.Network) NetworkMatcher {
 	var matcher NetworkMatcher
 	for _, n := range network {
@@ -194,6 +224,7 @@ type UserMatcher struct {
 	user []string
 }
 
+// NewUserMatcher creates a new UserMatcher.
 func NewUserMatcher(users []string) *UserMatcher {
 	usersCopy := make([]string, 0, len(users))
 	for _, user := range users {
@@ -224,6 +255,7 @@ type InboundTagMatcher struct {
 	tags []string
 }
 
+// NewInboundTagMatcher creates a new InboundTagMatcher.
 func NewInboundTagMatcher(tags []string) *InboundTagMatcher {
 	tagsCopy := make([]string, 0, len(tags))
 	for _, tag := range tags {
@@ -254,6 +286,7 @@ type ProtocolMatcher struct {
 	protocols []string
 }
 
+// NewProtocolMatcher creates a new ProtocolMatcher.
 func NewProtocolMatcher(protocols []string) *ProtocolMatcher {
 	pCopy := make([]string, 0, len(protocols))
 

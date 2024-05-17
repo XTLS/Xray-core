@@ -180,6 +180,9 @@ func (r *AuthenticationReader) readInternal(soft bool, mb *buf.MultiBuffer) erro
 		if err != nil {
 			return err
 		}
+		if b == nil {
+			return newError("readBuffer returned nil")
+		}
 		*mb = append(*mb, b)
 		return nil
 	}
@@ -196,6 +199,9 @@ func (r *AuthenticationReader) readInternal(soft bool, mb *buf.MultiBuffer) erro
 	rb, err := r.auth.Open(payload[:0], payload[:size])
 	if err != nil {
 		return err
+	}
+	if rb == nil {
+		return newError("auth.Open returned nil")
 	}
 
 	*mb = buf.MergeBytes(*mb, rb)

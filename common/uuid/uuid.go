@@ -3,7 +3,7 @@ package uuid // import "github.com/xtls/xray-core/common/uuid"
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/xtls/xray-core/common"
@@ -72,7 +72,7 @@ func ParseString(str string) (UUID, error) {
 		if l == 0 || l > 30 {
 			return uuid, errors.New("invalid UUID: ", str)
 		}
-		h := sha1.New()
+		h := sha256.New()
 		h.Write(uuid[:])
 		h.Write(text)
 		u := h.Sum(nil)[:16]

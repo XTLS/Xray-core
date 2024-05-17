@@ -63,12 +63,19 @@ func (p *Portal) Close() error {
 
 func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	if len(outbounds) == 0 {
+		return newError("no outbound metadata found").AtError()
+	}
+	ob := outbounds[len(outbounds)-1]
 	if ob == nil {
 		return newError("outbound metadata not found").AtError()
 	}
 
 	if isDomain(ob.Target, p.domain) {
+		if link == nil {
+			return newError("link is nil").AtWarning()
+		}
+
 		muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
 		if err != nil {
 			return newError("failed to create mux client worker").Base(err).AtWarning()

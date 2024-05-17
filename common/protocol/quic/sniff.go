@@ -64,9 +64,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 
 	versionNumber := binary.BigEndian.Uint32(vb)
 
-	if versionNumber != 0 && typeByte&0x40 == 0 {
-		return nil, errNotQuic
-	} else if versionNumber != versionDraft29 && versionNumber != version1 {
+	if (versionNumber != 0 && typeByte&0x40 == 0) || (versionNumber != versionDraft29 && versionNumber != version1) {
 		return nil, errNotQuic
 	}
 
@@ -81,9 +79,8 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		return nil, errNotQuic
 	}
 
-	if l, err := buffer.ReadByte(); err != nil {
-		return nil, errNotQuic
-	} else if common.Error2(buffer.ReadBytes(int32(l))) != nil {
+	l, err := buffer.ReadByte()
+	if err != nil || common.Error2(buffer.ReadBytes(int32(l))) != nil {
 		return nil, errNotQuic
 	}
 
