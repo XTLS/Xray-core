@@ -27,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
 	cone          bool
+	udpAllow      Filter
 }
 
 // NewServer creates a new Server object.
@@ -36,6 +37,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		udpAllow:      NewUDPFilter(600 * time.Second),
 	}
 	return s, nil
 }
@@ -135,6 +137,8 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
+		ip := conn.RemoteAddr().String()
+		s.udpAllow.Add(ip)
 		return s.handleUDP(conn)
 	}
 
@@ -193,6 +197,11 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	ip := conn.RemoteAddr().String()
+	if !s.udpAllow.Check(ip) {
+		newError("Unauthorized UDP access from ", stripPort(ip)).AtError().WriteToLog(session.ExportIDToError(ctx))
+		return nil
+	}
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		payload := packet.Payload
 		newError("writing back UDP response with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
