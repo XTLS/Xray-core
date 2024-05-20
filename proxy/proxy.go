@@ -470,7 +470,7 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
 // - writer are from *transport.Link
-func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer *signal.ActivityTimer) error {
+func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer *signal.ActivityTimer, inTimer *signal.ActivityTimer) error {
 	readerConn, readCounter, _ := UnwrapRawConn(readerConn)
 	writerConn, _, writeCounter := UnwrapRawConn(writerConn)
 	reader := buf.NewReader(readerConn)
@@ -510,6 +510,9 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			//runtime.Gosched() // necessary
 			time.Sleep(time.Millisecond) // without this, there will be a rare ssl error for freedom splice
 			timer.SetTimeout(8 * time.Hour) // prevent leak, just in case
+			if inTimer != nil {
+				inTimer.SetTimeout(8 * time.Hour)
+			}
 			w, err := tc.ReadFrom(readerConn)
 			if readCounter != nil {
 				readCounter.Add(w) // outbound stats

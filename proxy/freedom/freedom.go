@@ -219,10 +219,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 		if destination.Network == net.Network_TCP {
 			var writeConn net.Conn
+			var inTimer *signal.ActivityTimer
 			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && useSplice {
 				writeConn = inbound.Conn
+				inTimer = inbound.Timer
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer)
+			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
 		}
 		reader := NewPacketReader(conn, UDPOverride)
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {

@@ -179,8 +179,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer,
 		for {
 			if trafficState.ReaderSwitchToDirectCopy {
 				var writerConn net.Conn
+				var inTimer *signal.ActivityTimer
 				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
 					writerConn = inbound.Conn
+					inTimer = inbound.Timer
 					if inbound.CanSpliceCopy == 2 {
 						inbound.CanSpliceCopy = 1
 					}
@@ -188,7 +190,7 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer,
 						ob.CanSpliceCopy = 1
 					}
 				}
-				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer)
+				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer, inTimer)
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
