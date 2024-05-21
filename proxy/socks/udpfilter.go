@@ -3,7 +3,6 @@ package socks
 import (
 	"strings"
 	"sync"
-	"time"
 )
 
 /*
@@ -12,57 +11,45 @@ Tracking a UDP connection may be a bit troublesome.
 Here is a simple solution.
 We creat a filter, add remote IP to the pool when it try to establish a UDP connection with auth.
 And drop UDP packets from unauthorized IP.
+After discussion, we believe it is not necessary to add a timeout mechanism to this filter.
 */
 
 type Filter interface {
 	Check(ip string) bool
 	Add(ip string) bool
+	Enabled() bool
 }
 
 type UDPFilter struct {
-	access    sync.Mutex
-	lastClean time.Time
-	timeout   time.Duration
-	pool      map[string]time.Time
+	pool    sync.Map
+	enabled bool
 }
 
-func NewUDPFilter(timeout time.Duration) Filter {
+func NewUDPFilter(isEnable AuthType) Filter {
+	enable := false
+	if isEnable == AuthType_PASSWORD {
+		enable = true
+	}
 	return &UDPFilter{
-		lastClean: time.Now(),
-		pool:      make(map[string]time.Time),
-		timeout:   timeout,
+		pool:    sync.Map{},
+		enabled: enable,
 	}
 }
 
 func (f *UDPFilter) Check(ip string) bool {
 	ip = stripPort(ip)
-	now := time.Now()
-	f.access.Lock()
-	defer f.access.Unlock()
-
-	if now.Sub(f.lastClean) > f.timeout {
-		for oldIP, added := range f.pool {
-			if now.Sub(added) > f.timeout {
-				delete(f.pool, oldIP)
-			}
-		}
-		f.lastClean = now
-	}
-
-	if added, loaded := f.pool[ip]; loaded && now.Sub(added) <= f.timeout {
-		return true
-	}
-
-	return false
+	_, exists := f.pool.Load(ip)
+	return exists
 }
 
 func (f *UDPFilter) Add(ip string) bool {
 	ip = stripPort(ip)
-	now := time.Now()
-	f.access.Lock()
-	defer f.access.Unlock()
-	f.pool[ip] = now
+	f.pool.Store(ip, true)
 	return true
+}
+
+func (f *UDPFilter) Enabled() bool {
+	return f.enabled
 }
 
 // conn.RemoteAddr().String() will return an address with a port like 11.45.1.4:1919

@@ -37,7 +37,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
-		udpAllow:      NewUDPFilter(600 * time.Second),
+		udpAllow:      NewUDPFilter(config.AuthType), // We only use this when auth is enabled
 	}
 	return s, nil
 }
@@ -137,8 +137,10 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
-		ip := conn.RemoteAddr().String()
-		s.udpAllow.Add(ip)
+		if s.udpAllow.Enabled() {
+			ip := conn.RemoteAddr().String()
+			s.udpAllow.Add(ip)
+		}
 		return s.handleUDP(conn)
 	}
 
@@ -197,10 +199,12 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	ip := conn.RemoteAddr().String()
-	if !s.udpAllow.Check(ip) {
-		newError("Unauthorized UDP access from ", stripPort(ip)).AtError().WriteToLog(session.ExportIDToError(ctx))
-		return nil
+	if s.udpAllow.Enabled() {
+		ip := conn.RemoteAddr().String()
+		if !s.udpAllow.Check(ip) {
+			newError("Unauthorized UDP access from ", stripPort(ip)).AtError().WriteToLog(session.ExportIDToError(ctx))
+			return nil
+		}
 	}
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		payload := packet.Payload
