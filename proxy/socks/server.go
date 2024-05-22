@@ -1,7 +1,8 @@
-package shadowsocks
+package socks
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -14,70 +15,68 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
+// Server is a SOCKS 5 proxy server
 type Server struct {
 	config        *ServerConfig
-	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
+	udpFilter     *UDPFilter
 }
 
-// NewServer create a new Shadowsocks server.
+// NewServer creates a new Server object.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	validator := new(Validator)
-	for _, user := range config.Users {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, newError("failed to get shadowsocks user").Base(err).AtError()
-		}
-
-		if err := validator.Add(u); err != nil {
-			return nil, newError("failed to add user").Base(err).AtError()
-		}
-	}
-
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
-		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
-
+	if config.AuthType == AuthType_PASSWORD {
+		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
+	}
 	return s, nil
 }
 
-// AddUser implements proxy.UserManager.AddUser().
-func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
-	return s.validator.Add(u)
+func (s *Server) policy() policy.Session {
+	config := s.config
+	p := s.policyManager.ForLevel(config.UserLevel)
+	if config.Timeout > 0 {
+		features.PrintDeprecatedFeatureWarning("Socks timeout")
+	}
+	if config.Timeout > 0 && config.UserLevel == 0 {
+		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second
+	}
+	return p
 }
 
-// RemoveUser implements proxy.UserManager.RemoveUser().
-func (s *Server) RemoveUser(ctx context.Context, e string) error {
-	return s.validator.Del(e)
-}
-
+// Network implements proxy.Inbound.
 func (s *Server) Network() []net.Network {
-	list := s.config.Network
-	if len(list) == 0 {
-		list = append(list, net.Network_TCP)
+	list := []net.Network{net.Network_TCP}
+	if s.config.UdpEnabled {
+		list = append(list, net.Network_UDP)
 	}
 	return list
 }
 
+// Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
-	inbound.Name = "shadowsocks"
-	inbound.CanSpliceCopy = 3
-	
+	inbound.Name = "socks"
+	inbound.CanSpliceCopy = 2
+	inbound.User = &protocol.MemoryUser{
+		Level: s.config.UserLevel,
+	}
+
 	switch network {
 	case net.Network_TCP:
-		return s.handleConnection(ctx, conn, dispatcher)
+		return s.processTCP(ctx, conn, dispatcher)
 	case net.Network_UDP:
 		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
@@ -85,14 +84,134 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 }
 
+func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	plcy := s.policy()
+	if err := conn.SetReadDeadline(time.Now().Add(plcy.Timeouts.Handshake)); err != nil {
+		newError("failed to set deadline").Base(err).WriteToLog(session.ExportIDToError(ctx))
+	}
+
+	inbound := session.InboundFromContext(ctx)
+	if inbound == nil || !inbound.Gateway.IsValid() {
+		return newError("inbound gateway not specified")
+	}
+
+	svrSession := &ServerSession{
+		config:       s.config,
+		address:      inbound.Gateway.Address,
+		port:         inbound.Gateway.Port,
+		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
+	}
+
+	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+	request, err := svrSession.Handshake(reader, conn)
+	if err != nil {
+		if inbound.Source.IsValid() {
+			log.Record(&log.AccessMessage{
+				From:   inbound.Source,
+				To:     "",
+				Status: log.AccessRejected,
+				Reason: err,
+			})
+		}
+		return newError("failed to read request").Base(err)
+	}
+	if request.User != nil {
+		inbound.User.Email = request.User.Email
+	}
+
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		newError("failed to clear deadline").Base(err).WriteToLog(session.ExportIDToError(ctx))
+	}
+
+	if request.Command == protocol.RequestCommandTCP {
+		dest := request.Destination()
+		newError("TCP Connect request to ", dest).WriteToLog(session.ExportIDToError(ctx))
+		if inbound.Source.IsValid() {
+			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+				From:   inbound.Source,
+				To:     dest,
+				Status: log.AccessAccepted,
+				Reason: "",
+			})
+		}
+
+		return s.transport(ctx, reader, conn, dest, dispatcher, inbound)
+	}
+
+	if request.Command == protocol.RequestCommandUDP {
+		if s.udpFilter != nil {
+			s.udpFilter.Add(conn.RemoteAddr())
+		}
+		return s.handleUDP(conn)
+	}
+
+	return nil
+}
+
+func (*Server) handleUDP(c io.Reader) error {
+	// The TCP connection closes after this method returns. We need to wait until
+	// the client closes it.
+	return common.Error2(io.Copy(buf.DiscardBytes, c))
+}
+
+func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, cancel, s.policy().Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
+
+	plcy := s.policy()
+	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
+	link, err := dispatcher.Dispatch(ctx, dest)
+	if err != nil {
+		return err
+	}
+
+	requestDone := func() error {
+		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
+		if err := buf.Copy(buf.NewReader(reader), link.Writer, buf.UpdateActivity(timer)); err != nil {
+			return newError("failed to transport all TCP request").Base(err)
+		}
+
+		return nil
+	}
+
+	responseDone := func() error {
+		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
+
+		v2writer := buf.NewWriter(writer)
+		if err := buf.Copy(link.Reader, v2writer, buf.UpdateActivity(timer)); err != nil {
+			return newError("failed to transport all TCP response").Base(err)
+		}
+
+		return nil
+	}
+
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
+	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+		return newError("connection ends").Base(err)
+	}
+
+	return nil
+}
+
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if s.udpFilter != nil && !s.udpFilter.Check(conn.RemoteAddr()) {
+		newError("Unauthorized UDP access from ", conn.RemoteAddr().String()).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+		return nil
+	}
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
+		payload := packet.Payload
+		newError("writing back UDP response with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
+
 		request := protocol.RequestHeaderFromContext(ctx)
 		if request == nil {
 			return
 		}
-
-		payload := packet.Payload
 
 		if payload.UDP != nil {
 			request = &protocol.RequestHeader{
@@ -102,52 +221,40 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			}
 		}
 
-		data, err := EncodeUDPPacket(request, payload.Bytes())
+		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
 		payload.Release()
-		if err != nil {
-			newError("failed to encode UDP packet").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
-			return
-		}
-		defer data.Release()
 
-		conn.Write(data.Bytes())
+		defer udpMessage.Release()
+		if err != nil {
+			newError("failed to write UDP response").AtWarning().Base(err).WriteToLog(session.ExportIDToError(ctx))
+		}
+
+		conn.Write(udpMessage.Bytes())
 	})
 
 	inbound := session.InboundFromContext(ctx)
+	if inbound != nil && inbound.Source.IsValid() {
+		newError("client UDP connection from ", inbound.Source).WriteToLog(session.ExportIDToError(ctx))
+	}
+
 	var dest *net.Destination
+
 	reader := buf.NewPacketReader(conn)
 	for {
 		mpayload, err := reader.ReadMultiBuffer()
 		if err != nil {
-			break
+			return err
 		}
 
 		for _, payload := range mpayload {
-			var request *protocol.RequestHeader
-			var data *buf.Buffer
-			var err error
-
-			if inbound.User != nil {
-				validator := new(Validator)
-				validator.Add(inbound.User)
-				request, data, err = DecodeUDPPacket(validator, payload)
-			} else {
-				request, data, err = DecodeUDPPacket(s.validator, payload)
-				if err == nil {
-					inbound.User = request.User
-				}
+			request, err := DecodeUDPPacket(payload)
+			if err != nil {
+				newError("failed to parse UDP request").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				payload.Release()
+				continue
 			}
 
-			if err != nil {
-				if inbound.Source.IsValid() {
-					newError("dropping invalid UDP packet from: ", inbound.Source).Base(err).WriteToLog(session.ExportIDToError(ctx))
-					log.Record(&log.AccessMessage{
-						From:   inbound.Source,
-						To:     "",
-						Status: log.AccessRejected,
-						Reason: err,
-					})
-				}
+			if payload.IsEmpty() {
 				payload.Release()
 				continue
 			}
@@ -155,124 +262,26 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			destination := request.Destination()
 
 			currentPacketCtx := ctx
-			if inbound.Source.IsValid() {
+			newError("send packet to ", destination, " with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))
+			if inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,
 					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
-					Email:  request.User.Email,
 				})
 			}
-			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(currentPacketCtx))
 
-			data.UDP = &destination
+			payload.UDP = &destination
 
 			if !s.cone || dest == nil {
 				dest = &destination
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, *dest, data)
+			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
-
-	return nil
-}
-
-func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	sessionPolicy := s.policyManager.ForLevel(0)
-	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return newError("unable to set read deadline").Base(err).AtWarning()
-	}
-
-	bufferedReader := buf.BufferedReader{Reader: buf.NewReader(conn)}
-	request, bodyReader, err := ReadTCPSession(s.validator, &bufferedReader)
-	if err != nil {
-		log.Record(&log.AccessMessage{
-			From:   conn.RemoteAddr(),
-			To:     "",
-			Status: log.AccessRejected,
-			Reason: err,
-		})
-		return newError("failed to create request from: ", conn.RemoteAddr()).Base(err)
-	}
-	conn.SetReadDeadline(time.Time{})
-
-	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
-	inbound.User = request.User
-
-	dest := request.Destination()
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		From:   conn.RemoteAddr(),
-		To:     dest,
-		Status: log.AccessAccepted,
-		Reason: "",
-		Email:  request.User.Email,
-	})
-	newError("tunnelling request to ", dest).WriteToLog(session.ExportIDToError(ctx))
-
-	sessionPolicy = s.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return err
-	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
-		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		responseWriter, err := WriteTCPResponse(request, bufferedWriter)
-		if err != nil {
-			return newError("failed to write response").Base(err)
-		}
-
-		{
-			payload, err := link.Reader.ReadMultiBuffer()
-			if err != nil {
-				return err
-			}
-			if err := responseWriter.WriteMultiBuffer(payload); err != nil {
-				return err
-			}
-		}
-
-		if err := bufferedWriter.SetBuffered(false); err != nil {
-			return err
-		}
-
-		if err := buf.Copy(link.Reader, responseWriter, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport all TCP response").Base(err)
-		}
-
-		return nil
-	}
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport all TCP request").Base(err)
-		}
-
-		return nil
-	}
-
-	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
-		return newError("connection ends").Base(err)
-	}
-
-	return nil
 }
 
 func init() {
