@@ -123,12 +123,13 @@ func (bind *netBind) Close() error {
 type netBindClient struct {
 	netBind
 
+	ctx      context.Context
 	dialer   internet.Dialer
 	reserved []byte
 }
 
 func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
-	c, err := bind.dialer.Dial(context.Background(), endpoint.dst)
+	c, err := bind.dialer.Dial(bind.ctx, endpoint.dst)
 	if err != nil {
 		return err
 	}
