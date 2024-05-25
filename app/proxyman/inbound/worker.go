@@ -308,12 +308,11 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 			sid := session.NewID()
 			ctx = session.ContextWithID(ctx, sid)
 
+			outbounds := []*session.Outbound{{}}
 			if originalDest.IsValid() {
-				outbounds := []*session.Outbound{{
-					Target: originalDest,
-				}}
-				ctx = session.ContextWithOutbounds(ctx, outbounds)
+				outbounds[0].Target = originalDest
 			}
+			ctx = session.ContextWithOutbounds(ctx, outbounds)
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
 				Gateway: net.UDPDestination(w.address, w.port),
