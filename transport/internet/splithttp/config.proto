@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.transport.internet.splithttp;
+option csharp_namespace = "Xray.Transport.Internet.SplitHttp";
+option go_package = "github.com/xtls/xray-core/transport/internet/splithttp";
+option java_package = "com.xray.transport.internet.splithttp";
+option java_multiple_files = true;
+
+message Config {
+  string host = 1;
+  string path = 2;
+  map<string, string> header = 3;
+}

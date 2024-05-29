@@ -16,6 +16,7 @@ type TransportConfig struct {
 	GRPCConfig        *GRPCConfig         `json:"grpcSettings"`
 	GUNConfig         *GRPCConfig         `json:"gunSettings"`
 	HTTPUPGRADEConfig *HttpUpgradeConfig  `json:"httpupgradeSettings"`
+	SplitHTTPConfig   *SplitHTTPConfig    `json:"splithttpSettings"`
 }
 
 // Build implements Buildable.
@@ -110,6 +111,17 @@ func (c *TransportConfig) Build() (*global.Config, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+
+	if c.SplitHTTPConfig != nil {
+		shs, err := c.SplitHTTPConfig.Build()
+		if err != nil {
+			return nil, newError("failed to build SplitHTTP config").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "splithttp",
+			Settings:     serial.ToTypedMessage(shs),
 		})
 	}
 
