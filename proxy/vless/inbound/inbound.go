@@ -8,8 +8,6 @@ import (
 	gotls "crypto/tls"
 	"io"
 	"reflect"
-	"strconv"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -19,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
@@ -150,152 +147,27 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	fbMap := h.fallbacks
 	isfb := fbMap != nil
 
-	if isfb && firstLen < 18 {
-		err = newError("fallback directly")
+	if firstLen < 18 {
+		err = newError("firstLen < 18 (VLESS)")
 	} else {
-		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		request, requestAddons, _, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
 	}
 
 	if err != nil {
-		if isfb {
-			if err := connection.SetReadDeadline(time.Time{}); err != nil {
-				newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
+		if h.fallbacks == nil {
+			if errors.Cause(err) != io.EOF {
+				log.Record(&log.AccessMessage{
+					From:   connection.RemoteAddr(),
+					To:     "",
+					Status: log.AccessRejected,
+					Reason: err,
+				})
+				err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
 			}
-			newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
-
-			name := ""
-			alpn := ""
-			if tlsConn, ok := iConn.(*tls.Conn); ok {
-				cs := tlsConn.ConnectionState()
-				name = cs.ServerName
-				alpn = cs.NegotiatedProtocol
-				newError("realName = " + name).AtInfo().WriteToLog(sid)
-				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-			} else if realityConn, ok := iConn.(*reality.Conn); ok {
-				cs := realityConn.ConnectionState()
-				name = cs.ServerName
-				alpn = cs.NegotiatedProtocol
-				newError("realName = " + name).AtInfo().WriteToLog(sid)
-				newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-			}
-			name = strings.ToLower(name)
-			alpn = strings.ToLower(alpn)
-
-			fb, err := proxy.SearchFallbackMap(fbMap, ctx, first, firstLen, name, alpn)
-			if err != nil {
-				return err
-			}
-
-			ctx, cancel := context.WithCancel(ctx)
-			timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-			ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-
-			var conn net.Conn
-			if err := retry.ExponentialBackoff(5, 100).On(func() error {
-				var dialer net.Dialer
-				conn, err = dialer.DialContext(ctx, fb.Type, fb.Dest)
-				if err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
-				return newError("failed to dial to " + fb.Dest).Base(err).AtWarning()
-			}
-			defer conn.Close()
-
-			serverReader := buf.NewReader(conn)
-			serverWriter := buf.NewWriter(conn)
-
-			postRequest := func() error {
-				defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-				if fb.Xver != 0 {
-					ipType := 4
-					remoteAddr, remotePort, err := net.SplitHostPort(connection.RemoteAddr().String())
-					if err != nil {
-						ipType = 0
-					}
-					localAddr, localPort, err := net.SplitHostPort(connection.LocalAddr().String())
-					if err != nil {
-						ipType = 0
-					}
-					if ipType == 4 {
-						for i := 0; i < len(remoteAddr); i++ {
-							if remoteAddr[i] == ':' {
-								ipType = 6
-								break
-							}
-						}
-					}
-					pro := buf.New()
-					defer pro.Release()
-					switch fb.Xver {
-					case 1:
-						if ipType == 0 {
-							pro.Write([]byte("PROXY UNKNOWN\r\n"))
-							break
-						}
-						if ipType == 4 {
-							pro.Write([]byte("PROXY TCP4 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
-						} else {
-							pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
-						}
-					case 2:
-						pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A")) // signature
-						if ipType == 0 {
-							pro.Write([]byte("\x20\x00\x00\x00")) // v2 + LOCAL + UNSPEC + UNSPEC + 0 bytes
-							break
-						}
-						if ipType == 4 {
-							pro.Write([]byte("\x21\x11\x00\x0C")) // v2 + PROXY + AF_INET + STREAM + 12 bytes
-							pro.Write(net.ParseIP(remoteAddr).To4())
-							pro.Write(net.ParseIP(localAddr).To4())
-						} else {
-							pro.Write([]byte("\x21\x21\x00\x24")) // v2 + PROXY + AF_INET6 + STREAM + 36 bytes
-							pro.Write(net.ParseIP(remoteAddr).To16())
-							pro.Write(net.ParseIP(localAddr).To16())
-						}
-						p1, _ := strconv.ParseUint(remotePort, 10, 16)
-						p2, _ := strconv.ParseUint(localPort, 10, 16)
-						pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)})
-					}
-					if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pro}); err != nil {
-						return newError("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
-					}
-				}
-				if err := buf.Copy(reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
-					return newError("failed to fallback request payload").Base(err).AtInfo()
-				}
-				return nil
-			}
-
-			writer := buf.NewWriter(connection)
-
-			getResponse := func() error {
-				defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-				if err := buf.Copy(serverReader, writer, buf.UpdateActivity(timer)); err != nil {
-					return newError("failed to deliver response payload").Base(err).AtInfo()
-				}
-				return nil
-			}
-
-			if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), task.OnSuccess(getResponse, task.Close(writer))); err != nil {
-				common.Interrupt(serverReader)
-				common.Interrupt(serverWriter)
-				return newError("fallback ends").Base(err).AtInfo()
-			}
-			return nil
+			return err
 		}
-
-		if errors.Cause(err) != io.EOF {
-			log.Record(&log.AccessMessage{
-				From:   connection.RemoteAddr(),
-				To:     "",
-				Status: log.AccessRejected,
-				Reason: err,
-			})
-			err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
-		}
-		return err
+		newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
+		return proxy.ApplyFallback(ctx, sessionPolicy, connection, iConn, h.fallbacks, first, firstLen, reader)
 	}
 
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
