@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -37,7 +38,7 @@ func init() {
 type Server struct {
 	policyManager policy.Manager
 	validator     *Validator
-	fallbacks     map[string]map[string]map[string]*Fallback // or nil
+	fallbacks     proxy.FallbackMap // or nil
 	cone          bool
 }
 
@@ -63,53 +64,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 
 	if config.Fallbacks != nil {
-		server.fallbacks = make(map[string]map[string]map[string]*Fallback)
-		for _, fb := range config.Fallbacks {
-			if server.fallbacks[fb.Name] == nil {
-				server.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
-			}
-			if server.fallbacks[fb.Name][fb.Alpn] == nil {
-				server.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
-			}
-			server.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
-		}
-		if server.fallbacks[""] != nil {
-			for name, apfb := range server.fallbacks {
-				if name != "" {
-					for alpn := range server.fallbacks[""] {
-						if apfb[alpn] == nil {
-							apfb[alpn] = make(map[string]*Fallback)
-						}
-					}
-				}
-			}
-		}
-		for _, apfb := range server.fallbacks {
-			if apfb[""] != nil {
-				for alpn, pfb := range apfb {
-					if alpn != "" { // && alpn != "h2" {
-						for path, fb := range apfb[""] {
-							if pfb[path] == nil {
-								pfb[path] = fb
-							}
-						}
-					}
-				}
-			}
-		}
-		if server.fallbacks[""] != nil {
-			for name, apfb := range server.fallbacks {
-				if name != "" {
-					for alpn, pfb := range server.fallbacks[""] {
-						for path, fb := range pfb {
-							if apfb[alpn][path] == nil {
-								apfb[alpn][path] = fb
-							}
-						}
-					}
-				}
-			}
-		}
+		server.fallbacks = proxy.BuildFallbackMap(config.Fallbacks)
 	}
 
 	return server, nil
@@ -336,7 +291,7 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 	return nil
 }
 
-func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection stat.Connection, iConn stat.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
+func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection stat.Connection, iConn stat.Connection, fbMap proxy.FallbackMap, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
 	}
@@ -360,66 +315,9 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	name = strings.ToLower(name)
 	alpn = strings.ToLower(alpn)
 
-	if len(napfb) > 1 || napfb[""] == nil {
-		if name != "" && napfb[name] == nil {
-			match := ""
-			for n := range napfb {
-				if n != "" && strings.Contains(name, n) && len(n) > len(match) {
-					match = n
-				}
-			}
-			name = match
-		}
-	}
-
-	if napfb[name] == nil {
-		name = ""
-	}
-	apfb := napfb[name]
-	if apfb == nil {
-		return newError(`failed to find the default "name" config`).AtWarning()
-	}
-
-	if apfb[alpn] == nil {
-		alpn = ""
-	}
-	pfb := apfb[alpn]
-	if pfb == nil {
-		return newError(`failed to find the default "alpn" config`).AtWarning()
-	}
-
-	path := ""
-	if len(pfb) > 1 || pfb[""] == nil {
-		if firstLen >= 18 && first.Byte(4) != '*' { // not h2c
-			firstBytes := first.Bytes()
-			for i := 4; i <= 8; i++ { // 5 -> 9
-				if firstBytes[i] == '/' && firstBytes[i-1] == ' ' {
-					search := len(firstBytes)
-					if search > 64 {
-						search = 64 // up to about 60
-					}
-					for j := i + 1; j < search; j++ {
-						k := firstBytes[j]
-						if k == '\r' || k == '\n' { // avoid logging \r or \n
-							break
-						}
-						if k == '?' || k == ' ' {
-							path = string(firstBytes[i:j])
-							newError("realPath = " + path).AtInfo().WriteToLog(sid)
-							if pfb[path] == nil {
-								path = ""
-							}
-							break
-						}
-					}
-					break
-				}
-			}
-		}
-	}
-	fb := pfb[path]
-	if fb == nil {
-		return newError(`failed to find the default "path" config`).AtWarning()
+	fb, err := proxy.SearchFallbackMap(fbMap, ctx, first, firstLen, name, alpn)
+	if err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

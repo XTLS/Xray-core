@@ -55,7 +55,7 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             *vless.Validator
 	dns                   dns.Client
-	fallbacks             map[string]map[string]map[string]*Fallback // or nil
+	fallbacks             proxy.FallbackMap // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -80,63 +80,7 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 	}
 
 	if config.Fallbacks != nil {
-		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
-		// handler.regexps = make(map[string]*regexp.Regexp)
-		for _, fb := range config.Fallbacks {
-			if handler.fallbacks[fb.Name] == nil {
-				handler.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
-			}
-			if handler.fallbacks[fb.Name][fb.Alpn] == nil {
-				handler.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
-			}
-			handler.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
-			/*
-				if fb.Path != "" {
-					if r, err := regexp.Compile(fb.Path); err != nil {
-						return nil, newError("invalid path regexp").Base(err).AtError()
-					} else {
-						handler.regexps[fb.Path] = r
-					}
-				}
-			*/
-		}
-		if handler.fallbacks[""] != nil {
-			for name, apfb := range handler.fallbacks {
-				if name != "" {
-					for alpn := range handler.fallbacks[""] {
-						if apfb[alpn] == nil {
-							apfb[alpn] = make(map[string]*Fallback)
-						}
-					}
-				}
-			}
-		}
-		for _, apfb := range handler.fallbacks {
-			if apfb[""] != nil {
-				for alpn, pfb := range apfb {
-					if alpn != "" { // && alpn != "h2" {
-						for path, fb := range apfb[""] {
-							if pfb[path] == nil {
-								pfb[path] = fb
-							}
-						}
-					}
-				}
-			}
-		}
-		if handler.fallbacks[""] != nil {
-			for name, apfb := range handler.fallbacks {
-				if name != "" {
-					for alpn, pfb := range handler.fallbacks[""] {
-						for path, fb := range pfb {
-							if apfb[alpn][path] == nil {
-								apfb[alpn][path] = fb
-							}
-						}
-					}
-				}
-			}
-		}
+		handler.fallbacks = proxy.BuildFallbackMap(config.Fallbacks)
 	}
 
 	return handler, nil
@@ -203,8 +147,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	var requestAddons *encoding.Addons
 	var err error
 
-	napfb := h.fallbacks
-	isfb := napfb != nil
+	fbMap := h.fallbacks
+	isfb := fbMap != nil
 
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
@@ -237,81 +181,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			name = strings.ToLower(name)
 			alpn = strings.ToLower(alpn)
 
-			if len(napfb) > 1 || napfb[""] == nil {
-				if name != "" && napfb[name] == nil {
-					match := ""
-					for n := range napfb {
-						if n != "" && strings.Contains(name, n) && len(n) > len(match) {
-							match = n
-						}
-					}
-					name = match
-				}
-			}
-
-			if napfb[name] == nil {
-				name = ""
-			}
-			apfb := napfb[name]
-			if apfb == nil {
-				return newError(`failed to find the default "name" config`).AtWarning()
-			}
-
-			if apfb[alpn] == nil {
-				alpn = ""
-			}
-			pfb := apfb[alpn]
-			if pfb == nil {
-				return newError(`failed to find the default "alpn" config`).AtWarning()
-			}
-
-			path := ""
-			if len(pfb) > 1 || pfb[""] == nil {
-				/*
-					if lines := bytes.Split(firstBytes, []byte{'\r', '\n'}); len(lines) > 1 {
-						if s := bytes.Split(lines[0], []byte{' '}); len(s) == 3 {
-							if len(s[0]) < 8 && len(s[1]) > 0 && len(s[2]) == 8 {
-								newError("realPath = " + string(s[1])).AtInfo().WriteToLog(sid)
-								for _, fb := range pfb {
-									if fb.Path != "" && h.regexps[fb.Path].Match(s[1]) {
-										path = fb.Path
-										break
-									}
-								}
-							}
-						}
-					}
-				*/
-				if firstLen >= 18 && first.Byte(4) != '*' { // not h2c
-					firstBytes := first.Bytes()
-					for i := 4; i <= 8; i++ { // 5 -> 9
-						if firstBytes[i] == '/' && firstBytes[i-1] == ' ' {
-							search := len(firstBytes)
-							if search > 64 {
-								search = 64 // up to about 60
-							}
-							for j := i + 1; j < search; j++ {
-								k := firstBytes[j]
-								if k == '\r' || k == '\n' { // avoid logging \r or \n
-									break
-								}
-								if k == '?' || k == ' ' {
-									path = string(firstBytes[i:j])
-									newError("realPath = " + path).AtInfo().WriteToLog(sid)
-									if pfb[path] == nil {
-										path = ""
-									}
-									break
-								}
-							}
-							break
-						}
-					}
-				}
-			}
-			fb := pfb[path]
-			if fb == nil {
-				return newError(`failed to find the default "path" config`).AtWarning()
+			fb, err := proxy.SearchFallbackMap(fbMap, ctx, first, firstLen, name, alpn)
+			if err != nil {
+				return err
 			}
 
 			ctx, cancel := context.WithCancel(ctx)
