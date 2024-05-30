@@ -194,7 +194,7 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 					Timeout: 15 * time.Second,
 				})
 
-				handler(xnet.UDPDestination(xnet.IPAddress(id.LocalAddress.AsSlice()), xnet.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
+				handler(xnet.UDPDestination(xnet.IPAddress(id.LocalAddress.AsSlice()), xnet.Port(id.LocalPort)), gonet.NewUDPConn(&wq, ep))
 			}(r)
 		})
 		stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
