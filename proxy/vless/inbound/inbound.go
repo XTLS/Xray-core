@@ -45,7 +45,21 @@ func init() {
 		}); err != nil {
 			return nil, err
 		}
-		return New(ctx, config.(*Config), dc)
+
+		c := config.(*Config)
+
+		validator := new(vless.MemoryValidator)
+		for _, user := range c.Clients {
+			u, err := user.ToMemoryUser()
+			if err != nil {
+				return nil, errors.New("failed to get VLESS user").Base(err).AtError()
+			}
+			if err := validator.Add(u); err != nil {
+				return nil, errors.New("failed to initiate user").Base(err).AtError()
+			}
+		}
+
+		return New(ctx, c, dc, validator)
 	}))
 }
 
@@ -60,25 +74,14 @@ type Handler struct {
 }
 
 // New creates a new VLess inbound handler.
-func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
+func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		dns:                   dc,
+		validator:             validator,
 	}
-
-	validator := new(vless.MemoryValidator)
-	for _, user := range config.Clients {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, errors.New("failed to get VLESS user").Base(err).AtError()
-		}
-		if err := validator.Add(u); err != nil {
-			return nil, errors.New("failed to initiate user").Base(err).AtError()
-		}
-	}
-	handler.validator = validator
 
 	if config.Fallbacks != nil {
 		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
