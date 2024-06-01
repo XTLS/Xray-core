@@ -29,7 +29,7 @@ type deviceNet struct {
 
 func newDeviceNet(interfaceName string) *deviceNet {
 	var dialer net.Dialer
-	bindControl := control.BindToInterface(control.DefaultInterfaceFinder(), interfaceName, -1)
+	bindControl := control.BindToInterface(control.NewDefaultInterfaceFinder(), interfaceName, -1)
 	dialer.Control = control.Append(dialer.Control, bindControl)
 	return &deviceNet{dialer: dialer}
 }
