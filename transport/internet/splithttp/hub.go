@@ -22,7 +22,7 @@ type requestHandler struct {
 	host      string
 	path      string
 	ln        *Listener
-	sessions  map[string]*io.PipeWriter
+	sessions  sync.Map
 	localAddr gonet.TCPAddr
 }
 
@@ -59,9 +59,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	if request.Method == "POST" {
-		uploadPipeWriter := h.sessions[sessionId]
-		if uploadPipeWriter != nil {
-			io.Copy(uploadPipeWriter, request.Body)
+		uploadPipeWriter, ok := h.sessions.Load(sessionId)
+		if ok {
+			io.Copy(uploadPipeWriter.(*io.PipeWriter), request.Body)
 		}
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" {
@@ -72,9 +72,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		uploadPipeReader, uploadPipeWriter := io.Pipe()
 
-		h.sessions[sessionId] = uploadPipeWriter
+		h.sessions.Store(sessionId, uploadPipeWriter)
 		// the connection is finished, clean up map
-		defer delete(h.sessions, sessionId)
+		defer h.sessions.Delete(sessionId)
 
 		// magic header instructs nginx + apache to not buffer response body
 		writer.Header().Set("X-Accel-Buffering", "no")
@@ -186,7 +186,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			host:      shSettings.Host,
 			path:      shSettings.GetNormalizedPath(),
 			ln:        l,
-			sessions:  make(map[string]*io.PipeWriter),
+			sessions:  sync.Map{},
 			localAddr: localAddr,
 		},
 		ReadHeaderTimeout: time.Second * 4,
