@@ -3,6 +3,7 @@ package splithttp
 import (
 	"context"
 	gotls "crypto/tls"
+	"io"
 	gonet "net"
 	"net/http"
 	"net/http/httptrace"
@@ -158,6 +159,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			}
 		}
 	}()
+
+	// skip "ok" response
+	trashHeader := []byte{0, 0}
+	_, err = io.ReadFull(downResponse.Body, trashHeader)
+	if err != nil {
+		return nil, newError("failed to read initial response")
+	}
 
 	conn := splitConn{
 		downloadPipe: &uploadWriter{
