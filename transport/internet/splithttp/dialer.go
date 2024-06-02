@@ -168,10 +168,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	conn := splitConn{
-		downloadPipe: &uploadWriter{
+		writer: &uploadWriter{
 			uploadPipe: buf.NewBufferedWriter(uploadPipeWriter),
 		},
-		uploadPipe: downResponse.Body,
+		reader:     downResponse.Body,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}

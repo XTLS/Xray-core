@@ -7,25 +7,25 @@ import (
 )
 
 type splitConn struct {
-	downloadPipe io.WriteCloser
-	uploadPipe   io.ReadCloser
-	remoteAddr   net.Addr
-	localAddr    net.Addr
+	writer     io.WriteCloser
+	reader     io.ReadCloser
+	remoteAddr net.Addr
+	localAddr  net.Addr
 }
 
 func (c *splitConn) Write(b []byte) (int, error) {
-	return c.downloadPipe.Write(b)
+	return c.writer.Write(b)
 }
 
 func (c *splitConn) Read(b []byte) (int, error) {
-	return c.uploadPipe.Read(b)
+	return c.reader.Read(b)
 }
 
 func (c *splitConn) Close() error {
-	if err := c.downloadPipe.Close(); err != nil {
+	if err := c.writer.Close(); err != nil {
 		return err
 	}
-	return c.uploadPipe.Close()
+	return c.reader.Close()
 }
 
 func (c *splitConn) LocalAddr() net.Addr {

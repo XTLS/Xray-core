@@ -88,12 +88,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		downloadDone := make(chan int)
 
 		conn := splitConn{
-			downloadPipe: &httpResponseBodyWriter{
+			writer: &httpResponseBodyWriter{
 				responseWriter:  writer,
 				downloadDone:    downloadDone,
 				responseFlusher: responseFlusher,
 			},
-			uploadPipe: uploadPipeReader,
+			reader:     uploadPipeReader,
 			remoteAddr: remoteAddr,
 		}
 
