@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -16,7 +17,8 @@ import (
 )
 
 func Test_listenWSAndDial(t *testing.T) {
-	listen, err := ListenWS(context.Background(), net.LocalHostIP, 13146, &internet.MemoryStreamConfig{
+	listenPort := tcp.PickPort()
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "websocket",
 		ProtocolSettings: &Config{
 			Path: "ws",
@@ -41,7 +43,7 @@ func Test_listenWSAndDial(t *testing.T) {
 		ProtocolName:     "websocket",
 		ProtocolSettings: &Config{Path: "ws"},
 	}
-	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146), streamSettings)
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 1"))
@@ -56,7 +58,7 @@ func Test_listenWSAndDial(t *testing.T) {
 
 	common.Must(conn.Close())
 	<-time.After(time.Second * 5)
-	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146), streamSettings)
+	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
@@ -71,7 +73,8 @@ func Test_listenWSAndDial(t *testing.T) {
 }
 
 func TestDialWithRemoteAddr(t *testing.T) {
-	listen, err := ListenWS(context.Background(), net.LocalHostIP, 13148, &internet.MemoryStreamConfig{
+	listenPort := tcp.PickPort()
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "websocket",
 		ProtocolSettings: &Config{
 			Path: "ws",
@@ -93,7 +96,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 	})
 	common.Must(err)
 
-	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13148), &internet.MemoryStreamConfig{
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), &internet.MemoryStreamConfig{
 		ProtocolName:     "websocket",
 		ProtocolSettings: &Config{Path: "ws", Header: map[string]string{"X-Forwarded-For": "1.1.1.1"}},
 	})
@@ -113,6 +116,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 }
 
 func Test_listenWSAndDial_TLS(t *testing.T) {
+	listenPort := tcp.PickPort()
 	if runtime.GOARCH == "arm64" {
 		return
 	}
@@ -130,7 +134,7 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
 		},
 	}
-	listen, err := ListenWS(context.Background(), net.LocalHostIP, 13143, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			_ = conn.Close()
 		}()
@@ -138,7 +142,7 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 	common.Must(err)
 	defer listen.Close()
 
-	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13143), streamSettings)
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
 	_ = conn.Close()
 
