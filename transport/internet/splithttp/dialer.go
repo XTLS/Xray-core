@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"strconv"
 	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/semaphore"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -110,6 +112,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
+	maxConcurrentUploads := transportConfiguration.MaxConcurrentUploads
+	if maxConcurrentUploads == 0 {
+		maxConcurrentUploads = 10
+	}
+
+	maxUploadSize := transportConfiguration.MaxUploadSize
+	if maxUploadSize == 0 {
+		maxUploadSize = 1000000
+	}
+
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"
 	} else {
@@ -157,11 +169,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, newError("invalid status code on download:", downResponse.Status)
 	}
 
-	uploadUrl := requestURL.String() + "?session=" + sessionId
+	uploadUrl := requestURL.String() + "?session=" + sessionId + "&seq="
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(1000000))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
 
 	go func() {
+		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
+		var requestCounter int64
+
 		// by offloading the uploads into a buffered pipe, multiple conn.Write
 		// calls get automatically batched together into larger POST requests.
 		// without batching, bandwidth is extremely limited.
@@ -171,21 +186,33 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				break
 			}
 
-			req, err := http.NewRequest("POST", uploadUrl, &buf.MultiBufferContainer{MultiBuffer: chunk})
-			if err != nil {
-				break
-			}
+			<-requestsLimiter.Wait()
 
-			req.Header = transportConfiguration.GetRequestHeader()
+			url := uploadUrl + strconv.FormatInt(requestCounter, 10)
+			requestCounter += 1
 
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				break
-			}
+			go func() {
+				defer requestsLimiter.Signal()
+				req, err := http.NewRequest("POST", url, &buf.MultiBufferContainer{MultiBuffer: chunk})
+				if err != nil {
+					newError("failed to send upload").Base(err).WriteToLog()
+					return
+				}
 
-			if resp.StatusCode != 200 {
-				break
-			}
+				req.Header = transportConfiguration.GetRequestHeader()
+
+				resp, err := httpClient.Do(req)
+				if err != nil {
+					newError("failed to send upload").Base(err).WriteToLog()
+					return
+				}
+
+				if resp.StatusCode != 200 {
+					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
+					return
+				}
+			}()
+
 		}
 	}()
 

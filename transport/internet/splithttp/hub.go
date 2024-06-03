@@ -6,6 +6,7 @@ import (
 	"io"
 	gonet "net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -42,7 +43,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	sessionId := queryString.Get("session")
 	if sessionId == "" {
 		newError("no sessionid on request:", request.URL.Path).WriteToLog()
-		writer.WriteHeader(http.StatusNotFound)
+		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -59,10 +60,45 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	if request.Method == "POST" {
-		uploadPipeWriter, ok := h.sessions.Load(sessionId)
-		if ok {
-			io.Copy(uploadPipeWriter.(*io.PipeWriter), request.Body)
+		uploadQueue, ok := h.sessions.Load(sessionId)
+		if !ok {
+			newError("sessionid does not exist").WriteToLog()
+			writer.WriteHeader(http.StatusBadRequest)
+			return
 		}
+
+		seq := queryString.Get("seq")
+		if seq == "" {
+			newError("no seq on request:", request.URL.Path).WriteToLog()
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		payload, err := io.ReadAll(request.Body)
+		if err != nil {
+			newError("failed to upload").Base(err).WriteToLog()
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		seqInt, err := strconv.ParseUint(seq, 10, 64)
+		if err != nil {
+			newError("failed to upload").Base(err).WriteToLog()
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		err = uploadQueue.(*UploadQueue).Push(Packet{
+			Payload: payload,
+			Seq:     seqInt,
+		})
+
+		if err != nil {
+			newError("failed to upload").Base(err).WriteToLog()
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" {
 		responseFlusher, ok := writer.(http.Flusher)
@@ -70,9 +106,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			panic("expected http.ResponseWriter to be an http.Flusher")
 		}
 
-		uploadPipeReader, uploadPipeWriter := io.Pipe()
+		uploadQueue := NewUploadQueue(int(2 * h.ln.config.MaxConcurrentUploads))
 
-		h.sessions.Store(sessionId, uploadPipeWriter)
+		h.sessions.Store(sessionId, uploadQueue)
 		// the connection is finished, clean up map
 		defer h.sessions.Delete(sessionId)
 
@@ -93,7 +129,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				downloadDone:    downloadDone,
 				responseFlusher: responseFlusher,
 			},
-			reader:     uploadPipeReader,
+			reader:     uploadQueue,
 			remoteAddr: remoteAddr,
 		}
 

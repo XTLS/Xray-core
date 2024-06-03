@@ -223,9 +223,11 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 }
 
 type SplitHTTPConfig struct {
-	Host    string            `json:"host"`
-	Path    string            `json:"path"`
-	Headers map[string]string `json:"headers"`
+	Host                 string            `json:"host"`
+	Path                 string            `json:"path"`
+	Headers              map[string]string `json:"headers"`
+	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
+	MaxUploadSize        int32             `json:"maxUploadSize"`
 }
 
 // Build implements Buildable.
