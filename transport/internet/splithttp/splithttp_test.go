@@ -17,7 +17,7 @@ import (
 )
 
 func Test_listenSHAndDial(t *testing.T) {
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13146, &internet.MemoryStreamConfig{
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13149, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "/sh",
@@ -41,7 +41,7 @@ func Test_listenSHAndDial(t *testing.T) {
 		ProtocolName:     "splithttp",
 		ProtocolSettings: &Config{Path: "sh"},
 	}
-	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146), streamSettings)
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13149), streamSettings)
 
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 1"))
@@ -57,7 +57,7 @@ func Test_listenSHAndDial(t *testing.T) {
 
 	common.Must(conn.Close())
 	<-time.After(time.Second * 5)
-	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146), streamSettings)
+	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13149), streamSettings)
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
@@ -72,7 +72,7 @@ func Test_listenSHAndDial(t *testing.T) {
 }
 
 func TestDialWithRemoteAddr(t *testing.T) {
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13148, &internet.MemoryStreamConfig{
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13150, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "sh",
@@ -94,7 +94,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 	})
 	common.Must(err)
 
-	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13148), &internet.MemoryStreamConfig{
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13150), &internet.MemoryStreamConfig{
 		ProtocolName:     "splithttp",
 		ProtocolSettings: &Config{Path: "sh", Header: map[string]string{"X-Forwarded-For": "1.1.1.1"}},
 	})
@@ -130,7 +130,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
 		},
 	}
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13143, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, 13151, streamSettings, func(conn stat.Connection) {
 		go func() {
 			_ = conn.Close()
 		}()
@@ -138,7 +138,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	common.Must(err)
 	defer listen.Close()
 
-	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13143), streamSettings)
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), 13151), streamSettings)
 	common.Must(err)
 	_ = conn.Close()
 
