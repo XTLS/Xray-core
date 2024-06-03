@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -21,30 +22,35 @@ import (
 	"golang.org/x/net/http2"
 )
 
-func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+type dialerConf struct {
+	net.Destination
+	*internet.MemoryStreamConfig
 }
 
-func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("dialing splithttp to ", dest).WriteToLog(session.ExportIDToError(ctx))
+var (
+	globalDialerMap    map[dialerConf]*http.Client
+	globalDialerAccess sync.Mutex
+)
 
-	var requestURL url.URL
-	var gotlsConfig *gotls.Config
+func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) *http.Client {
+	globalDialerAccess.Lock()
+	defer globalDialerAccess.Unlock()
 
-	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+	if globalDialerMap == nil {
+		globalDialerMap = make(map[dialerConf]*http.Client)
+	}
+
+	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
+		return client
+	}
+
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+
+	var gotlsConfig *gotls.Config
 
 	if tlsConfig != nil {
 		gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(dest))
-		requestURL.Scheme = "https"
-	} else {
-		requestURL.Scheme = "http"
 	}
-	requestURL.Host = transportConfiguration.Host
-	if requestURL.Host == "" {
-		requestURL.Host = dest.NetAddr()
-	}
-	requestURL.Path = transportConfiguration.GetNormalizedPath()
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
 		conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
@@ -84,9 +90,38 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}
 
-	httpClient := http.Client{
+	client := &http.Client{
 		Transport: httpTransport,
 	}
+
+	globalDialerMap[dialerConf{dest, streamSettings}] = client
+	return client
+}
+
+func init() {
+	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+}
+
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
+	newError("dialing splithttp to ", dest).WriteToLog(session.ExportIDToError(ctx))
+
+	var requestURL url.URL
+
+	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+
+	if tlsConfig != nil {
+		requestURL.Scheme = "https"
+	} else {
+		requestURL.Scheme = "http"
+	}
+	requestURL.Host = transportConfiguration.Host
+	if requestURL.Host == "" {
+		requestURL.Host = dest.NetAddr()
+	}
+	requestURL.Path = transportConfiguration.GetNormalizedPath()
+
+	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
 	var remoteAddr gonet.Addr
 	var localAddr gonet.Addr
