@@ -25,12 +25,6 @@ func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
 }
 
-type utlsRoundtripper struct {
-	dialTLSContext func(ctx context.Context)
-	h2Transport    http2.Transport
-	h1Transport    http.Transport
-}
-
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	newError("dialing splithttp to ", dest).WriteToLog(session.ExportIDToError(ctx))
 
