@@ -79,11 +79,10 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 		}
 	}
 	if remoteAddr == nil {
+		_ = conn.Close()
 		return nil, newError("remoteAddr is nil")
 	}
-
-	conn = newConnection(conn, remoteAddr)
-	return stat.Connection(conn), nil
+	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
 
 func (s *server) keepAccepting() {
