@@ -2,7 +2,19 @@ NAME = xray
 
 VERSION=$(shell git describe --always --dirty)
 
+# NOTE: This MAKEFILE can be used to build Xray-core locally and in Automatic workflows. It is \
+	provided for convinience in automatic building and functions as a part of it.
+# NOTE: If you need to modify this file, please be aware that:\
+	- This file is not the main Makefile; it only accepts environment variables and builds the \
+	binary.\
+	- Automatic building expects the correct binaries to be built by this Makefile. If you \
+	intend to propose a change to this Makefile, carefully review the file below and ensure \
+	that the change will not accidently break the automatic building:\
+		.github/workflows/release.yml \
+	Otherwise it is recommended to contact the project maintainers.
+
 LDFLAGS = -X github.com/GFW-knocker/Xray-core/core.build=$(VERSION) -s -w -buildid=
+
 PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
 PREFIX ?= $(shell go env GOPATH)
@@ -12,7 +24,7 @@ ADDITION = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)
 else
 OUTPUT = $(NAME)
 endif
-ifeq ($(shell echo "$(GOARCH)" | grep -Pq "(mips|mipsle)" && echo true),true) # 
+ifeq ($(shell echo "$(GOARCH)" | grep -Eq "(mips|mipsle)" && echo true),true) # 
 ADDITION = GOMIPS=softfloat go build -o $(NAME)_softfloat -trimpath -ldflags "$(LDFLAGS)" -v $(MAIN)
 endif
 .PHONY: clean

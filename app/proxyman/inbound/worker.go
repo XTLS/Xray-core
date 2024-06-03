@@ -60,7 +60,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	sid := session.NewID()
 	ctx = session.ContextWithID(ctx, sid)
 
-	var outbound = &session.Outbound{}
+	outbounds := []*session.Outbound{{}}
 	if w.recvOrigDest {
 		var dest net.Destination
 		switch getTProxyType(w.stream) {
@@ -75,10 +75,10 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 			dest = net.DestinationFromAddr(conn.LocalAddr())
 		}
 		if dest.IsValid() {
-			outbound.Target = dest
+			outbounds[0].Target = dest
 		}
 	}
-	ctx = session.ContextWithOutbound(ctx, outbound)
+	ctx = session.ContextWithOutbounds(ctx, outbounds)
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
 		conn = &stat.CounterConnection{
@@ -308,11 +308,11 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 			sid := session.NewID()
 			ctx = session.ContextWithID(ctx, sid)
 
+			outbounds := []*session.Outbound{{}}
 			if originalDest.IsValid() {
-				ctx = session.ContextWithOutbound(ctx, &session.Outbound{
-					Target: originalDest,
-				})
+				outbounds[0].Target = originalDest
 			}
+			ctx = session.ContextWithOutbounds(ctx, outbounds)
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
 				Gateway: net.UDPDestination(w.address, w.port),

@@ -470,49 +470,81 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
 // - writer are from *transport.Link
-func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer signal.ActivityUpdater) error {
+func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer *signal.ActivityTimer, inTimer *signal.ActivityTimer) error {
 	readerConn, readCounter, _ := UnwrapRawConn(readerConn)
 	writerConn, _, writeCounter := UnwrapRawConn(writerConn)
 	reader := buf.NewReader(readerConn)
-	if inbound := session.InboundFromContext(ctx); inbound != nil {
-		if tc, ok := writerConn.(*net.TCPConn); ok && readerConn != nil && writerConn != nil && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
-			for inbound.CanSpliceCopy != 3 {
-				if inbound.CanSpliceCopy == 1 {
-					newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
-					statWriter, _ := writer.(*dispatcher.SizeStatWriter)
-					//runtime.Gosched() // necessary
-					time.Sleep(time.Millisecond) // without this, there will be a rare ssl error for freedom splice
-					w, err := tc.ReadFrom(readerConn)
-					if readCounter != nil {
-						readCounter.Add(w) // outbound stats
-					}
-					if writeCounter != nil {
-						writeCounter.Add(w) // inbound stats
-					}
-					if statWriter != nil {
-						statWriter.Counter.Add(w) // user stats
-					}
-					if err != nil && errors.Cause(err) != io.EOF {
-						return err
-					}
-					return nil
-				}
-				buffer, err := reader.ReadMultiBuffer()
-				if !buffer.IsEmpty() {
-					if readCounter != nil {
-						readCounter.Add(int64(buffer.Len()))
-					}
-					timer.Update()
-					if werr := writer.WriteMultiBuffer(buffer); werr != nil {
-						return werr
-					}
-				}
-				if err != nil {
-					return err
-				}
-			}
+	if runtime.GOOS != "linux" && runtime.GOOS != "android" {
+		return readV(ctx, reader, writer, timer, readCounter)
+	}
+	tc, ok := writerConn.(*net.TCPConn)
+	if !ok || readerConn == nil || writerConn == nil {
+		return readV(ctx, reader, writer, timer, readCounter)
+	}
+	inbound := session.InboundFromContext(ctx)
+	if inbound == nil || inbound.CanSpliceCopy == 3 {
+		return readV(ctx, reader, writer, timer, readCounter)
+	}
+	outbounds := session.OutboundsFromContext(ctx)
+	if len(outbounds) == 0 {
+		return readV(ctx, reader, writer, timer, readCounter)
+	}
+	for _, ob := range outbounds {
+		if ob.CanSpliceCopy == 3 {
+			return readV(ctx, reader, writer, timer, readCounter)
 		}
 	}
+
+	for {
+		inbound := session.InboundFromContext(ctx)
+		outbounds := session.OutboundsFromContext(ctx)
+		var splice = inbound.CanSpliceCopy == 1
+		for _, ob := range outbounds {
+			if ob.CanSpliceCopy != 1 {
+				splice = false
+			}
+		}
+		if splice {
+			newError("CopyRawConn splice").WriteToLog(session.ExportIDToError(ctx))
+			statWriter, _ := writer.(*dispatcher.SizeStatWriter)
+			//runtime.Gosched() // necessary
+			time.Sleep(time.Millisecond) // without this, there will be a rare ssl error for freedom splice
+			timer.SetTimeout(8 * time.Hour) // prevent leak, just in case
+			if inTimer != nil {
+				inTimer.SetTimeout(8 * time.Hour)
+			}
+			w, err := tc.ReadFrom(readerConn)
+			if readCounter != nil {
+				readCounter.Add(w) // outbound stats
+			}
+			if writeCounter != nil {
+				writeCounter.Add(w) // inbound stats
+			}
+			if statWriter != nil {
+				statWriter.Counter.Add(w) // user stats
+			}
+			if err != nil && errors.Cause(err) != io.EOF {
+				return err
+			}
+			return nil
+		}
+		buffer, err := reader.ReadMultiBuffer()
+		if !buffer.IsEmpty() {
+			if readCounter != nil {
+				readCounter.Add(int64(buffer.Len()))
+			}
+			timer.Update()
+			if werr := writer.WriteMultiBuffer(buffer); werr != nil {
+				return werr
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, readCounter stats.Counter) error {
 	newError("CopyRawConn readv").WriteToLog(session.ExportIDToError(ctx))
 	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
 		return newError("failed to process response").Base(err)

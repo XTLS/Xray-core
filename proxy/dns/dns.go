@@ -96,15 +96,16 @@ func parseIPQuery(b []byte) (r bool, domain string, id uint16, qType dnsmessage.
 
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("invalid outbound")
 	}
-	outbound.Name = "dns"
+	ob.Name = "dns"
 
-	srcNetwork := outbound.Target.Network
+	srcNetwork := ob.Target.Network
 
-	dest := outbound.Target
+	dest := ob.Target
 	if h.server.Network != net.Network_Unknown {
 		dest.Network = h.server.Network
 	}

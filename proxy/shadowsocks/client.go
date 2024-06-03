@@ -49,16 +49,14 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 
 // Process implements OutboundHandler.Process().
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified")
 	}
-	outbound.Name = "shadowsocks"
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.SetCanSpliceCopy(3)
-	}
-	destination := outbound.Target
+	ob.Name = "shadowsocks"
+	ob.CanSpliceCopy = 3
+	destination := ob.Target
 	network := destination.Network
 
 	var server *protocol.ServerSpec

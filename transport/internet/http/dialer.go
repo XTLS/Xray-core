@@ -68,7 +68,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			address := net.ParseAddress(rawHost)
 
 			hctx = session.ContextWithID(hctx, session.IDFromContext(ctx))
-			hctx = session.ContextWithOutbound(hctx, session.OutboundFromContext(ctx))
+			hctx = session.ContextWithOutbounds(hctx, session.OutboundsFromContext(ctx))
 			hctx = session.ContextWithTimeoutOnly(hctx, true)
 
 			pconn, err := internet.DialSystem(hctx, net.TCPDestination(address, port), sockopt)
@@ -97,12 +97,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 			}
-			negotiatedProtocol, negotiatedProtocolIsMutual := cn.NegotiatedProtocol()
+			negotiatedProtocol := cn.NegotiatedProtocol()
 			if negotiatedProtocol != http2.NextProtoTLS {
 				return nil, newError("http2: unexpected ALPN protocol " + negotiatedProtocol + "; want q" + http2.NextProtoTLS).AtError()
-			}
-			if !negotiatedProtocolIsMutual {
-				return nil, newError("http2: could not negotiate protocol mutually").AtError()
 			}
 			return cn, nil
 		},

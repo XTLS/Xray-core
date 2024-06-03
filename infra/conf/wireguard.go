@@ -22,14 +22,14 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 	config := new(wireguard.PeerConfig)
 
 	if c.PublicKey != "" {
-		config.PublicKey, err = parseWireGuardKey(c.PublicKey)
+		config.PublicKey, err = ParseWireGuardKey(c.PublicKey)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if c.PreSharedKey != "" {
-		config.PreSharedKey, err = parseWireGuardKey(c.PreSharedKey)
+		config.PreSharedKey, err = ParseWireGuardKey(c.PreSharedKey)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	config := new(wireguard.DeviceConfig)
 
 	var err error
-	config.SecretKey, err = parseWireGuardKey(c.SecretKey)
+	config.SecretKey, err = ParseWireGuardKey(c.SecretKey)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-func parseWireGuardKey(str string) (string, error) {
+func ParseWireGuardKey(str string) (string, error) {
 	var err error
 
 	if len(str)%2 == 0 {

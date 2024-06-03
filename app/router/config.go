@@ -135,7 +135,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	case "roundrobin":
 		return &Balancer{
 			selectors:   br.OutboundSelector,
-			strategy:    &RoundRobinStrategy{},
+			strategy:    &RoundRobinStrategy{FallbackTag: br.FallbackTag},
 			fallbackTag: br.FallbackTag,
 			ohm:         ohm,
 		}, nil
@@ -162,7 +162,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 			selectors:   br.OutboundSelector,
 			ohm:         ohm,
 			fallbackTag: br.FallbackTag,
-			strategy:    &RandomStrategy{},
+			strategy:    &RandomStrategy{FallbackTag: br.FallbackTag},
 		}, nil
 	default:
 		return nil, newError("unrecognized balancer type")

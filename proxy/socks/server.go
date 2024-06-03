@@ -27,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
 	cone          bool
+	udpFilter     *UDPFilter
 }
 
 // NewServer creates a new Server object.
@@ -36,6 +37,9 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+	}
+	if config.AuthType == AuthType_PASSWORD {
+		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
 	return s, nil
 }
@@ -65,7 +69,7 @@ func (s *Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "socks"
-	inbound.SetCanSpliceCopy(2)
+	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
@@ -135,6 +139,9 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
+		if s.udpFilter != nil {
+			s.udpFilter.Add(conn.RemoteAddr())
+		}
 		return s.handleUDP(conn)
 	}
 
@@ -193,6 +200,10 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	if s.udpFilter != nil && !s.udpFilter.Check(conn.RemoteAddr()) {
+		newError("Unauthorized UDP access from ", conn.RemoteAddr().String()).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+		return nil
+	}
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		payload := packet.Payload
 		newError("writing back UDP response with ", payload.Len(), " bytes").AtDebug().WriteToLog(session.ExportIDToError(ctx))

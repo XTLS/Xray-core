@@ -174,11 +174,14 @@ func main() {
 		suffix = ".exe"
 	}
 
-	targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/xtls/xray-core/HEAD/core/config.pb.go")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	/*
+		targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/XTLS/Xray-core/HEAD/core/config.pb.go")
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	*/
+	targetedVersion := ""
 
 	protoc, err := whichProtoc(suffix, targetedVersion)
 	if err != nil {

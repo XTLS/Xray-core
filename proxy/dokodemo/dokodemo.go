@@ -86,10 +86,15 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	destinationOverridden := false
 	if d.config.FollowRedirect {
-		if outbound := session.OutboundFromContext(ctx); outbound != nil && outbound.Target.IsValid() {
-			dest = outbound.Target
-			destinationOverridden = true
-		} else if handshake, ok := conn.(hasHandshakeAddressContext); ok {
+		outbounds := session.OutboundsFromContext(ctx)
+		if len(outbounds) > 0 {
+			ob := outbounds[len(outbounds) - 1]
+			if ob.Target.IsValid() {
+				dest = ob.Target
+				destinationOverridden = true
+			}
+		}
+		if handshake, ok := conn.(hasHandshakeAddressContext); ok && !destinationOverridden {
 			addr := handshake.HandshakeAddressContext(ctx)
 			if addr != nil {
 				dest.Address = addr
@@ -103,7 +108,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "dokodemo-door"
-	inbound.SetCanSpliceCopy(1)
+	inbound.CanSpliceCopy = 1
 	inbound.User = &protocol.MemoryUser{
 		Level: d.config.UserLevel,
 	}

@@ -45,7 +45,7 @@ func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
 	if v.conn != nil {
-		common.Close(v.conn.link.Reader)
+		common.Interrupt(v.conn.link.Reader)
 		common.Close(v.conn.link.Writer)
 		v.conn = nil
 	}

@@ -97,7 +97,8 @@ func TestRouterConfig(t *testing.T) {
 				"balancers": [
 					{
 						"tag": "b1",
-						"selector": ["test"]
+						"selector": ["test"],
+						"fallbackTag": "fall"
 					},
 					{
 						"tag": "b2",
@@ -137,6 +138,7 @@ func TestRouterConfig(t *testing.T) {
 						Tag:              "b1",
 						OutboundSelector: []string{"test"},
 						Strategy:         "random",
+						FallbackTag:      "fall",
 					},
 					{
 						Tag:              "b2",

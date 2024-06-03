@@ -26,11 +26,12 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		return protocolSnifferWithMetadata{}, errNotInit
 	}
 	return protocolSnifferWithMetadata{protocolSniffer: func(ctx context.Context, bytes []byte) (SniffResult, error) {
-		Target := session.OutboundFromContext(ctx).Target
-		if Target.Network == net.Network_TCP || Target.Network == net.Network_UDP {
-			domainFromFakeDNS := fakeDNSEngine.GetDomainFromFakeDNS(Target.Address)
+		outbounds := session.OutboundsFromContext(ctx)
+		ob := outbounds[len(outbounds) - 1]
+		if ob.Target.Network == net.Network_TCP || ob.Target.Network == net.Network_UDP {
+			domainFromFakeDNS := fakeDNSEngine.GetDomainFromFakeDNS(ob.Target.Address)
 			if domainFromFakeDNS != "" {
-				newError("fake dns got domain: ", domainFromFakeDNS, " for ip: ", Target.Address.String()).WriteToLog(session.ExportIDToError(ctx))
+				newError("fake dns got domain: ", domainFromFakeDNS, " for ip: ", ob.Target.Address.String()).WriteToLog(session.ExportIDToError(ctx))
 				return &fakeDNSSniffResult{domainName: domainFromFakeDNS}, nil
 			}
 		}
@@ -38,7 +39,7 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		if ipAddressInRangeValueI := ctx.Value(ipAddressInRange); ipAddressInRangeValueI != nil {
 			ipAddressInRangeValue := ipAddressInRangeValueI.(*ipAddressInRangeOpt)
 			if fkr0, ok := fakeDNSEngine.(dns.FakeDNSEngineRev0); ok {
-				inPool := fkr0.IsIPInIPPool(Target.Address)
+				inPool := fkr0.IsIPInIPPool(ob.Target.Address)
 				ipAddressInRangeValue.addressInRange = &inPool
 			}
 		}

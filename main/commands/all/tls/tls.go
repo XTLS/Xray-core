@@ -14,5 +14,6 @@ var CmdTLS = &base.Command{
 		cmdCert,
 		cmdPing,
 		cmdCertChainHash,
+		cmdECH,
 	},
 }

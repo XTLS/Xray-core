@@ -38,7 +38,7 @@ type strategyLeastLoadConfig struct {
 	Baselines []duration.Duration `json:"baselines,omitempty"`
 	// expected nodes count to select
 	Expected int32 `json:"expected,omitempty"`
-	// max acceptable rtt, filter away high delay nodes. defalut 0
+	// max acceptable rtt, filter away high delay nodes. default 0
 	MaxRTT duration.Duration `json:"maxRTT,omitempty"`
 	// acceptable failure rate
 	Tolerance float64 `json:"tolerance,omitempty"`

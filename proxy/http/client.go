@@ -69,16 +69,14 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 
 // Process implements proxy.Outbound.Process. We first create a socket tunnel via HTTP CONNECT method, then redirect all inbound traffic to that tunnel.
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified.")
 	}
-	outbound.Name = "http"
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inbound.SetCanSpliceCopy(2)
-	}
-	target := outbound.Target
+	ob.Name = "http"
+	ob.CanSpliceCopy = 2
+	target := ob.Target
 	targetAddr := target.NetAddr()
 
 	if target.Network == net.Network_UDP {
@@ -175,9 +173,10 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 	}
 
 	inbound := session.InboundFromContext(ctx)
-	outbound := session.OutboundFromContext(ctx)
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
 
-	if inbound == nil || outbound == nil {
+	if inbound == nil || ob == nil {
 		return nil, newError("missing inbound or outbound metadata from context")
 	}
 
@@ -186,7 +185,7 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 		Target net.Destination
 	}{
 		Source: inbound.Source,
-		Target: outbound.Target,
+		Target: ob.Target,
 	}
 
 	filled := make([]*Header, len(header))

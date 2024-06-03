@@ -116,8 +116,6 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	}
 	if utlsConfig.ServerName == "" {
 		utlsConfig.ServerName = dest.Address.String()
-	} else if strings.ToLower(utlsConfig.ServerName) == "nosni" { // If ServerName is set to "nosni", we set it empty.
-		utlsConfig.ServerName = ""
 	}
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
@@ -206,6 +204,9 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					req, _ = http.NewRequest("GET", string(prefix)+getPathLocked(paths), nil)
 					maps.Unlock()
 				}
+				if req == nil {
+					return
+				}
 				req.Header.Set("User-Agent", fingerprint.Client) // TODO: User-Agent map
 				if first && config.Show {
 					newError(fmt.Sprintf("REALITY localAddr: %v\treq.UserAgent(): %v\n", localAddr, req.UserAgent())).WriteToLog(session.ExportIDToError(ctx))
@@ -222,6 +223,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					if resp, err = client.Do(req); err != nil {
 						break
 					}
+					defer resp.Body.Close()
 					req.Header.Set("Referer", req.URL.String())
 					if body, err = io.ReadAll(resp.Body); err != nil {
 						break

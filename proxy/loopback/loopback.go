@@ -22,12 +22,13 @@ type Loopback struct {
 }
 
 func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet.Dialer) error {
-	outbound := session.OutboundFromContext(ctx)
-	if outbound == nil || !outbound.Target.IsValid() {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds) - 1]
+	if !ob.Target.IsValid() {
 		return newError("target not specified.")
 	}
-	outbound.Name = "loopback"
-	destination := outbound.Target
+	ob.Name = "loopback"
+	destination := ob.Target
 
 	newError("opening connection to ", destination).WriteToLog(session.ExportIDToError(ctx))
 

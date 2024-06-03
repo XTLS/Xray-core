@@ -112,7 +112,12 @@ func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig
 func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	newError("redirecting request " + dst.String() + " to " + obt).WriteToLog(session.ExportIDToError(ctx))
 	h := obm.GetHandler(obt)
-	ctx = session.ContextWithOutbound(ctx, &session.Outbound{Target: dst, Gateway: nil})
+	outbounds := session.OutboundsFromContext(ctx)
+    ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
+		Target: dst, 
+		Gateway: nil,
+		Tag: obt,
+	})) // add another outbound in session ctx
 	if h != nil {
 		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
 		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
@@ -131,8 +136,10 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 // DialSystem calls system dialer to create a network connection.
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	var src net.Address
-	if outbound := session.OutboundFromContext(ctx); outbound != nil {
-		src = outbound.Gateway
+	outbounds := session.OutboundsFromContext(ctx)
+	if len(outbounds) > 0 {
+		ob := outbounds[len(outbounds) - 1]
+		src = ob.Gateway
 	}
 	if sockopt == nil {
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
