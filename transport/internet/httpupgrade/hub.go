@@ -78,10 +78,7 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 			Port: int(0),
 		}
 	}
-	if remoteAddr == nil {
-		_ = conn.Close()
-		return nil, newError("remoteAddr is nil")
-	}
+
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
 
