@@ -3,9 +3,9 @@ package kcp_test
 import (
 	"testing"
 
+	. "github.com/GFW-knocker/Xray-core/transport/internet/kcp"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	. "github.com/xtls/xray-core/transport/internet/kcp"
 )
 
 func TestBadSegment(t *testing.T) {

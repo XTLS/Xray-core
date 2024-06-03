@@ -5,11 +5,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/features/dns"
+	"github.com/GFW-knocker/Xray-core/features/outbound"
 	"github.com/sagernet/sing/common/control"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/outbound"
 )
 
 var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}

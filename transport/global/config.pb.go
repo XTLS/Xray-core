@@ -7,7 +7,7 @@
 package global
 
 import (
-	internet "github.com/xtls/xray-core/transport/internet"
+	internet "github.com/GFW-knocker/Xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

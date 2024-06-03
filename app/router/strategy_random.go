@@ -1,13 +1,13 @@
 package router
 
 import (
-	"context"
+  "context"
+	"github.com/GFW-knocker/Xray-core/app/observatory"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/features/extension"
+	"github.com/GFW-knocker/Xray-core/common/dice"
 
-	"github.com/xtls/xray-core/app/observatory"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/extension"
 )
 
 // RandomStrategy represents a random balancing strategy

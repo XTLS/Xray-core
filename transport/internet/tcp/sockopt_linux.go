@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 )
 
 const SO_ORIGINAL_DST = 80

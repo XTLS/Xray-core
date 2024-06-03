@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	fmt "fmt"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
 )
 
 // MemoryAccount is an account type converted from Account.

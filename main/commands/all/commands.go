@@ -1,12 +1,12 @@
 package all
 
 import (
-	"github.com/xtls/xray-core/main/commands/all/api"
-	"github.com/xtls/xray-core/main/commands/all/tls"
-	"github.com/xtls/xray-core/main/commands/base"
+	"github.com/GFW-knocker/Xray-core/main/commands/all/api"
+	"github.com/GFW-knocker/Xray-core/main/commands/all/tls"
+	"github.com/GFW-knocker/Xray-core/main/commands/base"
 )
 
-// go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+// go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 func init() {
 	base.RootCommand.Commands = append(
