@@ -200,10 +200,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					return
 				}
 
+				defer resp.Body.Close()
+
 				if resp.StatusCode != 200 {
 					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
 					return
 				}
+
 			}()
 
 		}

@@ -22,10 +22,17 @@ func (c *splitConn) Read(b []byte) (int, error) {
 }
 
 func (c *splitConn) Close() error {
-	if err := c.writer.Close(); err != nil {
+	err := c.writer.Close()
+	err2 := c.reader.Close()
+	if err != nil {
 		return err
 	}
-	return c.reader.Close()
+
+	if err2 != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *splitConn) LocalAddr() net.Addr {
