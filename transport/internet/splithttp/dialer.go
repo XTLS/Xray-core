@@ -178,7 +178,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	if downResponse.StatusCode != 200 {
-		drainBeforeClose{downResponse.Body}.Close()
+		io.Copy(io.Discard, downResponse.Body)
+		downResponse.Body.Close()
 		return nil, newError("invalid status code on download:", downResponse.Status)
 	}
 
@@ -237,7 +238,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	trashHeader := []byte{0, 0}
 	_, err = io.ReadFull(downResponse.Body, trashHeader)
 	if err != nil {
-		drainBeforeClose{downResponse.Body}.Close()
+		io.Copy(io.Discard, downResponse.Body)
+		downResponse.Body.Close()
 		return nil, newError("failed to read initial response")
 	}
 
@@ -245,7 +247,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		writer: &uploadWriter{
 			uploadPipe: buf.NewBufferedWriter(uploadPipeWriter),
 		},
-		reader:     drainBeforeClose{downResponse.Body},
+		reader:     &drainBeforeClose{reader: downResponse.Body},
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
@@ -274,11 +276,11 @@ func (c *uploadWriter) Close() error {
 // if this isn't done. if the connection fails to be reused, we use
 // destroyHTTPClient as a last resort to not brick the transport entirely.
 type drainBeforeClose struct {
-	reader *io.Reader
+	reader io.ReadCloser
 }
 
-func (c *uploadWriter) Read(b []byte) (int, error) {
-	reader.Read(b)
+func (c *drainBeforeClose) Read(b []byte) (int, error) {
+	return c.reader.Read(b)
 }
 
 func (c *drainBeforeClose) Close() error {
