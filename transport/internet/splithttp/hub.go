@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
@@ -121,7 +122,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.Write([]byte("ok"))
 		responseFlusher.Flush()
 
-		downloadDone := make(chan int)
+		downloadDone := done.New()
 
 		conn := splitConn{
 			writer: &httpResponseBodyWriter{
@@ -136,7 +137,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		h.ln.addConn(stat.Connection(&conn))
 
 		// "A ResponseWriter may not be used after [Handler.ServeHTTP] has returned."
-		<-downloadDone
+		<-downloadDone.Wait()
 
 	} else {
 		writer.WriteHeader(http.StatusMethodNotAllowed)
@@ -147,12 +148,15 @@ type httpResponseBodyWriter struct {
 	sync.Mutex
 	responseWriter  http.ResponseWriter
 	responseFlusher http.Flusher
-	downloadDone    chan int
+	downloadDone    *done.Instance
 }
 
 func (c *httpResponseBodyWriter) Write(b []byte) (int, error) {
 	c.Lock()
 	defer c.Unlock()
+	if c.downloadDone.Done() {
+		return 0, io.ErrClosedPipe
+	}
 	n, err := c.responseWriter.Write(b)
 	if err == nil {
 		c.responseFlusher.Flush()
@@ -163,7 +167,7 @@ func (c *httpResponseBodyWriter) Write(b []byte) (int, error) {
 func (c *httpResponseBodyWriter) Close() error {
 	c.Lock()
 	defer c.Unlock()
-	c.downloadDone <- 0
+	c.downloadDone.Close()
 	return nil
 }
 
