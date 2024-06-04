@@ -144,12 +144,15 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 }
 
 type httpResponseBodyWriter struct {
+	sync.Mutex
 	responseWriter  http.ResponseWriter
 	responseFlusher http.Flusher
 	downloadDone    chan int
 }
 
 func (c *httpResponseBodyWriter) Write(b []byte) (int, error) {
+	c.Lock()
+	defer c.Unlock()
 	n, err := c.responseWriter.Write(b)
 	if err == nil {
 		c.responseFlusher.Flush()
@@ -158,6 +161,8 @@ func (c *httpResponseBodyWriter) Write(b []byte) (int, error) {
 }
 
 func (c *httpResponseBodyWriter) Close() error {
+	c.Lock()
+	defer c.Unlock()
 	c.downloadDone <- 0
 	return nil
 }

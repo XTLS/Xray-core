@@ -249,7 +249,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	conn := splitConn{
 		writer: &uploadWriter{
-			uploadPipe: buf.NewBufferedWriter(uploadPipeWriter),
+			uploadPipe: uploadPipeWriter,
 		},
 		reader:     downResponse.Body,
 		remoteAddr: remoteAddr,
@@ -260,17 +260,22 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 }
 
 type uploadWriter struct {
-	uploadPipe *buf.BufferedWriter
+	sync.Mutex
+	uploadPipe *pipe.Writer
 }
 
 func (c *uploadWriter) Write(b []byte) (int, error) {
-	bytes, err := c.uploadPipe.Write(b)
-	if err == nil {
-		c.uploadPipe.Flush()
+	c.Lock()
+	defer c.Unlock()
+	err := c.uploadPipe.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(b)})
+	if err != nil {
+		return 0, err
 	}
-	return bytes, err
+	return len(b), nil
 }
 
 func (c *uploadWriter) Close() error {
+	c.Lock()
+	defer c.Unlock()
 	return c.uploadPipe.Close()
 }
