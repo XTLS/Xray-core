@@ -121,8 +121,6 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 		return
 	}
 
-	listenPort := tcp.PickPort()
-
 	start := time.Now()
 
 	streamSettings := &internet.MemoryStreamConfig{
