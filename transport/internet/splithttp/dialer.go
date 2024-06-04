@@ -104,7 +104,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
 			IdleConnTimeout: 90 * time.Second,
-			MaxIdleConns:    100,
 		}
 	}
 
@@ -216,6 +215,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				req, err := http.NewRequest("POST", url, &buf.MultiBufferContainer{MultiBuffer: chunk})
 				if err != nil {
 					newError("failed to send upload").Base(err).WriteToLog()
+					uploadPipeReader.Interrupt()
 					return
 				}
 
@@ -224,6 +224,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				resp, err := httpClient.Do(req)
 				if err != nil {
 					newError("failed to send upload").Base(err).WriteToLog()
+					uploadPipeReader.Interrupt()
 					return
 				}
 
@@ -231,6 +232,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				if resp.StatusCode != 200 {
 					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
+					uploadPipeReader.Interrupt()
 					return
 				}
 
@@ -260,13 +262,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 }
 
 type uploadWriter struct {
-	sync.Mutex
 	uploadPipe *pipe.Writer
 }
 
 func (c *uploadWriter) Write(b []byte) (int, error) {
-	c.Lock()
-	defer c.Unlock()
 	err := c.uploadPipe.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(b)})
 	if err != nil {
 		return 0, err
@@ -275,7 +274,5 @@ func (c *uploadWriter) Write(b []byte) (int, error) {
 }
 
 func (c *uploadWriter) Close() error {
-	c.Lock()
-	defer c.Unlock()
 	return c.uploadPipe.Close()
 }
