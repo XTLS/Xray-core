@@ -113,15 +113,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
-	maxConcurrentUploads := transportConfiguration.MaxConcurrentUploads
-	if maxConcurrentUploads == 0 {
-		maxConcurrentUploads = 10
-	}
-
-	maxUploadSize := transportConfiguration.MaxUploadSize
-	if maxUploadSize == 0 {
-		maxUploadSize = 1000000
-	}
+	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
+	maxUploadSize := transportConfiguration.GetNormalizedMaxUploadSize()
 
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"

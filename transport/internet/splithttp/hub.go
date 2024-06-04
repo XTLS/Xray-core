@@ -106,7 +106,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			panic("expected http.ResponseWriter to be an http.Flusher")
 		}
 
-		uploadQueue := NewUploadQueue(int(2 * h.ln.config.MaxConcurrentUploads))
+		uploadQueue := NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads()))
 
 		h.sessions.Store(sessionId, uploadQueue)
 		// the connection is finished, clean up map

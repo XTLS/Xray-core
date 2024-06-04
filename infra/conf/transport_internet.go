@@ -241,9 +241,11 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Host = c.Headers["Host"]
 	}
 	config := &splithttp.Config{
-		Path:   c.Path,
-		Host:   c.Host,
-		Header: c.Headers,
+		Path:                 c.Path,
+		Host:                 c.Host,
+		Header:               c.Headers,
+		MaxConcurrentUploads: c.MaxConcurrentUploads,
+		MaxUploadSize:        c.MaxUploadSize,
 	}
 	return config, nil
 }

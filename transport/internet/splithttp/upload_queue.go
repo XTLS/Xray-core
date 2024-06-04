@@ -19,31 +19,28 @@ type UploadQueue struct {
 	heapGuard  sync.Mutex
 	heap       uploadHeap
 	nextSeq    uint64
+	closed     bool
 	maxPackets int
 }
 
 func NewUploadQueue(maxPackets int) *UploadQueue {
 	return &UploadQueue{
-		pushEvent:  make(chan struct{}),
+		pushEvent:  make(chan struct{}, 2*maxPackets),
 		heap:       uploadHeap{},
 		nextSeq:    0,
+		closed:     false,
 		maxPackets: maxPackets,
 	}
 }
 
 func (h *UploadQueue) Push(p Packet) error {
+	if h.closed {
+		return newError("splithttp packet queue closed")
+	}
+
 	h.heapGuard.Lock()
-	defer h.heapGuard.Unlock()
-
-	if h.maxPackets == -2 {
-		return newError("splithttp packet queue full")
-	}
-
-	if len(h.heap) > h.maxPackets {
-		return newError("splithttp packet queue full")
-	}
-
 	heap.Push(&h.heap, p)
+	h.heapGuard.Unlock()
 	h.pushEvent <- struct{}{}
 	return nil
 }
@@ -58,11 +55,14 @@ func (h *UploadQueue) Read(b []byte) (int, error) {
 }
 
 func (h *UploadQueue) Close() error {
-	h.maxPackets = -2
+	h.closed = true
 	return nil
 }
 
 func (h *UploadQueue) readPoll(b []byte) (int, error) {
+	if h.closed {
+		return 0, newError("splithttp packet queue closed")
+	}
 	<-h.pushEvent
 	h.heapGuard.Lock()
 	defer h.heapGuard.Unlock()
@@ -75,7 +75,7 @@ func (h *UploadQueue) readPoll(b []byte) (int, error) {
 		}
 		packet.Payload = reader.Bytes()
 		if len(packet.Payload) == 0 {
-			h.nextSeq += 1
+			h.nextSeq = packet.Seq + 1
 		} else {
 			heap.Push(&h.heap, packet)
 			h.pushEvent <- struct{}{}

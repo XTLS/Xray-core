@@ -29,6 +29,22 @@ func (c *Config) GetRequestHeader() http.Header {
 	return header
 }
 
+func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
+	if c.MaxConcurrentUploads == 0 {
+		return 10
+	}
+
+	return c.MaxConcurrentUploads
+}
+
+func (c *Config) GetNormalizedMaxUploadSize() int32 {
+	if c.MaxUploadSize == 0 {
+		return 1000000
+	}
+
+	return c.MaxUploadSize
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)
