@@ -42,10 +42,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		globalDialerMap = make(map[dialerConf]*http.Client)
 	}
 
-	// TODO: responses are not correctly closed, so connection reuse is broken right now
-	//if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
-	//return client
-	//}
+	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
+		return client
+	}
 
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
