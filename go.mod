@@ -3,12 +3,9 @@ module github.com/GFW-knocker/Xray-core
 go 1.22.2
 
 require (
-
+	github.com/GFW-knocker/wireguard v1.0.3
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 	github.com/cloudflare/circl v1.3.8
-
-	github.com/GFW-knocker/wireguard v2.0.1
-
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.6.0
@@ -26,16 +23,13 @@ require (
 	github.com/vishvananda/netlink v1.2.1-beta.2.0.20230316163032-ced5aaba43e3
 	github.com/xtls/reality v0.0.0-20240429224917-ecc4401070cc
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
-
 	golang.org/x/crypto v0.23.0
 	golang.org/x/net v0.25.0
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.20.0
-	
-	google.golang.org/grpc v1.64.0	
-  google.golang.org/protobuf v1.33.0
+	google.golang.org/grpc v1.64.0
+	google.golang.org/protobuf v1.34.1
 	gvisor.dev/gvisor v0.0.0-20231202080848-1f7806d17489
-
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.3.0
 )
