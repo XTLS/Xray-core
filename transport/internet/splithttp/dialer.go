@@ -35,6 +35,18 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
+func destroyHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) {
+	globalDialerAccess.Lock()
+	defer globalDialerAccess.Unlock()
+
+	if globalDialerMap == nil {
+		globalDialerMap = make(map[dialerConf]*http.Client)
+	}
+
+	delete(globalDialerMap, dialerConf{dest, streamSettings})
+
+}
+
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) *http.Client {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
@@ -159,10 +171,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	downResponse, err := httpClient.Do(req)
 	if err != nil {
-		return nil, newError("failed to send download http request").Base(err)
+		// workaround for various connection pool related issues. if the http client
+		// ever fails to send a request, we simply delete it entirely.
+		destroyHTTPClient(ctx, dest, streamSettings)
+		return nil, newError("failed to send download http request, destroying client").Base(err)
 	}
 
 	if downResponse.StatusCode != 200 {
+		drainBeforeClose{downResponse.Body}.Close()
 		return nil, newError("invalid status code on download:", downResponse.Status)
 	}
 
@@ -205,6 +221,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 
 				defer resp.Body.Close()
+				defer io.Copy(io.Discard, resp.Body)
 
 				if resp.StatusCode != 200 {
 					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
@@ -220,6 +237,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	trashHeader := []byte{0, 0}
 	_, err = io.ReadFull(downResponse.Body, trashHeader)
 	if err != nil {
+		drainBeforeClose{downResponse.Body}.Close()
 		return nil, newError("failed to read initial response")
 	}
 
@@ -227,7 +245,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		writer: &uploadWriter{
 			uploadPipe: buf.NewBufferedWriter(uploadPipeWriter),
 		},
-		reader:     downResponse.Body,
+		reader:     drainBeforeClose{downResponse.Body},
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
@@ -249,4 +267,21 @@ func (c *uploadWriter) Write(b []byte) (int, error) {
 
 func (c *uploadWriter) Close() error {
 	return c.uploadPipe.Close()
+}
+
+// a wrapper around http responses for draining them before closing. apparently
+// there are various issues around connection reuse _specifically on HTTP/1.1_
+// if this isn't done. if the connection fails to be reused, we use
+// destroyHTTPClient as a last resort to not brick the transport entirely.
+type drainBeforeClose struct {
+	reader *io.Reader
+}
+
+func (c *uploadWriter) Read(b []byte) (int, error) {
+	reader.Read(b)
+}
+
+func (c *drainBeforeClose) Close() error {
+	io.Copy(io.Discard, c.reader)
+	return c.reader.Close()
 }
