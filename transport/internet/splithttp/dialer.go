@@ -83,7 +83,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return dialContext(ctxInner)
 			},
 			IdleConnTimeout: 90 * time.Second,
-			MaxIdleConns:    100,
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
