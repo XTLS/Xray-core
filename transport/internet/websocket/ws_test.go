@@ -116,6 +116,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 }
 
 func Test_listenWSAndDial_TLS(t *testing.T) {
+	listenPort := tcp.PickPort()
 	if runtime.GOARCH == "arm64" {
 		return
 	}
