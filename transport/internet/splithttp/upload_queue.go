@@ -4,9 +4,8 @@ package splithttp
 // packets by a sequence number
 
 import (
-	"bytes"
 	"container/heap"
-	"sync"
+	"io"
 )
 
 type Packet struct {
@@ -15,21 +14,20 @@ type Packet struct {
 }
 
 type UploadQueue struct {
-	pushEvent  chan struct{}
-	heapGuard  sync.Mutex
-	heap       uploadHeap
-	nextSeq    uint64
-	closed     bool
-	maxPackets int
+	pushedPackets chan Packet
+	heap          uploadHeap
+	nextSeq       uint64
+	closed        bool
+	maxPackets    int
 }
 
 func NewUploadQueue(maxPackets int) *UploadQueue {
 	return &UploadQueue{
-		pushEvent:  make(chan struct{}, 2*maxPackets),
-		heap:       uploadHeap{},
-		nextSeq:    0,
-		closed:     false,
-		maxPackets: maxPackets,
+		pushedPackets: make(chan Packet, maxPackets),
+		heap:          uploadHeap{},
+		nextSeq:       0,
+		closed:        false,
+		maxPackets:    maxPackets,
 	}
 }
 
@@ -38,20 +36,8 @@ func (h *UploadQueue) Push(p Packet) error {
 		return newError("splithttp packet queue closed")
 	}
 
-	h.heapGuard.Lock()
-	heap.Push(&h.heap, p)
-	h.heapGuard.Unlock()
-	h.pushEvent <- struct{}{}
+	h.pushedPackets <- p
 	return nil
-}
-
-func (h *UploadQueue) Read(b []byte) (int, error) {
-	for {
-		n, err := h.readPoll(b)
-		if err != nil || n > 0 {
-			return n, err
-		}
-	}
 }
 
 func (h *UploadQueue) Close() error {
@@ -59,32 +45,47 @@ func (h *UploadQueue) Close() error {
 	return nil
 }
 
-func (h *UploadQueue) readPoll(b []byte) (int, error) {
-	if h.closed {
-		return 0, newError("splithttp packet queue closed")
+func (h *UploadQueue) Read(b []byte) (int, error) {
+	if h.closed && len(h.heap) == 0 && len(h.pushedPackets) == 0 {
+		return 0, io.EOF
 	}
-	<-h.pushEvent
-	h.heapGuard.Lock()
-	defer h.heapGuard.Unlock()
-	packet := heap.Pop(&h.heap).(Packet)
-	if packet.Seq == h.nextSeq {
-		reader := bytes.NewBuffer(packet.Payload)
-		n, err := reader.Read(b)
-		if err != nil {
-			return n, err
+
+	needMorePackets := false
+
+	if len(h.heap) > 0 {
+		packet := heap.Pop(&h.heap).(Packet)
+		n := 0
+
+		if packet.Seq == h.nextSeq {
+			copy(b, packet.Payload)
+			n = min(len(b), len(packet.Payload))
+
+			if n < len(packet.Payload) {
+				// partial read
+				packet.Payload = packet.Payload[n:]
+				heap.Push(&h.heap, packet)
+			} else {
+				h.nextSeq = packet.Seq + 1
+			}
+
+			return n, nil
 		}
-		packet.Payload = reader.Bytes()
-		if len(packet.Payload) == 0 {
-			h.nextSeq = packet.Seq + 1
-		} else {
+
+		// misordered packet
+		if packet.Seq > h.nextSeq {
 			heap.Push(&h.heap, packet)
-			h.pushEvent <- struct{}{}
+			needMorePackets = true
 		}
-		return n, err
 	} else {
-		heap.Push(&h.heap, packet)
-		return 0, nil
+		needMorePackets = true
 	}
+
+	if needMorePackets {
+		packet := <-h.pushedPackets
+		heap.Push(&h.heap, packet)
+	}
+
+	return 0, nil
 }
 
 // heap code directly taken from https://pkg.go.dev/container/heap
