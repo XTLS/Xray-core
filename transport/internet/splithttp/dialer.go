@@ -171,14 +171,19 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	downResponse, err := httpClient.Do(req)
 	if err != nil {
-		// workaround for various connection pool related issues. if the http client
-		// ever fails to send a request, we simply delete it entirely.
+		// workaround for various connection pool related issues, mostly around
+		// HTTP/1.1. if the http client ever fails to send a request, we simply
+		// delete it entirely.
+		// in HTTP/1.1, it was observed that pool connections would immediately
+		// fail with "context canceled" if the previous http response body was
+		// not explicitly BOTH drained and closed. at the same time, sometimes
+		// the draining itself takes forever and causes more problems.
+		// see also https://github.com/golang/go/issues/60240
 		destroyHTTPClient(ctx, dest, streamSettings)
 		return nil, newError("failed to send download http request, destroying client").Base(err)
 	}
 
 	if downResponse.StatusCode != 200 {
-		io.Copy(io.Discard, downResponse.Body)
 		downResponse.Body.Close()
 		return nil, newError("invalid status code on download:", downResponse.Status)
 	}
@@ -222,7 +227,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 
 				defer resp.Body.Close()
-				defer io.Copy(io.Discard, resp.Body)
 
 				if resp.StatusCode != 200 {
 					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
@@ -238,7 +242,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	trashHeader := []byte{0, 0}
 	_, err = io.ReadFull(downResponse.Body, trashHeader)
 	if err != nil {
-		io.Copy(io.Discard, downResponse.Body)
 		downResponse.Body.Close()
 		return nil, newError("failed to read initial response")
 	}
@@ -247,7 +250,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		writer: &uploadWriter{
 			uploadPipe: buf.NewBufferedWriter(uploadPipeWriter),
 		},
-		reader:     &drainBeforeClose{reader: downResponse.Body},
+		reader:     downResponse.Body,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
@@ -269,21 +272,4 @@ func (c *uploadWriter) Write(b []byte) (int, error) {
 
 func (c *uploadWriter) Close() error {
 	return c.uploadPipe.Close()
-}
-
-// a wrapper around http responses for draining them before closing. apparently
-// there are various issues around connection reuse _specifically on HTTP/1.1_
-// if this isn't done. if the connection fails to be reused, we use
-// destroyHTTPClient as a last resort to not brick the transport entirely.
-type drainBeforeClose struct {
-	reader io.ReadCloser
-}
-
-func (c *drainBeforeClose) Read(b []byte) (int, error) {
-	return c.reader.Read(b)
-}
-
-func (c *drainBeforeClose) Close() error {
-	io.Copy(io.Discard, c.reader)
-	return c.reader.Close()
 }
