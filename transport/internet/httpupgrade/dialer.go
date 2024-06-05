@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -47,7 +46,6 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	}
 
 	var conn net.Conn
-	var requestURL url.URL
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
@@ -58,19 +56,14 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		} else {
 			conn = tls.Client(pconn, tlsConfig)
 		}
-		requestURL.Scheme = "https"
 	} else {
 		conn = pconn
-		requestURL.Scheme = "http"
 	}
-
-	requestURL.Host = dest.NetAddr()
-	requestURL.Path = transportConfiguration.GetNormalizedPath()
 
 	var headersBuilder strings.Builder
 
 	headersBuilder.WriteString("GET ")
-	headersBuilder.WriteString(requestURL.String())
+	headersBuilder.WriteString(transportConfiguration.GetNormalizedPath())
 	headersBuilder.WriteString(" HTTP/1.1\r\n")
 	hasConnectionHeader := false
 	hasUpgradeHeader := false
