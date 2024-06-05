@@ -92,7 +92,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	}
 
 	if !hasUpgradeHeader {
-		headersBuilder.WriteString("Upgrade: WebSocket\r\n")
+		headersBuilder.WriteString("Upgrade: websocket\r\n")
 	}
 
 	headersBuilder.WriteString("\r\n")
