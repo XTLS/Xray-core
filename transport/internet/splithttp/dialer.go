@@ -249,30 +249,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, newError("failed to read initial response")
 	}
 
+	// necessary in order to send larger chunks in upload
+	bufferedUploadPipeWriter := buf.NewBufferedWriter(uploadPipeWriter)
+	bufferedUploadPipeWriter.SetBuffered(false)
+
 	conn := splitConn{
-		writer: &uploadWriter{
-			uploadPipe: uploadPipeWriter,
-		},
+		writer:     bufferedUploadPipeWriter,
 		reader:     downResponse.Body,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
 
 	return stat.Connection(&conn), nil
-}
-
-type uploadWriter struct {
-	uploadPipe *pipe.Writer
-}
-
-func (c *uploadWriter) Write(b []byte) (int, error) {
-	err := c.uploadPipe.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(b)})
-	if err != nil {
-		return 0, err
-	}
-	return len(b), nil
-}
-
-func (c *uploadWriter) Close() error {
-	return c.uploadPipe.Close()
 }
