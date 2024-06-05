@@ -100,7 +100,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	return connRF, nil
 }
 
-func dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	newError("creating connection to ", dest).WriteToLog(session.ExportIDToError(ctx))
 
 	conn, err := dialhttpUpgrade(ctx, dest, streamSettings)
@@ -111,5 +111,5 @@ func dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 }
 
 func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, dial))
+	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
 }

@@ -97,7 +97,7 @@ func (s *server) keepAccepting() {
 	}
 }
 
-func listenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
+func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	if transportConfiguration != nil {
 		if streamSettings.SocketSettings == nil {
@@ -147,5 +147,5 @@ func listenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 }
 
 func init() {
-	common.Must(internet.RegisterTransportListener(protocolName, listenHTTPUpgrade))
+	common.Must(internet.RegisterTransportListener(protocolName, ListenHTTPUpgrade))
 }
