@@ -14,6 +14,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/app/stats"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/serial"
+	"github.com/GFW-knocker/Xray-core/common/session"
 	core "github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/outbound"
 	"github.com/GFW-knocker/Xray-core/proxy/freedom"
