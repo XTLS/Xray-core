@@ -17,14 +17,14 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - ".github/workflows/*.yml"
+      - ".github/workflows/release.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
-      - ".github/workflows/*.yml"
+      - ".github/workflows/release.yml"
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -183,7 +183,7 @@ jobs:
         run: |
           mkdir -p build_assets
           make
-          find . -maxdepth 1 -type f -regex '.*\(wxray\|xray\|xray_softfloat\)\(\|.exe\)' -exec mv {} ./build_assets/ \;
+          find . -maxdepth 1 -type f -regex './\(wxray\|xray\|xray_softfloat\)\(\|.exe\)' -exec mv {} ./build_assets/ \;
 
       - name: Restore Cache
         uses: actions/cache/restore@v4
@@ -198,6 +198,7 @@ jobs:
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
 
       - name: Create ZIP archive
+        if: github.event_name == 'release'
         shell: bash
         run: |
           pushd build_assets || exit 1
