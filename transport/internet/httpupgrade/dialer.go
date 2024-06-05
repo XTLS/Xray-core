@@ -17,7 +17,6 @@ import (
 
 type ConnRF struct {
 	net.Conn
-	Req   *http.Request
 	First bool
 }
 
@@ -25,7 +24,7 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 	if c.First {
 		c.First = false
 		// TODO The bufio usage here is unreliable
-		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), c.Req) // nolint:bodyclose
+		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), nil) // nolint:bodyclose
 		if err != nil {
 			return 0, err
 		}
@@ -67,26 +66,43 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 
 	requestURL.Host = dest.NetAddr()
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
-	req := &http.Request{
-		Method: http.MethodGet,
-		URL:    &requestURL,
-		Host:   transportConfiguration.Host,
-		Header: make(http.Header),
-	}
-	for key, value := range transportConfiguration.Header {
-		req.Header.Add(key, value)
-	}
-	req.Header.Set("Connection", "upgrade")
-	req.Header.Set("Upgrade", "websocket")
 
-	err = req.Write(conn)
+	var headersBuilder strings.Builder
+
+	headersBuilder.WriteString("GET ")
+	headersBuilder.WriteString(requestURL.String())
+	headersBuilder.WriteString(" HTTP/1.1\r\n")
+	hasConnectionHeader := false
+	hasUpgradeHeader := false
+	for key, value := range transportConfiguration.Header {
+		if strings.ToLower(key) == "connection" {
+			hasConnectionHeader = true
+		}
+		if strings.ToLower(key) == "upgrade" {
+			hasUpgradeHeader = true
+		}
+		headersBuilder.WriteString(key)
+		headersBuilder.WriteString(": ")
+		headersBuilder.WriteString(value)
+		headersBuilder.WriteString("\r\n")
+	}
+
+	if !hasConnectionHeader {
+		headersBuilder.WriteString("Connection: upgrade\r\n")
+	}
+
+	if !hasUpgradeHeader {
+		headersBuilder.WriteString("Upgrade: WebSocket\r\n")
+	}
+
+	headersBuilder.WriteString("\r\n")
+	_, err = conn.Write([]byte(headersBuilder.String()))
 	if err != nil {
 		return nil, err
 	}
 
 	connRF := &ConnRF{
 		Conn:  conn,
-		Req:   req,
 		First: true,
 	}
 
