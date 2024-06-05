@@ -108,7 +108,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	client := &http.Client{
-		Timeout:   time.Second * 180,
 		Transport: httpTransport,
 	}
 
