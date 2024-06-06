@@ -21,6 +21,30 @@ type Counter interface {
 	Add(int64) int64
 }
 
+type MyCounter struct {
+	count int64
+}
+
+func (c *MyCounter) Value() int64 {
+	return c.count
+}
+
+func (c *MyCounter) Set(value int64) int64 {
+	previous := c.count
+
+	c.count = value
+
+	return previous
+}
+
+func (c *MyCounter) Add(value int64) int64 {
+	previous := c.count
+
+	c.count += value
+
+	return previous
+}
+
 // Channel is the interface for stats channel.
 //
 // xray:api:stable

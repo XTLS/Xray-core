@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
@@ -201,6 +202,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
+	var AccountUUID []byte
 	var err error
 
 	napfb := h.fallbacks
@@ -209,7 +211,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
 	} else {
-		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		request, requestAddons, isfb, AccountUUID, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator, connection.RemoteAddr())
 	}
 
 	if err != nil {
@@ -578,9 +580,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), getResponse); err != nil {
+		proxy.AccountUpdate(uuid.UUID(AccountUUID), connection.RemoteAddr(), connection.(*stat.CounterConnection).ReadCounter.Value(), connection.(*stat.CounterConnection).WriteCounter.Value())
+
 		common.Interrupt(serverReader)
 		common.Interrupt(serverWriter)
+
 		return newError("connection ends").Base(err).AtInfo()
+	} else {
+		proxy.AccountUpdate(uuid.UUID(AccountUUID), connection.RemoteAddr(), connection.(*stat.CounterConnection).ReadCounter.Value(), connection.(*stat.CounterConnection).WriteCounter.Value())
 	}
 
 	return nil

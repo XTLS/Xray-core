@@ -80,13 +80,12 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	}
 	ctx = session.ContextWithOutbounds(ctx, outbounds)
 
-	if w.uplinkCounter != nil || w.downlinkCounter != nil {
-		conn = &stat.CounterConnection{
-			Connection:   conn,
-			ReadCounter:  w.uplinkCounter,
-			WriteCounter: w.downlinkCounter,
-		}
+	conn = &stat.CounterConnection{
+		Connection:   conn,
+		ReadCounter:  stats.MyCounter{},
+		WriteCounter: stats.MyCounter{},
 	}
+
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
 		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
 		Gateway: net.TCPDestination(w.address, w.port),
