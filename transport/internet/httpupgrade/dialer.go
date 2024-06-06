@@ -24,7 +24,9 @@ type ConnRF struct {
 func (c *ConnRF) Read(b []byte) (int, error) {
 	if c.First {
 		c.First = false
-		reader := bufio.NewReader(c.Conn)
+		// create reader capped to size of `b`, so it can be fully drained into
+		// `b` later with a single Read call
+		reader := bufio.NewReaderSize(c.Conn, len(b))
 		resp, err := http.ReadResponse(reader, c.Req) // nolint:bodyclose
 		if err != nil {
 			return 0, err
@@ -35,7 +37,7 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 			return 0, newError("unrecognized reply")
 		}
 		// drain remaining bufreader
-		return reader.Read(b)
+		return reader.Read(b[:reader.Buffered()])
 	}
 	return c.Conn.Read(b)
 }
