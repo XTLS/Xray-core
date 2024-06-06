@@ -208,8 +208,10 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 	// Host priority: Host field > headers field > address.
 	if c.Host == "" && c.Headers["host"] != "" {
 		c.Host = c.Headers["host"]
+		delete(c.Headers,"host")
 	} else if c.Host == "" && c.Headers["Host"] != "" {
 		c.Host = c.Headers["Host"]
+		delete(c.Headers,"Host")
 	}
 	config := &httpupgrade.Config{
 		Path:                path,
