@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -16,6 +17,7 @@ import (
 
 type ConnRF struct {
 	net.Conn
+	Req   *http.Request
 	First bool
 }
 
@@ -23,7 +25,7 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 	if c.First {
 		c.First = false
 		// TODO The bufio usage here is unreliable
-		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), nil) // nolint:bodyclose
+		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), c.Req) // nolint:bodyclose
 		if err != nil {
 			return 0, err
 		}
@@ -46,6 +48,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	}
 
 	var conn net.Conn
+	var requestURL url.URL
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
@@ -56,46 +59,80 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		} else {
 			conn = tls.Client(pconn, tlsConfig)
 		}
+		requestURL.Scheme = "https"
 	} else {
 		conn = pconn
+		requestURL.Scheme = "http"
 	}
 
-	var headersBuilder strings.Builder
+	var req *http.Request = nil
 
-	headersBuilder.WriteString("GET ")
-	headersBuilder.WriteString(transportConfiguration.GetNormalizedPath())
-	headersBuilder.WriteString(" HTTP/1.1\r\n")
-	hasConnectionHeader := false
-	hasUpgradeHeader := false
-	for key, value := range transportConfiguration.Header {
-		if strings.ToLower(key) == "connection" {
-			hasConnectionHeader = true
+	if len(transportConfiguration.Header) == 0 {
+		requestURL.Host = dest.NetAddr()
+		requestURL.Path = transportConfiguration.GetNormalizedPath()
+		req = &http.Request{
+			Method: http.MethodGet,
+			URL:    &requestURL,
+			Host:   transportConfiguration.Host,
+			Header: make(http.Header),
 		}
-		if strings.ToLower(key) == "upgrade" {
-			hasUpgradeHeader = true
+
+		req.Header.Set("Connection", "upgrade")
+		req.Header.Set("Upgrade", "websocket")
+
+		err = req.Write(conn)
+		if err != nil {
+			return nil, err
 		}
-		headersBuilder.WriteString(key)
-		headersBuilder.WriteString(": ")
-		headersBuilder.WriteString(value)
+	} else {
+		var headersBuilder strings.Builder
+
+		headersBuilder.WriteString("GET ")
+		headersBuilder.WriteString(transportConfiguration.GetNormalizedPath())
+		headersBuilder.WriteString(" HTTP/1.1\r\n")
+		hasConnectionHeader := false
+		hasUpgradeHeader := false
+		hasHostHeader := false
+		for key, value := range transportConfiguration.Header {
+			if strings.ToLower(key) == "connection" {
+				hasConnectionHeader = true
+			}
+			if strings.ToLower(key) == "upgrade" {
+				hasUpgradeHeader = true
+			}
+			if strings.ToLower(key) == "host" {
+				hasHostHeader = true
+			}
+			headersBuilder.WriteString(key)
+			headersBuilder.WriteString(": ")
+			headersBuilder.WriteString(value)
+			headersBuilder.WriteString("\r\n")
+		}
+
+		if !hasConnectionHeader {
+			headersBuilder.WriteString("Connection: upgrade\r\n")
+		}
+
+		if !hasUpgradeHeader {
+			headersBuilder.WriteString("Upgrade: websocket\r\n")
+		}
+
+		if !hasHostHeader {
+			headersBuilder.WriteString("Host: ")
+			headersBuilder.WriteString(transportConfiguration.Host)
+			headersBuilder.WriteString("\r\n")
+		}
+
 		headersBuilder.WriteString("\r\n")
-	}
-
-	if !hasConnectionHeader {
-		headersBuilder.WriteString("Connection: upgrade\r\n")
-	}
-
-	if !hasUpgradeHeader {
-		headersBuilder.WriteString("Upgrade: websocket\r\n")
-	}
-
-	headersBuilder.WriteString("\r\n")
-	_, err = conn.Write([]byte(headersBuilder.String()))
-	if err != nil {
-		return nil, err
+		_, err = conn.Write([]byte(headersBuilder.String()))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	connRF := &ConnRF{
 		Conn:  conn,
+		Req:   req,
 		First: true,
 	}
 

@@ -72,6 +72,65 @@ func Test_listenHTTPUpgradeAndDial(t *testing.T) {
 	common.Must(listen.Close())
 }
 
+func Test_listenHTTPUpgradeAndDialWithHeaders(t *testing.T) {
+	listenPort := tcp.PickPort()
+	listen, err := ListenHTTPUpgrade(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName: "httpupgrade",
+		ProtocolSettings: &Config{
+			Path: "httpupgrade",
+			Header: map[string]string{
+				"User-Agent": "Mozilla",
+			},
+		},
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+
+			var b [1024]byte
+			_, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
+	})
+	common.Must(err)
+
+	ctx := context.Background()
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "httpupgrade",
+		ProtocolSettings: &Config{Path: "httpupgrade"},
+	}
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+
+	common.Must(err)
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	var b [1024]byte
+	n, err := conn.Read(b[:])
+	common.Must(err)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+
+	common.Must(conn.Close())
+	<-time.After(time.Second * 5)
+	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	_, err = conn.Write([]byte("Test connection 2"))
+	common.Must(err)
+	n, err = conn.Read(b[:])
+	common.Must(err)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+	common.Must(conn.Close())
+
+	common.Must(listen.Close())
+}
+
 func TestDialWithRemoteAddr(t *testing.T) {
 	listenPort := tcp.PickPort()
 	listen, err := ListenHTTPUpgrade(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
