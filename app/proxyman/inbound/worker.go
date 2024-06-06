@@ -82,8 +82,8 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 
 	conn = &stat.CounterConnection{
 		Connection:   conn,
-		ReadCounter:  stats.MyCounter{},
-		WriteCounter: stats.MyCounter{},
+		ReadCounter:  &stats.MyCounter{},
+		WriteCounter: &stats.MyCounter{},
 	}
 
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
