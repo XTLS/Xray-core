@@ -73,6 +73,12 @@ func (h *UploadQueue) Read(b []byte) (int, error) {
 
 		// misordered packet
 		if packet.Seq > h.nextSeq {
+			if len(h.heap) > h.maxPackets {
+				// the "reassembly buffer" is too large, and we want to
+				// constrain memory usage somehow. let's tear down the
+				// connection, and hope the application retries.
+				return 0, newError("packet queue is too large")
+			}
 			heap.Push(&h.heap, packet)
 			needMorePackets = true
 		}
