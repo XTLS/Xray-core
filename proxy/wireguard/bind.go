@@ -163,6 +163,53 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	return nil
 }
 
+// --------- GFW knocker -----------------------
+func (bind *netBindClient) Send_without_modify(buff [][]byte, endpoint conn.Endpoint) error {
+	var err error
+
+	nend, ok := endpoint.(*netEndpoint)
+	if !ok {
+		return conn.ErrWrongEndpointType
+	}
+
+	if nend.conn == nil {
+		err = bind.connectTo(nend)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, buff := range buff {
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (bind *netBindServer) Send_without_modify(buff [][]byte, endpoint conn.Endpoint) error {
+	var err error
+
+	nend, ok := endpoint.(*netEndpoint)
+	if !ok {
+		return conn.ErrWrongEndpointType
+	}
+
+	if nend.conn == nil {
+		return newError("connection not open yet")
+	}
+
+	for _, buff := range buff {
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+// --------------------------------------------------------
+
 func (bind *netBindClient) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 

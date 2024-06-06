@@ -8,8 +8,8 @@ dmitri.shuralyov.com/service/change v0.0.0-20181023043359-a85b471d5412/go.mod h1
 dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D6DFvNNtx+9ybjezNCa8XF0xaYcETyp6rHWU=
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/GFW-knocker/wireguard v1.0.3 h1:IQSGhpIsZIX50rH3oDLD75XJZzXPlxPCAZSvnqdLY2Q=
-github.com/GFW-knocker/wireguard v1.0.3/go.mod h1:xOrFkaQdDJgcXX6oFW8xXpVxCASrslpuuM49aPOKQyE=
+github.com/GFW-knocker/wireguard v1.0.4 h1:f1Rk2GmOA6XWBlWEcauwtAAMslIMnYk2a9AA4I4oKuQ=
+github.com/GFW-knocker/wireguard v1.0.4/go.mod h1:xOrFkaQdDJgcXX6oFW8xXpVxCASrslpuuM49aPOKQyE=
 github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0 h1:Wo41lDOevRJSGpevP+8Pk5bANX7fJacO2w04aqLiC5I=
 github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0/go.mod h1:FVGavL/QEBQDcBpr3fAojoK17xX5k9bicBphrOpP7uM=
 github.com/andybalholm/brotli v1.1.0 h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=
