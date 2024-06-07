@@ -42,6 +42,7 @@ func (h *UploadQueue) Push(p Packet) error {
 
 func (h *UploadQueue) Close() error {
 	h.closed = true
+	close(h.pushedPackets)
 	return nil
 }
 
@@ -87,7 +88,10 @@ func (h *UploadQueue) Read(b []byte) (int, error) {
 	}
 
 	if needMorePackets {
-		packet := <-h.pushedPackets
+		packet, more := <-h.pushedPackets
+		if !more {
+			return 0, io.EOF
+		}
 		heap.Push(&h.heap, packet)
 	}
 
