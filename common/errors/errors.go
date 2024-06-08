@@ -3,6 +3,7 @@ package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
 	"reflect"
+	"runtime"
 	"strings"
 
 	"github.com/xtls/xray-core/common/log"
@@ -25,6 +26,7 @@ type Error struct {
 	pathObj  interface{}
 	prefix   []interface{}
 	message  []interface{}
+	caller   string
 	inner    error
 	severity log.Severity
 }
@@ -54,9 +56,8 @@ func (err *Error) Error() string {
 		builder.WriteString("] ")
 	}
 
-	path := err.pkgPath()
-	if len(path) > 0 {
-		builder.WriteString(path)
+	if len(err.caller) > 0 {
+		builder.WriteString(err.caller)
 		builder.WriteString(": ")
 	}
 
@@ -155,9 +156,15 @@ type ExportOption func(*ExportOptionHolder)
 
 // New returns a new error object with message formed from given arguments.
 func New(msg ...interface{}) *Error {
+	pc, _, _, _ := runtime.Caller(2)
+	details := runtime.FuncForPC(pc).Name()
+	if len(details) >= trim {
+		details = details[trim:]
+	}
 	return &Error{
 		message:  msg,
 		severity: log.Severity_Info,
+		caller:   details,
 	}
 }
 
