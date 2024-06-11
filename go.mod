@@ -36,6 +36,8 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/caddyserver/certmagic v0.21.3 // indirect
+	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
@@ -44,11 +46,17 @@ require (
 	github.com/google/pprof v0.0.0-20240528025155-186aa0362fba // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
+	github.com/libdns/cloudflare v0.1.1 // indirect
+	github.com/libdns/libdns v0.2.2 // indirect
+	github.com/mholt/acmez/v2 v2.0.1 // indirect
 	github.com/onsi/ginkgo/v2 v2.19.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
+	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.uber.org/mock v0.4.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240531132922-fd00a4e0eefc // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/text v0.16.0 // indirect

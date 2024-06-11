@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caddyserver/certmagic"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -253,6 +254,38 @@ func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) f
 	}
 }
 
+func GetNewGetACMECertificateFunc(rejectUnknownSNI bool, ACMEService *certmagic.Config) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		var certs []*tls.Certificate
+		sni := strings.ToLower(hello.ServerName)
+		certs = append(certs, GetACMECertificate(ACMEService, hello))
+		if len(certs) == 0 {
+			return nil, errNoCertificates
+		}
+		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
+			return certs[0], nil
+		}
+		gsni := "*"
+		if index := strings.IndexByte(sni, '.'); index != -1 {
+			gsni += sni[index:]
+		}
+		for _, keyPair := range certs {
+			if keyPair.Leaf.Subject.CommonName == sni || keyPair.Leaf.Subject.CommonName == gsni {
+				return keyPair, nil
+			}
+			for _, name := range keyPair.Leaf.DNSNames {
+				if name == sni || name == gsni {
+					return keyPair, nil
+				}
+			}
+		}
+		if rejectUnknownSNI {
+			return nil, errNoCertificates
+		}
+		return certs[0], nil
+	}
+}
+
 func (c *Config) parseServerName() string {
 	return c.ServerName
 }
@@ -310,15 +343,16 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		VerifyPeerCertificate:  c.verifyPeerCert,
 	}
 
-	for _, opt := range opts {
-		opt(config)
-	}
 
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
 		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
+	}
+
+	for _, opt := range opts {
+		opt(config)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
