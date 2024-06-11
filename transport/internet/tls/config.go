@@ -310,15 +310,16 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		VerifyPeerCertificate:  c.verifyPeerCert,
 	}
 
-	for _, opt := range opts {
-		opt(config)
-	}
 
 	caCerts := c.getCustomCA()
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
 		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
+	}
+
+	for _, opt := range opts {
+		opt(config)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {

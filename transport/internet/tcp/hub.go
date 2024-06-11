@@ -68,7 +68,13 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	l.listener = listener
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		l.tlsConfig = config.GetTLSConfig()
+		if config.AcmeToken != "" {
+			// Initialize ACME service when starting inbound and pass it to TLS configuration
+			ACMEService := tls.StartACME(config.AcmeToken, config.AcmeMail, config.ServerName)
+			l.tlsConfig = config.GetTLSConfig(tls.WithACME(config.RejectUnknownSni, ACMEService))
+		} else {
+			l.tlsConfig = config.GetTLSConfig()
+		}
 	}
 	if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
 		l.realityConfig = config.GetREALITYConfig()

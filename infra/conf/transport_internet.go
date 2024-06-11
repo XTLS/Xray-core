@@ -208,10 +208,10 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 	// Host priority: Host field > headers field > address.
 	if c.Host == "" && c.Headers["host"] != "" {
 		c.Host = c.Headers["host"]
-		delete(c.Headers,"host")
+		delete(c.Headers, "host")
 	} else if c.Host == "" && c.Headers["Host"] != "" {
 		c.Host = c.Headers["Host"]
-		delete(c.Headers,"Host")
+		delete(c.Headers, "Host")
 	}
 	config := &httpupgrade.Config{
 		Path:                path,
@@ -399,6 +399,8 @@ type TLSConfig struct {
 	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 	MasterKeyLog                         string           `json:"masterKeyLog"`
+	ACMEToken                            string           `json:"acmeToken"`
+	ACMEMail                             string           `json:"acmeMail"`
 }
 
 // Build implements Buildable.
@@ -426,6 +428,8 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MaxVersion = c.MaxVersion
 	config.CipherSuites = c.CipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
+	config.AcmeToken = c.ACMEToken
+	config.AcmeMail = c.ACMEMail
 	if config.Fingerprint != "" && tls.GetFingerprint(config.Fingerprint) == nil {
 		return nil, newError(`unknown fingerprint: `, config.Fingerprint)
 	}
