@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caddyserver/certmagic"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -230,38 +229,6 @@ func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) f
 			return nil, errNoCertificates
 		}
 		sni := strings.ToLower(hello.ServerName)
-		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
-			return certs[0], nil
-		}
-		gsni := "*"
-		if index := strings.IndexByte(sni, '.'); index != -1 {
-			gsni += sni[index:]
-		}
-		for _, keyPair := range certs {
-			if keyPair.Leaf.Subject.CommonName == sni || keyPair.Leaf.Subject.CommonName == gsni {
-				return keyPair, nil
-			}
-			for _, name := range keyPair.Leaf.DNSNames {
-				if name == sni || name == gsni {
-					return keyPair, nil
-				}
-			}
-		}
-		if rejectUnknownSNI {
-			return nil, errNoCertificates
-		}
-		return certs[0], nil
-	}
-}
-
-func GetNewGetACMECertificateFunc(rejectUnknownSNI bool, ACMEService *certmagic.Config) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		var certs []*tls.Certificate
-		sni := strings.ToLower(hello.ServerName)
-		certs = append(certs, GetACMECertificate(ACMEService, hello))
-		if len(certs) == 0 {
-			return nil, errNoCertificates
-		}
 		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
 			return certs[0], nil
 		}

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/caddyserver/certmagic"
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -70,8 +69,9 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if config.AcmeToken != "" {
+			// Initialize ACME service when starting inbound and pass it to TLS configuration
 			ACMEService := tls.StartACME(config.AcmeToken, config.AcmeMail, config.ServerName)
-			l.tlsConfig = config.GetTLSConfig(WithACME(config.RejectUnknownSni, ACMEService))
+			l.tlsConfig = config.GetTLSConfig(tls.WithACME(config.RejectUnknownSni, ACMEService))
 		} else {
 			l.tlsConfig = config.GetTLSConfig()
 		}
@@ -124,12 +124,6 @@ func (v *Listener) keepAccepting() {
 			}
 			v.addConn(stat.Connection(conn))
 		}()
-	}
-}
-
-func WithACME(rejectUnknownSNI bool, ACMEService *certmagic.Config) tls.Option {
-	return func(config *gotls.Config) {
-		config.GetCertificate = tls.GetNewGetACMECertificateFunc(rejectUnknownSNI, ACMEService)
 	}
 }
 
