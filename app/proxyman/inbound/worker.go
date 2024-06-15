@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -58,7 +59,7 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
-	ctx = session.ContextWithID(ctx, sid)
+	ctx = c.ContextWithID(ctx, sid)
 
 	outbounds := []*session.Outbound{{}}
 	if w.recvOrigDest {
@@ -306,7 +307,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		go func() {
 			ctx := w.ctx
 			sid := session.NewID()
-			ctx = session.ContextWithID(ctx, sid)
+			ctx = c.ContextWithID(ctx, sid)
 
 			outbounds := []*session.Outbound{{}}
 			if originalDest.IsValid() {
@@ -452,7 +453,7 @@ type dsWorker struct {
 func (w *dsWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
-	ctx = session.ContextWithID(ctx, sid)
+	ctx = c.ContextWithID(ctx, sid)
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
 		conn = &stat.CounterConnection{

@@ -2,10 +2,12 @@
 package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
+	"context"
 	"reflect"
 	"runtime"
 	"strings"
 
+	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -166,6 +168,43 @@ func New(msg ...interface{}) *Error {
 		severity: log.Severity_Info,
 		caller:   details,
 	}
+}
+
+func LogDebug(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, log.Severity_Debug, msg...)
+}
+
+func LogInfo(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, log.Severity_Info, msg...)
+}
+
+func LogWarning(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, log.Severity_Warning, msg...)
+}
+
+func LogError(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, log.Severity_Error, msg...)
+}
+
+func doLog(ctx context.Context, severity log.Severity, msg ...interface{}) {
+	pc, _, _, _ := runtime.Caller(2)
+	details := runtime.FuncForPC(pc).Name()
+	if len(details) >= trim {
+		details = details[trim:]
+	}
+	err := &Error{
+		message:  msg,
+		severity: severity,
+		caller:   details,
+	}
+	if ctx != nil {
+		id := uint32(c.IDFromContext(ctx))
+		err.prefix = append(err.prefix, id)
+	}
+	log.Record(&log.GeneralMessage{
+		Severity: GetSeverity(err),
+		Content:  err,
+	})
 }
 
 // Cause returns the root cause of this error.

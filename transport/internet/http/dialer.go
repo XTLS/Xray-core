@@ -11,6 +11,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
@@ -67,7 +68,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			}
 			address := net.ParseAddress(rawHost)
 
-			hctx = session.ContextWithID(hctx, session.IDFromContext(ctx))
+			hctx = c.ContextWithID(hctx, c.IDFromContext(ctx))
 			hctx = session.ContextWithOutbounds(hctx, session.OutboundsFromContext(ctx))
 			hctx = session.ContextWithTimeoutOnly(hctx, true)
 
