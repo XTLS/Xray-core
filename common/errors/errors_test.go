@@ -45,11 +45,11 @@ func TestErrorMessage(t *testing.T) {
 	}{
 		{
 			err: New("a").Base(New("b")).WithPathObj(e{}),
-			msg: "common/errors_test: a > b",
+			msg: "testing.tRunner: a > testing.tRunner: b",
 		},
 		{
 			err: New("a").Base(New("b").WithPathObj(e{})),
-			msg: "a > common/errors_test: b",
+			msg: "testing.tRunner: a > testing.tRunner: b",
 		},
 	}
 
