@@ -8,6 +8,7 @@ import (
 	"github.com/quic-go/quic-go/logging"
 	"github.com/quic-go/quic-go/qlog"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -27,13 +28,13 @@ func (l *Listener) acceptStreams(conn quic.Connection) {
 	for {
 		stream, err := conn.AcceptStream(context.Background())
 		if err != nil {
-			newError("failed to accept stream").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to accept stream")
 			select {
 			case <-conn.Context().Done():
 				return
 			case <-l.done.Wait():
 				if err := conn.CloseWithError(0, ""); err != nil {
-					newError("failed to close connection").Base(err).WriteToLog()
+					errors.LogInfoInner(context.Background(), err, "failed to close connection")
 				}
 				return
 			default:
@@ -56,7 +57,7 @@ func (l *Listener) keepAccepting() {
 	for {
 		conn, err := l.listener.Accept(context.Background())
 		if err != nil {
-			newError("failed to accept QUIC connection").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to accept QUIC connection")
 			if l.done.Done() {
 				break
 			}
@@ -83,7 +84,7 @@ func (l *Listener) Close() error {
 // Listen creates a new Listener based on configurations.
 func Listen(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	if address.Family().IsDomain() {
-		return nil, newError("domain address is not allows for listening quic")
+		return nil, errors.New("domain address is not allows for listening quic")
 	}
 
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)

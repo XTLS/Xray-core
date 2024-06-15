@@ -120,11 +120,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	for _, user := range config.User {
 		mUser, err := user.ToMemoryUser()
 		if err != nil {
-			return nil, newError("failed to get VMess user").Base(err)
+			return nil, errors.New("failed to get VMess user").Base(err)
 		}
 
 		if err := handler.AddUser(ctx, mUser); err != nil {
-			return nil, newError("failed to initiate user").Base(err)
+			return nil, errors.New("failed to initiate user").Base(err)
 		}
 	}
 
@@ -153,17 +153,17 @@ func (h *Handler) GetUser(email string) *protocol.MemoryUser {
 
 func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
 	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
-		return newError("User ", user.Email, " already exists.")
+		return errors.New("User ", user.Email, " already exists.")
 	}
 	return h.clients.Add(user)
 }
 
 func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
-		return newError("Email must not be empty.")
+		return errors.New("Email must not be empty.")
 	}
 	if !h.usersByEmail.Remove(email) {
-		return newError("User ", email, " not found.")
+		return errors.New("User ", email, " not found.")
 	}
 	h.clients.Remove(email)
 	return nil
@@ -174,7 +174,7 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 
 	bodyWriter, err := session.EncodeResponseBody(request, output)
 	if err != nil {
-		return newError("failed to start decoding response").Base(err)
+		return errors.New("failed to start decoding response").Base(err)
 	}
 	{
 		// Optimize for small response packet
@@ -211,7 +211,7 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return newError("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	iConn := connection
@@ -234,7 +234,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				Status: log.AccessRejected,
 				Reason: err,
 			})
-			err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
+			err = errors.New("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
 		}
 		return err
 	}
@@ -249,10 +249,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		})
 	}
 
-	newError("received request for ", request.Destination()).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "received request for ", request.Destination())
 
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
-		newError("unable to set back read deadline").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "unable to set back read deadline")
 	}
 
 	inbound := session.InboundFromContext(ctx)
@@ -268,7 +268,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
 	if err != nil {
-		return newError("failed to dispatch request to ", request.Destination()).Base(err)
+		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}
 
 	requestDone := func() error {
@@ -276,10 +276,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 		if err != nil {
-			return newError("failed to start decoding").Base(err)
+			return errors.New("failed to start decoding").Base(err)
 		}
 		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transfer request").Base(err)
+			return errors.New("failed to transfer request").Base(err)
 		}
 		return nil
 	}
@@ -300,7 +300,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil
@@ -312,7 +312,7 @@ func (h *Handler) generateCommand(ctx context.Context, request *protocol.Request
 		if h.inboundHandlerManager != nil {
 			handler, err := h.inboundHandlerManager.GetHandler(ctx, tag)
 			if err != nil {
-				newError("failed to get detour handler: ", tag).Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogWarningInner(ctx, err, "failed to get detour handler: ", tag)
 				return nil
 			}
 			proxyHandler, port, availableMin := handler.GetRandomInboundProxy()
@@ -322,7 +322,7 @@ func (h *Handler) generateCommand(ctx context.Context, request *protocol.Request
 					availableMin = 255
 				}
 
-				newError("pick detour handler for port ", port, " for ", availableMin, " minutes.").AtDebug().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogDebug(ctx, "pick detour handler for port ", port, " for ", availableMin, " minutes.")
 				user := inboundHandler.GetUser(request.User.Email)
 				if user == nil {
 					return nil

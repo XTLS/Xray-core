@@ -2,6 +2,7 @@ package wireguard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
@@ -53,7 +54,7 @@ func parseEndpoints(conf *DeviceConfig) ([]netip.Addr, bool, bool, error) {
 			}
 			addr = prefix.Addr()
 			if prefix.Bits() != addr.BitLen() {
-				return nil, false, false, newError("interface address subnet should be /32 for IPv4 and /128 for IPv6")
+				return nil, false, false, errors.New("interface address subnet should be /32 for IPv4 and /128 for IPv6")
 			}
 		} else {
 			var err error

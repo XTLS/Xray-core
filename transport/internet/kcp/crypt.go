@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 // SimpleAuthenticator is a legacy AEAD used for KCP encryption.
@@ -64,12 +65,12 @@ func (a *SimpleAuthenticator) Open(dst, nonce, cipherText, extra []byte) ([]byte
 	fnvHash := fnv.New32a()
 	common.Must2(fnvHash.Write(dst[4:]))
 	if binary.BigEndian.Uint32(dst[:4]) != fnvHash.Sum32() {
-		return nil, newError("invalid auth")
+		return nil, errors.New("invalid auth")
 	}
 
 	length := binary.BigEndian.Uint16(dst[4:6])
 	if len(dst)-6 != int(length) {
-		return nil, newError("invalid auth")
+		return nil, errors.New("invalid auth")
 	}
 
 	return dst[6:], nil

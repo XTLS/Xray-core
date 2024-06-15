@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 )
@@ -47,5 +46,5 @@ func (d *Dispatcher) NewPacketConnection(ctx context.Context, conn N.PacketConn,
 }
 
 func (d *Dispatcher) NewError(ctx context.Context, err error) {
-	d.newErrorFunc(err).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, err.Error())
 }

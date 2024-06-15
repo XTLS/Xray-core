@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -33,7 +34,7 @@ type TrojanClientConfig struct {
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	if len(c.Servers) == 0 {
-		return nil, newError("0 Trojan server configured.")
+		return nil, errors.New("0 Trojan server configured.")
 	}
 
 	config := &trojan.ClientConfig{
@@ -42,16 +43,16 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 
 	for idx, rec := range c.Servers {
 		if rec.Address == nil {
-			return nil, newError("Trojan server address is not set.")
+			return nil, errors.New("Trojan server address is not set.")
 		}
 		if rec.Port == 0 {
-			return nil, newError("Invalid Trojan port.")
+			return nil, errors.New("Invalid Trojan port.")
 		}
 		if rec.Password == "" {
-			return nil, newError("Trojan password is not specified.")
+			return nil, errors.New("Trojan password is not specified.")
 		}
 		if rec.Flow != "" {
-			return nil, newError(`Trojan doesn't support "flow" anymore.`)
+			return nil, errors.New(`Trojan doesn't support "flow" anymore.`)
 		}
 
 		config.Server[idx] = &protocol.ServerEndpoint{
@@ -105,7 +106,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 
 	for idx, rawUser := range c.Clients {
 		if rawUser.Flow != "" {
-			return nil, newError(`Trojan doesn't support "flow" anymore.`)
+			return nil, errors.New(`Trojan doesn't support "flow" anymore.`)
 		}
 
 		config.Users[idx] = &protocol.User{
@@ -118,7 +119,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fallback != nil {
-		return nil, newError(`Trojan settings: please use "fallbacks":[{}] instead of "fallback":{}`)
+		return nil, errors.New(`Trojan settings: please use "fallbacks":[{}] instead of "fallback":{}`)
 	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
@@ -140,11 +141,11 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	for _, fb := range config.Fallbacks {
 		/*
 			if fb.Alpn == "h2" && fb.Path != "" {
-				return nil, newError(`Trojan fallbacks: "alpn":"h2" doesn't support "path"`)
+				return nil, errors.New(`Trojan fallbacks: "alpn":"h2" doesn't support "path"`)
 			}
 		*/
 		if fb.Path != "" && fb.Path[0] != '/' {
-			return nil, newError(`Trojan fallbacks: "path" must be empty or start with "/"`)
+			return nil, errors.New(`Trojan fallbacks: "path" must be empty or start with "/"`)
 		}
 		if fb.Type == "" && fb.Dest != "" {
 			if fb.Dest == "serve-ws-none" {
@@ -166,10 +167,10 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 			}
 		}
 		if fb.Type == "" {
-			return nil, newError(`Trojan fallbacks: please fill in a valid value for every "dest"`)
+			return nil, errors.New(`Trojan fallbacks: please fill in a valid value for every "dest"`)
 		}
 		if fb.Xver > 2 {
-			return nil, newError(`Trojan fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
+			return nil, errors.New(`Trojan fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
 		}
 	}
 

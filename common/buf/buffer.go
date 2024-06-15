@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/xtls/xray-core/common/bytespool"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -226,7 +227,7 @@ func (b *Buffer) Write(data []byte) (int, error) {
 // WriteByte writes a single byte into the buffer.
 func (b *Buffer) WriteByte(v byte) error {
 	if b.IsFull() {
-		return newError("buffer full")
+		return errors.New("buffer full")
 	}
 	b.v[b.end] = v
 	b.end++
@@ -286,7 +287,7 @@ func (b *Buffer) ReadFullFrom(reader io.Reader, size int32) (int64, error) {
 	end := b.end + size
 	if end > int32(len(b.v)) {
 		v := end
-		return 0, newError("out of bound: ", v)
+		return 0, errors.New("out of bound: ", v)
 	}
 	n, err := io.ReadFull(reader, b.v[b.end:end])
 	b.end += int32(n)

@@ -36,20 +36,14 @@ func TestError(t *testing.T) {
 	}
 }
 
-type e struct{}
-
 func TestErrorMessage(t *testing.T) {
 	data := []struct {
 		err error
 		msg string
 	}{
 		{
-			err: New("a").Base(New("b")).WithPathObj(e{}),
-			msg: "testing.tRunner: a > testing.tRunner: b",
-		},
-		{
-			err: New("a").Base(New("b").WithPathObj(e{})),
-			msg: "testing.tRunner: a > testing.tRunner: b",
+			err: New("a").Base(New("b")),
+			msg: "common/errors_test.TestErrorMessage: a > common/errors_test.TestErrorMessage: b",
 		},
 	}
 

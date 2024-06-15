@@ -94,7 +94,7 @@ func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.
 func handle(ctx context.Context, s *Session, output buf.Writer) {
 	writer := NewResponseWriter(s.ID, output, s.transferType)
 	if err := buf.Copy(s.input, writer); err != nil {
-		newError("session ", s.ID, " ends.").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "session ", s.ID, " ends.")
 		writer.hasError = true
 	}
 
@@ -118,7 +118,7 @@ func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.Bu
 }
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
-	newError("received request for ", meta.Target).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "received request for ", meta.Target)
 	{
 		msg := &log.AccessMessage{
 			To:     meta.Target,
@@ -134,7 +134,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 
 	if network := session.AllowedNetworkFromContext(ctx); network != net.Network_Unknown {
 		if meta.Target.Network != network {
-			return newError("unexpected network ", meta.Target.Network) // it will break the whole Mux connection
+			return errors.New("unexpected network ", meta.Target.Network) // it will break the whole Mux connection
 		}
 	}
 
@@ -152,7 +152,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		} else {
 			if x.Status == Initializing { // nearly impossible
 				XUDPManager.Unlock()
-				newError("XUDP hit ", meta.GlobalID).Base(errors.New("conflict")).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogWarningInner(ctx, errors.New("conflict"), "XUDP hit ", meta.GlobalID)
 				// It's not a good idea to return an err here, so just let client wait.
 				// Client will receive an End frame after sending a Keep frame.
 				return nil
@@ -170,7 +170,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				b.Release()
 				mb = nil
 			}
-			newError("XUDP hit ", meta.GlobalID).Base(err).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfoInner(ctx, err,"XUDP hit ", meta.GlobalID)
 		}
 		if mb != nil {
 			ctx = session.ContextWithTimeoutOnly(ctx, true)
@@ -180,7 +180,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				XUDPManager.Lock()
 				delete(XUDPManager.Map, x.GlobalID)
 				XUDPManager.Unlock()
-				err = newError("XUDP new ", meta.GlobalID).Base(errors.New("failed to dispatch request to ", meta.Target).Base(err))
+				err = errors.New("XUDP new ", meta.GlobalID).Base(errors.New("failed to dispatch request to ", meta.Target).Base(err))
 				return err // it will break the whole Mux connection
 			}
 			link.Writer.WriteMultiBuffer(mb) // it's meaningless to test a new pipe
@@ -188,7 +188,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				input:  link.Reader,
 				output: link.Writer,
 			}
-			newError("XUDP new ", meta.GlobalID).Base(err).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfoInner(ctx, err, "XUDP new ", meta.GlobalID)
 		}
 		x.Mux = &Session{
 			input:        x.Mux.input,
@@ -211,7 +211,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		if meta.Option.Has(OptionData) {
 			buf.Copy(NewStreamReader(reader), buf.Discard)
 		}
-		return newError("failed to dispatch request.").Base(err)
+		return errors.New("failed to dispatch request.").Base(err)
 	}
 	s := &Session{
 		input:        link.Reader,
@@ -255,7 +255,7 @@ func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 	err := buf.Copy(rr, s.output)
 
 	if err != nil && buf.IsWriteError(err) {
-		newError("failed to write to downstream writer. closing session ", s.ID).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to write to downstream writer. closing session ", s.ID)
 		s.Close(false)
 		return buf.Copy(rr, buf.Discard)
 	}
@@ -277,7 +277,7 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 	var meta FrameMetadata
 	err := meta.Unmarshal(reader)
 	if err != nil {
-		return newError("failed to read metadata").Base(err)
+		return errors.New("failed to read metadata").Base(err)
 	}
 
 	switch meta.SessionStatus {
@@ -291,11 +291,11 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 		err = w.handleStatusKeep(&meta, reader)
 	default:
 		status := meta.SessionStatus
-		return newError("unknown status: ", status).AtError()
+		return errors.New("unknown status: ", status).AtError()
 	}
 
 	if err != nil {
-		return newError("failed to process data").Base(err)
+		return errors.New("failed to process data").Base(err)
 	}
 	return nil
 }
@@ -314,7 +314,7 @@ func (w *ServerWorker) run(ctx context.Context) {
 			err := w.handleFrame(ctx, reader)
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
-					newError("unexpected EOF").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfoInner(ctx, err, "unexpected EOF")
 					common.Interrupt(input)
 				}
 				return

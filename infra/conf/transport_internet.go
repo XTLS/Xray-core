@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
@@ -66,14 +67,14 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if c.Mtu != nil {
 		mtu := *c.Mtu
 		if mtu < 576 || mtu > 1460 {
-			return nil, newError("invalid mKCP MTU size: ", mtu).AtError()
+			return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
 		}
 		config.Mtu = &kcp.MTU{Value: mtu}
 	}
 	if c.Tti != nil {
 		tti := *c.Tti
 		if tti < 10 || tti > 100 {
-			return nil, newError("invalid mKCP TTI: ", tti).AtError()
+			return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
 		}
 		config.Tti = &kcp.TTI{Value: tti}
 	}
@@ -105,11 +106,11 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if len(c.HeaderConfig) > 0 {
 		headerConfig, _, err := kcpHeaderLoader.Load(c.HeaderConfig)
 		if err != nil {
-			return nil, newError("invalid mKCP header config.").Base(err).AtError()
+			return nil, errors.New("invalid mKCP header config.").Base(err).AtError()
 		}
 		ts, err := headerConfig.(Buildable).Build()
 		if err != nil {
-			return nil, newError("invalid mKCP header config").Base(err).AtError()
+			return nil, errors.New("invalid mKCP header config").Base(err).AtError()
 		}
 		config.HeaderConfig = serial.ToTypedMessage(ts)
 	}
@@ -132,11 +133,11 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 	if len(c.HeaderConfig) > 0 {
 		headerConfig, _, err := tcpHeaderLoader.Load(c.HeaderConfig)
 		if err != nil {
-			return nil, newError("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err).AtError()
 		}
 		ts, err := headerConfig.(Buildable).Build()
 		if err != nil {
-			return nil, newError("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err).AtError()
 		}
 		config.HeaderSettings = serial.ToTypedMessage(ts)
 	}
@@ -209,10 +210,10 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 	// Host priority: Host field > headers field > address.
 	if c.Host == "" && c.Headers["host"] != "" {
 		c.Host = c.Headers["host"]
-		delete(c.Headers,"host")
+		delete(c.Headers, "host")
 	} else if c.Host == "" && c.Headers["Host"] != "" {
 		c.Host = c.Headers["Host"]
-		delete(c.Headers,"Host")
+		delete(c.Headers, "Host")
 	}
 	config := &httpupgrade.Config{
 		Path:                path,
@@ -286,7 +287,7 @@ func (c *HTTPConfig) Build() (proto.Message, error) {
 		for _, key := range headerNames {
 			value := c.Headers[key]
 			if value == nil {
-				return nil, newError("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key).AtError()
 			}
 			config.Header = append(config.Header, &httpheader.Header{
 				Name:  key,
@@ -312,11 +313,11 @@ func (c *QUICConfig) Build() (proto.Message, error) {
 	if len(c.Header) > 0 {
 		headerConfig, _, err := kcpHeaderLoader.Load(c.Header)
 		if err != nil {
-			return nil, newError("invalid QUIC header config.").Base(err).AtError()
+			return nil, errors.New("invalid QUIC header config.").Base(err).AtError()
 		}
 		ts, err := headerConfig.(Buildable).Build()
 		if err != nil {
-			return nil, newError("invalid QUIC header config").Base(err).AtError()
+			return nil, errors.New("invalid QUIC header config").Base(err).AtError()
 		}
 		config.Header = serial.ToTypedMessage(ts)
 	}
@@ -360,7 +361,7 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 	if len(s) > 0 {
 		return []byte(strings.Join(s, "\n")), nil
 	}
-	return nil, newError("both file and bytes are empty.")
+	return nil, errors.New("both file and bytes are empty.")
 }
 
 type TLSCertConfig struct {
@@ -379,7 +380,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 
 	cert, err := readFileOrString(c.CertFile, c.CertStr)
 	if err != nil {
-		return nil, newError("failed to parse certificate").Base(err)
+		return nil, errors.New("failed to parse certificate").Base(err)
 	}
 	certificate.Certificate = cert
 	certificate.CertificatePath = c.CertFile
@@ -387,7 +388,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	if len(c.KeyFile) > 0 || len(c.KeyStr) > 0 {
 		key, err := readFileOrString(c.KeyFile, c.KeyStr)
 		if err != nil {
-			return nil, newError("failed to parse key").Base(err)
+			return nil, errors.New("failed to parse key").Base(err)
 		}
 		certificate.Key = key
 		certificate.KeyPath = c.KeyFile
@@ -456,7 +457,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.CipherSuites = c.CipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
 	if config.Fingerprint != "" && tls.GetFingerprint(config.Fingerprint) == nil {
-		return nil, newError(`unknown fingerprint: `, config.Fingerprint)
+		return nil, errors.New(`unknown fingerprint: `, config.Fingerprint)
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
@@ -539,29 +540,29 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			}
 		}
 		if c.Type == "" {
-			return nil, newError(`please fill in a valid value for "dest"`)
+			return nil, errors.New(`please fill in a valid value for "dest"`)
 		}
 		if c.Xver > 2 {
-			return nil, newError(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
+			return nil, errors.New(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
 		}
 		if len(c.ServerNames) == 0 {
-			return nil, newError(`empty "serverNames"`)
+			return nil, errors.New(`empty "serverNames"`)
 		}
 		if c.PrivateKey == "" {
-			return nil, newError(`empty "privateKey"`)
+			return nil, errors.New(`empty "privateKey"`)
 		}
 		if config.PrivateKey, err = base64.RawURLEncoding.DecodeString(c.PrivateKey); err != nil || len(config.PrivateKey) != 32 {
-			return nil, newError(`invalid "privateKey": `, c.PrivateKey)
+			return nil, errors.New(`invalid "privateKey": `, c.PrivateKey)
 		}
 		if c.MinClientVer != "" {
 			config.MinClientVer = make([]byte, 3)
 			var u uint64
 			for i, s := range strings.Split(c.MinClientVer, ".") {
 				if i == 3 {
-					return nil, newError(`invalid "minClientVer": `, c.MinClientVer)
+					return nil, errors.New(`invalid "minClientVer": `, c.MinClientVer)
 				}
 				if u, err = strconv.ParseUint(s, 10, 8); err != nil {
-					return nil, newError(`"minClientVer[`, i, `]" should be lesser than 256`)
+					return nil, errors.New(`"minClientVer[`, i, `]" should be lesser than 256`)
 				} else {
 					config.MinClientVer[i] = byte(u)
 				}
@@ -572,23 +573,23 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			var u uint64
 			for i, s := range strings.Split(c.MaxClientVer, ".") {
 				if i == 3 {
-					return nil, newError(`invalid "maxClientVer": `, c.MaxClientVer)
+					return nil, errors.New(`invalid "maxClientVer": `, c.MaxClientVer)
 				}
 				if u, err = strconv.ParseUint(s, 10, 8); err != nil {
-					return nil, newError(`"maxClientVer[`, i, `]" should be lesser than 256`)
+					return nil, errors.New(`"maxClientVer[`, i, `]" should be lesser than 256`)
 				} else {
 					config.MaxClientVer[i] = byte(u)
 				}
 			}
 		}
 		if len(c.ShortIds) == 0 {
-			return nil, newError(`empty "shortIds"`)
+			return nil, errors.New(`empty "shortIds"`)
 		}
 		config.ShortIds = make([][]byte, len(c.ShortIds))
 		for i, s := range c.ShortIds {
 			config.ShortIds[i] = make([]byte, 8)
 			if _, err = hex.Decode(config.ShortIds[i], []byte(s)); err != nil {
-				return nil, newError(`invalid "shortIds[`, i, `]": `, s)
+				return nil, errors.New(`invalid "shortIds[`, i, `]": `, s)
 			}
 		}
 		config.Dest = s
@@ -598,35 +599,35 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 	} else {
 		if c.Fingerprint == "" {
-			return nil, newError(`empty "fingerprint"`)
+			return nil, errors.New(`empty "fingerprint"`)
 		}
 		if config.Fingerprint = strings.ToLower(c.Fingerprint); tls.GetFingerprint(config.Fingerprint) == nil {
-			return nil, newError(`unknown "fingerprint": `, config.Fingerprint)
+			return nil, errors.New(`unknown "fingerprint": `, config.Fingerprint)
 		}
 		if config.Fingerprint == "hellogolang" {
-			return nil, newError(`invalid "fingerprint": `, config.Fingerprint)
+			return nil, errors.New(`invalid "fingerprint": `, config.Fingerprint)
 		}
 		if len(c.ServerNames) != 0 {
-			return nil, newError(`non-empty "serverNames", please use "serverName" instead`)
+			return nil, errors.New(`non-empty "serverNames", please use "serverName" instead`)
 		}
 		if c.PublicKey == "" {
-			return nil, newError(`empty "publicKey"`)
+			return nil, errors.New(`empty "publicKey"`)
 		}
 		if config.PublicKey, err = base64.RawURLEncoding.DecodeString(c.PublicKey); err != nil || len(config.PublicKey) != 32 {
-			return nil, newError(`invalid "publicKey": `, c.PublicKey)
+			return nil, errors.New(`invalid "publicKey": `, c.PublicKey)
 		}
 		if len(c.ShortIds) != 0 {
-			return nil, newError(`non-empty "shortIds", please use "shortId" instead`)
+			return nil, errors.New(`non-empty "shortIds", please use "shortId" instead`)
 		}
 		config.ShortId = make([]byte, 8)
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
-			return nil, newError(`invalid "shortId": `, c.ShortId)
+			return nil, errors.New(`invalid "shortId": `, c.ShortId)
 		}
 		if c.SpiderX == "" {
 			c.SpiderX = "/"
 		}
 		if c.SpiderX[0] != '/' {
-			return nil, newError(`invalid "spiderX": `, c.SpiderX)
+			return nil, errors.New(`invalid "spiderX": `, c.SpiderX)
 		}
 		config.SpiderY = make([]int64, 10)
 		u, _ := url.Parse(c.SpiderX)
@@ -680,7 +681,7 @@ func (p TransportProtocol) Build() (string, error) {
 	case "splithttp":
 		return "splithttp", nil
 	default:
-		return "", newError("Config: unknown transport protocol: ", p)
+		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
 }
 
@@ -717,7 +718,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		case float64:
 			tfo = int32(math.Min(v, math.MaxInt32))
 		default:
-			return nil, newError("tcpFastOpen: only boolean and integer value is acceptable")
+			return nil, errors.New("tcpFastOpen: only boolean and integer value is acceptable")
 		}
 	}
 	var tproxy internet.SocketConfig_TProxyMode
@@ -755,7 +756,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	case "forceipv6v4":
 		dStrategy = internet.DomainStrategy_FORCE_IP64
 	default:
-		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
+		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
 	return &internet.SocketConfig{
@@ -817,34 +818,34 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		ts, err := tlsSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build TLS config.").Base(err)
+			return nil, errors.New("Failed to build TLS config.").Base(err)
 		}
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
 	case "reality":
 		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "domainsocket" {
-			return nil, newError("REALITY only supports TCP, H2, gRPC and DomainSocket for now.")
+			return nil, errors.New("REALITY only supports TCP, H2, gRPC and DomainSocket for now.")
 		}
 		if c.REALITYSettings == nil {
-			return nil, newError(`REALITY: Empty "realitySettings".`)
+			return nil, errors.New(`REALITY: Empty "realitySettings".`)
 		}
 		ts, err := c.REALITYSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build REALITY config.").Base(err)
+			return nil, errors.New("Failed to build REALITY config.").Base(err)
 		}
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
 	case "xtls":
-		return nil, newError(`Please use VLESS flow "xtls-rprx-vision" with TLS or REALITY.`)
+		return nil, errors.New(`Please use VLESS flow "xtls-rprx-vision" with TLS or REALITY.`)
 	default:
-		return nil, newError(`Unknown security "` + c.Security + `".`)
+		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
 	if c.TCPSettings != nil {
 		ts, err := c.TCPSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build TCP config.").Base(err)
+			return nil, errors.New("Failed to build TCP config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "tcp",
@@ -854,7 +855,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.KCPSettings != nil {
 		ts, err := c.KCPSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build mKCP config.").Base(err)
+			return nil, errors.New("Failed to build mKCP config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "mkcp",
@@ -864,7 +865,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.WSSettings != nil {
 		ts, err := c.WSSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build WebSocket config.").Base(err)
+			return nil, errors.New("Failed to build WebSocket config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "websocket",
@@ -874,7 +875,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.HTTPSettings != nil {
 		ts, err := c.HTTPSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build HTTP config.").Base(err)
+			return nil, errors.New("Failed to build HTTP config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "http",
@@ -884,7 +885,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.DSSettings != nil {
 		ds, err := c.DSSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build DomainSocket config.").Base(err)
+			return nil, errors.New("Failed to build DomainSocket config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "domainsocket",
@@ -894,7 +895,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.QUICSettings != nil {
 		qs, err := c.QUICSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build QUIC config").Base(err)
+			return nil, errors.New("Failed to build QUIC config").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "quic",
@@ -907,7 +908,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.GRPCConfig != nil {
 		gs, err := c.GRPCConfig.Build()
 		if err != nil {
-			return nil, newError("Failed to build gRPC config.").Base(err)
+			return nil, errors.New("Failed to build gRPC config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "grpc",
@@ -917,7 +918,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.HTTPUPGRADESettings != nil {
 		hs, err := c.HTTPUPGRADESettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build HttpUpgrade config.").Base(err)
+			return nil, errors.New("Failed to build HttpUpgrade config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
@@ -937,7 +938,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.SocketSettings != nil {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build sockopt").Base(err)
+			return nil, errors.New("Failed to build sockopt").Base(err)
 		}
 		config.SocketSettings = ss
 	}
@@ -954,7 +955,7 @@ type ProxyConfig struct {
 // Build implements Buildable.
 func (v *ProxyConfig) Build() (*internet.ProxyConfig, error) {
 	if v.Tag == "" {
-		return nil, newError("Proxy tag is not set.")
+		return nil, errors.New("Proxy tag is not set.")
 	}
 	return &internet.ProxyConfig{
 		Tag:                 v.Tag,

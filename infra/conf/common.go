@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
@@ -33,7 +34,7 @@ func (v *StringList) UnmarshalJSON(data []byte) error {
 		*v = *NewStringList(strlist)
 		return nil
 	}
-	return newError("unknown format of a string list: " + string(data))
+	return errors.New("unknown format of a string list: " + string(data))
 }
 
 type Address struct {
@@ -43,7 +44,7 @@ type Address struct {
 func (v *Address) UnmarshalJSON(data []byte) error {
 	var rawStr string
 	if err := json.Unmarshal(data, &rawStr); err != nil {
-		return newError("invalid address: ", string(data)).Base(err)
+		return errors.New("invalid address: ", string(data)).Base(err)
 	}
 	if strings.HasPrefix(rawStr, "env:") {
 		rawStr = platform.NewEnvFlag(rawStr[4:]).GetValue(func() string { return "" })
@@ -92,7 +93,7 @@ func (v *NetworkList) UnmarshalJSON(data []byte) error {
 		*v = nl
 		return nil
 	}
-	return newError("unknown format of a string list: " + string(data))
+	return errors.New("unknown format of a string list: " + string(data))
 }
 
 func (v *NetworkList) Build() []net.Network {
@@ -123,7 +124,7 @@ func parseStringPort(s string) (net.Port, net.Port, error) {
 
 	pair := strings.SplitN(s, "-", 2)
 	if len(pair) == 0 {
-		return net.Port(0), net.Port(0), newError("invalid port range: ", s)
+		return net.Port(0), net.Port(0), errors.New("invalid port range: ", s)
 	}
 	if len(pair) == 1 {
 		port, err := net.PortFromString(pair[0])
@@ -176,12 +177,12 @@ func (v *PortRange) UnmarshalJSON(data []byte) error {
 		v.From = uint32(from)
 		v.To = uint32(to)
 		if v.From > v.To {
-			return newError("invalid port range ", v.From, " -> ", v.To)
+			return errors.New("invalid port range ", v.From, " -> ", v.To)
 		}
 		return nil
 	}
 
-	return newError("invalid port range: ", string(data))
+	return errors.New("invalid port range: ", string(data))
 }
 
 type PortList struct {
@@ -202,7 +203,7 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 	var number uint32
 	if err := json.Unmarshal(data, &listStr); err != nil {
 		if err2 := json.Unmarshal(data, &number); err2 != nil {
-			return newError("invalid port: ", string(data)).Base(err2)
+			return errors.New("invalid port: ", string(data)).Base(err2)
 		}
 	}
 	rangelist := strings.Split(listStr, ",")
@@ -212,13 +213,13 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 			if strings.Contains(trimmed, "-") || strings.Contains(trimmed, "env:") {
 				from, to, err := parseStringPort(trimmed)
 				if err != nil {
-					return newError("invalid port range: ", trimmed).Base(err)
+					return errors.New("invalid port range: ", trimmed).Base(err)
 				}
 				list.Range = append(list.Range, PortRange{From: uint32(from), To: uint32(to)})
 			} else {
 				port, err := parseIntPort([]byte(trimmed))
 				if err != nil {
-					return newError("invalid port: ", trimmed).Base(err)
+					return errors.New("invalid port: ", trimmed).Base(err)
 				}
 				list.Range = append(list.Range, PortRange{From: uint32(port), To: uint32(port)})
 			}

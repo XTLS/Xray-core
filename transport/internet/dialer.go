@@ -5,6 +5,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
@@ -35,7 +36,7 @@ var transportDialerCache = make(map[string]dialFunc)
 // RegisterTransportDialer registers a Dialer with given name.
 func RegisterTransportDialer(protocol string, dialer dialFunc) error {
 	if _, found := transportDialerCache[protocol]; found {
-		return newError(protocol, " dialer already registered").AtError()
+		return errors.New(protocol, " dialer already registered").AtError()
 	}
 	transportDialerCache[protocol] = dialer
 	return nil
@@ -47,7 +48,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStrea
 		if streamSettings == nil {
 			s, err := ToMemoryStreamConfig(nil)
 			if err != nil {
-				return nil, newError("failed to create default stream settings").Base(err)
+				return nil, errors.New("failed to create default stream settings").Base(err)
 			}
 			streamSettings = s
 		}
@@ -55,7 +56,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStrea
 		protocol := streamSettings.ProtocolName
 		dialer := transportDialerCache[protocol]
 		if dialer == nil {
-			return nil, newError(protocol, " dialer not registered").AtError()
+			return nil, errors.New(protocol, " dialer not registered").AtError()
 		}
 		return dialer(ctx, dest, streamSettings)
 	}
@@ -63,12 +64,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStrea
 	if dest.Network == net.Network_UDP {
 		udpDialer := transportDialerCache["udp"]
 		if udpDialer == nil {
-			return nil, newError("UDP dialer not registered").AtError()
+			return nil, errors.New("UDP dialer not registered").AtError()
 		}
 		return udpDialer(ctx, dest, streamSettings)
 	}
 
-	return nil, newError("unknown network ", dest.Network)
+	return nil, errors.New("unknown network ", dest.Network)
 }
 
 // DestIpAddress returns the ip of proxy server. It is useful in case of Android client, which prepare an IP before proxy connection is established
@@ -110,13 +111,13 @@ func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig
 }
 
 func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
-	newError("redirecting request " + dst.String() + " to " + obt).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "redirecting request " + dst.String() + " to " + obt)
 	h := obm.GetHandler(obt)
 	outbounds := session.OutboundsFromContext(ctx)
-    ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
-		Target: dst, 
+	ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
+		Target:  dst,
 		Gateway: nil,
-		Tag: obt,
+		Tag:     obt,
 	})) // add another outbound in session ctx
 	if h != nil {
 		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
@@ -138,7 +139,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	var src net.Address
 	outbounds := session.OutboundsFromContext(ctx)
 	if len(outbounds) > 0 {
-		ob := outbounds[len(outbounds) - 1]
+		ob := outbounds[len(outbounds)-1]
 		src = ob.Gateway
 	}
 	if sockopt == nil {
@@ -149,9 +150,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		ips, err := lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
 		if err == nil && len(ips) > 0 {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
-			newError("replace destination with " + dest.String()).AtInfo().WriteToLog()
+			errors.LogInfo(ctx, "replace destination with " + dest.String())
 		} else if err != nil {
-			newError("failed to resolve ip").Base(err).AtWarning().WriteToLog()
+			errors.LogWarningInner(ctx, err, "failed to resolve ip")
 		}
 	}
 

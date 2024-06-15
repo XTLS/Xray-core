@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing/common/uot"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
@@ -44,15 +45,15 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 	}
 	if C.Contains(shadowaead_2022.List, config.Method) {
 		if config.Key == "" {
-			return nil, newError("missing psk")
+			return nil, errors.New("missing psk")
 		}
 		method, err := shadowaead_2022.NewWithPassword(config.Method, config.Key, nil)
 		if err != nil {
-			return nil, newError("create method").Base(err)
+			return nil, errors.New("create method").Base(err)
 		}
 		o.method = method
 	} else {
-		return nil, newError("unknown method ", config.Method)
+		return nil, errors.New("unknown method ", config.Method)
 	}
 	if config.UdpOverTcp {
 		o.uotClient = &uot.Client{Version: uint8(config.UdpOverTcpVersion)}
@@ -68,16 +69,16 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return newError("target not specified")
+		return errors.New("target not specified")
 	}
 	ob.Name = "shadowsocks-2022"
 	ob.CanSpliceCopy = 3
 	destination := ob.Target
 	network := destination.Network
 
-	newError("tunneling request to ", destination, " via ", o.server.NetAddr()).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", o.server.NetAddr())
 
 	serverDestination := o.server
 	if o.uotClient != nil {
@@ -87,7 +88,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 	connection, err := dialer.Dial(ctx, serverDestination)
 	if err != nil {
-		return newError("failed to connect to server").Base(err)
+		return errors.New("failed to connect to server").Base(err)
 	}
 
 	if session.TimeoutOnlyFromContext(ctx) {
@@ -100,7 +101,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		if timeoutReader, isTimeoutReader := link.Reader.(buf.TimeoutReader); isTimeoutReader {
 			mb, err := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 100)
 			if err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return newError("read payload").Base(err)
+				return errors.New("read payload").Base(err)
 			}
 			payload := B.New()
 			for {
@@ -111,7 +112,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 					_, err = serverConn.Write(payload.Bytes())
 					if err != nil {
 						payload.Release()
-						return newError("write payload").Base(err)
+						return errors.New("write payload").Base(err)
 					}
 					handshake = true
 				}
@@ -125,7 +126,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		if !handshake {
 			_, err = serverConn.Write(nil)
 			if err != nil {
-				return newError("client handshake").Base(err)
+				return errors.New("client handshake").Base(err)
 			}
 		}
 		return singbridge.CopyConn(ctx, inboundConn, link, serverConn)

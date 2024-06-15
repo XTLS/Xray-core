@@ -21,7 +21,7 @@ func readOneUDP(r io.Reader) (*Buffer, error) {
 	}
 
 	b.Release()
-	return nil, newError("Reader returns too many empty payloads.")
+	return nil, errors.New("Reader returns too many empty payloads.")
 }
 
 // ReadBuffer reads a Buffer from the given reader.

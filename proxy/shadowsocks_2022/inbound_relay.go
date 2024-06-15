@@ -15,6 +15,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -50,11 +51,11 @@ func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbou
 		destinations: config.Destinations,
 	}
 	if !C.Contains(shadowaead_2022.List, config.Method) || !strings.Contains(config.Method, "aes") {
-		return nil, newError("unsupported method ", config.Method)
+		return nil, errors.New("unsupported method ", config.Method)
 	}
 	service, err := shadowaead_2022.NewRelayServiceWithPassword[int](config.Method, config.Key, 500, inbound)
 	if err != nil {
-		return nil, newError("create service").Base(err)
+		return nil, errors.New("create service").Base(err)
 	}
 
 	for i, destination := range config.Destinations {
@@ -74,7 +75,7 @@ func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbou
 		}),
 	)
 	if err != nil {
-		return nil, newError("create service").Base(err)
+		return nil, errors.New("create service").Base(err)
 	}
 	inbound.service = service
 	return inbound, nil
@@ -135,7 +136,7 @@ func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadat
 		Status: log.AccessAccepted,
 		Email:  user.Email,
 	})
-	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
 	if err != nil {
@@ -158,7 +159,7 @@ func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketCon
 		Status: log.AccessAccepted,
 		Email:  user.Email,
 	})
-	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
 	link, err := dispatcher.Dispatch(ctx, destination)
@@ -177,5 +178,5 @@ func (i *RelayInbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}
-	newError(err).AtWarning().WriteToLog()
+	errors.LogWarning(ctx, err.Error())
 }

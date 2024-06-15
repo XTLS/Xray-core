@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -68,7 +69,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 		case internet.SocketConfig_Redirect:
 			d, err := tcp.GetOriginalDestination(conn)
 			if err != nil {
-				newError("failed to get original destination").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfoInner(ctx, err, "failed to get original destination")
 			} else {
 				dest = d
 			}
@@ -106,7 +107,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx = session.ContextWithContent(ctx, content)
 
 	if err := w.proxy.Process(ctx, net.Network_TCP, conn, w.dispatcher); err != nil {
-		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "connection ends")
 	}
 	cancel()
 	conn.Close()
@@ -122,24 +123,24 @@ func (w *tcpWorker) Start() error {
 		go w.callback(conn)
 	})
 	if err != nil {
-		return newError("failed to listen TCP on ", w.port).AtWarning().Base(err)
+		return errors.New("failed to listen TCP on ", w.port).AtWarning().Base(err)
 	}
 	w.hub = hub
 	return nil
 }
 
 func (w *tcpWorker) Close() error {
-	var errors []interface{}
+	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 		if err := common.Close(w.proxy); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 
 	return nil
@@ -328,7 +329,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 			}
 			ctx = session.ContextWithContent(ctx, content)
 			if err := w.proxy.Process(ctx, net.Network_UDP, conn, w.dispatcher); err != nil {
-				newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfoInner(ctx, err, "connection ends")
 			}
 			conn.Close()
 			// conn not removed by checker TODO may be lock worker here is better
@@ -359,7 +360,7 @@ func (w *udpWorker) clean() error {
 	defer w.Unlock()
 
 	if len(w.activeConn) == 0 {
-		return newError("no more connections. stopping...")
+		return errors.New("no more connections. stopping...")
 	}
 
 	for addr, conn := range w.activeConn {
@@ -403,26 +404,26 @@ func (w *udpWorker) Close() error {
 	w.Lock()
 	defer w.Unlock()
 
-	var errors []interface{}
+	var errs []interface{}
 
 	if w.hub != nil {
 		if err := w.hub.Close(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
 
 	if w.checker != nil {
 		if err := w.checker.Close(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
 
 	if err := common.Close(w.proxy); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 	return nil
 }
@@ -480,11 +481,11 @@ func (w *dsWorker) callback(conn stat.Connection) {
 	ctx = session.ContextWithContent(ctx, content)
 
 	if err := w.proxy.Process(ctx, net.Network_UNIX, conn, w.dispatcher); err != nil {
-		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "connection ends")
 	}
 	cancel()
 	if err := conn.Close(); err != nil {
-		newError("failed to close connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to close connection")
 	}
 }
 
@@ -502,24 +503,24 @@ func (w *dsWorker) Start() error {
 		go w.callback(conn)
 	})
 	if err != nil {
-		return newError("failed to listen Unix Domain Socket on ", w.address).AtWarning().Base(err)
+		return errors.New("failed to listen Unix Domain Socket on ", w.address).AtWarning().Base(err)
 	}
 	w.hub = hub
 	return nil
 }
 
 func (w *dsWorker) Close() error {
-	var errors []interface{}
+	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 		if err := common.Close(w.proxy); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 
 	return nil

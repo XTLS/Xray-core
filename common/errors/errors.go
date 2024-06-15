@@ -158,7 +158,7 @@ type ExportOption func(*ExportOptionHolder)
 
 // New returns a new error object with message formed from given arguments.
 func New(msg ...interface{}) *Error {
-	pc, _, _, _ := runtime.Caller(2)
+	pc, _, _, _ := runtime.Caller(1)
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
 		details = details[trim:]
@@ -171,22 +171,38 @@ func New(msg ...interface{}) *Error {
 }
 
 func LogDebug(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, log.Severity_Debug, msg...)
+	doLog(ctx, nil, log.Severity_Debug, msg...)
+}
+
+func LogDebugInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Debug, msg...)
 }
 
 func LogInfo(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, log.Severity_Info, msg...)
+	doLog(ctx, nil, log.Severity_Info, msg...)
+}
+
+func LogInfoInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Debug, msg...)
 }
 
 func LogWarning(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, log.Severity_Warning, msg...)
+	doLog(ctx, nil, log.Severity_Warning, msg...)
+}
+
+func LogWarningInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Debug, msg...)
 }
 
 func LogError(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, log.Severity_Error, msg...)
+	doLog(ctx, nil, log.Severity_Error, msg...)
 }
 
-func doLog(ctx context.Context, severity log.Severity, msg ...interface{}) {
+func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Debug, msg...)
+}
+
+func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
 	pc, _, _, _ := runtime.Caller(2)
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
@@ -196,10 +212,13 @@ func doLog(ctx context.Context, severity log.Severity, msg ...interface{}) {
 		message:  msg,
 		severity: severity,
 		caller:   details,
+		inner:    inner,
 	}
-	if ctx != nil {
+	if ctx != nil && ctx != context.Background() {
 		id := uint32(c.IDFromContext(ctx))
-		err.prefix = append(err.prefix, id)
+		if id > 0 {
+			err.prefix = append(err.prefix, id)
+		}
 	}
 	log.Record(&log.GeneralMessage{
 		Severity: GetSeverity(err),

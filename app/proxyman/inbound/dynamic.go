@@ -7,6 +7,7 @@ import (
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/task"
@@ -46,7 +47,7 @@ func NewDynamicInboundHandler(ctx context.Context, tag string, receiverConfig *p
 
 	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
 	if err != nil {
-		return nil, newError("failed to parse stream settings").Base(err).AtWarning()
+		return nil, errors.New("failed to parse stream settings").Base(err).AtWarning()
 	}
 	if receiverConfig.ReceiveOriginalDestination {
 		if mss.SocketSettings == nil {
@@ -94,7 +95,7 @@ func (h *DynamicInboundHandler) closeWorkers(workers []worker) {
 	for idx, worker := range workers {
 		ports2Del[idx] = worker.Port()
 		if err := worker.Close(); err != nil {
-			newError("failed to close worker").Base(err).WriteToLog()
+			errors.LogInfoInner(h.ctx, err, "failed to close worker")
 		}
 	}
 
@@ -123,7 +124,7 @@ func (h *DynamicInboundHandler) refresh() error {
 		port := h.allocatePort()
 		rawProxy, err := core.CreateObject(h.v, h.proxyConfig)
 		if err != nil {
-			newError("failed to create proxy instance").Base(err).AtWarning().WriteToLog()
+			errors.LogWarningInner(h.ctx, err, "failed to create proxy instance")
 			continue
 		}
 		p := rawProxy.(proxy.Inbound)
@@ -143,7 +144,7 @@ func (h *DynamicInboundHandler) refresh() error {
 				ctx:             h.ctx,
 			}
 			if err := worker.Start(); err != nil {
-				newError("failed to create TCP worker").Base(err).AtWarning().WriteToLog()
+				errors.LogWarningInner(h.ctx, err, "failed to create TCP worker")
 				continue
 			}
 			workers = append(workers, worker)
@@ -163,7 +164,7 @@ func (h *DynamicInboundHandler) refresh() error {
 				ctx:             h.ctx,
 			}
 			if err := worker.Start(); err != nil {
-				newError("failed to create UDP worker").Base(err).AtWarning().WriteToLog()
+				errors.LogWarningInner(h.ctx, err, "failed to create UDP worker")
 				continue
 			}
 			workers = append(workers, worker)
