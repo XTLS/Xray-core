@@ -30,8 +30,13 @@ type dialerConf struct {
 	*internet.MemoryStreamConfig
 }
 
+type reusedClient struct {
+	download *http.Client
+	upload   *http.Client
+}
+
 var (
-	globalDialerMap    map[dialerConf]*http.Client
+	globalDialerMap    map[dialerConf]reusedClient
 	globalDialerAccess sync.Mutex
 )
 
@@ -40,19 +45,19 @@ func destroyHTTPClient(ctx context.Context, dest net.Destination, streamSettings
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*http.Client)
+		globalDialerMap = make(map[dialerConf]reusedClient)
 	}
 
 	delete(globalDialerMap, dialerConf{dest, streamSettings})
 
 }
 
-func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) *http.Client {
+func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) reusedClient {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*http.Client)
+		globalDialerMap = make(map[dialerConf]reusedClient)
 	}
 
 	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
@@ -87,28 +92,45 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return conn, nil
 	}
 
-	var httpTransport http.RoundTripper
+	var uploadTransport http.RoundTripper
+	var downloadTransport http.RoundTripper
 
 	if tlsConfig != nil {
-		httpTransport = &http2.Transport{
+		downloadTransport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
 			IdleConnTimeout: 90 * time.Second,
 		}
+		uploadTransport = downloadTransport
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
 			return dialContext(ctxInner)
 		}
-		httpTransport = &http.Transport{
+
+		downloadTransport = &http.Transport{
+			DialTLSContext:  httpDialContext,
+			DialContext:     httpDialContext,
+			IdleConnTimeout: 90 * time.Second,
+			// chunked transfer download with keepalives is buggy with
+			// http.Client and our custom dial context.
+			DisableKeepAlives: true,
+		}
+
+		uploadTransport = &http.Transport{
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
 			IdleConnTimeout: 90 * time.Second,
 		}
 	}
 
-	client := &http.Client{
-		Transport: httpTransport,
+	client := reusedClient{
+		download: &http.Client{
+			Transport: downloadTransport,
+		},
+		upload: &http.Client{
+			Transport: uploadTransport,
+		},
 	}
 
 	globalDialerMap[dialerConf{dest, streamSettings}] = client
@@ -168,7 +190,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	req.Header = transportConfiguration.GetRequestHeader()
 
-	downResponse, err := httpClient.Do(req)
+	downResponse, err := httpClient.download.Do(req)
 	if err != nil {
 		// workaround for various connection pool related issues, mostly around
 		// HTTP/1.1. if the http client ever fails to send a request, we simply
@@ -220,7 +242,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				req.Header = transportConfiguration.GetRequestHeader()
 
-				resp, err := httpClient.Do(req)
+				resp, err := httpClient.upload.Do(req)
 				if err != nil {
 					newError("failed to send upload").Base(err).WriteToLog()
 					uploadPipeReader.Interrupt()
