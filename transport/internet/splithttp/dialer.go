@@ -33,6 +33,10 @@ type dialerConf struct {
 type reusedClient struct {
 	download *http.Client
 	upload   *http.Client
+	isH2     bool
+	// pool of net.Conn, created using dialUploadConn
+	uploadRawPool  *sync.Pool
+	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
 var (
@@ -117,11 +121,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			DisableKeepAlives: true,
 		}
 
-		uploadTransport = &http.Transport{
-			DialTLSContext:  httpDialContext,
-			DialContext:     httpDialContext,
-			IdleConnTimeout: 90 * time.Second,
-		}
+		// we use uploadRawPool for that
+		uploadTransport = nil
 	}
 
 	client := reusedClient{
@@ -131,6 +132,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		upload: &http.Client{
 			Transport: uploadTransport,
 		},
+		isH2:           tlsConfig != nil,
+		uploadRawPool:  &sync.Pool{},
+		dialUploadConn: dialContext,
 	}
 
 	globalDialerMap[dialerConf{dest, streamSettings}] = client
@@ -242,21 +246,48 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				req.Header = transportConfiguration.GetRequestHeader()
 
-				resp, err := httpClient.upload.Do(req)
-				if err != nil {
-					newError("failed to send upload").Base(err).WriteToLog()
-					uploadPipeReader.Interrupt()
-					return
+				if httpClient.isH2 {
+					resp, err := httpClient.upload.Do(req)
+					if err != nil {
+						newError("failed to send upload").Base(err).WriteToLog()
+						uploadPipeReader.Interrupt()
+						return
+					}
+					defer resp.Body.Close()
+
+					if resp.StatusCode != 200 {
+						newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
+						uploadPipeReader.Interrupt()
+						return
+					}
+				} else {
+					var err error
+					var uploadConn any
+					for _ = range 5 {
+						uploadConn = httpClient.uploadRawPool.Get()
+						if uploadConn == nil {
+							uploadConn, err = httpClient.dialUploadConn(ctx)
+							if err != nil {
+								newError("failed to connect upload").Base(err).WriteToLog()
+								uploadPipeReader.Interrupt()
+								return
+							}
+						}
+
+						err = req.Write(uploadConn.(net.Conn))
+						if err == nil {
+							break
+						}
+					}
+
+					if err != nil {
+						newError("failed to send upload").Base(err).WriteToLog()
+						uploadPipeReader.Interrupt()
+						return
+					}
+
+					httpClient.uploadRawPool.Put(uploadConn)
 				}
-
-				defer resp.Body.Close()
-
-				if resp.StatusCode != 200 {
-					newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
-					uploadPipeReader.Interrupt()
-					return
-				}
-
 			}()
 
 		}
