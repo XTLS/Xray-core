@@ -4,6 +4,7 @@ package dispatcher
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -186,8 +187,20 @@ func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResu
 		return false
 	}
 	for _, d := range request.ExcludeForDomain {
-		if strings.ToLower(domain) == d {
-			return false
+		if strings.HasPrefix(d, "regexp:") {
+			pattern := d[7:]
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				newError("Unable to compile regex").WriteToLog(session.ExportIDToError(ctx))
+				continue
+			}
+			if re.MatchString(domain) {
+				return false
+			}
+		} else {
+			if strings.ToLower(domain) == d {
+				return false
+			}
 		}
 	}
 	protocolString := result.Protocol()
@@ -223,7 +236,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		outbounds = []*session.Outbound{{}}
 		ctx = session.ContextWithOutbounds(ctx, outbounds)
 	}
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	ob.OriginalTarget = destination
 	ob.Target = destination
 	content := session.ContentFromContext(ctx)
@@ -280,7 +293,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		outbounds = []*session.Outbound{{}}
 		ctx = session.ContextWithOutbounds(ctx, outbounds)
 	}
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	ob.OriginalTarget = destination
 	ob.Target = destination
 	content := session.ContentFromContext(ctx)
@@ -371,7 +384,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 }
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if hosts, ok := d.dns.(dns.HostsLookup); ok && destination.Address.Family().IsDomain() {
 		proxied := hosts.LookupHosts(ob.Target.String())
 		if proxied != nil {
