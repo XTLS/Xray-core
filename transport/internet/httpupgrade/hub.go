@@ -62,7 +62,7 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 		ProtoMinor: 1,
 		Header:     http.Header{},
 	}
-	resp.Header.Set("Connection", "upgrade")
+	resp.Header.Set("Connection", "Upgrade")
 	resp.Header.Set("Upgrade", "websocket")
 	err = resp.Write(conn)
 	if err != nil {
