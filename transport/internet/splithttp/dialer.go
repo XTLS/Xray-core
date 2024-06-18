@@ -263,7 +263,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				} else {
 					var err error
 					var uploadConn any
-					for _ = range 5 {
+					for i := 0; i < 5; i++ {
 						uploadConn = httpClient.uploadRawPool.Get()
 						if uploadConn == nil {
 							uploadConn, err = httpClient.dialUploadConn(ctx)
