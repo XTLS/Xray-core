@@ -557,6 +557,9 @@ func applyTransportConfig(s *StreamConfig, t *TransportConfig) {
 	if s.HTTPUPGRADESettings == nil {
 		s.HTTPUPGRADESettings = t.HTTPUPGRADEConfig
 	}
+	if s.SplitHTTPSettings == nil {
+		s.SplitHTTPSettings = t.SplitHTTPConfig
+	}
 }
 
 // Build implements Buildable.

@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/quic"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
@@ -219,6 +220,34 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 		Header:              c.Headers,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
 		Ed:                  ed,
+	}
+	return config, nil
+}
+
+type SplitHTTPConfig struct {
+	Host                 string            `json:"host"`
+	Path                 string            `json:"path"`
+	Headers              map[string]string `json:"headers"`
+	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
+	MaxUploadSize        int32             `json:"maxUploadSize"`
+}
+
+// Build implements Buildable.
+func (c *SplitHTTPConfig) Build() (proto.Message, error) {
+	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
+	// If we don't do that, http host will be overwritten as address.
+	// Host priority: Host field > headers field > address.
+	if c.Host == "" && c.Headers["host"] != "" {
+		c.Host = c.Headers["host"]
+	} else if c.Host == "" && c.Headers["Host"] != "" {
+		c.Host = c.Headers["Host"]
+	}
+	config := &splithttp.Config{
+		Path:                 c.Path,
+		Host:                 c.Host,
+		Header:               c.Headers,
+		MaxConcurrentUploads: c.MaxConcurrentUploads,
+		MaxUploadSize:        c.MaxUploadSize,
 	}
 	return config, nil
 }
@@ -648,6 +677,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "grpc", nil
 	case "httpupgrade":
 		return "httpupgrade", nil
+	case "splithttp":
+		return "splithttp", nil
 	default:
 		return "", newError("Config: unknown transport protocol: ", p)
 	}
@@ -762,6 +793,7 @@ type StreamConfig struct {
 	GRPCConfig          *GRPCConfig         `json:"grpcSettings"`
 	GUNConfig           *GRPCConfig         `json:"gunSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig  `json:"httpupgradeSettings"`
+	SplitHTTPSettings   *SplitHTTPConfig    `json:"splithttpSettings"`
 }
 
 // Build implements Buildable.
@@ -889,6 +921,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
+			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.SplitHTTPSettings != nil {
+		hs, err := c.SplitHTTPSettings.Build()
+		if err != nil {
+			return nil, newError("Failed to build SplitHTTP config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "splithttp",
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
