@@ -42,7 +42,7 @@ func (h *requestHandler) maybeReapSession(isFullyConnected *done.Instance, sessi
 	shouldReap := done.New()
 	go func() {
 		time.Sleep(30 * time.Second)
-		shouldReap.Done()
+		shouldReap.Close()
 	}()
 
 	select {
@@ -154,7 +154,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		// after GET is done, the connection is finished. disable automatic
 		// session reaping, and handle it in defer
-		currentSession.isFullyConnected.Done()
+		currentSession.isFullyConnected.Close()
 		defer h.sessions.Delete(sessionId)
 
 		// magic header instructs nginx + apache to not buffer response body
