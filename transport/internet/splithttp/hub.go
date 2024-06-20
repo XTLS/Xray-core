@@ -29,6 +29,46 @@ type requestHandler struct {
 	localAddr gonet.TCPAddr
 }
 
+type httpSession struct {
+	uploadQueue *UploadQueue
+	// for as long as the GET request is not opened by the client, this will be
+	// open ("undone"), and the session may be expired within a certain TTL.
+	// after the client connects, this becomes "done" and the session lives as
+	// long as the GET request.
+	isFullyConnected *done.Instance
+}
+
+func (h *requestHandler) maybeReapSession(isFullyConnected *done.Instance, sessionId string) {
+	shouldReap := done.New()
+	go func() {
+		time.Sleep(30 * time.Second)
+		shouldReap.Done()
+	}()
+
+	select {
+	case <-isFullyConnected.Wait():
+		return
+	case <-shouldReap.Wait():
+		h.sessions.Delete(sessionId)
+	}
+}
+
+func (h *requestHandler) upsertSession(sessionId string) *httpSession {
+	currentSessionAny, ok := h.sessions.Load(sessionId)
+	if ok {
+		return currentSessionAny.(*httpSession)
+	}
+
+	s := &httpSession{
+		uploadQueue:      NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads())),
+		isFullyConnected: done.New(),
+	}
+
+	h.sessions.Store(sessionId, s)
+	go h.maybeReapSession(s.isFullyConnected, sessionId)
+	return s
+}
+
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if len(h.host) > 0 && request.Host != h.host {
 		newError("failed to validate host, request:", request.Host, ", config:", h.host).WriteToLog()
@@ -66,14 +106,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
-	if request.Method == "POST" {
-		uploadQueue, ok := h.sessions.Load(sessionId)
-		if !ok {
-			newError("sessionid does not exist").WriteToLog()
-			writer.WriteHeader(http.StatusBadRequest)
-			return
-		}
+	currentSession := h.upsertSession(sessionId)
 
+	if request.Method == "POST" {
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
@@ -99,7 +134,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		err = uploadQueue.(*UploadQueue).Push(Packet{
+		err = currentSession.uploadQueue.Push(Packet{
 			Payload: payload,
 			Seq:     seqInt,
 		})
@@ -117,10 +152,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			panic("expected http.ResponseWriter to be an http.Flusher")
 		}
 
-		uploadQueue := NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads()))
-
-		h.sessions.Store(sessionId, uploadQueue)
-		// the connection is finished, clean up map
+		// after GET is done, the connection is finished. disable automatic
+		// session reaping, and handle it in defer
+		currentSession.isFullyConnected.Done()
 		defer h.sessions.Delete(sessionId)
 
 		// magic header instructs nginx + apache to not buffer response body
@@ -140,7 +174,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				downloadDone:    downloadDone,
 				responseFlusher: responseFlusher,
 			},
-			reader:     uploadQueue,
+			reader:     currentSession.uploadQueue,
 			remoteAddr: remoteAddr,
 		}
 
