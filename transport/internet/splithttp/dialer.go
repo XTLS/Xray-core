@@ -185,7 +185,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	req, err := http.NewRequestWithContext(
 		httptrace.WithClientTrace(ctx, trace),
 		"GET",
-		requestURL.String()+"?session="+sessionId,
+		requestURL.String()+sessionId,
 		nil,
 	)
 	if err != nil {
@@ -213,7 +213,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, newError("invalid status code on download:", downResponse.Status)
 	}
 
-	uploadUrl := requestURL.String() + "?session=" + sessionId + "&seq="
+	uploadUrl := requestURL.String() + sessionId + "/"
 
 	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
 

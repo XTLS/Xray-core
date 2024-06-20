@@ -7,6 +7,7 @@ import (
 	gonet "net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,14 +35,19 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if request.URL.Path != h.path {
+
+	if !strings.HasPrefix(request.URL.Path, h.path) {
 		newError("failed to validate path, request:", request.URL.Path, ", config:", h.path).WriteToLog()
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	queryString := request.URL.Query()
-	sessionId := queryString.Get("session")
+	sessionId := ""
+	subpath := strings.Split(request.URL.Path[len(h.path):], "/")
+	if len(subpath) > 0 {
+		sessionId = subpath[0]
+	}
+
 	if sessionId == "" {
 		newError("no sessionid on request:", request.URL.Path).WriteToLog()
 		writer.WriteHeader(http.StatusBadRequest)
@@ -68,7 +74,11 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		seq := queryString.Get("seq")
+		seq := ""
+		if len(subpath) > 1 {
+			seq = subpath[1]
+		}
+
 		if seq == "" {
 			newError("no seq on request:", request.URL.Path).WriteToLog()
 			writer.WriteHeader(http.StatusBadRequest)
