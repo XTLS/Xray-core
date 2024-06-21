@@ -184,7 +184,7 @@ func Test_listenSHAndDial_H2C(t *testing.T) {
 			AllowHTTP: true,
 			// even with AllowHTTP, http2.Transport will attempt to establish
 			// the connection using DialTLSContext. Disable TLS with custom
-			// transport.
+			// dial context.
 			DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (gonet.Conn, error) {
 				var d gonet.Dialer
 				return d.DialContext(ctx, network, addr)
