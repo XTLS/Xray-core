@@ -58,6 +58,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
 
 	var gotlsConfig *gotls.Config
 
@@ -88,7 +89,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	var uploadTransport http.RoundTripper
 	var downloadTransport http.RoundTripper
 
-	if tlsConfig != nil {
+	if isH2 {
 		downloadTransport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
@@ -121,7 +122,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		upload: &http.Client{
 			Transport: uploadTransport,
 		},
-		isH2:           tlsConfig != nil,
+		isH2:           isH2,
 		uploadRawPool:  &sync.Pool{},
 		dialUploadConn: dialContext,
 	}
