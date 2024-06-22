@@ -3,6 +3,8 @@ package splithttp
 import (
 	"io"
 	"sync"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type LazyReader struct {
@@ -50,7 +52,7 @@ func (r *LazyReader) Close() error {
 	if r.reader != nil {
 		err = r.reader.Close()
 		r.reader = nil
-		r.readerError = newError("closed reader")
+		r.readerError = errors.New("closed reader")
 	}
 
 	return err

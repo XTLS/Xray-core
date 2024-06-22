@@ -928,7 +928,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.SplitHTTPSettings != nil {
 		hs, err := c.SplitHTTPSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build SplitHTTP config.").Base(err)
+			return nil, errors.New("Failed to build SplitHTTP config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "splithttp",

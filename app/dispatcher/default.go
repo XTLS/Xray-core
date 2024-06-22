@@ -192,7 +192,7 @@ func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResu
 			pattern := d[7:]
 			re, err := regexp.Compile(pattern)
 			if err != nil {
-				newError("Unable to compile regex").WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfo(ctx, "Unable to compile regex")
 				continue
 			}
 			if re.MatchString(domain) {
