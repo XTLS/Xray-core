@@ -127,6 +127,10 @@ func New(msg ...interface{}) *Error {
 	if len(details) >= trim {
 		details = details[trim:]
 	}
+	i := strings.Index(details, ".")
+	if i > 0 {
+		details = details[:i]
+	}
 	return &Error{
 		message:  msg,
 		severity: log.Severity_Info,
@@ -171,6 +175,10 @@ func doLog(ctx context.Context, inner error, severity log.Severity, msg ...inter
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
 		details = details[trim:]
+	}
+	i := strings.Index(details, ".")
+	if i > 0 {
+		details = details[:i]
 	}
 	err := &Error{
 		message:  msg,

@@ -43,7 +43,7 @@ func TestErrorMessage(t *testing.T) {
 	}{
 		{
 			err: New("a").Base(New("b")),
-			msg: "common/errors_test.TestErrorMessage: a > common/errors_test.TestErrorMessage: b",
+			msg: "common/errors_test: a > common/errors_test: b",
 		},
 	}
 
