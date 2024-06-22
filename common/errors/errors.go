@@ -3,7 +3,6 @@ package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
 	"context"
-	"reflect"
 	"runtime"
 	"strings"
 
@@ -25,28 +24,11 @@ type hasSeverity interface {
 
 // Error is an error object with underlying error.
 type Error struct {
-	pathObj  interface{}
 	prefix   []interface{}
 	message  []interface{}
 	caller   string
 	inner    error
 	severity log.Severity
-}
-
-func (err *Error) WithPathObj(obj interface{}) *Error {
-	err.pathObj = obj
-	return err
-}
-
-func (err *Error) pkgPath() string {
-	if err.pathObj == nil {
-		return ""
-	}
-	path := reflect.TypeOf(err.pathObj).PkgPath()
-	if len(path) >= trim {
-		return path[trim:]
-	}
-	return path
 }
 
 // Error implements error.Error().
@@ -130,24 +112,6 @@ func (err *Error) AtError() *Error {
 // String returns the string representation of this error.
 func (err *Error) String() string {
 	return err.Error()
-}
-
-// WriteToLog writes current error into log.
-func (err *Error) WriteToLog(opts ...ExportOption) {
-	var holder ExportOptionHolder
-
-	for _, opt := range opts {
-		opt(&holder)
-	}
-
-	if holder.SessionID > 0 {
-		err.prefix = append(err.prefix, holder.SessionID)
-	}
-
-	log.Record(&log.GeneralMessage{
-		Severity: GetSeverity(err),
-		Content:  err,
-	})
 }
 
 type ExportOptionHolder struct {
