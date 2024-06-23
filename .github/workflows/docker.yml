@@ -1,6 +1,8 @@
 name: Build docker image
 
 on:
+  release:
+    types: [published]
   push:
     branches:
       - main
@@ -19,6 +21,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/xray-core
           flavor: latest=true
           tags: |
+            type=sha
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
