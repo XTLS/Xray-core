@@ -2,7 +2,10 @@ package splithttp_test
 
 import (
 	"context"
+	gotls "crypto/tls"
 	"fmt"
+	gonet "net"
+	"net/http"
 	"runtime"
 	"testing"
 	"time"
@@ -15,6 +18,7 @@ import (
 	. "github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
 )
 
 func Test_listenSHAndDial(t *testing.T) {
@@ -150,5 +154,52 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
 		t.Error("end: ", end, " start: ", start)
+	}
+}
+
+func Test_listenSHAndDial_H2C(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		return
+	}
+
+	listenPort := tcp.PickPort()
+
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "shs",
+		},
+	}
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func() {
+			_ = conn.Close()
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	client := http.Client{
+		Transport: &http2.Transport{
+			// So http2.Transport doesn't complain the URL scheme isn't 'https'
+			AllowHTTP: true,
+			// even with AllowHTTP, http2.Transport will attempt to establish
+			// the connection using DialTLSContext. Disable TLS with custom
+			// dial context.
+			DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (gonet.Conn, error) {
+				var d gonet.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		},
+	}
+
+	resp, err := client.Get("http://" + net.LocalHostIP.String() + ":" + listenPort.String())
+	common.Must(err)
+
+	if resp.StatusCode != 404 {
+		t.Error("Expected 404 but got:", resp.StatusCode)
+	}
+
+	if resp.ProtoMajor != 2 {
+		t.Error("Expected h2 but got:", resp.ProtoMajor)
 	}
 }
