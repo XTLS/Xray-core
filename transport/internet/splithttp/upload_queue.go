@@ -47,7 +47,7 @@ func (h *UploadQueue) Close() error {
 }
 
 func (h *UploadQueue) Read(b []byte) (int, error) {
-	if h.closed && len(h.heap) == 0 && len(h.pushedPackets) == 0 {
+	if h.closed {
 		return 0, io.EOF
 	}
 
