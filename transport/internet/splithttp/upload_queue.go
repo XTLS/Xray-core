@@ -47,13 +47,19 @@ func (h *UploadQueue) Close() error {
 }
 
 func (h *UploadQueue) Read(b []byte) (int, error) {
-	if h.closed && len(h.heap) == 0 && len(h.pushedPackets) == 0 {
+	if h.closed {
 		return 0, io.EOF
 	}
 
-	needMorePackets := false
+	if len(h.heap) == 0 {
+		packet, more := <-h.pushedPackets
+		if !more {
+			return 0, io.EOF
+		}
+		heap.Push(&h.heap, packet)
+	}
 
-	if len(h.heap) > 0 {
+	for len(h.heap) > 0 {
 		packet := heap.Pop(&h.heap).(Packet)
 		n := 0
 
@@ -81,18 +87,12 @@ func (h *UploadQueue) Read(b []byte) (int, error) {
 				return 0, newError("packet queue is too large")
 			}
 			heap.Push(&h.heap, packet)
-			needMorePackets = true
+			packet2, more := <-h.pushedPackets
+			if !more {
+				return 0, io.EOF
+			}
+			heap.Push(&h.heap, packet2)
 		}
-	} else {
-		needMorePackets = true
-	}
-
-	if needMorePackets {
-		packet, more := <-h.pushedPackets
-		if !more {
-			return 0, io.EOF
-		}
-		heap.Push(&h.heap, packet)
 	}
 
 	return 0, nil
