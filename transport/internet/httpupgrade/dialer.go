@@ -36,8 +36,10 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 			strings.ToLower(resp.Header.Get("Connection")) != "upgrade" {
 			return 0, newError("unrecognized reply")
 		}
-		// drain remaining bufreader
-		return reader.Read(b[:reader.Buffered()])
+		if reader.Buffered() > 0 {
+			// drain remaining bufreader
+			return reader.Read(b[:reader.Buffered()])
+		}
 	}
 	return c.Conn.Read(b)
 }
