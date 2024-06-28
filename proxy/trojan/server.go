@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -22,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/restriction"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -35,6 +37,8 @@ func init() {
 
 // Server is an inbound connection handler that handles messages in trojan protocol.
 type Server struct {
+	sync.Mutex
+
 	policyManager policy.Manager
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
@@ -131,7 +135,7 @@ func (s *Server) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, usrIpRstrct *map[session.ID]*restriction.UserMaxIp, connIp *restriction.UserMaxIp) error {
 	sid := session.ExportIDToError(ctx)
 
 	iConn := conn
@@ -218,6 +222,29 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.CanSpliceCopy = 3
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
+
+	if sessionPolicy.Restriction.MaxIPs > 0 {
+		addr := conn.RemoteAddr().(*net.TCPAddr)
+
+		uniqueIps := make(map[string]bool)
+
+		s.Lock()
+		// Iterate through the connections and find unique used IP addresses withing last 30 seconds.
+		for _, conn := range *usrIpRstrct {
+			if conn.User == user.Email && !conn.IpAddress.Equal(addr.IP) && ((time.Now().Unix() - conn.Time) < 30) {
+				uniqueIps[conn.IpAddress.String()] = true
+			}
+		}
+		s.Unlock()
+
+		if len(uniqueIps) >= int(sessionPolicy.Restriction.MaxIPs) {
+			return newError("User ", user, " has exceeded their allowed IPs.").AtWarning()
+		}
+
+		connIp.IpAddress = addr.IP
+		connIp.User = user.Email
+		connIp.Time = time.Now().Unix()
+	}
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)

@@ -27,6 +27,9 @@ func defaultPolicy() *Policy {
 		Buffer: &Policy_Buffer{
 			Connection: p.Buffer.PerConnection,
 		},
+		Restriction: &Policy_Restriction{
+			MaxIPs: p.Restriction.MaxIPs,
+		},
 	}
 }
 
@@ -58,6 +61,11 @@ func (p *Policy) overrideWith(another *Policy) {
 			Connection: another.Buffer.Connection,
 		}
 	}
+	if another.Restriction != nil {
+		p.Restriction = &Policy_Restriction{
+			MaxIPs: another.Restriction.MaxIPs,
+		}
+	}
 }
 
 // ToCorePolicy converts this Policy to policy.Session.
@@ -76,6 +84,9 @@ func (p *Policy) ToCorePolicy() policy.Session {
 	}
 	if p.Buffer != nil {
 		cp.Buffer.PerConnection = p.Buffer.Connection
+	}
+	if p.Restriction != nil {
+		cp.Restriction.MaxIPs = p.Restriction.MaxIPs
 	}
 	return cp
 }

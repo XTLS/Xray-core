@@ -12,6 +12,7 @@ type Policy struct {
 	StatsUserUplink   bool    `json:"statsUserUplink"`
 	StatsUserDownlink bool    `json:"statsUserDownlink"`
 	BufferSize        *int32  `json:"bufferSize"`
+	MaxIPs            *int32  `json:"maxIPs"`
 }
 
 func (t *Policy) Build() (*policy.Policy, error) {
@@ -44,6 +45,12 @@ func (t *Policy) Build() (*policy.Policy, error) {
 		}
 		p.Buffer = &policy.Policy_Buffer{
 			Connection: bs,
+		}
+	}
+
+	if t.MaxIPs != nil {
+		p.Restriction = &policy.Policy_Restriction{
+			MaxIPs: (*t.MaxIPs),
 		}
 	}
 
