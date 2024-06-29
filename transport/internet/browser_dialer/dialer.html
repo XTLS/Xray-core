@@ -55,18 +55,21 @@
 									controller.abort();
 								} catch(e) {}
 							}
-							const response = await fetch(url, {signal: controller.signal});
 
-							const body = await response.body;
-							const reader = body.getReader();
+							try {
+								const response = await fetch(url, {signal: controller.signal});
 
-							while (true) {
-								const { done, value } = await reader.read();
-								ws.send(value);
-								if (done) break;
+								const body = await response.body;
+								const reader = body.getReader();
+
+								while (true) {
+									const { done, value } = await reader.read();
+									ws.send(value);
+									if (done) break;
+								}
+							} finally {
+								ws.close();
 							}
-
-							ws.close();
 						})()
 					} else if (method == "POST") {
 						console.log("Dial POST", url);
