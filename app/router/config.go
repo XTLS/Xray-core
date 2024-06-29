@@ -1,9 +1,11 @@
 package router
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
@@ -36,7 +38,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		case "linear":
 			matcher, err := NewDomainMatcher(rr.Domain)
 			if err != nil {
-				return nil, newError("failed to build domain condition").Base(err)
+				return nil, errors.New("failed to build domain condition").Base(err)
 			}
 			conds.Add(matcher)
 		case "mph", "hybrid":
@@ -44,9 +46,9 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		default:
 			matcher, err := NewMphMatcherGroup(rr.Domain)
 			if err != nil {
-				return nil, newError("failed to build domain condition with MphDomainMatcher").Base(err)
+				return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
 			}
-			newError("MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)").AtDebug().WriteToLog()
+			errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 			conds.Add(matcher)
 		}
 	}
@@ -116,7 +118,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if conds.Len() == 0 {
-		return nil, newError("this rule has no effective fields").AtWarning()
+		return nil, errors.New("this rule has no effective fields").AtWarning()
 	}
 
 	return conds, nil
@@ -146,7 +148,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 		}
 		s, ok := i.(*StrategyLeastLoadConfig)
 		if !ok {
-			return nil, newError("not a StrategyLeastLoadConfig").AtError()
+			return nil, errors.New("not a StrategyLeastLoadConfig").AtError()
 		}
 		leastLoadStrategy := NewLeastLoadStrategy(s)
 		return &Balancer{
@@ -165,6 +167,6 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 			strategy:    &RandomStrategy{FallbackTag: br.FallbackTag},
 		}, nil
 	default:
-		return nil, newError("unrecognized balancer type")
+		return nil, errors.New("unrecognized balancer type")
 	}
 }

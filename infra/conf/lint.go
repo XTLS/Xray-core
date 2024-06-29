@@ -1,5 +1,7 @@
 package conf
 
+import "github.com/xtls/xray-core/common/errors"
+
 type ConfigureFilePostProcessingStage interface {
 	Process(conf *Config) error
 }
@@ -16,7 +18,7 @@ func RegisterConfigureFilePostProcessingStage(name string, stage ConfigureFilePo
 func PostProcessConfigureFile(conf *Config) error {
 	for k, v := range configureFilePostProcessingStages {
 		if err := v.Process(conf); err != nil {
-			return newError("Rejected by Postprocessing Stage ", k).AtError().Base(err)
+			return errors.New("Rejected by Postprocessing Stage ", k).AtError().Base(err)
 		}
 	}
 	return nil

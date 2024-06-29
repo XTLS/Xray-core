@@ -1,12 +1,14 @@
 package buf
 
 import (
+	"context"
 	"io"
 	"net"
 	"os"
 	"syscall"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -18,7 +20,7 @@ type Reader interface {
 }
 
 // ErrReadTimeout is an error that happens with IO timeout.
-var ErrReadTimeout = newError("IO timeout")
+var ErrReadTimeout = errors.New("IO timeout")
 
 // TimeoutReader is a reader that returns error if Read() operation takes longer than the given timeout.
 type TimeoutReader interface {
@@ -74,7 +76,7 @@ func NewReader(reader io.Reader) Reader {
 		if sc, ok := reader.(syscall.Conn); ok {
 			rawConn, err := sc.SyscallConn()
 			if err != nil {
-				newError("failed to get sysconn").Base(err).WriteToLog()
+				errors.LogInfoInner(context.Background(), err, "failed to get sysconn")
 			} else {
 				var counter stats.Counter
 

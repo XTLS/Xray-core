@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/drain"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/vmess"
 	vmessaead "github.com/xtls/xray-core/proxy/vmess/aead"
@@ -53,7 +54,7 @@ func NewClientSession(ctx context.Context, behaviorSeed int64) *ClientSession {
 		var err error
 		session.readDrainer, err = drain.NewBehaviorSeedLimitedDrainer(behaviorSeed, 18, 3266, 64)
 		if err != nil {
-			newError("unable to initialize drainer").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "unable to initialize drainer")
 			session.readDrainer = drain.NewNopDrainer()
 		}
 	}
@@ -79,7 +80,7 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 
 	if header.Command != protocol.RequestCommandMux {
 		if err := addrParser.WriteAddressPort(buffer, header.Address, header.Port); err != nil {
-			return newError("failed to writer address and port").Base(err)
+			return errors.New("failed to writer address and port").Base(err)
 		}
 	}
 
@@ -112,7 +113,7 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 		var ok bool
 		padding, ok = sizeParser.(crypto.PaddingLengthGenerator)
 		if !ok {
-			return nil, newError("invalid option: RequestOptionGlobalPadding")
+			return nil, errors.New("invalid option: RequestOptionGlobalPadding")
 		}
 	}
 
@@ -173,7 +174,7 @@ func (c *ClientSession) EncodeRequestBody(request *protocol.RequestHeader, write
 		}
 		return crypto.NewAuthenticationWriter(auth, sizeParser, writer, request.Command.TransferType(), padding), nil
 	default:
-		return nil, newError("invalid option: Security")
+		return nil, errors.New("invalid option: Security")
 	}
 }
 
@@ -190,12 +191,12 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 
 	if n, err := io.ReadFull(reader, aeadEncryptedResponseHeaderLength[:]); err != nil {
 		c.readDrainer.AcknowledgeReceive(n)
-		return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Len").Base(err))
+		return nil, drain.WithError(c.readDrainer, reader, errors.New("Unable to Read Header Len").Base(err))
 	} else { // nolint: golint
 		c.readDrainer.AcknowledgeReceive(n)
 	}
 	if decryptedResponseHeaderLengthBinaryBuffer, err := aeadResponseHeaderLengthEncryptionAEAD.Open(nil, aeadResponseHeaderLengthEncryptionIV, aeadEncryptedResponseHeaderLength[:], nil); err != nil {
-		return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Length").Base(err))
+		return nil, drain.WithError(c.readDrainer, reader, errors.New("Failed To Decrypt Length").Base(err))
 	} else { // nolint: golint
 		common.Must(binary.Read(bytes.NewReader(decryptedResponseHeaderLengthBinaryBuffer), binary.BigEndian, &decryptedResponseHeaderLengthBinaryDeserializeBuffer))
 		decryptedResponseHeaderLength = int(decryptedResponseHeaderLengthBinaryDeserializeBuffer)
@@ -211,13 +212,13 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 
 	if n, err := io.ReadFull(reader, encryptedResponseHeaderBuffer); err != nil {
 		c.readDrainer.AcknowledgeReceive(n)
-		return nil, drain.WithError(c.readDrainer, reader, newError("Unable to Read Header Data").Base(err))
+		return nil, drain.WithError(c.readDrainer, reader, errors.New("Unable to Read Header Data").Base(err))
 	} else { // nolint: golint
 		c.readDrainer.AcknowledgeReceive(n)
 	}
 
 	if decryptedResponseHeaderBuffer, err := aeadResponseHeaderPayloadEncryptionAEAD.Open(nil, aeadResponseHeaderPayloadEncryptionIV, encryptedResponseHeaderBuffer, nil); err != nil {
-		return nil, drain.WithError(c.readDrainer, reader, newError("Failed To Decrypt Payload").Base(err))
+		return nil, drain.WithError(c.readDrainer, reader, errors.New("Failed To Decrypt Payload").Base(err))
 	} else { // nolint: golint
 		c.responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
 	}
@@ -226,11 +227,11 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 	defer buffer.Release()
 
 	if _, err := buffer.ReadFullFrom(c.responseReader, 4); err != nil {
-		return nil, newError("failed to read response header").Base(err).AtWarning()
+		return nil, errors.New("failed to read response header").Base(err).AtWarning()
 	}
 
 	if buffer.Byte(0) != c.responseHeader {
-		return nil, newError("unexpected response header. Expecting ", int(c.responseHeader), " but actually ", int(buffer.Byte(0)))
+		return nil, errors.New("unexpected response header. Expecting ", int(c.responseHeader), " but actually ", int(buffer.Byte(0)))
 	}
 
 	header := &protocol.ResponseHeader{
@@ -243,7 +244,7 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 
 		buffer.Clear()
 		if _, err := buffer.ReadFullFrom(c.responseReader, dataLen); err != nil {
-			return nil, newError("failed to read response command").Base(err)
+			return nil, errors.New("failed to read response command").Base(err)
 		}
 		command, err := UnmarshalCommand(cmdID, buffer.Bytes())
 		if err == nil {
@@ -265,7 +266,7 @@ func (c *ClientSession) DecodeResponseBody(request *protocol.RequestHeader, read
 		var ok bool
 		padding, ok = sizeParser.(crypto.PaddingLengthGenerator)
 		if !ok {
-			return nil, newError("invalid option: RequestOptionGlobalPadding")
+			return nil, errors.New("invalid option: RequestOptionGlobalPadding")
 		}
 	}
 
@@ -328,7 +329,7 @@ func (c *ClientSession) DecodeResponseBody(request *protocol.RequestHeader, read
 		}
 		return crypto.NewAuthenticationReader(auth, sizeParser, reader, request.Command.TransferType(), padding), nil
 	default:
-		return nil, newError("invalid option: Security")
+		return nil, errors.New("invalid option: Security")
 	}
 }
 

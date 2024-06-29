@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -102,7 +103,7 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader) error {
 		return err
 	}
 	if metaLen > 512 {
-		return newError("invalid metalen ", metaLen).AtError()
+		return errors.New("invalid metalen ", metaLen).AtError()
 	}
 
 	b := buf.New()
@@ -118,7 +119,7 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader) error {
 // Visible for testing only.
 func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 	if b.Len() < 4 {
-		return newError("insufficient buffer: ", b.Len())
+		return errors.New("insufficient buffer: ", b.Len())
 	}
 
 	f.SessionID = binary.BigEndian.Uint16(b.BytesTo(2))
@@ -129,14 +130,14 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 	if f.SessionStatus == SessionStatusNew || (f.SessionStatus == SessionStatusKeep && b.Len() > 4 &&
 		TargetNetwork(b.Byte(4)) == TargetNetworkUDP) { // MUST check the flag first
 		if b.Len() < 8 {
-			return newError("insufficient buffer: ", b.Len())
+			return errors.New("insufficient buffer: ", b.Len())
 		}
 		network := TargetNetwork(b.Byte(4))
 		b.Advance(5)
 
 		addr, port, err := addrParser.ReadAddressPort(nil, b)
 		if err != nil {
-			return newError("failed to parse address and port").Base(err)
+			return errors.New("failed to parse address and port").Base(err)
 		}
 
 		switch network {
@@ -145,7 +146,7 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 		case TargetNetworkUDP:
 			f.Target = net.UDPDestination(addr, port)
 		default:
-			return newError("unknown network type: ", network)
+			return errors.New("unknown network type: ", network)
 		}
 	}
 

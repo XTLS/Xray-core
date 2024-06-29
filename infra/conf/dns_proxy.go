@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/proxy/dns"
 	"google.golang.org/protobuf/proto"
@@ -30,7 +31,7 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 		c.NonIPQuery = "drop"
 	case "drop", "skip":
 	default:
-		return nil, newError(`unknown "nonIPQuery": `, c.NonIPQuery)
+		return nil, errors.New(`unknown "nonIPQuery": `, c.NonIPQuery)
 	}
 	config.Non_IPQuery = c.NonIPQuery
 	return config, nil

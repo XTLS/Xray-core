@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -13,11 +14,11 @@ import (
 )
 
 var (
-	ErrCommandTooLarge     = newError("Command too large.")
-	ErrCommandTypeMismatch = newError("Command type mismatch.")
-	ErrInvalidAuth         = newError("Invalid auth.")
-	ErrInsufficientLength  = newError("Insufficient length.")
-	ErrUnknownCommand      = newError("Unknown command.")
+	ErrCommandTooLarge     = errors.New("Command too large.")
+	ErrCommandTypeMismatch = errors.New("Command type mismatch.")
+	ErrInvalidAuth         = errors.New("Invalid auth.")
+	ErrInsufficientLength  = errors.New("Insufficient length.")
+	ErrUnknownCommand      = errors.New("Unknown command.")
 )
 
 func MarshalCommand(command interface{}, writer io.Writer) error {

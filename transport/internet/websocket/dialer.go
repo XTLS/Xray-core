@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
@@ -20,7 +21,7 @@ import (
 
 // Dial dials a WebSocket connection to the given destination.
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("creating connection to ", dest).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "creating connection to ", dest)
 	var conn net.Conn
 	if streamSettings.ProtocolSettings.(*Config).Ed > 0 {
 		ctx, cancel := context.WithCancel(ctx)
@@ -34,7 +35,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	} else {
 		var err error
 		if conn, err = dialWebSocket(ctx, dest, streamSettings, nil); err != nil {
-			return nil, newError("failed to dial WebSocket").Base(err)
+			return nil, errors.New("failed to dial WebSocket").Base(err)
 		}
 	}
 	return stat.Connection(conn), nil
@@ -67,18 +68,18 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				// Like the NetDial in the dialer
 				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
-					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
 					return nil, err
 				}
 				// TLS and apply the handshake
 				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 				if err := cn.WebsocketHandshakeContext(ctx); err != nil {
-					newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						newError("failed to dial to " + addr).Base(err).AtError().WriteToLog()
+						errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
 						return nil, err
 					}
 				}
@@ -114,7 +115,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		if resp != nil {
 			reason = resp.Status
 		}
-		return nil, newError("failed to dial to (", uri, "): ", reason).Base(err)
+		return nil, errors.New("failed to dial to (", uri, "): ", reason).Base(err)
 	}
 
 	return NewConnection(conn, conn.RemoteAddr(), nil), nil
@@ -142,7 +143,7 @@ func (d *delayDialConn) Write(b []byte) (int, error) {
 		var err error
 		if d.Conn, err = dialWebSocket(d.ctx, d.dest, d.streamSettings, ed); err != nil {
 			d.Close()
-			return 0, newError("failed to dial WebSocket").Base(err)
+			return 0, errors.New("failed to dial WebSocket").Base(err)
 		}
 		d.dialed <- true
 		if ed != nil {

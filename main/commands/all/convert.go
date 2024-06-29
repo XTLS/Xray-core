@@ -12,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/infra/conf/serial"
 	"github.com/xtls/xray-core/main/commands/base"
@@ -92,11 +93,11 @@ func loadArg(arg string) (out io.Reader, err error) {
 func FetchHTTPContent(target string) ([]byte, error) {
 	parsedTarget, err := url.Parse(target)
 	if err != nil {
-		return nil, newError("invalid URL: ", target).Base(err)
+		return nil, errors.New("invalid URL: ", target).Base(err)
 	}
 
 	if s := strings.ToLower(parsedTarget.Scheme); s != "http" && s != "https" {
-		return nil, newError("invalid scheme: ", parsedTarget.Scheme)
+		return nil, errors.New("invalid scheme: ", parsedTarget.Scheme)
 	}
 
 	client := &http.Client{
@@ -108,17 +109,17 @@ func FetchHTTPContent(target string) ([]byte, error) {
 		Close:  true,
 	})
 	if err != nil {
-		return nil, newError("failed to dial to ", target).Base(err)
+		return nil, errors.New("failed to dial to ", target).Base(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, newError("unexpected HTTP status code: ", resp.StatusCode)
+		return nil, errors.New("unexpected HTTP status code: ", resp.StatusCode)
 	}
 
 	content, err := buf.ReadAllToBytes(resp.Body)
 	if err != nil {
-		return nil, newError("failed to read HTTP response").Base(err)
+		return nil, errors.New("failed to read HTTP response").Base(err)
 	}
 
 	return content, nil

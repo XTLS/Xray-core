@@ -1,8 +1,10 @@
 package protocol
 
+import "github.com/xtls/xray-core/common/errors"
+
 func (u *User) GetTypedAccount() (Account, error) {
 	if u.GetAccount() == nil {
-		return nil, newError("Account missing").AtWarning()
+		return nil, errors.New("Account missing").AtWarning()
 	}
 
 	rawAccount, err := u.Account.GetInstance()
@@ -15,7 +17,7 @@ func (u *User) GetTypedAccount() (Account, error) {
 	if account, ok := rawAccount.(Account); ok {
 		return account, nil
 	}
-	return nil, newError("Unknown account type: ", u.Account.Type)
+	return nil, errors.New("Unknown account type: ", u.Account.Type)
 }
 
 func (u *User) ToMemoryUser() (*MemoryUser, error) {

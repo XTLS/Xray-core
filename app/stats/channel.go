@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 // Channel is an implementation of stats.Channel.
@@ -44,7 +45,7 @@ func (c *Channel) Subscribe() (chan interface{}, error) {
 	c.access.Lock()
 	defer c.access.Unlock()
 	if c.subsLimit > 0 && len(c.subscribers) >= c.subsLimit {
-		return nil, newError("Number of subscribers has reached limit")
+		return nil, errors.New("Number of subscribers has reached limit")
 	}
 	subscriber := make(chan interface{}, c.bufferSize)
 	c.subscribers = append(c.subscribers, subscriber)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
@@ -22,7 +23,7 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 	}
 
 	if fakeDNSEngine == nil {
-		errNotInit := newError("FakeDNSEngine is not initialized, but such a sniffer is used").AtError()
+		errNotInit := errors.New("FakeDNSEngine is not initialized, but such a sniffer is used").AtError()
 		return protocolSnifferWithMetadata{}, errNotInit
 	}
 	return protocolSnifferWithMetadata{protocolSniffer: func(ctx context.Context, bytes []byte) (SniffResult, error) {
@@ -31,7 +32,7 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		if ob.Target.Network == net.Network_TCP || ob.Target.Network == net.Network_UDP {
 			domainFromFakeDNS := fakeDNSEngine.GetDomainFromFakeDNS(ob.Target.Address)
 			if domainFromFakeDNS != "" {
-				newError("fake dns got domain: ", domainFromFakeDNS, " for ip: ", ob.Target.Address.String()).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfo(ctx, "fake dns got domain: ", domainFromFakeDNS, " for ip: ", ob.Target.Address.String())
 				return &fakeDNSSniffResult{domainName: domainFromFakeDNS}, nil
 			}
 		}
@@ -109,10 +110,10 @@ func newFakeDNSThenOthers(ctx context.Context, fakeDNSSniffer protocolSnifferWit
 					}
 					return nil, common.ErrNoClue
 				}
-				newError("ip address not in fake dns range, return as is").AtDebug().WriteToLog()
+				errors.LogDebug(ctx, "ip address not in fake dns range, return as is")
 				return nil, common.ErrNoClue
 			}
-			newError("fake dns sniffer did not set address in range option, assume false.").AtWarning().WriteToLog()
+			errors.LogWarning(ctx, "fake dns sniffer did not set address in range option, assume false.")
 			return nil, common.ErrNoClue
 		},
 		metadataSniffer: false,

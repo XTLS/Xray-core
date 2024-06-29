@@ -54,7 +54,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	case 0, net.IPv4len, net.IPv6len:
 		clientIP = net.IP(config.ClientIp)
 	default:
-		return nil, newError("unexpected client IP length ", len(config.ClientIp))
+		return nil, errors.New("unexpected client IP length ", len(config.ClientIp))
 	}
 
 	var ipOption *dns.IPOption
@@ -81,7 +81,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 
 	hosts, err := NewStaticHosts(config.StaticHosts, config.Hosts)
 	if err != nil {
-		return nil, newError("failed to create hosts").Base(err)
+		return nil, errors.New("failed to create hosts").Base(err)
 	}
 
 	clients := []*Client{}
@@ -99,7 +99,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		features.PrintDeprecatedFeatureWarning("simple DNS server")
 		client, err := NewSimpleClient(ctx, endpoint, clientIP)
 		if err != nil {
-			return nil, newError("failed to create client").Base(err)
+			return nil, errors.New("failed to create client").Base(err)
 		}
 		clients = append(clients, client)
 	}
@@ -122,7 +122,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		}
 		client, err := NewClient(ctx, ns, myClientIP, geoipContainer, &matcherInfos, updateDomain)
 		if err != nil {
-			return nil, newError("failed to create client").Base(err)
+			return nil, errors.New("failed to create client").Base(err)
 		}
 		clients = append(clients, client)
 	}
@@ -170,7 +170,7 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	if domain == "" {
-		return nil, newError("empty domain name")
+		return nil, errors.New("empty domain name")
 	}
 
 	option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
@@ -190,10 +190,10 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	case len(addrs) == 0: // Domain recorded, but no valid IP returned (e.g. IPv4 address with only IPv6 enabled)
 		return nil, dns.ErrEmptyResponse
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Domain replacement
-		newError("domain replaced: ", domain, " -> ", addrs[0].Domain()).WriteToLog()
+		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].Domain())
 		domain = addrs[0].Domain()
 	default: // Successfully found ip records in static host
-		newError("returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs).WriteToLog()
+		errors.LogInfo(s.ctx, "returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs)
 		return toNetIP(addrs)
 	}
 
@@ -202,7 +202,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
 	for _, client := range s.sortClients(domain) {
 		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
-			newError("skip DNS resolution for domain ", domain, " at server ", client.Name()).AtDebug().WriteToLog()
+			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
 			continue
 		}
 		ips, err := client.QueryIP(ctx, domain, option, s.disableCache)
@@ -210,7 +210,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 			return ips, nil
 		}
 		if err != nil {
-			newError("failed to lookup ip for domain ", domain, " at server ", client.Name()).Base(err).WriteToLog()
+			errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name())
 			errs = append(errs, err)
 		}
 		// 5 for RcodeRefused in miekg/dns, hardcode to reduce binary size
@@ -219,7 +219,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 		}
 	}
 
-	return nil, newError("returning nil for domain ", domain).Base(errors.Combine(errs...))
+	return nil, errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
 // LookupHosts implements dns.HostsLookup.
@@ -231,7 +231,7 @@ func (s *DNS) LookupHosts(domain string) *net.Address {
 	// Normalize the FQDN form query
 	addrs := s.hosts.Lookup(domain, *s.ipOption)
 	if len(addrs) > 0 {
-		newError("domain replaced: ", domain, " -> ", addrs[0].String()).AtInfo().WriteToLog()
+		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].String())
 		return &addrs[0]
 	}
 
@@ -289,16 +289,16 @@ func (s *DNS) sortClients(domain string) []*Client {
 	}
 
 	if len(domainRules) > 0 {
-		newError("domain ", domain, " matches following rules: ", domainRules).AtDebug().WriteToLog()
+		errors.LogDebug(s.ctx, "domain ", domain, " matches following rules: ", domainRules)
 	}
 	if len(clientNames) > 0 {
-		newError("domain ", domain, " will use DNS in order: ", clientNames).AtDebug().WriteToLog()
+		errors.LogDebug(s.ctx, "domain ", domain, " will use DNS in order: ", clientNames)
 	}
 
 	if len(clients) == 0 {
 		clients = append(clients, s.clients[0])
 		clientNames = append(clientNames, s.clients[0].Name())
-		newError("domain ", domain, " will use the first DNS: ", clientNames).AtDebug().WriteToLog()
+		errors.LogDebug(s.ctx, "domain ", domain, " will use the first DNS: ", clientNames)
 	}
 
 	return clients

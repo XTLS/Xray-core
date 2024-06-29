@@ -17,6 +17,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -53,15 +54,15 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		users:    config.Users,
 	}
 	if config.Key == "" {
-		return nil, newError("missing key")
+		return nil, errors.New("missing key")
 	}
 	psk, err := base64.StdEncoding.DecodeString(config.Key)
 	if err != nil {
-		return nil, newError("parse config").Base(err)
+		return nil, errors.New("parse config").Base(err)
 	}
 	service, err := shadowaead_2022.NewMultiService[int](config.Method, psk, 500, inbound, nil)
 	if err != nil {
-		return nil, newError("create service").Base(err)
+		return nil, errors.New("create service").Base(err)
 	}
 
 	for i, user := range config.Users {
@@ -75,7 +76,7 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		C.Map(config.Users, func(it *User) string { return it.Key }),
 	)
 	if err != nil {
-		return nil, newError("create service").Base(err)
+		return nil, errors.New("create service").Base(err)
 	}
 
 	inbound.service = service
@@ -91,7 +92,7 @@ func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) 
 	if account.Email != "" {
 		for idx := range i.users {
 			if i.users[idx].Email == account.Email {
-				return newError("User ", account.Email, " already exists.")
+				return errors.New("User ", account.Email, " already exists.")
 			}
 		}
 	}
@@ -114,7 +115,7 @@ func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
-		return newError("Email must not be empty.")
+		return errors.New("Email must not be empty.")
 	}
 
 	i.Lock()
@@ -129,7 +130,7 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	}
 
 	if idx == -1 {
-		return newError("User ", email, " not found.")
+		return errors.New("User ", email, " not found.")
 	}
 
 	ulen := len(i.users)
@@ -203,11 +204,11 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 		Status: log.AccessAccepted,
 		Email:  user.Email,
 	})
-	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
 	if !destination.IsValid() {
-		return newError("invalid destination")
+		return errors.New("invalid destination")
 	}
 
 	link, err := dispatcher.Dispatch(ctx, destination)
@@ -231,7 +232,7 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 		Status: log.AccessAccepted,
 		Email:  user.Email,
 	})
-	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
 	link, err := dispatcher.Dispatch(ctx, destination)
@@ -250,5 +251,5 @@ func (i *MultiUserInbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}
-	newError(err).AtWarning().WriteToLog()
+	errors.LogWarning(ctx, err.Error())
 }

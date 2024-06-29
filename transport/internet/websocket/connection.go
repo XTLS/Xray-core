@@ -74,13 +74,13 @@ func (c *Connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 func (c *Connection) Close() error {
 	var errors []interface{}
 	if err := c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 	if err := c.conn.Close(); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
-	if len(errors) > 0 {
-		return newError("failed to close connection").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close connection").Base(errors.New(serial.Concat(errs...)))
 	}
 	return nil
 }

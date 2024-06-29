@@ -3,6 +3,7 @@ package conf
 import (
 	"sort"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/headers/dns"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
@@ -133,7 +134,7 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, newError("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key).AtError()
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,
@@ -201,7 +202,7 @@ func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, newError("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key).AtError()
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,

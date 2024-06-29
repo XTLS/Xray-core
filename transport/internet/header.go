@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type PacketHeader interface {
@@ -20,7 +21,7 @@ func CreatePacketHeader(config interface{}) (PacketHeader, error) {
 	if h, ok := header.(PacketHeader); ok {
 		return h, nil
 	}
-	return nil, newError("not a packet header")
+	return nil, errors.New("not a packet header")
 }
 
 type ConnectionAuthenticator interface {
@@ -36,5 +37,5 @@ func CreateConnectionAuthenticator(config interface{}) (ConnectionAuthenticator,
 	if a, ok := auth.(ConnectionAuthenticator); ok {
 		return a, nil
 	}
-	return nil, newError("not a ConnectionAuthenticator")
+	return nil, errors.New("not a ConnectionAuthenticator")
 }

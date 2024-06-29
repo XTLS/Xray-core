@@ -12,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/semaphore"
@@ -134,7 +135,7 @@ func init() {
 }
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("dialing splithttp to ", dest).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "dialing splithttp to ", dest)
 
 	var requestURL url.URL
 
@@ -191,7 +192,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				)
 
 				if err != nil {
-					newError("failed to send upload").Base(err).WriteToLog()
+					errors.LogInfoInner(ctx, err, "failed to send upload")
 					uploadPipeReader.Interrupt()
 				}
 			}()

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -73,13 +73,13 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if len(h.host) > 0 && request.Host != h.host {
-		newError("failed to validate host, request:", request.Host, ", config:", h.host).WriteToLog()
+		errors.LogInfo(context.Background(), "failed to validate host, request:", request.Host, ", config:", h.host)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	if !strings.HasPrefix(request.URL.Path, h.path) {
-		newError("failed to validate path, request:", request.URL.Path, ", config:", h.path).WriteToLog()
+		errors.LogInfo(context.Background(), "failed to validate path, request:", request.URL.Path, ", config:", h.path)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -91,7 +91,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	if sessionId == "" {
-		newError("no sessionid on request:", request.URL.Path).WriteToLog()
+		errors.LogInfo(context.Background(), "no sessionid on request:", request.URL.Path)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -117,21 +117,21 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if seq == "" {
-			newError("no seq on request:", request.URL.Path).WriteToLog()
+			errors.LogInfo(context.Background(), "no seq on request:", request.URL.Path)
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		payload, err := io.ReadAll(request.Body)
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		seqInt, err := strconv.ParseUint(seq, 10, 64)
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -142,7 +142,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		})
 
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -249,9 +249,9 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen unix domain socket(for SH) on ", address).Base(err)
+			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
 		}
-		newError("listening unix domain socket(for SH) on ", address).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
 	} else { // tcp
 		localAddr = gonet.TCPAddr{
 			IP:   address.IP(),
@@ -262,9 +262,9 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
-		newError("listening TCP(for SH) on ", address, ":", port).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
 	}
 
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
@@ -294,7 +294,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	go func() {
 		if err := l.server.Serve(l.listener); err != nil {
-			newError("failed to serve http for splithttp").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
 		}
 	}()
 

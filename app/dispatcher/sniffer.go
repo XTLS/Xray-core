@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/bittorrent"
 	"github.com/xtls/xray-core/common/protocol/http"
@@ -52,7 +53,7 @@ func NewSniffer(ctx context.Context) *Sniffer {
 	return ret
 }
 
-var errUnknownContent = newError("unknown content")
+var errUnknownContent = errors.New("unknown content")
 
 func (s *Sniffer) Sniff(c context.Context, payload []byte, network net.Network) (SniffResult, error) {
 	var pendingSniffer []protocolSnifferWithMetadata

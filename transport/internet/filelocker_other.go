@@ -4,8 +4,10 @@
 package internet
 
 import (
+	"context"
 	"os"
 
+	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -17,7 +19,7 @@ func (fl *FileLocker) Acquire() error {
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		f.Close()
-		return newError("failed to lock file: ", fl.path).Base(err)
+		return errors.New("failed to lock file: ", fl.path).Base(err)
 	}
 	fl.file = f
 	return nil
@@ -26,12 +28,12 @@ func (fl *FileLocker) Acquire() error {
 // Release lock
 func (fl *FileLocker) Release() {
 	if err := unix.Flock(int(fl.file.Fd()), unix.LOCK_UN); err != nil {
-		newError("failed to unlock file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to unlock file: ", fl.path)
 	}
 	if err := fl.file.Close(); err != nil {
-		newError("failed to close file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to close file: ", fl.path)
 	}
 	if err := os.Remove(fl.path); err != nil {
-		newError("failed to remove file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to remove file: ", fl.path)
 	}
 }
