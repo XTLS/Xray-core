@@ -163,7 +163,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.Header().Set("X-Accel-Buffering", "no")
 		// magic header to make the HTTP middle box consider this as SSE to disable buffer
 		writer.Header().Set("Content-Type", "text/event-stream")
-		
+
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
 		// many CDN buffer the response headers until the origin starts sending

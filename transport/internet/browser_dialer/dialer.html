@@ -1,0 +1,105 @@
+<!-- vim: set noexpandtab: -->
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Browser Dialer</title>
+</head>
+<body>
+	<script>
+		// Copyright (c) 2021 XRAY. Mozilla Public License 2.0.
+		var url = "ws://" + window.location.host + "/websocket?token=csrfToken"
+		var count = 0
+		setInterval(check, 1000)
+		function check() {
+			if (count <= 0) {
+				count += 1
+				console.log("Prepare", url)
+				var ws = new WebSocket(url)
+				// arraybuffer is significantly faster in chrome than default
+				// blob, tested with chrome 123
+				ws.binaryType = "arraybuffer";
+				ws.onmessage = function (event) {
+					count -= 1;
+					let [method, url, protocol] = event.data.split(" ");
+					if (method == "WS") {
+						console.log("Dial WS", url, protocol);
+						const wss = new WebSocket(url, protocol);
+						wss.binaryType = "arraybuffer";
+						var opened = false;
+						ws.onmessage = function (event) {
+							wss.send(event.data)
+						}
+						wss.onopen = function (event) {
+							opened = true;
+							ws.send("ok")
+						}
+						wss.onmessage = function (event) {
+							ws.send(event.data)
+						}
+						wss.onclose = function (event) {
+							ws.close()
+						}
+						wss.onerror = function (event) {
+							!opened && ws.send("fail")
+							wss.close()
+						}
+						ws.onclose = function (event) {
+							wss.close()
+						}
+					} else if (method == "GET") {
+						(async () => {
+							console.log("Dial GET", url);
+							ws.send("ok");
+							const controller = new AbortController();
+							const response = await fetch(url, {signal: controller.signal});
+							const body = await response.body;
+							const reader = body.getReader();
+
+							ws.onclose = function (event) {
+								try {
+									controller.abort();
+								} catch(e) {}
+							}
+
+							while (true) {
+								const { done, value } = await reader.read();
+								console.log("chunk download");
+								ws.send(value);
+								if (done) break;
+							}
+
+							ws.close();
+						})()
+					} else if (method == "POST") {
+						console.log("Dial POST", url);
+						ws.send("ok");
+						let body;
+						ws.onmessage = function (event) {
+							if (event.data.byteLength == 0) {
+								console.log("start upload");
+								(async () => {
+									const response = await fetch(
+										url,
+										{method: "POST", body}
+									);
+									if (response.ok) {
+										ws.send("ok");
+										ws.close();
+									}
+								})();
+							} else {
+								body = event.data;
+							}
+						};
+					}
+
+					check()
+				}
+				ws.onerror = function (event) {
+					ws.close()
+				}
+			}
+		}
+	</script>
+</body>
+</html>
