@@ -8,10 +8,10 @@ type errorCollector struct {
 
 func (e *errorCollector) SubmitError(err error) {
 	if e.errors == nil {
-		e.errors = newError("underlying connection error").Base(err)
+		e.errors = errors.New("underlying connection error").Base(err)
 		return
 	}
-	e.errors = e.errors.Base(newError("underlying connection error").Base(err))
+	e.errors = e.errors.Base(errors.New("underlying connection error").Base(err))
 }
 
 func newErrorCollector() *errorCollector {
@@ -20,7 +20,7 @@ func newErrorCollector() *errorCollector {
 
 func (e *errorCollector) UnderlyingError() error {
 	if e.errors == nil {
-		return newError("failed to produce report")
+		return errors.New("failed to produce report")
 	}
 	return e.errors
 }

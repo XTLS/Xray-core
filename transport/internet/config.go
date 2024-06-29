@@ -1,6 +1,7 @@
 package internet
 
 import (
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
@@ -52,7 +53,7 @@ func transportProtocolToString(protocol TransportProtocol) string {
 
 func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 	if _, found := globalTransportConfigCreatorCache[name]; found {
-		return newError("protocol ", name, " is already registered").AtError()
+		return errors.New("protocol ", name, " is already registered").AtError()
 	}
 	globalTransportConfigCreatorCache[name] = creator
 	return nil
@@ -63,7 +64,7 @@ func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 func CreateTransportConfig(name string) (interface{}, error) {
 	creator, ok := globalTransportConfigCreatorCache[name]
 	if !ok {
-		return nil, newError("unknown transport protocol: ", name)
+		return nil, errors.New("unknown transport protocol: ", name)
 	}
 	return creator(), nil
 }

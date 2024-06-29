@@ -14,8 +14,8 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/signal/semaphore"
 	"github.com/xtls/xray-core/common/uuid"
@@ -136,7 +136,7 @@ func init() {
 }
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("dialing splithttp to ", dest).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "dialing splithttp to ", dest)
 
 	var requestURL url.URL
 
@@ -191,7 +191,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			nil,
 		)
 		if err != nil {
-			newError("failed to construct download http request").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "failed to construct download http request")
 			gotDownResponse.Close()
 			return
 		}
@@ -201,14 +201,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		response, err := httpClient.download.Do(req)
 		gotConn.Close()
 		if err != nil {
-			newError("failed to send download http request").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "failed to send download http request")
 			gotDownResponse.Close()
 			return
 		}
 
 		if response.StatusCode != 200 {
 			response.Body.Close()
-			newError("invalid status code on download:", response.Status).WriteToLog()
+			errors.LogInfo(ctx, "invalid status code on download:", response.Status)
 			gotDownResponse.Close()
 			return
 		}
@@ -219,7 +219,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			_, err = io.ReadFull(response.Body, trashHeader)
 			if err != nil {
 				response.Body.Close()
-				newError("failed to read initial response").Base(err).WriteToLog()
+				errors.LogInfoInner(ctx, err, "failed to read initial response")
 				gotDownResponse.Close()
 				return
 			}
@@ -258,7 +258,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				defer requestsLimiter.Signal()
 				req, err := http.NewRequest("POST", url, &buf.MultiBufferContainer{MultiBuffer: chunk})
 				if err != nil {
-					newError("failed to send upload").Base(err).WriteToLog()
+					errors.LogInfoInner(ctx, err, "failed to send upload")
 					uploadPipeReader.Interrupt()
 					return
 				}
@@ -268,14 +268,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				if httpClient.isH2 {
 					resp, err := httpClient.upload.Do(req)
 					if err != nil {
-						newError("failed to send upload").Base(err).WriteToLog()
+						errors.LogInfoInner(ctx, err, "failed to send upload")
 						uploadPipeReader.Interrupt()
 						return
 					}
 					defer resp.Body.Close()
 
 					if resp.StatusCode != 200 {
-						newError("failed to send upload, bad status code:", resp.Status).WriteToLog()
+						errors.LogInfo(ctx, "failed to send upload, bad status code:", resp.Status)
 						uploadPipeReader.Interrupt()
 						return
 					}
@@ -287,7 +287,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 						if uploadConn == nil {
 							uploadConn, err = httpClient.dialUploadConn(context.WithoutCancel(ctx))
 							if err != nil {
-								newError("failed to connect upload").Base(err).WriteToLog()
+								errors.LogInfoInner(ctx, err, "failed to connect upload")
 								uploadPipeReader.Interrupt()
 								return
 							}
@@ -300,7 +300,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					}
 
 					if err != nil {
-						newError("failed to send upload").Base(err).WriteToLog()
+						errors.LogInfoInner(ctx, err, "failed to send upload")
 						uploadPipeReader.Interrupt()
 						return
 					}
@@ -324,7 +324,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		CreateReader: func() (io.ReadCloser, error) {
 			<-gotDownResponse.Wait()
 			if downResponse == nil {
-				return nil, newError("downResponse failed")
+				return nil, errors.New("downResponse failed")
 			}
 			return downResponse, nil
 		},

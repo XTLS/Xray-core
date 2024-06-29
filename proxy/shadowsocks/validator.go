@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 )
 
@@ -21,7 +22,7 @@ type Validator struct {
 	behaviorFused bool
 }
 
-var ErrNotFound = newError("Not Found")
+var ErrNotFound = errors.New("Not Found")
 
 // Add a Shadowsocks user.
 func (v *Validator) Add(u *protocol.MemoryUser) error {
@@ -30,7 +31,7 @@ func (v *Validator) Add(u *protocol.MemoryUser) error {
 
 	account := u.Account.(*MemoryAccount)
 	if !account.Cipher.IsAEAD() && len(v.users) > 0 {
-		return newError("The cipher is not support Single-port Multi-user")
+		return errors.New("The cipher is not support Single-port Multi-user")
 	}
 	v.users = append(v.users, u)
 
@@ -46,7 +47,7 @@ func (v *Validator) Add(u *protocol.MemoryUser) error {
 // Del a Shadowsocks user with a non-empty Email.
 func (v *Validator) Del(email string) error {
 	if email == "" {
-		return newError("Email must not be empty.")
+		return errors.New("Email must not be empty.")
 	}
 
 	v.Lock()
@@ -62,7 +63,7 @@ func (v *Validator) Del(email string) error {
 	}
 
 	if idx == -1 {
-		return newError("User ", email, " not found.")
+		return errors.New("User ", email, " not found.")
 	}
 	ulen := len(v.users)
 

@@ -1,10 +1,12 @@
 package conf
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns/fakedns"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/dns"
 )
 
@@ -28,7 +30,7 @@ func (f *FakeDNSConfig) UnmarshalJSON(data []byte) error {
 	case json.Unmarshal(data, &pools) == nil:
 		f.pools = pools
 	default:
-		return newError("invalid fakedns config")
+		return errors.New("invalid fakedns config")
 	}
 	return nil
 }
@@ -51,7 +53,7 @@ func (f *FakeDNSConfig) Build() (*fakedns.FakeDnsPoolMulti, error) {
 		return &fakeDNSPool, nil
 	}
 
-	return nil, newError("no valid FakeDNS config")
+	return nil, errors.New("no valid FakeDNS config")
 }
 
 type FakeDNSPostProcessingStage struct{}
@@ -122,7 +124,7 @@ func (FakeDNSPostProcessingStage) Process(config *Config) error {
 			}
 		}
 		if !found {
-			newError("Defined FakeDNS but haven't enabled FakeDNS destOverride at any inbound.").AtWarning().WriteToLog()
+			errors.LogWarning(context.Background(), "Defined FakeDNS but haven't enabled FakeDNS destOverride at any inbound.")
 		}
 	}
 

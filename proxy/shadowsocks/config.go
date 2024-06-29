@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
@@ -25,7 +26,7 @@ type MemoryAccount struct {
 	replayFilter antireplay.GeneralizedReplayFilter
 }
 
-var ErrIVNotUnique = newError("IV is not unique")
+var ErrIVNotUnique = errors.New("IV is not unique")
 
 // Equals implements protocol.Account.Equals().
 func (a *MemoryAccount) Equals(another protocol.Account) bool {
@@ -94,7 +95,7 @@ func (a *Account) getCipher() (Cipher, error) {
 	case CipherType_NONE:
 		return NoneCipher{}, nil
 	default:
-		return nil, newError("Unsupported cipher.")
+		return nil, errors.New("Unsupported cipher.")
 	}
 }
 
@@ -102,7 +103,7 @@ func (a *Account) getCipher() (Cipher, error) {
 func (a *Account) AsAccount() (protocol.Account, error) {
 	Cipher, err := a.getCipher()
 	if err != nil {
-		return nil, newError("failed to get cipher").Base(err)
+		return nil, errors.New("failed to get cipher").Base(err)
 	}
 	return &MemoryAccount{
 		Cipher: Cipher,
@@ -182,7 +183,7 @@ func (c *AEADCipher) EncodePacket(key []byte, b *buf.Buffer) error {
 
 func (c *AEADCipher) DecodePacket(key []byte, b *buf.Buffer) error {
 	if b.Len() <= c.IVSize() {
-		return newError("insufficient data: ", b.Len())
+		return errors.New("insufficient data: ", b.Len())
 	}
 	ivLen := c.IVSize()
 	payloadLen := b.Len()

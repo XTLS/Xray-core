@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -42,7 +43,7 @@ type DokodemoDoor struct {
 // Init initializes the DokodemoDoor instance with necessary parameters.
 func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
 	if (config.NetworkList == nil || len(config.NetworkList.Network) == 0) && len(config.Networks) == 0 {
-		return newError("no network specified")
+		return errors.New("no network specified")
 	}
 	d.config = config
 	d.address = config.GetPredefinedAddress()
@@ -77,7 +78,7 @@ type hasHandshakeAddressContext interface {
 
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	newError("processing connection from: ", conn.RemoteAddr()).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
 	dest := net.Destination{
 		Network: network,
 		Address: d.address,
@@ -88,7 +89,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	if d.config.FollowRedirect {
 		outbounds := session.OutboundsFromContext(ctx)
 		if len(outbounds) > 0 {
-			ob := outbounds[len(outbounds) - 1]
+			ob := outbounds[len(outbounds)-1]
 			if ob.Target.IsValid() {
 				dest = ob.Target
 				destinationOverridden = true
@@ -103,7 +104,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		}
 	}
 	if !dest.IsValid() || dest.Address == nil {
-		return newError("unable to get destination")
+		return errors.New("unable to get destination")
 	}
 
 	inbound := session.InboundFromContext(ctx)
@@ -119,7 +120,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		Status: log.AccessAccepted,
 		Reason: "",
 	})
-	newError("received request for ", conn.RemoteAddr()).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "received request for ", conn.RemoteAddr())
 
 	plcy := d.policy()
 	ctx, cancel := context.WithCancel(ctx)
@@ -132,7 +133,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
-		return newError("failed to dispatch request").Base(err)
+		return errors.New("failed to dispatch request").Base(err)
 	}
 
 	requestCount := int32(1)
@@ -150,7 +151,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 			reader = buf.NewReader(conn)
 		}
 		if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport request").Base(err)
+			return errors.New("failed to transport request").Base(err)
 		}
 
 		return nil
@@ -217,7 +218,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 						}
 					}()
 					if err := buf.Copy(tReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-						return newError("failed to transport request (TPROXY conn)").Base(err)
+						return errors.New("failed to transport request (TPROXY conn)").Base(err)
 					}
 					return nil
 				}
@@ -229,7 +230,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport response").Base(err)
+			return errors.New("failed to transport response").Base(err)
 		}
 		return nil
 	}
@@ -239,7 +240,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	}, task.Close(link.Writer)), responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil
@@ -282,7 +283,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					w.mark,
 				)
 				if err != nil {
-					newError(err).WriteToLog()
+					errors.LogInfo(context.Background(), err.Error())
 					b.Release()
 					continue
 				}
@@ -290,7 +291,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 			_, err = conn.WriteTo(b.Bytes(), w.back)
 			if err != nil {
-				newError(err).WriteToLog()
+				errors.LogInfo(context.Background(), err.Error())
 				w.conns[*b.UDP] = nil
 				conn.Close()
 			}

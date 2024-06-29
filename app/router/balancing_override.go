@@ -2,6 +2,8 @@ package router
 
 import (
 	sync "sync"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 func (r *Router) OverrideBalancer(balancer string, target string) error {
@@ -13,7 +15,7 @@ func (r *Router) OverrideBalancer(balancer string, target string) error {
 		}
 	}
 	if b == nil {
-		return newError("balancer '", balancer, "' not found")
+		return errors.New("balancer '", balancer, "' not found")
 	}
 	b.override.Put(target)
 	return nil

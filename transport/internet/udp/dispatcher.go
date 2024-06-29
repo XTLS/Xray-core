@@ -2,16 +2,16 @@ package udp
 
 import (
 	"context"
-	"errors"
+	goerrors "errors"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/udp"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/features/routing"
@@ -59,7 +59,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		return v.conn, nil
 	}
 
-	newError("establishing new connection for ", dest).WriteToLog()
+	errors.LogInfo(ctx, "establishing new connection for ", dest)
 
 	ctx, cancel := context.WithCancel(ctx)
 	removeRay := func() {
@@ -70,7 +70,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 
 	link, err := v.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
-		return nil, newError("failed to dispatch request to ", dest).Base(err)
+		return nil, errors.New("failed to dispatch request to ", dest).Base(err)
 	}
 
 	entry := &connEntry{
@@ -85,17 +85,17 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 
 func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, payload *buf.Buffer) {
 	// TODO: Add user to destString
-	newError("dispatch request to: ", destination).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogDebug(ctx, "dispatch request to: ", destination)
 
 	conn, err := v.getInboundRay(ctx, destination)
 	if err != nil {
-		newError("failed to get inbound").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to get inbound")
 		return
 	}
 	outputStream := conn.link.Writer
 	if outputStream != nil {
 		if err := outputStream.WriteMultiBuffer(buf.MultiBuffer{payload}); err != nil {
-			newError("failed to write first UDP payload").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfoInner(ctx, err, "failed to write first UDP payload")
 			conn.cancel()
 			return
 		}
@@ -122,8 +122,8 @@ func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, cal
 
 		mb, err := input.ReadMultiBuffer()
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				newError("failed to handle UDP input").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			if !goerrors.Is(err, io.EOF) {
+				errors.LogInfoInner(ctx, err, "failed to handle UDP input")
 			}
 			return
 		}

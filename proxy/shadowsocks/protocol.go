@@ -4,12 +4,13 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
+	goerrors "errors"
 	"hash/crc32"
 	"io"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/drain"
 	"github.com/xtls/xray-core/common/net"
@@ -58,7 +59,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 	drainer, errDrain := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
 
 	if errDrain != nil {
-		return nil, nil, newError("failed to initialize drainer").Base(errDrain)
+		return nil, nil, errors.New("failed to initialize drainer").Base(errDrain)
 	}
 
 	var r buf.Reader
@@ -67,7 +68,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	if _, err := buffer.ReadFullFrom(reader, 50); err != nil {
 		drainer.AcknowledgeReceive(int(buffer.Len()))
-		return nil, nil, drain.WithError(drainer, reader, newError("failed to read 50 bytes").Base(err))
+		return nil, nil, drain.WithError(drainer, reader, errors.New("failed to read 50 bytes").Base(err))
 	}
 
 	bs := buffer.Bytes()
@@ -76,10 +77,10 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 	switch err {
 	case ErrNotFound:
 		drainer.AcknowledgeReceive(int(buffer.Len()))
-		return nil, nil, drain.WithError(drainer, reader, newError("failed to match an user").Base(err))
+		return nil, nil, drain.WithError(drainer, reader, errors.New("failed to match an user").Base(err))
 	case ErrIVNotUnique:
 		drainer.AcknowledgeReceive(int(buffer.Len()))
-		return nil, nil, drain.WithError(drainer, reader, newError("failed iv check").Base(err))
+		return nil, nil, drain.WithError(drainer, reader, errors.New("failed iv check").Base(err))
 	default:
 		reader = &FullReader{reader, bs[ivLen:]}
 		drainer.AcknowledgeReceive(int(ivLen))
@@ -97,7 +98,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 			iv := append([]byte(nil), buffer.BytesTo(ivLen)...)
 			r, err = account.Cipher.NewDecryptionReader(account.Key, iv, reader)
 			if err != nil {
-				return nil, nil, drain.WithError(drainer, reader, newError("failed to initialize decoding stream").Base(err).AtError())
+				return nil, nil, drain.WithError(drainer, reader, errors.New("failed to initialize decoding stream").Base(err).AtError())
 			}
 		}
 	}
@@ -115,7 +116,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 	addr, port, err := addrParser.ReadAddressPort(buffer, br)
 	if err != nil {
 		drainer.AcknowledgeReceive(int(buffer.Len()))
-		return nil, nil, drain.WithError(drainer, reader, newError("failed to read address").Base(err))
+		return nil, nil, drain.WithError(drainer, reader, errors.New("failed to read address").Base(err))
 	}
 
 	request.Address = addr
@@ -123,7 +124,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 
 	if request.Address == nil {
 		drainer.AcknowledgeReceive(int(buffer.Len()))
-		return nil, nil, drain.WithError(drainer, reader, newError("invalid remote address."))
+		return nil, nil, drain.WithError(drainer, reader, errors.New("invalid remote address."))
 	}
 
 	return request, br, nil
@@ -139,26 +140,26 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
 		if ivError := account.CheckIV(iv); ivError != nil {
-			return nil, newError("failed to mark outgoing iv").Base(ivError)
+			return nil, errors.New("failed to mark outgoing iv").Base(ivError)
 		}
 		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
-			return nil, newError("failed to write IV")
+			return nil, errors.New("failed to write IV")
 		}
 	}
 
 	w, err := account.Cipher.NewEncryptionWriter(account.Key, iv, writer)
 	if err != nil {
-		return nil, newError("failed to create encoding stream").Base(err).AtError()
+		return nil, errors.New("failed to create encoding stream").Base(err).AtError()
 	}
 
 	header := buf.New()
 
 	if err := addrParser.WriteAddressPort(header, request.Address, request.Port); err != nil {
-		return nil, newError("failed to write address").Base(err)
+		return nil, errors.New("failed to write address").Base(err)
 	}
 
 	if err := w.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
-		return nil, newError("failed to write header").Base(err)
+		return nil, errors.New("failed to write header").Base(err)
 	}
 
 	return w, nil
@@ -174,21 +175,21 @@ func ReadTCPResponse(user *protocol.MemoryUser, reader io.Reader) (buf.Reader, e
 
 	drainer, err := drain.NewBehaviorSeedLimitedDrainer(int64(behaviorSeed), 16+38, 3266, 64)
 	if err != nil {
-		return nil, newError("failed to initialize drainer").Base(err)
+		return nil, errors.New("failed to initialize drainer").Base(err)
 	}
 
 	var iv []byte
 	if account.Cipher.IVSize() > 0 {
 		iv = make([]byte, account.Cipher.IVSize())
 		if n, err := io.ReadFull(reader, iv); err != nil {
-			return nil, newError("failed to read IV").Base(err)
+			return nil, errors.New("failed to read IV").Base(err)
 		} else { // nolint: golint
 			drainer.AcknowledgeReceive(n)
 		}
 	}
 
 	if ivError := account.CheckIV(iv); ivError != nil {
-		return nil, drain.WithError(drainer, reader, newError("failed iv check").Base(ivError))
+		return nil, drain.WithError(drainer, reader, errors.New("failed iv check").Base(ivError))
 	}
 
 	return account.Cipher.NewDecryptionReader(account.Key, iv, reader)
@@ -203,10 +204,10 @@ func WriteTCPResponse(request *protocol.RequestHeader, writer io.Writer) (buf.Wr
 		iv = make([]byte, account.Cipher.IVSize())
 		common.Must2(rand.Read(iv))
 		if ivError := account.CheckIV(iv); ivError != nil {
-			return nil, newError("failed to mark outgoing iv").Base(ivError)
+			return nil, errors.New("failed to mark outgoing iv").Base(ivError)
 		}
 		if err := buf.WriteAllBytes(writer, iv, nil); err != nil {
-			return nil, newError("failed to write IV.").Base(err)
+			return nil, errors.New("failed to write IV.").Base(err)
 		}
 	}
 
@@ -224,13 +225,13 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 	}
 
 	if err := addrParser.WriteAddressPort(buffer, request.Address, request.Port); err != nil {
-		return nil, newError("failed to write address").Base(err)
+		return nil, errors.New("failed to write address").Base(err)
 	}
 
 	buffer.Write(payload)
 
 	if err := account.Cipher.EncodePacket(account.Key, buffer); err != nil {
-		return nil, newError("failed to encrypt UDP payload").Base(err)
+		return nil, errors.New("failed to encrypt UDP payload").Base(err)
 	}
 
 	return buffer, nil
@@ -240,21 +241,21 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 	rawPayload := payload.Bytes()
 	user, _, d, _, err := validator.Get(rawPayload, protocol.RequestCommandUDP)
 
-	if errors.Is(err, ErrIVNotUnique) {
-		return nil, nil, newError("failed iv check").Base(err)
+	if goerrors.Is(err, ErrIVNotUnique) {
+		return nil, nil, errors.New("failed iv check").Base(err)
 	}
 
-	if errors.Is(err, ErrNotFound) {
-		return nil, nil, newError("failed to match an user").Base(err)
+	if goerrors.Is(err, ErrNotFound) {
+		return nil, nil, errors.New("failed to match an user").Base(err)
 	}
 
 	if err != nil {
-		return nil, nil, newError("unexpected error").Base(err)
+		return nil, nil, errors.New("unexpected error").Base(err)
 	}
 
 	account, ok := user.Account.(*MemoryAccount)
 	if !ok {
-		return nil, nil, newError("expected MemoryAccount returned from validator")
+		return nil, nil, errors.New("expected MemoryAccount returned from validator")
 	}
 
 	if account.Cipher.IsAEAD() {
@@ -266,7 +267,7 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 			copy(iv, payload.BytesTo(account.Cipher.IVSize()))
 		}
 		if err = account.Cipher.DecodePacket(account.Key, payload); err != nil {
-			return nil, nil, newError("failed to decrypt UDP payload").Base(err)
+			return nil, nil, errors.New("failed to decrypt UDP payload").Base(err)
 		}
 	}
 
@@ -274,7 +275,7 @@ func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.Reque
 
 	addr, port, err := addrParser.ReadAddressPort(nil, payload)
 	if err != nil {
-		return nil, nil, newError("failed to parse address").Base(err)
+		return nil, nil, errors.New("failed to parse address").Base(err)
 	}
 
 	request := &protocol.RequestHeader{

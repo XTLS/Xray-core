@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -38,11 +39,11 @@ func NewListener(ctx context.Context, address net.Address, port net.Port, stream
 	kcpSettings := streamSettings.ProtocolSettings.(*Config)
 	header, err := kcpSettings.GetPackerHeader()
 	if err != nil {
-		return nil, newError("failed to create packet header").Base(err).AtError()
+		return nil, errors.New("failed to create packet header").Base(err).AtError()
 	}
 	security, err := kcpSettings.GetSecurity()
 	if err != nil {
-		return nil, newError("failed to create security").Base(err).AtError()
+		return nil, errors.New("failed to create security").Base(err).AtError()
 	}
 	l := &Listener{
 		header:   header,
@@ -67,7 +68,7 @@ func NewListener(ctx context.Context, address net.Address, port net.Port, stream
 	l.Lock()
 	l.hub = hub
 	l.Unlock()
-	newError("listening on ", address, ":", port).WriteToLog()
+	errors.LogInfo(ctx, "listening on ", address, ":", port)
 
 	go l.handlePackets()
 
@@ -86,7 +87,7 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 	payload.Release()
 
 	if len(segments) == 0 {
-		newError("discarding invalid payload from ", src).WriteToLog()
+		errors.LogInfo(context.Background(), "discarding invalid payload from ", src)
 		return
 	}
 

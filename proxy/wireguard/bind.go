@@ -202,7 +202,7 @@ func (bind *netBindServer) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	}
 
 	if nend.conn == nil {
-		return newError("connection not open yet")
+		return errors.New("connection not open yet")
 	}
 
 	for _, buff := range buff {

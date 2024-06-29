@@ -55,7 +55,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	}
 	p, ok := rawProxy.(proxy.Inbound)
 	if !ok {
-		return nil, newError("not an inbound proxy.")
+		return nil, errors.New("not an inbound proxy.")
 	}
 
 	h := &AlwaysOnInboundHandler{
@@ -75,7 +75,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
 	if err != nil {
-		return nil, newError("failed to parse stream config").Base(err).AtWarning()
+		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
 	}
 
 	if receiverConfig.ReceiveOriginalDestination {
@@ -89,7 +89,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	}
 	if pl == nil {
 		if net.HasNetwork(nl, net.Network_UNIX) {
-			newError("creating unix domain socket worker on ", address).AtDebug().WriteToLog()
+			errors.LogDebug(ctx, "creating unix domain socket worker on ", address)
 
 			worker := &dsWorker{
 				address:         address,
@@ -109,7 +109,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		for _, pr := range pl.Range {
 			for port := pr.From; port <= pr.To; port++ {
 				if net.HasNetwork(nl, net.Network_TCP) {
-					newError("creating stream worker on ", address, ":", port).AtDebug().WriteToLog()
+					errors.LogDebug(ctx, "creating stream worker on ", address, ":", port)
 
 					worker := &tcpWorker{
 						address:         address,
@@ -167,7 +167,7 @@ func (h *AlwaysOnInboundHandler) Close() error {
 	}
 	errs = append(errs, h.mux.Close())
 	if err := errors.Combine(errs...); err != nil {
-		return newError("failed to close all resources").Base(err)
+		return errors.New("failed to close all resources").Base(err)
 	}
 	return nil
 }

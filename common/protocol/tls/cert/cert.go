@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
@@ -27,11 +28,11 @@ type Certificate struct {
 func ParseCertificate(certPEM []byte, keyPEM []byte) (*Certificate, error) {
 	certBlock, _ := pem.Decode(certPEM)
 	if certBlock == nil {
-		return nil, newError("failed to decode certificate")
+		return nil, errors.New("failed to decode certificate")
 	}
 	keyBlock, _ := pem.Decode(keyPEM)
 	if keyBlock == nil {
-		return nil, newError("failed to decode key")
+		return nil, errors.New("failed to decode key")
 	}
 	return &Certificate{
 		Certificate: certBlock.Bytes,
@@ -116,7 +117,7 @@ func Generate(parent *Certificate, opts ...Option) (*Certificate, error) {
 	// higher signing performance than RSA2048
 	selfKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, newError("failed to generate self private key").Base(err)
+		return nil, errors.New("failed to generate self private key").Base(err)
 	}
 	parentKey = selfKey
 	if parent != nil {
@@ -128,7 +129,7 @@ func Generate(parent *Certificate, opts ...Option) (*Certificate, error) {
 			pKey, err = x509.ParsePKCS1PrivateKey(parent.PrivateKey)
 		}
 		if err != nil {
-			return nil, newError("failed to parse parent private key").Base(err)
+			return nil, errors.New("failed to parse parent private key").Base(err)
 		}
 		parentKey = pKey
 	}
@@ -136,7 +137,7 @@ func Generate(parent *Certificate, opts ...Option) (*Certificate, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return nil, newError("failed to generate serial number").Base(err)
+		return nil, errors.New("failed to generate serial number").Base(err)
 	}
 
 	template := &x509.Certificate{
@@ -156,19 +157,19 @@ func Generate(parent *Certificate, opts ...Option) (*Certificate, error) {
 	if parent != nil {
 		pCert, err := x509.ParseCertificate(parent.Certificate)
 		if err != nil {
-			return nil, newError("failed to parse parent certificate").Base(err)
+			return nil, errors.New("failed to parse parent certificate").Base(err)
 		}
 		parentCert = pCert
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, template, parentCert, publicKey(selfKey), parentKey)
 	if err != nil {
-		return nil, newError("failed to create certificate").Base(err)
+		return nil, errors.New("failed to create certificate").Base(err)
 	}
 
 	privateKey, err := x509.MarshalPKCS8PrivateKey(selfKey)
 	if err != nil {
-		return nil, newError("Unable to marshal private key").Base(err)
+		return nil, errors.New("Unable to marshal private key").Base(err)
 	}
 
 	return &Certificate{

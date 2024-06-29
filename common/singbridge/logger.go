@@ -5,7 +5,6 @@ import (
 
 	"github.com/sagernet/sing/common/logger"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/session"
 )
 
 var _ logger.ContextLogger = (*XrayLogger)(nil)
@@ -24,19 +23,19 @@ func (l *XrayLogger) Trace(args ...any) {
 }
 
 func (l *XrayLogger) Debug(args ...any) {
-	l.newError(args...).AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), args...)
 }
 
 func (l *XrayLogger) Info(args ...any) {
-	l.newError(args...).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), args...)
 }
 
 func (l *XrayLogger) Warn(args ...any) {
-	l.newError(args...).AtWarning().WriteToLog()
+	errors.LogWarning(context.Background(), args...)
 }
 
 func (l *XrayLogger) Error(args ...any) {
-	l.newError(args...).AtError().WriteToLog()
+	errors.LogError(context.Background(), args...)
 }
 
 func (l *XrayLogger) Fatal(args ...any) {
@@ -49,19 +48,19 @@ func (l *XrayLogger) TraceContext(ctx context.Context, args ...any) {
 }
 
 func (l *XrayLogger) DebugContext(ctx context.Context, args ...any) {
-	l.newError(args...).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogDebug(ctx, args...)
 }
 
 func (l *XrayLogger) InfoContext(ctx context.Context, args ...any) {
-	l.newError(args...).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, args...)
 }
 
 func (l *XrayLogger) WarnContext(ctx context.Context, args ...any) {
-	l.newError(args...).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogWarning(ctx, args...)
 }
 
 func (l *XrayLogger) ErrorContext(ctx context.Context, args ...any) {
-	l.newError(args...).AtError().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogError(ctx, args...)
 }
 
 func (l *XrayLogger) FatalContext(ctx context.Context, args ...any) {

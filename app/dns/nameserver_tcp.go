@@ -11,6 +11,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -114,7 +115,7 @@ func (s *TCPNameServer) Cleanup() error {
 	defer s.Unlock()
 
 	if len(s.ips) == 0 {
-		return newError("nothing to do. stopping...")
+		return errors.New("nothing to do. stopping...")
 	}
 
 	for domain, record := range s.ips {
@@ -126,7 +127,7 @@ func (s *TCPNameServer) Cleanup() error {
 		}
 
 		if record.A == nil && record.AAAA == nil {
-			newError(s.name, " cleanup ", domain).AtDebug().WriteToLog()
+			errors.LogDebug(context.Background(), s.name, " cleanup ", domain)
 			delete(s.ips, domain)
 		} else {
 			s.ips[domain] = record
@@ -169,7 +170,7 @@ func (s *TCPNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 			updated = true
 		}
 	}
-	newError(s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
 
 	if updated {
 		s.ips[req.domain] = rec
@@ -189,7 +190,7 @@ func (s *TCPNameServer) newReqID() uint16 {
 }
 
 func (s *TCPNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
-	newError(s.name, " querying DNS for: ", domain).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogDebug(ctx, s.name, " querying DNS for: ", domain)
 
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
 
@@ -219,13 +220,13 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				newError("failed to pack dns query").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to pack dns query")
 				return
 			}
 
 			conn, err := s.dial(dnsCtx)
 			if err != nil {
-				newError("failed to dial namesever").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to dial namesever")
 				return
 			}
 			defer conn.Close()
@@ -236,7 +237,7 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 
 			_, err = conn.Write(dnsReqBuf.Bytes())
 			if err != nil {
-				newError("failed to send query").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to send query")
 				return
 			}
 			dnsReqBuf.Release()
@@ -245,25 +246,25 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 			defer respBuf.Release()
 			n, err := respBuf.ReadFullFrom(conn, 2)
 			if err != nil && n == 0 {
-				newError("failed to read response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to read response length")
 				return
 			}
 			var length int16
 			err = binary.Read(bytes.NewReader(respBuf.Bytes()), binary.BigEndian, &length)
 			if err != nil {
-				newError("failed to parse response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to parse response length")
 				return
 			}
 			respBuf.Clear()
 			n, err = respBuf.ReadFullFrom(conn, int32(length))
 			if err != nil && n == 0 {
-				newError("failed to read response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to read response length")
 				return
 			}
 
 			rec, err := parseResponse(respBuf.Bytes())
 			if err != nil {
-				newError("failed to parse DNS over TCP response").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to parse DNS over TCP response")
 				return
 			}
 
@@ -319,11 +320,11 @@ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 	}
 
 	if disableCache {
-		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
+		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
-			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, err
 		}

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/sagernet/sing/common/uot"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -12,7 +13,7 @@ import (
 
 func (h *Handler) getUoTConnection(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if dest.Address == nil {
-		return nil, newError("nil destination address")
+		return nil, errors.New("nil destination address")
 	}
 	if !dest.Address.Family().IsDomain() {
 		return nil, os.ErrInvalid
@@ -27,7 +28,7 @@ func (h *Handler) getUoTConnection(ctx context.Context, dest net.Destination) (s
 	}
 	packetConn, err := internet.ListenSystemPacket(ctx, &net.UDPAddr{IP: net.AnyIP.IP(), Port: 0}, h.streamSettings.SocketSettings)
 	if err != nil {
-		return nil, newError("unable to listen socket").Base(err)
+		return nil, errors.New("unable to listen socket").Base(err)
 	}
 	conn := uot.NewServerConn(packetConn, uotVersion)
 	return h.getStatCouterConnection(conn), nil

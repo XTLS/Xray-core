@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
@@ -53,7 +54,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	case "forceipv6v4":
 		config.DomainStrategy = freedom.Config_FORCE_IP64
 	default:
-		return nil, newError("unsupported domain strategy: ", c.DomainStrategy)
+		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
 	if c.Fragment != nil {
@@ -80,22 +81,22 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 				config.Fragment.PacketsTo = config.Fragment.PacketsFrom
 			}
 			if err != nil {
-				return nil, newError("Invalid PacketsFrom").Base(err)
+				return nil, errors.New("Invalid PacketsFrom").Base(err)
 			}
 			if err2 != nil {
-				return nil, newError("Invalid PacketsTo").Base(err2)
+				return nil, errors.New("Invalid PacketsTo").Base(err2)
 			}
 			if config.Fragment.PacketsFrom > config.Fragment.PacketsTo {
 				config.Fragment.PacketsFrom, config.Fragment.PacketsTo = config.Fragment.PacketsTo, config.Fragment.PacketsFrom
 			}
 			if config.Fragment.PacketsFrom == 0 {
-				return nil, newError("PacketsFrom can't be 0")
+				return nil, errors.New("PacketsFrom can't be 0")
 			}
 		}
 
 		{
 			if c.Fragment.Length == "" {
-				return nil, newError("Length can't be empty")
+				return nil, errors.New("Length can't be empty")
 			}
 			lengthMinMax := strings.Split(c.Fragment.Length, "-")
 			if len(lengthMinMax) == 2 {
@@ -106,22 +107,22 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 				config.Fragment.LengthMax = config.Fragment.LengthMin
 			}
 			if err != nil {
-				return nil, newError("Invalid LengthMin").Base(err)
+				return nil, errors.New("Invalid LengthMin").Base(err)
 			}
 			if err2 != nil {
-				return nil, newError("Invalid LengthMax").Base(err2)
+				return nil, errors.New("Invalid LengthMax").Base(err2)
 			}
 			if config.Fragment.LengthMin > config.Fragment.LengthMax {
 				config.Fragment.LengthMin, config.Fragment.LengthMax = config.Fragment.LengthMax, config.Fragment.LengthMin
 			}
 			if config.Fragment.LengthMin == 0 {
-				return nil, newError("LengthMin can't be 0")
+				return nil, errors.New("LengthMin can't be 0")
 			}
 		}
 
 		{
 			if c.Fragment.Interval == "" {
-				return nil, newError("Interval can't be empty")
+				return nil, errors.New("Interval can't be empty")
 			}
 			intervalMinMax := strings.Split(c.Fragment.Interval, "-")
 			if len(intervalMinMax) == 2 {
@@ -132,10 +133,10 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 				config.Fragment.IntervalMax = config.Fragment.IntervalMin
 			}
 			if err != nil {
-				return nil, newError("Invalid IntervalMin").Base(err)
+				return nil, errors.New("Invalid IntervalMin").Base(err)
 			}
 			if err2 != nil {
-				return nil, newError("Invalid IntervalMax").Base(err2)
+				return nil, errors.New("Invalid IntervalMax").Base(err2)
 			}
 			if config.Fragment.IntervalMin > config.Fragment.IntervalMax {
 				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
@@ -150,11 +151,11 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	if len(c.Redirect) > 0 {
 		host, portStr, err := net.SplitHostPort(c.Redirect)
 		if err != nil {
-			return nil, newError("invalid redirect address: ", c.Redirect, ": ", err).Base(err)
+			return nil, errors.New("invalid redirect address: ", c.Redirect, ": ", err).Base(err)
 		}
 		port, err := v2net.PortFromString(portStr)
 		if err != nil {
-			return nil, newError("invalid redirect port: ", c.Redirect, ": ", err).Base(err)
+			return nil, errors.New("invalid redirect port: ", c.Redirect, ": ", err).Base(err)
 		}
 		config.DestinationOverride = &freedom.DestinationOverride{
 			Server: &protocol.ServerEndpoint{

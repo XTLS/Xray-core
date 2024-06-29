@@ -1,10 +1,13 @@
 package router
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type weightScaler func(value, weight float64) float64
@@ -64,7 +67,7 @@ func (s *WeightManager) findValue(tag string) float64 {
 		}
 		weight, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {
-			newError("unexpected error from ParseFloat: ", err).AtError().WriteToLog()
+			errors.LogError(context.Background(), "unexpected error from ParseFloat: ", err)
 			return s.defaultWeight
 		}
 		return weight
@@ -82,7 +85,7 @@ func (s *WeightManager) getMatch(tag, find string, isRegexp bool) string {
 	}
 	r, err := regexp.Compile(find)
 	if err != nil {
-		newError("invalid regexp: ", find, "err: ", err).AtError().WriteToLog()
+		errors.LogError(context.Background(), "invalid regexp: ", find, "err: ", err)
 		return ""
 	}
 	return r.FindString(tag)
