@@ -2,12 +2,14 @@ package browser_dialer
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/uuid"
 )
@@ -39,7 +41,7 @@ func init() {
 					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
 						conns <- conn
 					} else {
-						newError("Browser dialer http upgrade unexpected error").AtError().WriteToLog()
+						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
 					}
 				}
 			} else {
@@ -118,7 +120,7 @@ func CheckOK(conn *websocket.Conn) error {
 		return err
 	} else if s := string(p); s != "ok" {
 		conn.Close()
-		return newError(s)
+		return errors.New(s)
 	}
 
 	return nil

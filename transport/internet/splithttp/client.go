@@ -8,6 +8,7 @@ import (
 	"net/http/httptrace"
 	"sync"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
 )
@@ -64,7 +65,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 			nil,
 		)
 		if err != nil {
-			newError("failed to construct download http request").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "failed to construct download http request")
 			gotDownResponse.Close()
 			return
 		}
@@ -74,14 +75,14 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		response, err := c.Download.Do(req)
 		gotConn.Close()
 		if err != nil {
-			newError("failed to send download http request").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "failed to send download http request")
 			gotDownResponse.Close()
 			return
 		}
 
 		if response.StatusCode != 200 {
 			response.Body.Close()
-			newError("invalid status code on download:", response.Status).WriteToLog()
+			errors.LogInfo(ctx, "invalid status code on download:", response.Status)
 			gotDownResponse.Close()
 			return
 		}
@@ -98,7 +99,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		CreateReader: func() (io.ReadCloser, error) {
 			<-gotDownResponse.Wait()
 			if downResponse == nil {
-				return nil, newError("downResponse failed")
+				return nil, errors.New("downResponse failed")
 			}
 			return downResponse, nil
 		},
@@ -123,7 +124,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
-			return newError("bad status code:", resp.Status)
+			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
 		var err error

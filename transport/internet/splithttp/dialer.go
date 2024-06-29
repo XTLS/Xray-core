@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/semaphore"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
@@ -212,7 +211,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			for {
 				_, err := io.ReadFull(lazyRawDownload, trashHeader)
 				if err != nil {
-					return nil, newError("failed to read initial response").Base(err)
+					return nil, errors.New("failed to read initial response").Base(err)
 				}
 				if trashHeader[0] == 'k' {
 					break
