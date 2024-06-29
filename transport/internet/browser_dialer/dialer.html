@@ -1,4 +1,3 @@
-<!-- vim: set noexpandtab: -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -7,9 +6,9 @@
 <body>
 	<script>
 		// Copyright (c) 2021 XRAY. Mozilla Public License 2.0.
-		var url = "ws://" + window.location.host + "/websocket?token=csrfToken"
-		var count = 0
-		setInterval(check, 1000)
+		var url = "ws://" + window.location.host + "/websocket?token=csrfToken";
+		var count = 0;
+		setInterval(check, 1000);
 		function check() {
 			if (count <= 0) {
 				count += 1
@@ -51,15 +50,15 @@
 							console.log("Dial GET", url);
 							ws.send("ok");
 							const controller = new AbortController();
-							const response = await fetch(url, {signal: controller.signal});
-							const body = await response.body;
-							const reader = body.getReader();
-
 							ws.onclose = function (event) {
 								try {
 									controller.abort();
 								} catch(e) {}
 							}
+							const response = await fetch(url, {signal: controller.signal});
+
+							const body = await response.body;
+							const reader = body.getReader();
 
 							while (true) {
 								const { done, value } = await reader.read();
@@ -84,8 +83,10 @@
 									);
 									if (response.ok) {
 										ws.send("ok");
-										ws.close();
+									} else {
+										ws.send("fail");
 									}
+									ws.close();
 								})();
 							} else {
 								body = event.data;
