@@ -26,13 +26,13 @@ type DialerClient interface {
 
 // implements splithttp.DialerClient in terms of direct network connections
 type DefaultDialerClient struct {
-	TransportConfig *Config
-	Download        *http.Client
-	Upload          *http.Client
-	IsH2            bool
+	transportConfig *Config
+	download        *http.Client
+	upload          *http.Client
+	isH2            bool
 	// pool of net.Conn, created using dialUploadConn
-	UploadRawPool  *sync.Pool
-	DialUploadConn func(ctxInner context.Context) (net.Conn, error)
+	uploadRawPool  *sync.Pool
+	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
 func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
@@ -70,9 +70,9 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 			return
 		}
 
-		req.Header = c.TransportConfig.GetRequestHeader()
+		req.Header = c.transportConfig.GetRequestHeader()
 
-		response, err := c.Download.Do(req)
+		response, err := c.download.Do(req)
 		gotConn.Close()
 		if err != nil {
 			errors.LogInfoInner(ctx, err, "failed to send download http request")
@@ -113,10 +113,10 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	if err != nil {
 		return err
 	}
-	req.Header = c.TransportConfig.GetRequestHeader()
+	req.Header = c.transportConfig.GetRequestHeader()
 
-	if c.IsH2 {
-		resp, err := c.Upload.Do(req)
+	if c.isH2 {
+		resp, err := c.upload.Do(req)
 		if err != nil {
 			return err
 		}
@@ -130,9 +130,9 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		var err error
 		var uploadConn any
 		for i := 0; i < 5; i++ {
-			uploadConn = c.UploadRawPool.Get()
+			uploadConn = c.uploadRawPool.Get()
 			if uploadConn == nil {
-				uploadConn, err = c.DialUploadConn(ctx)
+				uploadConn, err = c.dialUploadConn(ctx)
 				if err != nil {
 					return err
 				}
@@ -148,7 +148,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 			return err
 		}
 
-		c.UploadRawPool.Put(uploadConn)
+		c.uploadRawPool.Put(uploadConn)
 	}
 
 	return nil

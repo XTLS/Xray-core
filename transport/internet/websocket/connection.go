@@ -11,23 +11,23 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 )
 
-var _ buf.Writer = (*Connection)(nil)
+var _ buf.Writer = (*connection)(nil)
 
 // connection is a wrapper for net.Conn over WebSocket connection.
-type Connection struct {
+type connection struct {
 	conn   *websocket.Conn
 	reader io.Reader
 }
 
-func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *Connection {
-	return &Connection{
+func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
+	return &connection{
 		conn:   conn,
 		reader: extraReader,
 	}
 }
 
 // Read implements net.Conn.Read()
-func (c *Connection) Read(b []byte) (int, error) {
+func (c *connection) Read(b []byte) (int, error) {
 	for {
 		reader, err := c.getReader()
 		if err != nil {
@@ -43,7 +43,7 @@ func (c *Connection) Read(b []byte) (int, error) {
 	}
 }
 
-func (c *Connection) getReader() (io.Reader, error) {
+func (c *connection) getReader() (io.Reader, error) {
 	if c.reader != nil {
 		return c.reader, nil
 	}
@@ -57,21 +57,21 @@ func (c *Connection) getReader() (io.Reader, error) {
 }
 
 // Write implements io.Writer.
-func (c *Connection) Write(b []byte) (int, error) {
+func (c *connection) Write(b []byte) (int, error) {
 	if err := c.conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
 		return 0, err
 	}
 	return len(b), nil
 }
 
-func (c *Connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
+func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	mb = buf.Compact(mb)
 	mb, err := buf.WriteMultiBuffer(c, mb)
 	buf.ReleaseMulti(mb)
 	return err
 }
 
-func (c *Connection) Close() error {
+func (c *connection) Close() error {
 	var errs []interface{}
 	if err := c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
 		errs = append(errs, err)
@@ -85,25 +85,25 @@ func (c *Connection) Close() error {
 	return nil
 }
 
-func (c *Connection) LocalAddr() net.Addr {
+func (c *connection) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-func (c *Connection) RemoteAddr() net.Addr {
+func (c *connection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-func (c *Connection) SetDeadline(t time.Time) error {
+func (c *connection) SetDeadline(t time.Time) error {
 	if err := c.SetReadDeadline(t); err != nil {
 		return err
 	}
 	return c.SetWriteDeadline(t)
 }
 
-func (c *Connection) SetReadDeadline(t time.Time) error {
+func (c *connection) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-func (c *Connection) SetWriteDeadline(t time.Time) error {
+func (c *connection) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }

@@ -113,16 +113,16 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	client := &DefaultDialerClient{
-		TransportConfig: streamSettings.ProtocolSettings.(*Config),
-		Download: &http.Client{
+		transportConfig: streamSettings.ProtocolSettings.(*Config),
+		download: &http.Client{
 			Transport: downloadTransport,
 		},
-		Upload: &http.Client{
+		upload: &http.Client{
 			Transport: uploadTransport,
 		},
-		IsH2:           isH2,
-		UploadRawPool:  &sync.Pool{},
-		DialUploadConn: dialContext,
+		isH2:           isH2,
+		uploadRawPool:  &sync.Pool{},
+		dialUploadConn: dialContext,
 	}
 
 	globalDialerMap[dialerConf{dest, streamSettings}] = client

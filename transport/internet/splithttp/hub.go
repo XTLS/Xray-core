@@ -32,7 +32,7 @@ type requestHandler struct {
 }
 
 type httpSession struct {
-	uploadQueue *UploadQueue
+	uploadQueue *uploadQueue
 	// for as long as the GET request is not opened by the client, this will be
 	// open ("undone"), and the session may be expired within a certain TTL.
 	// after the client connects, this becomes "done" and the session lives as
