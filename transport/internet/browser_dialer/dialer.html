@@ -62,7 +62,6 @@
 
 							while (true) {
 								const { done, value } = await reader.read();
-								console.log("chunk download");
 								ws.send(value);
 								if (done) break;
 							}
@@ -75,7 +74,6 @@
 						let body;
 						ws.onmessage = function (event) {
 							if (event.data.byteLength == 0) {
-								console.log("start upload");
 								(async () => {
 									const response = await fetch(
 										url,
