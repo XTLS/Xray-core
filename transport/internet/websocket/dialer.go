@@ -1,53 +1,22 @@
 package websocket
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
 	"io"
 	gonet "net"
-	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
-
-//go:embed dialer.html
-var webpage []byte
-
-var conns chan *websocket.Conn
-
-func init() {
-	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
-	if addr != "" {
-		token := uuid.New()
-		csrfToken := token.String()
-		webpage = bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
-		conns = make(chan *websocket.Conn, 256)
-		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/websocket" {
-				if r.URL.Query().Get("token") == csrfToken {
-					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-						conns <- conn
-					} else {
-						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
-					}
-				}
-			} else {
-				w.Write(webpage)
-			}
-		}))
-	}
-}
 
 // Dial dials a WebSocket connection to the given destination.
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
@@ -98,18 +67,18 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				// Like the NetDial in the dialer
 				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
 				// TLS and apply the handshake
 				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 				if err := cn.WebsocketHandshakeContext(ctx); err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+						errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 						return nil, err
 					}
 				}
@@ -124,28 +93,13 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 	uri := protocol + "://" + host + wsSettings.GetNormalizedPath()
 
-	if conns != nil {
-		data := []byte(uri)
-		if ed != nil {
-			data = append(data, " "+base64.RawURLEncoding.EncodeToString(ed)...)
-		}
-		var conn *websocket.Conn
-		for {
-			conn = <-conns
-			if conn.WriteMessage(websocket.TextMessage, data) != nil {
-				conn.Close()
-			} else {
-				break
-			}
-		}
-		if _, p, err := conn.ReadMessage(); err != nil {
-			conn.Close()
+	if browser_dialer.HasBrowserDialer() {
+		conn, err := browser_dialer.DialWS(uri, ed)
+		if err != nil {
 			return nil, err
-		} else if s := string(p); s != "ok" {
-			conn.Close()
-			return nil, errors.New(s)
 		}
-		return newConnection(conn, conn.RemoteAddr(), nil), nil
+
+		return NewConnection(conn, conn.RemoteAddr(), nil), nil
 	}
 
 	header := wsSettings.GetRequestHeader()
@@ -163,7 +117,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		return nil, errors.New("failed to dial to (", uri, "): ", reason).Base(err)
 	}
 
-	return newConnection(conn, conn.RemoteAddr(), nil), nil
+	return NewConnection(conn, conn.RemoteAddr(), nil), nil
 }
 
 type delayDialConn struct {

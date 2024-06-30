@@ -32,7 +32,7 @@ type requestHandler struct {
 }
 
 type httpSession struct {
-	uploadQueue *UploadQueue
+	uploadQueue *uploadQueue
 	// for as long as the GET request is not opened by the client, this will be
 	// open ("undone"), and the session may be expired within a certain TTL.
 	// after the client connects, this becomes "done" and the session lives as
@@ -163,7 +163,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.Header().Set("X-Accel-Buffering", "no")
 		// magic header to make the HTTP middle box consider this as SSE to disable buffer
 		writer.Header().Set("Content-Type", "text/event-stream")
-		
+
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
 		// many CDN buffer the response headers until the origin starts sending
