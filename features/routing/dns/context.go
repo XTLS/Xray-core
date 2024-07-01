@@ -3,6 +3,9 @@ package dns
 //go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 import (
+	"context"
+
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/features/dns"
 	"github.com/GFW-knocker/Xray-core/features/routing"
@@ -31,7 +34,7 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 			ctx.resolvedIPs = ips
 			return ips
 		}
-		newError("resolve ip for ", domain).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "resolve ip for ", domain)
 	}
 
 	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {

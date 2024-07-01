@@ -6,6 +6,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/retry"
@@ -34,12 +35,12 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	for _, rec := range config.Server {
 		s, err := protocol.NewServerSpecFromPB(rec)
 		if err != nil {
-			return nil, newError("failed to get server spec").Base(err)
+			return nil, errors.New("failed to get server spec").Base(err)
 		}
 		serverList.AddServer(s)
 	}
 	if serverList.Size() == 0 {
-		return nil, newError("0 target server")
+		return nil, errors.New("0 target server")
 	}
 
 	v := core.MustFromContext(ctx)
@@ -58,9 +59,9 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 // Process implements proxy.Outbound.Process.
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return newError("target not specified.")
+		return errors.New("target not specified.")
 	}
 	ob.Name = "socks"
 	ob.CanSpliceCopy = 2
@@ -85,12 +86,12 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		return nil
 	}); err != nil {
-		return newError("failed to find an available destination").Base(err)
+		return errors.New("failed to find an available destination").Base(err)
 	}
 
 	defer func() {
 		if err := conn.Close(); err != nil {
-			newError("failed to closed connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfoInner(ctx, err, "failed to closed connection")
 		}
 	}()
 
@@ -121,9 +122,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		request.Version = socks4Version
 
 		if destination.Network == net.Network_UDP {
-			return newError("udp is not supported in socks4")
+			return errors.New("udp is not supported in socks4")
 		} else if destination.Address.Family().IsIPv6() {
-			return newError("ipv6 is not supported in socks4")
+			return errors.New("ipv6 is not supported in socks4")
 		}
 	}
 
@@ -138,11 +139,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if err := conn.SetDeadline(time.Now().Add(p.Timeouts.Handshake)); err != nil {
-		newError("failed to set deadline for handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to set deadline for handshake")
 	}
 	udpRequest, err := ClientHandshake(request, conn, conn)
 	if err != nil {
-		return newError("failed to establish connection to server").AtWarning().Base(err)
+		return errors.New("failed to establish connection to server").AtWarning().Base(err)
 	}
 	if udpRequest != nil {
 		if udpRequest.Address == net.AnyIP || udpRequest.Address == net.AnyIPv6 {
@@ -151,7 +152,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {
-		newError("failed to clear deadline after handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to clear deadline after handshake")
 	}
 
 	var newCtx context.Context
@@ -182,7 +183,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	} else if request.Command == protocol.RequestCommandUDP {
 		udpConn, err := dialer.Dial(ctx, udpRequest.Destination())
 		if err != nil {
-			return newError("failed to create UDP connection").Base(err)
+			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer udpConn.Close()
 		requestFunc = func() error {
@@ -203,7 +204,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
 	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil

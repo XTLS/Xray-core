@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/dns"
@@ -25,7 +26,7 @@ func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ net.IP, op
 		if err := core.RequireFeatures(ctx, func(fd dns.FakeDNSEngine) {
 			f.fakeDNSEngine = fd
 		}); err != nil {
-			return nil, newError("Unable to locate a fake DNS Engine").Base(err).AtError()
+			return nil, errors.New("Unable to locate a fake DNS Engine").Base(err).AtError()
 		}
 	}
 	var ips []net.Address
@@ -37,10 +38,10 @@ func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ net.IP, op
 
 	netIP, err := toNetIP(ips)
 	if err != nil {
-		return nil, newError("Unable to convert IP to net ip").Base(err).AtError()
+		return nil, errors.New("Unable to convert IP to net ip").Base(err).AtError()
 	}
 
-	newError(f.Name(), " got answer: ", domain, " -> ", ips).AtInfo().WriteToLog()
+	errors.LogInfo(ctx, f.Name(), " got answer: ", domain, " -> ", ips)
 
 	if len(netIP) > 0 {
 		return netIP, nil

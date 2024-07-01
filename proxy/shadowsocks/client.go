@@ -6,6 +6,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/retry"
@@ -31,12 +32,12 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	for _, rec := range config.Server {
 		s, err := protocol.NewServerSpecFromPB(rec)
 		if err != nil {
-			return nil, newError("failed to parse server spec").Base(err)
+			return nil, errors.New("failed to parse server spec").Base(err)
 		}
 		serverList.AddServer(s)
 	}
 	if serverList.Size() == 0 {
-		return nil, newError("0 server")
+		return nil, errors.New("0 server")
 	}
 
 	v := core.MustFromContext(ctx)
@@ -50,9 +51,9 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 // Process implements OutboundHandler.Process().
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return newError("target not specified")
+		return errors.New("target not specified")
 	}
 	ob.Name = "shadowsocks"
 	ob.CanSpliceCopy = 3
@@ -75,9 +76,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return nil
 	})
 	if err != nil {
-		return newError("failed to find an available destination").AtWarning().Base(err)
+		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
-	newError("tunneling request to ", destination, " via ", network, ":", server.Destination().NetAddr()).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", network, ":", server.Destination().NetAddr())
 
 	defer conn.Close()
 
@@ -95,7 +96,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	user := server.PickUser()
 	_, ok := user.Account.(*MemoryAccount)
 	if !ok {
-		return newError("user account is not valid")
+		return errors.New("user account is not valid")
 	}
 	request.User = user
 
@@ -124,11 +125,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
 			bodyWriter, err := WriteTCPRequest(request, bufferedWriter)
 			if err != nil {
-				return newError("failed to write request").Base(err)
+				return errors.New("failed to write request").Base(err)
 			}
 
 			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return newError("failed to write A request payload").Base(err).AtWarning()
+				return errors.New("failed to write A request payload").Base(err).AtWarning()
 			}
 
 			if err := bufferedWriter.SetBuffered(false); err != nil {
@@ -151,7 +152,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
 		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
-			return newError("connection ends").Base(err)
+			return errors.New("connection ends").Base(err)
 		}
 
 		return nil
@@ -168,7 +169,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			}
 
 			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
-				return newError("failed to transport all UDP request").Base(err)
+				return errors.New("failed to transport all UDP request").Base(err)
 			}
 			return nil
 		}
@@ -182,14 +183,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			}
 
 			if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-				return newError("failed to transport all UDP response").Base(err)
+				return errors.New("failed to transport all UDP response").Base(err)
 			}
 			return nil
 		}
 
 		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
 		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
-			return newError("connection ends").Base(err)
+			return errors.New("connection ends").Base(err)
 		}
 
 		return nil

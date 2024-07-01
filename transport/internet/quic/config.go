@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
+	"errors"
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
@@ -30,7 +31,7 @@ func getAuth(config *Config) (cipher.AEAD, error) {
 		return chacha20poly1305.New(key[:])
 	}
 
-	return nil, newError("unsupported security type")
+	return nil, errors.New("unsupported security type")
 }
 
 func getHeader(config *Config) (internet.PacketHeader, error) {

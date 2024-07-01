@@ -2,11 +2,12 @@ package wireguard
 
 import (
 	"context"
-	"errors"
+	goerrors "errors"
 	"io"
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/log"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/session"
@@ -81,7 +82,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.Name = "wireguard"
 	inbound.CanSpliceCopy = 3
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 
 	s.info = routingInfo{
 		ctx:         core.ToBackgroundDetachedContext(ctx),
@@ -117,7 +118,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			v.endpoint = nep
 			v.err = err
 			v.waiter.Done()
-			if err != nil && errors.Is(err, io.EOF) {
+			if err != nil && goerrors.Is(err, io.EOF) {
 				nep.conn = nil
 				return nil
 			}
@@ -127,7 +128,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	if s.info.dispatcher == nil {
-		newError("unexpected: dispatcher == nil").AtError().WriteToLog()
+		errors.LogError(s.info.ctx, "unexpected: dispatcher == nil")
 		return
 	}
 	defer conn.Close()
@@ -155,14 +156,14 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 
 	link, err := s.info.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
-		newError("dispatch connection").Base(err).AtError().WriteToLog()
+		errors.LogErrorInner(s.info.ctx, err, "dispatch connection")
 	}
 	defer cancel()
 
 	requestDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
 		if err := buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport all TCP request").Base(err)
+			return errors.New("failed to transport all TCP request").Base(err)
 		}
 
 		return nil
@@ -171,7 +172,7 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 		if err := buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to transport all TCP response").Base(err)
+			return errors.New("failed to transport all TCP response").Base(err)
 		}
 
 		return nil
@@ -181,7 +182,7 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
-		newError("connection ends").Base(err).AtDebug().WriteToLog()
+		errors.LogDebugInner(s.info.ctx, err, "connection ends")
 		return
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "unsafe"
 
+	"github.com/GFW-knocker/Xray-core/common/ctx"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/features/routing"
 )
@@ -11,34 +12,18 @@ import (
 //go:linkname IndependentCancelCtx context.newCancelCtx
 func IndependentCancelCtx(parent context.Context) context.Context
 
-type sessionKey int
-
 const (
-	idSessionKey sessionKey = iota
-	inboundSessionKey
-	outboundSessionKey
-	contentSessionKey
-	muxPreferedSessionKey
-	sockoptSessionKey
-	trackedConnectionErrorKey
-	dispatcherKey
-	timeoutOnlyKey
-	allowedNetworkKey
-	handlerSessionKey
+	inboundSessionKey         ctx.SessionKey = 1
+	outboundSessionKey        ctx.SessionKey = 2
+	contentSessionKey         ctx.SessionKey = 3
+	muxPreferedSessionKey     ctx.SessionKey = 4
+	sockoptSessionKey         ctx.SessionKey = 5
+	trackedConnectionErrorKey ctx.SessionKey = 6
+	dispatcherKey             ctx.SessionKey = 7
+	timeoutOnlyKey            ctx.SessionKey = 8
+	allowedNetworkKey         ctx.SessionKey = 9
+	handlerSessionKey         ctx.SessionKey = 10
 )
-
-// ContextWithID returns a new context with the given ID.
-func ContextWithID(ctx context.Context, id ID) context.Context {
-	return context.WithValue(ctx, idSessionKey, id)
-}
-
-// IDFromContext returns ID in this context, or 0 if not contained.
-func IDFromContext(ctx context.Context) ID {
-	if id, ok := ctx.Value(idSessionKey).(ID); ok {
-		return id
-	}
-	return 0
-}
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
 	return context.WithValue(ctx, inboundSessionKey, inbound)

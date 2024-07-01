@@ -4,9 +4,11 @@ package retry // import "github.com/GFW-knocker/Xray-core/common/retry"
 
 import (
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
-var ErrRetryFailed = newError("all retry attempts failed")
+var ErrRetryFailed = errors.New("all retry attempts failed")
 
 // Strategy is a way to retry on a specific function.
 type Strategy interface {
@@ -36,7 +38,7 @@ func (r *retryer) On(method func() error) error {
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 		attempt++
 	}
-	return newError(accumulatedError).Base(ErrRetryFailed)
+	return errors.New(accumulatedError).Base(ErrRetryFailed)
 }
 
 // Timed returns a retry strategy with fixed interval.

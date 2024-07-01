@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/routing"
 	"github.com/GFW-knocker/Xray-core/features/stats"
@@ -38,7 +39,7 @@ func (s *routingServer) GetBalancerInfo(ctx context.Context, request *GetBalance
 		{
 			res, err := pt.GetPrincipleTarget(request.GetTag())
 			if err != nil {
-				newError("unable to obtain principle target").Base(err).AtInfo().WriteToLog()
+				errors.LogInfoInner(ctx, err, "unable to obtain principle target")
 			} else {
 				ret.Balancer.PrincipleTarget = &PrincipleTargetInfo{Tag: res}
 			}
@@ -51,21 +52,21 @@ func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *Ove
 	if bo, ok := s.router.(routing.BalancerOverrider); ok {
 		return &OverrideBalancerTargetResponse{}, bo.SetOverrideTarget(request.BalancerTag, request.Target)
 	}
-	return nil, newError("unsupported router implementation")
+	return nil, errors.New("unsupported router implementation")
 }
 
 func (s *routingServer) AddRule(ctx context.Context, request *AddRuleRequest) (*AddRuleResponse, error) {
 	if bo, ok := s.router.(routing.Router); ok {
 		return &AddRuleResponse{}, bo.AddRule(request.Config, request.ShouldAppend)
 	}
-	return nil, newError("unsupported router implementation")
+	return nil, errors.New("unsupported router implementation")
 
 }
 func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRuleRequest) (*RemoveRuleResponse, error) {
 	if bo, ok := s.router.(routing.Router); ok {
 		return &RemoveRuleResponse{}, bo.RemoveRule(request.RuleTag)
 	}
-	return nil, newError("unsupported router implementation")
+	return nil, errors.New("unsupported router implementation")
 }
 
 // NewRoutingServer creates a statistics service with statistics manager.
@@ -78,7 +79,7 @@ func NewRoutingServer(router routing.Router, routingStats stats.Channel) Routing
 
 func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest) (*RoutingContext, error) {
 	if request.RoutingContext == nil {
-		return nil, newError("Invalid routing request.")
+		return nil, errors.New("Invalid routing request.")
 	}
 	route, err := s.router.PickRoute(AsRoutingContext(request.RoutingContext))
 	if err != nil {
@@ -93,7 +94,7 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {
 	if s.routingStats == nil {
-		return newError("Routing statistics not enabled.")
+		return errors.New("Routing statistics not enabled.")
 	}
 	genMessage := AsProtobufMessage(request.FieldSelectors)
 	subscriber, err := stats.SubscribeRunnableChannel(s.routingStats)
@@ -105,11 +106,11 @@ func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequ
 		select {
 		case value, ok := <-subscriber:
 			if !ok {
-				return newError("Upstream closed the subscriber channel.")
+				return errors.New("Upstream closed the subscriber channel.")
 			}
 			route, ok := value.(routing.Route)
 			if !ok {
-				return newError("Upstream sent malformed statistics.")
+				return errors.New("Upstream sent malformed statistics.")
 			}
 			err := stream.Send(genMessage(route))
 			if err != nil {

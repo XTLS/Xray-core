@@ -57,6 +57,7 @@ import (
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/kcp"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/quic"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/reality"
+	_ "github.com/GFW-knocker/Xray-core/transport/internet/splithttp"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/tcp"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/udp"

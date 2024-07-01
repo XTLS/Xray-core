@@ -171,10 +171,10 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 	var parser dnsmessage.Parser
 	h, err := parser.Start(payload)
 	if err != nil {
-		return nil, newError("failed to parse DNS response").Base(err).AtWarning()
+		return nil, errors.New("failed to parse DNS response").Base(err).AtWarning()
 	}
 	if err := parser.SkipAllQuestions(); err != nil {
-		return nil, newError("failed to skip questions in DNS response").Base(err).AtWarning()
+		return nil, errors.New("failed to skip questions in DNS response").Base(err).AtWarning()
 	}
 
 	now := time.Now()
@@ -189,7 +189,7 @@ L:
 		ah, err := parser.AnswerHeader()
 		if err != nil {
 			if err != dnsmessage.ErrSectionDone {
-				newError("failed to parse answer section for domain: ", ah.Name.String()).Base(err).WriteToLog()
+				errors.LogInfoInner(context.Background(), err, "failed to parse answer section for domain: ", ah.Name.String())
 			}
 			break
 		}
@@ -207,20 +207,20 @@ L:
 		case dnsmessage.TypeA:
 			ans, err := parser.AResource()
 			if err != nil {
-				newError("failed to parse A record for domain: ", ah.Name).Base(err).WriteToLog()
+				errors.LogInfoInner(context.Background(), err, "failed to parse A record for domain: ", ah.Name)
 				break L
 			}
 			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.A[:]))
 		case dnsmessage.TypeAAAA:
 			ans, err := parser.AAAAResource()
 			if err != nil {
-				newError("failed to parse AAAA record for domain: ", ah.Name).Base(err).WriteToLog()
+				errors.LogInfoInner(context.Background(), err, "failed to parse AAAA record for domain: ", ah.Name)
 				break L
 			}
 			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.AAAA[:]))
 		default:
 			if err := parser.SkipAnswer(); err != nil {
-				newError("failed to skip answer").Base(err).WriteToLog()
+				errors.LogInfoInner(context.Background(), err, "failed to skip answer")
 				break L
 			}
 			continue

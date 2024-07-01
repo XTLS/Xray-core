@@ -6,6 +6,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/serial"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -96,7 +97,7 @@ func (r *TCPReader) ReadMessage() (*buf.Buffer, error) {
 		return nil, err
 	}
 	if size > buf.Size {
-		return nil, newError("message size too large: ", size)
+		return nil, errors.New("message size too large: ", size)
 	}
 	b := buf.New()
 	if _, err := b.ReadFullFrom(r.reader, int32(size)); err != nil {

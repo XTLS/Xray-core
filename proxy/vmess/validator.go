@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/proxy/vmess/aead"
 )
@@ -104,6 +105,6 @@ func (v *TimedUserValidator) GetBehaviorSeed() uint64 {
 	return v.behaviorSeed
 }
 
-var ErrNotFound = newError("Not Found")
+var ErrNotFound = errors.New("Not Found")
 
-var ErrTainted = newError("ErrTainted")
+var ErrTainted = errors.New("ErrTainted")

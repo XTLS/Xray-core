@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/json"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/serial"
 	"github.com/GFW-knocker/Xray-core/proxy/http"
@@ -67,11 +68,11 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 		for _, rawUser := range serverConfig.Users {
 			user := new(protocol.User)
 			if err := json.Unmarshal(rawUser, user); err != nil {
-				return nil, newError("failed to parse HTTP user").Base(err).AtError()
+				return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
 			}
 			account := new(HTTPAccount)
 			if err := json.Unmarshal(rawUser, account); err != nil {
-				return nil, newError("failed to parse HTTP account").Base(err).AtError()
+				return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
 			server.User = append(server.User, user)

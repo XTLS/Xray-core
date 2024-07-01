@@ -5,8 +5,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/GFW-knocker/Xray-core/features/dns"
 	"github.com/GFW-knocker/Xray-core/features/outbound"
 	"github.com/sagernet/sing/common/control"
@@ -48,7 +48,7 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 }
 
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
-	newError("dialing to " + dest.String()).AtDebug().WriteToLog()
+	errors.LogDebug(ctx, "dialing to "+dest.String())
 
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
@@ -73,7 +73,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			}
 			sys.Control(func(fd uintptr) {
 				if err := applyOutboundSocketOptions("udp", dest.NetAddr(), fd, sockopt); err != nil {
-					newError("failed to apply socket options").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfo(ctx, err, "failed to apply socket options")
 				}
 			})
 		}
@@ -99,17 +99,17 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		dialer.Control = func(network, address string, c syscall.RawConn) error {
 			for _, ctl := range d.controllers {
 				if err := ctl(network, address, c); err != nil {
-					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
 			return c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
-						newError("failed to apply socket options").Base(err).WriteToLog(session.ExportIDToError(ctx))
+						errors.LogInfoInner(ctx, err, "failed to apply socket options")
 					}
 					if dest.Network == net.Network_UDP && hasBindAddr(sockopt) {
 						if err := bindAddr(fd, sockopt.BindAddress, sockopt.BindPort); err != nil {
-							newError("failed to bind source address to ", sockopt.BindAddress).Base(err).WriteToLog(session.ExportIDToError(ctx))
+							errors.LogInfoInner(ctx, err, "failed to bind source address to ", sockopt.BindAddress)
 						}
 					}
 				}
@@ -210,12 +210,12 @@ func UseAlternativeSystemDialer(dialer SystemDialer) {
 // xray:api:beta
 func RegisterDialerController(ctl control.Func) error {
 	if ctl == nil {
-		return newError("nil listener controller")
+		return errors.New("nil listener controller")
 	}
 
 	dialer, ok := effectiveSystemDialer.(*DefaultSystemDialer)
 	if !ok {
-		return newError("RegisterListenerController not supported in custom dialer")
+		return errors.New("RegisterListenerController not supported in custom dialer")
 	}
 
 	dialer.controllers = append(dialer.controllers, ctl)

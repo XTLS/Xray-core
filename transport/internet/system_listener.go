@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/pires/go-proxyproto"
 	"github.com/sagernet/sing/common/control"
 )
@@ -39,13 +39,13 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 		return c.Control(func(fd uintptr) {
 			for _, controller := range controllers {
 				if err := controller(network, address, c); err != nil {
-					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
 
 			if sockopt != nil {
 				if err := applyInboundSocketOptions(network, fd, sockopt); err != nil {
-					newError("failed to apply socket options to incoming connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfoInner(ctx, err, "failed to apply socket options to incoming connection")
 				}
 			}
 
@@ -95,7 +95,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				address = s[0]
 				perm, perr := strconv.ParseUint(s[1], 8, 32)
 				if perr != nil {
-					return nil, newError("failed to parse permission: " + s[1]).Base(perr)
+					return nil, errors.New("failed to parse permission: " + s[1]).Base(perr)
 				}
 
 				mode := os.FileMode(perm)
@@ -122,7 +122,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				err = os.Chmod(address, *filePerm)
 				if err != nil {
 					l.Close()
-					return nil, newError("failed to set permission for " + address).Base(err)
+					return nil, errors.New("failed to set permission for " + address).Base(err)
 				}
 				return l, nil
 			}
@@ -152,7 +152,7 @@ func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sock
 // xray:api:beta
 func RegisterListenerController(controller control.Func) error {
 	if controller == nil {
-		return newError("nil listener controller")
+		return errors.New("nil listener controller")
 	}
 
 	effectiveListener.controllers = append(effectiveListener.controllers, controller)

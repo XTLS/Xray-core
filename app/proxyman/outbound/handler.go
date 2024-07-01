@@ -3,7 +3,7 @@ package outbound
 import (
 	"context"
 	"crypto/rand"
-	"errors"
+	goerrors "errors"
 	"io"
 	"math/big"
 	gonet "net"
@@ -12,6 +12,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/app/proxyman"
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/mux"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/net/cnc"
@@ -88,11 +89,11 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
 			if err != nil {
-				return nil, newError("failed to parse stream settings").Base(err).AtWarning()
+				return nil, errors.New("failed to parse stream settings").Base(err).AtWarning()
 			}
 			h.streamSettings = mss
 		default:
-			return nil, newError("settings is not SenderConfig")
+			return nil, errors.New("settings is not SenderConfig")
 		}
 	}
 
@@ -108,7 +109,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	proxyHandler, ok := rawProxyHandler.(proxy.Outbound)
 	if !ok {
-		return nil, newError("not an outbound handler")
+		return nil, errors.New("not an outbound handler")
 	}
 
 	if h.senderSettings != nil && h.senderSettings.MultiplexSettings != nil {
@@ -171,7 +172,7 @@ func (h *Handler) Tag() string {
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
@@ -179,16 +180,16 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	if h.mux != nil {
 		test := func(err error) {
 			if err != nil {
-				err := newError("failed to process mux outbound traffic").Base(err)
+				err := errors.New("failed to process mux outbound traffic").Base(err)
 				session.SubmitOutboundErrorToOriginator(ctx, err)
-				err.WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfo(ctx, err.Error())
 				common.Interrupt(link.Writer)
 			}
 		}
 		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
 			switch h.udp443 {
 			case "reject":
-				test(newError("XUDP rejected UDP/443 traffic").AtInfo())
+				test(errors.New("XUDP rejected UDP/443 traffic").AtInfo())
 				return
 			case "skip":
 				goto out
@@ -209,15 +210,15 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 out:
 	err := h.proxy.Process(ctx, link, h)
 	if err != nil {
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || errors.Is(err, context.Canceled) {
+		if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, context.Canceled) {
 			err = nil
 		}
 	}
 	if err != nil {
 		// Ensure outbound ray is properly closed.
-		err := newError("failed to process outbound traffic").Base(err)
+		err := errors.New("failed to process outbound traffic").Base(err)
 		session.SubmitOutboundErrorToOriginator(ctx, err)
-		err.WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, err.Error())
 		common.Interrupt(link.Writer)
 	} else {
 		common.Close(link.Writer)
@@ -244,11 +245,11 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			tag := h.senderSettings.ProxySettings.Tag
 			handler := h.outboundManager.GetHandler(tag)
 			if handler != nil {
-				newError("proxying to ", tag, " for dest ", dest).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogDebug(ctx, "proxying to ", tag, " for dest ", dest)
 				outbounds := session.OutboundsFromContext(ctx)
 				ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
 					Target: dest,
-					Tag: tag,
+					Tag:    tag,
 				})) // add another outbound in session ctx
 				opts := pipe.OptionsFromContext(ctx)
 				uplinkReader, uplinkWriter := pipe.New(opts...)
@@ -265,12 +266,12 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				return h.getStatCouterConnection(conn), nil
 			}
 
-			newError("failed to get outbound handler with tag: ", tag).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			errors.LogWarning(ctx, "failed to get outbound handler with tag: ", tag)
 		}
 
 		if h.senderSettings.Via != nil {
 			outbounds := session.OutboundsFromContext(ctx)
-			ob := outbounds[len(outbounds) - 1]
+			ob := outbounds[len(outbounds)-1]
 			if h.senderSettings.ViaCidr == "" {
 				ob.Gateway = h.senderSettings.Via.AsAddress()
 			} else { //Get a random address.
@@ -286,7 +287,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	ob.Conn = conn
 	return conn, err
 }

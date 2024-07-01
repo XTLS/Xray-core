@@ -7,6 +7,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/app/dns"
 	"github.com/GFW-knocker/Xray-core/app/router"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 )
 
@@ -47,7 +48,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return newError("failed to parse name server: ", string(data))
+	return errors.New("failed to parse name server: ", string(data))
 }
 
 func toDomainMatchingType(t router.Domain_Type) dns.DomainMatchingType {
@@ -67,7 +68,7 @@ func toDomainMatchingType(t router.Domain_Type) dns.DomainMatchingType {
 
 func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	if c.Address == nil {
-		return nil, newError("NameServer address is not specified.")
+		return nil, errors.New("NameServer address is not specified.")
 	}
 
 	var domains []*dns.NameServer_PriorityDomain
@@ -76,7 +77,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	for _, rule := range c.Domains {
 		parsedDomain, err := parseDomainRule(rule)
 		if err != nil {
-			return nil, newError("invalid domain rule: ", rule).Base(err)
+			return nil, errors.New("invalid domain rule: ", rule).Base(err)
 		}
 
 		for _, pd := range parsedDomain {
@@ -93,13 +94,13 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 
 	geoipList, err := ToCidrList(c.ExpectIPs)
 	if err != nil {
-		return nil, newError("invalid IP rule: ", c.ExpectIPs).Base(err)
+		return nil, errors.New("invalid IP rule: ", c.ExpectIPs).Base(err)
 	}
 
 	var myClientIP []byte
 	if c.ClientIP != nil {
 		if !c.ClientIP.Family().IsIP() {
-			return nil, newError("not an IP address:", c.ClientIP.String())
+			return nil, errors.New("not an IP address:", c.ClientIP.String())
 		}
 		myClientIP = []byte(c.ClientIP.IP())
 	}
@@ -153,7 +154,7 @@ func (h *HostAddress) UnmarshalJSON(data []byte) error {
 	case json.Unmarshal(data, &addrs) == nil:
 		h.addrs = addrs
 	default:
-		return newError("invalid address")
+		return errors.New("invalid address")
 	}
 	return nil
 }
@@ -196,7 +197,7 @@ func (m *HostsWrapper) UnmarshalJSON(data []byte) error {
 		m.Hosts = hosts
 		return nil
 	}
-	return newError("invalid DNS hosts").Base(err)
+	return errors.New("invalid DNS hosts").Base(err)
 }
 
 // Build implements Buildable
@@ -214,7 +215,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 		case strings.HasPrefix(domain, "domain:"):
 			domainName := domain[7:]
 			if len(domainName) == 0 {
-				return nil, newError("empty domain type of rule: ", domain)
+				return nil, errors.New("empty domain type of rule: ", domain)
 			}
 			mapping := getHostMapping(m.Hosts[domain])
 			mapping.Type = dns.DomainMatchingType_Subdomain
@@ -224,11 +225,11 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 		case strings.HasPrefix(domain, "geosite:"):
 			listName := domain[8:]
 			if len(listName) == 0 {
-				return nil, newError("empty geosite rule: ", domain)
+				return nil, errors.New("empty geosite rule: ", domain)
 			}
 			geositeList, err := loadGeositeWithAttr("geosite.dat", listName)
 			if err != nil {
-				return nil, newError("failed to load geosite: ", listName).Base(err)
+				return nil, errors.New("failed to load geosite: ", listName).Base(err)
 			}
 			for _, d := range geositeList {
 				mapping := getHostMapping(m.Hosts[domain])
@@ -240,7 +241,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 		case strings.HasPrefix(domain, "regexp:"):
 			regexpVal := domain[7:]
 			if len(regexpVal) == 0 {
-				return nil, newError("empty regexp type of rule: ", domain)
+				return nil, errors.New("empty regexp type of rule: ", domain)
 			}
 			mapping := getHostMapping(m.Hosts[domain])
 			mapping.Type = dns.DomainMatchingType_Regex
@@ -250,7 +251,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 		case strings.HasPrefix(domain, "keyword:"):
 			keywordVal := domain[8:]
 			if len(keywordVal) == 0 {
-				return nil, newError("empty keyword type of rule: ", domain)
+				return nil, errors.New("empty keyword type of rule: ", domain)
 			}
 			mapping := getHostMapping(m.Hosts[domain])
 			mapping.Type = dns.DomainMatchingType_Keyword
@@ -260,7 +261,7 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 		case strings.HasPrefix(domain, "full:"):
 			fullVal := domain[5:]
 			if len(fullVal) == 0 {
-				return nil, newError("empty full domain type of rule: ", domain)
+				return nil, errors.New("empty full domain type of rule: ", domain)
 			}
 			mapping := getHostMapping(m.Hosts[domain])
 			mapping.Type = dns.DomainMatchingType_Full
@@ -276,20 +277,20 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 			case !strings.Contains(substr, "."):
 				mapping.Domain = "^[^.]*" + substr + "[^.]*$"
 			default:
-				return nil, newError("substr in dotless rule should not contain a dot: ", substr)
+				return nil, errors.New("substr in dotless rule should not contain a dot: ", substr)
 			}
 			mappings = append(mappings, mapping)
 
 		case strings.HasPrefix(domain, "ext:"):
 			kv := strings.Split(domain[4:], ":")
 			if len(kv) != 2 {
-				return nil, newError("invalid external resource: ", domain)
+				return nil, errors.New("invalid external resource: ", domain)
 			}
 			filename := kv[0]
 			list := kv[1]
 			geositeList, err := loadGeositeWithAttr(filename, list)
 			if err != nil {
-				return nil, newError("failed to load domain list: ", list, " from ", filename).Base(err)
+				return nil, errors.New("failed to load domain list: ", list, " from ", filename).Base(err)
 			}
 			for _, d := range geositeList {
 				mapping := getHostMapping(m.Hosts[domain])
@@ -320,7 +321,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 
 	if c.ClientIP != nil {
 		if !c.ClientIP.Family().IsIP() {
-			return nil, newError("not an IP address:", c.ClientIP.String())
+			return nil, errors.New("not an IP address:", c.ClientIP.String())
 		}
 		config.ClientIp = []byte(c.ClientIP.IP())
 	}
@@ -328,7 +329,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	for _, server := range c.Servers {
 		ns, err := server.Build()
 		if err != nil {
-			return nil, newError("failed to build nameserver").Base(err)
+			return nil, errors.New("failed to build nameserver").Base(err)
 		}
 		config.NameServer = append(config.NameServer, ns)
 	}
@@ -336,7 +337,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	if c.Hosts != nil {
 		staticHosts, err := c.Hosts.Build()
 		if err != nil {
-			return nil, newError("failed to build hosts").Base(err)
+			return nil, errors.New("failed to build hosts").Base(err)
 		}
 		config.StaticHosts = append(config.StaticHosts, staticHosts...)
 	}

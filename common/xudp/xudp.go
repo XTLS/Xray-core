@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/platform"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
@@ -36,7 +37,7 @@ func init() {
 	}
 	rand.Read(BaseKey)
 	go func() {
-		time.Sleep(100 * time.Millisecond) // this is not nice, but need to give some time for Android to setup ENV 
+		time.Sleep(100 * time.Millisecond) // this is not nice, but need to give some time for Android to setup ENV
 		if raw := platform.NewEnvFlag(platform.XUDPBaseKey).GetValue(func() string { return "" }); raw != "" {
 			if BaseKey, _ = base64.RawURLEncoding.DecodeString(raw); len(BaseKey) == 32 {
 				return
@@ -56,7 +57,7 @@ func GetGlobalID(ctx context.Context) (globalID [8]byte) {
 		h.Write([]byte(inbound.Source.String()))
 		copy(globalID[:], h.Sum(nil))
 		if Show {
-			newError(fmt.Sprintf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID)).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfo(ctx, fmt.Sprintf("XUDP inbound.Source.String(): %v\tglobalID: %v\n", inbound.Source.String(), globalID))
 		}
 	}
 	return

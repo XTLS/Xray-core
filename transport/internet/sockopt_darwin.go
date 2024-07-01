@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"golang.org/x/sys/unix"
 )
@@ -36,7 +37,7 @@ const (
 func OriginalDst(la, ra net.Addr) (net.IP, int, error) {
 	f, err := os.Open("/dev/pf")
 	if err != nil {
-		return net.IP{}, -1, newError("failed to open device /dev/pf").Base(err)
+		return net.IP{}, -1, errors.New("failed to open device /dev/pf").Base(err)
 	}
 	defer f.Close()
 	fd := f.Fd()
@@ -111,7 +112,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			InterfaceIndex := getInterfaceIndexByName(config.Interface)
 			if InterfaceIndex != 0 {
 				if err := unix.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, InterfaceIndex); err != nil {
-					return newError("failed to set Interface").Base(err)
+					return errors.New("failed to set Interface").Base(err)
 				}
 			}
 		}
@@ -119,26 +120,26 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if config.TcpKeepAliveIdle > 0 || config.TcpKeepAliveInterval > 0 {
 			if config.TcpKeepAliveIdle > 0 {
 				if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_KEEPALIVE, int(config.TcpKeepAliveInterval)); err != nil {
-					return newError("failed to set TCP_KEEPINTVL", err)
+					return errors.New("failed to set TCP_KEEPINTVL", err)
 				}
 			}
 			if config.TcpKeepAliveInterval > 0 {
 				if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, sysTCP_KEEPINTVL, int(config.TcpKeepAliveIdle)); err != nil {
-					return newError("failed to set TCP_KEEPIDLE", err)
+					return errors.New("failed to set TCP_KEEPIDLE", err)
 				}
 			}
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 1); err != nil {
-				return newError("failed to set SO_KEEPALIVE", err)
+				return errors.New("failed to set SO_KEEPALIVE", err)
 			}
 		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 0); err != nil {
-				return newError("failed to unset SO_KEEPALIVE", err)
+				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
 		}
 
 		if config.TcpNoDelay {
 			if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
-				return newError("failed to set TCP_NODELAY", err)
+				return errors.New("failed to set TCP_NODELAY", err)
 			}
 		}
 	}
@@ -161,7 +162,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			InterfaceIndex := getInterfaceIndexByName(config.Interface)
 			if InterfaceIndex != 0 {
 				if err := unix.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF, InterfaceIndex); err != nil {
-					return newError("failed to set Interface").Base(err)
+					return errors.New("failed to set Interface").Base(err)
 				}
 			}
 		}
@@ -169,20 +170,20 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if config.TcpKeepAliveIdle > 0 || config.TcpKeepAliveInterval > 0 {
 			if config.TcpKeepAliveIdle > 0 {
 				if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_KEEPALIVE, int(config.TcpKeepAliveInterval)); err != nil {
-					return newError("failed to set TCP_KEEPINTVL", err)
+					return errors.New("failed to set TCP_KEEPINTVL", err)
 				}
 			}
 			if config.TcpKeepAliveInterval > 0 {
 				if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, sysTCP_KEEPINTVL, int(config.TcpKeepAliveIdle)); err != nil {
-					return newError("failed to set TCP_KEEPIDLE", err)
+					return errors.New("failed to set TCP_KEEPIDLE", err)
 				}
 			}
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 1); err != nil {
-				return newError("failed to set SO_KEEPALIVE", err)
+				return errors.New("failed to set SO_KEEPALIVE", err)
 			}
 		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_KEEPALIVE, 0); err != nil {
-				return newError("failed to unset SO_KEEPALIVE", err)
+				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
 		}
 	}
@@ -210,7 +211,7 @@ func bindAddr(fd uintptr, address []byte, port uint32) error {
 		copy(a6.Addr[:], address)
 		sockaddr = a6
 	default:
-		return newError("unexpected length of ip")
+		return errors.New("unexpected length of ip")
 	}
 
 	return unix.Bind(int(fd), sockaddr)
@@ -218,14 +219,14 @@ func bindAddr(fd uintptr, address []byte, port uint32) error {
 
 func setReuseAddr(fd uintptr) error {
 	if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
-		return newError("failed to set SO_REUSEADDR").Base(err).AtWarning()
+		return errors.New("failed to set SO_REUSEADDR").Base(err).AtWarning()
 	}
 	return nil
 }
 
 func setReusePort(fd uintptr) error {
 	if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
-		return newError("failed to set SO_REUSEPORT").Base(err).AtWarning()
+		return errors.New("failed to set SO_REUSEPORT").Base(err).AtWarning()
 	}
 	return nil
 }

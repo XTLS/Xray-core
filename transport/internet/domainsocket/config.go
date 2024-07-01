@@ -2,6 +2,7 @@ package domainsocket
 
 import (
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
@@ -14,7 +15,7 @@ const (
 func (c *Config) GetUnixAddr() (*net.UnixAddr, error) {
 	path := c.Path
 	if path == "" {
-		return nil, newError("empty domain socket path")
+		return nil, errors.New("empty domain socket path")
 	}
 	if c.Abstract && path[0] != '@' {
 		path = "@" + path

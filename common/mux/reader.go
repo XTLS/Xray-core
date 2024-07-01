@@ -5,6 +5,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common/buf"
 	"github.com/GFW-knocker/Xray-core/common/crypto"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/serial"
 )
@@ -37,7 +38,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 
 	if size > buf.Size {
-		return nil, newError("packet size too large: ", size)
+		return nil, errors.New("packet size too large: ", size)
 	}
 
 	b := buf.New()

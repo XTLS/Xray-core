@@ -30,6 +30,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
 	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/log"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
@@ -120,7 +121,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 
 	h.net, err = h.makeVirtualTun(bind)
 	if err != nil {
-		return newError("failed to create virtual tun interface").Base(err)
+		return errors.New("failed to create virtual tun interface").Base(err)
 	}
 	h.bind = bind
 	return nil
@@ -129,9 +130,9 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return newError("target not specified")
+		return errors.New("target not specified")
 	}
 	ob.Name = "wireguard"
 	ob.CanSpliceCopy = 3
@@ -163,7 +164,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		}
 		if err != nil {
-			return newError("failed to lookup DNS").Base(err)
+			return errors.New("failed to lookup DNS").Base(err)
 		} else if len(ips) == 0 {
 			return dns.ErrEmptyResponse
 		}
@@ -193,7 +194,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if command == protocol.RequestCommandTCP {
 		conn, err := h.net.DialContextTCPAddrPort(ctx, addrPort)
 		if err != nil {
-			return newError("failed to create TCP connection").Base(err)
+			return errors.New("failed to create TCP connection").Base(err)
 		}
 		defer conn.Close()
 
@@ -208,7 +209,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	} else if command == protocol.RequestCommandUDP {
 		conn, err := h.net.DialUDPAddrPort(netip.AddrPort{}, addrPort)
 		if err != nil {
-			return newError("failed to create UDP connection").Base(err)
+			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
 
@@ -230,7 +231,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil
@@ -275,14 +276,14 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 
 		address, port, err := net.SplitHostPort(peer.Endpoint)
 		if err != nil {
-			newError("failed to split endpoint ", peer.Endpoint, " into address and port").AtError().WriteToLog()
+			errors.LogError(h.bind.ctx, "failed to split endpoint ", peer.Endpoint, " into address and port")
 		}
 		addr := net.ParseAddress(address)
 		if addr.Family().IsDomain() {
 			dialerIp := bind.dialer.DestIpAddress()
 			if dialerIp != nil {
 				addr = net.ParseAddress(dialerIp.String())
-				newError("createIPCRequest use dialer dest ip: ", addr).WriteToLog()
+				errors.LogInfo(h.bind.ctx, "createIPCRequest use dialer dest ip: ", addr)
 			} else {
 				ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
 					IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
@@ -297,9 +298,9 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 					}
 				}
 				if err != nil {
-					newError("createIPCRequest failed to lookup DNS").Base(err).WriteToLog()
+					errors.LogInfoInner(h.bind.ctx, err, "createIPCRequest failed to lookup DNS")
 				} else if len(ips) == 0 {
-					newError("createIPCRequest empty lookup DNS").WriteToLog()
+					errors.LogInfo(h.bind.ctx, "createIPCRequest empty lookup DNS")
 				} else {
 					addr = net.IPAddress(ips[dice.Roll(len(ips))])
 				}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/serial"
@@ -13,11 +14,11 @@ import (
 )
 
 var (
-	ErrCommandTooLarge     = newError("Command too large.")
-	ErrCommandTypeMismatch = newError("Command type mismatch.")
-	ErrInvalidAuth         = newError("Invalid auth.")
-	ErrInsufficientLength  = newError("Insufficient length.")
-	ErrUnknownCommand      = newError("Unknown command.")
+	ErrCommandTooLarge     = errors.New("Command too large.")
+	ErrCommandTypeMismatch = errors.New("Command type mismatch.")
+	ErrInvalidAuth         = errors.New("Invalid auth.")
+	ErrInsufficientLength  = errors.New("Insufficient length.")
+	ErrUnknownCommand      = errors.New("Unknown command.")
 )
 
 func MarshalCommand(command interface{}, writer io.Writer) error {

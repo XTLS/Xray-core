@@ -2,15 +2,18 @@ package burst
 
 import (
 	"context"
-	
-	"github.com/GFW-knocker/Xray-core/core"
+
+	"sync"
+
 	"github.com/GFW-knocker/Xray-core/app/observatory"
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/signal/done"
+	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/extension"
 	"github.com/GFW-knocker/Xray-core/features/outbound"
+
 	"google.golang.org/protobuf/proto"
-	"sync"
 )
 
 type Observer struct {
@@ -66,7 +69,7 @@ func (o *Observer) Start() error {
 			hs, ok := o.ohm.(outbound.HandlerSelector)
 			if !ok {
 
-				return nil, newError("outbound.Manager is not a HandlerSelector")
+				return nil, errors.New("outbound.Manager is not a HandlerSelector")
 			}
 
 			outbounds := hs.Select(o.config.SubjectSelector)
@@ -90,7 +93,7 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 		outboundManager = om
 	})
 	if err != nil {
-		return nil, newError("Cannot get depended features").Base(err)
+		return nil, errors.New("Cannot get depended features").Base(err)
 	}
 	hp := NewHealthPing(ctx, config.PingConfig)
 	return &Observer{

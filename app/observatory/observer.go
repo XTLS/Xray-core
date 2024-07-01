@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	v2net "github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/GFW-knocker/Xray-core/common/signal/done"
@@ -60,7 +61,7 @@ func (o *Observer) background() {
 	for !o.finished.Done() {
 		hs, ok := o.ohm.(outbound.HandlerSelector)
 		if !ok {
-			newError("outbound.Manager is not a HandlerSelector").WriteToLog()
+			errors.LogInfo(o.ctx, "outbound.Manager is not a HandlerSelector")
 			return
 		}
 
@@ -127,18 +128,18 @@ func (o *Observer) probe(outbound string) ProbeResult {
 				// MUST use Xray's built in context system
 				dest, err := v2net.ParseDestination(network + ":" + addr)
 				if err != nil {
-					return newError("cannot understand address").Base(err)
+					return errors.New("cannot understand address").Base(err)
 				}
 				trackedCtx := session.TrackedConnectionError(o.ctx, errorCollectorForRequest)
 				conn, err := tagged.Dialer(trackedCtx, dest, outbound)
 				if err != nil {
-					return newError("cannot dial remote address ", dest).Base(err)
+					return errors.New("cannot dial remote address ", dest).Base(err)
 				}
 				connection = conn
 				return nil
 			})
 			if taskErr != nil {
-				return nil, newError("cannot finish connection").Base(taskErr)
+				return nil, errors.New("cannot finish connection").Base(taskErr)
 			}
 			return connection, nil
 		},
@@ -161,7 +162,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		}
 		response, err := httpClient.Get(probeURL)
 		if err != nil {
-			return newError("outbound failed to relay connection").Base(err)
+			return errors.New("outbound failed to relay connection").Base(err)
 		}
 		if response.Body != nil {
 			response.Body.Close()
@@ -171,15 +172,11 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		return nil
 	})
 	if err != nil {
-		fullerr := newError("underlying connection failed").Base(errorCollectorForRequest.UnderlyingError())
-		fullerr = newError("with outbound handler report").Base(fullerr)
-		fullerr = newError("GET request failed:", err).Base(fullerr)
-		fullerr = newError("the outbound ", outbound, " is dead:").Base(fullerr)
-		fullerr = fullerr.AtInfo()
-		fullerr.WriteToLog()
-		return ProbeResult{Alive: false, LastErrorReason: fullerr.Error()}
+		var errorMessage = "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
+		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)
+		return ProbeResult{Alive: false, LastErrorReason: errorMessage}
 	}
-	newError("the outbound ", outbound, " is alive:", GETTime.Seconds()).AtInfo().WriteToLog()
+	errors.LogInfo(o.ctx, "the outbound ", outbound, " is alive:", GETTime.Seconds())
 	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}
 }
 
@@ -222,7 +219,7 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 		outboundManager = om
 	})
 	if err != nil {
-		return nil, newError("Cannot get depended features").Base(err)
+		return nil, errors.New("Cannot get depended features").Base(err)
 	}
 	return &Observer{
 		config: config,

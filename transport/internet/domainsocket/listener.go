@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
@@ -38,7 +39,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	unixListener, err := net.ListenUnix("unix", addr)
 	if err != nil {
-		return nil, newError("failed to listen domain socket").Base(err).AtWarning()
+		return nil, errors.New("failed to listen domain socket").Base(err).AtWarning()
 	}
 
 	ln := &Listener{
@@ -88,7 +89,7 @@ func (ln *Listener) run() {
 			if strings.Contains(err.Error(), "closed") {
 				break
 			}
-			newError("failed to accepted raw connections").Base(err).AtWarning().WriteToLog()
+			errors.LogWarningInner(context.Background(), err, "failed to accepted raw connections")
 			continue
 		}
 		go func() {
@@ -96,7 +97,7 @@ func (ln *Listener) run() {
 				conn = tls.Server(conn, ln.tlsConfig)
 			} else if ln.realityConfig != nil {
 				if conn, err = reality.Server(conn, ln.realityConfig); err != nil {
-					newError(err).AtInfo().WriteToLog()
+					errors.LogInfo(context.Background(), err.Error())
 					return
 				}
 			}
@@ -117,7 +118,7 @@ func (fl *fileLocker) Acquire() error {
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		f.Close()
-		return newError("failed to lock file: ", fl.path).Base(err)
+		return errors.New("failed to lock file: ", fl.path).Base(err)
 	}
 	fl.file = f
 	return nil
@@ -125,13 +126,13 @@ func (fl *fileLocker) Acquire() error {
 
 func (fl *fileLocker) Release() {
 	if err := unix.Flock(int(fl.file.Fd()), unix.LOCK_UN); err != nil {
-		newError("failed to unlock file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to unlock file: ", fl.path)
 	}
 	if err := fl.file.Close(); err != nil {
-		newError("failed to close file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to close file: ", fl.path)
 	}
 	if err := os.Remove(fl.path); err != nil {
-		newError("failed to remove file: ", fl.path).Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to remove file: ", fl.path)
 	}
 }
 

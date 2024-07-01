@@ -14,6 +14,7 @@ import (
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
 const (
@@ -28,9 +29,9 @@ const (
 )
 
 var (
-	ErrHeaderToLong = newError("Header too long.")
+	ErrHeaderToLong = errors.New("Header too long.")
 
-	ErrHeaderMisMatch = newError("Header Mismatch.")
+	ErrHeaderMisMatch = errors.New("Header Mismatch.")
 )
 
 type Reader interface {

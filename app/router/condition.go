@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/strmatcher"
 	"github.com/GFW-knocker/Xray-core/features/routing"
@@ -49,12 +50,12 @@ var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
 	matcherType, f := matcherTypeMap[domain.Type]
 	if !f {
-		return nil, newError("unsupported domain type", domain.Type)
+		return nil, errors.New("unsupported domain type", domain.Type)
 	}
 
 	matcher, err := matcherType.New(domain.Value)
 	if err != nil {
-		return nil, newError("failed to create domain matcher").Base(err)
+		return nil, errors.New("failed to create domain matcher").Base(err)
 	}
 
 	return matcher, nil
@@ -69,7 +70,7 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	for _, d := range domains {
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
-			return nil, newError("unsupported domain type", d.Type)
+			return nil, errors.New("unsupported domain type", d.Type)
 		}
 		_, err := g.AddPattern(d.Value, matcherType)
 		if err != nil {

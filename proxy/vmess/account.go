@@ -3,6 +3,7 @@ package vmess
 import (
 	"strings"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/uuid"
 )
@@ -31,7 +32,7 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 func (a *Account) AsAccount() (protocol.Account, error) {
 	id, err := uuid.ParseString(a.Id)
 	if err != nil {
-		return nil, newError("failed to parse ID").Base(err).AtError()
+		return nil, errors.New("failed to parse ID").Base(err).AtError()
 	}
 	protoID := protocol.NewID(id)
 	var AuthenticatedLength, NoTerminationSignal bool

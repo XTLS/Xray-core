@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/net/cnc"
 	"github.com/GFW-knocker/Xray-core/common/signal/done"
@@ -31,7 +32,7 @@ func (l *OutboundListener) add(conn net.Conn) {
 func (l *OutboundListener) Accept() (net.Conn, error) {
 	select {
 	case <-l.done.Wait():
-		return nil, newError("listen closed")
+		return nil, errors.New("listen closed")
 	case c := <-l.buffer:
 		return c, nil
 	}

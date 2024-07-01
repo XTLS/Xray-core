@@ -9,6 +9,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/app/observatory"
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/extension"
 )
@@ -95,7 +96,7 @@ func (s *LeastLoadStrategy) pickOutbounds(candidates []string) []*node {
 // with 'balancer.fallbackTag', it means: selects qualified nodes or use the fallback.
 func (s *LeastLoadStrategy) selectLeastLoad(nodes []*node) []*node {
 	if len(nodes) == 0 {
-		newError("least load: no qualified outbound").AtInfo().WriteToLog()
+		errors.LogInfo(s.ctx, "least load: no qualified outbound")
 		return nil
 	}
 	expected := int(s.settings.Expected)
@@ -123,7 +124,7 @@ func (s *LeastLoadStrategy) selectLeastLoad(nodes []*node) []*node {
 		}
 		// don't continue if find expected selects
 		if count >= expected {
-			newError("applied baseline: ", baseline).AtDebug().WriteToLog()
+			errors.LogDebug(s.ctx, "applied baseline: ", baseline)
 			break
 		}
 	}
@@ -142,7 +143,7 @@ func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) 
 	}
 	observeResult, err := s.observer.GetObservation(s.ctx)
 	if err != nil {
-		newError("cannot get observation").Base(err).WriteToLog()
+		errors.LogInfoInner(s.ctx, err, "cannot get observation")
 		return make([]*node, 0)
 	}
 

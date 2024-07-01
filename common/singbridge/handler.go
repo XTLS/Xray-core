@@ -4,14 +4,13 @@ import (
 	"context"
 	"io"
 
-	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/GFW-knocker/Xray-core/common/buf"
 	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/GFW-knocker/Xray-core/features/routing"
 	"github.com/GFW-knocker/Xray-core/transport"
+	M "github.com/sagernet/sing/common/metadata"
+	N "github.com/sagernet/sing/common/network"
 )
 
 var (
@@ -47,5 +46,5 @@ func (d *Dispatcher) NewPacketConnection(ctx context.Context, conn N.PacketConn,
 }
 
 func (d *Dispatcher) NewError(ctx context.Context, err error) {
-	d.newErrorFunc(err).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, err.Error())
 }

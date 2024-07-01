@@ -14,6 +14,9 @@
 				count += 1
 				console.log("Prepare", url)
 				var ws = new WebSocket(url)
+				// arraybuffer is significantly faster in chrome than default
+				// blob, tested with chrome 123
+				ws.binaryType = "arraybuffer";
 				var wss = undefined
 				var first = true
 				ws.onmessage = function (event) {
@@ -23,6 +26,7 @@
 						var arr = event.data.split(" ")
 						console.log("Dial", arr[0], arr[1])
 						wss = new WebSocket(arr[0], arr[1])
+						wss.binaryType = "arraybuffer";
 						var opened = false
 						wss.onopen = function (event) {
 							opened = true

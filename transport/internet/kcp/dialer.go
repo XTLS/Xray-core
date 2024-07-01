@@ -8,6 +8,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
 	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
@@ -46,22 +47,22 @@ func fetchInput(_ context.Context, input io.Reader, reader PacketReader, conn *C
 // DialKCP dials a new KCP connections to the specific destination.
 func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	dest.Network = net.Network_UDP
-	newError("dialing mKCP to ", dest).WriteToLog()
+	errors.LogInfo(ctx, "dialing mKCP to ", dest)
 
 	rawConn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
-		return nil, newError("failed to dial to dest: ", err).AtWarning().Base(err)
+		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
 	kcpSettings := streamSettings.ProtocolSettings.(*Config)
 
 	header, err := kcpSettings.GetPackerHeader()
 	if err != nil {
-		return nil, newError("failed to create packet header").Base(err)
+		return nil, errors.New("failed to create packet header").Base(err)
 	}
 	security, err := kcpSettings.GetSecurity()
 	if err != nil {
-		return nil, newError("failed to create security").Base(err)
+		return nil, errors.New("failed to create security").Base(err)
 	}
 	reader := &KCPPacketReader{
 		Header:   header,

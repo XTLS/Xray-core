@@ -3,6 +3,7 @@ package taggedimpl
 import (
 	"context"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/net/cnc"
 	"github.com/GFW-knocker/Xray-core/common/session"
@@ -14,12 +15,12 @@ import (
 func DialTaggedOutbound(ctx context.Context, dest net.Destination, tag string) (net.Conn, error) {
 	var dispatcher routing.Dispatcher
 	if core.FromContext(ctx) == nil {
-		return nil, newError("Instance context variable is not in context, dial denied. ")
+		return nil, errors.New("Instance context variable is not in context, dial denied. ")
 	}
 	if err := core.RequireFeatures(ctx, func(dispatcherInstance routing.Dispatcher) {
 		dispatcher = dispatcherInstance
 	}); err != nil {
-		return nil, newError("Required Feature dispatcher not resolved").Base(err)
+		return nil, errors.New("Required Feature dispatcher not resolved").Base(err)
 	}
 
 	content := new(session.Content)

@@ -1,12 +1,14 @@
 package ctlcmd
 
 import (
+	"context"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/platform"
 )
 
@@ -15,7 +17,7 @@ import (
 func Run(args []string, input io.Reader) (buf.MultiBuffer, error) {
 	xctl := platform.GetToolLocation("xctl")
 	if _, err := os.Stat(xctl); err != nil {
-		return nil, newError("xctl doesn't exist").Base(err)
+		return nil, errors.New("xctl doesn't exist").Base(err)
 	}
 
 	var errBuffer buf.MultiBufferContainer
@@ -30,7 +32,7 @@ func Run(args []string, input io.Reader) (buf.MultiBuffer, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, newError("failed to start xctl").Base(err)
+		return nil, errors.New("failed to start xctl").Base(err)
 	}
 
 	if err := cmd.Wait(); err != nil {
@@ -38,12 +40,12 @@ func Run(args []string, input io.Reader) (buf.MultiBuffer, error) {
 		if errBuffer.Len() > 0 {
 			msg += ": \n" + strings.TrimSpace(errBuffer.MultiBuffer.String())
 		}
-		return nil, newError(msg).Base(err)
+		return nil, errors.New(msg).Base(err)
 	}
 
 	// log stderr, info message
 	if !errBuffer.IsEmpty() {
-		newError("<xctl message> \n", strings.TrimSpace(errBuffer.MultiBuffer.String())).AtInfo().WriteToLog()
+		errors.LogInfo(context.Background(), "<xctl message> \n", strings.TrimSpace(errBuffer.MultiBuffer.String()))
 	}
 
 	return outBuffer.MultiBuffer, nil

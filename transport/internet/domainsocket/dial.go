@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
@@ -23,7 +24,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	conn, err := net.DialUnix("unix", nil, addr)
 	if err != nil {
-		return nil, newError("failed to dial unix: ", settings.Path).Base(err).AtWarning()
+		return nil, errors.New("failed to dial unix: ", settings.Path).Base(err).AtWarning()
 	}
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {

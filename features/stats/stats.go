@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/features"
 )
 
@@ -116,7 +117,7 @@ func (NoopManager) Type() interface{} {
 
 // RegisterCounter implements Manager.
 func (NoopManager) RegisterCounter(string) (Counter, error) {
-	return nil, newError("not implemented")
+	return nil, errors.New("not implemented")
 }
 
 // UnregisterCounter implements Manager.
@@ -131,7 +132,7 @@ func (NoopManager) GetCounter(string) Counter {
 
 // RegisterChannel implements Manager.
 func (NoopManager) RegisterChannel(string) (Channel, error) {
-	return nil, newError("not implemented")
+	return nil, errors.New("not implemented")
 }
 
 // UnregisterChannel implements Manager.

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/proxy"
 	"github.com/GFW-knocker/Xray-core/proxy/vless"
@@ -16,17 +17,17 @@ func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
 	case vless.XRV:
 		bytes, err := proto.Marshal(addons)
 		if err != nil {
-			return newError("failed to marshal addons protobuf value").Base(err)
+			return errors.New("failed to marshal addons protobuf value").Base(err)
 		}
 		if err := buffer.WriteByte(byte(len(bytes))); err != nil {
-			return newError("failed to write addons protobuf length").Base(err)
+			return errors.New("failed to write addons protobuf length").Base(err)
 		}
 		if _, err := buffer.Write(bytes); err != nil {
-			return newError("failed to write addons protobuf value").Base(err)
+			return errors.New("failed to write addons protobuf value").Base(err)
 		}
 	default:
 		if err := buffer.WriteByte(0); err != nil {
-			return newError("failed to write addons protobuf length").Base(err)
+			return errors.New("failed to write addons protobuf length").Base(err)
 		}
 	}
 
@@ -37,17 +38,17 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 	addons := new(Addons)
 	buffer.Clear()
 	if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-		return nil, newError("failed to read addons protobuf length").Base(err)
+		return nil, errors.New("failed to read addons protobuf length").Base(err)
 	}
 
 	if length := int32(buffer.Byte(0)); length != 0 {
 		buffer.Clear()
 		if _, err := buffer.ReadFullFrom(reader, length); err != nil {
-			return nil, newError("failed to read addons protobuf value").Base(err)
+			return nil, errors.New("failed to read addons protobuf value").Base(err)
 		}
 
 		if err := proto.Unmarshal(buffer.Bytes(), addons); err != nil {
-			return nil, newError("failed to unmarshal addons protobuf value").Base(err)
+			return nil, errors.New("failed to unmarshal addons protobuf value").Base(err)
 		}
 
 		// Verification.
@@ -149,7 +150,7 @@ func (w *LengthPacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		mb[i] = nil
 	}
 	if _, err := w.Write(w.cache); err != nil {
-		return newError("failed to write a packet").Base(err)
+		return errors.New("failed to write a packet").Base(err)
 	}
 	return nil
 }
@@ -168,7 +169,7 @@ type LengthPacketReader struct {
 
 func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if _, err := io.ReadFull(r.Reader, r.cache); err != nil { // maybe EOF
-		return nil, newError("failed to read packet length").Base(err)
+		return nil, errors.New("failed to read packet length").Base(err)
 	}
 	length := int32(r.cache[0])<<8 | int32(r.cache[1])
 	// fmt.Println("Read", length)
@@ -181,7 +182,7 @@ func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		length -= size
 		b := buf.New()
 		if _, err := b.ReadFullFrom(r.Reader, size); err != nil {
-			return nil, newError("failed to read packet payload").Base(err)
+			return nil, errors.New("failed to read packet payload").Base(err)
 		}
 		mb = append(mb, b)
 	}

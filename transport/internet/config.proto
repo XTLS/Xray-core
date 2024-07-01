@@ -16,6 +16,7 @@ enum TransportProtocol {
   HTTP = 4;
   DomainSocket = 5;
   HTTPUpgrade = 6;
+  SplitHTTP = 7;
 }
 
 enum DomainStrategy {

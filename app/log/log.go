@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/log"
 )
 
@@ -35,7 +36,7 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 		return nil, err
 	}
 
-	newError("Logger started").AtDebug().WriteToLog()
+	errors.LogDebug(ctx, "Logger started")
 	return g, nil
 }
 
@@ -77,10 +78,10 @@ func (g *Instance) startInternal() error {
 	g.active = true
 
 	if err := g.initAccessLogger(); err != nil {
-		return newError("failed to initialize access logger").Base(err).AtWarning()
+		return errors.New("failed to initialize access logger").Base(err).AtWarning()
 	}
 	if err := g.initErrorLogger(); err != nil {
-		return newError("failed to initialize error logger").Base(err).AtWarning()
+		return errors.New("failed to initialize error logger").Base(err).AtWarning()
 	}
 
 	return nil
@@ -120,7 +121,7 @@ func (g *Instance) Handle(msg log.Message) {
 
 // Close implements common.Closable.Close().
 func (g *Instance) Close() error {
-	newError("Logger closing").AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "Logger closing")
 
 	g.Lock()
 	defer g.Unlock()

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
@@ -24,16 +24,20 @@ type ConnRF struct {
 func (c *ConnRF) Read(b []byte) (int, error) {
 	if c.First {
 		c.First = false
-		// TODO The bufio usage here is unreliable
-		resp, err := http.ReadResponse(bufio.NewReader(c.Conn), c.Req) // nolint:bodyclose
+		// create reader capped to size of `b`, so it can be fully drained into
+		// `b` later with a single Read call
+		reader := bufio.NewReaderSize(c.Conn, len(b))
+		resp, err := http.ReadResponse(reader, c.Req) // nolint:bodyclose
 		if err != nil {
 			return 0, err
 		}
 		if resp.Status != "101 Switching Protocols" ||
 			strings.ToLower(resp.Header.Get("Upgrade")) != "websocket" ||
 			strings.ToLower(resp.Header.Get("Connection")) != "upgrade" {
-			return 0, newError("unrecognized reply")
+			return 0, errors.New("unrecognized reply")
 		}
+		// drain remaining bufreader
+		return reader.Read(b[:reader.Buffered()])
 	}
 	return c.Conn.Read(b)
 }
@@ -43,7 +47,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 
 	pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
-		newError("failed to dial to ", dest).Base(err).AtError().WriteToLog()
+		errors.LogErrorInner(ctx, err, "failed to dial to ", dest)
 		return nil, err
 	}
 
@@ -74,9 +78,9 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		Header: make(http.Header),
 	}
 	for key, value := range transportConfiguration.Header {
-		req.Header.Add(key, value)
+		AddHeader(req.Header, key, value)
 	}
-	req.Header.Set("Connection", "upgrade")
+	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
 
 	err = req.Write(conn)
@@ -100,16 +104,23 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	return connRF, nil
 }
 
-func dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("creating connection to ", dest).WriteToLog(session.ExportIDToError(ctx))
+// http.Header.Add() will convert headers to MIME header format.
+// Some people don't like this because they want to send "Web*S*ocket".
+// So we add a simple function to replace that method.
+func AddHeader(header http.Header, key, value string) {
+	header[key] = append(header[key], value)
+}
+
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
+	errors.LogInfo(ctx, "creating connection to ", dest)
 
 	conn, err := dialhttpUpgrade(ctx, dest, streamSettings)
 	if err != nil {
-		return nil, newError("failed to dial request to ", dest).Base(err)
+		return nil, errors.New("failed to dial request to ", dest).Base(err)
 	}
 	return stat.Connection(conn), nil
 }
 
 func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, dial))
+	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/task"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
@@ -21,7 +22,7 @@ type connectionContext struct {
 	conn    quic.Connection
 }
 
-var errConnectionClosed = newError("connection closed")
+var errConnectionClosed = errors.New("connection closed")
 
 func (c *connectionContext) openStream(destAddr net.Addr) (*interConn, error) {
 	if !isActive(c.conn) {
@@ -65,17 +66,17 @@ func removeInactiveConnections(conns []*connectionContext) []*connectionContext 
 			continue
 		}
 
-		newError("closing quic connection at index: ", i).WriteToLog()
+		errors.LogInfo(context.Background(), "closing quic connection at index: ", i)
 		if err := s.conn.CloseWithError(0, ""); err != nil {
-			newError("failed to close connection").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to close connection")
 		}
 		if err := s.rawConn.Close(); err != nil {
-			newError("failed to close raw connection").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to close raw connection")
 		}
 	}
 
 	if len(activeConnections) < len(conns) {
-		newError("active quic connection reduced from ", len(conns), " to ", len(activeConnections)).WriteToLog()
+		errors.LogInfo(context.Background(), "active quic connection reduced from ", len(conns), " to ", len(activeConnections))
 		return activeConnections
 	}
 
@@ -125,17 +126,17 @@ func (s *clientConnections) openConnection(ctx context.Context, destAddr net.Add
 			if err == nil {
 				return conn, nil
 			}
-			newError("failed to openStream: ").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "failed to openStream: ")
 		} else {
-			newError("current quic connection is not active!").WriteToLog()
+			errors.LogInfo(ctx, "current quic connection is not active!")
 		}
 	}
 
 	conns = removeInactiveConnections(conns)
-	newError("dialing quic to ", dest).WriteToLog()
+	errors.LogInfo(ctx, "dialing quic to ", dest)
 	rawConn, err := internet.DialSystem(ctx, dest, sockopt)
 	if err != nil {
-		return nil, newError("failed to dial to dest: ", err).AtWarning().Base(err)
+		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
 	quicConfig := &quic.Config{
@@ -156,7 +157,7 @@ func (s *clientConnections) openConnection(ctx context.Context, destAddr net.Add
 	default:
 		// TODO: Support sockopt for QUIC
 		rawConn.Close()
-		return nil, newError("QUIC with sockopt is unsupported").AtWarning()
+		return nil, errors.New("QUIC with sockopt is unsupported").AtWarning()
 	}
 
 	sysConn, err := wrapSysConn(udpConn, config)
@@ -208,14 +209,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			IP:   dest.Address.IP(),
 			Port: int(dest.Port),
 		}
-	}  else {
+	} else {
 		dialerIp := internet.DestIpAddress()
 		if dialerIp != nil {
 			destAddr = &net.UDPAddr{
 				IP:   dialerIp,
 				Port: int(dest.Port),
 			}
-			newError("quic Dial use dialer dest addr: ", destAddr).WriteToLog()
+			errors.LogInfo(ctx, "quic Dial use dialer dest addr: ", destAddr)
 		} else {
 			addr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
 			if err != nil {

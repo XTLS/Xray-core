@@ -3,6 +3,16 @@ package shadowsocks_2022
 import (
 	"context"
 
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/log"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/common/singbridge"
+	"github.com/GFW-knocker/Xray-core/features/routing"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	shadowsocks "github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
@@ -11,15 +21,6 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/GFW-knocker/Xray-core/common"
-	"github.com/GFW-knocker/Xray-core/common/buf"
-	"github.com/GFW-knocker/Xray-core/common/log"
-	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/protocol"
-	"github.com/GFW-knocker/Xray-core/common/session"
-	"github.com/GFW-knocker/Xray-core/common/singbridge"
-	"github.com/GFW-knocker/Xray-core/features/routing"
-	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 )
 
 func init() {
@@ -49,11 +50,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 		level:    int(config.Level),
 	}
 	if !C.Contains(shadowaead_2022.List, config.Method) {
-		return nil, newError("unsupported method ", config.Method)
+		return nil, errors.New("unsupported method ", config.Method)
 	}
 	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound, nil)
 	if err != nil {
-		return nil, newError("create service").Base(err)
+		return nil, errors.New("create service").Base(err)
 	}
 	inbound.service = service
 	return inbound, nil
@@ -112,7 +113,7 @@ func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 		Status: log.AccessAccepted,
 		Email:  i.email,
 	})
-	newError("tunnelling request to tcp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
 	if err != nil {
@@ -133,7 +134,7 @@ func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 		Status: log.AccessAccepted,
 		Email:  i.email,
 	})
-	newError("tunnelling request to udp:", metadata.Destination).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
 	link, err := dispatcher.Dispatch(ctx, destination)
@@ -152,7 +153,7 @@ func (i *Inbound) NewError(ctx context.Context, err error) {
 	if E.IsClosed(err) {
 		return
 	}
-	newError(err).AtWarning().WriteToLog()
+	errors.LogWarning(ctx, err.Error())
 }
 
 type natPacketConn struct {

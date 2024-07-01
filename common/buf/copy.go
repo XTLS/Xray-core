@@ -120,7 +120,7 @@ func Copy(reader Reader, writer Writer, options ...CopyOption) error {
 	return nil
 }
 
-var ErrNotTimeoutReader = newError("not a TimeoutReader")
+var ErrNotTimeoutReader = errors.New("not a TimeoutReader")
 
 func CopyOnceTimeout(reader Reader, writer Writer, timeout time.Duration) error {
 	timeoutReader, ok := reader.(TimeoutReader)

@@ -40,9 +40,9 @@ func (m *Manager) RegisterCounter(name string) (stats.Counter, error) {
 	defer m.access.Unlock()
 
 	if _, found := m.counters[name]; found {
-		return nil, newError("Counter ", name, " already registered.")
+		return nil, errors.New("Counter ", name, " already registered.")
 	}
-	newError("create new counter ", name).AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "create new counter ", name)
 	c := new(Counter)
 	m.counters[name] = c
 	return c, nil
@@ -54,7 +54,7 @@ func (m *Manager) UnregisterCounter(name string) error {
 	defer m.access.Unlock()
 
 	if _, found := m.counters[name]; found {
-		newError("remove counter ", name).AtDebug().WriteToLog()
+		errors.LogDebug(context.Background(), "remove counter ", name)
 		delete(m.counters, name)
 	}
 	return nil
@@ -89,9 +89,9 @@ func (m *Manager) RegisterChannel(name string) (stats.Channel, error) {
 	defer m.access.Unlock()
 
 	if _, found := m.channels[name]; found {
-		return nil, newError("Channel ", name, " already registered.")
+		return nil, errors.New("Channel ", name, " already registered.")
 	}
-	newError("create new channel ", name).AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "create new channel ", name)
 	c := NewChannel(&ChannelConfig{BufferSize: 64, Blocking: false})
 	m.channels[name] = c
 	if m.running {
@@ -106,7 +106,7 @@ func (m *Manager) UnregisterChannel(name string) error {
 	defer m.access.Unlock()
 
 	if c, found := m.channels[name]; found {
-		newError("remove channel ", name).AtDebug().WriteToLog()
+		errors.LogDebug(context.Background(), "remove channel ", name)
 		delete(m.channels, name)
 		return c.Close()
 	}
@@ -148,7 +148,7 @@ func (m *Manager) Close() error {
 	m.running = false
 	errs := []error{}
 	for name, channel := range m.channels {
-		newError("remove channel ", name).AtDebug().WriteToLog()
+		errors.LogDebug(context.Background(), "remove channel ", name)
 		delete(m.channels, name)
 		if err := channel.Close(); err != nil {
 			errs = append(errs, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/inbound"
 	"github.com/GFW-knocker/Xray-core/features/outbound"
@@ -26,7 +27,7 @@ type OutboundOperation interface {
 func getInbound(handler inbound.Handler) (proxy.Inbound, error) {
 	gi, ok := handler.(proxy.GetInbound)
 	if !ok {
-		return nil, newError("can't get inbound proxy from handler.")
+		return nil, errors.New("can't get inbound proxy from handler.")
 	}
 	return gi.GetInbound(), nil
 }
@@ -39,11 +40,11 @@ func (op *AddUserOperation) ApplyInbound(ctx context.Context, handler inbound.Ha
 	}
 	um, ok := p.(proxy.UserManager)
 	if !ok {
-		return newError("proxy is not a UserManager")
+		return errors.New("proxy is not a UserManager")
 	}
 	mUser, err := op.User.ToMemoryUser()
 	if err != nil {
-		return newError("failed to parse user").Base(err)
+		return errors.New("failed to parse user").Base(err)
 	}
 	return um.AddUser(ctx, mUser)
 }
@@ -56,7 +57,7 @@ func (op *RemoveUserOperation) ApplyInbound(ctx context.Context, handler inbound
 	}
 	um, ok := p.(proxy.UserManager)
 	if !ok {
-		return newError("proxy is not a UserManager")
+		return errors.New("proxy is not a UserManager")
 	}
 	return um.RemoveUser(ctx, op.Email)
 }
@@ -82,16 +83,16 @@ func (s *handlerServer) RemoveInbound(ctx context.Context, request *RemoveInboun
 func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundRequest) (*AlterInboundResponse, error) {
 	rawOperation, err := request.Operation.GetInstance()
 	if err != nil {
-		return nil, newError("unknown operation").Base(err)
+		return nil, errors.New("unknown operation").Base(err)
 	}
 	operation, ok := rawOperation.(InboundOperation)
 	if !ok {
-		return nil, newError("not an inbound operation")
+		return nil, errors.New("not an inbound operation")
 	}
 
 	handler, err := s.ihm.GetHandler(ctx, request.Tag)
 	if err != nil {
-		return nil, newError("failed to get handler: ", request.Tag).Base(err)
+		return nil, errors.New("failed to get handler: ", request.Tag).Base(err)
 	}
 
 	return &AlterInboundResponse{}, operation.ApplyInbound(ctx, handler)
@@ -111,11 +112,11 @@ func (s *handlerServer) RemoveOutbound(ctx context.Context, request *RemoveOutbo
 func (s *handlerServer) AlterOutbound(ctx context.Context, request *AlterOutboundRequest) (*AlterOutboundResponse, error) {
 	rawOperation, err := request.Operation.GetInstance()
 	if err != nil {
-		return nil, newError("unknown operation").Base(err)
+		return nil, errors.New("unknown operation").Base(err)
 	}
 	operation, ok := rawOperation.(OutboundOperation)
 	if !ok {
-		return nil, newError("not an outbound operation")
+		return nil, errors.New("not an outbound operation")
 	}
 
 	handler := s.ohm.GetHandler(request.Tag)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/task"
 )
 
@@ -41,7 +42,7 @@ func generate(domainNames []string, isCA bool, jsonOutput bool, fileOutput strin
 
 	cert, err := Generate(nil, opts...)
 	if err != nil {
-		return newError("failed to generate TLS certificate").Base(err)
+		return errors.New("failed to generate TLS certificate").Base(err)
 	}
 
 	if jsonOutput {

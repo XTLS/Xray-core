@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
 // HealthPingSettings holds settings for health Checker
@@ -51,7 +52,7 @@ func NewHealthPing(ctx context.Context, config *HealthPingConfig) *HealthPing {
 	if settings.Interval == 0 {
 		settings.Interval = time.Duration(1) * time.Minute
 	} else if settings.Interval < 10 {
-		newError("health check interval is too small, 10s is applied").AtWarning().WriteToLog()
+		errors.LogWarning(ctx, "health check interval is too small, 10s is applied")
 		settings.Interval = time.Duration(10) * time.Second
 	}
 	if settings.SamplingCount <= 0 {
@@ -82,7 +83,7 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	go func() {
 		tags, err := selector()
 		if err != nil {
-			newError("error select outbounds for initial health check: ", err).AtWarning().WriteToLog()
+			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
 			return
 		}
 		h.Check(tags)
@@ -93,7 +94,7 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 			go func() {
 				tags, err := selector()
 				if err != nil {
-					newError("error select outbounds for scheduled health check: ", err).AtWarning().WriteToLog()
+					errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
 					return
 				}
 				h.doCheck(tags, interval, h.Settings.SamplingCount)
@@ -125,7 +126,7 @@ func (h *HealthPing) Check(tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
-	newError("perform one-time health check for tags ", tags).AtInfo().WriteToLog()
+	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
 	h.doCheck(tags, 0, 1)
 	return nil
 }
@@ -158,7 +159,7 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 				delay = time.Duration(dice.Roll(int(duration)))
 			}
 			time.AfterFunc(delay, func() {
-				newError("checking ", handler).AtDebug().WriteToLog()
+				errors.LogDebug(h.ctx, "checking ", handler)
 				delay, err := client.MeasureDelay()
 				if err == nil {
 					ch <- &rtt{
@@ -168,19 +169,19 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 					return
 				}
 				if !h.checkConnectivity() {
-					newError("network is down").AtWarning().WriteToLog()
+					errors.LogWarning(h.ctx, "network is down")
 					ch <- &rtt{
 						handler: handler,
 						value:   0,
 					}
 					return
 				}
-				newError(fmt.Sprintf(
+				errors.LogWarning(h.ctx, fmt.Sprintf(
 					"error ping %s with %s: %s",
 					h.Settings.Destination,
 					handler,
 					err,
-				)).AtWarning().WriteToLog()
+				))
 				ch <- &rtt{
 					handler: handler,
 					value:   rttFailed,

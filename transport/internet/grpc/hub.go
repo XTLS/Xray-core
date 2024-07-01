@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/session"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/grpc/encoding"
 	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
@@ -94,7 +94,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 	listener.s = s
 
 	if settings.SocketSettings != nil && settings.SocketSettings.AcceptProxyProtocol {
-		newError("accepting PROXY protocol").AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
 
 	go func() {
@@ -106,7 +106,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 				Net:  "unix",
 			}, settings.SocketSettings)
 			if err != nil {
-				newError("failed to listen on ", address).Base(err).AtError().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogErrorInner(ctx, err, "failed to listen on ", address)
 				return
 			}
 		} else { // tcp
@@ -115,19 +115,19 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 				Port: int(port),
 			}, settings.SocketSettings)
 			if err != nil {
-				newError("failed to listen on ", address, ":", port).Base(err).AtError().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogErrorInner(ctx, err, "failed to listen on ", address, ":", port)
 				return
 			}
 		}
 
-		newError("gRPC listen for service name `" + grpcSettings.getServiceName() + "` tun `" + grpcSettings.getTunStreamName() + "` multi tun `" + grpcSettings.getTunMultiStreamName() + "`").AtDebug().WriteToLog()
+		errors.LogDebug(ctx, "gRPC listen for service name `"+grpcSettings.getServiceName()+"` tun `"+grpcSettings.getTunStreamName()+"` multi tun `"+grpcSettings.getTunMultiStreamName()+"`")
 		encoding.RegisterGRPCServiceServerX(s, listener, grpcSettings.getServiceName(), grpcSettings.getTunStreamName(), grpcSettings.getTunMultiStreamName())
 
 		if config := reality.ConfigFromStreamSettings(settings); config != nil {
 			streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
 		}
 		if err = s.Serve(streamListener); err != nil {
-			newError("Listener for gRPC ended").Base(err).WriteToLog()
+			errors.LogInfoInner(ctx, err, "Listener for gRPC ended")
 		}
 	}()
 

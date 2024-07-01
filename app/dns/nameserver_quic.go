@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/log"
 	"github.com/GFW-knocker/Xray-core/common/net"
 	"github.com/GFW-knocker/Xray-core/common/protocol/dns"
@@ -20,6 +22,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/task"
 	dns_feature "github.com/GFW-knocker/Xray-core/features/dns"
 	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
+
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/http2"
 )
@@ -45,7 +48,7 @@ type QUICNameServer struct {
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
 func NewQUICNameServer(url *url.URL, queryStrategy QueryStrategy) (*QUICNameServer, error) {
-	newError("DNS: created Local DNS-over-QUIC client for ", url.String()).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
 
 	var err error
 	port := net.Port(853)
@@ -84,7 +87,7 @@ func (s *QUICNameServer) Cleanup() error {
 	defer s.Unlock()
 
 	if len(s.ips) == 0 {
-		return newError("nothing to do. stopping...")
+		return errors.New("nothing to do. stopping...")
 	}
 
 	for domain, record := range s.ips {
@@ -96,7 +99,7 @@ func (s *QUICNameServer) Cleanup() error {
 		}
 
 		if record.A == nil && record.AAAA == nil {
-			newError(s.name, " cleanup ", domain).AtDebug().WriteToLog()
+			errors.LogDebug(context.Background(), s.name, " cleanup ", domain)
 			delete(s.ips, domain)
 		} else {
 			s.ips[domain] = record
@@ -139,7 +142,7 @@ func (s *QUICNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 			updated = true
 		}
 	}
-	newError(s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
 
 	if updated {
 		s.ips[req.domain] = rec
@@ -159,7 +162,7 @@ func (s *QUICNameServer) newReqID() uint16 {
 }
 
 func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
-	newError(s.name, " querying: ", domain).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, s.name, " querying: ", domain)
 
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
 
@@ -192,7 +195,7 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				newError("failed to pack dns query").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to pack dns query")
 				return
 			}
 
@@ -203,13 +206,13 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 
 			conn, err := s.openStream(dnsCtx)
 			if err != nil {
-				newError("failed to open quic connection").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to open quic connection")
 				return
 			}
 
 			_, err = conn.Write(dnsReqBuf.Bytes())
 			if err != nil {
-				newError("failed to send query").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to send query")
 				return
 			}
 
@@ -219,25 +222,25 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 			defer respBuf.Release()
 			n, err := respBuf.ReadFullFrom(conn, 2)
 			if err != nil && n == 0 {
-				newError("failed to read response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to read response length")
 				return
 			}
 			var length int16
 			err = binary.Read(bytes.NewReader(respBuf.Bytes()), binary.BigEndian, &length)
 			if err != nil {
-				newError("failed to parse response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to parse response length")
 				return
 			}
 			respBuf.Clear()
 			n, err = respBuf.ReadFullFrom(conn, int32(length))
 			if err != nil && n == 0 {
-				newError("failed to read response length").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to read response length")
 				return
 			}
 
 			rec, err := parseResponse(respBuf.Bytes())
 			if err != nil {
-				newError("failed to handle response").Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to handle response")
 				return
 			}
 			s.updateIP(r, rec)
@@ -296,11 +299,11 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 	}
 
 	if disableCache {
-		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
+		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
-			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, err
 		}
