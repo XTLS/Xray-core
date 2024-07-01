@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	v2tls "github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	http_proto "github.com/GFW-knocker/Xray-core/common/protocol/http"
+	"github.com/GFW-knocker/Xray-core/common/signal/done"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
+	v2tls "github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -163,7 +163,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.Header().Set("X-Accel-Buffering", "no")
 		// magic header to make the HTTP middle box consider this as SSE to disable buffer
 		writer.Header().Set("Content-Type", "text/event-stream")
-		
+
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
 		// many CDN buffer the response headers until the origin starts sending

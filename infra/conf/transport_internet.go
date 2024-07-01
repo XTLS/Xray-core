@@ -24,6 +24,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/transport/internet/kcp"
 	"github.com/GFW-knocker/Xray-core/transport/internet/quic"
 	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
+	"github.com/GFW-knocker/Xray-core/transport/internet/splithttp"
 	"github.com/GFW-knocker/Xray-core/transport/internet/tcp"
 	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"github.com/GFW-knocker/Xray-core/transport/internet/websocket"

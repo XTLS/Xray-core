@@ -5,7 +5,7 @@ package retry // import "github.com/GFW-knocker/Xray-core/common/retry"
 import (
 	"time"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
 var ErrRetryFailed = errors.New("all retry attempts failed")
