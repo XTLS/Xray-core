@@ -81,12 +81,6 @@ func DialPost(uri string, payload []byte) error {
 		return err
 	}
 
-	// send "EOF"
-	err = conn.WriteMessage(websocket.BinaryMessage, []byte{})
-	if err != nil {
-		return err
-	}
-
 	err = CheckOK(conn)
 	if err != nil {
 		return err
