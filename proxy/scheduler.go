@@ -57,9 +57,13 @@ func(s *Scheduler) mainLoop() {
 			var sending = len(s.Buffer)
 			if sending > 0 {
 				errors.LogDebug(s.ctx, "Scheduler Trigger for ", sending, " buffer(s) with ", d, " ", trigger)
-			}
-			for i := 0; i<sending; i++ {
-				s.Error <- s.writer.WriteMultiBuffer(<-s.Buffer)
+				for i := 0; i<sending; i++ {
+					s.Error <- s.writer.WriteMultiBuffer(<-s.Buffer)
+				}
+			} else if trigger > 0 {
+				errors.LogDebug(s.ctx, "Scheduler Trigger for fake buffer with ", d, " ", trigger)
+				mb := make(buf.MultiBuffer, 1)
+				s.Error <- s.writer.WriteMultiBuffer(mb)
 			}
 			s.bufferReadLock.Unlock()
 		}()
@@ -69,6 +73,6 @@ func(s *Scheduler) mainLoop() {
 func(s *Scheduler) exampleIndependentScheduler() {
 	for {
 		time.Sleep(500 * time.Millisecond)
-		s.Trigger <- -1 // send all buffers
+		s.Trigger <- 1 // send fake buffer if no pending
 	}
 }
