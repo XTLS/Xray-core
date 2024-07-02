@@ -1,6 +1,7 @@
 package splithttp
 
 import (
+	"bytes"
 	"context"
 	"io"
 	gonet "net"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"sync"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -17,7 +19,7 @@ import (
 type DialerClient interface {
 	// (ctx, baseURL, payload) -> err
 	// baseURL already contains sessionId and seq
-	SendUploadRequest(context.Context, string, io.ReadWriteCloser) error
+	SendUploadRequest(context.Context, string, io.ReadWriteCloser, int64) error
 
 	// (ctx, baseURL) -> (downloadReader, remoteAddr, localAddr)
 	// baseURL already contains sessionId
@@ -108,8 +110,9 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 	return lazyDownload, remoteAddr, localAddr, nil
 }
 
-func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser) error {
+func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
 	req, err := http.NewRequest("POST", url, payload)
+	req.ContentLength = contentLength
 	if err != nil {
 		return err
 	}
@@ -127,25 +130,36 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
-		var err error
+		// stringify the entire HTTP/1.1 request so it can be
+		// safely retried. if instead req.Write is called multiple
+		// times, the body is already drained after the first
+		// request
+		requestBytes := new(bytes.Buffer)
+		common.Must(req.Write(requestBytes))
+
 		var uploadConn any
-		for i := 0; i < 5; i++ {
+
+		for {
 			uploadConn = c.uploadRawPool.Get()
-			if uploadConn == nil {
-				uploadConn, err = c.dialUploadConn(ctx)
+			newConnection := uploadConn == nil
+			if newConnection {
+				uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
 				if err != nil {
 					return err
 				}
 			}
 
-			err = req.Write(uploadConn.(net.Conn))
+			_, err = uploadConn.(net.Conn).Write(requestBytes.Bytes())
+
+			// if the write failed, we try another connection from
+			// the pool, until the write on a new connection fails.
+			// failed writes to a pooled connection are normal when
+			// the connection has been closed in the meantime.
 			if err == nil {
 				break
+			} else if newConnection {
+				return err
 			}
-		}
-
-		if err != nil {
-			return err
 		}
 
 		c.uploadRawPool.Put(uploadConn)

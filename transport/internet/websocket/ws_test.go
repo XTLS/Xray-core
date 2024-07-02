@@ -28,6 +28,7 @@ func Test_listenWSAndDial(t *testing.T) {
 			defer c.Close()
 
 			var b [1024]byte
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
 			_, err := c.Read(b[:])
 			if err != nil {
 				return

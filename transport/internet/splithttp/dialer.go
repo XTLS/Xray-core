@@ -188,6 +188,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					context.WithoutCancel(ctx),
 					baseURL+"/"+strconv.FormatInt(seq, 10),
 					&buf.MultiBufferContainer{MultiBuffer: chunk},
+					int64(chunk.Len()),
 				)
 
 				if err != nil {
