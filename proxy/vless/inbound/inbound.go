@@ -198,7 +198,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	var request *protocol.RequestHeader
-	var requestAddons *encoding.Addons
+	var requestAddons *proxy.Addons
 	var err error
 
 	napfb := h.fallbacks
@@ -438,8 +438,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
-	responseAddons := &encoding.Addons{
-		// Flow: requestAddons.Flow,
+	responseAddons := &proxy.Addons{
+		Flow: account.Flow,
+	}
+	encoding.PopulateSeed(account.Seed, responseAddons)
+	if check := encoding.CheckSeed(requestAddons, responseAddons); check != nil {
+		return errors.New("Seed configuration mis-match").Base(check).AtWarning()
 	}
 
 	var input *bytes.Reader
@@ -510,18 +514,17 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
-	trafficState := proxy.NewTrafficState(account.ID.Bytes())
+	trafficState := proxy.NewTrafficState(account.ID.Bytes(), account.Flow)
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		// default: clientReader := reader
-		clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
+		clientReader := encoding.DecodeBodyAddons(reader, request, responseAddons, trafficState, ctx)
 
 		var err error
 
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
-			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
 			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
@@ -544,7 +547,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
+		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons, trafficState, ctx)
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...

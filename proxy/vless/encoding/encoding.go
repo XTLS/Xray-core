@@ -30,7 +30,7 @@ var addrParser = protocol.NewAddressParser(
 )
 
 // EncodeRequestHeader writes encoded request header into the given writer.
-func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons) error {
+func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requestAddons *proxy.Addons) error {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -64,7 +64,7 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator *vless.Validator) (*protocol.RequestHeader, *Addons, bool, error) {
+func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator *vless.Validator) (*protocol.RequestHeader, *proxy.Addons, bool, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -133,7 +133,7 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 }
 
 // EncodeResponseHeader writes encoded response header into the given writer.
-func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, responseAddons *Addons) error {
+func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, responseAddons *proxy.Addons) error {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -153,7 +153,7 @@ func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, res
 }
 
 // DecodeResponseHeader decodes and returns (if successful) a ResponseHeader from an input stream.
-func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*Addons, error) {
+func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*proxy.Addons, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
