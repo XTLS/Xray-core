@@ -108,7 +108,7 @@
 						try {
 							const response = await fetch(
 								url,
-								{method: "POST", event.data}
+								{method: "POST", body: event.data}
 							);
 							if (response.ok) {
 								ws.send("ok");
