@@ -1,7 +1,10 @@
 package trojan
 
 import (
+	"bufio"
 	"context"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 	"io"
 	"strconv"
 	"strings"
@@ -346,14 +349,14 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 		cs := tlsConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		errors.LogInfo(ctx, "realName = " + name)
-		errors.LogInfo(ctx, "realAlpn = " + alpn)
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
 	} else if realityConn, ok := iConn.(*reality.Conn); ok {
 		cs := realityConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		errors.LogInfo(ctx, "realName = " + name)
-		errors.LogInfo(ctx, "realAlpn = " + alpn)
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
 	}
 	name = strings.ToLower(name)
 	alpn = strings.ToLower(alpn)
@@ -403,7 +406,7 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 						}
 						if k == '?' || k == ' ' {
 							path = string(firstBytes[i:j])
-							errors.LogInfo(ctx, "realPath = " + path)
+							errors.LogInfo(ctx, "realPath = "+path)
 							if pfb[path] == nil {
 								path = ""
 							}
@@ -412,6 +415,11 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 					}
 					break
 				}
+			}
+		} else if firstLen >= 18 && first.Byte(4) == '*' { // process h2c
+			h2path := extractPathFromH2Request(connection)
+			if h2path != "" {
+				path = h2path
 			}
 		}
 	}
@@ -519,4 +527,38 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 	}
 
 	return nil
+}
+
+// Get path form http2
+func extractPathFromH2Request(conn stat.Connection) string {
+	reader := bufio.NewReader(conn)
+	framer := http2.NewFramer(conn, reader)
+
+	for {
+		frame, err := framer.ReadFrame()
+		if err != nil {
+			return ""
+		}
+
+		// find headers frame
+		if f, ok := frame.(*http2.HeadersFrame); ok {
+			decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+			headerBlock := f.HeaderBlockFragment()
+
+			hf, err := decoder.DecodeFull(headerBlock)
+			if err != nil {
+				return ""
+			}
+			path := func(headers []hpack.HeaderField) string {
+				for _, header := range headers {
+					if header.Name == ":path" {
+						return header.Value
+					}
+				}
+				return ""
+			}
+
+			return path(hf)
+		}
+	}
 }

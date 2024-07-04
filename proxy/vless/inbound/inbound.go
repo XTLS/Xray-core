@@ -3,6 +3,7 @@ package inbound
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	gotls "crypto/tls"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -223,14 +227,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				cs := tlsConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = " + name)
-				errors.LogInfo(ctx, "realAlpn = " + alpn)
+				errors.LogInfo(ctx, "realName = "+name)
+				errors.LogInfo(ctx, "realAlpn = "+alpn)
 			} else if realityConn, ok := iConn.(*reality.Conn); ok {
 				cs := realityConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = " + name)
-				errors.LogInfo(ctx, "realAlpn = " + alpn)
+				errors.LogInfo(ctx, "realName = "+name)
+				errors.LogInfo(ctx, "realAlpn = "+alpn)
 			}
 			name = strings.ToLower(name)
 			alpn = strings.ToLower(alpn)
@@ -295,7 +299,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 								}
 								if k == '?' || k == ' ' {
 									path = string(firstBytes[i:j])
-									errors.LogInfo(ctx, "realPath = " + path)
+									errors.LogInfo(ctx, "realPath = "+path)
 									if pfb[path] == nil {
 										path = ""
 									}
@@ -304,6 +308,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 							}
 							break
 						}
+					}
+				} else if firstLen >= 18 && first.Byte(4) == '*' { // process h2c
+					h2path := extractPathFromH2Request(connection)
+					if h2path != "" {
+						path = h2path
 					}
 				}
 			}
@@ -582,4 +591,38 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	return nil
+}
+
+// Get path form http2
+func extractPathFromH2Request(conn stat.Connection) string {
+	reader := bufio.NewReader(conn)
+	framer := http2.NewFramer(conn, reader)
+
+	for {
+		frame, err := framer.ReadFrame()
+		if err != nil {
+			return ""
+		}
+
+		// find headers frame
+		if f, ok := frame.(*http2.HeadersFrame); ok {
+			decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+			headerBlock := f.HeaderBlockFragment()
+
+			hf, err := decoder.DecodeFull(headerBlock)
+			if err != nil {
+				return ""
+			}
+			path := func(headers []hpack.HeaderField) string {
+				for _, header := range headers {
+					if header.Name == ":path" {
+						return header.Value
+					}
+				}
+				return ""
+			}
+
+			return path(hf)
+		}
+	}
 }
