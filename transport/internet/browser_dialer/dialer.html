@@ -102,6 +102,7 @@
 						}
 					})()
 				} else if (method == "POST") {
+					upstreamPostCount += 1;
 					console.log("Dial POST", url);
 					ws.send("ok");
 					ws.onmessage = async (event) => {
