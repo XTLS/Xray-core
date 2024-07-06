@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -173,6 +174,21 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
+
+	//Lookup ip for proxied request
+	sockopt := h.streamSettings.SocketSettings
+	if sockopt != nil {
+		dest := ob.Target
+		if internet.CanLookupIP(ctx, dest, sockopt) {
+			ips, err := internet.LookupIP(dest.Address.String(), sockopt.DomainStrategy, ob.Gateway)
+			if err == nil && len(ips) > 0 {
+				dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+				errors.LogInfo(ctx, "replace destination with "+dest.String())
+			} else if err != nil {
+				errors.LogWarningInner(ctx, err, "failed to resolve ip")
+			}
+		}
+	}
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}

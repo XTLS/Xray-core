@@ -82,7 +82,7 @@ var (
 	obm       outbound.Manager
 )
 
-func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+func LookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
 	if dnsClient == nil {
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 	return ips, err
 }
 
-func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
+func CanLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
 	if dst.Address.Family().IsIP() || dnsClient == nil {
 		return false
 	}
@@ -146,8 +146,8 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
 	}
 
-	if canLookupIP(ctx, dest, sockopt) {
-		ips, err := lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
+	if CanLookupIP(ctx, dest, sockopt) {
+		ips, err := LookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
 		if err == nil && len(ips) > 0 {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with " + dest.String())
