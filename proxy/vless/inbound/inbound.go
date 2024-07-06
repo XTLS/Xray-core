@@ -3,7 +3,6 @@ package inbound
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	gotls "crypto/tls"
@@ -313,10 +312,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					h2path := extractPathFromH2Request(connection)
 					if h2path != "" {
 						path = h2path
+						errors.LogInfo(ctx, "realPath = "+path)
 					}
 				}
 			}
-			fb := pfb[path]
+			fb := prefixMatch(pfb, path)
 			if fb == nil {
 				return errors.New(`failed to find the default "path" config`).AtWarning()
 			}
@@ -595,8 +595,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 // Get path form http2
 func extractPathFromH2Request(conn stat.Connection) string {
-	reader := bufio.NewReader(conn)
-	framer := http2.NewFramer(conn, reader)
+	framer := http2.NewFramer(io.Discard, conn)
 
 	for {
 		frame, err := framer.ReadFrame()
@@ -625,4 +624,22 @@ func extractPathFromH2Request(conn stat.Connection) string {
 			return path(hf)
 		}
 	}
+}
+
+func prefixMatch(pfb map[string]*Fallback, path string) *Fallback {
+	for {
+		if val, exists := pfb[path]; exists {
+			return val
+		}
+		if path == "/" {
+			break
+		}
+		path = strings.TrimSuffix(path, "/")
+		if idx := strings.LastIndex(path, "/"); idx != -1 {
+			path = path[:idx]
+		} else {
+			break
+		}
+	}
+	return nil
 }
