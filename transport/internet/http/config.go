@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strings"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/transport/internet"
@@ -18,7 +20,7 @@ func (c *Config) getHosts() []string {
 func (c *Config) isValidHost(host string) bool {
 	hosts := c.getHosts()
 	for _, h := range hosts {
-		if h == host {
+		if strings.Contains(strings.ToLower(host), strings.ToLower(h)) {
 			return true
 		}
 	}
