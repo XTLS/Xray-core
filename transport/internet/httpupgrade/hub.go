@@ -39,7 +39,7 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 
 	if s.config != nil {
 		host := req.Host
-		if len(s.config.Host) > 0 && !strings.Contains(strings.ToLower(host), strings.ToLower(s.config.Host)) {
+		if len(s.config.Host) > 0 && !internet.IsValidHTTPHost(host, s.config.Host) {
 			return nil, errors.New("bad host: ", host)
 		}
 		path := s.config.GetNormalizedPath()
