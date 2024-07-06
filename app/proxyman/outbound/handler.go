@@ -179,7 +179,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	sockopt := h.streamSettings.SocketSettings
 	if sockopt != nil {
 		dest := ob.Target
-		if internet.CanLookupIP(ctx, dest, sockopt) {
+		if internet.CanLookupIP(ctx, dest, sockopt) && dest.Network == net.Network_TCP {
 			ips, err := internet.LookupIP(dest.Address.String(), sockopt.DomainStrategy, ob.Gateway)
 			if err == nil && len(ips) > 0 {
 				dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
