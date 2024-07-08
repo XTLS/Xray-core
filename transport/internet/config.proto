@@ -121,4 +121,6 @@ message SocketConfig {
   bool tcp_no_delay = 18;
 
   bool tcp_mptcp = 19;
+
+  map<int32, int32> customSockopt = 20;
 }

@@ -685,23 +685,29 @@ func (p TransportProtocol) Build() (string, error) {
 	}
 }
 
+type CustomSockoptConfig struct {
+	Opt   int32 `json:"opt"`
+	Value int32 `json:"value"`
+}
+
 type SocketConfig struct {
-	Mark                 int32       `json:"mark"`
-	TFO                  interface{} `json:"tcpFastOpen"`
-	TProxy               string      `json:"tproxy"`
-	AcceptProxyProtocol  bool        `json:"acceptProxyProtocol"`
-	DomainStrategy       string      `json:"domainStrategy"`
-	DialerProxy          string      `json:"dialerProxy"`
-	TCPKeepAliveInterval int32       `json:"tcpKeepAliveInterval"`
-	TCPKeepAliveIdle     int32       `json:"tcpKeepAliveIdle"`
-	TCPCongestion        string      `json:"tcpCongestion"`
-	TCPWindowClamp       int32       `json:"tcpWindowClamp"`
-	TCPMaxSeg            int32       `json:"tcpMaxSeg"`
-	TcpNoDelay           bool        `json:"tcpNoDelay"`
-	TCPUserTimeout       int32       `json:"tcpUserTimeout"`
-	V6only               bool        `json:"v6only"`
-	Interface            string      `json:"interface"`
-	TcpMptcp             bool        `json:"tcpMptcp"`
+	Mark                 int32                  `json:"mark"`
+	TFO                  interface{}            `json:"tcpFastOpen"`
+	TProxy               string                 `json:"tproxy"`
+	AcceptProxyProtocol  bool                   `json:"acceptProxyProtocol"`
+	DomainStrategy       string                 `json:"domainStrategy"`
+	DialerProxy          string                 `json:"dialerProxy"`
+	TCPKeepAliveInterval int32                  `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle     int32                  `json:"tcpKeepAliveIdle"`
+	TCPCongestion        string                 `json:"tcpCongestion"`
+	TCPWindowClamp       int32                  `json:"tcpWindowClamp"`
+	TCPMaxSeg            int32                  `json:"tcpMaxSeg"`
+	TcpNoDelay           bool                   `json:"tcpNoDelay"`
+	TCPUserTimeout       int32                  `json:"tcpUserTimeout"`
+	V6only               bool                   `json:"v6only"`
+	Interface            string                 `json:"interface"`
+	TcpMptcp             bool                   `json:"tcpMptcp"`
+	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
 }
 
 // Build implements Buildable.
@@ -759,6 +765,12 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
+	CustomSockoptMap := make(map[int32]int32)
+
+	for _, opt := range c.CustomSockopt {
+		CustomSockoptMap[opt.Opt] = opt.Value
+	}
+
 	return &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
@@ -776,6 +788,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
+		CustomSockopt:        CustomSockoptMap,
 	}, nil
 }
 

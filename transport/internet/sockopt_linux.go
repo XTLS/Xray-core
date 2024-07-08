@@ -108,6 +108,14 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 
+		if len(config.CustomSockopt) != 0 {
+			for opt, value := range config.CustomSockopt {
+				if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, int(opt), int(value)); err != nil {
+					return errors.New("failed to set CustomSockopt", opt, err)
+				}
+			}
+		}
+
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -174,6 +182,14 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if config.TcpMaxSeg > 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
 				return errors.New("failed to set TCP_MAXSEG", err)
+			}
+		}
+
+		if len(config.CustomSockopt) != 0 {
+			for opt, value := range config.CustomSockopt {
+				if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, int(opt), int(value)); err != nil {
+					return errors.New("failed to set CustomSockopt", opt, err)
+				}
 			}
 		}
 	}
