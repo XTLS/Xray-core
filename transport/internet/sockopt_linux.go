@@ -223,6 +223,8 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
 						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 					}
+				} else {
+					return errors.New("unknown CustomSockopt type:", custom.Type)
 				}
 			}
 		}
