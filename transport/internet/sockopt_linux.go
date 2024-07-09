@@ -120,16 +120,17 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				if custom.Level != "" {
 					level, _ = strconv.Atoi(custom.Level)
 				}
-				if len(custom.Int) > 0 {
-					Int, _ := strconv.Atoi(custom.Int)
-					if err := syscall.SetsockoptInt(int(fd), level, opt, Int); err != nil {
-						return errors.New("failed to set CustomSockopt", custom.Int, err)
+				if custom.Type == "int" {
+					value, _ := strconv.Atoi(custom.Value)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+						return errors.New("failed to set CustomSockoptInt", opt, value, err)
 					}
-				}
-				if len(custom.Str) > 0 {
-					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Str); err != nil {
-						return errors.New("failed to set CustomSockopt", custom.Str, err)
+				} else if custom.Type == "str" {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 					}
+				} else {
+					return errors.New("unknown CustomSockopt type:", custom.Type)
 				}
 			}
 		}
@@ -213,15 +214,14 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				if custom.Level != "" {
 					level, _ = strconv.Atoi(custom.Level)
 				}
-				if len(custom.Int) > 0 {
-					Int, _ := strconv.Atoi(custom.Int)
-					if err := syscall.SetsockoptInt(int(fd), level, opt, Int); err != nil {
-						return errors.New("failed to set CustomSockopt", custom.Int, err)
+				if custom.Type == "int" {
+					value, _ := strconv.Atoi(custom.Value)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+						return errors.New("failed to set CustomSockoptInt", opt, value, err)
 					}
-				}
-				if len(custom.Str) > 0 {
-					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Str); err != nil {
-						return errors.New("failed to set CustomSockopt", custom.Str, err)
+				} else if custom.Type == "str" {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 					}
 				}
 			}

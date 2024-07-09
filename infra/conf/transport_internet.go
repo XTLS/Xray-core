@@ -686,10 +686,10 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type CustomSockoptConfig struct {
-	Level  string `json:"level"`
-	Opt    string `json:"opt"`
-	Int    string `json:"int"`
-	String string `json:"str"`
+	Level string `json:"level"`
+	Opt   string `json:"opt"`
+	Value string `json:"value"`
+	Type  string `json:"type"`
 }
 
 type SocketConfig struct {
@@ -773,8 +773,8 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		customSockopt := &internet.CustomSockopt{
 			Level: copt.Level,
 			Opt:   copt.Opt,
-			Int:   copt.Int,
-			Str:   copt.String,
+			Value: copt.Value,
+			Type:  copt.Type,
 		}
 		customSockopts = append(customSockopts, customSockopt)
 	}
