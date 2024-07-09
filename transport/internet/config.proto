@@ -68,6 +68,13 @@ message ProxyConfig {
   bool transportLayerProxy = 2;
 }
 
+message CustomSockopt {
+  string level = 1;
+  string opt = 2;
+  string value = 3;
+  string type = 4;
+}
+
 // SocketConfig is options to be applied on network sockets.
 message SocketConfig {
   // Mark of the connection. If non-zero, the value will be set to SO_MARK.
@@ -121,4 +128,6 @@ message SocketConfig {
   bool tcp_no_delay = 18;
 
   bool tcp_mptcp = 19;
+
+  repeated CustomSockopt customSockopt = 20;
 }

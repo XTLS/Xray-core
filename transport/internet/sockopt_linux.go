@@ -2,6 +2,7 @@ package internet
 
 import (
 	"net"
+	"strconv"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -107,7 +108,32 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return errors.New("failed to set TCP_NODELAY", err)
 			}
 		}
-
+		if len(config.CustomSockopt) > 0 {
+			for _, custom := range config.CustomSockopt {
+				var level = 0x6 // default TCP
+				var opt int
+				if len(custom.Opt) == 0 {
+					return errors.New("No opt!")
+				} else {
+					opt, _ = strconv.Atoi(custom.Opt)
+				}
+				if custom.Level != "" {
+					level, _ = strconv.Atoi(custom.Level)
+				}
+				if custom.Type == "int" {
+					value, _ := strconv.Atoi(custom.Value)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+						return errors.New("failed to set CustomSockoptInt", opt, value, err)
+					}
+				} else if custom.Type == "str" {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+					}
+				} else {
+					return errors.New("unknown CustomSockopt type:", custom.Type)
+				}
+			}
+		}
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -174,6 +200,32 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if config.TcpMaxSeg > 0 {
 			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
 				return errors.New("failed to set TCP_MAXSEG", err)
+			}
+		}
+		if len(config.CustomSockopt) > 0 {
+			for _, custom := range config.CustomSockopt {
+				var level = 0x6 // default TCP
+				var opt int
+				if len(custom.Opt) == 0 {
+					return errors.New("No opt!")
+				} else {
+					opt, _ = strconv.Atoi(custom.Opt)
+				}
+				if custom.Level != "" {
+					level, _ = strconv.Atoi(custom.Level)
+				}
+				if custom.Type == "int" {
+					value, _ := strconv.Atoi(custom.Value)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+						return errors.New("failed to set CustomSockoptInt", opt, value, err)
+					}
+				} else if custom.Type == "str" {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+					}
+				} else {
+					return errors.New("unknown CustomSockopt type:", custom.Type)
+				}
 			}
 		}
 	}
