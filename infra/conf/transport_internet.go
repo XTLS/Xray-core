@@ -686,8 +686,10 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type CustomSockoptConfig struct {
-	Opt   int32 `json:"opt"`
-	Value int32 `json:"value"`
+	Level  string `json:"level"`
+	Opt    string `json:"opt"`
+	Int    string `json:"int"`
+	String string `json:"str"`
 }
 
 type SocketConfig struct {
@@ -765,10 +767,16 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
-	CustomSockoptMap := make(map[int32]int32)
+	var customSockopts []*internet.CustomSockopt
 
-	for _, opt := range c.CustomSockopt {
-		CustomSockoptMap[opt.Opt] = opt.Value
+	for _, copt := range c.CustomSockopt {
+		customSockopt := &internet.CustomSockopt{
+			Level: copt.Level,
+			Opt:   copt.Opt,
+			Int:   copt.Int,
+			Str:   copt.String,
+		}
+		customSockopts = append(customSockopts, customSockopt)
 	}
 
 	return &internet.SocketConfig{
@@ -788,7 +796,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
-		CustomSockopt:        CustomSockoptMap,
+		CustomSockopt:        customSockopts,
 	}, nil
 }
 

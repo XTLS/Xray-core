@@ -2,6 +2,7 @@ package internet
 
 import (
 	"net"
+	"strconv"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -107,15 +108,31 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return errors.New("failed to set TCP_NODELAY", err)
 			}
 		}
-
-		if len(config.CustomSockopt) != 0 {
-			for opt, value := range config.CustomSockopt {
-				if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, int(opt), int(value)); err != nil {
-					return errors.New("failed to set CustomSockopt", opt, err)
+		if len(config.CustomSockopt) > 0 {
+			for _, custom := range config.CustomSockopt {
+				var level = 0x6 // default TCP
+				var opt int
+				if len(custom.Opt) == 0 {
+					return errors.New("No opt!")
+				} else {
+					opt, _ = strconv.Atoi(custom.Opt)
+				}
+				if custom.Level != "" {
+					level, _ = strconv.Atoi(custom.Level)
+				}
+				if len(custom.Int) > 0 {
+					Int, _ := strconv.Atoi(custom.Int)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, Int); err != nil {
+						return errors.New("failed to set CustomSockopt", custom.Int, err)
+					}
+				}
+				if len(custom.Str) > 0 {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Str); err != nil {
+						return errors.New("failed to set CustomSockopt", custom.Str, err)
+					}
 				}
 			}
 		}
-
 	}
 
 	if config.Tproxy.IsEnabled() {
@@ -184,11 +201,28 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				return errors.New("failed to set TCP_MAXSEG", err)
 			}
 		}
-
-		if len(config.CustomSockopt) != 0 {
-			for opt, value := range config.CustomSockopt {
-				if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, int(opt), int(value)); err != nil {
-					return errors.New("failed to set CustomSockopt", opt, err)
+		if len(config.CustomSockopt) > 0 {
+			for _, custom := range config.CustomSockopt {
+				var level = 0x6 // default TCP
+				var opt int
+				if len(custom.Opt) == 0 {
+					return errors.New("No opt!")
+				} else {
+					opt, _ = strconv.Atoi(custom.Opt)
+				}
+				if custom.Level != "" {
+					level, _ = strconv.Atoi(custom.Level)
+				}
+				if len(custom.Int) > 0 {
+					Int, _ := strconv.Atoi(custom.Int)
+					if err := syscall.SetsockoptInt(int(fd), level, opt, Int); err != nil {
+						return errors.New("failed to set CustomSockopt", custom.Int, err)
+					}
+				}
+				if len(custom.Str) > 0 {
+					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Str); err != nil {
+						return errors.New("failed to set CustomSockopt", custom.Str, err)
+					}
 				}
 			}
 		}
