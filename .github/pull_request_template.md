@@ -3,6 +3,7 @@
 <details><summary>Artifacts</summary>
 
 * <!-- xray-artifact windows-64 --><!-- /xray-artifact -->
+* <!-- xray-artifact windows-arm64-v8a --><!-- /xray-artifact -->
 * <!-- xray-artifact linux-64 --><!-- /xray-artifact -->
 * <!-- xray-artifact linux-arm64-v8a --><!-- /xray-artifact -->
 * <!-- xray-artifact macos-64 --><!-- /xray-artifact -->
