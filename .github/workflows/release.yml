@@ -228,7 +228,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: nefrob/pr-description@v1.1.2
         with:
-          content: "<!-- xray-artifact -->${{ env.ASSET_NAME }}: ${{ steps.upload-artifact.outputs.artifact-id }}<!-- /xray-artifact -->"
+          content: "<!-- xray-artifact -->${{ env.ASSET_NAME }}: ${{ steps.upload-artifact.outputs.artifact-url }}<!-- /xray-artifact -->"
           regex: "<!-- xray-artifact -->${{ env.ASSET_NAME }}: .*?<!-- /xray-artifact -->"
           appendContentOnMatchOnly: true
           token: ${{ secrets.GITHUB_TOKEN }}
