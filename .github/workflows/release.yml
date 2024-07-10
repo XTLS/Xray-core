@@ -73,6 +73,7 @@ jobs:
     needs: prepare
     permissions:
       contents: write
+      pull-requests: write
     strategy:
       matrix:
         # Include amd64 on all platforms.
