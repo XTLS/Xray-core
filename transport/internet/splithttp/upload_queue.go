@@ -15,7 +15,7 @@ type Packet struct {
 	Seq     uint64
 }
 
-type UploadQueue struct {
+type uploadQueue struct {
 	pushedPackets chan Packet
 	heap          uploadHeap
 	nextSeq       uint64
@@ -23,8 +23,8 @@ type UploadQueue struct {
 	maxPackets    int
 }
 
-func NewUploadQueue(maxPackets int) *UploadQueue {
-	return &UploadQueue{
+func NewUploadQueue(maxPackets int) *uploadQueue {
+	return &uploadQueue{
 		pushedPackets: make(chan Packet, maxPackets),
 		heap:          uploadHeap{},
 		nextSeq:       0,
@@ -33,7 +33,7 @@ func NewUploadQueue(maxPackets int) *UploadQueue {
 	}
 }
 
-func (h *UploadQueue) Push(p Packet) error {
+func (h *uploadQueue) Push(p Packet) error {
 	if h.closed {
 		return errors.New("splithttp packet queue closed")
 	}
@@ -42,13 +42,13 @@ func (h *UploadQueue) Push(p Packet) error {
 	return nil
 }
 
-func (h *UploadQueue) Close() error {
+func (h *uploadQueue) Close() error {
 	h.closed = true
 	close(h.pushedPackets)
 	return nil
 }
 
-func (h *UploadQueue) Read(b []byte) (int, error) {
+func (h *uploadQueue) Read(b []byte) (int, error) {
 	if h.closed {
 		return 0, io.EOF
 	}

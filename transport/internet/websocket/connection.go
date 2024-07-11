@@ -15,16 +15,14 @@ var _ buf.Writer = (*connection)(nil)
 
 // connection is a wrapper for net.Conn over WebSocket connection.
 type connection struct {
-	conn       *websocket.Conn
-	reader     io.Reader
-	remoteAddr net.Addr
+	conn   *websocket.Conn
+	reader io.Reader
 }
 
-func newConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
+func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
 	return &connection{
-		conn:       conn,
-		remoteAddr: remoteAddr,
-		reader:     extraReader,
+		conn:   conn,
+		reader: extraReader,
 	}
 }
 
@@ -92,7 +90,7 @@ func (c *connection) LocalAddr() net.Addr {
 }
 
 func (c *connection) RemoteAddr() net.Addr {
-	return c.remoteAddr
+	return c.conn.RemoteAddr()
 }
 
 func (c *connection) SetDeadline(t time.Time) error {
