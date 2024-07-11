@@ -243,7 +243,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return w.Writer.WriteMultiBuffer(mb)
 }
 
-// ReshapeMultiBuffer prepare multi buffer for padding stucture (max 21 bytes)
+// ReshapeMultiBuffer prepare multi buffer for padding structure (max 21 bytes)
 func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBuffer {
 	needReshape := 0
 	for _, b := range buffer {
@@ -278,7 +278,7 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 	return mb2
 }
 
-// XtlsPadding add padding to eliminate length siganature during tls handshake
+// XtlsPadding add padding to eliminate length signature during tls handshake
 func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context) *buf.Buffer {
 	var contentLen int32 = 0
 	var paddingLen int32 = 0

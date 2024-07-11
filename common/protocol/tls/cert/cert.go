@@ -19,7 +19,7 @@ import (
 //go:generate go run github.com/xtls/xray-core/common/errors/errorgen
 
 type Certificate struct {
-	// Cerificate in ASN.1 DER format
+	// certificate in ASN.1 DER format
 	Certificate []byte
 	// Private key in ASN.1 DER format
 	PrivateKey []byte

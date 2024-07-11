@@ -19,7 +19,7 @@ func GetToolLocation(file string) string {
 	return filepath.Join(toolPath, file+".exe")
 }
 
-// GetAssetLocation searches for `file` in the excutable dir
+// GetAssetLocation searches for `file` in the executable dir
 func GetAssetLocation(file string) string {
 	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
 	return filepath.Join(assetPath, file)

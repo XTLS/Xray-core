@@ -83,7 +83,7 @@ jobs:
           - goarch: 386
             goos: darwin
         include:
-          # BEIGIN MacOS ARM64
+          # BEGIN MacOS ARM64
           - goos: darwin
             goarch: arm64
           # END MacOS ARM64

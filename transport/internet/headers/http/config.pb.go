@@ -374,7 +374,7 @@ type Config struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Settings for authenticating requests. If not set, client side will not send
-	// authenication header, and server side will bypass authentication.
+	// authentication header, and server side will bypass authentication.
 	Request *RequestConfig `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
 	// Settings for authenticating responses. If not set, client side will bypass
 	// authentication, and server side will not send authentication header.
