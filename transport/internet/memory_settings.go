@@ -1,6 +1,6 @@
 package internet
 
-// MemoryStreamConfig is a parsed form of StreamConfig. This is used to reduce number of Protobuf parsing.
+// MemoryStreamConfig is a parsed form of StreamConfig. This is used to reduce the number of Protobuf parsings.
 type MemoryStreamConfig struct {
 	ProtocolName     string
 	ProtocolSettings interface{}

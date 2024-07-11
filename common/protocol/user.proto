@@ -8,7 +8,7 @@ option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
 
-// User is a generic user for all procotols.
+// User is a generic user for all protocols.
 message User {
   uint32 level = 1;
   string email = 2;

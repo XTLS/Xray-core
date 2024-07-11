@@ -219,7 +219,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		} else {
 			errors.LogDebug(ctx, "Reader is not timeout reader, will send out vless header separately from first payload")
 		}
-		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
 		if err := bufferWriter.SetBuffered(false); err != nil {
 			return errors.New("failed to write A request payload").Base(err).AtWarning()
 		}
@@ -238,7 +238,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			err = encoding.XtlsWrite(clientReader, serverWriter, timer, conn, trafficState, ob, ctx1)
 		} else {
-			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
+			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		}
 		if err != nil {
@@ -276,7 +276,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if requestAddons.Flow == vless.XRV {
 			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, trafficState, ob, ctx)
 		} else {
-			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
+			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
 		}
 

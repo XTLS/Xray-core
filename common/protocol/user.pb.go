@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// User is a generic user for all procotols.
+// User is a generic user for all protocols.
 type User struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

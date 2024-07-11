@@ -174,7 +174,7 @@ func init() {
 				common.Must(err)
 				return loadProtobufConfig(data)
 			default:
-				return nil, errors.New("unknow type")
+				return nil, errors.New("unknown type")
 			}
 		},
 	}))
