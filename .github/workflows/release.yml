@@ -78,6 +78,9 @@ jobs:
         # Include amd64 on all platforms.
         goos: [windows, freebsd, openbsd, linux, darwin]
         goarch: [amd64, 386]
+        patch-gotoolchain: [""]
+        patch-assetname: [""]
+
         exclude:
           # Exclude i386 on darwin
           - goarch: 386
@@ -152,6 +155,16 @@ jobs:
             goarch: arm
             goarm: 7
           # END OPENBSD ARM
+          # BEGIN Windows 7
+          - goos: windows
+            goarch: amd64
+            patch-gotoolchain: 1.21.4
+            patch-assetname: win7-64
+          - goos: windows
+            goarch: 386
+            patch-gotoolchain: 1.21.4
+            patch-assetname: win7-32
+          # END Windows 7
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -164,11 +177,21 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v4
 
-      - name: Show workflow information 
+      - name: Show workflow information
         run: |
-          export _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
+          _NAME=${{ matrix.patch-assetname }}
+          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
+      # provide 1.21 builds without breaking other people's (preferred) 1.22
+      # build
+      - name: Patch Go version
+        if: ${{ matrix.patch-gotoolchain != '' }}
+        run: |
+          echo "Patch GOTOOLCHAIN=${{ matrix.patch-gotoolchain }}"
+          sed -i "s/^go .*$/go ${{ matrix.patch-gotoolchain }}/g" go.mod
+          echo "GOTOOLCHAIN=go${{ matrix.patch-gotoolchain }}" >> $GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v5
