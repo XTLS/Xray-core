@@ -50,6 +50,7 @@ func Test_listenSHAndDial(t *testing.T) {
 	}
 	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
+	<-time.After(time.Millisecond * 100) // SH can't receive a short message too fast ATM
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 1"))
 	common.Must(err)
@@ -65,6 +66,8 @@ func Test_listenSHAndDial(t *testing.T) {
 	common.Must(conn.Close())
 	<-time.After(time.Second * 5)
 	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+
+	<-time.After(time.Millisecond * 100) // SH can't receive a short message too fast ATM
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
@@ -107,6 +110,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 		ProtocolSettings: &Config{Path: "sh", Header: map[string]string{"X-Forwarded-For": "1.1.1.1"}},
 	})
 
+	<-time.After(time.Millisecond * 100) // SH can't receive a short message too fast ATM
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 1"))
 	common.Must(err)
