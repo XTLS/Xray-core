@@ -78,7 +78,7 @@ jobs:
         # Include amd64 on all platforms.
         goos: [windows, freebsd, openbsd, linux, darwin]
         goarch: [amd64, 386]
-        patch-gotoolchain: [""]
+        gotoolchain: [""]
         patch-assetname: [""]
 
         exclude:
@@ -158,11 +158,11 @@ jobs:
           # BEGIN Windows 7
           - goos: windows
             goarch: amd64
-            patch-gotoolchain: 1.21.4
+            gotoolchain: 1.21.4
             patch-assetname: win7-64
           - goos: windows
             goarch: 386
-            patch-gotoolchain: 1.21.4
+            gotoolchain: 1.21.4
             patch-assetname: win7-32
           # END Windows 7
       fail-fast: false
@@ -184,19 +184,10 @@ jobs:
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
-      # provide 1.21 builds without breaking other people's (preferred) 1.22
-      # build
-      - name: Patch Go version
-        if: ${{ matrix.patch-gotoolchain != '' }}
-        run: |
-          echo "Patch GOTOOLCHAIN=${{ matrix.patch-gotoolchain }}"
-          go mod edit -go=${{ matrix.patch-gotoolchain }}
-          echo "GOTOOLCHAIN=go${{ matrix.patch-gotoolchain }}" >> $GITHUB_ENV
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.gotoolchain || "1.22" }}
           check-latest: true
 
       - name: Get project dependencies
