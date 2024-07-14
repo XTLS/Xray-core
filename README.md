@@ -89,7 +89,8 @@
   - [Furious](https://github.com/LorenEteval/Furious)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
-
+- Android, Windows, Linux, macOS, iOS:
+   - [Hiddify](https://github.com/hiddify/hiddify-next) 
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
 - Xray Tools
