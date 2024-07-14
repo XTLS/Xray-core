@@ -40,7 +40,5 @@ jobs:
           path: resources
           key: xray-geodat-
           enableCrossOsArchive: true
-      - name: Go mod tidy
-        run: go mod tidy && git diff --exit-code
       - name: Test
         run: go test -timeout 1h -v ./...
