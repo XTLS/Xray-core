@@ -151,7 +151,7 @@ func LogInfo(ctx context.Context, msg ...interface{}) {
 }
 
 func LogInfoInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Debug, msg...)
+	doLog(ctx, inner, log.Severity_Info, msg...)
 }
 
 func LogWarning(ctx context.Context, msg ...interface{}) {
@@ -159,7 +159,7 @@ func LogWarning(ctx context.Context, msg ...interface{}) {
 }
 
 func LogWarningInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Debug, msg...)
+	doLog(ctx, inner, log.Severity_Warning, msg...)
 }
 
 func LogError(ctx context.Context, msg ...interface{}) {
@@ -167,7 +167,7 @@ func LogError(ctx context.Context, msg ...interface{}) {
 }
 
 func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Debug, msg...)
+	doLog(ctx, inner, log.Severity_Error, msg...)
 }
 
 func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
