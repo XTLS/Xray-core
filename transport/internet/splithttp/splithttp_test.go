@@ -64,7 +64,7 @@ func Test_listenSHAndDial(t *testing.T) {
 	}
 
 	common.Must(conn.Close())
-	<-time.After(time.Second * 5)
+	// <-time.After(time.Second * 5)
 	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
 	<-time.After(time.Millisecond * 100) // SH can't receive a short message too fast ATM
