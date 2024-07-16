@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -50,12 +52,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return client
 	}
 
-	if browser_dialer.HasBrowserDialer() {
-		return &BrowserDialerClient{}
-	}
-
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
+	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
 
 	var gotlsConfig *gotls.Config
 
@@ -83,10 +82,34 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return conn, nil
 	}
 
-	var uploadTransport http.RoundTripper
 	var downloadTransport http.RoundTripper
+	var uploadTransport http.RoundTripper
 
-	if isH2 {
+	if isH3 {
+		quicConfig := &quic.Config{
+			HandshakeIdleTimeout: 10 * time.Second,
+			MaxIdleTimeout:       90 * time.Second,
+			KeepAlivePeriod:      3 * time.Second,
+		}
+		dest.Network = net.Network_UDP
+		roundTripper := &http3.RoundTripper{
+			TLSClientConfig: gotlsConfig,
+			QUICConfig:      quicConfig,
+			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				if err != nil {
+					return nil, err
+				}
+				udpAddr,err := net.ResolveUDPAddr("udp",dest.NetAddr())
+				if err != nil {
+					return nil, err
+				}
+				return quic.DialEarly(ctx, conn.(net.PacketConn), udpAddr, tlsCfg, cfg)
+			},
+		}
+		downloadTransport = roundTripper
+		uploadTransport = roundTripper
+	} else if isH2 {
 		downloadTransport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
@@ -107,7 +130,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
 		}
-
 		// we use uploadRawPool for that
 		uploadTransport = nil
 	}
@@ -121,6 +143,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			Transport: uploadTransport,
 		},
 		isH2:           isH2,
+		isH3:           isH3,
 		uploadRawPool:  &sync.Pool{},
 		dialUploadConn: dialContext,
 	}

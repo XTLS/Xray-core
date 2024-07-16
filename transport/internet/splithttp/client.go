@@ -32,6 +32,7 @@ type DefaultDialerClient struct {
 	download        *http.Client
 	upload          *http.Client
 	isH2            bool
+	isH3            bool
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
