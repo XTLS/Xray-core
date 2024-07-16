@@ -100,7 +100,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				if err != nil {
 					return nil, err
 				}
-				udpAddr,err := net.ResolveUDPAddr("udp",dest.NetAddr())
+				udpAddr,err := net.ResolveUDPAddr("udp",conn.RemoteAddr().String())
 				if err != nil {
 					return nil, err
 				}
