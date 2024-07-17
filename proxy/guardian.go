@@ -13,16 +13,19 @@ import (
 )
 
 type Account struct {
-	DownloadTrace uint32
-	UploadTrace   uint32
-	Download      uint32
-	Traffic       uint32
-	Upload        uint32
-	Time          uint32
-	User          uint32
-	Flag          uint32
-	Refresh       uint32
-	UserMap       map[string]uint32
+	Owner uint32
+	Flag  uint32
+	User  uint32
+	Time  uint32
+
+	Usage   uint32
+	Allow   uint32
+	Traffic uint32
+
+	Trace   uint32
+	Refresh uint32
+
+	UserMap map[string]uint32
 }
 
 var AccountMapMutex = sync.Mutex{}
@@ -33,7 +36,7 @@ func init() {
 		panic(Error)
 	}
 
-	DB.SetConnMaxLifetime(time.Minute * 3)
+	DB.SetConnMaxLifetime(time.Minute * 10)
 	DB.SetMaxOpenConns(10)
 	DB.SetMaxIdleConns(10)
 }
@@ -61,26 +64,30 @@ func AccountUpdate(AccountUUID uuid.UUID, AccountIP net.Addr, CounterUpload int6
 			}
 		}
 
-		var Download = (Cache.DownloadTrace + uint32(CounterDownload)) / 1000000
-		var Upload = (Cache.UploadTrace + uint32(CounterUpload)) / 1000000
+		Cache.Trace += uint32(CounterUpload + CounterDownload)
 
-		if Download > 1 || Upload > 1 {
-			_, Error := DB.Exec("UPDATE `subscription` SET `Download` = `Download` + ?, `Upload` = `Upload` + ? WHERE `UUID` = ? LIMIT 1", Download, Upload, AccountKey)
+		var UsageAsMB = Cache.Trace / 1000000
+
+		if UsageAsMB > 0 {
+			_, Error := DB.Exec("UPDATE `subscription` SET `Usage` = `Usage` + ? WHERE `UUID` = ? LIMIT 1", UsageAsMB, AccountKey)
 
 			if Error != nil {
-				fmt.Println(">> AccountUpdate-Traffic:", AccountKey, Error)
+				fmt.Println(">> AccountUpdate-Traffic-Sub:", AccountKey, Error)
 
 				return
 			}
 
-			Cache.DownloadTrace = (Cache.DownloadTrace + uint32(CounterDownload)) - (Download * 1000000)
-			Cache.UploadTrace = (Cache.UploadTrace + uint32(CounterUpload)) - (Upload * 1000000)
+			_, Error = DB.Exec("UPDATE `account` SET `Traffic` = GREATEST(0, CAST(`Traffic` AS INT) - ?) WHERE `ID` = ? LIMIT 1", UsageAsMB, Cache.Owner)
 
-			Cache.Download += Download
-			Cache.Upload += Upload
-		} else {
-			Cache.DownloadTrace += uint32(CounterDownload)
-			Cache.UploadTrace += uint32(CounterUpload)
+			if Error != nil {
+				fmt.Println(">> AccountUpdate-Traffic-Acc:", AccountKey, Error)
+
+				return
+			}
+
+			Cache.Trace -= (UsageAsMB * 1000000)
+
+			Cache.Usage += UsageAsMB
 		}
 	}
 }
@@ -96,15 +103,15 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	if !OK {
 		Cache = new(Account)
 
-		QuerySelect := DB.QueryRow("SELECT `Flag`, `User`, `Time`, `Traffic`, `Upload`, `Download` FROM `subscription` WHERE `UUID` = ? LIMIT 1", AccountKey).Scan(&Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Upload, &Cache.Download)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
-		if QuerySelect != nil {
-			fmt.Println(">> AccountVerify-Query-1:", AccountKey, QuerySelect)
+		if Error != nil {
+			fmt.Println(">> AccountVerify-Error-1:", AccountKey, Error)
 
 			return false
 		}
 
-		Cache.Refresh = uint32(time.Now().Unix()) + 60
+		Cache.Refresh = uint32(time.Now().Unix()) + 6
 
 		Cache.UserMap = make(map[string]uint32)
 
@@ -112,33 +119,21 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	}
 
 	if Cache.Refresh < uint32(time.Now().Unix()) {
-		QuerySelect := DB.QueryRow("SELECT `Flag`, `User`, `Time`, `Traffic`, `Upload`, `Download` FROM `subscription` WHERE `UUID` = ? LIMIT 1", AccountKey).Scan(&Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Upload, &Cache.Download)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
-		if QuerySelect != nil {
-			fmt.Println(">> AccountVerify-Query-2:", AccountKey, QuerySelect)
+		if Error != nil {
+			fmt.Println(">> AccountVerify-Error-2:", AccountKey, Error)
 
 			return false
 		}
 
-		Cache.Refresh = uint32(time.Now().Unix()) + 60
+		Cache.Refresh = uint32(time.Now().Unix()) + 6
 	}
 
-	if Cache.User > 0 {
-		IP := AccountIP.String()[:strings.Index(AccountIP.String(), ":")]
+	if Cache.Flag > 0 {
+		fmt.Println(">> AccountVerify-Flag:", AccountKey, Cache.Flag)
 
-		IPCount, OK := Cache.UserMap[IP]
-
-		if !OK {
-			if len(Cache.UserMap) >= int(Cache.User) {
-				fmt.Println(">> AccountVerify-User:", len(Cache.UserMap), Cache.User)
-
-				return false
-			}
-
-			IPCount = 0
-		}
-
-		Cache.UserMap[IP] = IPCount + 1
+		return false
 	}
 
 	if Cache.Time > 0 {
@@ -161,16 +156,34 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 		}
 	}
 
-	if Cache.Traffic > 0 && (Cache.Traffic*1000) < (Cache.Upload+Cache.Download) {
-		fmt.Println(">> AccountVerify-Traffic:", AccountKey, (Cache.Traffic * 1000), (Cache.Upload + Cache.Download))
+	if Cache.Traffic < Cache.Usage {
+		fmt.Println(">> AccountVerify-Traffic:", AccountKey, Cache.Traffic, Cache.Usage)
 
 		return false
 	}
 
-	if Cache.Flag > 0 {
-		fmt.Println(">> AccountVerify-Flag:", AccountKey, Cache.Flag)
+	if Cache.Allow < 750 {
+		fmt.Println(">> AccountVerify-Allow:", AccountKey, Cache.Allow)
 
 		return false
+	}
+
+	if Cache.User > 0 {
+		IP := AccountIP.String()[:strings.Index(AccountIP.String(), ":")]
+
+		IPCount, OK := Cache.UserMap[IP]
+
+		if !OK {
+			if len(Cache.UserMap) >= int(Cache.User) {
+				fmt.Println(">> AccountVerify-User:", len(Cache.UserMap), Cache.User)
+
+				return false
+			}
+
+			IPCount = 0
+		}
+
+		Cache.UserMap[IP] = IPCount + 1
 	}
 
 	return true
