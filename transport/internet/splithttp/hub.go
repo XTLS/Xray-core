@@ -27,6 +27,7 @@ type requestHandler struct {
 	host      string
 	path      string
 	ln        *Listener
+	sessionMu *sync.Mutex
 	sessions  sync.Map
 	localAddr gonet.TCPAddr
 }
@@ -56,7 +57,17 @@ func (h *requestHandler) maybeReapSession(isFullyConnected *done.Instance, sessi
 }
 
 func (h *requestHandler) upsertSession(sessionId string) *httpSession {
+	// fast path
 	currentSessionAny, ok := h.sessions.Load(sessionId)
+	if ok {
+		return currentSessionAny.(*httpSession)
+	}
+
+	// slow path
+	h.sessionMu.Lock()
+	defer h.sessionMu.Unlock()
+
+	currentSessionAny, ok = h.sessions.Load(sessionId)
 	if ok {
 		return currentSessionAny.(*httpSession)
 	}
@@ -277,6 +288,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		host:      shSettings.Host,
 		path:      shSettings.GetNormalizedPath(),
 		ln:        l,
+		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},
 		localAddr: localAddr,
 	}
