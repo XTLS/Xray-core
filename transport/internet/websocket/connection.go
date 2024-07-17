@@ -14,15 +14,19 @@ import (
 var _ buf.Writer = (*connection)(nil)
 
 // connection is a wrapper for net.Conn over WebSocket connection.
+// remoteAddr is used to pass "virtual" remote IP addresses in X-Forwarded-For.
+// so we shouldn't directly read it form conn.
 type connection struct {
-	conn   *websocket.Conn
-	reader io.Reader
+	conn       *websocket.Conn
+	reader     io.Reader
+	remoteAddr net.Addr
 }
 
 func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
 	return &connection{
-		conn:   conn,
-		reader: extraReader,
+		conn:       conn,
+		remoteAddr: remoteAddr,
+		reader:     extraReader,
 	}
 }
 
@@ -90,7 +94,7 @@ func (c *connection) LocalAddr() net.Addr {
 }
 
 func (c *connection) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
+	return c.remoteAddr
 }
 
 func (c *connection) SetDeadline(t time.Time) error {
