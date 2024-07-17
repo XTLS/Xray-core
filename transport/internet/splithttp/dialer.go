@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/http3"
+	utls "github.com/refraction-networking/utls"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -93,10 +96,17 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			KeepAlivePeriod:      3 * time.Second,
 			Allow0RTT:            true,
 		}
+		utlsConfig := &utls.Config{
+			RootCAs:               gotlsConfig.RootCAs,
+			ServerName:            gotlsConfig.ServerName,
+			InsecureSkipVerify:    gotlsConfig.InsecureSkipVerify,
+			VerifyPeerCertificate: gotlsConfig.VerifyPeerCertificate,
+			KeyLogWriter:          gotlsConfig.KeyLogWriter,
+		}
 		roundTripper := &http3.RoundTripper{
-			TLSClientConfig: gotlsConfig,
-			QUICConfig:      quicConfig,
-			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			TLSClientConfig: utlsConfig,
+			QuicConfig:      quicConfig,
+			Dial: func(ctx context.Context, addr string, tlsCfg *utls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
 					return nil, err
@@ -108,8 +118,42 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return quic.DialEarly(ctx, conn.(*internet.PacketConnWrapper).Conn.(*net.UDPConn), udpAddr, tlsCfg, cfg)
 			},
 		}
-		downloadTransport = roundTripper
-		uploadTransport = roundTripper
+
+		if(gotlsConfig == nil){
+			downloadTransport = roundTripper
+			uploadTransport = roundTripper
+		} else if tlsConfig.GetFingerprint() == "" {
+			downloadTransport = roundTripper
+			uploadTransport = roundTripper
+		} else {
+			var quicSpec quic.QUICSpec
+			var err error
+
+			// fingerprints available for QUIC are different from those of TCP TLS, so it has been implemented this way for now
+			// so that users who previously used http1.1 or h2 may not have to adjust their configurations as much.
+			// it should be changed in the future. (When you do this there will be many users crying that her client stopped working)
+			if(strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()),"chrome")){
+				quicSpec, err = quic.QUICID2Spec(quic.QUICChrome_115)
+			} else if strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()),"firefox") {
+				quicSpec, err = quic.QUICID2Spec(quic.QUICFirefox_116)
+			} else {
+				errors.LogError(ctx,"unknown fingerprint: ",tlsConfig.GetFingerprint())
+				return nil
+			}
+
+			if err != nil {
+				errors.LogError(ctx,tlsConfig.GetFingerprint())
+				return nil
+			}
+
+			uRoundTripper := http3.GetURoundTripper(
+				roundTripper,
+				&quicSpec,
+				nil,
+			)
+			downloadTransport = uRoundTripper
+			uploadTransport = uRoundTripper
+		}
 	} else if isH2 {
 		downloadTransport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
