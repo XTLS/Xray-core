@@ -86,12 +86,13 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	var uploadTransport http.RoundTripper
 
 	if isH3 {
+		dest.Network = net.Network_UDP
 		quicConfig := &quic.Config{
 			HandshakeIdleTimeout: 10 * time.Second,
 			MaxIdleTimeout:       90 * time.Second,
 			KeepAlivePeriod:      3 * time.Second,
+			Allow0RTT:            true,
 		}
-		dest.Network = net.Network_UDP
 		roundTripper := &http3.RoundTripper{
 			TLSClientConfig: gotlsConfig,
 			QUICConfig:      quicConfig,
@@ -100,11 +101,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				if err != nil {
 					return nil, err
 				}
-				udpAddr,err := net.ResolveUDPAddr("udp",conn.RemoteAddr().String())
+				udpAddr, err := net.ResolveUDPAddr("udp", conn.RemoteAddr().String())
 				if err != nil {
 					return nil, err
 				}
-				return quic.DialEarly(ctx, conn.(net.PacketConn), udpAddr, tlsCfg, cfg)
+				return quic.DialEarly(ctx, conn.(*internet.PacketConnWrapper).Conn.(*net.UDPConn), udpAddr, tlsCfg, cfg)
 			},
 		}
 		downloadTransport = roundTripper
