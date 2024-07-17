@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/logging"
+	"github.com/refraction-networking/uquic/qlog"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -169,7 +169,7 @@ func (s *clientConnections) openConnection(ctx context.Context, destAddr net.Add
 		ConnectionIDLength: 12,
 		Conn:               sysConn,
 	}
-	conn, err := tr.Dial(context.Background(), destAddr, tlsConfig.GetTLSConfig(tls.WithDestination(dest)), quicConfig)
+	conn, err := tr.Dial(context.Background(), destAddr, tls.ToUTLSConfig(tlsConfig.GetTLSConfig(tls.WithDestination(dest))), quicConfig)
 	if err != nil {
 		sysConn.Close()
 		return nil, err

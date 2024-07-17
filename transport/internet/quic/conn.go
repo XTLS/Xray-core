@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/refraction-networking/uquic"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"

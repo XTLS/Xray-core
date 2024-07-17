@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog"
+	"github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/logging"
+	"github.com/refraction-networking/uquic/qlog"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -123,7 +123,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		ConnectionIDLength: 12,
 		Conn:               conn,
 	}
-	qListener, err := tr.Listen(tlsConfig.GetTLSConfig(), quicConfig)
+	qListener, err := tr.Listen(tls.ToUTLSConfig(tlsConfig.GetTLSConfig()), quicConfig)
 	if err != nil {
 		conn.Close()
 		return nil, err
