@@ -96,7 +96,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 				return
 			}
 
-			_, err = c.Write([]byte("Response"))
+			_, err = c.Write([]byte(c.RemoteAddr().String()))
 			common.Must(err)
 		}(conn)
 	})
@@ -113,7 +113,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 
 	var b [1024]byte
 	n, _ := conn.Read(b[:])
-	if string(b[:n]) != "Response" {
+	if string(b[:n]) != "1.1.1.1:0" {
 		t.Error("response: ", string(b[:n]))
 	}
 
