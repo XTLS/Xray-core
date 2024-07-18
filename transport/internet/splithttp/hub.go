@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -233,10 +235,13 @@ func (c *httpResponseBodyWriter) Close() error {
 
 type Listener struct {
 	sync.Mutex
-	server   http.Server
-	listener net.Listener
-	config   *Config
-	addConn  internet.ConnHandler
+	server     http.Server
+	h3server   *http3.Server
+	listener   net.Listener
+	h3listener *quic.EarlyListener
+	config     *Config
+	addConn    internet.ConnHandler
+	isH3       bool
 }
 
 func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
@@ -253,7 +258,8 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var listener net.Listener
 	var err error
 	var localAddr = gonet.TCPAddr{}
-
+	tlsConfig := getTLSConfig(streamSettings)
+	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
@@ -263,6 +269,17 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
 		}
 		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
+	} else if l.isH3 { // quic
+		Conn, err := net.ListenUDP("udp", &net.UDPAddr{
+			IP:   address.IP(),
+			Port: int(port),
+		})
+		h3listener, err := quic.ListenEarly(Conn,tlsConfig, nil)
+		if err != nil {
+			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
+		}
+		l.h3listener = h3listener
+		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
 	} else { // tcp
 		localAddr = gonet.TCPAddr{
 			IP:   address.IP(),
@@ -276,6 +293,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
+
 	}
 
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
@@ -304,11 +322,23 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		MaxHeaderBytes:    8192,
 	}
 
-	go func() {
-		if err := l.server.Serve(l.listener); err != nil {
-			errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
+	if l.isH3 {
+		l.h3server = &http3.Server{
+			Handler: handler,
 		}
-	}()
+		go func() {
+			if err := l.h3server.ServeListener(l.h3listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
+			}
+		}()
+	} else {
+		go func() {
+			if err := l.server.Serve(l.listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
+			}
+		}()
+
+	}
 
 	return l, err
 }
@@ -320,9 +350,21 @@ func (ln *Listener) Addr() net.Addr {
 
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
+	if ln.h3server != nil {
+		ln.h3server.Close()
+	}
+	if ln.h3listener != nil {
+		ln.h3listener.Close()
+	}
 	return ln.listener.Close()
 }
-
+func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *tls.Config {
+	config := v2tls.ConfigFromStreamSettings(streamSettings)
+	if config == nil {
+		return &tls.Config{}
+	}
+	return config.GetTLSConfig()
+}
 func init() {
 	common.Must(internet.RegisterTransportListener(protocolName, ListenSH))
 }
