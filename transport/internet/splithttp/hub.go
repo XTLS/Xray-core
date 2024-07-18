@@ -327,7 +327,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			}
 		}()
 	}
-
+	l.listener = listener
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 			listener = tls.NewListener(listener, tlsConfig)
