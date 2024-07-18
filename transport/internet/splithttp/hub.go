@@ -258,8 +258,18 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var listener net.Listener
 	var err error
 	var localAddr = gonet.TCPAddr{}
+	handler := &requestHandler{
+		host:      shSettings.Host,
+		path:      shSettings.GetNormalizedPath(),
+		ln:        l,
+		sessionMu: &sync.Mutex{},
+		sessions:  sync.Map{},
+		localAddr: localAddr,
+	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
+
+
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
@@ -280,6 +290,15 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		}
 		l.h3listener = h3listener
 		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
+
+		l.h3server = &http3.Server{
+			Handler: handler,
+		}
+		go func() {
+			if err := l.h3server.ServeListener(l.h3listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
+			}
+		}()
 	} else { // tcp
 		localAddr = gonet.TCPAddr{
 			IP:   address.IP(),
@@ -292,52 +311,27 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
+		l.listener = listener
 		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
 
+		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
+		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
+		l.server = http.Server{
+			Handler:           h2cHandler,
+			ReadHeaderTimeout: time.Second * 4,
+			MaxHeaderBytes:    8192,
+		}
+		go func() {
+			if err := l.server.Serve(l.listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
+			}
+		}()
 	}
 
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 			listener = tls.NewListener(listener, tlsConfig)
 		}
-	}
-
-	handler := &requestHandler{
-		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath(),
-		ln:        l,
-		sessionMu: &sync.Mutex{},
-		sessions:  sync.Map{},
-		localAddr: localAddr,
-	}
-
-	// h2cHandler can handle both plaintext HTTP/1.1 and h2c
-	h2cHandler := h2c.NewHandler(handler, &http2.Server{})
-
-	l.listener = listener
-
-	l.server = http.Server{
-		Handler:           h2cHandler,
-		ReadHeaderTimeout: time.Second * 4,
-		MaxHeaderBytes:    8192,
-	}
-
-	if l.isH3 {
-		l.h3server = &http3.Server{
-			Handler: handler,
-		}
-		go func() {
-			if err := l.h3server.ServeListener(l.h3listener); err != nil {
-				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
-			}
-		}()
-	} else {
-		go func() {
-			if err := l.server.Serve(l.listener); err != nil {
-				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
-			}
-		}()
-
 	}
 
 	return l, err
@@ -351,12 +345,13 @@ func (ln *Listener) Addr() net.Addr {
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
 	if ln.h3server != nil {
-		ln.h3server.Close()
+		if err := ln.h3server.Close(); err != nil {
+			return err
+		}
+	} else if ln.listener != nil {
+		return ln.listener.Close()
 	}
-	if ln.h3listener != nil {
-		ln.h3listener.Close()
-	}
-	return ln.listener.Close()
+	return errors.New("listener does not have an HTTP/3 server or a net.listener")
 }
 func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *tls.Config {
 	config := v2tls.ConfigFromStreamSettings(streamSettings)
