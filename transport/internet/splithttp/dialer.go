@@ -101,11 +101,32 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				if err != nil {
 					return nil, err
 				}
-				udpAddr, err := net.ResolveUDPAddr("udp", conn.RemoteAddr().String())
-				if err != nil {
-					return nil, err
+
+				var udpConn *net.UDPConn
+				var udpAddr *net.UDPAddr
+
+				switch c := conn.(type) {
+				case *internet.PacketConnWrapper:
+					var ok bool
+					udpConn, ok = c.Conn.(*net.UDPConn)
+					if !ok {
+						return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
+					}
+					udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
+					if err != nil {
+						return nil, err
+					}
+				case *net.UDPConn:
+					udpConn = c
+					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
+					if err != nil {
+						return nil, err
+					}
+				default:
+					return nil, errors.New("unsupported connection type: %T", conn)
 				}
-				return quic.DialEarly(ctx, conn.(*internet.PacketConnWrapper).Conn.(*net.UDPConn), udpAddr, tlsCfg, cfg)
+
+				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
 			},
 		}
 		downloadTransport = roundTripper
