@@ -280,10 +280,13 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		}
 		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
 	} else if l.isH3 { // quic
-		Conn, err := net.ListenUDP("udp", &net.UDPAddr{
+		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
 			IP:   address.IP(),
 			Port: int(port),
-		})
+		}, streamSettings.SocketSettings)
+		if err != nil {
+			return nil,  errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
+		}
 		h3listener, err := quic.ListenEarly(Conn,tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
