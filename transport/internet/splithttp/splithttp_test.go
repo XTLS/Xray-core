@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/testing/servers/tcp"
+	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
 	. "github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -202,5 +203,44 @@ func Test_listenSHAndDial_H2C(t *testing.T) {
 
 	if resp.ProtoMajor != 2 {
 		t.Error("Expected h2 but got:", resp.ProtoMajor)
+	}
+}
+
+func Test_listenSHAndDial_QUIC(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		return
+	}
+
+	listenPort := udp.PickPort()
+
+	start := time.Now()
+
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "shs",
+		},
+		SecurityType: "tls",
+		SecuritySettings: &tls.Config{
+			AllowInsecure: true,
+			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
+			NextProtocol:  []string{"h3"},
+		},
+	}
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func() {
+			_ = conn.Close()
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	_ = conn.Close()
+
+	end := time.Now()
+	if !end.Before(start.Add(time.Second * 5)) {
+		t.Error("end: ", end, " start: ", start)
 	}
 }
