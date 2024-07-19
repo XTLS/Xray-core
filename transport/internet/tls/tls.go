@@ -142,6 +142,7 @@ func ToUTLSConfig(c *tls.Config) *utls.Config {
 		InsecureSkipVerify:    c.InsecureSkipVerify,
 		VerifyPeerCertificate: c.VerifyPeerCertificate,
 		KeyLogWriter:          c.KeyLogWriter,
+		NextProtos:            c.NextProtos,
 	}
 }
 
