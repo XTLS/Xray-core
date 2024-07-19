@@ -2,6 +2,7 @@ package splithttp_test
 
 import (
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"fmt"
 	gonet "net"
@@ -10,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/testing/servers/tcp"
@@ -229,15 +232,49 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	}
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
-			_ = conn.Close()
+			defer conn.Close()
+
+			b := buf.New()
+			defer b.Release()
+
+			for {
+				b.Clear()
+				if _, err := b.ReadFrom(conn); err != nil {
+					return
+				}
+				common.Must2(conn.Write(b.Bytes()))
+			}
 		}()
 	})
 	common.Must(err)
 	defer listen.Close()
 
+	time.Sleep(time.Second)
+
 	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	_ = conn.Close()
+	defer conn.Close()
+
+	const N = 1024
+	b1 := make([]byte, N)
+	common.Must2(rand.Read(b1))
+	b2 := buf.New()
+
+	common.Must2(conn.Write(b1))
+
+	b2.Clear()
+	common.Must2(b2.ReadFullFrom(conn, N))
+	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
+		t.Error(r)
+	}
+
+	common.Must2(conn.Write(b1))
+
+	b2.Clear()
+	common.Must2(b2.ReadFullFrom(conn, N))
+	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
+		t.Error(r)
+	}
 
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {

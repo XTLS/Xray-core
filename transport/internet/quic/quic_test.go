@@ -24,20 +24,18 @@ import (
 func TestQuicConnection(t *testing.T) {
 	port := udp.PickPort()
 
-	listener, err := quic.Listen(context.Background(), net.LocalHostIP, port, &internet.MemoryStreamConfig{
+	streamSettings := &internet.MemoryStreamConfig{
 		ProtocolName:     "quic",
 		ProtocolSettings: &quic.Config{},
 		SecurityType:     "tls",
 		SecuritySettings: &tls.Config{
-			Certificate: []*tls.Certificate{
-				tls.ParseCertificate(
-					cert.MustGenerate(nil,
-						cert.DNSNames("www.example.com"),
-					),
-				),
-			},
+			AllowInsecure: true,
+			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
+			NextProtocol:  []string{"h3"},
 		},
-	}, func(conn stat.Connection) {
+	}
+
+	listener, err := quic.Listen(context.Background(), net.LocalHostIP, port, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
 
@@ -54,21 +52,11 @@ func TestQuicConnection(t *testing.T) {
 		}()
 	})
 	common.Must(err)
-
 	defer listener.Close()
 
 	time.Sleep(time.Second)
 
-	dctx := context.Background()
-	conn, err := quic.Dial(dctx, net.TCPDestination(net.LocalHostIP, port), &internet.MemoryStreamConfig{
-		ProtocolName:     "quic",
-		ProtocolSettings: &quic.Config{},
-		SecurityType:     "tls",
-		SecuritySettings: &tls.Config{
-			ServerName:    "www.example.com",
-			AllowInsecure: true,
-		},
-	})
+	conn, err := quic.Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), port), streamSettings)
 	common.Must(err)
 	defer conn.Close()
 
