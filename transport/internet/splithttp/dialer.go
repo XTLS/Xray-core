@@ -140,7 +140,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			},
 		}
 
-		if(gotlsConfig == nil){
+		if gotlsConfig == nil {
 			downloadTransport = roundTripper
 			uploadTransport = roundTripper
 		} else if tlsConfig.GetFingerprint() == "" {
@@ -153,17 +153,17 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			// fingerprints available for QUIC are different from those of TCP TLS, so it has been implemented this way for now
 			// so that users who previously used http1.1 or h2 may not have to adjust their configurations as much.
 			// it should be changed in the future. (When you do this there will be many users crying that her client stopped working)
-			if(strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()),"chrome")){
+			if strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()), "chrome") {
 				quicSpec, err = quic.QUICID2Spec(quic.QUICChrome_115)
-			} else if strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()),"firefox") {
+			} else if strings.Contains(strings.ToLower(tlsConfig.GetFingerprint()), "firefox") {
 				quicSpec, err = quic.QUICID2Spec(quic.QUICFirefox_116)
 			} else {
-				errors.LogError(ctx,"unknown fingerprint: ",tlsConfig.GetFingerprint())
+				errors.LogError(ctx, "unknown fingerprint: ", tlsConfig.GetFingerprint())
 				return nil
 			}
 
 			if err != nil {
-				errors.LogError(ctx,tlsConfig.GetFingerprint())
+				errors.LogError(ctx, tlsConfig.GetFingerprint())
 				return nil
 			}
 

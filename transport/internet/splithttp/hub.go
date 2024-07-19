@@ -269,7 +269,6 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
-
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
@@ -285,9 +284,9 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil,  errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
 		}
-		h3listener, err := quic.ListenEarly(Conn,tlsConfig, nil)
+		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
 		}
