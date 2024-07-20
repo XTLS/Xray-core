@@ -88,9 +88,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if isH3 {
 		dest.Network = net.Network_UDP
 		quicConfig := &quic.Config{
-			HandshakeIdleTimeout: 10 * time.Second,
-			MaxIdleTimeout:       90 * time.Second,
-			KeepAlivePeriod:      3 * time.Second,
 			Allow0RTT:            true,
 		}
 		roundTripper := &http3.RoundTripper{
