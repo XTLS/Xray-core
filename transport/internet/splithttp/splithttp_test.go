@@ -143,7 +143,16 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	}
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
-			_ = conn.Close()
+			defer conn.Close()
+
+			var b [1024]byte
+			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, err := conn.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(conn.Write([]byte("Response")))
 		}()
 	})
 	common.Must(err)
@@ -151,7 +160,15 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 
 	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	_ = conn.Close()
+
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	var b [1024]byte
+	n, _ := conn.Read(b[:])
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
 
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
