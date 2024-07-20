@@ -87,12 +87,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	if isH3 {
 		dest.Network = net.Network_UDP
-		quicConfig := &quic.Config{
-			Allow0RTT:            true,
-		}
 		roundTripper := &http3.RoundTripper{
 			TLSClientConfig: gotlsConfig,
-			QUICConfig:      quicConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
