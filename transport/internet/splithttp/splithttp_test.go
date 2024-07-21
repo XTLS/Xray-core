@@ -2,6 +2,7 @@ package splithttp_test
 
 import (
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"fmt"
 	gonet "net"
@@ -10,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/testing/servers/tcp"
@@ -143,7 +146,16 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	}
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
-			_ = conn.Close()
+			defer conn.Close()
+
+			var b [1024]byte
+			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, err := conn.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(conn.Write([]byte("Response")))
 		}()
 	})
 	common.Must(err)
@@ -151,7 +163,15 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 
 	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	_ = conn.Close()
+
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	var b [1024]byte
+	n, _ := conn.Read(b[:])
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
 
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
@@ -229,15 +249,49 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	}
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
-			_ = conn.Close()
+			defer conn.Close()
+
+			b := buf.New()
+			defer b.Release()
+
+			for {
+				b.Clear()
+				if _, err := b.ReadFrom(conn); err != nil {
+					return
+				}
+				common.Must2(conn.Write(b.Bytes()))
+			}
 		}()
 	})
 	common.Must(err)
 	defer listen.Close()
 
+	time.Sleep(time.Second)
+
 	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	_ = conn.Close()
+	defer conn.Close()
+
+	const N = 1024
+	b1 := make([]byte, N)
+	common.Must2(rand.Read(b1))
+	b2 := buf.New()
+
+	common.Must2(conn.Write(b1))
+
+	b2.Clear()
+	common.Must2(b2.ReadFullFrom(conn, N))
+	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
+		t.Error(r)
+	}
+
+	common.Must2(conn.Write(b1))
+
+	b2.Clear()
+	common.Must2(b2.ReadFullFrom(conn, N))
+	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
+		t.Error(r)
+	}
 
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {

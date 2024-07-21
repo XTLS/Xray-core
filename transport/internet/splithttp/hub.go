@@ -269,7 +269,6 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
-
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
@@ -285,9 +284,9 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil,  errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
 		}
-		h3listener, err := quic.ListenEarly(Conn,tlsConfig, nil)
+		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
 		}
@@ -314,7 +313,6 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
-		l.listener = listener
 		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
 
 		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
@@ -324,17 +322,23 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    8192,
 		}
+	}
+
+	// tcp/unix (h1/h2)
+	if listener != nil {
+		if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
+			if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
+				listener = tls.NewListener(listener, tlsConfig)
+			}
+		}
+
+		l.listener = listener
+
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
 				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
 			}
 		}()
-	}
-	l.listener = listener
-	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
-			listener = tls.NewListener(listener, tlsConfig)
-		}
 	}
 
 	return l, err
