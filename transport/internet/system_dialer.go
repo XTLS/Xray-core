@@ -221,3 +221,9 @@ func RegisterDialerController(ctl control.Func) error {
 	dialer.controllers = append(dialer.controllers, ctl)
 	return nil
 }
+
+
+type PacketConnWithDest interface {
+    net.PacketConn
+    net.Conn
+}
