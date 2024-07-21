@@ -94,6 +94,10 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		gotDownResponse.Close()
 	}()
 
+	if c.isH3 {
+		gotConn.Close()
+	}
+
 	// we want to block Dial until we know the remote address of the server,
 	// for logging purposes
 	<-gotConn.Wait()
