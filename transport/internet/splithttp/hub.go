@@ -314,14 +314,6 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
-
-		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
-		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
-		l.server = http.Server{
-			Handler:           h2cHandler,
-			ReadHeaderTimeout: time.Second * 4,
-			MaxHeaderBytes:    8192,
-		}
 	}
 
 	// tcp/unix (h1/h2)
@@ -332,7 +324,14 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			}
 		}
 
+		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
+		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
 		l.listener = listener
+		l.server = http.Server{
+			Handler:           h2cHandler,
+			ReadHeaderTimeout: time.Second * 4,
+			MaxHeaderBytes:    8192,
+		}
 
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
