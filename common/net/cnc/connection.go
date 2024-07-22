@@ -2,7 +2,6 @@ package cnc
 
 import (
 	"io"
-	gonet "net"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -121,17 +120,6 @@ func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 
 	return c.writer.WriteMultiBuffer(mb)
-}
-
-// ReadFrom implements net.PacketConn
-func (c *connection) ReadFrom(p []byte) (n int, addr gonet.Addr, err error) {
-	n, err = c.Read(p)
-	return n, c.remote, err
-}
-
-// ReadFrom implements net.PacketConn
-func (c *connection) WriteTo(p []byte, addr gonet.Addr) (n int, err error) {
-	return c.Write(p)
 }
 
 // Close implements net.Conn.Close().
