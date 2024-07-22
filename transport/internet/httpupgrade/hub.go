@@ -19,11 +19,11 @@ import (
 type server struct {
 	config         *Config
 	addConn        internet.ConnHandler
-	innnerListener net.Listener
+	innerListener net.Listener
 }
 
 func (s *server) Close() error {
-	return s.innnerListener.Close()
+	return s.innerListener.Close()
 }
 
 func (s *server) Addr() net.Addr {
@@ -36,6 +36,9 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Discard any remaining data in the buffer
+	connReader.Discard(connReader.Buffered())
 
 	if s.config != nil {
 		host := req.Host
@@ -84,16 +87,19 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 
 func (s *server) keepAccepting() {
 	for {
-		conn, err := s.innnerListener.Accept()
+		conn, err := s.innerListener.Accept()
 		if err != nil {
 			return
 		}
-		handledConn, err := s.Handle(conn)
-		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to handle request")
-			continue
-		}
-		s.addConn(handledConn)
+		// Handle the connection in a separate goroutine to avoid deadlock
+		go func(c net.Conn) {
+			handledConn, err := s.Handle(c)
+			if err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to handle request")
+				return
+			}
+			s.addConn(handledConn)
+		}(conn)
 	}
 }
 
@@ -140,7 +146,7 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 	serverInstance := &server{
 		config:         transportConfiguration,
 		addConn:        addConn,
-		innnerListener: listener,
+		innerListener: listener,
 	}
 	go serverInstance.keepAccepting()
 	return serverInstance, nil
