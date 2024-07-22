@@ -45,10 +45,11 @@ type httpSession struct {
 
 func (h *requestHandler) maybeReapSession(isFullyConnected *done.Instance, sessionId string) {
 	shouldReap := done.New()
-	go func() {
-		time.Sleep(30 * time.Second)
-		shouldReap.Close()
-	}()
+	time.AfterFunc(30*time.Second, func() {
+		if !isFullyConnected.Done() {
+			h.sessions.Delete(sessionId)
+		}
+	})
 
 	select {
 	case <-isFullyConnected.Wait():
@@ -278,6 +279,13 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
 		}
 		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
+
+		// Create a dummy HTTP server for UDS
+		l.server = http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Do nothing, as this server is not actually listening
+			}),
+		}
 	} else if l.isH3 { // quic
 		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
 			IP:   address.IP(),
@@ -326,6 +334,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	// tcp/unix (h1/h2)
 	if listener != nil {
+		defer listener.Close() // Close the listener even if an error occurs
 		if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 			if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 				listener = tls.NewListener(listener, tlsConfig)
