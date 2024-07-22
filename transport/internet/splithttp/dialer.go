@@ -42,8 +42,16 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
-	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
+	var isH2, isH3 bool
+	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+
+	if transportConfiguration.Protocol != "" {
+		isH2 = transportConfiguration.Protocol == "h2"
+		isH3 = transportConfiguration.Protocol == "h3"
+	} else {
+		isH2 = tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
+		isH3 = tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
+	}
 
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
@@ -84,7 +92,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 		return conn, nil
 	}
-
 	var downloadTransport http.RoundTripper
 	var uploadTransport http.RoundTripper
 
