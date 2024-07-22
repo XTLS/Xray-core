@@ -2,9 +2,9 @@ package internet
 
 import (
 	"context"
+	"math/rand"
 	"syscall"
 	"time"
-    "math/rand"
 
 	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/errors"
@@ -49,7 +49,7 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 }
 
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
-	errors.LogDebug(ctx, "dialing to " + dest.String())
+	errors.LogDebug(ctx, "dialing to "+dest.String())
 
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
@@ -223,8 +223,6 @@ func RegisterDialerController(ctl control.Func) error {
 	return nil
 }
 
-
-
 type FakePacketConn struct {
 	net.Conn
 }
@@ -246,8 +244,7 @@ func (c *FakePacketConn) LocalAddr() net.Addr {
 }
 
 func (c *FakePacketConn) SetReadBuffer(bytes int) error {
-    // do nothing, this function is only there to suppress quic-go printing
-    // random warnings about UDP buffers to stdout
-    return nil
+	// do nothing, this function is only there to suppress quic-go printing
+	// random warnings about UDP buffers to stdout
+	return nil
 }
-
