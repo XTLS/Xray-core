@@ -4,6 +4,7 @@ import (
 	"context"
 	"syscall"
 	"time"
+    "math/rand"
 
 	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/errors"
@@ -223,7 +224,30 @@ func RegisterDialerController(ctl control.Func) error {
 }
 
 
-type PacketConnWithDest interface {
-    net.PacketConn
-    net.Conn
+
+type FakePacketConn struct {
+	net.Conn
 }
+
+func (c *FakePacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	n, err = c.Read(p)
+	return n, c.RemoteAddr(), err
+}
+
+func (c *FakePacketConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
+	return c.Write(p)
+}
+
+func (c *FakePacketConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{
+		IP:   net.IP{byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256))},
+		Port: rand.Intn(65536),
+	}
+}
+
+func (c *FakePacketConn) SetReadBuffer(bytes int) error {
+    // do nothing, this function is only there to suppress quic-go printing
+    // random warnings about UDP buffers to stdout
+    return nil
+}
+
