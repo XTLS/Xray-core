@@ -117,10 +117,10 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 
 func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
 	req, err := http.NewRequest("POST", url, payload)
-	req.ContentLength = contentLength
 	if err != nil {
 		return err
 	}
+	req.ContentLength = contentLength
 	req.Header = c.transportConfig.GetRequestHeader()
 
 	if c.isH2 || c.isH3 {
