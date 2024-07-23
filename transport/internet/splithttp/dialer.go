@@ -99,7 +99,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		roundTripper := &http3.RoundTripper{
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-				if (tlsConfig != nil) {
+				if (tlsConfig != nil && tlsCfg != nil) {
 					tlsCfg.ServerName = tlsConfig.ServerName
 					tlsCfg.NextProtos = tlsConfig.NextProtocol
 				}
