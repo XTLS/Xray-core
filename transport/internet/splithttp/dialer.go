@@ -183,6 +183,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
 	maxUploadSize := transportConfiguration.GetNormalizedMaxUploadSize()
+	maxUploadInterval := transportConfiguration.GetNormalizedMaxUploadInterval()
 
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"
@@ -206,6 +207,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	go func() {
 		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
 		var requestCounter int64
+
+		lastWrite := time.Now()
 
 		// by offloading the uploads into a buffered pipe, multiple conn.Write
 		// calls get automatically batched together into larger POST requests.
@@ -237,6 +240,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}()
 
+			if maxUploadInterval > 0 {
+				if time.Since(lastWrite) < maxUploadInterval {
+					time.Sleep(maxUploadInterval)
+				}
+
+				lastWrite = time.Now()
+			}
 		}
 	}()
 

@@ -2,6 +2,7 @@ package splithttp
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
@@ -43,6 +44,14 @@ func (c *Config) GetNormalizedMaxUploadSize() int32 {
 	}
 
 	return c.MaxUploadSize
+}
+
+func (c *Config) GetNormalizedMaxUploadInterval() time.Duration {
+	if c.MaxUploadIntervalMs == 0 {
+		return 10 * time.Millisecond
+	}
+
+	return time.Duration(c.MaxUploadIntervalMs) * time.Millisecond
 }
 
 func init() {

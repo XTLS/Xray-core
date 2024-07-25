@@ -231,6 +231,7 @@ type SplitHTTPConfig struct {
 	Headers              map[string]string `json:"headers"`
 	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
 	MaxUploadSize        int32             `json:"maxUploadSize"`
+	MaxUploadIntervalMs  int32             `json:"maxUploadIntervalMs"`
 }
 
 // Build implements Buildable.
@@ -249,6 +250,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		Header:               c.Headers,
 		MaxConcurrentUploads: c.MaxConcurrentUploads,
 		MaxUploadSize:        c.MaxUploadSize,
+		MaxUploadIntervalMs:  c.MaxUploadIntervalMs,
 	}
 	return config, nil
 }

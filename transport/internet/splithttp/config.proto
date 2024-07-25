@@ -12,4 +12,5 @@ message Config {
   map<string, string> header = 3;
   int32 maxConcurrentUploads = 4;
   int32 maxUploadSize = 5;
+  int32 maxUploadIntervalMs = 6;
 }
