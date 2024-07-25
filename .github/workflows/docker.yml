@@ -25,24 +25,84 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
+      - name: Docker metadata Loyalsoldier flavor
+        id: loyalsoldier
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/xray-core
+          flavor: |
+            latest=auto
+            suffix=-loyalsoldier,onlatest=true
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+      - name: Docker metadata L (short for Loyalsoldier) flavor
+        id: l
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/xray-core
+          flavor: |
+            latest=auto
+            suffix=-l,onlatest=true
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - # Add support for more platforms with QEMU (optional)
-        # https://github.com/docker/setup-qemu-action
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: |
+            linux/386
+            linux/amd64
+            linux/arm
+            linux/arm64
+            linux/loong64
+            linux/mips
+            linux/mips64
+            linux/mips64le
+            linux/mipsle
+            linux/ppc64
+            linux/ppc64le
+            linux/riscv64
+            linux/s390x
+          provenance: false
           file: .github/docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Build and push Loyalsoldier flavor
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: |
+            linux/386
+            linux/amd64
+            linux/arm
+            linux/arm64
+            linux/loong64
+            linux/mips
+            linux/mips64
+            linux/mips64le
+            linux/mipsle
+            linux/ppc64
+            linux/ppc64le
+            linux/riscv64
+            linux/s390x
+          provenance: false
+          file: .github/docker/Dockerfile
+          build-args: flavor=loyalsoldier
+          push: true
+          tags: |
+            ${{ steps.loyalsoldier.outputs.tags }}
+            ${{ steps.l.outputs.tags }}
