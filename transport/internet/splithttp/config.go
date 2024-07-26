@@ -46,12 +46,12 @@ func (c *Config) GetNormalizedMaxUploadSize() int32 {
 	return c.MaxUploadSize
 }
 
-func (c *Config) GetNormalizedMaxUploadInterval() time.Duration {
-	if c.MaxUploadIntervalMs == 0 {
+func (c *Config) GetNormalizedMinUploadInterval() time.Duration {
+	if c.MinUploadIntervalMs == 0 {
 		return 10 * time.Millisecond
 	}
 
-	return time.Duration(c.MaxUploadIntervalMs) * time.Millisecond
+	return time.Duration(c.MinUploadIntervalMs) * time.Millisecond
 }
 
 func init() {

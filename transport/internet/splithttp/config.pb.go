@@ -30,7 +30,7 @@ type Config struct {
 	Header               map[string]string `protobuf:"bytes,3,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	MaxConcurrentUploads int32             `protobuf:"varint,4,opt,name=maxConcurrentUploads,proto3" json:"maxConcurrentUploads,omitempty"`
 	MaxUploadSize        int32             `protobuf:"varint,5,opt,name=maxUploadSize,proto3" json:"maxUploadSize,omitempty"`
-	MaxUploadIntervalMs  int32             `protobuf:"varint,6,opt,name=maxUploadIntervalMs,proto3" json:"maxUploadIntervalMs,omitempty"`
+	MinUploadIntervalMs  int32             `protobuf:"varint,6,opt,name=minUploadIntervalMs,proto3" json:"minUploadIntervalMs,omitempty"`
 }
 
 func (x *Config) Reset() {
@@ -100,9 +100,9 @@ func (x *Config) GetMaxUploadSize() int32 {
 	return 0
 }
 
-func (x *Config) GetMaxUploadIntervalMs() int32 {
+func (x *Config) GetMinUploadIntervalMs() int32 {
 	if x != nil {
-		return x.MaxUploadIntervalMs
+		return x.MinUploadIntervalMs
 	}
 	return 0
 }
