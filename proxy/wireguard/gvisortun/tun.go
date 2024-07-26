@@ -12,7 +12,7 @@ import (
 	"os"
 	"syscall"
 
-	"golang.zx2c4.com/wireguard/tun"
+	"github.com/GFW-knocker/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -38,11 +38,13 @@ type netTun struct {
 type Net netTun
 
 func CreateNetTUN(localAddresses []netip.Addr, mtu int, promiscuousMode bool) (tun.Device, *Net, *stack.Stack, error) {
+	// promiscuousMode = true
 	opts := stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, ipv6.NewProtocol},
 		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol, icmp.NewProtocol6, icmp.NewProtocol4},
 		HandleLocal:        !promiscuousMode,
 	}
+	mtu = 1420
 	dev := &netTun{
 		ep:             channel.New(1024, uint32(mtu), ""),
 		stack:          stack.New(opts),

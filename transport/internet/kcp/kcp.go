@@ -6,4 +6,4 @@
 //	xtaci@github for translating to Golang
 package kcp
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen

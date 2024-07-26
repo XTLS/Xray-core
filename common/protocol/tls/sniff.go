@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/xtls/xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common"
 )
 
 type SniffHeader struct {

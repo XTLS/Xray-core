@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/xtls/reality"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet"
 )
 
 func (c *Config) GetREALITYConfig() *reality.Config {

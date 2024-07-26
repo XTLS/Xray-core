@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"sync"
 
-	"golang.zx2c4.com/wireguard/conn"
+	"github.com/GFW-knocker/wireguard/conn"
 
-	xnet "github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/transport/internet"
+	xnet "github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/features/dns"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
 type netReadInfo struct {
@@ -123,9 +123,17 @@ func (bind *netBind) Close() error {
 type netBindClient struct {
 	netBind
 
-	ctx      context.Context
-	dialer   internet.Dialer
-	reserved []byte
+	ctx              context.Context
+	dialer           internet.Dialer
+	reserved         []byte
+	Wnoise           string
+	Wheader          []byte
+	WnoisecountFrom  int
+	WnoisecountTo    int
+	WnoisedelayFrom  int
+	WnoisedelayTo    int
+	WpayloadsizeFrom int
+	WpayloadsizeTo   int
 }
 
 func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
@@ -162,6 +170,61 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 
 	return nil
 }
+
+// --------- GFW knocker -----------------------
+func (bind *netBindClient) Get_extra_data() (string, []byte, int, int, int, int, int, int) {
+	return bind.Wnoise, bind.Wheader, bind.WnoisecountFrom, bind.WnoisecountTo, bind.WnoisedelayFrom, bind.WnoisedelayTo, bind.WpayloadsizeFrom, bind.WpayloadsizeTo
+}
+
+func (bind *netBindServer) Get_extra_data() (string, []byte, int, int, int, int, int, int) {
+	return "", nil, 1, 2, 5, 10, 5, 10
+}
+
+func (bind *netBindClient) Send_without_modify(buff [][]byte, endpoint conn.Endpoint) error {
+	var err error
+
+	nend, ok := endpoint.(*netEndpoint)
+	if !ok {
+		return conn.ErrWrongEndpointType
+	}
+
+	if nend.conn == nil {
+		err = bind.connectTo(nend)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, buff := range buff {
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (bind *netBindServer) Send_without_modify(buff [][]byte, endpoint conn.Endpoint) error {
+	var err error
+
+	nend, ok := endpoint.(*netEndpoint)
+	if !ok {
+		return conn.ErrWrongEndpointType
+	}
+
+	if nend.conn == nil {
+		return errors.New("connection not open yet")
+	}
+
+	for _, buff := range buff {
+		if _, err = nend.conn.Write(buff); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+// --------------------------------------------------------
 
 func (bind *netBindClient) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error

@@ -4,11 +4,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/cmdarg"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/main/confloader"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/cmdarg"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/main/confloader"
 	"google.golang.org/protobuf/proto"
 )
 

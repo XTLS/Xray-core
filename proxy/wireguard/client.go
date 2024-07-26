@@ -22,26 +22,28 @@ package wireguard
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/dice"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/log"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/common/signal"
+	"github.com/GFW-knocker/Xray-core/common/task"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/features/dns"
+	"github.com/GFW-knocker/Xray-core/features/policy"
+	"github.com/GFW-knocker/Xray-core/transport"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
 // Handler is an outbound connection that silently swallow the entire payload.
@@ -99,6 +101,84 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 		h.bind = nil
 	}
 
+	// ------ GFW-knocker --------------------
+	var tmp []string
+	var tmperr1 error
+	var tmperr2 error
+	var v1 uint64
+	var v2 uint64
+
+	// noise header []byte
+	var Wheader []byte = nil
+	Wnoise := h.conf.Wnoise
+	if (Wnoise != "") && (Wnoise != "none") && (Wnoise != "quic") && (Wnoise != "random") {
+		if len(Wnoise)%2 != 0 {
+			Wnoise = Wnoise + "0"
+		}
+		decodedBytes, err := hex.DecodeString(Wnoise)
+		if err == nil {
+			Wheader = decodedBytes
+		}
+	}
+
+	// noise packet count
+	var WnoisecountFrom int = 1
+	var WnoisecountTo int = 2
+	tmp = strings.Split(h.conf.Wnoisecount, "-")
+	if len(tmp) == 2 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		v2, tmperr2 = strconv.ParseUint(tmp[1], 10, 64)
+		if (tmperr1 == nil) && (tmperr2 == nil) {
+			WnoisecountFrom = int(v1)
+			WnoisecountTo = int(v2)
+		}
+	} else if len(tmp) == 1 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		if tmperr1 == nil {
+			WnoisecountFrom = int(v1)
+			WnoisecountTo = int(v1)
+		}
+	}
+
+	// delay between packets
+	var WnoisedelayFrom int = 5
+	var WnoisedelayTo int = 10
+	tmp = strings.Split(h.conf.Wnoisedelay, "-")
+	if len(tmp) == 2 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		v2, tmperr2 = strconv.ParseUint(tmp[1], 10, 64)
+		if (tmperr1 == nil) && (tmperr2 == nil) {
+			WnoisedelayFrom = int(v1)
+			WnoisedelayTo = int(v2)
+		}
+	} else if len(tmp) == 1 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		if tmperr1 == nil {
+			WnoisedelayFrom = int(v1)
+			WnoisedelayTo = int(v1)
+		}
+	}
+
+	// noise payload size in byte
+	var WpayloadsizeFrom int = 5
+	var WpayloadsizeTo int = 10
+	tmp = strings.Split(h.conf.Wpayloadsize, "-")
+	if len(tmp) == 2 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		v2, tmperr2 = strconv.ParseUint(tmp[1], 10, 64)
+		if (tmperr1 == nil) && (tmperr2 == nil) {
+			WpayloadsizeFrom = int(v1)
+			WpayloadsizeTo = int(v2)
+		}
+	} else if len(tmp) == 1 {
+		v1, tmperr1 = strconv.ParseUint(tmp[0], 10, 64)
+		if tmperr1 == nil {
+			WpayloadsizeFrom = int(v1)
+			WpayloadsizeTo = int(v1)
+		}
+	}
+	// ------ GFW-knocker --------------------
+
 	// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
 	bind := &netBindClient{
 		netBind: netBind{
@@ -109,9 +189,17 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 			},
 			workers: int(h.conf.NumWorkers),
 		},
-		ctx:      ctx,
-		dialer:   dialer,
-		reserved: h.conf.Reserved,
+		ctx:              ctx,
+		dialer:           dialer,
+		reserved:         h.conf.Reserved,
+		Wnoise:           h.conf.Wnoise,
+		Wheader:          Wheader,
+		WnoisecountFrom:  WnoisecountFrom,
+		WnoisecountTo:    WnoisecountTo,
+		WnoisedelayFrom:  WnoisedelayFrom,
+		WnoisedelayTo:    WnoisedelayTo,
+		WpayloadsizeFrom: WpayloadsizeFrom,
+		WpayloadsizeTo:   WpayloadsizeTo,
 	}
 	defer func() {
 		if err != nil {
@@ -151,16 +239,29 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	// resolve dns
 	addr := destination.Address
 	if addr.Family().IsDomain() {
+
 		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
 			IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
 			IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
 		})
+
+		// ----------- gfw-knocker ----------------
+		// ips, err := net.LookupIP(addr.Domain())
+		// fmt.Println("PROCESS DNS : " + addr.Domain())
+		// ----------- gfw-knocker ----------------
+
 		{ // Resolve fallback
 			if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
 				ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
 					IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
 					IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
 				})
+
+				// ----------- gfw-knocker ----------------
+				// ips, err = net.LookupIP(addr.Domain())
+				// fmt.Print("PROCESS DNS : " + addr.Domain())
+				// ----------- gfw-knocker ----------------
+
 			}
 		}
 		if err != nil {
@@ -285,16 +386,29 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 				addr = net.ParseAddress(dialerIp.String())
 				errors.LogInfo(h.bind.ctx, "createIPCRequest use dialer dest ip: ", addr)
 			} else {
-				ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-					IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
-					IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
-				})
+
+				// ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
+				// 	IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
+				// 	IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
+				// })
+
+				// ----------- gfw-knocker ----------------
+				ips, err := net.LookupIP(addr.Domain())
+				// fmt.Println("IPC DNS : " + addr.Domain())
+				// ----------- gfw-knocker ----------------
+
 				{ // Resolve fallback
 					if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
-						ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
-							IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
-							IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
-						})
+						// ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
+						// 	IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
+						// 	IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
+						// })
+
+						// ----------- gfw-knocker ----------------
+						ips, err = net.LookupIP(addr.Domain())
+						// fmt.Println("IPC DNS : " + addr.Domain())
+						// ----------- gfw-knocker ----------------
+
 					}
 				}
 				if err != nil {

@@ -3,18 +3,18 @@ package loopback
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/net/cnc"
+	"github.com/GFW-knocker/Xray-core/common/retry"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/common/task"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/features/routing"
+	"github.com/GFW-knocker/Xray-core/transport"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
 type Loopback struct {

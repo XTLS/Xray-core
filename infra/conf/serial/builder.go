@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/xtls/xray-core/common/errors"
-	creflect "github.com/xtls/xray-core/common/reflect"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/main/confloader"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	creflect "github.com/GFW-knocker/Xray-core/common/reflect"
+	"github.com/GFW-knocker/Xray-core/core"
+	"github.com/GFW-knocker/Xray-core/infra/conf"
+	"github.com/GFW-knocker/Xray-core/main/confloader"
 )
 
 func MergeConfigFromFiles(files []string, formats []string) (string, error) {

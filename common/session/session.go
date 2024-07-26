@@ -1,15 +1,15 @@
 // Package session provides functions for sessions of incoming requests.
-package session // import "github.com/xtls/xray-core/common/session"
+package session // import "github.com/GFW-knocker/Xray-core/common/session"
 
 import (
 	"context"
 	"math/rand"
 
-	c "github.com/xtls/xray-core/common/ctx"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/signal"
+	c "github.com/GFW-knocker/Xray-core/common/ctx"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol"
+	"github.com/GFW-knocker/Xray-core/common/signal"
 )
 
 // NewID generates a new ID. The generated ID is high likely to be unique, but not cryptographically secure.
@@ -65,7 +65,7 @@ type Outbound struct {
 	Tag string
 	// Name of the outbound proxy that handles the connection.
 	Name string
-	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings 
+	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
 	Conn net.Conn
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot

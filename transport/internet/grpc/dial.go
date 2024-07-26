@@ -6,16 +6,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	c "github.com/xtls/xray-core/common/ctx"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
-	"github.com/xtls/xray-core/transport/internet/reality"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/GFW-knocker/Xray-core/common"
+	c "github.com/GFW-knocker/Xray-core/common/ctx"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/transport/internet/grpc/encoding"
+	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
+	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/connectivity"
@@ -56,7 +56,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	}
 	client := encoding.NewGRPCServiceClient(conn)
 	if grpcSettings.MultiMode {
-		errors.LogDebug(ctx, "using gRPC multi mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunMultiStreamName() + "`")
+		errors.LogDebug(ctx, "using gRPC multi mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunMultiStreamName()+"`")
 		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunMultiStreamName())
 		if err != nil {
 			return nil, errors.New("Cannot dial gRPC").Base(err)
@@ -64,7 +64,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		return encoding.NewMultiHunkConn(grpcService, nil), nil
 	}
 
-	errors.LogDebug(ctx, "using gRPC tun mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunStreamName() + "`")
+	errors.LogDebug(ctx, "using gRPC tun mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunStreamName()+"`")
 	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunStreamName())
 	if err != nil {
 		return nil, errors.New("Cannot dial gRPC").Base(err)

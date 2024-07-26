@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.transport.internet.httpupgrade;
 option csharp_namespace = "Xray.Transport.Internet.HttpUpgrade";
-option go_package = "github.com/xtls/xray-core/transport/internet/httpupgrade";
+option go_package = "github.com/GFW-knocker/Xray-core/transport/internet/httpupgrade";
 option java_package = "com.xray.transport.internet.httpupgrade";
 option java_multiple_files = true;
 

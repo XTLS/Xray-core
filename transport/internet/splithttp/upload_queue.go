@@ -8,7 +8,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
 type Packet struct {

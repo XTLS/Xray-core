@@ -3,13 +3,13 @@ package dispatcher
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol/bittorrent"
-	"github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/protocol/quic"
-	"github.com/xtls/xray-core/common/protocol/tls"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/protocol/bittorrent"
+	"github.com/GFW-knocker/Xray-core/common/protocol/http"
+	"github.com/GFW-knocker/Xray-core/common/protocol/quic"
+	"github.com/GFW-knocker/Xray-core/common/protocol/tls"
 )
 
 type SniffResult interface {

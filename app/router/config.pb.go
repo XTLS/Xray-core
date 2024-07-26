@@ -7,8 +7,8 @@
 package router
 
 import (
-	net "github.com/xtls/xray-core/common/net"
-	serial "github.com/xtls/xray-core/common/serial"
+	net "github.com/GFW-knocker/Xray-core/common/net"
+	serial "github.com/GFW-knocker/Xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
