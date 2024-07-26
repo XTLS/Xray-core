@@ -10,20 +10,19 @@ import (
 	"sync"
 	"time"
 
-  "github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
 	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/common/net"
-	"github.com/GFW-knocker/Xray-core/common/signal/done"
 	"github.com/GFW-knocker/Xray-core/common/signal/semaphore"
 	"github.com/GFW-knocker/Xray-core/common/uuid"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
-  "github.com/GFW-knocker/Xray-core/transport/internet/browser_dialer"
+	"github.com/GFW-knocker/Xray-core/transport/internet/browser_dialer"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"github.com/GFW-knocker/Xray-core/transport/pipe"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"golang.org/x/net/http2"
 )
 
