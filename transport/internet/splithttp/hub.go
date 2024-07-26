@@ -344,18 +344,18 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 }
 
 // Addr implements net.Listener.Addr().
-func (ln *HTTPServerManager) Addr() net.Addr {
-	return ln.listener.Addr()
+func (sm *HTTPServerManager) Addr() net.Addr {
+	return sm.listener.Addr()
 }
 
 // Close implements net.Listener.Close().
-func (ln *HTTPServerManager) Close() error {
-	if ln.h3server != nil {
-		if err := ln.h3server.Close(); err != nil {
+func (sm *HTTPServerManager) Close() error {
+	if sm.h3server != nil {
+		if err := sm.h3server.Close(); err != nil {
 			return err
 		}
-	} else if ln.listener != nil {
-		return ln.listener.Close()
+	} else if sm.listener != nil {
+		return sm.listener.Close()
 	}
 	return errors.New("listener does not have an HTTP/3 server or a net.listener")
 }
