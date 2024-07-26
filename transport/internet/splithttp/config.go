@@ -48,7 +48,7 @@ func (c *Config) GetNormalizedMaxUploadSize() int32 {
 
 func (c *Config) GetNormalizedMinUploadInterval() time.Duration {
 	if c.MinUploadIntervalMs == 0 {
-		return 10 * time.Millisecond
+		return 30 * time.Millisecond
 	}
 
 	return time.Duration(c.MinUploadIntervalMs) * time.Millisecond
