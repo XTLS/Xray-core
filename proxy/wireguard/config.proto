@@ -31,4 +31,8 @@ message DeviceConfig {
   DomainStrategy domain_strategy = 7;
   bool is_client = 8;
   bool kernel_mode = 9;
+  string wnoise = 10;
+  string wnoisecount = 11;
+  string wnoisedelay = 12;
+  string wpayloadsize = 13;
 }

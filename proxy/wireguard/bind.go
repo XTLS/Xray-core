@@ -123,9 +123,17 @@ func (bind *netBind) Close() error {
 type netBindClient struct {
 	netBind
 
-	ctx      context.Context
-	dialer   internet.Dialer
-	reserved []byte
+	ctx              context.Context
+	dialer           internet.Dialer
+	reserved         []byte
+	Wnoise           string
+	Wheader          []byte
+	WnoisecountFrom  int
+	WnoisecountTo    int
+	WnoisedelayFrom  int
+	WnoisedelayTo    int
+	WpayloadsizeFrom int
+	WpayloadsizeTo   int
 }
 
 func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
@@ -164,6 +172,14 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 }
 
 // --------- GFW knocker -----------------------
+func (bind *netBindClient) Get_extra_data() (string, []byte, int, int, int, int, int, int) {
+	return bind.Wnoise, bind.Wheader, bind.WnoisecountFrom, bind.WnoisecountTo, bind.WnoisedelayFrom, bind.WnoisedelayTo, bind.WpayloadsizeFrom, bind.WpayloadsizeTo
+}
+
+func (bind *netBindServer) Get_extra_data() (string, []byte, int, int, int, int, int, int) {
+	return "", nil, 1, 2, 5, 10, 5, 10
+}
+
 func (bind *netBindClient) Send_without_modify(buff [][]byte, endpoint conn.Endpoint) error {
 	var err error
 
