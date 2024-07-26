@@ -1,7 +1,7 @@
 module github.com/GFW-knocker/Xray-core
 
 
-go 1.21.4
+go 1.22.4
 
 
 require (
