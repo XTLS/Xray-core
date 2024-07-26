@@ -28,7 +28,7 @@ import (
 type requestHandler struct {
 	host      string
 	path      string
-	ln        *Listener
+	sm        *HTTPServerManager
 	sessionMu *sync.Mutex
 	sessions  sync.Map
 	localAddr gonet.TCPAddr
@@ -75,7 +75,7 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	}
 
 	s := &httpSession{
-		uploadQueue:      NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads())),
+		uploadQueue:      NewUploadQueue(int(2 * h.sm.config.GetNormalizedMaxConcurrentUploads())),
 		isFullyConnected: done.New(),
 	}
 
@@ -196,7 +196,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			remoteAddr: remoteAddr,
 		}
 
-		h.ln.addConn(stat.Connection(&conn))
+		h.sm.addConn(stat.Connection(&conn))
 
 		// "A ResponseWriter may not be used after [Handler.ServeHTTP] has returned."
 		<-downloadDone.Wait()
@@ -233,7 +233,7 @@ func (c *httpResponseBodyWriter) Close() error {
 	return nil
 }
 
-type Listener struct {
+type HTTPServerManager struct {
 	sync.Mutex
 	server     http.Server
 	h3server   *http3.Server
@@ -245,12 +245,12 @@ type Listener struct {
 }
 
 func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
-	l := &Listener{
+	serverManager := &HTTPServerManager{
 		addConn: addConn,
 	}
 	shSettings := streamSettings.ProtocolSettings.(*Config)
-	l.config = shSettings
-	if l.config != nil {
+	serverManager.config = shSettings
+	if serverManager.config != nil {
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
 		}
@@ -261,13 +261,13 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	handler := &requestHandler{
 		host:      shSettings.Host,
 		path:      shSettings.GetNormalizedPath(),
-		ln:        l,
+		sm:        serverManager,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},
 		localAddr: localAddr,
 	}
 	tlsConfig := getTLSConfig(streamSettings)
-	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
+	serverManager.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
@@ -278,7 +278,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
 		}
 		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
-	} else if l.isH3 { // quic
+	} else if serverManager.isH3 { // quic
 		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
 			IP:   address.IP(),
 			Port: int(port),
@@ -290,14 +290,14 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
 		}
-		l.h3listener = h3listener
+		serverManager.h3listener = h3listener
 		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
 
-		l.h3server = &http3.Server{
+		serverManager.h3server = &http3.Server{
 			Handler: handler,
 		}
 		go func() {
-			if err := l.h3server.ServeListener(l.h3listener); err != nil {
+			if err := serverManager.h3server.ServeListener(serverManager.h3listener); err != nil {
 				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
 			}
 		}()
@@ -326,30 +326,30 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
 		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
-		l.listener = listener
-		l.server = http.Server{
+		serverManager.listener = listener
+		serverManager.server = http.Server{
 			Handler:           h2cHandler,
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    8192,
 		}
 
 		go func() {
-			if err := l.server.Serve(l.listener); err != nil {
+			if err := serverManager.server.Serve(serverManager.listener); err != nil {
 				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
 			}
 		}()
 	}
 
-	return l, err
+	return serverManager, err
 }
 
 // Addr implements net.Listener.Addr().
-func (ln *Listener) Addr() net.Addr {
+func (ln *HTTPServerManager) Addr() net.Addr {
 	return ln.listener.Addr()
 }
 
 // Close implements net.Listener.Close().
-func (ln *Listener) Close() error {
+func (ln *HTTPServerManager) Close() error {
 	if ln.h3server != nil {
 		if err := ln.h3server.Close(); err != nil {
 			return err
