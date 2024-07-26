@@ -202,7 +202,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	sessionId := sessionIdUuid.String()
 	baseURL := requestURL.String() + sessionId
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize.roll()))
 
 	go func() {
 		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
@@ -240,9 +240,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}()
 
-			if minUploadInterval > 0 {
-				if time.Since(lastWrite) < minUploadInterval {
-					time.Sleep(minUploadInterval)
+			if minUploadInterval.From > 0 {
+				roll := time.Duration(minUploadInterval.roll()) * time.Millisecond
+				if time.Since(lastWrite) < roll {
+					time.Sleep(roll)
 				}
 
 				lastWrite = time.Now()

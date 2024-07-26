@@ -1,8 +1,9 @@
 package splithttp
 
 import (
+	"crypto/rand"
+	"math/big"
 	"net/http"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
@@ -38,24 +39,42 @@ func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
 	return c.MaxConcurrentUploads
 }
 
-func (c *Config) GetNormalizedMaxUploadSize() int32 {
-	if c.MaxUploadSize == 0 {
-		return 1000000
+func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
+	r := c.MaxUploadSize
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 1000000,
+			To:   1000000,
+		}
 	}
 
-	return c.MaxUploadSize
+	return *r
 }
 
-func (c *Config) GetNormalizedMinUploadInterval() time.Duration {
-	if c.MinUploadIntervalMs == 0 {
-		return 30 * time.Millisecond
+func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {
+	r := c.MinUploadIntervalMs
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 30,
+			To:   30,
+		}
 	}
 
-	return time.Duration(c.MinUploadIntervalMs) * time.Millisecond
+	return *r
 }
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)
 	}))
+}
+
+func (c RandRangeConfig) roll() int32 {
+	if c.From == c.To {
+		return c.From
+	}
+	bigInt, _ := rand.Int(rand.Reader, big.NewInt(int64(c.To-c.From)))
+	return c.From + int32(bigInt.Int64())
 }

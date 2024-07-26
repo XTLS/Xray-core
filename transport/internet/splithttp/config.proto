@@ -11,6 +11,11 @@ message Config {
   string path = 2;
   map<string, string> header = 3;
   int32 maxConcurrentUploads = 4;
-  int32 maxUploadSize = 5;
-  int32 minUploadIntervalMs = 6;
+  RandRangeConfig maxUploadSize = 5;
+  RandRangeConfig minUploadIntervalMs = 6;
+}
+
+message RandRangeConfig {
+    int32 from = 1;
+    int32 to = 2;
 }
