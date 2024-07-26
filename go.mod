@@ -1,11 +1,9 @@
 module github.com/GFW-knocker/Xray-core
 
-
-go 1.22.4
-
+go 1.21.4
 
 require (
-	github.com/GFW-knocker/wireguard v1.0.5
+	github.com/GFW-knocker/wireguard v1.0.6
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 	github.com/cloudflare/circl v1.3.9
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
