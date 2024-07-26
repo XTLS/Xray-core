@@ -40,7 +40,7 @@ func ListenUnix(ctx context.Context, address net.Address, settings *MemoryStream
 	protocol := settings.ProtocolName
 	listenFunc := transportListenerCache[protocol]
 	if listenFunc == nil {
-		return nil, errors.New(protocol, " unix istener not registered.").AtError()
+		return nil, errors.New(protocol, " unix listener not registered.").AtError()
 	}
 	listener, err := listenFunc(ctx, address, net.Port(0), settings, handler)
 	if err != nil {

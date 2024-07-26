@@ -223,14 +223,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				cs := tlsConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = " + name)
-				errors.LogInfo(ctx, "realAlpn = " + alpn)
+				errors.LogInfo(ctx, "realName = "+name)
+				errors.LogInfo(ctx, "realAlpn = "+alpn)
 			} else if realityConn, ok := iConn.(*reality.Conn); ok {
 				cs := realityConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = " + name)
-				errors.LogInfo(ctx, "realAlpn = " + alpn)
+				errors.LogInfo(ctx, "realName = "+name)
+				errors.LogInfo(ctx, "realAlpn = "+alpn)
 			}
 			name = strings.ToLower(name)
 			alpn = strings.ToLower(alpn)
@@ -295,7 +295,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 								}
 								if k == '?' || k == ' ' {
 									path = string(firstBytes[i:j])
-									errors.LogInfo(ctx, "realPath = " + path)
+									errors.LogInfo(ctx, "realPath = "+path)
 									if pfb[path] == nil {
 										path = ""
 									}
@@ -524,7 +524,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
 			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
 		} else {
-			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBufer
+			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		}
 
@@ -552,7 +552,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err := clientWriter.WriteMultiBuffer(multiBuffer); err != nil {
 			return err // ...
 		}
-		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
 		if err := bufferWriter.SetBuffered(false); err != nil {
 			return errors.New("failed to write A response payload").Base(err).AtWarning()
 		}
@@ -561,7 +561,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, nil, ctx)
 		} else {
-			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
+			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
 		}
 		if err != nil {

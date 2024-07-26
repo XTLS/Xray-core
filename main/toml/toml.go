@@ -43,7 +43,7 @@ func init() {
 			case io.Reader:
 				return serial.LoadTOMLConfig(v)
 			default:
-				return nil, errors.New("unknow type")
+				return nil, errors.New("unknown type")
 			}
 		},
 	}))

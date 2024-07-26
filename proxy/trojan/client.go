@@ -124,7 +124,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return errors.New("failed to write A request payload").Base(err).AtWarning()
 		}
 
-		// Flush; bufferWriter.WriteMultiBufer now is bufferWriter.writer.WriteMultiBuffer
+		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
 		if err = bufferWriter.SetBuffered(false); err != nil {
 			return errors.New("failed to flush payload").Base(err).AtWarning()
 		}

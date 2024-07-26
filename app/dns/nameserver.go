@@ -85,7 +85,7 @@ func NewClient(
 			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}
 
-		// Priotize local domains with specific TLDs or without any dot to local DNS
+		// Prioritize local domains with specific TLDs or those without any dot for the local DNS
 		if _, isLocalDNS := server.(*LocalNameServer); isLocalDNS {
 			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
 			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)

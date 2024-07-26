@@ -29,7 +29,7 @@ func TestActivityTimerUpdate(t *testing.T) {
 	timer.SetTimeout(time.Second * 1)
 	time.Sleep(time.Second * 2)
 	if ctx.Err() == nil {
-		t.Error("expcted some error, but got nil")
+		t.Error("expected some error, but got nil")
 	}
 	runtime.KeepAlive(timer)
 }

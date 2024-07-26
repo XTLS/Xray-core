@@ -147,7 +147,7 @@ func TestTLSHeaders(t *testing.T) {
 		header, err := SniffTLS(test.input)
 		if test.err {
 			if err == nil {
-				t.Errorf("Exepct error but nil in test %v", test)
+				t.Errorf("Expect error but nil in test %v", test)
 			}
 		} else {
 			if err != nil {

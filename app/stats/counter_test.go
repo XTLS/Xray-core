@@ -18,7 +18,7 @@ func TestStatsCounter(t *testing.T) {
 	common.Must(err)
 
 	if v := c.Add(1); v != 1 {
-		t.Fatal("unpexcted Add(1) return: ", v, ", wanted ", 1)
+		t.Fatal("unexpected Add(1) return: ", v, ", wanted ", 1)
 	}
 
 	if v := c.Set(0); v != 1 {

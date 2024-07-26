@@ -16,9 +16,12 @@ func (c *Config) getHosts() []string {
 }
 
 func (c *Config) isValidHost(host string) bool {
+	if len(c.Host) == 0 {
+		return true
+	}
 	hosts := c.getHosts()
 	for _, h := range hosts {
-		if h == host {
+		if internet.IsValidHTTPHost(host, h) {
 			return true
 		}
 	}

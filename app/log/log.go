@@ -30,8 +30,8 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	}
 	log.RegisterHandler(g)
 
-	// start logger instantly on inited
-	// other modules would log during init
+	// Start logger instantly on initialization
+	// Other modules would log during initialization
 	if err := g.startInternal(); err != nil {
 		return nil, err
 	}

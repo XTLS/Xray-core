@@ -209,7 +209,7 @@ func (h *HealthPing) PutResult(tag string, rtt time.Duration) {
 	if !ok {
 		// validity is 2 times to sampling period, since the check are
 		// distributed in the time line randomly, in extreme cases,
-		// previous checks are distributed on the left, and latters
+		// Previous checks are distributed on the left, and later ones
 		// on the right
 		validity := h.Settings.Interval * time.Duration(h.Settings.SamplingCount) * 2
 		r = NewHealthPingResult(h.Settings.SamplingCount, validity)
