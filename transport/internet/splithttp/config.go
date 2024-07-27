@@ -31,38 +31,51 @@ func (c *Config) GetRequestHeader() http.Header {
 	return header
 }
 
-func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
-	if c.MaxConcurrentUploads == 0 {
-		return 10
-	}
-
-	return c.MaxConcurrentUploads
-}
-
-func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
-	r := c.MaxUploadSize
-
-	if r == nil {
-		r = &RandRangeConfig{
-			From: 1000000,
-			To:   1000000,
+func (c *Config) GetNormalizedMaxConcurrentUploads(isServer bool) RandRangeConfig {
+	if c.MaxConcurrentUploads == nil {
+		if isServer {
+			return RandRangeConfig{
+				From: 200,
+				To:   200,
+			}
+		} else {
+			return RandRangeConfig{
+				From: 100,
+				To:   100,
+			}
 		}
 	}
 
-	return *r
+	return *c.MaxConcurrentUploads
+}
+
+func (c *Config) GetNormalizedMaxUploadSize(isServer bool) RandRangeConfig {
+	if c.MaxUploadSize == nil {
+		if isServer {
+			return RandRangeConfig{
+				From: 2000000,
+				To:   2000000,
+			}
+		} else {
+			return RandRangeConfig{
+				From: 1000000,
+				To:   1000000,
+			}
+		}
+	}
+
+	return *c.MaxUploadSize
 }
 
 func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {
-	r := c.MinUploadIntervalMs
-
-	if r == nil {
-		r = &RandRangeConfig{
+	if c.MinUploadIntervalMs == nil {
+		return RandRangeConfig{
 			From: 30,
 			To:   30,
 		}
 	}
 
-	return *r
+	return *c.MinUploadIntervalMs
 }
 
 func init() {
