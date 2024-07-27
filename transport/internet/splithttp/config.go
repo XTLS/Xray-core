@@ -39,12 +39,17 @@ func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
 	return c.MaxConcurrentUploads
 }
 
-func (c *Config) GetNormalizedMaxUploadSize() int32 {
-	if c.MaxUploadSize == 0 {
-		return 1000000
+func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
+	r := c.MaxUploadSize
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 1000000,
+			To:   1000000,
+		}
 	}
 
-	return c.MaxUploadSize
+	return *r
 }
 
 func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {

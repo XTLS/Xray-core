@@ -202,7 +202,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	sessionId := sessionIdUuid.String()
 	baseURL := requestURL.String() + sessionId
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize.roll()))
 
 	go func() {
 		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
