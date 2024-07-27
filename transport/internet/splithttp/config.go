@@ -1,6 +1,8 @@
 package splithttp
 
 import (
+	"crypto/rand"
+	"math/big"
 	"net/http"
 
 	"github.com/xtls/xray-core/common"
@@ -45,8 +47,29 @@ func (c *Config) GetNormalizedMaxUploadSize() int32 {
 	return c.MaxUploadSize
 }
 
+func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {
+	r := c.MinUploadIntervalMs
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 30,
+			To:   30,
+		}
+	}
+
+	return *r
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)
 	}))
+}
+
+func (c RandRangeConfig) roll() int32 {
+	if c.From == c.To {
+		return c.From
+	}
+	bigInt, _ := rand.Int(rand.Reader, big.NewInt(int64(c.To-c.From)))
+	return c.From + int32(bigInt.Int64())
 }
