@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"bytes"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
@@ -135,6 +136,9 @@ func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, erro
 		return nil, newError("failed to generate new certificate for ", domain).Base(err)
 	}
 	newCertPEM, newKeyPEM := newCert.ToPEM()
+	if rawCA.BuildChain {
+		newCertPEM = bytes.Join([][]byte{newCertPEM, rawCA.Certificate}, []byte("\n"))
+	}
 	cert, err := tls.X509KeyPair(newCertPEM, newKeyPEM)
 	return &cert, err
 }
