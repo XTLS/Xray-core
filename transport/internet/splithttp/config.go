@@ -4,23 +4,28 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
-func (c *Config) GetNormalizedPath() string {
-	path := c.Path
-	if path == "" {
-		path = "/"
+func (c *Config) GetNormalizedPath(addPath string, addQuery bool) string {
+	pathAndQuery := strings.SplitN(c.Path, "?", 2)
+	path := pathAndQuery[0]
+	query := ""
+	if len(pathAndQuery) > 1 && addQuery {
+		query = "?" + pathAndQuery[1]
 	}
-	if path[0] != '/' {
+
+	if path == "" || path[0] != '/' {
 		path = "/" + path
 	}
 	if path[len(path)-1] != '/' {
 		path = path + "/"
 	}
-	return path
+
+	return path + addPath + query
 }
 
 func (c *Config) GetRequestHeader() http.Header {

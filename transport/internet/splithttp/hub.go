@@ -268,7 +268,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var localAddr = gonet.TCPAddr{}
 	handler := &requestHandler{
 		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath(),
+		path:      shSettings.GetNormalizedPath("", false),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},

@@ -194,13 +194,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if requestURL.Host == "" {
 		requestURL.Host = dest.NetAddr()
 	}
-	requestURL.Path = transportConfiguration.GetNormalizedPath()
-
-	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
 	sessionIdUuid := uuid.New()
-	sessionId := sessionIdUuid.String()
-	baseURL := requestURL.String() + sessionId
+	requestURL.Path = transportConfiguration.GetNormalizedPath(sessionIdUuid.String(), true)
+	baseURL := requestURL.String()
+
+	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
 	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize.roll()))
 
