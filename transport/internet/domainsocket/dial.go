@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -23,7 +24,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	conn, err := net.DialUnix("unix", nil, addr)
 	if err != nil {
-		return nil, newError("failed to dial unix: ", settings.Path).Base(err).AtWarning()
+		return nil, errors.New("failed to dial unix: ", settings.Path).Base(err).AtWarning()
 	}
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {

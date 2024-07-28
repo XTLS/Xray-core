@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/cmdarg"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/main/confloader"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,14 +39,14 @@ var (
 func RegisterConfigLoader(format *ConfigFormat) error {
 	name := strings.ToLower(format.Name)
 	if _, found := configLoaderByName[name]; found {
-		return newError(format.Name, " already registered.")
+		return errors.New(format.Name, " already registered.")
 	}
 	configLoaderByName[name] = format
 
 	for _, ext := range format.Extension {
 		lext := strings.ToLower(ext)
 		if f, found := configLoaderByExt[lext]; found {
-			return newError(ext, " already registered to ", f.Name)
+			return errors.New(ext, " already registered to ", f.Name)
 		}
 		configLoaderByExt[lext] = format
 	}
@@ -116,7 +117,7 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			}
 
 			if f == "" {
-				return nil, newError("Failed to get format of ", file).AtWarning()
+				return nil, errors.New("Failed to get format of ", file).AtWarning()
 			}
 
 			if f == "protobuf" {
@@ -130,7 +131,7 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			if len(v) == 1 {
 				return configLoaderByName["protobuf"].Loader(v)
 			} else {
-				return nil, newError("Only one protobuf config file is allowed").AtWarning()
+				return nil, errors.New("Only one protobuf config file is allowed").AtWarning()
 			}
 		}
 
@@ -141,11 +142,11 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 		if f, found := configLoaderByName[formatName]; found {
 			return f.Loader(v)
 		} else {
-			return nil, newError("Unable to load config in", formatName).AtWarning()
+			return nil, errors.New("Unable to load config in", formatName).AtWarning()
 		}
 	}
 
-	return nil, newError("Unable to load config").AtWarning()
+	return nil, errors.New("Unable to load config").AtWarning()
 }
 
 func loadProtobufConfig(data []byte) (*Config, error) {
@@ -173,7 +174,7 @@ func init() {
 				common.Must(err)
 				return loadProtobufConfig(data)
 			default:
-				return nil, newError("unknow type")
+				return nil, errors.New("unknown type")
 			}
 		},
 	}))

@@ -6,6 +6,9 @@ package splithttp
 import (
 	"container/heap"
 	"io"
+	"sync"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type Packet struct {
@@ -13,16 +16,17 @@ type Packet struct {
 	Seq     uint64
 }
 
-type UploadQueue struct {
-	pushedPackets chan Packet
-	heap          uploadHeap
-	nextSeq       uint64
-	closed        bool
-	maxPackets    int
+type uploadQueue struct {
+	pushedPackets   chan Packet
+	writeCloseMutex sync.Mutex
+	heap            uploadHeap
+	nextSeq         uint64
+	closed          bool
+	maxPackets      int
 }
 
-func NewUploadQueue(maxPackets int) *UploadQueue {
-	return &UploadQueue{
+func NewUploadQueue(maxPackets int) *uploadQueue {
+	return &uploadQueue{
 		pushedPackets: make(chan Packet, maxPackets),
 		heap:          uploadHeap{},
 		nextSeq:       0,
@@ -31,29 +35,41 @@ func NewUploadQueue(maxPackets int) *UploadQueue {
 	}
 }
 
-func (h *UploadQueue) Push(p Packet) error {
+func (h *uploadQueue) Push(p Packet) error {
+	h.writeCloseMutex.Lock()
+	defer h.writeCloseMutex.Unlock()
+
 	if h.closed {
-		return newError("splithttp packet queue closed")
+		return errors.New("splithttp packet queue closed")
 	}
 
 	h.pushedPackets <- p
 	return nil
 }
 
-func (h *UploadQueue) Close() error {
+func (h *uploadQueue) Close() error {
+	h.writeCloseMutex.Lock()
+	defer h.writeCloseMutex.Unlock()
+
 	h.closed = true
 	close(h.pushedPackets)
 	return nil
 }
 
-func (h *UploadQueue) Read(b []byte) (int, error) {
-	if h.closed && len(h.heap) == 0 && len(h.pushedPackets) == 0 {
+func (h *uploadQueue) Read(b []byte) (int, error) {
+	if h.closed {
 		return 0, io.EOF
 	}
 
-	needMorePackets := false
+	if len(h.heap) == 0 {
+		packet, more := <-h.pushedPackets
+		if !more {
+			return 0, io.EOF
+		}
+		heap.Push(&h.heap, packet)
+	}
 
-	if len(h.heap) > 0 {
+	for len(h.heap) > 0 {
 		packet := heap.Pop(&h.heap).(Packet)
 		n := 0
 
@@ -78,21 +94,15 @@ func (h *UploadQueue) Read(b []byte) (int, error) {
 				// the "reassembly buffer" is too large, and we want to
 				// constrain memory usage somehow. let's tear down the
 				// connection, and hope the application retries.
-				return 0, newError("packet queue is too large")
+				return 0, errors.New("packet queue is too large")
 			}
 			heap.Push(&h.heap, packet)
-			needMorePackets = true
+			packet2, more := <-h.pushedPackets
+			if !more {
+				return 0, io.EOF
+			}
+			heap.Push(&h.heap, packet2)
 		}
-	} else {
-		needMorePackets = true
-	}
-
-	if needMorePackets {
-		packet, more := <-h.pushedPackets
-		if !more {
-			return 0, io.EOF
-		}
-		heap.Push(&h.heap, packet)
 	}
 
 	return 0, nil

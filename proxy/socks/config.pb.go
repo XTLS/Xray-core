@@ -26,7 +26,7 @@ const (
 type AuthType int32
 
 const (
-	// NO_AUTH is for anounymous authentication.
+	// NO_AUTH is for anonymous authentication.
 	AuthType_NO_AUTH AuthType = 0
 	// PASSWORD is for username/password authentication.
 	AuthType_PASSWORD AuthType = 1

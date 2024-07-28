@@ -51,8 +51,8 @@ func ConnectionOutputMulti(reader buf.Reader) ConnectionOption {
 func ConnectionOutputMultiUDP(reader buf.Reader) ConnectionOption {
 	return func(c *connection) {
 		c.reader = &buf.BufferedReader{
-			Reader:  reader,
-			Spliter: buf.SplitFirstBytes,
+			Reader:   reader,
+			Splitter: buf.SplitFirstBytes,
 		}
 	}
 }

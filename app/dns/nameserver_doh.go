@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -43,7 +44,7 @@ type DoHNameServer struct {
 
 // NewDoHNameServer creates DOH server object for remote resolving.
 func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, queryStrategy QueryStrategy) (*DoHNameServer, error) {
-	newError("DNS: created Remote DOH client for ", url.String()).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), "DNS: created Remote DOH client for ", url.String())
 	s := baseDOHNameServer(url, "DOH", queryStrategy)
 
 	s.dispatcher = dispatcher
@@ -119,7 +120,7 @@ func NewDoHLocalNameServer(url *url.URL, queryStrategy QueryStrategy) *DoHNameSe
 		Timeout:   time.Second * 180,
 		Transport: tr,
 	}
-	newError("DNS: created Local DOH client for ", url.String()).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), "DNS: created Local DOH client for ", url.String())
 	return s
 }
 
@@ -150,7 +151,7 @@ func (s *DoHNameServer) Cleanup() error {
 	defer s.Unlock()
 
 	if len(s.ips) == 0 {
-		return newError("nothing to do. stopping...")
+		return errors.New("nothing to do. stopping...")
 	}
 
 	for domain, record := range s.ips {
@@ -162,7 +163,7 @@ func (s *DoHNameServer) Cleanup() error {
 		}
 
 		if record.A == nil && record.AAAA == nil {
-			newError(s.name, " cleanup ", domain).AtDebug().WriteToLog()
+			errors.LogDebug(context.Background(), s.name, " cleanup ", domain)
 			delete(s.ips, domain)
 		} else {
 			s.ips[domain] = record
@@ -205,7 +206,7 @@ func (s *DoHNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 			updated = true
 		}
 	}
-	newError(s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed).AtInfo().WriteToLog()
+	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
 
 	if updated {
 		s.ips[req.domain] = rec
@@ -225,10 +226,10 @@ func (s *DoHNameServer) newReqID() uint16 {
 }
 
 func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
-	newError(s.name, " querying: ", domain).AtInfo().WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, s.name, " querying: ", domain)
 
 	if s.name+"." == "DOH//"+domain {
-		newError(s.name, " tries to resolve itself! Use IP or set \"hosts\" instead.").AtError().WriteToLog(session.ExportIDToError(ctx))
+		errors.LogError(ctx, s.name, " tries to resolve itself! Use IP or set \"hosts\" instead.")
 		return
 	}
 
@@ -258,7 +259,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 			})
 
 			// forced to use mux for DOH
-			// dnsCtx = session.ContextWithMuxPrefered(dnsCtx, true)
+			// dnsCtx = session.ContextWithMuxPreferred(dnsCtx, true)
 
 			var cancel context.CancelFunc
 			dnsCtx, cancel = context.WithDeadline(dnsCtx, deadline)
@@ -266,17 +267,17 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				newError("failed to pack dns query for ", domain).Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", domain)
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
-				newError("failed to retrieve response for ", domain).Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", domain)
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
-				newError("failed to handle DOH response for ", domain).Base(err).AtError().WriteToLog()
+				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", domain)
 				return
 			}
 			s.updateIP(r, rec)
@@ -361,11 +362,11 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 	}
 
 	if disableCache {
-		newError("DNS cache is disabled. Querying IP for ", domain, " at ", s.name).AtDebug().WriteToLog()
+		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
 		if err != errRecordNotFound {
-			newError(s.name, " cache HIT ", domain, " -> ", ips).Base(err).AtDebug().WriteToLog()
+			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, err
 		}

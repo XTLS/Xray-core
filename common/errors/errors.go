@@ -2,9 +2,11 @@
 package errors // import "github.com/xtls/xray-core/common/errors"
 
 import (
-	"reflect"
+	"context"
+	"runtime"
 	"strings"
 
+	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -22,27 +24,11 @@ type hasSeverity interface {
 
 // Error is an error object with underlying error.
 type Error struct {
-	pathObj  interface{}
 	prefix   []interface{}
 	message  []interface{}
+	caller   string
 	inner    error
 	severity log.Severity
-}
-
-func (err *Error) WithPathObj(obj interface{}) *Error {
-	err.pathObj = obj
-	return err
-}
-
-func (err *Error) pkgPath() string {
-	if err.pathObj == nil {
-		return ""
-	}
-	path := reflect.TypeOf(err.pathObj).PkgPath()
-	if len(path) >= trim {
-		return path[trim:]
-	}
-	return path
 }
 
 // Error implements error.Error().
@@ -54,9 +40,8 @@ func (err *Error) Error() string {
 		builder.WriteString("] ")
 	}
 
-	path := err.pkgPath()
-	if len(path) > 0 {
-		builder.WriteString(path)
+	if len(err.caller) > 0 {
+		builder.WriteString(err.caller)
 		builder.WriteString(": ")
 	}
 
@@ -129,24 +114,6 @@ func (err *Error) String() string {
 	return err.Error()
 }
 
-// WriteToLog writes current error into log.
-func (err *Error) WriteToLog(opts ...ExportOption) {
-	var holder ExportOptionHolder
-
-	for _, opt := range opts {
-		opt(&holder)
-	}
-
-	if holder.SessionID > 0 {
-		err.prefix = append(err.prefix, holder.SessionID)
-	}
-
-	log.Record(&log.GeneralMessage{
-		Severity: GetSeverity(err),
-		Content:  err,
-	})
-}
-
 type ExportOptionHolder struct {
 	SessionID uint32
 }
@@ -155,10 +122,80 @@ type ExportOption func(*ExportOptionHolder)
 
 // New returns a new error object with message formed from given arguments.
 func New(msg ...interface{}) *Error {
+	pc, _, _, _ := runtime.Caller(1)
+	details := runtime.FuncForPC(pc).Name()
+	if len(details) >= trim {
+		details = details[trim:]
+	}
+	i := strings.Index(details, ".")
+	if i > 0 {
+		details = details[:i]
+	}
 	return &Error{
 		message:  msg,
 		severity: log.Severity_Info,
+		caller:   details,
 	}
+}
+
+func LogDebug(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, nil, log.Severity_Debug, msg...)
+}
+
+func LogDebugInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Debug, msg...)
+}
+
+func LogInfo(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, nil, log.Severity_Info, msg...)
+}
+
+func LogInfoInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Info, msg...)
+}
+
+func LogWarning(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, nil, log.Severity_Warning, msg...)
+}
+
+func LogWarningInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Warning, msg...)
+}
+
+func LogError(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, nil, log.Severity_Error, msg...)
+}
+
+func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
+	doLog(ctx, inner, log.Severity_Error, msg...)
+}
+
+func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
+	pc, _, _, _ := runtime.Caller(2)
+	details := runtime.FuncForPC(pc).Name()
+	if len(details) >= trim {
+		details = details[trim:]
+	}
+	i := strings.Index(details, ".")
+	if i > 0 {
+		details = details[:i]
+	}
+	err := &Error{
+		message:  msg,
+		severity: severity,
+		caller:   details,
+		inner:    inner,
+	}
+	if ctx != nil && ctx != context.Background() {
+		id := uint32(c.IDFromContext(ctx))
+		if id > 0 {
+			err.prefix = append(err.prefix, id)
+		}
+	}
+	log.Record(&log.GeneralMessage{
+		Severity: GetSeverity(err),
+		Content:  err,
+	})
 }
 
 // Cause returns the root cause of this error.

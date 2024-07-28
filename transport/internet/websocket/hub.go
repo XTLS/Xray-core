@@ -13,9 +13,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -38,13 +38,13 @@ var upgrader = &websocket.Upgrader{
 }
 
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if len(h.host) > 0 && request.Host != h.host {
-		newError("failed to validate host, request:", request.Host, ", config:", h.host).WriteToLog()
+	if len(h.host) > 0 && !internet.IsValidHTTPHost(request.Host, h.host) {
+		errors.LogInfo(context.Background(), "failed to validate host, request:", request.Host, ", config:", h.host)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if request.URL.Path != h.path {
-		newError("failed to validate path, request:", request.URL.Path, ", config:", h.path).WriteToLog()
+		errors.LogInfo(context.Background(), "failed to validate path, request:", request.URL.Path, ", config:", h.path)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -60,7 +60,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	conn, err := upgrader.Upgrade(writer, request, responseHeader)
 	if err != nil {
-		newError("failed to convert to WebSocket connection").Base(err).WriteToLog()
+		errors.LogInfoInner(context.Background(), err, "failed to convert to WebSocket connection")
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
-	h.ln.addConn(newConnection(conn, remoteAddr, extraReader))
+	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader))
 }
 
 type Listener struct {
@@ -104,22 +104,22 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen unix domain socket(for WS) on ", address).Base(err)
+			return nil, errors.New("failed to listen unix domain socket(for WS) on ", address).Base(err)
 		}
-		newError("listening unix domain socket(for WS) on ", address).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening unix domain socket(for WS) on ", address)
 	} else { // tcp
 		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
 			IP:   address.IP(),
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen TCP(for WS) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen TCP(for WS) on ", address, ":", port).Base(err)
 		}
-		newError("listening TCP(for WS) on ", address, ":", port).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening TCP(for WS) on ", address, ":", port)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
-		newError("accepting PROXY protocol").AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
 
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
@@ -142,7 +142,7 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	go func() {
 		if err := l.server.Serve(l.listener); err != nil {
-			newError("failed to serve http for WebSocket").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			errors.LogWarningInner(ctx, err, "failed to serve http for WebSocket")
 		}
 	}()
 

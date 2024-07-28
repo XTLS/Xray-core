@@ -28,7 +28,7 @@ type Config struct {
 	// Path of the domain socket. This overrides the IP/Port parameter from
 	// upstream caller.
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	// Abstract speicifies whether to use abstract namespace or not.
+	// Abstract specifies whether to use abstract namespace or not.
 	// Traditionally Unix domain socket is file system based. Abstract domain
 	// socket can be used without acquiring file lock.
 	Abstract bool `protobuf:"varint,2,opt,name=abstract,proto3" json:"abstract,omitempty"`

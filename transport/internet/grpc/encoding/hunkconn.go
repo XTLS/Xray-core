@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -79,7 +80,7 @@ func (h *HunkReaderWriter) forceFetch() error {
 			return err
 		}
 
-		return newError("failed to fetch hunk from gRPC tunnel").Base(err)
+		return errors.New("failed to fetch hunk from gRPC tunnel").Base(err)
 	}
 
 	h.buf = hunk.Data
@@ -135,7 +136,7 @@ func (h *HunkReaderWriter) Write(buf []byte) (int, error) {
 
 	err := h.hc.Send(&Hunk{Data: buf[:]})
 	if err != nil {
-		return 0, newError("failed to send data over gRPC tunnel").Base(err)
+		return 0, errors.New("failed to send data over gRPC tunnel").Base(err)
 	}
 	return len(buf), nil
 }

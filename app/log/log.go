@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 )
 
@@ -29,13 +30,13 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	}
 	log.RegisterHandler(g)
 
-	// start logger instantly on inited
-	// other modules would log during init
+	// Start logger instantly on initialization
+	// Other modules would log during initialization
 	if err := g.startInternal(); err != nil {
 		return nil, err
 	}
 
-	newError("Logger started").AtDebug().WriteToLog()
+	errors.LogDebug(ctx, "Logger started")
 	return g, nil
 }
 
@@ -77,10 +78,10 @@ func (g *Instance) startInternal() error {
 	g.active = true
 
 	if err := g.initAccessLogger(); err != nil {
-		return newError("failed to initialize access logger").Base(err).AtWarning()
+		return errors.New("failed to initialize access logger").Base(err).AtWarning()
 	}
 	if err := g.initErrorLogger(); err != nil {
-		return newError("failed to initialize error logger").Base(err).AtWarning()
+		return errors.New("failed to initialize error logger").Base(err).AtWarning()
 	}
 
 	return nil
@@ -120,7 +121,7 @@ func (g *Instance) Handle(msg log.Message) {
 
 // Close implements common.Closable.Close().
 func (g *Instance) Close() error {
-	newError("Logger closing").AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "Logger closing")
 
 	g.Lock()
 	defer g.Unlock()

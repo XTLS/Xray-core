@@ -1,8 +1,11 @@
 package confloader
 
 import (
+	"context"
 	"io"
 	"os"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type (
@@ -19,7 +22,7 @@ var (
 // actual work is in external module
 func LoadConfig(file string) (io.Reader, error) {
 	if EffectiveConfigFileLoader == nil {
-		newError("external config module not loaded, reading from stdin").AtInfo().WriteToLog()
+		errors.LogInfo(context.Background(), "external config module not loaded, reading from stdin")
 		return os.Stdin, nil
 	}
 	return EffectiveConfigFileLoader(file)
@@ -29,7 +32,7 @@ func LoadConfig(file string) (io.Reader, error) {
 // the actual work also in external module
 func LoadExtConfig(files []string, reader io.Reader) (io.Reader, error) {
 	if EffectiveExtConfigLoader == nil {
-		return nil, newError("external config module not loaded").AtError()
+		return nil, errors.New("external config module not loaded").AtError()
 	}
 
 	return EffectiveExtConfigLoader(files, reader)

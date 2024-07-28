@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
@@ -39,12 +39,12 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 
 	if s.config != nil {
 		host := req.Host
-		if len(s.config.Host) > 0 && host != s.config.Host {
-			return nil, newError("bad host: ", host)
+		if len(s.config.Host) > 0 && !internet.IsValidHTTPHost(host, s.config.Host) {
+			return nil, errors.New("bad host: ", host)
 		}
 		path := s.config.GetNormalizedPath()
 		if req.URL.Path != path {
-			return nil, newError("bad path: ", req.URL.Path)
+			return nil, errors.New("bad path: ", req.URL.Path)
 		}
 	}
 
@@ -52,7 +52,7 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 	upgrade := strings.ToLower(req.Header.Get("Upgrade"))
 	if connection != "upgrade" || upgrade != "websocket" {
 		_ = conn.Close()
-		return nil, newError("unrecognized request")
+		return nil, errors.New("unrecognized request")
 	}
 	resp := &http.Response{
 		Status:     "101 Switching Protocols",
@@ -90,7 +90,7 @@ func (s *server) keepAccepting() {
 		}
 		handledConn, err := s.Handle(conn)
 		if err != nil {
-			newError("failed to handle request").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to handle request")
 			continue
 		}
 		s.addConn(handledConn)
@@ -113,22 +113,22 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen unix domain socket(for HttpUpgrade) on ", address).Base(err)
+			return nil, errors.New("failed to listen unix domain socket(for HttpUpgrade) on ", address).Base(err)
 		}
-		newError("listening unix domain socket(for HttpUpgrade) on ", address).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening unix domain socket(for HttpUpgrade) on ", address)
 	} else { // tcp
 		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
 			IP:   address.IP(),
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen TCP(for HttpUpgrade) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen TCP(for HttpUpgrade) on ", address, ":", port).Base(err)
 		}
-		newError("listening TCP(for HttpUpgrade) on ", address, ":", port).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening TCP(for HttpUpgrade) on ", address, ":", port)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
-		newError("accepting PROXY protocol").AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
 
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {

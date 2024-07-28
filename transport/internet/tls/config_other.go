@@ -6,6 +6,8 @@ package tls
 import (
 	"crypto/x509"
 	"sync"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type rootCertsCache struct {
@@ -42,11 +44,11 @@ func (c *Config) getCertPool() (*x509.CertPool, error) {
 
 	pool, err := x509.SystemCertPool()
 	if err != nil {
-		return nil, newError("system root").AtWarning().Base(err)
+		return nil, errors.New("system root").AtWarning().Base(err)
 	}
 	for _, cert := range c.Certificate {
 		if !pool.AppendCertsFromPEM(cert.Certificate) {
-			return nil, newError("append cert to root").AtWarning().Base(err)
+			return nil, errors.New("append cert to root").AtWarning().Base(err)
 		}
 	}
 	return pool, err

@@ -11,26 +11,31 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type requestHandler struct {
 	host      string
 	path      string
 	ln        *Listener
+	sessionMu *sync.Mutex
 	sessions  sync.Map
 	localAddr gonet.TCPAddr
 }
 
 type httpSession struct {
-	uploadQueue *UploadQueue
+	uploadQueue *uploadQueue
 	// for as long as the GET request is not opened by the client, this will be
 	// open ("undone"), and the session may be expired within a certain TTL.
 	// after the client connects, this becomes "done" and the session lives as
@@ -54,7 +59,17 @@ func (h *requestHandler) maybeReapSession(isFullyConnected *done.Instance, sessi
 }
 
 func (h *requestHandler) upsertSession(sessionId string) *httpSession {
+	// fast path
 	currentSessionAny, ok := h.sessions.Load(sessionId)
+	if ok {
+		return currentSessionAny.(*httpSession)
+	}
+
+	// slow path
+	h.sessionMu.Lock()
+	defer h.sessionMu.Unlock()
+
+	currentSessionAny, ok = h.sessions.Load(sessionId)
 	if ok {
 		return currentSessionAny.(*httpSession)
 	}
@@ -70,14 +85,14 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 }
 
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if len(h.host) > 0 && request.Host != h.host {
-		newError("failed to validate host, request:", request.Host, ", config:", h.host).WriteToLog()
+	if len(h.host) > 0 && !internet.IsValidHTTPHost(request.Host, h.host) {
+		errors.LogInfo(context.Background(), "failed to validate host, request:", request.Host, ", config:", h.host)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	if !strings.HasPrefix(request.URL.Path, h.path) {
-		newError("failed to validate path, request:", request.URL.Path, ", config:", h.path).WriteToLog()
+		errors.LogInfo(context.Background(), "failed to validate path, request:", request.URL.Path, ", config:", h.path)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -89,7 +104,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	if sessionId == "" {
-		newError("no sessionid on request:", request.URL.Path).WriteToLog()
+		errors.LogInfo(context.Background(), "no sessionid on request:", request.URL.Path)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -115,21 +130,21 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if seq == "" {
-			newError("no seq on request:", request.URL.Path).WriteToLog()
+			errors.LogInfo(context.Background(), "no seq on request:", request.URL.Path)
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		payload, err := io.ReadAll(request.Body)
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		seqInt, err := strconv.ParseUint(seq, 10, 64)
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -140,7 +155,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		})
 
 		if err != nil {
-			newError("failed to upload").Base(err).WriteToLog()
+			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -159,6 +174,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		// magic header instructs nginx + apache to not buffer response body
 		writer.Header().Set("X-Accel-Buffering", "no")
+		// magic header to make the HTTP middle box consider this as SSE to disable buffer
+		writer.Header().Set("Content-Type", "text/event-stream")
+
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
 		// many CDN buffer the response headers until the origin starts sending
@@ -217,10 +235,13 @@ func (c *httpResponseBodyWriter) Close() error {
 
 type Listener struct {
 	sync.Mutex
-	server   http.Server
-	listener net.Listener
-	config   *Config
-	addConn  internet.ConnHandler
+	server     http.Server
+	h3server   *http3.Server
+	listener   net.Listener
+	h3listener *quic.EarlyListener
+	config     *Config
+	addConn    internet.ConnHandler
+	isH3       bool
 }
 
 func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
@@ -237,6 +258,16 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var listener net.Listener
 	var err error
 	var localAddr = gonet.TCPAddr{}
+	handler := &requestHandler{
+		host:      shSettings.Host,
+		path:      shSettings.GetNormalizedPath(),
+		ln:        l,
+		sessionMu: &sync.Mutex{},
+		sessions:  sync.Map{},
+		localAddr: localAddr,
+	}
+	tlsConfig := getTLSConfig(streamSettings)
+	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
 	if port == net.Port(0) { // unix
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
@@ -244,9 +275,32 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen unix domain socket(for SH) on ", address).Base(err)
+			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
 		}
-		newError("listening unix domain socket(for SH) on ", address).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
+	} else if l.isH3 { // quic
+		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
+			IP:   address.IP(),
+			Port: int(port),
+		}, streamSettings.SocketSettings)
+		if err != nil {
+			return nil, errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
+		}
+		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
+		if err != nil {
+			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
+		}
+		l.h3listener = h3listener
+		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
+
+		l.h3server = &http3.Server{
+			Handler: handler,
+		}
+		go func() {
+			if err := l.h3server.ServeListener(l.h3listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
+			}
+		}()
 	} else { // tcp
 		localAddr = gonet.TCPAddr{
 			IP:   address.IP(),
@@ -257,36 +311,34 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, newError("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
 		}
-		newError("listening TCP(for SH) on ", address, ":", port).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
 	}
 
-	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
-			listener = tls.NewListener(listener, tlsConfig)
+	// tcp/unix (h1/h2)
+	if listener != nil {
+		if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
+			if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
+				listener = tls.NewListener(listener, tlsConfig)
+			}
 		}
-	}
 
-	l.listener = listener
-
-	l.server = http.Server{
-		Handler: &requestHandler{
-			host:      shSettings.Host,
-			path:      shSettings.GetNormalizedPath(),
-			ln:        l,
-			sessions:  sync.Map{},
-			localAddr: localAddr,
-		},
-		ReadHeaderTimeout: time.Second * 4,
-		MaxHeaderBytes:    8192,
-	}
-
-	go func() {
-		if err := l.server.Serve(l.listener); err != nil {
-			newError("failed to serve http for splithttp").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
+		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
+		l.listener = listener
+		l.server = http.Server{
+			Handler:           h2cHandler,
+			ReadHeaderTimeout: time.Second * 4,
+			MaxHeaderBytes:    8192,
 		}
-	}()
+
+		go func() {
+			if err := l.server.Serve(l.listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
+			}
+		}()
+	}
 
 	return l, err
 }
@@ -298,9 +350,22 @@ func (ln *Listener) Addr() net.Addr {
 
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
-	return ln.listener.Close()
+	if ln.h3server != nil {
+		if err := ln.h3server.Close(); err != nil {
+			return err
+		}
+	} else if ln.listener != nil {
+		return ln.listener.Close()
+	}
+	return errors.New("listener does not have an HTTP/3 server or a net.listener")
 }
-
+func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *tls.Config {
+	config := v2tls.ConfigFromStreamSettings(streamSettings)
+	if config == nil {
+		return &tls.Config{}
+	}
+	return config.GetTLSConfig()
+}
 func init() {
 	common.Must(internet.RegisterTransportListener(protocolName, ListenSH))
 }

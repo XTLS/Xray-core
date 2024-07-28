@@ -64,7 +64,7 @@ func NewServer(dest net.Destination, dispatcher routing.Dispatcher, queryStrateg
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
 		return NewClassicNameServer(dest, dispatcher), nil
 	}
-	return nil, newError("No available name server could be created from ", dest).AtWarning()
+	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
 }
 
 // NewClient creates a DNS client managing a name server with client IP, domain rules and expected IPs.
@@ -82,10 +82,10 @@ func NewClient(
 		// Create a new server for each client for now
 		server, err := NewServer(ns.Address.AsDestination(), dispatcher, ns.GetQueryStrategy())
 		if err != nil {
-			return newError("failed to create nameserver").Base(err).AtWarning()
+			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}
 
-		// Priotize local domains with specific TLDs or without any dot to local DNS
+		// Prioritize local domains with specific TLDs or those without any dot for the local DNS
 		if _, isLocalDNS := server.(*LocalNameServer); isLocalDNS {
 			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
 			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)
@@ -111,7 +111,7 @@ func NewClient(
 		for _, domain := range ns.PrioritizedDomain {
 			domainRule, err := toStrMatcher(domain.Type, domain.Domain)
 			if err != nil {
-				return newError("failed to create prioritized domain").Base(err).AtWarning()
+				return errors.New("failed to create prioritized domain").Base(err).AtWarning()
 			}
 			originalRuleIdx := ruleCurr
 			if ruleCurr < len(ns.OriginalRules) {
@@ -130,7 +130,7 @@ func NewClient(
 			}
 			err = updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
 			if err != nil {
-				return newError("failed to create prioritized domain").Base(err).AtWarning()
+				return errors.New("failed to create prioritized domain").Base(err).AtWarning()
 			}
 		}
 
@@ -139,7 +139,7 @@ func NewClient(
 		for _, geoip := range ns.Geoip {
 			matcher, err := container.Add(geoip)
 			if err != nil {
-				return newError("failed to create ip matcher").Base(err).AtWarning()
+				return errors.New("failed to create ip matcher").Base(err).AtWarning()
 			}
 			matchers = append(matchers, matcher)
 		}
@@ -147,9 +147,9 @@ func NewClient(
 		if len(clientIP) > 0 {
 			switch ns.Address.Address.GetAddress().(type) {
 			case *net.IPOrDomain_Domain:
-				newError("DNS: client ", ns.Address.Address.GetDomain(), " uses clientIP ", clientIP.String()).AtInfo().WriteToLog()
+				errors.LogInfo(ctx, "DNS: client ", ns.Address.Address.GetDomain(), " uses clientIP ", clientIP.String())
 			case *net.IPOrDomain_Ip:
-				newError("DNS: client ", ns.Address.Address.GetIp(), " uses clientIP ", clientIP.String()).AtInfo().WriteToLog()
+				errors.LogInfo(ctx, "DNS: client ", ns.Address.Address.GetIp(), " uses clientIP ", clientIP.String())
 			}
 		}
 
@@ -169,7 +169,7 @@ func NewSimpleClient(ctx context.Context, endpoint *net.Endpoint, clientIP net.I
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		server, err := NewServer(endpoint.AsDestination(), dispatcher, QueryStrategy_USE_IP)
 		if err != nil {
-			return newError("failed to create nameserver").Base(err).AtWarning()
+			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}
 		client.server = server
 		client.clientIP = clientIP
@@ -179,9 +179,9 @@ func NewSimpleClient(ctx context.Context, endpoint *net.Endpoint, clientIP net.I
 	if len(clientIP) > 0 {
 		switch endpoint.Address.GetAddress().(type) {
 		case *net.IPOrDomain_Domain:
-			newError("DNS: client ", endpoint.Address.GetDomain(), " uses clientIP ", clientIP.String()).AtInfo().WriteToLog()
+			errors.LogInfo(ctx, "DNS: client ", endpoint.Address.GetDomain(), " uses clientIP ", clientIP.String())
 		case *net.IPOrDomain_Ip:
-			newError("DNS: client ", endpoint.Address.GetIp(), " uses clientIP ", clientIP.String()).AtInfo().WriteToLog()
+			errors.LogInfo(ctx, "DNS: client ", endpoint.Address.GetIp(), " uses clientIP ", clientIP.String())
 		}
 	}
 
@@ -222,7 +222,7 @@ func (c *Client) MatchExpectedIPs(domain string, ips []net.IP) ([]net.IP, error)
 	if len(newIps) == 0 {
 		return nil, errExpectedIPNonMatch
 	}
-	newError("domain ", domain, " expectIPs ", newIps, " matched at server ", c.Name()).AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "domain ", domain, " expectIPs ", newIps, " matched at server ", c.Name())
 	return newIps, nil
 }
 

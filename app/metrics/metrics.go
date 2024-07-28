@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/core"
@@ -93,12 +94,12 @@ func (p *MetricsHandler) Start() error {
 
 	go func() {
 		if err := http.Serve(listener, http.DefaultServeMux); err != nil {
-			newError("failed to start metrics server").Base(err).AtError().WriteToLog()
+			errors.LogErrorInner(context.Background(), err, "failed to start metrics server")
 		}
 	}()
 
 	if err := p.ohm.RemoveHandler(context.Background(), p.tag); err != nil {
-		newError("failed to remove existing handler").WriteToLog()
+		errors.LogInfo(context.Background(), "failed to remove existing handler")
 	}
 
 	return p.ohm.AddHandler(context.Background(), &Outbound{

@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/tls"
 	"crypto/x509"
@@ -11,6 +12,7 @@ import (
 	"time"
 	"bytes"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -36,7 +38,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	root := x509.NewCertPool()
 	for _, cert := range c.Certificate {
 		if !root.AppendCertsFromPEM(cert.Certificate) {
-			return nil, newError("failed to append cert").AtWarning()
+			return nil, errors.New("failed to append cert").AtWarning()
 		}
 	}
 	return root, nil
@@ -52,12 +54,12 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 		getX509KeyPair := func() *tls.Certificate {
 			keyPair, err := tls.X509KeyPair(entry.Certificate, entry.Key)
 			if err != nil {
-				newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
+				errors.LogWarningInner(context.Background(), err, "ignoring invalid X509 key pair")
 				return nil
 			}
 			keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
 			if err != nil {
-				newError("ignoring invalid certificate").Base(err).AtWarning().WriteToLog()
+				errors.LogWarningInner(context.Background(), err, "ignoring invalid certificate")
 				return nil
 			}
 			return &keyPair
@@ -79,7 +81,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			}
 			if isOcspstapling {
 				if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
-					newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
+					errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
 				} else if string(newOCSPData) != string(cert.OCSPStaple) {
 					cert.OCSPStaple = newOCSPData
 				}
@@ -107,12 +109,12 @@ func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstaplin
 			if entry.CertificatePath != "" && entry.KeyPath != "" {
 				newCert, err := filesystem.ReadFile(entry.CertificatePath)
 				if err != nil {
-					newError("failed to parse certificate").Base(err).AtError().WriteToLog()
+          errors.LogErrorInner(context.Background(), err, "failed to parse certificate")
 					return
 				}
 				newKey, err := filesystem.ReadFile(entry.KeyPath)
 				if err != nil {
-					newError("failed to parse key").Base(err).AtError().WriteToLog()
+					errors.LogErrorInner(context.Background(), err, "failed to parse key")
 					return
 				}
 				if string(newCert) != string(entry.Certificate) || string(newKey) != string(entry.Key) {
@@ -141,11 +143,11 @@ func isCertificateExpired(c *tls.Certificate) bool {
 func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, error) {
 	parent, err := cert.ParseCertificate(rawCA.Certificate, rawCA.Key)
 	if err != nil {
-		return nil, newError("failed to parse raw certificate").Base(err)
+		return nil, errors.New("failed to parse raw certificate").Base(err)
 	}
 	newCert, err := cert.Generate(parent, cert.CommonName(domain), cert.DNSNames(domain))
 	if err != nil {
-		return nil, newError("failed to generate new certificate for ", domain).Base(err)
+		return nil, errors.New("failed to generate new certificate for ", domain).Base(err)
 	}
 	newCertPEM, newKeyPEM := newCert.ToPEM()
 	if rawCA.BuildChain {
@@ -193,7 +195,7 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 					newCerts = append(newCerts, certificate)
 				} else if certificate.Leaf != nil {
 					expTime := certificate.Leaf.NotAfter.Format(time.RFC3339)
-					newError("old certificate for ", domain, " (expire on ", expTime, ") discarded").AtInfo().WriteToLog()
+					errors.LogInfo(context.Background(), "old certificate for ", domain, " (expire on ", expTime, ") discarded")
 				}
 			}
 
@@ -208,16 +210,16 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 			if rawCert.Usage == Certificate_AUTHORITY_ISSUE {
 				newCert, err := issueCertificate(rawCert, domain)
 				if err != nil {
-					newError("failed to issue new certificate for ", domain).Base(err).WriteToLog()
+					errors.LogInfoInner(context.Background(), err, "failed to issue new certificate for ", domain)
 					continue
 				}
 				parsed, err := x509.ParseCertificate(newCert.Certificate[0])
 				if err == nil {
 					newCert.Leaf = parsed
 					expTime := parsed.NotAfter.Format(time.RFC3339)
-					newError("new certificate for ", domain, " (expire on ", expTime, ") issued").AtInfo().WriteToLog()
+					errors.LogInfo(context.Background(), "new certificate for ", domain, " (expire on ", expTime, ") issued")
 				} else {
-					newError("failed to parse new certificate for ", domain).Base(err).WriteToLog()
+					errors.LogInfoInner(context.Background(), err, "failed to parse new certificate for ", domain)
 				}
 
 				access.Lock()
@@ -229,7 +231,7 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 		}
 
 		if issuedCertificate == nil {
-			return nil, newError("failed to create a new certificate for ", domain)
+			return nil, errors.New("failed to create a new certificate for ", domain)
 		}
 
 		access.Lock()
@@ -282,7 +284,7 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 				return nil
 			}
 		}
-		return newError("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
+		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
 	}
 
 	if c.PinnedPeerCertificatePublicKeySha256 != nil {
@@ -296,7 +298,7 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 				}
 			}
 		}
-		return newError("peer public key is unrecognized.")
+		return errors.New("peer public key is unrecognized.")
 	}
 	return nil
 }
@@ -305,7 +307,7 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	root, err := c.getCertPool()
 	if err != nil {
-		newError("failed to load system root certificate").AtError().Base(err).WriteToLog()
+		errors.LogErrorInner(context.Background(), err, "failed to load system root certificate")
 	}
 
 	if c == nil {
@@ -383,7 +385,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none" {
 		writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 		if err != nil {
-			newError("failed to open ", c.MasterKeyLog, " as master key log").AtError().Base(err).WriteToLog()
+			errors.LogErrorInner(context.Background(), err, "failed to open ", c.MasterKeyLog, " as master key log")
 		} else {
 			config.KeyLogWriter = writer
 		}

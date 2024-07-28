@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/common/uuid"
@@ -36,11 +37,11 @@ var localTLDsAndDotlessDomainsRule = &NameServer_OriginalRule{
 func toStrMatcher(t DomainMatchingType, domain string) (strmatcher.Matcher, error) {
 	strMType, f := typeMap[t]
 	if !f {
-		return nil, newError("unknown mapping type", t).AtWarning()
+		return nil, errors.New("unknown mapping type", t).AtWarning()
 	}
 	matcher, err := strMType.New(domain)
 	if err != nil {
-		return nil, newError("failed to create str matcher").Base(err)
+		return nil, errors.New("failed to create str matcher").Base(err)
 	}
 	return matcher, nil
 }
@@ -51,7 +52,7 @@ func toNetIP(addrs []net.Address) ([]net.IP, error) {
 		if addr.Family().IsIP() {
 			ips = append(ips, addr.IP())
 		} else {
-			return nil, newError("Failed to convert address", addr, "to Net IP.").AtWarning()
+			return nil, errors.New("Failed to convert address", addr, "to Net IP.").AtWarning()
 		}
 	}
 	return ips, nil

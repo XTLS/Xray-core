@@ -27,7 +27,7 @@ func TestReadError(t *testing.T) {
 		t.Error("expected to be ReadError, but not")
 	}
 
-	if err.Error() != "error" {
+	if err.Error() != "common/buf_test: error" {
 		t.Fatal("unexpected error message: ", err.Error())
 	}
 }
@@ -48,7 +48,7 @@ func TestWriteError(t *testing.T) {
 		t.Error("expected to be WriteError, but not")
 	}
 
-	if err.Error() != "error" {
+	if err.Error() != "common/buf_test: error" {
 		t.Fatal("unexpected error message: ", err.Error())
 	}
 }

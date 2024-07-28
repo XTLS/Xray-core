@@ -21,7 +21,7 @@ func readOneUDP(r io.Reader) (*Buffer, error) {
 	}
 
 	b.Release()
-	return nil, newError("Reader returns too many empty payloads.")
+	return nil, errors.New("Reader returns too many empty payloads.")
 }
 
 // ReadBuffer reads a Buffer from the given reader.
@@ -41,8 +41,8 @@ type BufferedReader struct {
 	Reader Reader
 	// Buffer is the internal buffer to be read from first
 	Buffer MultiBuffer
-	// Spliter is a function to read bytes from MultiBuffer
-	Spliter func(MultiBuffer, []byte) (MultiBuffer, int)
+	// Splitter is a function to read bytes from MultiBuffer
+	Splitter func(MultiBuffer, []byte) (MultiBuffer, int)
 }
 
 // BufferedBytes returns the number of bytes that is cached in this reader.
@@ -59,7 +59,7 @@ func (r *BufferedReader) ReadByte() (byte, error) {
 
 // Read implements io.Reader. It reads from internal buffer first (if available) and then reads from the underlying reader.
 func (r *BufferedReader) Read(b []byte) (int, error) {
-	spliter := r.Spliter
+	spliter := r.Splitter
 	if spliter == nil {
 		spliter = SplitBytes
 	}

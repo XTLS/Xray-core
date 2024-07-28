@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"runtime"
@@ -10,14 +11,15 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/signal/semaphore"
 )
 
 var (
-	ErrIOTimeout        = newError("Read/Write timeout")
-	ErrClosedListener   = newError("Listener closed.")
-	ErrClosedConnection = newError("Connection closed.")
+	ErrIOTimeout        = errors.New("Read/Write timeout")
+	ErrClosedListener   = errors.New("Listener closed.")
+	ErrClosedConnection = errors.New("Connection closed.")
 )
 
 // State of the connection
@@ -203,7 +205,7 @@ type Connection struct {
 
 // NewConnection create a new KCP connection between local and remote.
 func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, config *Config) *Connection {
-	newError("#", meta.Conversation, " creating connection to ", meta.RemoteAddr).WriteToLog()
+	errors.LogInfo(context.Background(), "#", meta.Conversation, " creating connection to ", meta.RemoteAddr)
 
 	conn := &Connection{
 		meta:       meta,
@@ -428,7 +430,7 @@ func (c *Connection) SetState(state State) {
 	current := c.Elapsed()
 	atomic.StoreInt32((*int32)(&c.state), int32(state))
 	atomic.StoreUint32(&c.stateBeginTime, current)
-	newError("#", c.meta.Conversation, " entering state ", state, " at ", current).AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "#", c.meta.Conversation, " entering state ", state, " at ", current)
 
 	switch state {
 	case StateReadyToClose:
@@ -472,7 +474,7 @@ func (c *Connection) Close() error {
 		c.SetState(StateTerminated)
 	}
 
-	newError("#", c.meta.Conversation, " closing connection to ", c.meta.RemoteAddr).WriteToLog()
+	errors.LogInfo(context.Background(), "#", c.meta.Conversation, " closing connection to ", c.meta.RemoteAddr)
 
 	return nil
 }
@@ -528,7 +530,7 @@ func (c *Connection) Terminate() {
 	if c == nil {
 		return
 	}
-	newError("#", c.meta.Conversation, " terminating connection to ", c.RemoteAddr()).WriteToLog()
+	errors.LogInfo(context.Background(), "#", c.meta.Conversation, " terminating connection to ", c.RemoteAddr())
 
 	// v.SetState(StateTerminated)
 	c.dataInput.Signal()
@@ -616,7 +618,7 @@ func (c *Connection) flush() {
 	}
 
 	if c.State() == StateTerminating {
-		newError("#", c.meta.Conversation, " sending terminating cmd.").AtDebug().WriteToLog()
+		errors.LogDebug(context.Background(), "#", c.meta.Conversation, " sending terminating cmd.")
 		c.Ping(current, CommandTerminate)
 
 		if current-atomic.LoadUint32(&c.stateBeginTime) > 8000 {

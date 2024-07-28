@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -34,7 +34,7 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 		if resp.Status != "101 Switching Protocols" ||
 			strings.ToLower(resp.Header.Get("Upgrade")) != "websocket" ||
 			strings.ToLower(resp.Header.Get("Connection")) != "upgrade" {
-			return 0, newError("unrecognized reply")
+			return 0, errors.New("unrecognized reply")
 		}
 		// drain remaining bufreader
 		return reader.Read(b[:reader.Buffered()])
@@ -47,7 +47,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 
 	pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
-		newError("failed to dial to ", dest).Base(err).AtError().WriteToLog()
+		errors.LogErrorInner(ctx, err, "failed to dial to ", dest)
 		return nil, err
 	}
 
@@ -104,19 +104,19 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	return connRF, nil
 }
 
-//http.Header.Add() will convert headers to MIME header format.
-//Some people don't like this because they want to send "Web*S*ocket".
-//So we add a simple function to replace that method.
+// http.Header.Add() will convert headers to MIME header format.
+// Some people don't like this because they want to send "Web*S*ocket".
+// So we add a simple function to replace that method.
 func AddHeader(header http.Header, key, value string) {
 	header[key] = append(header[key], value)
 }
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-	newError("creating connection to ", dest).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "creating connection to ", dest)
 
 	conn, err := dialhttpUpgrade(ctx, dest, streamSettings)
 	if err != nil {
-		return nil, newError("failed to dial request to ", dest).Base(err)
+		return nil, errors.New("failed to dial request to ", dest).Base(err)
 	}
 	return stat.Connection(conn), nil
 }

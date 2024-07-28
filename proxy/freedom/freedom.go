@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/retry"
@@ -27,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 var useSplice bool
@@ -87,7 +89,7 @@ func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Ad
 		}
 	}
 	if err != nil {
-		newError("failed to get IP address for domain ", domain).Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", domain)
 	}
 	if len(ips) == 0 {
 		return nil
@@ -107,9 +109,9 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return newError("target not specified.")
+		return errors.New("target not specified.")
 	}
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
@@ -143,7 +145,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					Address: ip,
 					Port:    dialDest.Port,
 				}
-				newError("dialing to ", dialDest).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfo(ctx, "dialing to ", dialDest)
 			} else if h.config.forceIP() {
 				return dns.ErrEmptyResponse
 			}
@@ -169,10 +171,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	})
 	if err != nil {
-		return newError("failed to open connection to ", destination).Base(err)
+		return errors.New("failed to open connection to ", destination).Base(err)
 	}
 	defer conn.Close()
-	newError("connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr()).WriteToLog(session.ExportIDToError(ctx))
+	errors.LogInfo(ctx, "connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr())
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
@@ -195,8 +197,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
 			if h.config.Fragment != nil {
-				newError("FRAGMENT", h.config.Fragment.PacketsFrom, h.config.Fragment.PacketsTo, h.config.Fragment.LengthMin, h.config.Fragment.LengthMax,
-					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax).AtDebug().WriteToLog(session.ExportIDToError(ctx))
+				errors.LogDebug(ctx, "FRAGMENT", h.config.Fragment.PacketsFrom, h.config.Fragment.PacketsTo, h.config.Fragment.LengthMin, h.config.Fragment.LengthMax,
+					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax)
 				writer = buf.NewWriter(&FragmentWriter{
 					fragment: h.config.Fragment,
 					writer:   conn,
@@ -209,7 +211,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to process request").Base(err)
+			return errors.New("failed to process request").Base(err)
 		}
 
 		return nil
@@ -224,11 +226,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writeConn = inbound.Conn
 				inTimer = inbound.Timer
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			if !isTLSConn(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
+				return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			}
 		}
-		reader := NewPacketReader(conn, UDPOverride)
+		var reader buf.Reader
+		if destination.Network == net.Network_TCP {
+			reader = buf.NewReader(conn)
+		} else {
+			reader = NewPacketReader(conn, UDPOverride)
+		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to process response").Base(err)
+			return errors.New("failed to process response").Base(err)
 		}
 		return nil
 	}
@@ -238,10 +247,23 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if err := task.Run(ctx, requestDone, task.OnSuccess(responseDone, task.Close(output))); err != nil {
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil
+}
+
+func isTLSConn(conn stat.Connection) bool {
+	if conn != nil {
+		statConn, ok := conn.(*stat.CounterConnection)
+		if ok {
+			conn = statConn.Connection
+		}
+		if _, ok := conn.(*tls.Conn); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {

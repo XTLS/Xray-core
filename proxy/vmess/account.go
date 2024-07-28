@@ -3,6 +3,7 @@ package vmess
 import (
 	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
 )
@@ -31,7 +32,7 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 func (a *Account) AsAccount() (protocol.Account, error) {
 	id, err := uuid.ParseString(a.Id)
 	if err != nil {
-		return nil, newError("failed to parse ID").Base(err).AtError()
+		return nil, errors.New("failed to parse ID").Base(err).AtError()
 	}
 	protoID := protocol.NewID(id)
 	var AuthenticatedLength, NoTerminationSignal bool

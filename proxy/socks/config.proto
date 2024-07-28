@@ -17,7 +17,7 @@ message Account {
 
 // AuthType is the authentication type of Socks proxy.
 enum AuthType {
-  // NO_AUTH is for anounymous authentication.
+  // NO_AUTH is for anonymous authentication.
   NO_AUTH = 0;
   // PASSWORD is for username/password authentication.
   PASSWORD = 1;

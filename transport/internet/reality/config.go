@@ -1,12 +1,14 @@
 package reality
 
 import (
+	"context"
 	"io"
 	"net"
 	"os"
 	"time"
 
 	"github.com/xtls/reality"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -48,7 +50,7 @@ func KeyLogWriterFromConfig(c *Config) io.Writer {
 
 	writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
-		newError("failed to open ", c.MasterKeyLog, " as master key log").AtError().Base(err).WriteToLog()
+		errors.LogErrorInner(context.Background(), err, "failed to open ", c.MasterKeyLog, " as master key log")
 	}
 
 	return writer

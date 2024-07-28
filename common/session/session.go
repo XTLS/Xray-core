@@ -5,20 +5,18 @@ import (
 	"context"
 	"math/rand"
 
+	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal"
 )
 
-// ID of a session.
-type ID uint32
-
 // NewID generates a new ID. The generated ID is high likely to be unique, but not cryptographically secure.
 // The generated ID will never be 0.
-func NewID() ID {
+func NewID() c.ID {
 	for {
-		id := ID(rand.Uint32())
+		id := c.ID(rand.Uint32())
 		if id != 0 {
 			return id
 		}
@@ -28,7 +26,7 @@ func NewID() ID {
 // ExportIDToError transfers session.ID into an error object, for logging purpose.
 // This can be used with error.WriteToLog().
 func ExportIDToError(ctx context.Context) errors.ExportOption {
-	id := IDFromContext(ctx)
+	id := c.IDFromContext(ctx)
 	return func(h *errors.ExportOptionHolder) {
 		h.SessionID = uint32(id)
 	}

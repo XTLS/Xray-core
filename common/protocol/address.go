@@ -5,6 +5,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -181,12 +182,12 @@ func (p *addressParser) readAddress(b *buf.Buffer, reader io.Reader) (net.Addres
 	}
 
 	if addrType >= 16 {
-		return nil, newError("unknown address type: ", addrType)
+		return nil, errors.New("unknown address type: ", addrType)
 	}
 
 	addrFamily := p.addrTypeMap[addrType]
 	if addrFamily == net.AddressFamily(afInvalid) {
-		return nil, newError("unknown address type: ", addrType)
+		return nil, errors.New("unknown address type: ", addrType)
 	}
 
 	switch addrFamily {
@@ -216,7 +217,7 @@ func (p *addressParser) readAddress(b *buf.Buffer, reader io.Reader) (net.Addres
 			}
 		}
 		if !isValidDomain(domain) {
-			return nil, newError("invalid domain name: ", domain)
+			return nil, errors.New("invalid domain name: ", domain)
 		}
 		return net.DomainAddress(domain), nil
 	default:
@@ -227,7 +228,7 @@ func (p *addressParser) readAddress(b *buf.Buffer, reader io.Reader) (net.Addres
 func (p *addressParser) writeAddress(writer io.Writer, address net.Address) error {
 	tb := p.addrByteMap[address.Family()]
 	if tb == afInvalid {
-		return newError("unknown address family", address.Family())
+		return errors.New("unknown address family", address.Family())
 	}
 
 	switch address.Family() {
@@ -241,7 +242,7 @@ func (p *addressParser) writeAddress(writer io.Writer, address net.Address) erro
 	case net.AddressFamilyDomain:
 		domain := address.Domain()
 		if isDomainTooLong(domain) {
-			return newError("Super long domain is not supported: ", domain)
+			return errors.New("Super long domain is not supported: ", domain)
 		}
 
 		if _, err := writer.Write([]byte{tb, byte(len(domain))}); err != nil {

@@ -3,6 +3,7 @@ package internet
 import (
 	"context"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -11,7 +12,7 @@ var transportListenerCache = make(map[string]ListenFunc)
 
 func RegisterTransportListener(protocol string, listener ListenFunc) error {
 	if _, found := transportListenerCache[protocol]; found {
-		return newError(protocol, " listener already registered.").AtError()
+		return errors.New(protocol, " listener already registered.").AtError()
 	}
 	transportListenerCache[protocol] = listener
 	return nil
@@ -31,7 +32,7 @@ func ListenUnix(ctx context.Context, address net.Address, settings *MemoryStream
 	if settings == nil {
 		s, err := ToMemoryStreamConfig(nil)
 		if err != nil {
-			return nil, newError("failed to create default unix stream settings").Base(err)
+			return nil, errors.New("failed to create default unix stream settings").Base(err)
 		}
 		settings = s
 	}
@@ -39,11 +40,11 @@ func ListenUnix(ctx context.Context, address net.Address, settings *MemoryStream
 	protocol := settings.ProtocolName
 	listenFunc := transportListenerCache[protocol]
 	if listenFunc == nil {
-		return nil, newError(protocol, " unix istener not registered.").AtError()
+		return nil, errors.New(protocol, " unix listener not registered.").AtError()
 	}
 	listener, err := listenFunc(ctx, address, net.Port(0), settings, handler)
 	if err != nil {
-		return nil, newError("failed to listen on unix address: ", address).Base(err)
+		return nil, errors.New("failed to listen on unix address: ", address).Base(err)
 	}
 	return listener, nil
 }
@@ -52,7 +53,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, settings
 	if settings == nil {
 		s, err := ToMemoryStreamConfig(nil)
 		if err != nil {
-			return nil, newError("failed to create default stream settings").Base(err)
+			return nil, errors.New("failed to create default stream settings").Base(err)
 		}
 		settings = s
 	}
@@ -62,17 +63,17 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, settings
 	}
 
 	if address.Family().IsDomain() {
-		return nil, newError("domain address is not allowed for listening: ", address.Domain())
+		return nil, errors.New("domain address is not allowed for listening: ", address.Domain())
 	}
 
 	protocol := settings.ProtocolName
 	listenFunc := transportListenerCache[protocol]
 	if listenFunc == nil {
-		return nil, newError(protocol, " listener not registered.").AtError()
+		return nil, errors.New(protocol, " listener not registered.").AtError()
 	}
 	listener, err := listenFunc(ctx, address, port, settings, handler)
 	if err != nil {
-		return nil, newError("failed to listen on address: ", address, ":", port).Base(err)
+		return nil, errors.New("failed to listen on address: ", address, ":", port).Base(err)
 	}
 	return listener, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
@@ -24,8 +25,8 @@ type RoundRobinStrategy struct {
 
 	ctx         context.Context
 	observatory extension.Observatory
-	mu    sync.Mutex
-	index int
+	mu          sync.Mutex
+	index       int
 }
 
 func (s *RoundRobinStrategy) InjectContext(ctx context.Context) {
@@ -95,7 +96,7 @@ func (b *Balancer) PickOutbound() (string, error) {
 	candidates, err := b.SelectOutbounds()
 	if err != nil {
 		if b.fallbackTag != "" {
-			newError("fallback to [", b.fallbackTag, "], due to error: ", err).AtInfo().WriteToLog()
+			errors.LogInfo(context.Background(), "fallback to [", b.fallbackTag, "], due to error: ", err)
 			return b.fallbackTag, nil
 		}
 		return "", err
@@ -108,11 +109,11 @@ func (b *Balancer) PickOutbound() (string, error) {
 	}
 	if tag == "" {
 		if b.fallbackTag != "" {
-			newError("fallback to [", b.fallbackTag, "], due to empty tag returned").AtInfo().WriteToLog()
+			errors.LogInfo(context.Background(), "fallback to [", b.fallbackTag, "], due to empty tag returned")
 			return b.fallbackTag, nil
 		}
 		// will use default handler
-		return "", newError("balancing strategy returns empty tag")
+		return "", errors.New("balancing strategy returns empty tag")
 	}
 	return tag, nil
 }
@@ -127,7 +128,7 @@ func (b *Balancer) InjectContext(ctx context.Context) {
 func (b *Balancer) SelectOutbounds() ([]string, error) {
 	hs, ok := b.ohm.(outbound.HandlerSelector)
 	if !ok {
-		return nil, newError("outbound.Manager is not a HandlerSelector")
+		return nil, errors.New("outbound.Manager is not a HandlerSelector")
 	}
 	tags := hs.Select(b.selectors)
 	return tags, nil
@@ -139,13 +140,13 @@ func (r *Router) GetPrincipleTarget(tag string) ([]string, error) {
 		if s, ok := b.strategy.(BalancingPrincipleTarget); ok {
 			candidates, err := b.SelectOutbounds()
 			if err != nil {
-				return nil, newError("unable to select outbounds").Base(err)
+				return nil, errors.New("unable to select outbounds").Base(err)
 			}
 			return s.GetPrincipleTarget(candidates), nil
 		}
-		return nil, newError("unsupported GetPrincipleTarget")
+		return nil, errors.New("unsupported GetPrincipleTarget")
 	}
-	return nil, newError("cannot find tag")
+	return nil, errors.New("cannot find tag")
 }
 
 // SetOverrideTarget implements routing.BalancerOverrider
@@ -154,7 +155,7 @@ func (r *Router) SetOverrideTarget(tag, target string) error {
 		b.override.Put(target)
 		return nil
 	}
-	return newError("cannot find tag")
+	return errors.New("cannot find tag")
 }
 
 // GetOverrideTarget implements routing.BalancerOverrider
@@ -162,5 +163,5 @@ func (r *Router) GetOverrideTarget(tag string) (string, error) {
 	if b, ok := r.balancers[tag]; ok {
 		return b.override.Get(), nil
 	}
-	return "", newError("cannot find tag")
+	return "", errors.New("cannot find tag")
 }
