@@ -240,6 +240,7 @@ type SplitHTTPMux struct {
 	Mode                     string     `json:"mode"`
 	MaxConnectionConcurrency Int32Range `json:"maxConnectionConcurrency"`
 	MaxConnectionLifetime    Int32Range `json:"maxConnectionLifetime"`
+	MaxConnection int32 `json:"maxConnection"`
 }
 
 // Build implements Buildable.
@@ -273,7 +274,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		From: c.Mux.MaxConnectionLifetime.From,
 		To:   c.Mux.MaxConnectionLifetime.To,
 	}
-
+	muxProtobuf.MaxConnections = c.Mux.MaxConnection
 	config := &splithttp.Config{
 		Path:   c.Path,
 		Host:   c.Host,
@@ -291,6 +292,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			To:   c.ScMinPostsIntervalMs.To,
 		},
 		NoSSEHeader: c.NoSSEHeader,
+		Mux: &muxProtobuf,
 	}
 	return config, nil
 }
