@@ -2,21 +2,27 @@
 FROM --platform=$BUILDPLATFORM golang:alpine AS build
 WORKDIR /src
 COPY . .
-ARG TARGETOS TARGETARCH
+ARG TARGETOS
+ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+ADD https://github.com/v2fly/geoip/releases/latest/download/geoip.dat /v2fly/geoip.dat
+ADD https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat /v2fly/geosite.dat
+ADD https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat /loyalsoldier/geoip.dat
+ADD https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat /loyalsoldier/geosite.dat
 
-FROM --platform=${TARGETPLATFORM} alpine:latest
-WORKDIR /root
+# chainguard/static contains only tzdata and ca-certificates, can be built with multiarch static binaries.
+FROM --platform=linux/amd64 chainguard/static:latest
+WORKDIR /var/log/xray
 COPY .github/docker/files/config.json /etc/xray/config.json
-COPY --from=build /src/xray /usr/bin/xray
-RUN set -ex \
-	&& apk add --no-cache tzdata ca-certificates \
-	&& mkdir -p /var/log/xray /usr/share/xray \
-    && chmod +x /usr/bin/xray \
-	&& wget -O /usr/share/xray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat \
-	&& wget -O /usr/share/xray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
+COPY --from=build --chmod=755 /src/xray /usr/bin/xray
 
+USER root
+WORKDIR /root
 VOLUME /etc/xray
-ENV TZ=Asia/Shanghai
+ARG TZ=Asia/Shanghai
+ENV TZ=$TZ
 ENTRYPOINT [ "/usr/bin/xray" ]
 CMD [ "-config", "/etc/xray/config.json" ]
+
+ARG flavor=v2fly
+COPY --from=build /$flavor /usr/share/xray

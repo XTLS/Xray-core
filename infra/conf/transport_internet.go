@@ -229,9 +229,9 @@ type SplitHTTPConfig struct {
 	Host                 string            `json:"host"`
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
-	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
-	MaxUploadSize        Int32Range        `json:"maxUploadSize"`
-	MinUploadInterval          Int32Range        `json:"minUploadInterval"`
+	ScMaxConcurrentPosts Int32Range            `json:"maxConcurrentUploads"`
+	ScMaxEachPostBytes       Int32Range        `json:"maxUploadSize"`
+	ScMinPostsIntervalMs          Int32Range        `json:"minUploadInterval"`
 	Mux                  SplitHTTPMux      `json:"mux"`
 }
 
@@ -274,19 +274,22 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 
 	config := &splithttp.Config{
-		Path:                 c.Path,
-		Host:                 c.Host,
-		Header:               c.Headers,
-		MaxConcurrentUploads: c.MaxConcurrentUploads,
-		MaxUploadSize: &splithttp.RandRangeConfig{
-			From: c.MaxUploadSize.From,
-			To:   c.MaxUploadSize.To,
+		Path:   c.Path,
+		Host:   c.Host,
+		Header: c.Headers,
+		ScMaxConcurrentPosts: &splithttp.RandRangeConfig{
+			From: c.ScMaxConcurrentPosts.From,
+			To:   c.ScMaxConcurrentPosts.To,
 		},
-		MinUploadInterval: &splithttp.RandRangeConfig{
-			From: c.MinUploadInterval.From,
-			To:   c.MinUploadInterval.To,
+		ScMaxEachPostBytes: &splithttp.RandRangeConfig{
+			From: c.ScMaxEachPostBytes.From,
+			To:   c.ScMaxEachPostBytes.To,
 		},
-		Mux: &muxProtobuf,
+		ScMinPostsIntervalMs: &splithttp.RandRangeConfig{
+			From: c.ScMinPostsIntervalMs.From,
+			To:   c.ScMinPostsIntervalMs.To,
+		},
+		NoSSEHeader: c.NoSSEHeader,
 	}
 	return config, nil
 }
@@ -410,6 +413,7 @@ type TLSCertConfig struct {
 	Usage          string   `json:"usage"`
 	OcspStapling   uint64   `json:"ocspStapling"`
 	OneTimeLoading bool     `json:"oneTimeLoading"`
+	BuildChain     bool     `json:"buildChain"`
 }
 
 // Build implements Buildable.
@@ -448,6 +452,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		certificate.OneTimeLoading = c.OneTimeLoading
 	}
 	certificate.OcspStapling = c.OcspStapling
+	certificate.BuildChain = c.BuildChain
 
 	return certificate, nil
 }

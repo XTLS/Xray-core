@@ -4,23 +4,28 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
-func (c *Config) GetNormalizedPath() string {
-	path := c.Path
-	if path == "" {
-		path = "/"
+func (c *Config) GetNormalizedPath(addPath string, addQuery bool) string {
+	pathAndQuery := strings.SplitN(c.Path, "?", 2)
+	path := pathAndQuery[0]
+	query := ""
+	if len(pathAndQuery) > 1 && addQuery {
+		query = "?" + pathAndQuery[1]
 	}
-	if path[0] != '/' {
+
+	if path == "" || path[0] != '/' {
 		path = "/" + path
 	}
 	if path[len(path)-1] != '/' {
 		path = path + "/"
 	}
-	return path
+
+	return path + addPath + query
 }
 
 func (c *Config) GetRequestHeader() http.Header {
@@ -30,39 +35,33 @@ func (c *Config) GetRequestHeader() http.Header {
 	}
 	return header
 }
-
-func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
-	if c.GetMaxConcurrentUploads() == 0 {
-		return 10
-	}
-
-	return c.GetMaxConcurrentUploads()
-}
-
-func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
-	r := c.GetMaxUploadSize()
-
-	if r == nil {
-		r = &RandRangeConfig{
-			From: 900000,
-			To:   1000000,
+func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
+	if c.ScMaxConcurrentPosts == nil || c.ScMaxConcurrentPosts.To == 0 {
+		return RandRangeConfig{
+			From: 100,
+			To:   100,
 		}
 	}
 
-	return *r
+	return *c.ScMaxConcurrentPosts
 }
 
-func (c *Config) GetNormalizedUploadDelay() RandRangeConfig {
-	r := c.GetMinUploadInterval()
-
-	if r == nil {
-		r = &RandRangeConfig{
+func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
+	if c.ScMaxEachPostBytes == nil || c.ScMaxEachPostBytes.To == 0 {
+		return RandRangeConfig{
+			From: 1000000,
+			To:   1000000,
+		}
+	}
+func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
+	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
+		return RandRangeConfig{
 			From: 30,
 			To:   30,
 		}
 	}
 
-	return *r
+	return *c.ScMinPostsIntervalMs
 }
 
 func (c *Multiplexing) GetNormalizedConnectionLifetime() RandRangeConfig {

@@ -185,10 +185,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
+	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
+	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
 
-	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
-	maxUploadSize := transportConfiguration.GetNormalizedMaxUploadSize()
-	minUploadInterval := transportConfiguration.GetNormalizedUploadDelay()
 
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"
@@ -199,18 +199,17 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if requestURL.Host == "" {
 		requestURL.Host = dest.NetAddr()
 	}
-	requestURL.Path = transportConfiguration.GetNormalizedPath()
+
+	sessionIdUuid := uuid.New()
+	requestURL.Path = transportConfiguration.GetNormalizedPath(sessionIdUuid.String(), true)
+	baseURL := requestURL.String()
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
-	sessionIdUuid := uuid.New()
-	sessionId := sessionIdUuid.String()
-	baseURL := requestURL.String() + sessionId
-
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize.roll()))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(scMaxEachPostBytes.roll()))
 
 	go func() {
-		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
+		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
 		var requestCounter int64
 
 		lastWrite := time.Now()
@@ -246,8 +245,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}()
 
-			if minUploadInterval.From > 0 {
-				roll := time.Duration(minUploadInterval.roll()) * time.Millisecond
+			if scMinPostsIntervalMs.From > 0 {
+				roll := time.Duration(scMinPostsIntervalMs.roll()) * time.Millisecond
 				if time.Since(lastWrite) < roll {
 					time.Sleep(roll)
 				}
