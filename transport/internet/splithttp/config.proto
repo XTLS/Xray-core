@@ -13,6 +13,7 @@ message Config {
   RandRangeConfig maxConcurrentUploads = 4;
   RandRangeConfig maxUploadSize = 5;
   RandRangeConfig minUploadIntervalMs = 6;
+  bool noSSEHeader = 7;
 }
 
 message RandRangeConfig {

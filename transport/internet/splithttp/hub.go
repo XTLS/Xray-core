@@ -26,6 +26,7 @@ import (
 )
 
 type requestHandler struct {
+	config    *Config
 	host      string
 	path      string
 	ln        *Listener
@@ -182,8 +183,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		// magic header instructs nginx + apache to not buffer response body
 		writer.Header().Set("X-Accel-Buffering", "no")
-		// magic header to make the HTTP middle box consider this as SSE to disable buffer
-		writer.Header().Set("Content-Type", "text/event-stream")
+		if !h.config.NoSSEHeader {
+			// magic header to make the HTTP middle box consider this as SSE to disable buffer
+			writer.Header().Set("Content-Type", "text/event-stream")
+		}
 
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
@@ -267,6 +270,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var err error
 	var localAddr = gonet.TCPAddr{}
 	handler := &requestHandler{
+		config:    shSettings,
 		host:      shSettings.Host,
 		path:      shSettings.GetNormalizedPath("", false),
 		ln:        l,
