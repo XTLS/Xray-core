@@ -43,7 +43,7 @@ func (m *muxManager) getClient(ctx context.Context, dest net.Destination, stream
 	default:
 		return &muxDialerClient{
 			DefaultDialerClient: createHTTPClient(ctx, dest, streamSettings),
-			leftUsage:           m.config.GetNormalizedConnectionLifetime().roll(),
+			leftUsage:           math.MaxInt32,
 			expirationTime:      time.Unix(math.MaxInt64, 0),
 		}
 	}
