@@ -80,8 +80,8 @@ func (m *muxManager) dialPreferNew(ctx context.Context, dest net.Destination, st
 				return &client
 			}
 		}
-		if streamSettings.ProtocolSettings.(*Config).GetScMinPostsIntervalMs().From > 0 {
-			time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetScMinPostsIntervalMs().roll()) * time.Millisecond)
+		if streamSettings.ProtocolSettings.(*Config).GetNormalizedScMinPostsIntervalMs().From > 0 {
+			time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedScMinPostsIntervalMs().roll()) * time.Millisecond)
 		}
 		continue
 	}
@@ -94,7 +94,7 @@ func (m *muxManager) newClient(ctx context.Context, dest net.Destination, stream
 	Client := muxDialerClient{
 		DefaultDialerClient: createHTTPClient(ctx, dest, streamSettings),
 		leftUsage:           m.config.GetNormalizedMaxConnectionConcurrency().roll(),
-		expirationTime:      time.Now().Add(time.Duration(m.config.GetMaxConnectionLifetime().roll()) * time.Second),
+		expirationTime:      time.Now().Add(time.Duration(m.config.GetNormalizedConnectionLifetime().roll()) * time.Second),
 	}
 	m.dialerClients = append(m.dialerClients, Client)
 	return &Client
