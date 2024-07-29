@@ -32,8 +32,8 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerAccess sync.Mutex
-	globalMuxManagerMap    map[dialerConf]muxManager
+	globalDialerAccess  sync.Mutex
+	globalMuxManagerMap map[dialerConf]muxManager
 )
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
@@ -48,11 +48,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		globalMuxManagerMap = make(map[dialerConf]muxManager)
 	}
 	if muxMan, found := globalMuxManagerMap[dialerConf{dest, streamSettings}]; found {
-		return muxMan.getClient(ctx,dest,streamSettings)
+		return muxMan.getClient(ctx, dest, streamSettings)
 	}
 	muxMan := muxManager{}
 	globalMuxManagerMap[dialerConf{dest, streamSettings}] = muxMan
-	return muxMan.getClient(ctx,dest,streamSettings)
+	return muxMan.getClient(ctx, dest, streamSettings)
 }
 
 func createHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) *DefaultDialerClient {
@@ -188,7 +188,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
-
 
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"
