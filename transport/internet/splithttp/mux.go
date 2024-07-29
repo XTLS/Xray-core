@@ -35,7 +35,7 @@ func (m *muxManager) getClient(ctx context.Context, dest net.Destination, stream
 	if len(m.dialerClients) > 0 {
 		m.removeExpiredConnections()
 	}
-	switch m.config.Mode {
+	switch m.config.GetMode() {
 	case Multiplexing_PREFRE_EXTISTING:
 		return m.dialPreferExisting(ctx, dest, streamSettings)
 	case Multiplexing_PREFRE_NEW:
@@ -43,7 +43,7 @@ func (m *muxManager) getClient(ctx context.Context, dest net.Destination, stream
 	default:
 		return &muxDialerClient{
 			DefaultDialerClient: createHTTPClient(ctx, dest, streamSettings),
-			leftUsage:           m.config.MaxConnectionConcurrency.roll(),
+			leftUsage:           m.config.GetNormalizedConnectionLifetime().roll(),
 			expirationTime:      time.Unix(math.MaxInt64, 0),
 		}
 	}
@@ -57,7 +57,7 @@ func (m *muxManager) dialPreferExisting(ctx context.Context, dest net.Destinatio
 				return &client
 			}
 		}
-		if int32(len(m.dialerClients)) >= m.config.MaxConnections || m.config.MaxConnections == 0 {
+		if int32(len(m.dialerClients)) >= m.config.GetMaxConnections() || m.config.GetMaxConnections() == 0 {
 			if streamSettings.ProtocolSettings.(*Config).MaxUploadSize.From > 0 {
 				time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedUploadDelay().roll()) * time.Millisecond)
 			}
@@ -80,7 +80,7 @@ func (m *muxManager) dialPreferNew(ctx context.Context, dest net.Destination, st
 				return &client
 			}
 		}
-		if streamSettings.ProtocolSettings.(*Config).MaxUploadSize.From > 0 {
+		if streamSettings.ProtocolSettings.(*Config).GetMaxUploadSize().From > 0 {
 			time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedUploadDelay().roll()) * time.Millisecond)
 		}
 		continue
@@ -93,7 +93,8 @@ func (m *muxManager) newClient(ctx context.Context, dest net.Destination, stream
 
 	Client := muxDialerClient{
 		DefaultDialerClient: createHTTPClient(ctx, dest, streamSettings),
-		leftUsage:           m.config.MaxConnectionConcurrency.roll(),
+		leftUsage:           m.config.GetNormalizedMaxConnectionConcurrency().roll(),
+		expirationTime:      time.Now().Add(time.Duration(m.config.GetMaxConnectionLifetime().roll()) * time.Second),
 	}
 	m.dialerClients = append(m.dialerClients, Client)
 	return &Client

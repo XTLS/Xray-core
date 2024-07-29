@@ -32,15 +32,15 @@ func (c *Config) GetRequestHeader() http.Header {
 }
 
 func (c *Config) GetNormalizedMaxConcurrentUploads() int32 {
-	if c.MaxConcurrentUploads == 0 {
+	if c.GetMaxConcurrentUploads() == 0 {
 		return 10
 	}
 
-	return c.MaxConcurrentUploads
+	return c.GetMaxConcurrentUploads()
 }
 
 func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
-	r := c.MaxUploadSize
+	r := c.GetMaxUploadSize()
 
 	if r == nil {
 		r = &RandRangeConfig{
@@ -53,12 +53,38 @@ func (c *Config) GetNormalizedMaxUploadSize() RandRangeConfig {
 }
 
 func (c *Config) GetNormalizedUploadDelay() RandRangeConfig {
-	r := c.MinUploadInterval
+	r := c.GetMinUploadInterval()
 
 	if r == nil {
 		r = &RandRangeConfig{
 			From: 30,
 			To:   30,
+		}
+	}
+
+	return *r
+}
+
+func (c *Multiplexing) GetNormalizedConnectionLifetime() RandRangeConfig {
+	r := c.GetMaxConnectionLifetime()
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 100,
+			To:   300,
+		}
+	}
+
+	return *r
+}
+
+func (c *Multiplexing) GetNormalizedMaxConnectionConcurrency() RandRangeConfig {
+	r := c.GetMaxConnectionConcurrency()
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 25,
+			To:   45,
 		}
 	}
 
