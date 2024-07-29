@@ -258,7 +258,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch strings.ToLower(c.Mux.Mode) {
 	case "disabled", "off", "none":
 		muxProtobuf.Mode = splithttp.Multiplexing_DISABLED
-	case "prefer_reuse", "preferreuse", "": // Default: Reuse existing connections before opening new ones
+	case "prefer_reuse", "preferreuse", "prefer_existing", "preferexisting", "": // Default: Reuse existing connections before opening new ones
 		muxProtobuf.Mode = splithttp.Multiplexing_PREFRE_EXTISTING
 	case "prefer_new", "prefernew": // Open new connections until max limit, then reuse
 		muxProtobuf.Mode = splithttp.Multiplexing_PREFRE_NEW
