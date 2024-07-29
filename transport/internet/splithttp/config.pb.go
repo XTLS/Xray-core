@@ -28,9 +28,9 @@ type Config struct {
 	Host                 string            `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
 	Path                 string            `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	Header               map[string]string `protobuf:"bytes,3,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	MaxConcurrentUploads *RandRangeConfig  `protobuf:"bytes,4,opt,name=maxConcurrentUploads,proto3" json:"maxConcurrentUploads,omitempty"`
-	MaxEachUploadBytes   *RandRangeConfig  `protobuf:"bytes,5,opt,name=maxEachUploadBytes,proto3" json:"maxEachUploadBytes,omitempty"`
-	MinUploadIntervalMs  *RandRangeConfig  `protobuf:"bytes,6,opt,name=minUploadIntervalMs,proto3" json:"minUploadIntervalMs,omitempty"`
+	ScMaxConcurrentPosts *RandRangeConfig  `protobuf:"bytes,4,opt,name=scMaxConcurrentPosts,proto3" json:"scMaxConcurrentPosts,omitempty"`
+	ScMaxEachPostBytes   *RandRangeConfig  `protobuf:"bytes,5,opt,name=scMaxEachPostBytes,proto3" json:"scMaxEachPostBytes,omitempty"`
+	ScMinPostsIntervalMs *RandRangeConfig  `protobuf:"bytes,6,opt,name=scMinPostsIntervalMs,proto3" json:"scMinPostsIntervalMs,omitempty"`
 	NoSSEHeader          bool              `protobuf:"varint,7,opt,name=noSSEHeader,proto3" json:"noSSEHeader,omitempty"`
 }
 
@@ -87,23 +87,23 @@ func (x *Config) GetHeader() map[string]string {
 	return nil
 }
 
-func (x *Config) GetMaxConcurrentUploads() *RandRangeConfig {
+func (x *Config) GetScMaxConcurrentPosts() *RandRangeConfig {
 	if x != nil {
-		return x.MaxConcurrentUploads
+		return x.ScMaxConcurrentPosts
 	}
 	return nil
 }
 
-func (x *Config) GetMaxEachUploadBytes() *RandRangeConfig {
+func (x *Config) GetScMaxEachPostBytes() *RandRangeConfig {
 	if x != nil {
-		return x.MaxEachUploadBytes
+		return x.ScMaxEachPostBytes
 	}
 	return nil
 }
 
-func (x *Config) GetMinUploadIntervalMs() *RandRangeConfig {
+func (x *Config) GetScMinPostsIntervalMs() *RandRangeConfig {
 	if x != nil {
-		return x.MinUploadIntervalMs
+		return x.ScMinPostsIntervalMs
 	}
 	return nil
 }
@@ -245,9 +245,9 @@ var file_transport_internet_splithttp_config_proto_goTypes = []interface{}{
 }
 var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	2, // 0: xray.transport.internet.splithttp.Config.header:type_name -> xray.transport.internet.splithttp.Config.HeaderEntry
-	1, // 1: xray.transport.internet.splithttp.Config.maxConcurrentUploads:type_name -> xray.transport.internet.splithttp.RandRangeConfig
-	1, // 2: xray.transport.internet.splithttp.Config.maxEachUploadBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
-	1, // 3: xray.transport.internet.splithttp.Config.minUploadIntervalMs:type_name -> xray.transport.internet.splithttp.RandRangeConfig
+	1, // 1: xray.transport.internet.splithttp.Config.scMaxConcurrentPosts:type_name -> xray.transport.internet.splithttp.RandRangeConfig
+	1, // 2: xray.transport.internet.splithttp.Config.scMaxEachPostBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
+	1, // 3: xray.transport.internet.splithttp.Config.scMinPostsIntervalMs:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name

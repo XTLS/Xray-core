@@ -181,8 +181,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
-	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
-	maxEachUploadBytes := transportConfiguration.GetNormalizedMaxEachUploadBytes()
+	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
+	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	minUploadInterval := transportConfiguration.GetNormalizedMinUploadInterval()
 
 	if tlsConfig != nil {
@@ -201,10 +201,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxEachUploadBytes.roll()))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(scMaxEachPostBytes.roll()))
 
 	go func() {
-		requestsLimiter := semaphore.New(int(maxConcurrentUploads.roll()))
+		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
 		var requestCounter int64
 
 		lastWrite := time.Now()

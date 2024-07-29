@@ -10,9 +10,9 @@ message Config {
   string host = 1;
   string path = 2;
   map<string, string> header = 3;
-  RandRangeConfig maxConcurrentUploads = 4;
-  RandRangeConfig maxEachUploadBytes = 5;
-  RandRangeConfig minUploadIntervalMs = 6;
+  RandRangeConfig scMaxConcurrentPosts = 4;
+  RandRangeConfig scMaxEachPostBytes = 5;
+  RandRangeConfig scMinPostsIntervalMs = 6;
   bool noSSEHeader = 7;
 }
 
