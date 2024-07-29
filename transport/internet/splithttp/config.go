@@ -47,15 +47,15 @@ func (c *Config) GetNormalizedMaxConcurrentUploads(isServer bool) RandRangeConfi
 	return *c.MaxConcurrentUploads
 }
 
-func (c *Config) GetNormalizedMaxUploadBytes(isServer bool) RandRangeConfig {
-	if c.MaxUploadBytes == nil || c.MaxUploadBytes.To == 0 {
+func (c *Config) GetNormalizedMaxEachUploadBytes(isServer bool) RandRangeConfig {
+	if c.MaxEachUploadBytes == nil || c.MaxEachUploadBytes.To == 0 {
 		return RandRangeConfig{
 			From: 1000000,
 			To:   1000000,
 		}
 	}
 
-	return *c.MaxUploadBytes
+	return *c.MaxEachUploadBytes
 }
 
 func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {

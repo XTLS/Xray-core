@@ -11,7 +11,7 @@ message Config {
   string path = 2;
   map<string, string> header = 3;
   RandRangeConfig maxConcurrentUploads = 4;
-  RandRangeConfig maxUploadBytes = 5;
+  RandRangeConfig maxEachUploadBytes = 5;
   RandRangeConfig minUploadIntervalMs = 6;
   bool noSSEHeader = 7;
 }

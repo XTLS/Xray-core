@@ -123,7 +123,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	currentSession := h.upsertSession(sessionId)
-	maxUploadBytes := int(h.ln.config.GetNormalizedMaxUploadBytes(true).To)
+	maxEachUploadBytes := int(h.ln.config.GetNormalizedMaxEachUploadBytes(true).To)
 
 	if request.Method == "POST" {
 		seq := ""
@@ -139,8 +139,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		payload, err := io.ReadAll(request.Body)
 
-		if len(payload) > maxUploadBytes {
-			errors.LogInfo(context.Background(), "Too large upload. maxUploadBytes is set to ", maxUploadBytes, "but request had size ", len(payload), ". Adjust maxUploadBytes on the server to be at least as large as client.")
+		if len(payload) > maxEachUploadBytes {
+			errors.LogInfo(context.Background(), "Too large upload. maxEachUploadBytes is set to ", maxEachUploadBytes, "but request had size ", len(payload), ". Adjust maxEachUploadBytes on the server to be at least as large as client.")
 			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}

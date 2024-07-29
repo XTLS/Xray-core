@@ -29,7 +29,7 @@ type Config struct {
 	Path                 string            `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	Header               map[string]string `protobuf:"bytes,3,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	MaxConcurrentUploads *RandRangeConfig  `protobuf:"bytes,4,opt,name=maxConcurrentUploads,proto3" json:"maxConcurrentUploads,omitempty"`
-	MaxUploadBytes       *RandRangeConfig  `protobuf:"bytes,5,opt,name=maxUploadBytes,proto3" json:"maxUploadBytes,omitempty"`
+	MaxEachUploadBytes   *RandRangeConfig  `protobuf:"bytes,5,opt,name=maxEachUploadBytes,proto3" json:"maxEachUploadBytes,omitempty"`
 	MinUploadIntervalMs  *RandRangeConfig  `protobuf:"bytes,6,opt,name=minUploadIntervalMs,proto3" json:"minUploadIntervalMs,omitempty"`
 	NoSSEHeader          bool              `protobuf:"varint,7,opt,name=noSSEHeader,proto3" json:"noSSEHeader,omitempty"`
 }
@@ -94,9 +94,9 @@ func (x *Config) GetMaxConcurrentUploads() *RandRangeConfig {
 	return nil
 }
 
-func (x *Config) GetMaxUploadBytes() *RandRangeConfig {
+func (x *Config) GetMaxEachUploadBytes() *RandRangeConfig {
 	if x != nil {
-		return x.MaxUploadBytes
+		return x.MaxEachUploadBytes
 	}
 	return nil
 }
@@ -246,7 +246,7 @@ var file_transport_internet_splithttp_config_proto_goTypes = []interface{}{
 var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	2, // 0: xray.transport.internet.splithttp.Config.header:type_name -> xray.transport.internet.splithttp.Config.HeaderEntry
 	1, // 1: xray.transport.internet.splithttp.Config.maxConcurrentUploads:type_name -> xray.transport.internet.splithttp.RandRangeConfig
-	1, // 2: xray.transport.internet.splithttp.Config.maxUploadBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
+	1, // 2: xray.transport.internet.splithttp.Config.maxEachUploadBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	1, // 3: xray.transport.internet.splithttp.Config.minUploadIntervalMs:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
