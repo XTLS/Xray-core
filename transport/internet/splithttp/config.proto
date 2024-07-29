@@ -10,8 +10,8 @@ message Config {
   string host = 1;
   string path = 2;
   map<string, string> header = 3;
-  int32 maxConcurrentUploads = 4;
-  int32 maxUploadSize = 5;
+  RandRangeConfig maxConcurrentUploads = 4;
+  RandRangeConfig maxUploadSize = 5;
   RandRangeConfig minUploadIntervalMs = 6;
 }
 

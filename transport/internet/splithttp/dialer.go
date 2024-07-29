@@ -181,8 +181,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
-	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
-	maxUploadSize := transportConfiguration.GetNormalizedMaxUploadSize()
+	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads(false)
+	maxUploadSize := transportConfiguration.GetNormalizedMaxUploadSize(false)
 	minUploadInterval := transportConfiguration.GetNormalizedMinUploadInterval()
 
 	if tlsConfig != nil {
@@ -194,18 +194,17 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if requestURL.Host == "" {
 		requestURL.Host = dest.NetAddr()
 	}
-	requestURL.Path = transportConfiguration.GetNormalizedPath()
+
+	sessionIdUuid := uuid.New()
+	requestURL.Path = transportConfiguration.GetNormalizedPath(sessionIdUuid.String(), true)
+	baseURL := requestURL.String()
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
-	sessionIdUuid := uuid.New()
-	sessionId := sessionIdUuid.String()
-	baseURL := requestURL.String() + sessionId
-
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize.roll()))
 
 	go func() {
-		requestsLimiter := semaphore.New(int(maxConcurrentUploads))
+		requestsLimiter := semaphore.New(int(maxConcurrentUploads.roll()))
 		var requestCounter int64
 
 		lastWrite := time.Now()

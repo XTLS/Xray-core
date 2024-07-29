@@ -75,7 +75,7 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	}
 
 	s := &httpSession{
-		uploadQueue:      NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads())),
+		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedMaxConcurrentUploads(true).To)),
 		isFullyConnected: done.New(),
 	}
 
@@ -122,6 +122,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	currentSession := h.upsertSession(sessionId)
+	maxUploadSize := int(h.ln.config.GetNormalizedMaxUploadSize(true).To)
 
 	if request.Method == "POST" {
 		seq := ""
@@ -136,6 +137,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		payload, err := io.ReadAll(request.Body)
+
+		if len(payload) > maxUploadSize {
+			errors.LogInfo(context.Background(), "Too large upload. maxUploadSize is set to", maxUploadSize, "but request had size", len(payload), ". Adjust maxUploadSize on the server to be at least as large as client.")
+			writer.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -260,7 +268,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var localAddr = gonet.TCPAddr{}
 	handler := &requestHandler{
 		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath(),
+		path:      shSettings.GetNormalizedPath("", false),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},
