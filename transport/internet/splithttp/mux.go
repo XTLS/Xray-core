@@ -58,8 +58,8 @@ func (m *muxManager) dialPreferExisting(ctx context.Context, dest net.Destinatio
 			}
 		}
 		if int32(len(m.dialerClients)) >= m.config.GetMaxConnections() || m.config.GetMaxConnections() == 0 {
-			if streamSettings.ProtocolSettings.(*Config).MaxUploadSize.From > 0 {
-				time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedUploadDelay().roll()) * time.Millisecond)
+			if streamSettings.ProtocolSettings.(*Config).GetNormalizedScMinPostsIntervalMs().From > 0 {
+				time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedScMinPostsIntervalMs().roll()) * time.Millisecond)
 			}
 			continue
 		}
@@ -80,8 +80,8 @@ func (m *muxManager) dialPreferNew(ctx context.Context, dest net.Destination, st
 				return &client
 			}
 		}
-		if streamSettings.ProtocolSettings.(*Config).GetMaxUploadSize().From > 0 {
-			time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetNormalizedUploadDelay().roll()) * time.Millisecond)
+		if streamSettings.ProtocolSettings.(*Config).GetScMinPostsIntervalMs().From > 0 {
+			time.Sleep(time.Duration(streamSettings.ProtocolSettings.(*Config).GetScMinPostsIntervalMs().roll()) * time.Millisecond)
 		}
 		continue
 	}

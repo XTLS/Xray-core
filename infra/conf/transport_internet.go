@@ -229,6 +229,7 @@ type SplitHTTPConfig struct {
 	Host                 string            `json:"host"`
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
+	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxConcurrentPosts Int32Range            `json:"maxConcurrentUploads"`
 	ScMaxEachPostBytes       Int32Range        `json:"maxUploadSize"`
 	ScMinPostsIntervalMs          Int32Range        `json:"minUploadInterval"`

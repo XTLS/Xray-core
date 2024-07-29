@@ -53,6 +53,8 @@ func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
 			To:   1000000,
 		}
 	}
+	return *c.ScMaxEachPostBytes
+}
 func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
 		return RandRangeConfig{
