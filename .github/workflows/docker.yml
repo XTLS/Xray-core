@@ -25,27 +25,14 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
-      - name: Docker metadata Loyalsoldier flavor
-        id: loyalsoldier
+      - name: Docker metadata LS (short for Loyalsoldier) flavor
+        id: ls
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/xray-core
           flavor: |
             latest=auto
-            suffix=-loyalsoldier,onlatest=true
-          tags: |
-            type=sha
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-      - name: Docker metadata L (short for Loyalsoldier) flavor
-        id: l
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/xray-core
-          flavor: |
-            latest=auto
-            suffix=-l,onlatest=true
+            suffix=-ls,onlatest=true
           tags: |
             type=sha
             type=ref,event=branch
@@ -86,5 +73,4 @@ jobs:
           build-args: flavor=loyalsoldier
           push: true
           tags: |
-            ${{ steps.loyalsoldier.outputs.tags }}
-            ${{ steps.l.outputs.tags }}
+            ${{ steps.ls.outputs.tags }}
