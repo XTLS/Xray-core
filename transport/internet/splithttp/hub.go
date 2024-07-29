@@ -76,7 +76,7 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	}
 
 	s := &httpSession{
-		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedMaxConcurrentUploads(true).To)),
+		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedMaxConcurrentUploads().To)),
 		isFullyConnected: done.New(),
 	}
 
@@ -123,7 +123,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	currentSession := h.upsertSession(sessionId)
-	maxEachUploadBytes := int(h.ln.config.GetNormalizedMaxEachUploadBytes(true).To)
+	maxEachUploadBytes := int(h.ln.config.GetNormalizedMaxEachUploadBytes().To)
 
 	if request.Method == "POST" {
 		seq := ""

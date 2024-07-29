@@ -36,7 +36,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	return header
 }
 
-func (c *Config) GetNormalizedMaxConcurrentUploads(isServer bool) RandRangeConfig {
+func (c *Config) GetNormalizedMaxConcurrentUploads() RandRangeConfig {
 	if c.MaxConcurrentUploads == nil || c.MaxConcurrentUploads.To == 0 {
 		return RandRangeConfig{
 			From: 100,
@@ -47,7 +47,7 @@ func (c *Config) GetNormalizedMaxConcurrentUploads(isServer bool) RandRangeConfi
 	return *c.MaxConcurrentUploads
 }
 
-func (c *Config) GetNormalizedMaxEachUploadBytes(isServer bool) RandRangeConfig {
+func (c *Config) GetNormalizedMaxEachUploadBytes() RandRangeConfig {
 	if c.MaxEachUploadBytes == nil || c.MaxEachUploadBytes.To == 0 {
 		return RandRangeConfig{
 			From: 1000000,

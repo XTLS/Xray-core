@@ -181,8 +181,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 
-	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads(false)
-	maxEachUploadBytes := transportConfiguration.GetNormalizedMaxEachUploadBytes(false)
+	maxConcurrentUploads := transportConfiguration.GetNormalizedMaxConcurrentUploads()
+	maxEachUploadBytes := transportConfiguration.GetNormalizedMaxEachUploadBytes()
 	minUploadInterval := transportConfiguration.GetNormalizedMinUploadInterval()
 
 	if tlsConfig != nil {
