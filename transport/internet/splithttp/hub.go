@@ -76,7 +76,7 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	}
 
 	s := &httpSession{
-		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedMaxConcurrentUploads(true).To)),
+		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedScMaxConcurrentPosts().To)),
 		isFullyConnected: done.New(),
 	}
 
@@ -123,7 +123,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	currentSession := h.upsertSession(sessionId)
-	maxUploadSize := int(h.ln.config.GetNormalizedMaxUploadSize(true).To)
+	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
 	if request.Method == "POST" {
 		seq := ""
@@ -139,8 +139,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		payload, err := io.ReadAll(request.Body)
 
-		if len(payload) > maxUploadSize {
-			errors.LogInfo(context.Background(), "Too large upload. maxUploadSize is set to", maxUploadSize, "but request had size", len(payload), ". Adjust maxUploadSize on the server to be at least as large as client.")
+		if len(payload) > scMaxEachPostBytes {
+			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request had size ", len(payload), ". Adjust scMaxEachPostBytes on the server to be at least as large as client.")
 			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
