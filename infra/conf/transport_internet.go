@@ -230,8 +230,15 @@ type SplitHTTPConfig struct {
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
 	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
-	MaxUploadSize        int32             `json:"maxUploadSize"`
-	MinUploadIntervalMs  Int32Range        `json:"minUploadIntervalMs"`
+	MaxUploadSize        Int32Range        `json:"maxUploadSize"`
+	MinUploadInterval          Int32Range        `json:"minUploadInterval"`
+	Mux                  SplitHTTPMux      `json:"mux"`
+}
+
+type SplitHTTPMux struct {
+	Mode                     string     `json:"mode"`
+	MaxConnectionConcurrency Int32Range `json:"maxConnectionConcurrency"`
+	MaxConnectionLifetime    Int32Range `json:"maxConnectionLifetime"`
 }
 
 // Build implements Buildable.
@@ -244,16 +251,42 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	} else if c.Host == "" && c.Headers["Host"] != "" {
 		c.Host = c.Headers["Host"]
 	}
+
+	// Multiplexing config
+	muxProtobuf := splithttp.Multiplexing{}
+	switch strings.ToLower(c.Mux.Mode) {
+	case "disabled", "off", "none":
+		muxProtobuf.Mode = splithttp.Multiplexing_DISABLED
+	case "prefer_reuse", "preferreuse", "": // Default: Reuse existing connections before opening new ones
+		muxProtobuf.Mode = splithttp.Multiplexing_PREFRE_EXTISTING
+	case "prefer_new", "prefernew": // Open new connections until max limit, then reuse
+		muxProtobuf.Mode = splithttp.Multiplexing_PREFRE_NEW
+	default:
+		return nil, errors.New("unsupported splithttp multiplexing mode: ", c.Mux.Mode)
+	}
+	muxProtobuf.MaxConnectionConcurrency = &splithttp.RandRangeConfig{
+		From: c.Mux.MaxConnectionConcurrency.From,
+		To:   c.Mux.MaxConnectionConcurrency.To,
+	}
+	muxProtobuf.MaxConnectionLifetime = &splithttp.RandRangeConfig{
+		From: c.Mux.MaxConnectionLifetime.From,
+		To:   c.Mux.MaxConnectionLifetime.To,
+	}
+
 	config := &splithttp.Config{
 		Path:                 c.Path,
 		Host:                 c.Host,
 		Header:               c.Headers,
 		MaxConcurrentUploads: c.MaxConcurrentUploads,
-		MaxUploadSize:        c.MaxUploadSize,
-		MinUploadIntervalMs: &splithttp.RandRangeConfig{
-			From: c.MinUploadIntervalMs.From,
-			To:   c.MinUploadIntervalMs.To,
+		MaxUploadSize: &splithttp.RandRangeConfig{
+			From: c.MaxUploadSize.From,
+			To:   c.MaxUploadSize.To,
 		},
+		MinUploadInterval: &splithttp.RandRangeConfig{
+			From: c.MinUploadInterval.From,
+			To:   c.MinUploadInterval.To,
+		},
+		Mux: &muxProtobuf,
 	}
 	return config, nil
 }
