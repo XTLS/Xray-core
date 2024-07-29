@@ -230,7 +230,7 @@ type SplitHTTPConfig struct {
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
 	MaxConcurrentUploads Int32Range        `json:"maxConcurrentUploads"`
-	MaxUploadSize        Int32Range        `json:"maxUploadSize"`
+	MaxUploadBytes       Int32Range        `json:"maxUploadBytes"`
 	MinUploadIntervalMs  Int32Range        `json:"minUploadIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 }
@@ -253,9 +253,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			From: c.MaxConcurrentUploads.From,
 			To:   c.MaxConcurrentUploads.To,
 		},
-		MaxUploadSize: &splithttp.RandRangeConfig{
-			From: c.MaxUploadSize.From,
-			To:   c.MaxUploadSize.To,
+		MaxUploadBytes: &splithttp.RandRangeConfig{
+			From: c.MaxUploadBytes.From,
+			To:   c.MaxUploadBytes.To,
 		},
 		MinUploadIntervalMs: &splithttp.RandRangeConfig{
 			From: c.MinUploadIntervalMs.From,
