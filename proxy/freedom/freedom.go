@@ -29,6 +29,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/transport"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
+  "github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -227,9 +228,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writeConn = inbound.Conn
 				inTimer = inbound.Timer
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			if !isTLSConn(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
+				return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			}
 		}
-		reader := NewPacketReader(conn, UDPOverride)
+		var reader buf.Reader
+		if destination.Network == net.Network_TCP {
+			reader = buf.NewReader(conn)
+		} else {
+			reader = NewPacketReader(conn, UDPOverride)
+		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
 		}
@@ -245,6 +253,19 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	return nil
+}
+
+func isTLSConn(conn stat.Connection) bool {
+	if conn != nil {
+		statConn, ok := conn.(*stat.CounterConnection)
+		if ok {
+			conn = statConn.Connection
+		}
+		if _, ok := conn.(*tls.Conn); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {

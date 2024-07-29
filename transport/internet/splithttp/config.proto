@@ -10,6 +10,13 @@ message Config {
   string host = 1;
   string path = 2;
   map<string, string> header = 3;
-  int32 maxConcurrentUploads = 4;
-  int32 maxUploadSize = 5;
+  RandRangeConfig scMaxConcurrentPosts = 4;
+  RandRangeConfig scMaxEachPostBytes = 5;
+  RandRangeConfig scMinPostsIntervalMs = 6;
+  bool noSSEHeader = 7;
+}
+
+message RandRangeConfig {
+    int32 from = 1;
+    int32 to = 2;
 }

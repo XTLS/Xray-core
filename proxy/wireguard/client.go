@@ -180,7 +180,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 	// ------ GFW-knocker --------------------
 
 	// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
-	bind := &netBindClient{
+	h.bind = &netBindClient{
 		netBind: netBind{
 			dns: h.dns,
 			dnsOption: dns.IPOption{
@@ -203,15 +203,14 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 	}
 	defer func() {
 		if err != nil {
-			_ = bind.Close()
+			_ = h.bind.Close()
 		}
 	}()
 
-	h.net, err = h.makeVirtualTun(bind)
+	h.net, err = h.makeVirtualTun()
 	if err != nil {
 		return errors.New("failed to create virtual tun interface").Base(err)
 	}
-	h.bind = bind
 	return nil
 }
 
@@ -339,16 +338,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 }
 
 // creates a tun interface on netstack given a configuration
-func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
+func (h *Handler) makeVirtualTun() (Tunnel, error) {
 	t, err := h.conf.createTun()(h.endpoints, int(h.conf.Mtu), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	bind.dnsOption.IPv4Enable = h.hasIPv4
-	bind.dnsOption.IPv6Enable = h.hasIPv6
+	h.bind.dnsOption.IPv4Enable = h.hasIPv4
+	h.bind.dnsOption.IPv6Enable = h.hasIPv6
 
-	if err = t.BuildDevice(h.createIPCRequest(bind, h.conf), bind); err != nil {
+	if err = t.BuildDevice(h.createIPCRequest(), h.bind); err != nil {
 		_ = t.Close()
 		return nil, err
 	}
@@ -356,17 +355,17 @@ func (h *Handler) makeVirtualTun(bind *netBindClient) (Tunnel, error) {
 }
 
 // serialize the config into an IPC request
-func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) string {
+func (h *Handler) createIPCRequest() string {
 	var request strings.Builder
 
-	request.WriteString(fmt.Sprintf("private_key=%s\n", conf.SecretKey))
+	request.WriteString(fmt.Sprintf("private_key=%s\n", h.conf.SecretKey))
 
-	if !conf.IsClient {
+	if !h.conf.IsClient {
 		// placeholder, we'll handle actual port listening on Xray
 		request.WriteString("listen_port=1337\n")
 	}
 
-	for _, peer := range conf.Peers {
+	for _, peer := range h.conf.Peers {
 		if peer.PublicKey != "" {
 			request.WriteString(fmt.Sprintf("public_key=%s\n", peer.PublicKey))
 		}
@@ -381,7 +380,7 @@ func (h *Handler) createIPCRequest(bind *netBindClient, conf *DeviceConfig) stri
 		}
 		addr := net.ParseAddress(address)
 		if addr.Family().IsDomain() {
-			dialerIp := bind.dialer.DestIpAddress()
+			dialerIp := h.bind.dialer.DestIpAddress()
 			if dialerIp != nil {
 				addr = net.ParseAddress(dialerIp.String())
 				errors.LogInfo(h.bind.ctx, "createIPCRequest use dialer dest ip: ", addr)
