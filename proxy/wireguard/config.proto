@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.wireguard;
 option csharp_namespace = "Xray.Proxy.WireGuard";
-option go_package = "github.com/xtls/xray-core/proxy/wireguard";
+option go_package = "github.com/GFW-knocker/Xray-core/proxy/wireguard";
 option java_package = "com.xray.proxy.wireguard";
 option java_multiple_files = true;
 
@@ -31,4 +31,8 @@ message DeviceConfig {
   DomainStrategy domain_strategy = 7;
   bool is_client = 8;
   bool kernel_mode = 9;
+  string wnoise = 10;
+  string wnoisecount = 11;
+  string wnoisedelay = 12;
+  string wpayloadsize = 13;
 }

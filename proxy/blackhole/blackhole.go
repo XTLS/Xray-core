@@ -1,16 +1,16 @@
 // Package blackhole is an outbound handler that blocks all connections.
 package blackhole
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 import (
 	"context"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/transport"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
 // Handler is an outbound connection that silently swallow the entire payload.

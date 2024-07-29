@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
 

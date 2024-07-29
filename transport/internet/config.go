@@ -1,9 +1,9 @@
 package internet
 
 import (
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/features"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/serial"
+	"github.com/GFW-knocker/Xray-core/features"
 )
 
 type ConfigCreator func() interface{}

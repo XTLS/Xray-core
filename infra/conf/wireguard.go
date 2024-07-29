@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/proxy/wireguard"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/proxy/wireguard"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -60,10 +60,19 @@ type WireGuardConfig struct {
 	NumWorkers     int32                  `json:"workers"`
 	Reserved       []byte                 `json:"reserved"`
 	DomainStrategy string                 `json:"domainStrategy"`
+	Wnoise         string                 `json:"wnoise"`
+	Wnoisecount    string                 `json:"wnoisecount"`
+	Wnoisedelay    string                 `json:"wnoisedelay"`
+	Wpayloadsize   string                 `json:"wpayloadsize"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
 	config := new(wireguard.DeviceConfig)
+
+	config.Wnoise = c.Wnoise
+	config.Wnoisecount = c.Wnoisecount
+	config.Wnoisedelay = c.Wnoisedelay
+	config.Wpayloadsize = c.Wpayloadsize
 
 	var err error
 	config.SecretKey, err = ParseWireGuardKey(c.SecretKey)

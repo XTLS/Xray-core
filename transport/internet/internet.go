@@ -16,3 +16,4 @@ func IsValidHTTPHost(request string, config string) bool {
 	}
 	return r == c
 }
+

@@ -6,8 +6,8 @@ import (
 	"io/ioutil"
 	gonet "net"
 
-	"github.com/xtls/xray-core/transport/internet/browser_dialer"
-	"github.com/xtls/xray-core/transport/internet/websocket"
+	"github.com/GFW-knocker/Xray-core/transport/internet/browser_dialer"
+	"github.com/GFW-knocker/Xray-core/transport/internet/websocket"
 )
 
 // implements splithttp.DialerClient in terms of browser dialer

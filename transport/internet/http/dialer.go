@@ -9,18 +9,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	c "github.com/xtls/xray-core/common/ctx"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/pipe"
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/buf"
+	c "github.com/GFW-knocker/Xray-core/common/ctx"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/common/net/cnc"
+	"github.com/GFW-knocker/Xray-core/common/session"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	"github.com/GFW-knocker/Xray-core/transport/internet/reality"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
+	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
+	"github.com/GFW-knocker/Xray-core/transport/pipe"
 	"golang.org/x/net/http2"
 )
 
@@ -75,7 +75,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 			pconn, err := internet.DialSystem(hctx, net.TCPDestination(address, port), sockopt)
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+				errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 				return nil, err
 			}
 
@@ -90,12 +90,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
 			}
 			if err := cn.HandshakeContext(ctx); err != nil {
-				errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+				errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 				return nil, err
 			}
 			if !tlsConfig.InsecureSkipVerify {
 				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
 			}

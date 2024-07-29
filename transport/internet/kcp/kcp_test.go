@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GFW-knocker/Xray-core/common"
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/net"
+	"github.com/GFW-knocker/Xray-core/transport/internet"
+	. "github.com/GFW-knocker/Xray-core/transport/internet/kcp"
+	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	"github.com/google/go-cmp/cmp"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
-	. "github.com/xtls/xray-core/transport/internet/kcp"
-	"github.com/xtls/xray-core/transport/internet/stat"
 	"golang.org/x/sync/errgroup"
 )
 

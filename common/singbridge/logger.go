@@ -3,8 +3,8 @@ package singbridge
 import (
 	"context"
 
+	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/sagernet/sing/common/logger"
-	"github.com/xtls/xray-core/common/errors"
 )
 
 var _ logger.ContextLogger = (*XrayLogger)(nil)
