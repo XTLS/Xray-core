@@ -31,6 +31,8 @@ message Certificate {
 
   // If true, one-Time Loading
   bool One_time_loading = 7;
+
+  bool build_chain = 8;
 }
 
 message Config {

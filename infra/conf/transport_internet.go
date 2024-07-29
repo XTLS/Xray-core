@@ -385,6 +385,7 @@ type TLSCertConfig struct {
 	Usage          string   `json:"usage"`
 	OcspStapling   uint64   `json:"ocspStapling"`
 	OneTimeLoading bool     `json:"oneTimeLoading"`
+	BuildChain     bool     `json:"buildChain"`
 }
 
 // Build implements Buildable.
@@ -423,6 +424,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		certificate.OneTimeLoading = c.OneTimeLoading
 	}
 	certificate.OcspStapling = c.OcspStapling
+	certificate.BuildChain = c.BuildChain
 
 	return certificate, nil
 }
