@@ -2,7 +2,6 @@ package splithttp
 
 import (
 	"context"
-	"math"
 	"sync"
 	"time"
 
