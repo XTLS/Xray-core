@@ -183,7 +183,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
-	minUploadInterval := transportConfiguration.GetNormalizedMinUploadInterval()
+	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
 
 	if tlsConfig != nil {
 		requestURL.Scheme = "https"
@@ -239,8 +239,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}()
 
-			if minUploadInterval.From > 0 {
-				roll := time.Duration(minUploadInterval.roll()) * time.Millisecond
+			if scMinPostsIntervalMs.From > 0 {
+				roll := time.Duration(scMinPostsIntervalMs.roll()) * time.Millisecond
 				if time.Since(lastWrite) < roll {
 					time.Sleep(roll)
 				}

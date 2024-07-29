@@ -58,7 +58,7 @@ func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
 	return *c.ScMaxEachPostBytes
 }
 
-func (c *Config) GetNormalizedMinUploadInterval() RandRangeConfig {
+func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
 		return RandRangeConfig{
 			From: 30,
