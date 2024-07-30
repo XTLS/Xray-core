@@ -6,6 +6,16 @@ option go_package = "github.com/xtls/xray-core/transport/internet/splithttp";
 option java_package = "com.xray.transport.internet.splithttp";
 option java_multiple_files = true;
 
+message Config {
+  string host = 1;
+  string path = 2;
+  map<string, string> header = 3;
+  RandRangeConfig scMaxConcurrentPosts = 4;
+  RandRangeConfig scMaxEachPostBytes = 5;
+  RandRangeConfig scMinPostsIntervalMs = 6;
+  bool noSSEHeader = 8;
+  Multiplexing mux = 7;
+}
 
 message RandRangeConfig {
     int32 from = 1;
@@ -22,15 +32,4 @@ message Multiplexing {
   RandRangeConfig maxConnectionConcurrency = 4;
   RandRangeConfig maxConnectionLifetime = 5;
   int32 maxConnections = 6;
-}
-
-message Config {
-  string host = 1;
-  string path = 2;
-  map<string, string> header = 3;
-  RandRangeConfig scMaxConcurrentPosts = 4;
-  RandRangeConfig scMaxEachPostBytes = 5;
-  RandRangeConfig scMinPostsIntervalMs = 6;
-  Multiplexing mux = 7;
-  bool noSSEHeader = 8;
 }
