@@ -32,8 +32,8 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]DialerClient
-	globalDialerAccess sync.Mutex
+	globalDialerAccess  sync.Mutex
+	globalMuxManagerMap map[dialerConf]muxManager
 )
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
@@ -41,22 +41,28 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return &BrowserDialerClient{}
 	}
 
+	globalDialerAccess.Lock()
+	defer globalDialerAccess.Unlock()
+
+	if globalMuxManagerMap == nil {
+		globalMuxManagerMap = make(map[dialerConf]muxManager)
+	}
+	if muxMan, found := globalMuxManagerMap[dialerConf{dest, streamSettings}]; found {
+		return muxMan.getClient(ctx, dest, streamSettings)
+	}
+	muxMan := muxManager{}
+	globalMuxManagerMap[dialerConf{dest, streamSettings}] = muxMan
+	return muxMan.getClient(ctx, dest, streamSettings)
+}
+
+func createHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) *DefaultDialerClient {
+
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
 	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
 
-	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
-
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]DialerClient)
-	}
-
 	if isH3 {
 		dest.Network = net.Network_UDP
-	}
-	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
-		return client
 	}
 
 	var gotlsConfig *gotls.Config
@@ -151,7 +157,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		uploadTransport = nil
 	}
 
-	client := &DefaultDialerClient{
+	client := DefaultDialerClient{
 		transportConfig: streamSettings.ProtocolSettings.(*Config),
 		download: &http.Client{
 			Transport: downloadTransport,
@@ -165,8 +171,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialUploadConn: dialContext,
 	}
 
-	globalDialerMap[dialerConf{dest, streamSettings}] = client
-	return client
+	return &client
 }
 
 func init() {
@@ -180,7 +185,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-
 	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
@@ -213,6 +217,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		// calls get automatically batched together into larger POST requests.
 		// without batching, bandwidth is extremely limited.
 		for {
+
 			chunk, err := uploadPipeReader.ReadMultiBuffer()
 			if err != nil {
 				break

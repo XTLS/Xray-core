@@ -13,10 +13,23 @@ message Config {
   RandRangeConfig scMaxConcurrentPosts = 4;
   RandRangeConfig scMaxEachPostBytes = 5;
   RandRangeConfig scMinPostsIntervalMs = 6;
-  bool noSSEHeader = 7;
+  bool noSSEHeader = 8;
+  Multiplexing mux = 7;
 }
 
 message RandRangeConfig {
     int32 from = 1;
     int32 to = 2;
+}
+
+message Multiplexing {
+  enum MultiplexingMode {
+    DISABLED = 0;
+    PREFER_EXTISTING = 1;
+    PREFER_NEW = 2;
+  }
+  MultiplexingMode mode = 3;
+  RandRangeConfig maxConnectionConcurrency = 4;
+  RandRangeConfig maxConnectionLifetime = 5;
+  int32 maxConnections = 6;
 }

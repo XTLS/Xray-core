@@ -35,7 +35,6 @@ func (c *Config) GetRequestHeader() http.Header {
 	}
 	return header
 }
-
 func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
 	if c.ScMaxConcurrentPosts == nil || c.ScMaxConcurrentPosts.To == 0 {
 		return RandRangeConfig{
@@ -54,10 +53,8 @@ func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
 			To:   1000000,
 		}
 	}
-
 	return *c.ScMaxEachPostBytes
 }
-
 func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
 		return RandRangeConfig{
@@ -67,6 +64,32 @@ func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	}
 
 	return *c.ScMinPostsIntervalMs
+}
+
+func (c *Multiplexing) GetNormalizedConnectionLifetime() RandRangeConfig {
+	r := c.GetMaxConnectionLifetime()
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 100,
+			To:   300,
+		}
+	}
+
+	return *r
+}
+
+func (c *Multiplexing) GetNormalizedMaxConnectionConcurrency() RandRangeConfig {
+	r := c.GetMaxConnectionConcurrency()
+
+	if r == nil {
+		r = &RandRangeConfig{
+			From: 25,
+			To:   45,
+		}
+	}
+
+	return *r
 }
 
 func init() {
