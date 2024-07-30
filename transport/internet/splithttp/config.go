@@ -72,8 +72,8 @@ func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 func (c *Config) GetNormalizedResponseOkPadding() RandRangeConfig {
 	if c.ResponseOkPadding == nil || c.ResponseOkPadding.To == 0 {
 		return RandRangeConfig{
-			From: 0,
-			To:   0,
+			From: 100,
+			To:   1000,
 		}
 	}
 
