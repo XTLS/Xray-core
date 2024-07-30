@@ -35,9 +35,9 @@ func (m *muxManager) getClient(ctx context.Context, dest net.Destination, stream
 		m.removeExpiredConnections()
 	}
 	switch m.config.GetMode() {
-	case Multiplexing_PREFRE_EXTISTING:
+	case Multiplexing_PREFER_EXTISTING:
 		return m.dialPreferExisting(ctx, dest, streamSettings)
-	case Multiplexing_PREFRE_NEW:
+	case Multiplexing_PREFER_NEW:
 		return m.dialPreferNew(ctx, dest, streamSettings)
 	default:
 		return &muxDialerClient{

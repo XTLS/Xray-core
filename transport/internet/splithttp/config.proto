@@ -25,8 +25,8 @@ message RandRangeConfig {
 message Multiplexing {
   enum MultiplexingMode {
     DISABLED = 0;
-    PREFRE_EXTISTING = 1;
-    PREFRE_NEW = 2;
+    PREFER_EXTISTING = 1;
+    PREFER_NEW = 2;
   }
   MultiplexingMode mode = 3;
   RandRangeConfig maxConnectionConcurrency = 4;
