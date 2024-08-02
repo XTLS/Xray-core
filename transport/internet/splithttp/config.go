@@ -69,6 +69,17 @@ func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	return *c.ScMinPostsIntervalMs
 }
 
+func (c *Config) GetNormalizedResponseOkPadding() RandRangeConfig {
+	if c.ResponseOkPadding == nil || c.ResponseOkPadding.To == 0 {
+		return RandRangeConfig{
+			From: 100,
+			To:   1000,
+		}
+	}
+
+	return *c.ResponseOkPadding
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)

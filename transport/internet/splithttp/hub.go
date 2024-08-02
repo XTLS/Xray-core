@@ -124,6 +124,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	currentSession := h.upsertSession(sessionId)
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
+	responseOkPadding := h.ln.config.GetNormalizedResponseOkPadding()
 
 	if request.Method == "POST" {
 		seq := ""
@@ -192,6 +193,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		// send a chunk immediately to enable CDN streaming.
 		// many CDN buffer the response headers until the origin starts sending
 		// the body, with no way to turn it off.
+		padding := int(responseOkPadding.roll())
+		for i := 0; i < padding; i++ {
+			writer.Write([]byte("o"))
+		}
 		writer.Write([]byte("ok"))
 		responseFlusher.Flush()
 
