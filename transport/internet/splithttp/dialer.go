@@ -90,9 +90,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	if isH3 {
 		quicConfig := &quic.Config{
-			KeepAlivePeriod:      0,
-			HandshakeIdleTimeout: time.Second * 8,
-			MaxIdleTimeout:       time.Second * 300,
+			MaxIdleTimeout: time.Second * 300,
 		}
 		roundTripper := &http3.RoundTripper{
 			QUICConfig:      quicConfig,
