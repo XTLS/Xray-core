@@ -89,7 +89,13 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	var uploadTransport http.RoundTripper
 
 	if isH3 {
+		quicConfig := &quic.Config{
+			KeepAlivePeriod:      0,
+			HandshakeIdleTimeout: time.Second * 8,
+			MaxIdleTimeout:       time.Second * 300,
+		}
 		roundTripper := &http3.RoundTripper{
+			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
