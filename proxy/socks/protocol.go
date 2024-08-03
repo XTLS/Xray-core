@@ -74,7 +74,7 @@ func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer)
 		if err != nil {
 			return nil, errors.New("failed to read domain for socks 4a").Base(err)
 		}
-		address = net.DomainAddress(domain)
+		address = net.ParseAddress(domain)
 	}
 
 	switch cmd {
