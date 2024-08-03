@@ -57,3 +57,12 @@ func (v *MemoryValidator) Get(id uuid.UUID) *protocol.MemoryUser {
 	}
 	return nil
 }
+
+// Get a VLESS user with email, nil if user doesn't exist.
+func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
+	u, _ := v.email.Load(email)
+	if u != nil {
+		return u.(*protocol.MemoryUser)
+	}
+	return nil
+}

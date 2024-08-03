@@ -89,17 +89,17 @@ func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) 
 	defer i.Unlock()
 
 	account := u.Account.(*MemoryAccount)
-	if account.Email != "" {
+	if u.Email != "" {
 		for idx := range i.users {
-			if i.users[idx].Email == account.Email {
-				return errors.New("User ", account.Email, " already exists.")
+			if i.users[idx].Email == u.Email {
+				return errors.New("User ", u.Email, " already exists.")
 			}
 		}
 	}
 	i.users = append(i.users, &User{
 		Key:   account.Key,
-		Email: account.Email,
-		Level: account.Level,
+		Email: u.Email,
+		Level: int32(u.Level),
 	})
 
 	// sync to multi service
@@ -146,6 +146,27 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 		C.Map(i.users, func(it *User) string { return it.Key }),
 	)
 
+	return nil
+}
+
+// GetUser implements proxy.UserManager.GetUser().
+func (i *MultiUserInbound) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	if email == "" {
+		return nil
+	}
+	
+	i.Lock()
+	defer i.Unlock()
+
+	for _, u := range i.users {
+		if strings.EqualFold(u.Email, email) {
+			return &protocol.MemoryUser{
+				Email: u.Email,
+				Level: uint32(u.Level),
+				Account: &MemoryAccount{Key: u.Key},
+			}
+		}
+	}
 	return nil
 }
 
@@ -197,6 +218,7 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
+		Account: &MemoryAccount{Key: user.Key},
 	}
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
@@ -225,6 +247,7 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	inbound.User = &protocol.MemoryUser{
 		Email: user.Email,
 		Level: uint32(user.Level),
+		Account: &MemoryAccount{Key: user.Key},
 	}
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,

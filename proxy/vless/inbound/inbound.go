@@ -172,6 +172,11 @@ func (h *Handler) RemoveUser(ctx context.Context, e string) error {
 	return h.validator.Del(e)
 }
 
+// GetUser implements proxy.UserManager.GetUser().
+func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	return h.validator.GetByEmail(email)
+}
+
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
