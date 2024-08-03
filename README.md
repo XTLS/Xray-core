@@ -4,6 +4,10 @@
 
 [README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
 
+## NFTs
+
+[Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633)
+
 ## License
 
 [Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
