@@ -98,6 +98,10 @@ func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundR
 	return &AlterInboundResponse{}, operation.ApplyInbound(ctx, handler)
 }
 
+func (s *handlerServer) GetInboundUser(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUserResponse, error) {
+	return &GetInboundUserResponse{}, nil
+}
+
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
 	if err := core.AddOutboundHandler(s.s, request.Outbound); err != nil {
 		return nil, err

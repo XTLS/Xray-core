@@ -37,6 +37,15 @@ message AlterInboundRequest {
 
 message AlterInboundResponse {}
 
+message GetInboundUserRequest {
+  string tag = 1;
+  string email = 2;
+}
+
+message GetInboundUserResponse {
+  xray.common.protocol.User user = 1;
+}
+
 message AddOutboundRequest {
   core.OutboundHandlerConfig outbound = 1;
 }
@@ -62,6 +71,8 @@ service HandlerService {
   rpc RemoveInbound(RemoveInboundRequest) returns (RemoveInboundResponse) {}
 
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
+
+  rpc GetInboundUser(GetInboundUserRequest) returns (GetInboundUserResponse) {}
 
   rpc AddOutbound(AddOutboundRequest) returns (AddOutboundResponse) {}
 
