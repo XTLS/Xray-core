@@ -22,6 +22,18 @@ type Counter interface {
 	Add(int64) int64
 }
 
+// OnlineMap is the interface for stats.
+//
+// xray:api:stable
+type OnlineMap interface {
+	// Count is the current value of the OnlineMap.
+	Count() int
+	// AddIP adds a ip to the current OnlineMap.
+	AddIP(string)
+	// List is the current OnlineMap ip list.
+	List() []string
+}
+
 // Channel is the interface for stats channel.
 //
 // xray:api:stable
@@ -72,6 +84,13 @@ type Manager interface {
 	// GetCounter returns a counter by its identifier.
 	GetCounter(string) Counter
 
+	// RegisterCounter registers a new counter to the manager. The identifier string must not be empty, and unique among other counters.
+	RegisterOnlineMap(string) (OnlineMap, error)
+	// UnregisterCounter unregisters a counter from the manager by its identifier.
+	UnregisterOnlineMap(string) error
+	// GetCounter returns a counter by its identifier.
+	GetOnlineMap(string) OnlineMap
+
 	// RegisterChannel registers a new channel to the manager. The identifier string must not be empty, and unique among other channels.
 	RegisterChannel(string) (Channel, error)
 	// UnregisterChannel unregisters a channel from the manager by its identifier.
@@ -88,6 +107,16 @@ func GetOrRegisterCounter(m Manager, name string) (Counter, error) {
 	}
 
 	return m.RegisterCounter(name)
+}
+
+// GetOrRegisterCounter tries to get the StatCounter first. If not exist, it then tries to create a new counter.
+func GetOrRegisterOnlineMap(m Manager, name string) (OnlineMap, error) {
+	onlineMap := m.GetOnlineMap(name)
+	if onlineMap != nil {
+		return onlineMap, nil
+	}
+
+	return m.RegisterOnlineMap(name)
 }
 
 // GetOrRegisterChannel tries to get the StatChannel first. If not exist, it then tries to create a new channel.
@@ -127,6 +156,21 @@ func (NoopManager) UnregisterCounter(string) error {
 
 // GetCounter implements Manager.
 func (NoopManager) GetCounter(string) Counter {
+	return nil
+}
+
+// RegisterCounter implements Manager.
+func (NoopManager) RegisterOnlineMap(string) (OnlineMap, error) {
+	return nil, errors.New("not implemented")
+}
+
+// UnregisterCounter implements Manager.
+func (NoopManager) UnregisterOnlineMap(string) error {
+	return nil
+}
+
+// GetCounter implements Manager.
+func (NoopManager) GetOnlineMap(string) OnlineMap {
 	return nil
 }
 

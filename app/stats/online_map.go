@@ -1,0 +1,79 @@
+package stats
+
+import (
+	"sync"
+	"time"
+)
+
+// OnlineMap is an implementation of stats.OnlineMap.
+type OnlineMap struct {
+	value  int
+	ipList map[string]time.Time
+	access sync.RWMutex
+}
+
+// Count implements stats.OnlineMap.
+func (c *OnlineMap) Count() int {
+	return c.value
+}
+
+// List implements stats.OnlineMap.
+func (c *OnlineMap) List() []string {
+	return c.GetKeys()
+}
+
+// AddIP implements stats.OnlineMap.
+func (c *OnlineMap) AddIP(ip string) {
+	list := c.ipList
+
+	keys := c.GetKeys()
+	if list == nil {
+		list = map[string]time.Time{}
+	}
+	if ip == "127.0.0.1" {
+		return
+	}
+	if !contains(keys, ip) {
+		c.access.Lock()
+		list[ip] = time.Now()
+		c.access.Unlock()
+	}
+	list = c.RemoveExpiredIPs(list)
+
+	c.value = len(list)
+	c.ipList = list
+}
+
+func (c *OnlineMap) GetKeys() []string {
+	c.access.RLock()
+	defer c.access.RUnlock()
+
+	keys := []string{}
+	for k := range c.ipList {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func (c *OnlineMap) RemoveExpiredIPs(list map[string]time.Time) map[string]time.Time {
+	c.access.Lock()
+	defer c.access.Unlock()
+
+	now := time.Now()
+	for k, t := range list {
+		diff := now.Sub(t)
+		if diff.Seconds() > 20 {
+			delete(list, k)
+		}
+	}
+	return list
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}

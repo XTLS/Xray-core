@@ -13,17 +13,19 @@ import (
 
 // Manager is an implementation of stats.Manager.
 type Manager struct {
-	access   sync.RWMutex
-	counters map[string]*Counter
-	channels map[string]*Channel
-	running  bool
+	access    sync.RWMutex
+	counters  map[string]*Counter
+	onlineMap map[string]*OnlineMap
+	channels  map[string]*Channel
+	running   bool
 }
 
 // NewManager creates an instance of Statistics Manager.
 func NewManager(ctx context.Context, config *Config) (*Manager, error) {
 	m := &Manager{
-		counters: make(map[string]*Counter),
-		channels: make(map[string]*Channel),
+		counters:  make(map[string]*Counter),
+		onlineMap: make(map[string]*OnlineMap),
+		channels:  make(map[string]*Channel),
 	}
 
 	return m, nil
@@ -81,6 +83,43 @@ func (m *Manager) VisitCounters(visitor func(string, stats.Counter) bool) {
 			break
 		}
 	}
+}
+
+// RegisterOnlineMap implements stats.Manager.
+func (m *Manager) RegisterOnlineMap(name string) (stats.OnlineMap, error) {
+	m.access.Lock()
+	defer m.access.Unlock()
+
+	if _, found := m.onlineMap[name]; found {
+		return nil, errors.New("onlineMap ", name, " already registered.")
+	}
+	errors.LogDebug(context.Background(), "create new onlineMap ", name)
+	om := new(OnlineMap)
+	m.onlineMap[name] = om
+	return om, nil
+}
+
+// UnregisterOnlineMap implements stats.Manager.
+func (m *Manager) UnregisterOnlineMap(name string) error {
+	m.access.Lock()
+	defer m.access.Unlock()
+
+	if _, found := m.onlineMap[name]; found {
+		errors.LogDebug(context.Background(), "remove onlineMap ", name)
+		delete(m.onlineMap, name)
+	}
+	return nil
+}
+
+// GetOnlineMap implements stats.Manager.
+func (m *Manager) GetOnlineMap(name string) stats.OnlineMap {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	if om, found := m.onlineMap[name]; found {
+		return om
+	}
+	return nil
 }
 
 // RegisterChannel implements stats.Manager.
