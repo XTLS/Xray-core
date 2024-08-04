@@ -84,11 +84,11 @@ type Manager interface {
 	// GetCounter returns a counter by its identifier.
 	GetCounter(string) Counter
 
-	// RegisterCounter registers a new counter to the manager. The identifier string must not be empty, and unique among other counters.
+	// RegisterOnlineMap registers a new onlinemap to the manager. The identifier string must not be empty, and unique among other onlinemaps.
 	RegisterOnlineMap(string) (OnlineMap, error)
-	// UnregisterCounter unregisters a counter from the manager by its identifier.
+	// UnregisterOnlineMap unregisters a onlinemap from the manager by its identifier.
 	UnregisterOnlineMap(string) error
-	// GetCounter returns a counter by its identifier.
+	// GetOnlineMap returns a onlinemap by its identifier.
 	GetOnlineMap(string) OnlineMap
 
 	// RegisterChannel registers a new channel to the manager. The identifier string must not be empty, and unique among other channels.
@@ -109,7 +109,7 @@ func GetOrRegisterCounter(m Manager, name string) (Counter, error) {
 	return m.RegisterCounter(name)
 }
 
-// GetOrRegisterCounter tries to get the StatCounter first. If not exist, it then tries to create a new counter.
+// GetOrRegisterOnlineMap tries to get the OnlineMap first. If not exist, it then tries to create a new onlinemap.
 func GetOrRegisterOnlineMap(m Manager, name string) (OnlineMap, error) {
 	onlineMap := m.GetOnlineMap(name)
 	if onlineMap != nil {
@@ -159,17 +159,17 @@ func (NoopManager) GetCounter(string) Counter {
 	return nil
 }
 
-// RegisterCounter implements Manager.
+// RegisterOnlineMap implements Manager.
 func (NoopManager) RegisterOnlineMap(string) (OnlineMap, error) {
 	return nil, errors.New("not implemented")
 }
 
-// UnregisterCounter implements Manager.
+// UnregisterOnlineMap implements Manager.
 func (NoopManager) UnregisterOnlineMap(string) error {
 	return nil
 }
 
-// GetCounter implements Manager.
+// GetOnlineMap implements Manager.
 func (NoopManager) GetOnlineMap(string) OnlineMap {
 	return nil
 }
