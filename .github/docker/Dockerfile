@@ -25,4 +25,4 @@ ENTRYPOINT [ "/usr/bin/xray" ]
 CMD [ "-config", "/etc/xray/config.json" ]
 
 ARG flavor=v2fly
-COPY --from=build /$flavor /usr/share/xray
+COPY --from=build --chmod=644 /$flavor /usr/share/xray
