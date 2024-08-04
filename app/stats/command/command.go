@@ -48,6 +48,20 @@ func (s *statsServer) GetStats(ctx context.Context, request *GetStatsRequest) (*
 	}, nil
 }
 
+func (s *statsServer) GetStatsOnline(ctx context.Context, request *GetStatsRequest) (*GetStatsResponse, error) {
+	c := s.stats.GetOnlineMap(request.Name)
+	if c == nil {
+		return nil, errors.New(request.Name, " not found.")
+	}
+	value := int64(c.Count())
+	return &GetStatsResponse{
+		Stat: &Stat{
+			Name:  request.Name,
+			Value: value,
+		},
+	}, nil
+}
+
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
 	matcher, err := strmatcher.Substr.New(request.Pattern)
 	if err != nil {
