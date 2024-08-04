@@ -26,6 +26,9 @@ import (
 	"golang.org/x/net/http2"
 )
 
+// this is consistent with other xray transports
+const connIdleTimeout = 300 * time.Second
+
 type dialerConf struct {
 	net.Destination
 	*internet.MemoryStreamConfig
@@ -90,7 +93,13 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	if isH3 {
 		quicConfig := &quic.Config{
-			MaxIdleTimeout: time.Second * 300,
+			MaxIdleTimeout: connIdleTimeout,
+
+			// these two are defaults of quic-go/http3. the default of quic-go (no
+			// http3) is different, so it is hardcoded here for clarity.
+			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
+			MaxIncomingStreams: -1,
+			KeepAlivePeriod:    time.Second * 10,
 		}
 		roundTripper := &http3.RoundTripper{
 			QUICConfig:      quicConfig,
@@ -135,7 +144,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
 		}
 		uploadTransport = downloadTransport
 	} else {
@@ -146,7 +155,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		downloadTransport = &http.Transport{
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
 			// chunked transfer download with keepalives is buggy with
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
