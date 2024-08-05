@@ -94,7 +94,7 @@ func (m *Manager) RegisterOnlineMap(name string) (stats.OnlineMap, error) {
 		return nil, errors.New("onlineMap ", name, " already registered.")
 	}
 	errors.LogDebug(context.Background(), "create new onlineMap ", name)
-	om := new(OnlineMap)
+	om := NewOnlineMap()
 	m.onlineMap[name] = om
 	return om, nil
 }
