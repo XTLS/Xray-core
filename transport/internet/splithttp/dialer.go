@@ -26,8 +26,15 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// this is consistent with other xray transports
+// defines the maximum time an idle TCP session can survive in the tunnel, so
+// it should be consistent across HTTP versions and with other transports.
 const connIdleTimeout = 300 * time.Second
+
+// consistent with quic-go
+const h3KeepalivePeriod = 10 * time.Second
+
+// consistent with chrome
+const h2KeepalivePeriod = 45 * time.Second
 
 type dialerConf struct {
 	net.Destination
@@ -99,7 +106,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
 			MaxIncomingStreams: -1,
-			KeepAlivePeriod:    time.Second * 10,
+			KeepAlivePeriod:    h3KeepalivePeriod,
 		}
 		roundTripper := &http3.RoundTripper{
 			QUICConfig:      quicConfig,
@@ -145,6 +152,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 				return dialContext(ctxInner)
 			},
 			IdleConnTimeout: connIdleTimeout,
+			ReadIdleTimeout: h2KeepalivePeriod,
 		}
 		uploadTransport = downloadTransport
 	} else {
