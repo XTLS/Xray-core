@@ -33,7 +33,20 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Header {
 		header.Add(k, v)
 	}
+
+	paddingLen := c.GetNormalizedPadding().roll()
+	if paddingLen > 0 {
+		header.Add("X-Padding", strings.Repeat("0", int(paddingLen)))
+	}
+
 	return header
+}
+
+func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
+	paddingLen := c.GetNormalizedPadding().roll()
+	if paddingLen > 0 {
+		writer.Header().Set("X-Padding", strings.Repeat("0", int(paddingLen)))
+	}
 }
 
 func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
@@ -69,15 +82,15 @@ func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
 	return *c.ScMinPostsIntervalMs
 }
 
-func (c *Config) GetNormalizedResponseOkPadding() RandRangeConfig {
-	if c.ResponseOkPadding == nil || c.ResponseOkPadding.To == 0 {
+func (c *Config) GetNormalizedPadding() RandRangeConfig {
+	if c.Padding == nil || c.Padding.To == 0 {
 		return RandRangeConfig{
 			From: 100,
 			To:   1000,
 		}
 	}
 
-	return *c.ResponseOkPadding
+	return *c.Padding
 }
 
 func init() {
