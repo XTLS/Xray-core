@@ -46,7 +46,9 @@ func executeInboundUser(cmd *base.Command, args []string) {
 	if err != nil {
 		base.Fatalf("failed to get inbound user: %s", err)
 	}
-	account, err := resp.User.Account.GetInstance()
 	showJSONResponse(resp)
-	showJSONResponse(account) // TODO auto convert
+	if resp.User != nil { // TODO auto convert
+		account, _ := resp.User.Account.GetInstance()
+		showJSONResponse(account)
+	}
 }
