@@ -607,6 +607,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ShortIds = make([][]byte, len(c.ShortIds))
 		for i, s := range c.ShortIds {
 			config.ShortIds[i] = make([]byte, 8)
+			if len(s)%2 != 0 && len(s) < 16 {
+				s += "0"
+			}
 			if _, err = hex.Decode(config.ShortIds[i], []byte(s)); err != nil {
 				return nil, errors.New(`invalid "shortIds[`, i, `]": `, s)
 			}
@@ -639,6 +642,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`non-empty "shortIds", please use "shortId" instead`)
 		}
 		config.ShortId = make([]byte, 8)
+		if len(c.ShortId)%2 != 0 && len(c.ShortId) < 16 {
+			c.ShortId += "0"
+		}
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
 			return nil, errors.New(`invalid "shortId": `, c.ShortId)
 		}
@@ -789,10 +795,27 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	var customSockopts []*internet.CustomSockopt
 
 	for _, copt := range c.CustomSockopt {
+		var opt string
+		var level string
+		var value string
+		opt, err := parseHex(copt.Opt)
+		if err != nil {
+			return nil, errors.New("Fail to parse CustomSockopt opt").Base(err).AtError()
+		}
+		level, err = parseHex(copt.Level)
+		if err != nil {
+			return nil, errors.New("Fail to parse CustomSockopt level").Base(err).AtError()
+		}
+		if copt.Type == "int" {
+			value, err = parseHex(copt.Value)
+			if err != nil {
+				return nil, errors.New("Fail to parse CustomSockopt int").Base(err).AtError()
+			}
+		}
 		customSockopt := &internet.CustomSockopt{
-			Level: copt.Level,
-			Opt:   copt.Opt,
-			Value: copt.Value,
+			Level: level,
+			Opt:   opt,
+			Value: value,
 			Type:  copt.Type,
 		}
 		customSockopts = append(customSockopts, customSockopt)
@@ -1001,4 +1024,16 @@ func (v *ProxyConfig) Build() (*internet.ProxyConfig, error) {
 		Tag:                 v.Tag,
 		TransportLayerProxy: v.TransportLayerProxy,
 	}, nil
+}
+
+func parseHex(s string) (string, error) {
+	if len(s) < 3 || !strings.HasPrefix(s, "0x") {
+		return "", errors.New("Hex must start with 0x but current is:", s)
+	}
+	ints, err := strconv.ParseInt(s[2:], 16, 64)
+	if err != nil {
+		return "", errors.New("Invalid hex:", s)
+	}
+	s = strconv.FormatInt(ints, 10)
+	return s, nil
 }
