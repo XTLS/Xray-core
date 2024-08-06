@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -726,6 +727,14 @@ func (c *Config) Build() (*core.Config, error) {
 		oc, err := rawOutboundConfig.Build()
 		if err != nil {
 			return nil, err
+		}
+		config.Outbound = append(config.Outbound, oc)
+	}
+	// If no outbound, create a freedom as default
+	if len(config.Outbound) == 0 {
+		errors.LogWarning(context.Background(), "No outbound found, creating a freedom outbound as default")
+		oc := &core.OutboundHandlerConfig{
+			ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 		}
 		config.Outbound = append(config.Outbound, oc)
 	}
