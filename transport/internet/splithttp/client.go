@@ -38,6 +38,12 @@ type DefaultDialerClient struct {
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
+func splitHttpWriteHeaderWhenEmpty(headers *http.Header, key string, value string) {
+	if headers.Get(key) == "" {
+		headers.Add(key, value)
+	}
+}
+
 func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
 	var remoteAddr gonet.Addr
 	var localAddr gonet.Addr
@@ -74,6 +80,10 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		}
 
 		req.Header = c.transportConfig.GetRequestHeader()
+		// Tell the middleboxes to expect an SSE response
+		splitHttpWriteHeaderWhenEmpty(&req.Header, "Accept", "text/event-stream")
+		// Tell the middleboxes to not serve from cache altogether
+		splitHttpWriteHeaderWhenEmpty(&req.Header, "Cache-Control", "no-cache")
 
 		response, err := c.download.Do(req)
 		gotConn.Close()
