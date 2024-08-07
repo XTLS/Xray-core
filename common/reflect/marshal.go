@@ -46,7 +46,11 @@ func marshalSlice(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) in
 }
 
 func isNullValue(f reflect.StructField, rv reflect.Value) bool {
-	if tag := f.Tag.Get("json"); strings.Contains(tag, "omitempty") {
+	if rv.Kind() == reflect.String && rv.Len() == 0 {
+		return true
+	} else if !isValueKind(rv.Kind()) && rv.IsNil() {
+		return true
+	} else if tag := f.Tag.Get("json"); strings.Contains(tag, "omitempty") {
 		if !rv.IsValid() || rv.IsZero() {
 			return true
 		}
@@ -65,6 +69,8 @@ func toJsonName(f reflect.StructField) string {
 	if tag := f.Tag.Get("json"); len(tag) > 0 {
 		if before, _, ok := strings.Cut(tag, ","); ok {
 			return before
+		} else {
+			return tag
 		}
 	}
 	return f.Name
@@ -137,6 +143,11 @@ func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 			return d.AsAddress().String(), true
 		}
 		return nil, false
+	case cnet.Address:
+		if d := v.(cnet.Address); d != nil {
+			return d.String(), true
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -182,8 +193,8 @@ func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 		return nil
 	}
 
-	if isValueKind(k) {
-		if ty := rv.Type().Name(); k.String() != ty {
+	if ty := rv.Type().Name(); isValueKind(k) {
+		if k.String() != ty {
 			if s, ok := marshalIString(v); ok {
 				return s
 			}
