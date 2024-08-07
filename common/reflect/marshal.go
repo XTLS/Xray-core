@@ -2,11 +2,13 @@ package reflect
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 
 	cnet "github.com/xtls/xray-core/common/net"
 	cserial "github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf"
 )
 
 func MarshalToJson(v interface{}, insertTypeInfo bool) (string, bool) {
@@ -126,6 +128,29 @@ func marshalIString(v interface{}) (r string, ok bool) {
 	return "", false
 }
 
+func serializePortList(portList *cnet.PortList) (interface{}, bool) {
+	if portList == nil {
+		return nil, false
+	}
+
+	n := len(portList.Range)
+	if n == 1 {
+		if first := portList.Range[0]; first.From == first.To {
+			return first.From, true
+		}
+	}
+
+	r := make([]string, 0, n)
+	for _, pr := range portList.Range {
+		if pr.From == pr.To {
+			r = append(r, pr.FromPort().String())
+		} else {
+			r = append(r, fmt.Sprintf("%d-%d", pr.From, pr.To))
+		}
+	}
+	return strings.Join(r, ","), true
+}
+
 func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) (interface{}, bool) {
 	switch ty := v.(type) {
 	case cserial.TypedMessage:
@@ -139,13 +164,19 @@ func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 	case *json.RawMessage, json.RawMessage:
 		return ty, true
 	case *cnet.IPOrDomain:
-		if d := v.(*cnet.IPOrDomain); d != nil {
-			return d.AsAddress().String(), true
+		if domain := v.(*cnet.IPOrDomain); domain != nil {
+			return domain.AsAddress().String(), true
 		}
 		return nil, false
+	case *cnet.PortList:
+		npl := v.(*cnet.PortList)
+		return serializePortList(npl)
+	case *conf.PortList:
+		cpl := v.(*conf.PortList)
+		return serializePortList(cpl.Build())
 	case cnet.Address:
-		if d := v.(cnet.Address); d != nil {
-			return d.String(), true
+		if addr := v.(cnet.Address); addr != nil {
+			return addr.String(), true
 		}
 		return nil, false
 	default:
@@ -201,6 +232,8 @@ func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 		}
 		return v
 	}
+
+	// fmt.Println("kind:", k, "type:", rv.Type().Name())
 
 	switch k {
 	case reflect.Struct:
