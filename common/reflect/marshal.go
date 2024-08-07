@@ -3,6 +3,7 @@ package reflect
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 
 	cnet "github.com/xtls/xray-core/common/net"
 	cserial "github.com/xtls/xray-core/common/serial"
@@ -57,6 +58,22 @@ func isNullValue(v interface{}) bool {
 	}
 }
 
+func toJsonName(f reflect.StructField) string {
+	if tags := f.Tag.Get("protobuf"); len(tags) > 0 {
+		for _, tag := range strings.Split(tags, ",") {
+			if before, after, ok := strings.Cut(tag, "="); ok && before == "json" {
+				return after
+			}
+		}
+	}
+	if tag := f.Tag.Get("json"); len(tag) > 0 {
+		if before, _, ok := strings.Cut(tag, ","); ok {
+			return before
+		}
+	}
+	return f.Name
+}
+
 func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
 	r := make(map[string]interface{})
 	t := v.Type()
@@ -64,7 +81,7 @@ func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
 		rv := v.Field(i)
 		if rv.CanInterface() {
 			ft := t.Field(i)
-			name := ft.Name
+			name := toJsonName(ft)
 			value := rv.Interface()
 			tv := marshalInterface(value, ignoreNullValue)
 			if !ignoreNullValue || !isNullValue(tv) {
