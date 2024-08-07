@@ -188,6 +188,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
+		// A web-compliant header telling all middleboxes to disable caching.
+		// Should be able to prevent overloading the cache, or stop CDNs from
+		// teeing the response stream into their cache, causing slowdowns.
+		writer.Header().Set("Cache-Control", "no-store")
 
 		writer.WriteHeader(http.StatusOK)
 		// send a chunk immediately to enable CDN streaming.
