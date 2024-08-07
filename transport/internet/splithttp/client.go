@@ -132,6 +132,10 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	}
 	req.ContentLength = contentLength
 	req.Header = c.transportConfig.GetRequestHeader()
+	// Tell the middleboxes to expect an SSE response
+	splitHttpWriteHeaderWhenEmpty(&req.Header, "Accept", "text/event-stream")
+	// Tell the middleboxes to not serve from cache altogether
+	splitHttpWriteHeaderWhenEmpty(&req.Header, "Cache-Control", "no-cache")
 
 	if c.isH2 || c.isH3 {
 		resp, err := c.upload.Do(req)
