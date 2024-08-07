@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 
+	cnet "github.com/xtls/xray-core/common/net"
 	cserial "github.com/xtls/xray-core/common/serial"
 )
 
@@ -43,6 +44,19 @@ func marshalSlice(v reflect.Value, ignoreNullValue bool) interface{} {
 	return r
 }
 
+func isNullValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	kind := reflect.TypeOf(v).Kind()
+	switch kind {
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
+		return reflect.ValueOf(v).Len() == 0
+	default:
+		return false
+	}
+}
+
 func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
 	r := make(map[string]interface{})
 	t := v.Type()
@@ -53,7 +67,7 @@ func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
 			name := ft.Name
 			value := rv.Interface()
 			tv := marshalInterface(value, ignoreNullValue)
-			if tv != nil || !ignoreNullValue {
+			if !ignoreNullValue || !isNullValue(tv) {
 				r[name] = tv
 			}
 		}
@@ -87,7 +101,6 @@ func marshalIString(v interface{}) (r string, ok bool) {
 			ok = false
 		}
 	}()
-
 	if iStringFn, ok := v.(interface{ String() string }); ok {
 		return iStringFn.String(), true
 	}
@@ -104,10 +117,13 @@ func marshalKnownType(v interface{}, ignoreNullValue bool) (interface{}, bool) {
 		return ty, true
 	case []json.RawMessage:
 		return ty, true
-	case *json.RawMessage:
+	case *json.RawMessage, json.RawMessage:
 		return ty, true
-	case json.RawMessage:
-		return ty, true
+	case *cnet.IPOrDomain:
+		if d := v.(*cnet.IPOrDomain); d != nil {
+			return d.AsAddress().String(), true
+		}
+		return nil, false
 	default:
 		return nil, false
 	}
@@ -152,7 +168,13 @@ func marshalInterface(v interface{}, ignoreNullValue bool) interface{} {
 	if k == reflect.Invalid {
 		return nil
 	}
+
 	if isValueKind(k) {
+		if ty := rv.Type().Name(); k.String() != ty {
+			if s, ok := marshalIString(v); ok {
+				return s
+			}
+		}
 		return v
 	}
 
