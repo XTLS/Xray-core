@@ -9,8 +9,8 @@ import (
 	cserial "github.com/xtls/xray-core/common/serial"
 )
 
-func MarshalToJson(v interface{}) (string, bool) {
-	if itf := marshalInterface(v, true); itf != nil {
+func MarshalToJson(v interface{}, insertTypeInfo bool) (string, bool) {
+	if itf := marshalInterface(v, true, insertTypeInfo); itf != nil {
 		if b, err := json.MarshalIndent(itf, "", "  "); err == nil {
 			return string(b[:]), true
 		}
@@ -18,7 +18,7 @@ func MarshalToJson(v interface{}) (string, bool) {
 	return "", false
 }
 
-func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool) interface{} {
+func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool, insertTypeInfo bool) interface{} {
 	if v == nil {
 		return nil
 	}
@@ -26,36 +26,32 @@ func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool) interfac
 	if err != nil {
 		return nil
 	}
-	r := marshalInterface(tmsg, ignoreNullValue)
-	if msg, ok := r.(map[string]interface{}); ok {
+	r := marshalInterface(tmsg, ignoreNullValue, insertTypeInfo)
+	if msg, ok := r.(map[string]interface{}); ok && insertTypeInfo {
 		msg["_TypedMessage_"] = v.Type
 	}
 	return r
 }
 
-func marshalSlice(v reflect.Value, ignoreNullValue bool) interface{} {
+func marshalSlice(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) interface{} {
 	r := make([]interface{}, 0)
 	for i := 0; i < v.Len(); i++ {
 		rv := v.Index(i)
 		if rv.CanInterface() {
 			value := rv.Interface()
-			r = append(r, marshalInterface(value, ignoreNullValue))
+			r = append(r, marshalInterface(value, ignoreNullValue, insertTypeInfo))
 		}
 	}
 	return r
 }
 
-func isNullValue(v interface{}) bool {
-	if v == nil {
-		return true
+func isNullValue(f reflect.StructField, rv reflect.Value) bool {
+	if tag := f.Tag.Get("json"); strings.Contains(tag, "omitempty") {
+		if !rv.IsValid() || rv.IsZero() {
+			return true
+		}
 	}
-	kind := reflect.TypeOf(v).Kind()
-	switch kind {
-	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
-		return reflect.ValueOf(v).Len() == 0
-	default:
-		return false
-	}
+	return false
 }
 
 func toJsonName(f reflect.StructField) string {
@@ -74,17 +70,17 @@ func toJsonName(f reflect.StructField) string {
 	return f.Name
 }
 
-func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
+func marshalStruct(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) interface{} {
 	r := make(map[string]interface{})
 	t := v.Type()
 	for i := 0; i < v.NumField(); i++ {
 		rv := v.Field(i)
 		if rv.CanInterface() {
 			ft := t.Field(i)
-			name := toJsonName(ft)
-			value := rv.Interface()
-			tv := marshalInterface(value, ignoreNullValue)
-			if !ignoreNullValue || !isNullValue(tv) {
+			if !ignoreNullValue || !isNullValue(ft, rv) {
+				name := toJsonName(ft)
+				value := rv.Interface()
+				tv := marshalInterface(value, ignoreNullValue, insertTypeInfo)
 				r[name] = tv
 			}
 		}
@@ -92,7 +88,7 @@ func marshalStruct(v reflect.Value, ignoreNullValue bool) interface{} {
 	return r
 }
 
-func marshalMap(v reflect.Value, ignoreNullValue bool) interface{} {
+func marshalMap(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) interface{} {
 	// policy.level is map[uint32] *struct
 	kt := v.Type().Key()
 	vt := reflect.TypeOf((*interface{})(nil))
@@ -102,7 +98,7 @@ func marshalMap(v reflect.Value, ignoreNullValue bool) interface{} {
 		rv := v.MapIndex(key)
 		if rv.CanInterface() {
 			iv := rv.Interface()
-			tv := marshalInterface(iv, ignoreNullValue)
+			tv := marshalInterface(iv, ignoreNullValue, insertTypeInfo)
 			if tv != nil || !ignoreNullValue {
 				r.SetMapIndex(key, reflect.ValueOf(&tv))
 			}
@@ -124,12 +120,12 @@ func marshalIString(v interface{}) (r string, ok bool) {
 	return "", false
 }
 
-func marshalKnownType(v interface{}, ignoreNullValue bool) (interface{}, bool) {
+func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) (interface{}, bool) {
 	switch ty := v.(type) {
 	case cserial.TypedMessage:
-		return marshalTypedMessage(&ty, ignoreNullValue), true
+		return marshalTypedMessage(&ty, ignoreNullValue, insertTypeInfo), true
 	case *cserial.TypedMessage:
-		return marshalTypedMessage(ty, ignoreNullValue), true
+		return marshalTypedMessage(ty, ignoreNullValue, insertTypeInfo), true
 	case map[string]json.RawMessage:
 		return ty, true
 	case []json.RawMessage:
@@ -171,9 +167,9 @@ func isValueKind(kind reflect.Kind) bool {
 	}
 }
 
-func marshalInterface(v interface{}, ignoreNullValue bool) interface{} {
+func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) interface{} {
 
-	if r, ok := marshalKnownType(v, ignoreNullValue); ok {
+	if r, ok := marshalKnownType(v, ignoreNullValue, insertTypeInfo); ok {
 		return r
 	}
 
@@ -197,13 +193,13 @@ func marshalInterface(v interface{}, ignoreNullValue bool) interface{} {
 
 	switch k {
 	case reflect.Struct:
-		return marshalStruct(rv, ignoreNullValue)
+		return marshalStruct(rv, ignoreNullValue, insertTypeInfo)
 	case reflect.Slice:
-		return marshalSlice(rv, ignoreNullValue)
+		return marshalSlice(rv, ignoreNullValue, insertTypeInfo)
 	case reflect.Array:
-		return marshalSlice(rv, ignoreNullValue)
+		return marshalSlice(rv, ignoreNullValue, insertTypeInfo)
 	case reflect.Map:
-		return marshalMap(rv, ignoreNullValue)
+		return marshalMap(rv, ignoreNullValue, insertTypeInfo)
 	default:
 		break
 	}
