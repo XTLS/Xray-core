@@ -1,6 +1,7 @@
 package reflect
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -13,11 +14,20 @@ import (
 
 func MarshalToJson(v interface{}, insertTypeInfo bool) (string, bool) {
 	if itf := marshalInterface(v, true, insertTypeInfo); itf != nil {
-		if b, err := json.MarshalIndent(itf, "", "  "); err == nil {
+		if b, err := JSONMarshalWithoutEscape(itf); err == nil {
 			return string(b[:]), true
 		}
 	}
 	return "", false
+}
+
+func JSONMarshalWithoutEscape(t interface{}) ([]byte, error) {
+    buffer := &bytes.Buffer{}
+    encoder := json.NewEncoder(buffer)
+	encoder.SetIndent("", "    ")
+    encoder.SetEscapeHTML(false)
+    err := encoder.Encode(t)
+    return buffer.Bytes(), err
 }
 
 func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool, insertTypeInfo bool) interface{} {
