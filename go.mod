@@ -12,7 +12,7 @@ require (
 	github.com/miekg/dns v1.1.61
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.7.0
-	github.com/quic-go/quic-go v0.45.2
+	github.com/quic-go/quic-go v0.46.0
 	github.com/refraction-networking/utls v1.6.7
 	github.com/sagernet/sing v0.4.1
 	github.com/sagernet/sing-shadowsocks v0.2.7
