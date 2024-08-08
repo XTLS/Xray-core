@@ -14,7 +14,7 @@ message Config {
   RandRangeConfig scMaxEachPostBytes = 5;
   RandRangeConfig scMinPostsIntervalMs = 6;
   bool noSSEHeader = 7;
-  RandRangeConfig padding = 8;
+  RandRangeConfig xPaddingHeader = 8;
 }
 
 message RandRangeConfig {

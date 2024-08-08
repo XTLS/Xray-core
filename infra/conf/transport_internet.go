@@ -233,7 +233,7 @@ type SplitHTTPConfig struct {
 	ScMaxEachPostBytes   *Int32Range       `json:"scMaxEachPostBytes"`
 	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
-	Padding              *Int32Range       `json:"padding"`
+	XPaddingHeader       *Int32Range       `json:"xPaddingHeader"`
 }
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
@@ -265,7 +265,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxEachPostBytes:   splithttpNewRandRangeConfig(c.ScMaxEachPostBytes),
 		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
 		NoSSEHeader:          c.NoSSEHeader,
-		Padding:              splithttpNewRandRangeConfig(c.Padding),
+		XPaddingHeader:       splithttpNewRandRangeConfig(c.XPaddingHeader),
 	}
 	return config, nil
 }
