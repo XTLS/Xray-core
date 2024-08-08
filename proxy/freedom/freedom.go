@@ -392,6 +392,29 @@ type FragmentWriter struct {
 func (f *FragmentWriter) Write(b []byte) (int, error) {
 	f.count++
 
+	if f.fragment.PacketsFrom == 1 && f.fragment.PacketsTo == 1 && f.count == 1 {
+		// two TLS Hello Fragments into one tcp segment
+		if f.count != 1 || len(b) <= 5 || b[0] != 22 {
+			return f.writer.Write(b)
+		}
+		recordLen := 5 + ((int(b[3]) << 8) | int(b[4]))
+		if len(b) < recordLen { // maybe already fragmented somehow
+			return f.writer.Write(b)
+		}
+
+		p2 := b[5 : len(b)/2]
+		p1 := []byte{22, 3, 1, byte(len(p2) >> 8), byte(len(p2))}
+		p4 := b[len(b)/2:]
+		p3 := []byte{22, 3, 1, byte(len(p4) >> 8), byte(len(p4))}
+
+		// 😐 Concat requires go v1.22
+		x := append(p1, p2...)
+		x = append(x, p3...)
+		x = append(x, p4...)
+
+		return f.writer.Write(x)
+	}
+
 	if f.fragment.PacketsFrom == 0 && f.fragment.PacketsTo == 1 {
 		if f.count != 1 || len(b) <= 5 || b[0] != 22 {
 			return f.writer.Write(b)
