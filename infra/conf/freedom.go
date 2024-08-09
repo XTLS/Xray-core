@@ -62,8 +62,8 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		var err, err2 error
 
 		switch strings.ToLower(c.Fragment.Packets) {
-		case "recordlayer":
-			// TLS Hello Fragmentation (into two record layer fragments)
+		case "singletlshello":
+			// TLS Hello Fragmentation (into multiple handshake messages but one tcp segment)
 			config.Fragment.PacketsFrom = 1
 			config.Fragment.PacketsTo = 1
 		case "tlshello":
