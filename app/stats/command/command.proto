@@ -48,6 +48,7 @@ message SysStatsResponse {
 
 service StatsService {
   rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {}
+  rpc GetStatsOnline(GetStatsRequest) returns (GetStatsResponse) {}
   rpc QueryStats(QueryStatsRequest) returns (QueryStatsResponse) {}
   rpc GetSysStats(SysStatsRequest) returns (SysStatsResponse) {}
 }
