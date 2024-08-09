@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	gotls "crypto/tls"
 	"fmt"
+	"io"
 	gonet "net"
 	"net/http"
 	"runtime"
@@ -60,7 +61,7 @@ func Test_listenSHAndDial(t *testing.T) {
 
 	var b [1024]byte
 	fmt.Println("test2")
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -72,7 +73,7 @@ func Test_listenSHAndDial(t *testing.T) {
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
-	n, _ = conn.Read(b[:])
+	n, _ = io.ReadFull(conn, b[:])
 	common.Must(err)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -116,7 +117,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 	common.Must(err)
 
 	var b [1024]byte
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	if string(b[:n]) != "1.1.1.1:0" {
 		t.Error("response: ", string(b[:n]))
 	}
@@ -168,7 +169,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	common.Must(err)
 
 	var b [1024]byte
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
 	}
@@ -339,7 +340,7 @@ func Test_listenSHAndDial_Unix(t *testing.T) {
 
 	var b [1024]byte
 	fmt.Println("test2")
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -351,7 +352,7 @@ func Test_listenSHAndDial_Unix(t *testing.T) {
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
-	n, _ = conn.Read(b[:])
+	n, _ = io.ReadFull(conn, b[:])
 	common.Must(err)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -397,7 +398,7 @@ func Test_queryString(t *testing.T) {
 
 	var b [1024]byte
 	fmt.Println("test2")
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
