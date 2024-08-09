@@ -1,9 +1,11 @@
 package convert
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/xtls/xray-core/common/cmdarg"
+	creflect "github.com/xtls/xray-core/common/reflect"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/main/commands/base"
 
@@ -11,11 +13,21 @@ import (
 )
 
 var cmdProtobuf = &base.Command{
-	CustomFlags: false,
-	UsageLine:   "{{.Exec}} convert pb [json file] [json file] ...",
+	CustomFlags: true,
+	UsageLine:   "{{.Exec}} convert pb [-debug] [-type] [json file] [json file] ...",
 	Short:       "Convert multiple json configs to protobuf",
 	Long: `
 Convert multiple json configs to protobuf.
+
+Arguments:
+
+	-d, -debug
+		Show mix.pb as json.
+		FOR DEBUGGING ONLY!
+		DO NOT PASS THIS OUTPUT TO XRAY-CORE!
+
+	-t, -type
+		Inject type information into debug output.
 
 Examples:
 
@@ -25,6 +37,15 @@ Examples:
 }
 
 func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
+
+	var optDump bool
+	var optType bool
+
+	cmd.Flag.BoolVar(&optDump, "d", false, "")
+	cmd.Flag.BoolVar(&optDump, "debug", false, "")
+	cmd.Flag.BoolVar(&optType, "t", false, "")
+	cmd.Flag.BoolVar(&optType, "type", false, "")
+	cmd.Flag.Parse(args)
 
 	unnamedArgs := cmdarg.Arg{}
 	for _, v := range cmd.Flag.Args() {
@@ -38,6 +59,15 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 	pbConfig, err := core.LoadConfig("auto", unnamedArgs)
 	if err != nil {
 		base.Fatalf(err.Error())
+	}
+
+	if optDump {
+		if j, ok := creflect.MarshalToJson(pbConfig, optType); ok {
+			fmt.Println(j)
+			return
+		} else {
+			base.Fatalf("failed to marshal proto config to json.")
+		}
 	}
 
 	bytesConfig, err := proto.Marshal(pbConfig)
