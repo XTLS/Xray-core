@@ -393,19 +393,21 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 	f.count++
 
 	if f.fragment.PacketsFrom == 1 && f.fragment.PacketsTo == 1 && f.count == 1 {
-		// two TLS Hello Fragments into one tcp segment
+		// TLS record layer fragments(for client hello)
+		// Note: TLS handshake doesn't check record layer, so it can be modified by us.
 		if f.count != 1 || len(b) <= 5 || b[0] != 22 {
 			return f.writer.Write(b)
 		}
 		recordLen := 5 + ((int(b[3]) << 8) | int(b[4]))
-		if len(b) < recordLen { // maybe already fragmented somehow
+		if len(b) < recordLen { // Size not match, maybe already fragmented somehow
 			return f.writer.Write(b)
 		}
 
+		// Build new fragmented client hello
 		p2 := b[5 : len(b)/2]
-		p1 := []byte{22, 3, 1, byte(len(p2) >> 8), byte(len(p2))}
+		p1 := []byte{b[0], b[1], b[2], byte(len(p2) >> 8), byte(len(p2))}
 		p4 := b[len(b)/2:]
-		p3 := []byte{22, 3, 1, byte(len(p4) >> 8), byte(len(p4))}
+		p3 := []byte{b[0], b[1], b[2], byte(len(p4) >> 8), byte(len(p4))}
 
 		// 😐 Concat requires go v1.22
 		x := append(p1, p2...)
