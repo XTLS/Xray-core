@@ -143,7 +143,7 @@ func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
-func (h *Handler) GetUser(email string) *protocol.MemoryUser {
+func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
 	user, existing := h.usersByEmail.Get(email)
 	if !existing {
 		h.clients.Add(user)
@@ -323,7 +323,7 @@ func (h *Handler) generateCommand(ctx context.Context, request *protocol.Request
 				}
 
 				errors.LogDebug(ctx, "pick detour handler for port ", port, " for ", availableMin, " minutes.")
-				user := inboundHandler.GetUser(request.User.Email)
+				user := inboundHandler.GetUser(ctx, request.User.Email)
 				if user == nil {
 					return nil
 				}
