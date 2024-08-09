@@ -229,8 +229,22 @@ type SplitHTTPConfig struct {
 	Host                 string            `json:"host"`
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
-	MaxConcurrentUploads int32             `json:"maxConcurrentUploads"`
-	MaxUploadSize        int32             `json:"maxUploadSize"`
+	ScMaxConcurrentPosts *Int32Range       `json:"scMaxConcurrentPosts"`
+	ScMaxEachPostBytes   *Int32Range       `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
+	NoSSEHeader          bool              `json:"noSSEHeader"`
+	ResponseOkPadding    *Int32Range       `json:"responseOkPadding"`
+}
+
+func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
+	if input == nil {
+		return nil
+	}
+
+	return &splithttp.RandRangeConfig{
+		From: input.From,
+		To:   input.To,
+	}
 }
 
 // Build implements Buildable.
@@ -247,8 +261,11 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		Path:                 c.Path,
 		Host:                 c.Host,
 		Header:               c.Headers,
-		MaxConcurrentUploads: c.MaxConcurrentUploads,
-		MaxUploadSize:        c.MaxUploadSize,
+		ScMaxConcurrentPosts: splithttpNewRandRangeConfig(c.ScMaxConcurrentPosts),
+		ScMaxEachPostBytes:   splithttpNewRandRangeConfig(c.ScMaxEachPostBytes),
+		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
+		NoSSEHeader:          c.NoSSEHeader,
+		ResponseOkPadding:    splithttpNewRandRangeConfig(c.ResponseOkPadding),
 	}
 	return config, nil
 }
@@ -372,6 +389,7 @@ type TLSCertConfig struct {
 	Usage          string   `json:"usage"`
 	OcspStapling   uint64   `json:"ocspStapling"`
 	OneTimeLoading bool     `json:"oneTimeLoading"`
+	BuildChain     bool     `json:"buildChain"`
 }
 
 // Build implements Buildable.
@@ -410,6 +428,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		certificate.OneTimeLoading = c.OneTimeLoading
 	}
 	certificate.OcspStapling = c.OcspStapling
+	certificate.BuildChain = c.BuildChain
 
 	return certificate, nil
 }
