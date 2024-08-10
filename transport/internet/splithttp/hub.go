@@ -192,12 +192,15 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		h.config.WriteResponseHeader(writer)
 
 		writer.WriteHeader(http.StatusOK)
-		// in earlier versions, this initial body data was used to immediately
-		// start a 200 OK on all CDN. but xray client since 1.8.16 does not
-		// actually require an immediate 200 OK, but now requires these
-		// additional bytes "ok". xray client 1.8.24+ doesn't require "ok"
-		// anymore, and so this line should be removed in later versions.
-		writer.Write([]byte("ok"))
+		if _, ok := request.URL.Query()["x_padding"]; !ok {
+			// in earlier versions, this initial body data was used to immediately
+			// start a 200 OK on all CDN. but xray client since 1.8.16 does not
+			// actually require an immediate 200 OK, but now requires these
+			// additional bytes "ok". xray client 1.8.24+ doesn't require "ok"
+			// anymore, and so this line should be removed in later versions.
+			writer.Write([]byte("ok"))
+		}
+
 		responseFlusher.Flush()
 
 		downloadDone := done.New()
