@@ -26,6 +26,16 @@ import (
 	"golang.org/x/net/http2"
 )
 
+// defines the maximum time an idle TCP session can survive in the tunnel, so
+// it should be consistent across HTTP versions and with other transports.
+const connIdleTimeout = 300 * time.Second
+
+// consistent with quic-go
+const h3KeepalivePeriod = 10 * time.Second
+
+// consistent with chrome
+const h2KeepalivePeriod = 45 * time.Second
+
 type dialerConf struct {
 	net.Destination
 	*internet.MemoryStreamConfig
@@ -89,7 +99,17 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	var uploadTransport http.RoundTripper
 
 	if isH3 {
+		quicConfig := &quic.Config{
+			MaxIdleTimeout: connIdleTimeout,
+
+			// these two are defaults of quic-go/http3. the default of quic-go (no
+			// http3) is different, so it is hardcoded here for clarity.
+			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
+			MaxIncomingStreams: -1,
+			KeepAlivePeriod:    h3KeepalivePeriod,
+		}
 		roundTripper := &http3.RoundTripper{
+			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
@@ -131,7 +151,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
+			ReadIdleTimeout: h2KeepalivePeriod,
 		}
 		uploadTransport = downloadTransport
 	} else {
@@ -142,7 +163,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		downloadTransport = &http.Transport{
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
 			// chunked transfer download with keepalives is buggy with
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
