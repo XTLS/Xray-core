@@ -414,7 +414,7 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			from = to
 			buf[3] = byte(l >> 8)
 			buf[4] = byte(l)
-			if f.fragment.IntervalMax == 0 { // If interval is 0, we sent them in one tcp packet
+			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
 				hello = append(hello, buf[:5+l]...)
 			} else {
 				_, err := f.writer.Write(buf[:5+l])
@@ -424,12 +424,11 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 				}
 			}
 			if from == len(data) {
-				if f.fragment.IntervalMax == 0 {
-					if len(b) > recordLen {
-						hello = append(hello, b[recordLen:]...)
+				if len(hello) > 0 {
+					_, err := f.writer.Write(hello)
+					if err != nil {
+						return 0, err
 					}
-					f.writer.Write(hello)
-					return len(b), nil
 				}
 				if len(b) > recordLen {
 					n, err := f.writer.Write(b[recordLen:])
