@@ -277,7 +277,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	handler := &requestHandler{
 		config:    shSettings,
 		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath("", false),
+		path:      shSettings.GetNormalizedPath(),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},

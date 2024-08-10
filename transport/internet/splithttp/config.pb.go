@@ -32,7 +32,7 @@ type Config struct {
 	ScMaxEachPostBytes   *RandRangeConfig  `protobuf:"bytes,5,opt,name=scMaxEachPostBytes,proto3" json:"scMaxEachPostBytes,omitempty"`
 	ScMinPostsIntervalMs *RandRangeConfig  `protobuf:"bytes,6,opt,name=scMinPostsIntervalMs,proto3" json:"scMinPostsIntervalMs,omitempty"`
 	NoSSEHeader          bool              `protobuf:"varint,7,opt,name=noSSEHeader,proto3" json:"noSSEHeader,omitempty"`
-	XPaddingHeader       *RandRangeConfig  `protobuf:"bytes,8,opt,name=xPaddingHeader,proto3" json:"xPaddingHeader,omitempty"`
+	XPaddingBytes        *RandRangeConfig  `protobuf:"bytes,8,opt,name=xPaddingBytes,proto3" json:"xPaddingBytes,omitempty"`
 }
 
 func (x *Config) Reset() {
@@ -116,9 +116,9 @@ func (x *Config) GetNoSSEHeader() bool {
 	return false
 }
 
-func (x *Config) GetXPaddingHeader() *RandRangeConfig {
+func (x *Config) GetXPaddingBytes() *RandRangeConfig {
 	if x != nil {
-		return x.XPaddingHeader
+		return x.XPaddingBytes
 	}
 	return nil
 }
@@ -263,7 +263,7 @@ var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	1, // 1: xray.transport.internet.splithttp.Config.scMaxConcurrentPosts:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	1, // 2: xray.transport.internet.splithttp.Config.scMaxEachPostBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	1, // 3: xray.transport.internet.splithttp.Config.scMinPostsIntervalMs:type_name -> xray.transport.internet.splithttp.RandRangeConfig
-	1, // 4: xray.transport.internet.splithttp.Config.xPaddingHeader:type_name -> xray.transport.internet.splithttp.RandRangeConfig
+	1, // 4: xray.transport.internet.splithttp.Config.xPaddingBytes:type_name -> xray.transport.internet.splithttp.RandRangeConfig
 	5, // [5:5] is the sub-list for method output_type
 	5, // [5:5] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
