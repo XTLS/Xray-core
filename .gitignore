@@ -14,10 +14,6 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Temporary lock files
-*.swp
-.~lock.*
-
 *.DS_Store
 .idea
 *.zip
