@@ -124,7 +124,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	currentSession := h.upsertSession(sessionId)
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
-	responseOkPadding := h.ln.config.GetNormalizedResponseOkPadding()
 
 	if request.Method == "POST" {
 		seq := ""
@@ -170,6 +169,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
+		h.config.WriteResponseHeader(writer)
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" {
 		responseFlusher, ok := writer.(http.Flusher)
@@ -189,14 +189,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		h.config.WriteResponseHeader(writer)
+
 		writer.WriteHeader(http.StatusOK)
-		// send a chunk immediately to enable CDN streaming.
-		// many CDN buffer the response headers until the origin starts sending
-		// the body, with no way to turn it off.
-		padding := int(responseOkPadding.roll())
-		for i := 0; i < padding; i++ {
-			writer.Write([]byte("o"))
-		}
+		// in earlier versions, this initial body data was used to immediately
+		// start a 200 OK on all CDN. but xray client since 1.8.16 does not
+		// actually require an immediate 200 OK, but now requires these
+		// additional bytes "ok". xray client 1.8.24+ doesn't require "ok"
+		// anymore, and so this line should be removed in later versions.
 		writer.Write([]byte("ok"))
 		responseFlusher.Flush()
 
@@ -277,7 +277,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	handler := &requestHandler{
 		config:    shSettings,
 		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath("", false),
+		path:      shSettings.GetNormalizedPath(),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},

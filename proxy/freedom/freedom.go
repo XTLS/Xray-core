@@ -402,6 +402,7 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 		}
 		data := b[5:recordLen]
 		buf := make([]byte, 1024)
+		var hello []byte
 		for from := 0; ; {
 			to := from + int(randBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
 			if to > len(data) {
@@ -413,12 +414,22 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			from = to
 			buf[3] = byte(l >> 8)
 			buf[4] = byte(l)
-			_, err := f.writer.Write(buf[:5+l])
-			time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
-			if err != nil {
-				return 0, err
+			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
+				hello = append(hello, buf[:5+l]...)
+			} else {
+				_, err := f.writer.Write(buf[:5+l])
+				time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
+				if err != nil {
+					return 0, err
+				}
 			}
 			if from == len(data) {
+				if len(hello) > 0 {
+					_, err := f.writer.Write(hello)
+					if err != nil {
+						return 0, err
+					}
+				}
 				if len(b) > recordLen {
 					n, err := f.writer.Write(b[recordLen:])
 					if err != nil {
