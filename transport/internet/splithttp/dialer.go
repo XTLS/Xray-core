@@ -118,7 +118,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 
-				var udpConn *net.UDPConn
+				var udpConn net.PacketConn
 				var udpAddr *net.UDPAddr
 
 				switch c := conn.(type) {
@@ -139,7 +139,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 						return nil, err
 					}
 				default:
-					return nil, errors.New("unsupported connection type: %T", conn)
+					udpConn = &internet.FakePacketConn{c}
+					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
