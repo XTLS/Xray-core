@@ -177,6 +177,11 @@ func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUse
 	return h.validator.GetByEmail(email)
 }
 
+// GetUsers implements proxy.UserManager.GetUsers().
+func (h *Handler) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return h.validator.GetAll()
+}
+
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}

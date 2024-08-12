@@ -7,7 +7,7 @@ import (
 
 var cmdInboundUser = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api inbounduser [--server=127.0.0.1:8080] -tag=tag -email=email",
+	UsageLine:   "{{.Exec}} api inbounduser [--server=127.0.0.1:8080] -tag=tag [-email=email]",
 	Short:       "Get Inbound User",
 	Long: `
 Get User info from an inbound.
@@ -19,7 +19,7 @@ Arguments:
 	-tag
 	    Inbound tag
     -email
-		User email
+		User email. If email is not given, will get all users
 Example:
     {{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -tag="tag name" -email="xray@love.com"
 `,
@@ -42,7 +42,7 @@ func executeInboundUser(cmd *base.Command, args []string) {
 		Tag: tag,
 		Email: email,
 	}
-	resp, err := client.GetInboundUser(ctx, r)
+	resp, err := client.GetInboundUsers(ctx, r)
 	if err != nil {
 		base.Fatalf("failed to get inbound user: %s", err)
 	}

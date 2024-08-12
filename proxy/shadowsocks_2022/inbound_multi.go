@@ -170,6 +170,21 @@ func (i *MultiUserInbound) GetUser(ctx context.Context, email string) *protocol.
 	return nil
 }
 
+// GetUsers implements proxy.UserManager.GetUsers().
+func (i *MultiUserInbound) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	i.Lock()
+	defer i.Unlock()
+	dst := make([]*protocol.MemoryUser, len(i.users))
+	for _, u := range i.users {
+		dst = append(dst, &protocol.MemoryUser{
+			Email: u.Email,
+			Level: uint32(u.Level),
+			Account: &MemoryAccount{Key: u.Key},
+		})
+	}
+	return dst
+}
+
 func (i *MultiUserInbound) Network() []net.Network {
 	return i.networks
 }

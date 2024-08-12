@@ -43,7 +43,7 @@ message GetInboundUserRequest {
 }
 
 message GetInboundUserResponse {
-  xray.common.protocol.User user = 1;
+  repeated xray.common.protocol.User users = 1;
 }
 
 message AddOutboundRequest {
@@ -72,7 +72,7 @@ service HandlerService {
 
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
 
-  rpc GetInboundUser(GetInboundUserRequest) returns (GetInboundUserResponse) {}
+  rpc GetInboundUsers(GetInboundUserRequest) returns (GetInboundUserResponse) {}
 
   rpc AddOutbound(AddOutboundRequest) returns (AddOutboundResponse) {}
 

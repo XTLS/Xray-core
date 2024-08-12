@@ -60,3 +60,13 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 	}
 	return nil
 }
+
+// Get all users
+func (v *Validator) GetAll() []*protocol.MemoryUser {
+	var u = make([]*protocol.MemoryUser, 0, 100)
+	v.email.Range(func(key, value interface{}) bool {
+		u = append(u, value.(*protocol.MemoryUser))
+		return true
+	})
+	return u
+}

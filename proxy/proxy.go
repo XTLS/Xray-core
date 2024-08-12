@@ -81,6 +81,9 @@ type UserManager interface {
 	
 	// Get user by email.
 	GetUser(context.Context, string) *protocol.MemoryUser
+
+	// Get all users.
+	GetUsers(context.Context) []*protocol.MemoryUser
 }
 
 type GetInbound interface {

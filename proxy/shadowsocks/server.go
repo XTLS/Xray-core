@@ -68,6 +68,11 @@ func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser
 	return s.validator.GetByEmail(email)
 }
 
+// GetUsers implements proxy.UserManager.GetUsers().
+func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return s.validator.GetAll()
+}
+
 func (s *Server) Network() []net.Network {
 	list := s.config.Network
 	if len(list) == 0 {

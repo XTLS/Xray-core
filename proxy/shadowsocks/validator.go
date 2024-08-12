@@ -92,6 +92,15 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 	return nil
 }
 
+// GetAll get all users
+func (v *Validator) GetAll() []*protocol.MemoryUser {
+	v.Lock()
+	defer v.Unlock()
+	dst := make([]*protocol.MemoryUser, len(v.users))
+	copy(v.users, dst)
+	return dst
+}
+
 // Get a Shadowsocks user.
 func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol.MemoryUser, aead cipher.AEAD, ret []byte, ivLen int32, err error) {
 	v.RLock()

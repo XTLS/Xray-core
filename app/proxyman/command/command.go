@@ -99,7 +99,7 @@ func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundR
 	return &AlterInboundResponse{}, operation.ApplyInbound(ctx, handler)
 }
 
-func (s *handlerServer) GetInboundUser(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUserResponse, error) {
+func (s *handlerServer) GetInboundUsers(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUserResponse, error) {
 	handler, err := s.ihm.GetHandler(ctx, request.Tag)
 	if err != nil {
 		return nil, errors.New("failed to get handler: ", request.Tag).Base(err)
@@ -112,7 +112,15 @@ func (s *handlerServer) GetInboundUser(ctx context.Context, request *GetInboundU
 	if !ok {
 		return nil, errors.New("proxy is not a UserManager")
 	}
-	return &GetInboundUserResponse{User: protocol.ToProtoUser(um.GetUser(ctx, request.Email))}, nil
+	if len(request.Email) > 0 {
+		return &GetInboundUserResponse{Users: []*protocol.User{protocol.ToProtoUser(um.GetUser(ctx, request.Email))}}, nil
+	}
+	var result = make([]*protocol.User, 0, 100)
+	users := um.GetUsers(ctx)
+	for _, u := range users {
+		result = append(result, protocol.ToProtoUser(u))
+	}
+	return &GetInboundUserResponse{Users: result}, nil
 }
 
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
