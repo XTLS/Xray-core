@@ -417,10 +417,32 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
 				hello = append(hello, buf[:5+l]...)
 			} else {
-				_, err := f.writer.Write(buf[:5+l])
-				time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
-				if err != nil {
-					return 0, err
+				if f.fragment.Segment > 1 {
+					buf := buf[:5+l]
+					sliceSize := len(buf) / int(f.fragment.Segment)
+					written := 0
+					for {
+						if (written+sliceSize) > len(buf) || (written+sliceSize) == len(buf) {
+							_, err := f.writer.Write(buf[written:])
+							if err != nil {
+								return 0, err
+							}
+							break
+						} else {
+							writtenSlice, err := f.writer.Write(buf[written:(written + sliceSize)])
+							time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
+							if err != nil {
+								return 0, err
+							}
+							written += writtenSlice
+						}
+					}
+				} else {
+					_, err := f.writer.Write(buf[:5+l])
+					time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
+					if err != nil {
+						return 0, err
+					}
 				}
 			}
 			if from == len(data) {

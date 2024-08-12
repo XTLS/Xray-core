@@ -98,7 +98,16 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			if c.Fragment.Length == "" {
 				return nil, errors.New("Length can't be empty")
 			}
-			lengthMinMax := strings.Split(c.Fragment.Length, "-")
+			fragmentLen := c.Fragment.Length
+			if strings.Contains(fragmentLen, "/") {
+				lengthMinMaxSeg := strings.Split(fragmentLen, "/")
+				fragmentLen = lengthMinMaxSeg[0]
+				config.Fragment.Segment, err = strconv.ParseUint(lengthMinMaxSeg[1], 10, 64)
+				if err != nil {
+					return nil, errors.New("Invalid Segment").Base(err)
+				}
+			}
+			lengthMinMax := strings.Split(fragmentLen, "-")
 			if len(lengthMinMax) == 2 {
 				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
 				config.Fragment.LengthMax, err2 = strconv.ParseUint(lengthMinMax[1], 10, 64)

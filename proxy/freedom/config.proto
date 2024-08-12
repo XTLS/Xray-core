@@ -19,6 +19,7 @@ message Fragment {
   uint64 length_max = 4;
   uint64 interval_min = 5;
   uint64 interval_max = 6;
+  uint64 segment = 7;
 }
 
 message Config {
