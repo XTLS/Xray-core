@@ -115,6 +115,11 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 		if len(Wnoise)%2 != 0 {
 			Wnoise = Wnoise + "0"
 		}
+
+		if len(Wnoise) > 100 {
+			Wnoise = Wnoise[:100]
+		}
+
 		decodedBytes, err := hex.DecodeString(Wnoise)
 		if err == nil {
 			Wheader = decodedBytes
@@ -177,6 +182,27 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 			WpayloadsizeTo = int(v1)
 		}
 	}
+
+	// limit noise params to reasonable value
+	if WnoisecountFrom > 50 {
+		WnoisecountFrom = 50
+	}
+	if WnoisecountTo > 50 {
+		WnoisecountTo = 50
+	}
+	if WnoisedelayFrom > 100 {
+		WnoisedelayFrom = 100
+	}
+	if WnoisedelayTo > 100 {
+		WnoisedelayTo = 100
+	}
+	if WpayloadsizeFrom > 100 {
+		WpayloadsizeFrom = 100
+	}
+	if WpayloadsizeTo > 100 {
+		WpayloadsizeTo = 100
+	}
+
 	// ------ GFW-knocker --------------------
 
 	// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
