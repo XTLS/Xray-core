@@ -1,6 +1,7 @@
 package splithttp
 
 import (
+	"bytes"
 	"context"
 	gotls "crypto/tls"
 	"io"
@@ -25,6 +26,16 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"golang.org/x/net/http2"
 )
+
+// defines the maximum time an idle TCP session can survive in the tunnel, so
+// it should be consistent across HTTP versions and with other transports.
+const connIdleTimeout = 300 * time.Second
+
+// consistent with quic-go
+const h3KeepalivePeriod = 10 * time.Second
+
+// consistent with chrome
+const h2KeepalivePeriod = 45 * time.Second
 
 type dialerConf struct {
 	net.Destination
@@ -89,7 +100,17 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	var uploadTransport http.RoundTripper
 
 	if isH3 {
+		quicConfig := &quic.Config{
+			MaxIdleTimeout: connIdleTimeout,
+
+			// these two are defaults of quic-go/http3. the default of quic-go (no
+			// http3) is different, so it is hardcoded here for clarity.
+			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
+			MaxIncomingStreams: -1,
+			KeepAlivePeriod:    h3KeepalivePeriod,
+		}
 		roundTripper := &http3.RoundTripper{
+			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
@@ -97,7 +118,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 
-				var udpConn *net.UDPConn
+				var udpConn net.PacketConn
 				var udpAddr *net.UDPAddr
 
 				switch c := conn.(type) {
@@ -118,7 +139,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 						return nil, err
 					}
 				default:
-					return nil, errors.New("unsupported connection type: %T", conn)
+					udpConn = &internet.FakePacketConn{c}
+					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
@@ -131,7 +156,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
+			ReadIdleTimeout: h2KeepalivePeriod,
 		}
 		uploadTransport = downloadTransport
 	} else {
@@ -142,7 +168,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		downloadTransport = &http.Transport{
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
-			IdleConnTimeout: 90 * time.Second,
+			IdleConnTimeout: connIdleTimeout,
 			// chunked transfer download with keepalives is buggy with
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
@@ -196,8 +222,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	sessionIdUuid := uuid.New()
-	requestURL.Path = transportConfiguration.GetNormalizedPath(sessionIdUuid.String(), true)
-	baseURL := requestURL.String()
+	requestURL.Path = transportConfiguration.GetNormalizedPath() + sessionIdUuid.String()
+	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
@@ -226,9 +252,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			go func() {
 				defer requestsLimiter.Signal()
 
+				// this intentionally makes a shallow-copy of the struct so we
+				// can reassign Path (potentially concurrently)
+				url := requestURL
+				url.Path += "/" + strconv.FormatInt(seq, 10)
+				// reassign query to get different padding
+				url.RawQuery = transportConfiguration.GetNormalizedQuery()
+
 				err := httpClient.SendUploadRequest(
 					context.WithoutCancel(ctx),
-					baseURL+"/"+strconv.FormatInt(seq, 10),
+					url.String(),
 					&buf.MultiBufferContainer{MultiBuffer: chunk},
 					int64(chunk.Len()),
 				)
@@ -250,26 +283,38 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
-	lazyRawDownload, remoteAddr, localAddr, err := httpClient.OpenDownload(context.WithoutCancel(ctx), baseURL)
+	lazyRawDownload, remoteAddr, localAddr, err := httpClient.OpenDownload(context.WithoutCancel(ctx), requestURL.String())
 	if err != nil {
 		return nil, err
 	}
 
 	lazyDownload := &LazyReader{
 		CreateReader: func() (io.ReadCloser, error) {
-			// skip "ooooooooook" response
-			trashHeader := []byte{0}
-			for {
-				_, err := io.ReadFull(lazyRawDownload, trashHeader)
-				if err != nil {
-					return nil, errors.New("failed to read initial response").Base(err)
-				}
-				if trashHeader[0] == 'k' {
-					break
-				}
+			// skip "ok" response
+			trashHeader := []byte{0, 0}
+			_, err := io.ReadFull(lazyRawDownload, trashHeader)
+			if err != nil {
+				return nil, errors.New("failed to read initial response").Base(err)
 			}
 
-			return lazyRawDownload, nil
+			if bytes.Equal(trashHeader, []byte("ok")) {
+				return lazyRawDownload, nil
+			}
+
+			// we read some garbage byte that may not have been "ok" at
+			// all. return a reader that replays what we have read so far
+			reader := io.MultiReader(
+				bytes.NewReader(trashHeader),
+				lazyRawDownload,
+			)
+			readCloser := struct {
+				io.Reader
+				io.Closer
+			}{
+				Reader: reader,
+				Closer: lazyRawDownload,
+			}
+			return readCloser, nil
 		},
 	}
 

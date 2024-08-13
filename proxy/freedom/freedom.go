@@ -29,7 +29,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/transport"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
-  "github.com/GFW-knocker/Xray-core/transport/internet/tls"
+	"github.com/GFW-knocker/Xray-core/transport/internet/tls"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -481,7 +481,6 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 						return 0, err
 					}
 				}
-
 				if len(b) > recordLen {
 					n, err := f.writer.Write(b[recordLen:])
 					if err != nil {

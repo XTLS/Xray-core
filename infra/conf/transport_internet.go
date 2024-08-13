@@ -229,10 +229,22 @@ type SplitHTTPConfig struct {
 	Host                 string            `json:"host"`
 	Path                 string            `json:"path"`
 	Headers              map[string]string `json:"headers"`
-	ScMaxConcurrentPosts Int32Range        `json:"scMaxConcurrentPosts"`
-	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
-	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
+	ScMaxConcurrentPosts *Int32Range       `json:"scMaxConcurrentPosts"`
+	ScMaxEachPostBytes   *Int32Range       `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
+	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
+}
+
+func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
+	if input == nil {
+		return nil
+	}
+
+	return &splithttp.RandRangeConfig{
+		From: input.From,
+		To:   input.To,
+	}
 }
 
 // Build implements Buildable.
@@ -246,22 +258,14 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Host = c.Headers["Host"]
 	}
 	config := &splithttp.Config{
-		Path:   c.Path,
-		Host:   c.Host,
-		Header: c.Headers,
-		ScMaxConcurrentPosts: &splithttp.RandRangeConfig{
-			From: c.ScMaxConcurrentPosts.From,
-			To:   c.ScMaxConcurrentPosts.To,
-		},
-		ScMaxEachPostBytes: &splithttp.RandRangeConfig{
-			From: c.ScMaxEachPostBytes.From,
-			To:   c.ScMaxEachPostBytes.To,
-		},
-		ScMinPostsIntervalMs: &splithttp.RandRangeConfig{
-			From: c.ScMinPostsIntervalMs.From,
-			To:   c.ScMinPostsIntervalMs.To,
-		},
-		NoSSEHeader: c.NoSSEHeader,
+		Path:                 c.Path,
+		Host:                 c.Host,
+		Header:               c.Headers,
+		ScMaxConcurrentPosts: splithttpNewRandRangeConfig(c.ScMaxConcurrentPosts),
+		ScMaxEachPostBytes:   splithttpNewRandRangeConfig(c.ScMaxEachPostBytes),
+		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
+		NoSSEHeader:          c.NoSSEHeader,
+		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 	}
 	return config, nil
 }

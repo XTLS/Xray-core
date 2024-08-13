@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/GFW-knocker/Xray-core/common/buf"
+	creflect "github.com/GFW-knocker/Xray-core/common/reflect"
 	"github.com/GFW-knocker/Xray-core/main/commands/base"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -107,20 +107,16 @@ func fetchHTTPContent(target string) ([]byte, error) {
 	return content, nil
 }
 
-func protoToJSONString(m proto.Message, prefix, indent string) (string, error) {
-	return strings.TrimSpace(protojson.MarshalOptions{Indent: indent}.Format(m)), nil
-}
-
 func showJSONResponse(m proto.Message) {
 	if isNil(m) {
 		return
 	}
-	output, err := protoToJSONString(m, "", "    ")
-	if err != nil {
+	if j, ok := creflect.MarshalToJson(m, true); ok {
+		fmt.Println(j)
+	} else {
 		fmt.Fprintf(os.Stdout, "%v\n", m)
-		base.Fatalf("error encode json: %s", err)
+		base.Fatalf("error encode json")
 	}
-	fmt.Println(output)
 }
 
 func isNil(i interface{}) bool {
