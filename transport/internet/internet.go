@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
 
 func IsValidHTTPHost(request string, config string) bool {
 	r := strings.ToLower(request)
@@ -16,4 +16,3 @@ func IsValidHTTPHost(request string, config string) bool {
 	}
 	return r == c
 }
-

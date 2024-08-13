@@ -121,12 +121,14 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	})) // add another outbound in session ctx
 	if h != nil {
 
+		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
+		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
+
 		// --------------------------------------------------------
 		// mmmray : disable dialer buffer for wireguard chain speed problem (temporary workaround)
-		// ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
-		// dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
-		ur, uw := pipe.New(pipe.WithSizeLimit(0))
-		dr, dw := pipe.New(pipe.WithSizeLimit(0))
+		// ur, uw := pipe.New(pipe.WithSizeLimit(0))
+		// dr, dw := pipe.New(pipe.WithSizeLimit(0))
+		// better solution is to use ConnectionOutputMultiUDP() as below
 		// ----------------------------------------------------------
 
 		go h.Dispatch(context.WithoutCancel(ctx), &transport.Link{Reader: ur, Writer: dw})
