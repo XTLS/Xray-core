@@ -12,7 +12,7 @@ type MemoryAccount struct {
 }
 
 // AsAccount implements protocol.AsAccount.
-func (u *User) AsAccount() (protocol.Account, error) {
+func (u *Account) AsAccount() (protocol.Account, error) {
 	return &MemoryAccount{
 		Key:   u.GetKey(),
 	}, nil
@@ -27,7 +27,7 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 }
 
 func (a *MemoryAccount) ToProto() proto.Message {
-	return &User{
+	return &Account{
 		Key: a.Key,
 	}
 }
