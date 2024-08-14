@@ -2,6 +2,7 @@ package socks
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"time"
@@ -84,23 +85,15 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		Level: s.config.UserLevel,
 	}
 
-	var newConn readConn
-	if network == net.Network_TCP {
-		reader := bufio.NewReader(conn)
-		newConn = conBuff{
-			Connection: conn,
-			reader:     reader,
-		}
-		firstbyte, _ := reader.Peek(1)
-		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if socks5/4
-			errors.LogDebug(ctx, "Not socks request, try to parse as HTTP request")
-			return s.httpServer.Process(ctx, network, newConn.(stat.Connection), dispatcher)
-		}
-	}
-
 	switch network {
 	case net.Network_TCP:
-		return s.processTCP(ctx, newConn.(stat.Connection), dispatcher)
+		firstbyte := make([]byte, 1)
+		conn.Read(firstbyte)
+		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if socks5/4
+			errors.LogDebug(ctx, "Not socks request, try to parse as HTTP request")
+			return s.httpServer.Process(ctx, network, conn, dispatcher, firstbyte...)
+		}
+		return s.processTCP(ctx, conn, dispatcher, firstbyte)
 	case net.Network_UDP:
 		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
@@ -108,7 +101,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 }
 
-func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte []byte) error {
 	plcy := s.policy()
 	if err := conn.SetReadDeadline(time.Now().Add(plcy.Timeouts.Handshake)); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to set deadline")
@@ -126,7 +119,12 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
 	}
 
-	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+	// Firstbyte is for forwarded conn from SOCKS inbound
+	// Because it needs first byte to choose protocol
+	// We need to add it back
+	readerWithoutFirstbyte := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+	multiReader := io.MultiReader(bytes.NewReader(firstbyte), readerWithoutFirstbyte)
+	reader := bufio.NewReaderSize(multiReader, buf.Size)
 	request, err := svrSession.Handshake(reader, conn)
 	if err != nil {
 		if inbound.Source.IsValid() {
@@ -306,20 +304,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
-}
-
-// Used for read bytes from connection without consuming data
-type readConn interface {
-	Read(p []byte) (n int, err error)
-}
-
-type conBuff struct {
-	stat.Connection
-	reader *bufio.Reader
-}
-
-func (c conBuff) Read(p []byte) (n int, err error) {
-	return c.reader.Read(p)
 }
 
 func init() {
