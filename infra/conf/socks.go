@@ -35,6 +35,7 @@ type SocksServerConfig struct {
 	Host       *Address        `json:"ip"`
 	Timeout    uint32          `json:"timeout"`
 	UserLevel  uint32          `json:"userLevel"`
+	Mixed      *bool           `json:"mixed"`
 }
 
 func (v *SocksServerConfig) Build() (proto.Message, error) {
@@ -63,6 +64,10 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 
 	config.Timeout = v.Timeout
 	config.UserLevel = v.UserLevel
+	config.Mixed = true
+	if v.Mixed != nil {
+		config.Mixed = *v.Mixed
+	}
 	return config, nil
 }
 

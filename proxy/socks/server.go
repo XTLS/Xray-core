@@ -1,8 +1,10 @@
 package socks
 
 import (
+	"bufio"
 	"context"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -19,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -29,6 +32,7 @@ type Server struct {
 	policyManager policy.Manager
 	cone          bool
 	udpFilter     *UDPFilter
+	httpServer    *http.Server
 }
 
 // NewServer creates a new Server object.
@@ -41,6 +45,13 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 	if config.AuthType == AuthType_PASSWORD {
 		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
+	}
+	if config.Mixed {
+		httpConfig := &http.ServerConfig{}
+		if config.AuthType == AuthType_PASSWORD {
+			httpConfig.Accounts = config.Accounts
+		}
+		s.httpServer, _ = http.NewServer(ctx, httpConfig)
 	}
 	return s, nil
 }
@@ -75,9 +86,31 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		Level: s.config.UserLevel,
 	}
 
+	var newConn readConn
+	if network == net.Network_TCP {
+		reader := bufio.NewReader(conn)
+		newConn = conBuff{
+			Connection: conn,
+			reader:     reader,
+		}
+		firstbyte, _ := reader.Peek(1)
+		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if socks5/4
+			errors.LogDebug(ctx, "Not socks request, try to parse as HTTP request")
+			bytes, _ := reader.Peek(8)
+			str := string(bytes)
+			// Check if the request has a valid HTTP method. If not, back to SOCKS.
+			httpMethods := []string{"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "CONNECT", "TRACE", "PATCH"}
+			for _, method := range httpMethods {
+				if strings.HasPrefix(str, method) {
+					return s.httpServer.Process(ctx, network, newConn.(stat.Connection), dispatcher)
+				}
+			}
+		}
+	}
+
 	switch network {
 	case net.Network_TCP:
-		return s.processTCP(ctx, conn, dispatcher)
+		return s.processTCP(ctx, newConn.(stat.Connection), dispatcher)
 	case net.Network_UDP:
 		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
@@ -283,6 +316,20 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
+}
+
+// Used for read bytes from connection without consuming data
+type readConn interface {
+	Read(p []byte) (n int, err error)
+}
+
+type conBuff struct {
+	stat.Connection
+	reader *bufio.Reader
+}
+
+func (c conBuff) Read(p []byte) (n int, err error) {
+	return c.reader.Read(p)
 }
 
 func init() {
