@@ -91,7 +91,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		conn.Read(firstbyte)
 		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if socks5/4
 			errors.LogDebug(ctx, "Not socks request, try to parse as HTTP request")
-			return s.httpServer.Process(ctx, network, conn, dispatcher, firstbyte...)
+			return s.httpServer.ProcessWithFirstbyte(ctx, network, conn, dispatcher, firstbyte...)
 		}
 		return s.processTCP(ctx, conn, dispatcher, firstbyte)
 	case net.Network_UDP:

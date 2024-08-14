@@ -83,7 +83,15 @@ type readerOnly struct {
 	io.Reader
 }
 
-func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte ...byte) error {
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	return s.ProcessWithFirstbyte(ctx, network, conn, dispatcher)
+}
+
+// Firstbyte is for forwarded conn from SOCKS inbound
+// Because it needs first byte to choose protocol
+// We need to add it back
+// Other parts are the same as the process function
+func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte ...byte) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "http"
 	inbound.CanSpliceCopy = 2
@@ -91,9 +99,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		Level: s.config.UserLevel,
 	}
 	var reader *bufio.Reader
-	// Firstbyte is for forwarded conn from SOCKS inbound
-	// Because it needs first byte to choose protocol
-	// We need to add it back
 	if len(firstbyte) > 0 {
 		readerWithoutFirstbyte := bufio.NewReaderSize(readerOnly{conn}, buf.Size)
 		multiReader := io.MultiReader(bytes.NewReader(firstbyte), readerWithoutFirstbyte)
