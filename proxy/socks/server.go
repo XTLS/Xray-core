@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -46,13 +45,12 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	if config.AuthType == AuthType_PASSWORD {
 		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
-	if config.Mixed {
-		httpConfig := &http.ServerConfig{}
-		if config.AuthType == AuthType_PASSWORD {
-			httpConfig.Accounts = config.Accounts
-		}
-		s.httpServer, _ = http.NewServer(ctx, httpConfig)
+	// Create http config and server
+	httpConfig := &http.ServerConfig{}
+	if config.AuthType == AuthType_PASSWORD {
+		httpConfig.Accounts = config.Accounts
 	}
+	s.httpServer, _ = http.NewServer(ctx, httpConfig)
 	return s, nil
 }
 
@@ -96,15 +94,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		firstbyte, _ := reader.Peek(1)
 		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if socks5/4
 			errors.LogDebug(ctx, "Not socks request, try to parse as HTTP request")
-			bytes, _ := reader.Peek(8)
-			str := string(bytes)
-			// Check if the request has a valid HTTP method. If not, back to SOCKS.
-			httpMethods := []string{"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "CONNECT", "TRACE", "PATCH"}
-			for _, method := range httpMethods {
-				if strings.HasPrefix(str, method) {
-					return s.httpServer.Process(ctx, network, newConn.(stat.Connection), dispatcher)
-				}
-			}
+			return s.httpServer.Process(ctx, network, newConn.(stat.Connection), dispatcher)
 		}
 	}
 

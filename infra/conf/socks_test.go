@@ -44,7 +44,6 @@ func TestSocksInboundConfig(t *testing.T) {
 				},
 				Timeout:   5,
 				UserLevel: 1,
-				Mixed:     true,
 			},
 		},
 	})

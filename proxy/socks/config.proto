@@ -37,7 +37,6 @@ message ServerConfig {
   bool udp_enabled = 4;
   uint32 timeout = 5 [deprecated = true];
   uint32 user_level = 6;
-  bool mixed = 7;
 }
 
 // ClientConfig is the protobuf config for Socks client.
