@@ -20,7 +20,7 @@ type ConfigFormat struct {
 }
 
 // ConfigLoader is a utility to load Xray config from external source.
-type ConfigLoader func(input interface{}) (*Config, error)
+type ConfigLoader func(input any) (*Config, error)
 
 // ConfigBuilder is a builder to build core.Config from filenames and formats
 type ConfigBuilder func(files []string, formats []string) (*Config, error)
@@ -98,7 +98,7 @@ func getFormat(filename string) string {
 	return GetFormatByExtension(getExtension(filename))
 }
 
-func LoadConfig(formatName string, input interface{}) (*Config, error) {
+func LoadConfig(formatName string, input any) (*Config, error) {
 	switch v := input.(type) {
 	case cmdarg.Arg:
 		formats := make([]string, len(v))
@@ -161,7 +161,7 @@ func init() {
 	common.Must(RegisterConfigLoader(&ConfigFormat{
 		Name:      "Protobuf",
 		Extension: []string{"pb"},
-		Loader: func(input interface{}) (*Config, error) {
+		Loader: func(input any) (*Config, error) {
 			switch v := input.(type) {
 			case cmdarg.Arg:
 				r, err := confloader.LoadConfig(v[0])
