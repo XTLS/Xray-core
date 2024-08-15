@@ -41,13 +41,12 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
-	if config.AuthType == AuthType_PASSWORD {
-		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
+	httpConfig := &http.ServerConfig{
+		UserLevel: config.UserLevel,
 	}
-	// Create http config and server
-	httpConfig := &http.ServerConfig{}
 	if config.AuthType == AuthType_PASSWORD {
 		httpConfig.Accounts = config.Accounts
+		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
 	s.httpServer, _ = http.NewServer(ctx, httpConfig)
 	return s, nil
