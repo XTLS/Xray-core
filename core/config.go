@@ -150,11 +150,11 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 }
 
 func loadProtobufConfig(data []byte) (*Config, error) {
-	config := new(Config)
-	if err := proto.Unmarshal(data, config); err != nil {
+	var config Config
+	if err := proto.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
-	return config, nil
+	return &config, nil
 }
 
 func init() {
