@@ -1,7 +1,6 @@
 package socks
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -123,8 +122,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	// Because it needs first byte to choose protocol
 	// We need to add it back
 	readerWithoutFirstbyte := &buf.BufferedReader{Reader: buf.NewReader(conn)}
-	multiReader := io.MultiReader(bytes.NewReader(firstbyte), readerWithoutFirstbyte)
-	reader := bufio.NewReaderSize(multiReader, buf.Size)
+	reader := io.MultiReader(bytes.NewReader(firstbyte), readerWithoutFirstbyte)
 	request, err := svrSession.Handshake(reader, conn)
 	if err != nil {
 		if inbound.Source.IsValid() {
