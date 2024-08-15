@@ -12,5 +12,10 @@ type CommandEnvHolder struct {
 var CommandEnv CommandEnvHolder
 
 func init() {
+	// exec, err := os.Executable()
+	// if err != nil {
+	// 	return
+	// }
+	// CommandEnv.Exec = path.Base(exec)
 	CommandEnv.Exec = "xray"
 }
