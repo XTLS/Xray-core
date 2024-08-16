@@ -27,7 +27,7 @@ type pipeOption struct {
 }
 
 func (o *pipeOption) isFull(curSize int32) bool {
-	return o.limit >= 0 && curSize > o.limit
+	return o.limit >= 0 && curSize >= o.limit
 }
 
 type pipe struct {
@@ -45,6 +45,14 @@ var (
 	errBufferFull = errors.New("buffer full")
 	errSlowDown   = errors.New("slow down")
 )
+
+func (p *pipe) Len() int32 {
+    data := p.data
+    if data == nil {
+        return 0
+    }
+    return data.Len()
+}
 
 func (p *pipe) getState(forRead bool) error {
 	switch p.state {
