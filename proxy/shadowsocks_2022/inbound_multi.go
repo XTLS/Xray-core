@@ -50,6 +50,18 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		}
 	}
 	memUsers := []*protocol.MemoryUser{}
+	for i, user := range config.Users {
+		if user.Email == "" {
+			u := uuid.New()
+			user.Email = "unnamed-user-" + strconv.Itoa(i) + "-" + u.String()
+		}
+		u, err := user.ToMemoryUser()
+		if err != nil {
+			return nil, errors.New("failed to get shadowsocks user").Base(err).AtError()
+		}
+		memUsers = append(memUsers, u)
+	}
+
 	inbound := &MultiUserInbound{
 		networks: networks,
 		users:    memUsers,
@@ -64,20 +76,6 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	service, err := shadowaead_2022.NewMultiService[int](config.Method, psk, 500, inbound, nil)
 	if err != nil {
 		return nil, errors.New("create service").Base(err)
-	}
-
-	for i, user := range config.Users {
-		if user.Email == "" {
-			u := uuid.New()
-			user.Email = "unnamed-user-" + strconv.Itoa(i) + "-" + u.String()
-		}
-	}
-	for _, user := range config.Users {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, errors.New("failed to get shadowsocks user").Base(err).AtError()
-		}
-		memUsers = append(memUsers, u)
 	}
 	err = service.UpdateUsersWithPasswords(
 		C.MapIndexed(memUsers, func(index int, it *protocol.MemoryUser) int { return index }),
