@@ -11,8 +11,8 @@ import (
 	"github.com/xtls/xray-core/main/confloader"
 )
 
-func MergeConfigFromFiles(files []string, formats []string) (string, error) {
-	c, err := mergeConfigs(files, formats)
+func MergeConfigFromFiles(files []*core.ConfigSource) (string, error) {
+	c, err := mergeConfigs(files)
 	if err != nil {
 		return "", err
 	}
@@ -23,15 +23,15 @@ func MergeConfigFromFiles(files []string, formats []string) (string, error) {
 	return "", errors.New("marshal to json failed.").AtError()
 }
 
-func mergeConfigs(files []string, formats []string) (*conf.Config, error) {
+func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {
 	cf := &conf.Config{}
 	for i, file := range files {
 		errors.LogInfo(context.Background(), "Reading config: ", file)
-		r, err := confloader.LoadConfig(file)
+		r, err := confloader.LoadConfig(file.File)
 		if err != nil {
 			return nil, errors.New("failed to read config: ", file).Base(err)
 		}
-		c, err := ReaderDecoderByFormat[formats[i]](r)
+		c, err := ReaderDecoderByFormat[file.Format](r)
 		if err != nil {
 			return nil, errors.New("failed to decode config: ", file).Base(err)
 		}
@@ -39,13 +39,13 @@ func mergeConfigs(files []string, formats []string) (*conf.Config, error) {
 			*cf = *c
 			continue
 		}
-		cf.Override(c, file)
+		cf.Override(c, file.File)
 	}
 	return cf, nil
 }
 
-func BuildConfig(files []string, formats []string) (*core.Config, error) {
-	config, err := mergeConfigs(files, formats)
+func BuildConfig(files []*core.ConfigSource) (*core.Config, error) {
+	config, err := mergeConfigs(files)
 	if err != nil {
 		return nil, err
 	}

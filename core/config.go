@@ -19,14 +19,19 @@ type ConfigFormat struct {
 	Loader    ConfigLoader
 }
 
+type ConfigSource struct {
+	File   string
+	Format string
+}
+
 // ConfigLoader is a utility to load Xray config from external source.
 type ConfigLoader func(input interface{}) (*Config, error)
 
 // ConfigBuilder is a builder to build core.Config from filenames and formats
-type ConfigBuilder func(files []string, formats []string) (*Config, error)
+type ConfigBuilder func(files []*ConfigSource) (*Config, error)
 
 // ConfigsMerger merge multiple json configs into on config
-type ConfigsMerger func(files []string, formats []string) (string, error)
+type ConfigsMerger func(files []*ConfigSource) (string, error)
 
 var (
 	configLoaderByName    = make(map[string]*ConfigFormat)
@@ -55,20 +60,21 @@ func RegisterConfigLoader(format *ConfigFormat) error {
 }
 
 func GetMergedConfig(args cmdarg.Arg) (string, error) {
-	files := make([]string, 0)
-	formats := make([]string, 0)
+	var files []*ConfigSource
 	supported := []string{"json", "yaml", "toml"}
 	for _, file := range args {
 		format := getFormat(file)
 		for _, s := range supported {
 			if s == format {
-				files = append(files, file)
-				formats = append(formats, format)
+				files = append(files, &ConfigSource{
+					File:   file,
+					Format: format,
+				})
 				break
 			}
 		}
 	}
-	return ConfigMergedFormFiles(files, formats)
+	return ConfigMergedFormFiles(files)
 }
 
 func GetFormatByExtension(ext string) string {
@@ -101,7 +107,7 @@ func getFormat(filename string) string {
 func LoadConfig(formatName string, input interface{}) (*Config, error) {
 	switch v := input.(type) {
 	case cmdarg.Arg:
-		formats := make([]string, len(v))
+		sources := make([]*ConfigSource, len(v))
 		hasProtobuf := false
 		for i, file := range v {
 			var f string
@@ -123,7 +129,10 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			if f == "protobuf" {
 				hasProtobuf = true
 			}
-			formats[i] = f
+			sources[i] = &ConfigSource{
+				File:   file,
+				Format: f,
+			}
 		}
 
 		// only one protobuf config file is allowed
@@ -136,8 +145,7 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 		}
 
 		// to avoid import cycle
-		return ConfigBuilderForFiles(v, formats)
-
+		return ConfigBuilderForFiles(sources)
 	case io.Reader:
 		if f, found := configLoaderByName[formatName]; found {
 			return f.Loader(v)
