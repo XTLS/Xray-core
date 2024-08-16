@@ -27,7 +27,7 @@ func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {
 	cf := &conf.Config{}
 	for i, file := range files {
 		errors.LogInfo(context.Background(), "Reading config: ", file)
-		r, err := confloader.LoadConfig(file.File)
+		r, err := confloader.LoadConfig(file.Name)
 		if err != nil {
 			return nil, errors.New("failed to read config: ", file).Base(err)
 		}
@@ -39,7 +39,7 @@ func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {
 			*cf = *c
 			continue
 		}
-		cf.Override(c, file.File)
+		cf.Override(c, file.Name)
 	}
 	return cf, nil
 }

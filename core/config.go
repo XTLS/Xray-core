@@ -20,7 +20,7 @@ type ConfigFormat struct {
 }
 
 type ConfigSource struct {
-	File   string
+	Name   string
 	Format string
 }
 
@@ -67,7 +67,7 @@ func GetMergedConfig(args cmdarg.Arg) (string, error) {
 		for _, s := range supported {
 			if s == format {
 				files = append(files, &ConfigSource{
-					File:   file,
+					Name:   file,
 					Format: format,
 				})
 				break
@@ -107,7 +107,7 @@ func getFormat(filename string) string {
 func LoadConfig(formatName string, input interface{}) (*Config, error) {
 	switch v := input.(type) {
 	case cmdarg.Arg:
-		sources := make([]*ConfigSource, len(v))
+		files := make([]*ConfigSource, len(v))
 		hasProtobuf := false
 		for i, file := range v {
 			var f string
@@ -129,8 +129,8 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			if f == "protobuf" {
 				hasProtobuf = true
 			}
-			sources[i] = &ConfigSource{
-				File:   file,
+			files[i] = &ConfigSource{
+				Name:   file,
 				Format: f,
 			}
 		}
@@ -145,7 +145,7 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 		}
 
 		// to avoid import cycle
-		return ConfigBuilderForFiles(sources)
+		return ConfigBuilderForFiles(files)
 	case io.Reader:
 		if f, found := configLoaderByName[formatName]; found {
 			return f.Loader(v)
