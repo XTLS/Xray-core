@@ -448,7 +448,6 @@ func Test_maxUpload(t *testing.T) {
 	common.Must(err)
 
 	var b [1024]byte
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
@@ -456,7 +455,7 @@ func Test_maxUpload(t *testing.T) {
 	}
 	common.Must(conn.Close())
 
-	if uploadSize > 100 {
+	if uploadSize > 100 || uploadSize == 0 {
 		t.Error("incorrect upload size: ", uploadSize)
 	}
 
