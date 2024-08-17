@@ -227,7 +227,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(scMaxEachPostBytes.roll()))
+	maxUploadSize := scMaxEachPostBytes.roll()
+	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
+	// code relies on this behavior. Subtract 1 so that together with
+	// uploadWriter wrapper, exact size limits can be enforced
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
 
 	go func() {
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
@@ -318,16 +322,48 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
-	// necessary in order to send larger chunks in upload
-	bufferedUploadPipeWriter := buf.NewBufferedWriter(uploadPipeWriter)
-	bufferedUploadPipeWriter.SetBuffered(false)
+	writer := uploadWriter{
+		uploadPipeWriter,
+		maxUploadSize,
+	}
 
 	conn := splitConn{
-		writer:     bufferedUploadPipeWriter,
+		writer:     writer,
 		reader:     lazyDownload,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
 
 	return stat.Connection(&conn), nil
+}
+
+// A wrapper around pipe that ensures the size limit is exactly honored.
+//
+// The MultiBuffer pipe accepts any single WriteMultiBuffer call even if that
+// single MultiBuffer exceeds the size limit, and then starts blocking on the
+// next WriteMultiBuffer call. This means that ReadMultiBuffer can return more
+// bytes than the size limit. We work around this by splitting a potentially
+// too large write up into multiple.
+type uploadWriter struct {
+	*pipe.Writer
+	maxLen int32
+}
+
+func (w uploadWriter) Write(b []byte) (int, error) {
+	capacity := int(w.maxLen - w.Len())
+	if capacity > 0 && capacity < len(b) {
+		b = b[:capacity]
+	}
+
+	buffer := buf.New()
+	n, err := buffer.Write(b)
+	if err != nil {
+		return 0, err
+	}
+
+	err = w.WriteMultiBuffer([]*buf.Buffer{buffer})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
