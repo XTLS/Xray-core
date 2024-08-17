@@ -228,7 +228,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
 	maxUploadSize := scMaxEachPostBytes.roll()
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize))
+	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
+	// code relies on this behavior. Subtract 1 so that together with
+	// uploadWriter wrapper, exact size limits can be enforced
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
 
 	go func() {
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))

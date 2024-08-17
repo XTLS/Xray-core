@@ -27,7 +27,7 @@ type pipeOption struct {
 }
 
 func (o *pipeOption) isFull(curSize int32) bool {
-	return o.limit >= 0 && curSize >= o.limit
+	return o.limit >= 0 && curSize > o.limit
 }
 
 type pipe struct {
