@@ -172,7 +172,7 @@ func (i *MultiUserInbound) GetUsers(ctx context.Context) []*protocol.MemoryUser 
 	i.Lock()
 	defer i.Unlock()
 	dst := make([]*protocol.MemoryUser, len(i.users))
-	copy(i.users, dst)
+	copy(dst, i.users)
 	return dst
 }
 

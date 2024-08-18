@@ -60,7 +60,7 @@ func (v *TimedUserValidator) GetUsers() []*protocol.MemoryUser {
 	v.Lock()
 	defer v.Unlock()
 	dst := make([]*protocol.MemoryUser, len(v.users))
-	copy(v.users, dst)
+	copy(dst, v.users)
 	return dst
 }
 
