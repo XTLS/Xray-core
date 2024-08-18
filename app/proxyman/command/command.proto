@@ -46,6 +46,10 @@ message GetInboundUserResponse {
   repeated xray.common.protocol.User users = 1;
 }
 
+message GetInboundUsersCountResponse {
+  int64 count = 1;
+}
+
 message AddOutboundRequest {
   core.OutboundHandlerConfig outbound = 1;
 }
@@ -73,6 +77,8 @@ service HandlerService {
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
 
   rpc GetInboundUsers(GetInboundUserRequest) returns (GetInboundUserResponse) {}
+
+  rpc GetInboundUsersCount(GetInboundUserRequest) returns (GetInboundUsersCountResponse) {}
 
   rpc AddOutbound(AddOutboundRequest) returns (AddOutboundResponse) {}
 

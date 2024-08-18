@@ -70,3 +70,13 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 	})
 	return u
 }
+
+// Get users count
+func (v *Validator) GetCount() int64 {
+	var c int64 = 0
+	v.email.Range(func(key, value interface{}) bool {
+		c++
+		return true
+	})
+	return c
+}

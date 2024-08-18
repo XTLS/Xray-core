@@ -64,6 +64,12 @@ func (v *TimedUserValidator) GetUsers() []*protocol.MemoryUser {
 	return dst
 }
 
+func (v *TimedUserValidator) GetCount() int64 {
+	v.Lock()
+	defer v.Unlock()
+	return int64(len(v.users))
+}
+
 func (v *TimedUserValidator) GetAEAD(userHash []byte) (*protocol.MemoryUser, bool, error) {
 	v.RLock()
 	defer v.RUnlock()

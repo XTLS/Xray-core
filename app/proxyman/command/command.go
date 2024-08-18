@@ -123,6 +123,22 @@ func (s *handlerServer) GetInboundUsers(ctx context.Context, request *GetInbound
 	return &GetInboundUserResponse{Users: result}, nil
 }
 
+func (s *handlerServer) GetInboundUsersCount(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUsersCountResponse, error) {
+	handler, err := s.ihm.GetHandler(ctx, request.Tag)
+	if err != nil {
+		return nil, errors.New("failed to get handler: ", request.Tag).Base(err)
+	}
+	p, err := getInbound(handler)
+	if err != nil {
+		return nil, err
+	}
+	um, ok := p.(proxy.UserManager)
+	if !ok {
+		return nil, errors.New("proxy is not a UserManager")
+	}
+	return &GetInboundUsersCountResponse{Count: um.GetUsersCount(ctx)}, nil
+}
+
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
 	if err := core.AddOutboundHandler(s.s, request.Outbound); err != nil {
 		return nil, err

@@ -182,6 +182,11 @@ func (h *Handler) GetUsers(ctx context.Context) []*protocol.MemoryUser {
 	return h.validator.GetAll()
 }
 
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (h *Handler) GetUsersCount(context.Context) int64 {
+	return h.validator.GetCount()
+}
+
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}

@@ -73,6 +73,11 @@ func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
 	return s.validator.GetAll()
 }
 
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.GetCount()
+}
+
 func (s *Server) Network() []net.Network {
 	list := s.config.Network
 	if len(list) == 0 {

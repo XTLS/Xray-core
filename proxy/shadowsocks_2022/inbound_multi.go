@@ -176,6 +176,13 @@ func (i *MultiUserInbound) GetUsers(ctx context.Context) []*protocol.MemoryUser 
 	return dst
 }
 
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (i *MultiUserInbound) GetUsersCount(context.Context) int64 {
+	i.Lock()
+	defer i.Unlock()
+	return int64(len(i.users))
+}
+
 func (i *MultiUserInbound) Network() []net.Network {
 	return i.networks
 }

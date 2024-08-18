@@ -101,6 +101,13 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 	return dst
 }
 
+// GetCount get users count
+func (v *Validator) GetCount() int64 {
+	v.Lock()
+	defer v.Unlock()
+	return int64(len(v.users))
+}
+
 // Get a Shadowsocks user.
 func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol.MemoryUser, aead cipher.AEAD, ret []byte, ivLen int32, err error) {
 	v.RLock()

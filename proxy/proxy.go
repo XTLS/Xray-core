@@ -84,6 +84,9 @@ type UserManager interface {
 
 	// Get all users.
 	GetUsers(context.Context) []*protocol.MemoryUser
+
+	// Get users count.
+	GetUsersCount(context.Context) int64
 }
 
 type GetInbound interface {

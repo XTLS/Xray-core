@@ -135,6 +135,11 @@ func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
 	return s.validator.GetAll()
 }
 
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.GetCount()
+}
+
 // Network implements proxy.Inbound.Network().
 func (s *Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}

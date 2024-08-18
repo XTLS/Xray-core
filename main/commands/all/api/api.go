@@ -22,6 +22,7 @@ var CmdAPI = &base.Command{
 		cmdRemoveInbounds,
 		cmdRemoveOutbounds,
 		cmdInboundUser,
+		cmdInboundUserCount,
 		cmdAddRules,
 		cmdRemoveRules,
 		cmdSourceIpBlock,
