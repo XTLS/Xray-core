@@ -200,6 +200,9 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		r := netlink.NewRule()
 		r.Table, r.Family, r.Src = ipv6TableIndex, unix.AF_INET6, addr.IPNet
 		out.rules = append(out.rules, r)
+		r = netlink.NewRule()
+		r.Table, r.Family, r.OifName = ipv6TableIndex, unix.AF_INET6, n
+		out.rules = append(out.rules, r)
 	}
 
 	for _, addr := range out.linkAddrs {
