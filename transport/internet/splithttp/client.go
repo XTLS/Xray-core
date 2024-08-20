@@ -61,8 +61,11 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		// in case we hit an error, we want to unblock this part
 		defer gotConn.Close()
 
+		ctx = httptrace.WithClientTrace(ctx, trace)
+		ctx, ctxCancel := context.WithCancel(ctx)
+
 		req, err := http.NewRequestWithContext(
-			httptrace.WithClientTrace(ctx, trace),
+			ctx,
 			"GET",
 			baseURL,
 			nil,
@@ -90,17 +93,32 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 			return
 		}
 
-		downResponse = response.Body
+		if c.isH3 {
+			// workaround for https://github.com/quic-go/quic-go/issues/2143 -- always
+			// cancel request context so that Close cancels any Read, and also acquire
+			// mutex so that Close does not race with Read and cause panics. This
+			// should then match the behavior of http2 and http1. This wrapper type may
+			// be applied to all HTTP versions but is avoided due to additional
+			// overhead.
+			downResponse = &h3Body{
+				inner:  response.Body,
+				cancel: ctxCancel,
+			}
+		} else {
+			downResponse = response.Body
+		}
+
 		gotDownResponse.Close()
 	}()
 
-	if c.isH3 {
-		gotConn.Close()
+	if !c.isH3 {
+		// in quic-go, sometimes gotConn is never closed for the lifetime of
+		// the entire connection, and the download locks up
+		// https://github.com/quic-go/quic-go/issues/3342
+		// for other HTTP versions, we want to block Dial until we know the
+		// remote address of the server, for logging purposes
+		<-gotConn.Wait()
 	}
-
-	// we want to block Dial until we know the remote address of the server,
-	// for logging purposes
-	<-gotConn.Wait()
 
 	lazyDownload := &LazyReader{
 		CreateReader: func() (io.ReadCloser, error) {
@@ -171,4 +189,26 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	}
 
 	return nil
+}
+
+type h3Body struct {
+	inner  io.ReadCloser
+	lock   sync.Mutex
+	cancel context.CancelFunc
+}
+
+func (c *h3Body) Read(b []byte) (int, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.inner.Read(b)
+}
+
+func (c *h3Body) Close() error {
+	c.cancel()
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.inner.Close()
 }
