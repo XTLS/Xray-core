@@ -327,6 +327,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
+			firstWrite:        true,
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
@@ -338,6 +339,7 @@ type PacketWriter struct {
 	*Handler
 	context.Context
 	UDPOverride net.Destination
+	firstWrite  bool
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -369,6 +371,18 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
 		} else {
+			if w.firstWrite {
+				w.firstWrite = false
+				//Do not send noise for DNS requests
+				if w.UDPOverride.Port != 53 {
+					noise, err := GenerateRandomBytes(randBetween(2, 8))
+					if err != nil {
+						return err
+					}
+					_, _ = w.PacketConnWrapper.Write(noise)
+				}
+
+			}
 			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}
 		b.Release()
@@ -468,4 +482,14 @@ func randBetween(left int64, right int64) int64 {
 	}
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
 	return left + bigInt.Int64()
+}
+func GenerateRandomBytes(n int64) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	// Note that err == nil only if we read len(b) bytes.
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
