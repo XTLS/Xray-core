@@ -40,6 +40,22 @@ func ContextWithOutbounds(ctx context.Context, outbounds []*Outbound) context.Co
 	return context.WithValue(ctx, outboundSessionKey, outbounds)
 }
 
+func ContextCloneOutbounds(ctx context.Context) context.Context {
+	outbounds := OutboundsFromContext(ctx)
+	newOutbounds := make([]*Outbound, len(outbounds))
+	for i, ob := range outbounds {
+		if ob == nil {
+			continue
+		}
+
+		// copy outbound by value
+		v := *ob
+		newOutbounds[i] = &v
+	}
+
+	return ContextWithOutbounds(ctx, newOutbounds)
+}
+
 func OutboundsFromContext(ctx context.Context) []*Outbound {
 	if outbounds, ok := ctx.Value(outboundSessionKey).([]*Outbound); ok {
 		return outbounds

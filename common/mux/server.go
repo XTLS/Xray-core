@@ -170,7 +170,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				b.Release()
 				mb = nil
 			}
-			errors.LogInfoInner(ctx, err,"XUDP hit ", meta.GlobalID)
+			errors.LogInfoInner(ctx, err, "XUDP hit ", meta.GlobalID)
 		}
 		if mb != nil {
 			ctx = session.ContextWithTimeoutOnly(ctx, true)
@@ -286,7 +286,8 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 	case SessionStatusEnd:
 		err = w.handleStatusEnd(&meta, reader)
 	case SessionStatusNew:
-		err = w.handleStatusNew(ctx, &meta, reader)
+		// clone outbounds because it is going to be mutated concurrently (Target and OriginalTarget)
+		err = w.handleStatusNew(session.ContextCloneOutbounds(ctx), &meta, reader)
 	case SessionStatusKeep:
 		err = w.handleStatusKeep(&meta, reader)
 	default:
