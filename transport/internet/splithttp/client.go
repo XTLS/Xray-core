@@ -93,19 +93,12 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 			return
 		}
 
-		if c.isH3 {
-			// workaround for https://github.com/quic-go/quic-go/issues/2143 -- always
-			// cancel request context so that Close cancels any Read, and also acquire
-			// mutex so that Close does not race with Read and cause panics. This
-			// should then match the behavior of http2 and http1. This wrapper type may
-			// be applied to all HTTP versions but is avoided due to additional
-			// overhead.
-			downResponse = &h3Body{
-				inner:  response.Body,
-				cancel: ctxCancel,
-			}
-		} else {
-			downResponse = response.Body
+		// workaround for https://github.com/quic-go/quic-go/issues/2143 --
+		// always cancel request context so that Close cancels any Read.
+		// Should then match the behavior of http2 and http1.
+		downResponse = downloadBody{
+			response.Body,
+			ctxCancel,
 		}
 
 		gotDownResponse.Close()
@@ -191,24 +184,12 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	return nil
 }
 
-type h3Body struct {
-	inner  io.ReadCloser
-	lock   sync.Mutex
+type downloadBody struct {
+	io.ReadCloser
 	cancel context.CancelFunc
 }
 
-func (c *h3Body) Read(b []byte) (int, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	return c.inner.Read(b)
-}
-
-func (c *h3Body) Close() error {
+func (c downloadBody) Close() error {
 	c.cancel()
-
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	return c.inner.Close()
+	return nil
 }
