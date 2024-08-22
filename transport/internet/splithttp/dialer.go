@@ -83,7 +83,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		}
 
 		if gotlsConfig != nil {
-			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+			if fingerprint := tls.GetRandomFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 				conn = tls.UClient(conn, gotlsConfig, fingerprint)
 				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
 					return nil, err

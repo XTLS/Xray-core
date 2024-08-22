@@ -18,7 +18,7 @@ message Config {
   uint64 max_time_diff = 9;
   repeated bytes short_ids = 10;
 
-  string Fingerprint = 21;
+  repeated string Fingerprint = 21;
   string server_name = 22;
   bytes public_key = 23;
   bytes short_id = 24;
