@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -187,9 +186,8 @@ func GetRandomFingerprint(names []string) *utls.ClientHelloID {
 	if size == 0 {
 		return nil
 	}
-	var index, _ = rand.Int(rand.Reader, big.NewInt(int64(size)))         // Get a secure random fingerprint name in slice
-	fmt.Printf("index=%d, fingerprint=%s\n", index, names[index.Int64()]) // TODO debug print
-	return GetFingerprint(names[index.Int64()])                           // Get fingerprint from utls
+	var index, _ = rand.Int(rand.Reader, big.NewInt(int64(size))) // Get a secure random fingerprint name in slice
+	return GetFingerprint(names[index.Int64()])                   // Get fingerprint from utls
 }
 
 var PresetFingerprints = map[string]*utls.ClientHelloID{

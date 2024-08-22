@@ -439,14 +439,15 @@ type FingerprintList struct {
 
 func (c *FingerprintList) UnmarshalJSON(data []byte) error {
 	var name string
-	var err = json.Unmarshal(data, &name)
-	if err == nil {
-		c.Names = []string{name}
+	if err := json.Unmarshal(data, &name); err == nil { // parse as string
+		c.Names = []string{name} // as 1 size string slice
 		return nil
 	}
 
-	err = json.Unmarshal(data, &c.Names)
-	if err == nil {
+	if err := json.Unmarshal(data, &c.Names); err == nil { // parse as string list
+		for i, name := range c.Names {
+			c.Names[i] = strings.ToLower(name)
+		}
 		return nil
 	}
 	return errors.New("failed to parse fingerprint: ", string(data))
