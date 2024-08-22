@@ -203,7 +203,7 @@ func TestStatsChannelBlocking(t *testing.T) {
 
 	// Test blocking channel publishing
 	go func() {
-		// Dummy messsage with no subscriber receiving, will block broadcasting goroutine
+		// Dummy message with no subscriber receiving, will block broadcasting goroutine
 		c.Publish(context.Background(), nil)
 
 		<-pauseCh
