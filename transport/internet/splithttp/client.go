@@ -108,7 +108,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 	}
 
 	lazyDownload := &LazyReader{
-		CreateReader: func() (io.ReadCloser, error) {
+		CreateReader: func() (io.Reader, error) {
 			<-gotDownResponse.Wait()
 			if downResponse == nil {
 				return nil, errors.New("downResponse failed")
@@ -187,7 +187,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 }
 
 type downloadBody struct {
-	io.ReadCloser
+	io.Reader
 	cancel context.CancelFunc
 }
 
