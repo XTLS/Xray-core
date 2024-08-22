@@ -1,10 +1,8 @@
 package splithttp
 
 import (
-	"bytes"
 	"context"
 	gotls "crypto/tls"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -292,35 +290,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
-	lazyDownload := &LazyReader{
-		CreateReader: func() (io.ReadCloser, error) {
-			// skip "ok" response
-			trashHeader := []byte{0, 0}
-			_, err := io.ReadFull(lazyRawDownload, trashHeader)
-			if err != nil {
-				return nil, errors.New("failed to read initial response").Base(err)
-			}
-
-			if bytes.Equal(trashHeader, []byte("ok")) {
-				return lazyRawDownload, nil
-			}
-
-			// we read some garbage byte that may not have been "ok" at
-			// all. return a reader that replays what we have read so far
-			reader := io.MultiReader(
-				bytes.NewReader(trashHeader),
-				lazyRawDownload,
-			)
-			readCloser := struct {
-				io.Reader
-				io.Closer
-			}{
-				Reader: reader,
-				Closer: lazyRawDownload,
-			}
-			return readCloser, nil
-		},
-	}
+	reader := &stripOkReader{ReadCloser: lazyRawDownload}
 
 	writer := uploadWriter{
 		uploadPipeWriter,
@@ -329,7 +299,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	conn := splitConn{
 		writer:     writer,
-		reader:     lazyDownload,
+		reader:     reader,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}

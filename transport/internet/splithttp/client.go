@@ -49,6 +49,8 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 	var downResponse io.ReadCloser
 	gotDownResponse := done.New()
 
+	ctx, ctxCancel := context.WithCancel(ctx)
+
 	go func() {
 		trace := &httptrace.ClientTrace{
 			GotConn: func(connInfo httptrace.GotConnInfo) {
@@ -62,7 +64,6 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		defer gotConn.Close()
 
 		ctx = httptrace.WithClientTrace(ctx, trace)
-		ctx, ctxCancel := context.WithCancel(ctx)
 
 		req, err := http.NewRequestWithContext(
 			ctx,
@@ -93,14 +94,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 			return
 		}
 
-		// workaround for https://github.com/quic-go/quic-go/issues/2143 --
-		// always cancel request context so that Close cancels any Read.
-		// Should then match the behavior of http2 and http1.
-		downResponse = downloadBody{
-			response.Body,
-			ctxCancel,
-		}
-
+		downResponse = response.Body
 		gotDownResponse.Close()
 	}()
 
@@ -123,7 +117,15 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		},
 	}
 
-	return lazyDownload, remoteAddr, localAddr, nil
+	// workaround for https://github.com/quic-go/quic-go/issues/2143 --
+	// always cancel request context so that Close cancels any Read.
+	// Should then match the behavior of http2 and http1.
+	reader := downloadBody{
+		lazyDownload,
+		ctxCancel,
+	}
+
+	return reader, remoteAddr, localAddr, nil
 }
 
 func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
