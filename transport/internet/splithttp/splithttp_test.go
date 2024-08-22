@@ -248,6 +248,8 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 			NextProtocol:  []string{"h3"},
 		},
 	}
+
+	serverClosed := false
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
@@ -258,10 +260,12 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 			for {
 				b.Clear()
 				if _, err := b.ReadFrom(conn); err != nil {
-					return
+					break
 				}
 				common.Must2(conn.Write(b.Bytes()))
 			}
+
+			serverClosed = true
 		}()
 	})
 	common.Must(err)
@@ -271,7 +275,6 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 
 	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	defer conn.Close()
 
 	const N = 1024
 	b1 := make([]byte, N)
@@ -292,6 +295,12 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	common.Must2(b2.ReadFullFrom(conn, N))
 	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
 		t.Error(r)
+	}
+
+	conn.Close()
+	time.Sleep(100 * time.Millisecond)
+	if !serverClosed {
+		t.Error("server did not get closed")
 	}
 
 	end := time.Now()
