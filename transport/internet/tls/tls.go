@@ -183,7 +183,11 @@ func GetFingerprint(name string) (fingerprint *utls.ClientHelloID) {
 }
 
 func GetRandomFingerprint(names []string) *utls.ClientHelloID {
-	var index, _ = rand.Int(rand.Reader, big.NewInt(int64(len(names))))   // Get a secure random fingerprint name in slice
+	var size = len(names)
+	if size == 0 {
+		return nil
+	}
+	var index, _ = rand.Int(rand.Reader, big.NewInt(int64(size)))         // Get a secure random fingerprint name in slice
 	fmt.Printf("index=%d, fingerprint=%s\n", index, names[index.Int64()]) // TODO debug print
 	return GetFingerprint(names[index.Int64()])                           // Get fingerprint from utls
 }

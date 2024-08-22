@@ -452,12 +452,6 @@ func (c *FingerprintList) UnmarshalJSON(data []byte) error {
 	return errors.New("failed to parse fingerprint: ", string(data))
 }
 
-func (c *FingerprintList) ToLowerAll() {
-	for i, name := range c.Names {
-		c.Names[i] = strings.ToLower(name)
-	}
-}
-
 type TLSConfig struct {
 	Insecure                             bool             `json:"allowInsecure"`
 	Certs                                []*TLSCertConfig `json:"certificates"`
@@ -499,14 +493,19 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MinVersion = c.MinVersion
 	config.MaxVersion = c.MaxVersion
 	config.CipherSuites = c.CipherSuites
-	// Check the validity of each fingerprint
-	c.Fingerprint.ToLowerAll()
-	for _, fp := range c.Fingerprint.Names {
-		if fp != "" && tls.GetFingerprint(fp) == nil {
-			return nil, errors.New(`unknown fingerprint: `, fp)
+
+	if c.Fingerprint == nil {
+		config.Fingerprint = []string{} // empty slice
+	} else {
+		// Check the validity of each fingerprint
+		for _, fp := range c.Fingerprint.Names {
+			if fp != "" && tls.GetFingerprint(fp) == nil {
+				return nil, errors.New(`unknown fingerprint: `, fp)
+			}
 		}
+		config.Fingerprint = c.Fingerprint.Names
 	}
-	config.Fingerprint = c.Fingerprint.Names
+
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
 	if c.PinnedPeerCertificateChainSha256 != nil {
@@ -646,7 +645,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
 	} else {
-		c.Fingerprint.ToLowerAll()
+		if c.Fingerprint == nil {
+			return nil, errors.New(`empty "fingerprint"`)
+		}
 		for _, fp := range c.Fingerprint.Names {
 			if fp == "" {
 				return nil, errors.New(`empty "fingerprint"`)
