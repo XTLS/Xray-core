@@ -499,7 +499,7 @@ func file_proxy_freedom_config_proto_rawDescGZIP() []byte {
 
 var file_proxy_freedom_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proxy_freedom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_proxy_freedom_config_proto_goTypes = []interface{}{
+var file_proxy_freedom_config_proto_goTypes = []any{
 	(Config_DomainStrategy)(0),      // 0: xray.proxy.freedom.Config.DomainStrategy
 	(*DestinationOverride)(nil),     // 1: xray.proxy.freedom.DestinationOverride
 	(*Fragment)(nil),                // 2: xray.proxy.freedom.Fragment
@@ -550,7 +550,7 @@ func file_proxy_freedom_config_proto_init() {
 				return nil
 			}
 		}
-		file_proxy_freedom_config_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_proxy_freedom_config_proto_msgTypes[2].Exporter = func(v any, i int) any {
 			switch v := v.(*Noise); i {
 			case 0:
 				return &v.state
@@ -562,7 +562,7 @@ func file_proxy_freedom_config_proto_init() {
 				return nil
 			}
 		}
-		file_proxy_freedom_config_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_proxy_freedom_config_proto_msgTypes[3].Exporter = func(v any, i int) any {
 			switch v := v.(*Config); i {
 			case 0:
 				return &v.state
