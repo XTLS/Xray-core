@@ -207,7 +207,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
+			if h.config.Noise != nil {
+				errors.LogDebug(ctx, "NOISE", h.config.Noise.StrNoise, h.config.Noise.LengthMin, h.config.Noise.LengthMax,
+					h.config.Noise.DelayMin, h.config.Noise.DelayMax)
+				writer = NewPacketWriter(conn, h, ctx, UDPOverride, true)
+			} else {
+				writer = NewPacketWriter(conn, h, ctx, UDPOverride, false)
+			}
 		}
 
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
@@ -310,7 +316,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, hasNoise bool) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -321,13 +327,24 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		counter = statConn.WriteCounter
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		return &PacketWriter{
-			PacketConnWrapper: c,
-			Counter:           counter,
-			Handler:           h,
-			Context:           ctx,
-			UDPOverride:       UDPOverride,
-			firstWrite:        true,
+		if hasNoise {
+			return &NoisePacketWriter{
+				Writer: PacketWriter{
+					PacketConnWrapper: c,
+					Handler:           h,
+					Context:           ctx,
+					UDPOverride:       UDPOverride,
+				},
+				firstWrite: hasNoise,
+			}
+		} else {
+			return &PacketWriter{
+				PacketConnWrapper: c,
+				Counter:           counter,
+				Handler:           h,
+				Context:           ctx,
+				UDPOverride:       UDPOverride,
+			}
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
@@ -339,7 +356,6 @@ type PacketWriter struct {
 	*Handler
 	context.Context
 	UDPOverride net.Destination
-	firstWrite  bool
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -371,18 +387,6 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
 		} else {
-			if w.firstWrite {
-				w.firstWrite = false
-				//Do not send noise for DNS requests
-				if w.UDPOverride.Port != 53 {
-					noise, err := GenerateRandomBytes(randBetween(2, 8))
-					if err != nil {
-						return err
-					}
-					_, _ = w.PacketConnWrapper.Write(noise)
-				}
-
-			}
 			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}
 		b.Release()
@@ -392,6 +396,82 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		if w.Counter != nil {
 			w.Counter.Add(int64(n))
+		}
+	}
+	return nil
+}
+
+type NoisePacketWriter struct {
+	Writer     PacketWriter
+	firstWrite bool
+}
+
+// MultiBuffer writer with Noise in first packet
+func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if w.firstWrite {
+		w.firstWrite = false
+		//Do not send noise for DNS requests just to be safe
+		if w.Writer.UDPOverride.Port != 53 {
+			var noise []byte
+			var err error
+			//User input string
+			if w.Writer.config.Noise.StrNoise != "" {
+				noise = []byte(w.Writer.config.Noise.StrNoise)
+			} else {
+				//Random noise
+				noise, err = GenerateRandomBytes(randBetween(int64(w.Writer.config.Noise.LengthMin),
+					int64(w.Writer.config.Noise.LengthMax)))
+			}
+
+			if err != nil {
+				return err
+			}
+			_, _ = w.Writer.PacketConnWrapper.Write(noise)
+
+			if w.Writer.config.Noise.DelayMin != 0 {
+				time.Sleep(time.Duration(randBetween(int64(w.Writer.config.Noise.DelayMin), int64(w.Writer.config.Noise.DelayMax))) * time.Millisecond)
+			}
+		}
+
+	}
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		var n int
+		var err error
+		if b.UDP != nil {
+			if w.Writer.UDPOverride.Address != nil {
+				b.UDP.Address = w.Writer.UDPOverride.Address
+			}
+			if w.Writer.UDPOverride.Port != 0 {
+				b.UDP.Port = w.Writer.UDPOverride.Port
+			}
+			if w.Writer.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
+				ip := w.Writer.Handler.resolveIP(w.Writer.Context, b.UDP.Address.Domain(), nil)
+				if ip != nil {
+					b.UDP.Address = ip
+				}
+			}
+			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+			if destAddr == nil {
+				b.Release()
+				continue
+			}
+			n, err = w.Writer.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
+		} else {
+
+			n, err = w.Writer.PacketConnWrapper.Write(b.Bytes())
+		}
+		b.Release()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
+		if w.Writer.Counter != nil {
+			w.Writer.Counter.Add(int64(n))
 		}
 	}
 	return nil
