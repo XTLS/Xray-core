@@ -118,6 +118,9 @@ func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.Bu
 }
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
+	// deep-clone outbounds because it is going to be mutated concurrently
+	// (Target and OriginalTarget)
+	ctx = session.ContextCloneOutbounds(ctx)
 	errors.LogInfo(ctx, "received request for ", meta.Target)
 	{
 		msg := &log.AccessMessage{
@@ -286,8 +289,7 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 	case SessionStatusEnd:
 		err = w.handleStatusEnd(&meta, reader)
 	case SessionStatusNew:
-		// clone outbounds because it is going to be mutated concurrently (Target and OriginalTarget)
-		err = w.handleStatusNew(session.ContextCloneOutbounds(ctx), &meta, reader)
+		err = w.handleStatusNew(ctx, &meta, reader)
 	case SessionStatusKeep:
 		err = w.handleStatusKeep(&meta, reader)
 	default:
