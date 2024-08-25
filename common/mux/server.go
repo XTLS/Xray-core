@@ -118,6 +118,9 @@ func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.Bu
 }
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
+	// deep-clone outbounds because it is going to be mutated concurrently
+	// (Target and OriginalTarget)
+	ctx = session.ContextCloneOutbounds(ctx)
 	errors.LogInfo(ctx, "received request for ", meta.Target)
 	{
 		msg := &log.AccessMessage{
@@ -170,7 +173,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				b.Release()
 				mb = nil
 			}
-			errors.LogInfoInner(ctx, err,"XUDP hit ", meta.GlobalID)
+			errors.LogInfoInner(ctx, err, "XUDP hit ", meta.GlobalID)
 		}
 		if mb != nil {
 			ctx = session.ContextWithTimeoutOnly(ctx, true)
