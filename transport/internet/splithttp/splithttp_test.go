@@ -249,6 +249,8 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 			NextProtocol:  []string{"h3"},
 		},
 	}
+
+	serverClosed := false
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
@@ -259,10 +261,12 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 			for {
 				b.Clear()
 				if _, err := b.ReadFrom(conn); err != nil {
-					return
+					break
 				}
 				common.Must2(conn.Write(b.Bytes()))
 			}
+
+			serverClosed = true
 		}()
 	})
 	common.Must(err)
@@ -272,7 +276,6 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 
 	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
-	defer conn.Close()
 
 	const N = 1024
 	b1 := make([]byte, N)
@@ -293,6 +296,12 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	common.Must2(b2.ReadFullFrom(conn, N))
 	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
 		t.Error(r)
+	}
+
+	conn.Close()
+	time.Sleep(100 * time.Millisecond)
+	if !serverClosed {
+		t.Error("server did not get closed")
 	}
 
 	end := time.Now()
@@ -389,7 +398,7 @@ func Test_queryString(t *testing.T) {
 	ctx := context.Background()
 	streamSettings := &internet.MemoryStreamConfig{
 		ProtocolName:     "splithttp",
-		ProtocolSettings: &Config{Path: "sh"},
+		ProtocolSettings: &Config{Path: "sh?ed=2048"},
 	}
 	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
@@ -406,5 +415,59 @@ func Test_queryString(t *testing.T) {
 	}
 
 	common.Must(conn.Close())
+	common.Must(listen.Close())
+}
+
+func Test_maxUpload(t *testing.T) {
+	listenPort := tcp.PickPort()
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+			ScMaxEachPostBytes: &RandRangeConfig{
+				From: 100,
+				To:   100,
+			},
+		},
+	}
+
+	var uploadSize int
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			var b [1024]byte
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			n, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			uploadSize = n
+
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
+	})
+	common.Must(err)
+	ctx := context.Background()
+
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+
+	// send a slightly too large upload
+	var upload [101]byte
+	_, err = conn.Write(upload[:])
+	common.Must(err)
+
+	var b [1024]byte
+	n, _ := io.ReadFull(conn, b[:])
+	fmt.Println("string is", n)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+	common.Must(conn.Close())
+
+	if uploadSize > 100 || uploadSize == 0 {
+		t.Error("incorrect upload size: ", uploadSize)
+	}
+
 	common.Must(listen.Close())
 }

@@ -2,6 +2,7 @@ package http
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -83,14 +84,28 @@ type readerOnly struct {
 }
 
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	return s.ProcessWithFirstbyte(ctx, network, conn, dispatcher)
+}
+
+// Firstbyte is for forwarded conn from SOCKS inbound
+// Because it needs first byte to choose protocol
+// We need to add it back
+// Other parts are the same as the process function
+func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte ...byte) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "http"
 	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-
-	reader := bufio.NewReaderSize(readerOnly{conn}, buf.Size)
+	var reader *bufio.Reader
+	if len(firstbyte) > 0 {
+		readerWithoutFirstbyte := bufio.NewReaderSize(readerOnly{conn}, buf.Size)
+		multiReader := io.MultiReader(bytes.NewReader(firstbyte), readerWithoutFirstbyte)
+		reader = bufio.NewReaderSize(multiReader, buf.Size)
+	} else {
+		reader = bufio.NewReaderSize(readerOnly{conn}, buf.Size)
+	}
 
 Start:
 	if err := conn.SetReadDeadline(time.Now().Add(s.policy().Timeouts.Handshake)); err != nil {

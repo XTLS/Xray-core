@@ -19,6 +19,7 @@ import (
 	"github.com/GFW-knocker/Xray-core/features"
 	"github.com/GFW-knocker/Xray-core/features/policy"
 	"github.com/GFW-knocker/Xray-core/features/routing"
+	"github.com/GFW-knocker/Xray-core/proxy/http"
 	"github.com/GFW-knocker/Xray-core/transport/internet/stat"
 	"github.com/GFW-knocker/Xray-core/transport/internet/udp"
 )
@@ -29,6 +30,7 @@ type Server struct {
 	policyManager policy.Manager
 	cone          bool
 	udpFilter     *UDPFilter
+	httpServer    *http.Server
 }
 
 // NewServer creates a new Server object.
@@ -39,9 +41,14 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
+	httpConfig := &http.ServerConfig{
+		UserLevel: config.UserLevel,
+	}
 	if config.AuthType == AuthType_PASSWORD {
+		httpConfig.Accounts = config.Accounts
 		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
+	s.httpServer, _ = http.NewServer(ctx, httpConfig)
 	return s, nil
 }
 
@@ -77,7 +84,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	switch network {
 	case net.Network_TCP:
-		return s.processTCP(ctx, conn, dispatcher)
+		firstbyte := make([]byte, 1)
+		conn.Read(firstbyte)
+		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if it is Socks5/4/4a
+			errors.LogDebug(ctx, "Not Socks request, try to parse as HTTP request")
+			return s.httpServer.ProcessWithFirstbyte(ctx, network, conn, dispatcher, firstbyte...)
+		}
+		return s.processTCP(ctx, conn, dispatcher, firstbyte)
 	case net.Network_UDP:
 		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
@@ -85,7 +98,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 }
 
-func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher, firstbyte []byte) error {
 	plcy := s.policy()
 	if err := conn.SetReadDeadline(time.Now().Add(plcy.Timeouts.Handshake)); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to set deadline")
@@ -103,7 +116,13 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
 	}
 
-	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+	// Firstbyte is for forwarded conn from SOCKS inbound
+	// Because it needs first byte to choose protocol
+	// We need to add it back
+	reader := &buf.BufferedReader{
+		Reader: buf.NewReader(conn),
+		Buffer: buf.MultiBuffer{buf.FromBytes(firstbyte)},
+	}
 	request, err := svrSession.Handshake(reader, conn)
 	if err != nil {
 		if inbound.Source.IsValid() {

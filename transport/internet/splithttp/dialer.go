@@ -1,10 +1,8 @@
 package splithttp
 
 import (
-	"bytes"
 	"context"
 	gotls "crypto/tls"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -227,7 +225,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpClient := getHTTPClient(ctx, dest, streamSettings)
 
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(scMaxEachPostBytes.roll()))
+	maxUploadSize := scMaxEachPostBytes.roll()
+	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
+	// code relies on this behavior. Subtract 1 so that together with
+	// uploadWriter wrapper, exact size limits can be enforced
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
 
 	go func() {
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
@@ -288,46 +290,50 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
-	lazyDownload := &LazyReader{
-		CreateReader: func() (io.ReadCloser, error) {
-			// skip "ok" response
-			trashHeader := []byte{0, 0}
-			_, err := io.ReadFull(lazyRawDownload, trashHeader)
-			if err != nil {
-				return nil, errors.New("failed to read initial response").Base(err)
-			}
+	reader := &stripOkReader{ReadCloser: lazyRawDownload}
 
-			if bytes.Equal(trashHeader, []byte("ok")) {
-				return lazyRawDownload, nil
-			}
-
-			// we read some garbage byte that may not have been "ok" at
-			// all. return a reader that replays what we have read so far
-			reader := io.MultiReader(
-				bytes.NewReader(trashHeader),
-				lazyRawDownload,
-			)
-			readCloser := struct {
-				io.Reader
-				io.Closer
-			}{
-				Reader: reader,
-				Closer: lazyRawDownload,
-			}
-			return readCloser, nil
-		},
+	writer := uploadWriter{
+		uploadPipeWriter,
+		maxUploadSize,
 	}
 
-	// necessary in order to send larger chunks in upload
-	bufferedUploadPipeWriter := buf.NewBufferedWriter(uploadPipeWriter)
-	bufferedUploadPipeWriter.SetBuffered(false)
-
 	conn := splitConn{
-		writer:     bufferedUploadPipeWriter,
-		reader:     lazyDownload,
+		writer:     writer,
+		reader:     reader,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 	}
 
 	return stat.Connection(&conn), nil
+}
+
+// A wrapper around pipe that ensures the size limit is exactly honored.
+//
+// The MultiBuffer pipe accepts any single WriteMultiBuffer call even if that
+// single MultiBuffer exceeds the size limit, and then starts blocking on the
+// next WriteMultiBuffer call. This means that ReadMultiBuffer can return more
+// bytes than the size limit. We work around this by splitting a potentially
+// too large write up into multiple.
+type uploadWriter struct {
+	*pipe.Writer
+	maxLen int32
+}
+
+func (w uploadWriter) Write(b []byte) (int, error) {
+	capacity := int(w.maxLen - w.Len())
+	if capacity > 0 && capacity < len(b) {
+		b = b[:capacity]
+	}
+
+	buffer := buf.New()
+	n, err := buffer.Write(b)
+	if err != nil {
+		return 0, err
+	}
+
+	err = w.WriteMultiBuffer([]*buf.Buffer{buffer})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
