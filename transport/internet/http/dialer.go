@@ -143,13 +143,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpHeaders := make(http.Header)
 
-	// GFW-Knocker
-	httpHeaders.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-
 	for _, httpHeader := range httpSettings.Header {
 		for _, httpHeaderValue := range httpHeader.Value {
 			httpHeaders.Set(httpHeader.Name, httpHeaderValue)
 		}
+	}
+
+	// GFW-Knocker
+	uagent := httpHeaders.Get("User-Agent")
+	if uagent == "" {
+		httpHeaders.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 	}
 
 	request := &http.Request{

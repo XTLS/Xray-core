@@ -83,6 +83,12 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
 
+	// GFW-Knocker
+	uagent := req.Header.Get("User-Agent")
+	if uagent == "" {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+	}
+
 	err = req.Write(conn)
 	if err != nil {
 		return nil, err
