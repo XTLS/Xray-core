@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.app.dns.fakedns;
 option csharp_namespace = "Xray.App.Dns.Fakedns";
-option go_package = "github.com/xtls/xray-core/app/dns/fakedns";
+option go_package = "github.com/xmplusdev/xray-core/app/dns/fakedns";
 option java_package = "com.xray.app.dns.fakedns";
 option java_multiple_files = true;
 

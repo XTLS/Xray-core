@@ -1,6 +1,6 @@
 package outbound
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/xmplusdev/xray-core/common/errors/errorgen
 
 import (
 	"context"
@@ -9,24 +9,24 @@ import (
 	"hash/crc64"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/xudp"
-	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/proxy/vmess"
-	"github.com/xtls/xray-core/proxy/vmess/encoding"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xmplusdev/xray-core/common"
+	"github.com/xmplusdev/xray-core/common/buf"
+	"github.com/xmplusdev/xray-core/common/errors"
+	"github.com/xmplusdev/xray-core/common/net"
+	"github.com/xmplusdev/xray-core/common/platform"
+	"github.com/xmplusdev/xray-core/common/protocol"
+	"github.com/xmplusdev/xray-core/common/retry"
+	"github.com/xmplusdev/xray-core/common/session"
+	"github.com/xmplusdev/xray-core/common/signal"
+	"github.com/xmplusdev/xray-core/common/task"
+	"github.com/xmplusdev/xray-core/common/xudp"
+	core "github.com/xmplusdev/xray-core/core"
+	"github.com/xmplusdev/xray-core/features/policy"
+	"github.com/xmplusdev/xray-core/proxy/vmess"
+	"github.com/xmplusdev/xray-core/proxy/vmess/encoding"
+	"github.com/xmplusdev/xray-core/transport"
+	"github.com/xmplusdev/xray-core/transport/internet"
+	"github.com/xmplusdev/xray-core/transport/internet/stat"
 )
 
 // Handler is an outbound connection handler for VMess protocol.

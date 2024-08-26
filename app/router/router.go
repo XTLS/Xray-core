@@ -1,19 +1,20 @@
 package router
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
+//go:generate go run github.com/xmplusdev/xray-core/common/errors/errorgen
 
 import (
 	"context"
 	sync "sync"
-
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
-	routing_dns "github.com/xtls/xray-core/features/routing/dns"
+	"sort"
+	
+	"github.com/xmplusdev/xray-core/common"
+	"github.com/xmplusdev/xray-core/common/errors"
+	"github.com/xmplusdev/xray-core/common/serial"
+	"github.com/xmplusdev/xray-core/core"
+	"github.com/xmplusdev/xray-core/features/dns"
+	"github.com/xmplusdev/xray-core/features/outbound"
+	"github.com/xmplusdev/xray-core/features/routing"
+	routing_dns "github.com/xmplusdev/xray-core/features/routing/dns"
 )
 
 // Router is an implementation of routing.Router.
@@ -27,6 +28,8 @@ type Router struct {
 	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
 	mu         sync.Mutex
+	tag2indexmap map[string]int
+	index2tag    map[int]string
 }
 
 // Route is an implementation of routing.Route.
@@ -34,6 +37,149 @@ type Route struct {
 	routing.Context
 	outboundGroupTags []string
 	outboundTag       string
+}
+
+func NewRouter() *Router {
+	con := NewConditionChan()
+	con.Add(NewInboundTagMatcher([]string{"asdf"}))
+	con.Add(NewProtocolMatcher([]string{"tls"}))
+	con.Add(NewUserMatcher([]string{"bge"}))
+	return &Router{
+		domainStrategy:     Config_AsIs,
+		rules:              []*Rule{&Rule{Condition: con}},
+		balancers:          map[string]*Balancer{},
+		tag2indexmap: map[string]int{},
+		index2tag:    map[int]string{},
+	}
+}
+
+func RemoveDuplicateRule(users []string) []string {
+	sort.Strings(users)
+	j := 0
+	for i := 1; i < len(users); i++ {
+		if users[j] == users[i] {
+			continue
+		}
+		j++
+		users[j] = users[i]
+	}
+	return users[:j+1]
+}
+
+func (r *Router) AddUserRule(tag string, email []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if index, ok := r.tag2indexmap[tag]; ok {
+		if conditioncan, ok := r.rules[index].Condition.(*ConditionChan); ok {
+			for _, condition := range *conditioncan {
+				if usermatcher, ok := condition.(*UserMatcher); ok {
+					usermatcher.user = RemoveDuplicateRule(append(usermatcher.user, email...))
+					break
+				}
+			}
+		} else if usermatcher, ok := r.rules[index].Condition.(*UserMatcher); ok {
+			usermatcher.user = RemoveDuplicateRule(append(usermatcher.user, email...))
+
+		}
+	} else {
+		tagStartIndex := len(r.rules)
+		r.tag2indexmap[tag] = tagStartIndex
+		r.index2tag[tagStartIndex] = tag
+		r.rules = append(r.rules, &Rule{Condition: NewUserMatcher(email), Tag: tag})
+	}
+}
+
+func (r *Router) RemoveUserRule(Users []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	removed_index := make([]int, 0, len(r.rules))
+	for _, email := range Users {
+		for _, rl := range r.rules {
+			conditions, ok := rl.Condition.(*ConditionChan)
+			if ok {
+				for _, v := range *conditions {
+					usermatcher, ok := v.(*UserMatcher)
+					if ok {
+						index := -1
+						for i, e := range usermatcher.user {
+							if e == email {
+								index = i
+								break
+							}
+						}
+						if index != -1 {
+							usermatcher.user = append(usermatcher.user[:index], usermatcher.user[index+1:]...)
+						}
+						break
+					}
+				}
+			} else {
+				if usermatcher, ok := rl.Condition.(*UserMatcher); ok {
+					index := -1
+					for i, e := range usermatcher.user {
+						if e == email {
+							index = i
+							break
+						}
+					}
+					if index != -1 {
+						usermatcher.user = append(usermatcher.user[:index], usermatcher.user[index+1:]...)
+					}
+				}
+			}
+
+		}
+	}
+	
+	for index, rl := range r.rules {
+		conditions, ok := rl.Condition.(*ConditionChan)
+		if ok {
+			for _, v := range *conditions {
+				usermatcher, ok := v.(*UserMatcher)
+				if ok {
+					if len(usermatcher.user) == 0 {
+						removed_index = append(removed_index, index)
+						break
+					}
+
+				}
+			}
+		} else {
+			usermatcher, ok := rl.Condition.(*UserMatcher)
+			if ok {
+				if len(usermatcher.user) == 0 {
+					removed_index = append(removed_index, index)
+				}
+			}
+		}
+
+	} 
+	
+	newRules := make([]*Rule, len(r.rules) - len(removed_index))
+	m := make(map[int]bool, len(r.rules))
+	for _, reomve := range removed_index {
+		m[reomve] = true
+	}
+	
+	start := 0
+	for index, rl := range r.rules {
+		if !m[index] {
+			newRules[start] = rl
+			start += 1
+		}
+	}
+	
+	newtag2indexmap := make(map[string]int, len(newRules))
+	newindex2tag := make(map[int]string, len(newRules))
+	for index, rule := range newRules {
+		newtag2indexmap[rule.Tag] = index
+		newindex2tag[index] = rule.Tag
+	}
+	
+	r.rules = newRules
+	r.tag2indexmap = newtag2indexmap
+	r.index2tag = newindex2tag
+	return
 }
 
 // Init initializes the Router.
@@ -45,6 +191,8 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 	r.dispatcher = dispatcher
 
 	r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
+	r.tag2indexmap = map[string]int{}
+	r.index2tag = map[int]string{}
 	for _, rule := range config.BalancingRule {
 		balancer, err := rule.Build(ohm, dispatcher)
 		if err != nil {

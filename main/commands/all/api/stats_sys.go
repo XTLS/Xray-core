@@ -1,8 +1,8 @@
 package api
 
 import (
-	statsService "github.com/xtls/xray-core/app/stats/command"
-	"github.com/xtls/xray-core/main/commands/base"
+	statsService "github.com/xmplusdev/xray-core/app/stats/command"
+	"github.com/xmplusdev/xray-core/main/commands/base"
 )
 
 var cmdSysStats = &base.Command{

@@ -13,7 +13,7 @@ VERSION=$(shell git describe --always --dirty)
 		.github/workflows/release.yml \
 	Otherwise it is recommended to contact the project maintainers.
 
-LDFLAGS = -X github.com/xtls/xray-core/core.build=$(VERSION) -s -w -buildid=
+LDFLAGS = -X github.com/xmplusdev/xray-core/core.build=$(VERSION) -s -w -buildid=
 PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
 PREFIX ?= $(shell go env GOPATH)

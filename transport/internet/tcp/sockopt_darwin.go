@@ -4,10 +4,10 @@
 package tcp
 
 import (
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xmplusdev/xray-core/common/errors"
+	"github.com/xmplusdev/xray-core/common/net"
+	"github.com/xmplusdev/xray-core/transport/internet"
+	"github.com/xmplusdev/xray-core/transport/internet/stat"
 )
 
 // GetOriginalDestination from tcp conn

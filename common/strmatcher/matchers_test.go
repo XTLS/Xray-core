@@ -3,8 +3,8 @@ package strmatcher_test
 import (
 	"testing"
 
-	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/strmatcher"
+	"github.com/xmplusdev/xray-core/common"
+	. "github.com/xmplusdev/xray-core/common/strmatcher"
 )
 
 func TestMatcher(t *testing.T) {

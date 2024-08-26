@@ -8,11 +8,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/proxy/trojan"
+	"github.com/xmplusdev/xray-core/common/errors"
+	"github.com/xmplusdev/xray-core/common/net"
+	"github.com/xmplusdev/xray-core/common/protocol"
+	"github.com/xmplusdev/xray-core/common/serial"
+	"github.com/xmplusdev/xray-core/proxy/trojan"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -105,10 +105,11 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	}
 
 	for idx, rawUser := range c.Clients {
+		/*
 		if rawUser.Flow != "" {
 			return nil, errors.New(`Trojan doesn't support "flow" anymore.`)
 		}
-
+		*/
 		config.Users[idx] = &protocol.User{
 			Level: uint32(rawUser.Level),
 			Email: rawUser.Email,

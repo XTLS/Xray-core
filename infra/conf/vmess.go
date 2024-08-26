@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/common/uuid"
-	"github.com/xtls/xray-core/proxy/vmess"
-	"github.com/xtls/xray-core/proxy/vmess/inbound"
-	"github.com/xtls/xray-core/proxy/vmess/outbound"
+	"github.com/xmplusdev/xray-core/common/errors"
+	"github.com/xmplusdev/xray-core/common/protocol"
+	"github.com/xmplusdev/xray-core/common/serial"
+	"github.com/xmplusdev/xray-core/common/uuid"
+	"github.com/xmplusdev/xray-core/proxy/vmess"
+	"github.com/xmplusdev/xray-core/proxy/vmess/inbound"
+	"github.com/xmplusdev/xray-core/proxy/vmess/outbound"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -156,7 +156,13 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 				return nil, errors.New("invalid VMess user").Base(err)
 			}
 
-			u, err := uuid.ParseString(account.ID)
+			x := account.ID
+			if x == "" {
+				accid := strings.Split(user.Email, "|")
+				x = accid[2]
+			}
+				
+			u, err := uuid.ParseString(x)
 			if err != nil {
 				return nil, err
 			}
