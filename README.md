@@ -22,6 +22,8 @@
 
 [Project X Channel](https://t.me/projectXtls)
 
+[Project VLESS](https://t.me/projectVless) (non-Chinese)
+
 ## Installation
 
 - Linux Script
