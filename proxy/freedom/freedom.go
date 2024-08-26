@@ -210,7 +210,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if h.config.Noise != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noise.StrNoise, h.config.Noise.LengthMin, h.config.Noise.LengthMax,
 					h.config.Noise.DelayMin, h.config.Noise.DelayMax)
-				writer = NewNoisePacketWriter(conn, h, ctx, UDPOverride, h.config.Noise)
+				writer = &NoisePacketWriter{
+					Writer: buf.SequentialWriter{
+						Writer: conn,
+					},
+					noise:       h.config.Noise,
+					firstWrite:  true,
+					UDPOverride: UDPOverride,
+				}
 
 			} else {
 				writer = NewPacketWriter(conn, h, ctx, UDPOverride)
@@ -340,33 +347,6 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 	return &buf.SequentialWriter{Writer: conn}
 }
 
-func NewNoisePacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, noise *Noise) buf.Writer {
-	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
-		iConn = statConn.Connection
-	}
-	var counter stats.Counter
-	if statConn != nil {
-		counter = statConn.WriteCounter
-	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		return &NoisePacketWriter{
-			Writer: PacketWriter{
-				PacketConnWrapper: c,
-				Counter:           counter,
-				Handler:           h,
-				Context:           ctx,
-				UDPOverride:       UDPOverride,
-			},
-			firstWrite: true,
-			noise:      noise,
-		}
-
-	}
-	return &buf.SequentialWriter{Writer: conn}
-}
-
 type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
@@ -419,44 +399,42 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 type NoisePacketWriter struct {
-	noise      *Noise
-	Writer     PacketWriter
-	firstWrite bool
+	noise       *Noise
+	Writer      buf.SequentialWriter
+	firstWrite  bool
+	UDPOverride net.Destination
 }
 
 // MultiBuffer writer with Noise in first packet
 func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.firstWrite {
 		w.firstWrite = false
-		//Do not send noise for DNS requests just to be safe
-		if w.Writer.UDPOverride.Port != 53 {
-			var noise []byte
-			var err error
-			//User input string
-			if w.noise.StrNoise != "" {
-				noise = []byte(w.noise.StrNoise)
-			} else {
-				//Random noise
-				noise, err = GenerateRandomBytes(randBetween(int64(w.noise.LengthMin),
-					int64(w.noise.LengthMax)))
-			}
+		//Do not send Noise for dns requests(just to be safe)
+		if w.UDPOverride.Port == 53 {
+			return w.Writer.WriteMultiBuffer(mb)
+		}
+		var noise []byte
+		var err error
+		//User input string
+		if w.noise.StrNoise != "" {
+			noise = []byte(w.noise.StrNoise)
+		} else {
+			//Random noise
+			noise, err = GenerateRandomBytes(randBetween(int64(w.noise.LengthMin),
+				int64(w.noise.LengthMax)))
+		}
 
-			if err != nil {
-				return err
-			}
-			_, _ = w.Writer.PacketConnWrapper.Write(noise)
+		if err != nil {
+			return err
+		}
+		_, _ = w.Writer.Write(noise)
 
-			if w.noise.DelayMin != 0 {
-				time.Sleep(time.Duration(randBetween(int64(w.noise.DelayMin), int64(w.noise.DelayMax))) * time.Millisecond)
-			}
+		if w.noise.DelayMin != 0 {
+			time.Sleep(time.Duration(randBetween(int64(w.noise.DelayMin), int64(w.noise.DelayMax))) * time.Millisecond)
 		}
 
 	}
-	err := w.Writer.WriteMultiBuffer(mb)
-	if err != nil {
-		return err
-	}
-	return nil
+	return w.Writer.WriteMultiBuffer(mb)
 }
 
 type FragmentWriter struct {
