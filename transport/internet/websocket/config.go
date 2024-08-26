@@ -22,6 +22,10 @@ func (c *Config) GetNormalizedPath() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
+
+	// GFW-Knocker
+	header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+
 	for k, v := range c.Header {
 		header.Add(k, v)
 	}
