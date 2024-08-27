@@ -13,16 +13,14 @@ body:
           required: true
         - label: I searched issues and did not find any similar issues.
           required: true
-  - type: input
-    attributes:
-      label: Version
-      description: Version of Xray-core
-    validations:
-      required: true
+        - label: The problem can be successfully reproduced in the latest Release
+          required: true
   - type: textarea
     attributes:
       label: Description
-      description: Please provide a detailed description of the error. And the information you think valuable.
+      description: |-
+        Please provide a detailed description of the error. And the information you think valuable.
+        If the problem occurs after the update, please provide the **specific** version
     validations:
       required: true
   - type: textarea

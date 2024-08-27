@@ -62,7 +62,7 @@ func NewServer(dest net.Destination, dispatcher routing.Dispatcher, queryStrateg
 		dest.Network = net.Network_UDP
 	}
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
-		return NewClassicNameServer(dest, dispatcher), nil
+		return NewClassicNameServer(dest, dispatcher, queryStrategy), nil
 	}
 	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
 }

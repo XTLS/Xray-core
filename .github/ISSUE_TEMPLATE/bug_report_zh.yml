@@ -11,18 +11,16 @@ body:
           required: true
         - label: 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。
           required: true
-        - label: 我搜索了issues，没有发现已提出的类似问题。
+        - label: 我搜索了 issues, 没有发现已提出的类似问题。
           required: true
-  - type: input
-    attributes:
-      label: 版本
-      description: 使用的Xray-core版本
-    validations:
-      required: true
+        - label: 问题在 Release 最新的版本上可以成功复现
+          required: true
   - type: textarea
     attributes:
       label: 描述
-      description: 请提供错误的详细描述。以及你认为有价值的信息。
+      description: |-
+        请提供错误的详细描述。以及你认为有价值的信息。
+        如果问题在更新后出现，请提供**具体**出现问题的版本号。
     validations:
       required: true
   - type: textarea
