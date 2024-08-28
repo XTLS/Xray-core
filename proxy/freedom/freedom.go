@@ -207,20 +207,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
+			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 			if h.config.Noise != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noise.StrNoise, h.config.Noise.LengthMin, h.config.Noise.LengthMax,
 					h.config.Noise.DelayMin, h.config.Noise.DelayMax)
 				writer = &NoisePacketWriter{
-					Writer: buf.SequentialWriter{
-						Writer: conn,
-					},
+					Writer:      writer,
 					noise:       h.config.Noise,
 					firstWrite:  true,
 					UDPOverride: UDPOverride,
 				}
-
-			} else {
-				writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 			}
 		}
 
@@ -401,8 +397,8 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 type NoisePacketWriter struct {
+	buf.Writer
 	noise       *Noise
-	Writer      buf.SequentialWriter
 	firstWrite  bool
 	UDPOverride net.Destination
 }
@@ -429,7 +425,7 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if err != nil {
 			return err
 		}
-		_, _ = w.Writer.Write(noise)
+		w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
 
 		if w.noise.DelayMin != 0 {
 			time.Sleep(time.Duration(randBetween(int64(w.noise.DelayMin), int64(w.noise.DelayMax))) * time.Millisecond)
