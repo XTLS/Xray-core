@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/transport/internet/reality/segaro"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -61,13 +62,16 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 }
 
 // EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
+func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context, segaroConfig *segaro.SegaroConfig) buf.Writer {
 	if request.Command == protocol.RequestCommandUDP {
 		return NewMultiLengthPacketWriter(writer.(buf.Writer))
 	}
 	w := buf.NewWriter(writer)
-	if requestAddons.Flow == vless.XRV {
+	switch requestAddons.Flow {
+	case vless.XRV:
 		w = proxy.NewVisionWriter(w, state, context)
+	case vless.XSV:
+		w = segaro.NewSegaroWriter(w, state, segaroConfig)
 	}
 	return w
 }

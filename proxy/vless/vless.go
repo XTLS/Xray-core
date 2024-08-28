@@ -9,4 +9,5 @@ package vless
 
 const (
 	XRV = "xtls-rprx-vision"
+	XSV = "xtls-segaro-vision"
 )

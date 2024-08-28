@@ -520,6 +520,11 @@ type REALITYConfig struct {
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
 
+	RandPacket   string `json:"randPacket"`
+	SplitPacket  string `json:"splitPacket"`
+	PaddingSize  uint32 `json:"paddingSize"`
+	SubchunkSize uint32 `json:"subchunkSize"`
+
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
 	PublicKey   string `json:"publicKey"`
@@ -673,6 +678,59 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.SpiderX = u.String()
 		config.ServerName = c.ServerName
 	}
+
+	if len(c.RandPacket) != 0 {
+		if strings.Contains(c.RandPacket, "-") {
+			randPacket := strings.Split(c.RandPacket, "-")
+			if len(randPacket) != 2 {
+				return nil, errors.New(`incorrect range of "randPacket"`)
+			}
+			min, err := strconv.Atoi(randPacket[0])
+			if err != nil {
+				return nil, errors.New(`incorrect range of "randPacket" min value`)
+			}
+			max, err := strconv.Atoi(randPacket[1])
+			if err != nil {
+				return nil, errors.New(`incorrect range of "randPacket" max value`)
+			}
+			if min > max {
+				return nil, errors.New(`incorrect randPacket min > max`)
+			}
+		} else {
+			if _, err := strconv.Atoi(c.RandPacket); err != nil {
+				return nil, errors.New(`incorrect "randPacket" value`)
+			}
+		}
+	}
+
+	if len(c.SplitPacket) != 0 {
+		if strings.Contains(c.SplitPacket, "-") {
+			splitPacket := strings.Split(c.SplitPacket, "-")
+			if len(splitPacket) != 2 {
+				return nil, errors.New(`incorrect range of "splitPacket"`)
+			}
+			min, err := strconv.Atoi(splitPacket[0])
+			if err != nil {
+				return nil, errors.New(`incorrect range of "splitPacket" min value`)
+			}
+			max, err := strconv.Atoi(splitPacket[1])
+			if err != nil {
+				return nil, errors.New(`incorrect range of "splitPacket" max value`)
+			}
+			if min > max {
+				return nil, errors.New(`incorrect splitPacket min > max`)
+			}
+		} else {
+			if _, err := strconv.Atoi(c.SplitPacket); err != nil {
+				return nil, errors.New(`incorrect "splitPacket" value`)
+			}
+		}
+	}
+	config.SplitPacket = c.SplitPacket
+	config.RandPacket = c.RandPacket
+	config.PaddingSize = c.PaddingSize
+	config.SubchunkSize = c.SubchunkSize
+
 	return config, nil
 }
 

@@ -89,6 +89,13 @@ func NewBufferedWriter(writer Writer) *BufferedWriter {
 	}
 }
 
+
+// GetBuffer implements a way to access the internal buffer.
+func (w *BufferedWriter) GetBuffer() *Buffer {
+	return w.buffer
+}
+
+
 // WriteByte implements io.ByteWriter.
 func (w *BufferedWriter) WriteByte(c byte) error {
 	return common.Error2(w.Write([]byte{c}))

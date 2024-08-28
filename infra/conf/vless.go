@@ -56,7 +56,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		account.Id = u.String()
 
 		switch account.Flow {
-		case "", vless.XRV:
+		case "", vless.XRV, vless.XSV:
 		default:
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
@@ -180,7 +180,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account.Id = u.String()
 
 			switch account.Flow {
-			case "", vless.XRV, vless.XRV + "-udp443":
+			case "", vless.XRV, vless.XRV + "-udp443", vless.XSV:
 			default:
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}

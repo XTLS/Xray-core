@@ -18,6 +18,11 @@ message Config {
   uint64 max_time_diff = 9;
   repeated bytes short_ids = 10;
 
+  string rand_packet = 11;
+  string split_packet = 12;
+  uint32 padding_size = 13;
+  uint32 subchunk_size = 14;
+
   string Fingerprint = 21;
   string server_name = 22;
   bytes public_key = 23;

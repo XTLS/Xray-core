@@ -26,6 +26,10 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		MinClientVer: c.MinClientVer,
 		MaxClientVer: c.MaxClientVer,
 		MaxTimeDiff:  time.Duration(c.MaxTimeDiff) * time.Millisecond,
+		SplitPacket:  c.SplitPacket,
+		RandPacket:   c.RandPacket,
+		PaddingSize:  c.PaddingSize,
+		SubChunkSize: c.SubchunkSize,
 
 		NextProtos:             nil, // should be nil
 		SessionTicketsDisabled: true,

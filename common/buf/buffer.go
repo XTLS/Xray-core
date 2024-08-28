@@ -234,6 +234,35 @@ func (b *Buffer) WriteByte(v byte) error {
 	return nil
 }
 
+
+// WriteAtBeginning writes data at the beginning of the buffer.
+func (b *Buffer) WriteAtBeginning(data []byte) (int, error) {
+	dataLen := len(data)
+	if dataLen == 0 {
+		return 0, nil
+	}
+	if int32(dataLen) > int32(len(b.v))-b.end {
+		return 0, errors.New("not enough space in buffer")
+	}
+	if b.end > 0 {
+		copy(b.v[dataLen:], b.v[:b.end])
+	}
+	nBytes := copy(b.v[:], data)
+	b.end += int32(nBytes)
+	return nBytes, nil
+}
+
+
+// ResetStart set the start position to zero.
+func (b *Buffer) ResetStart() {
+	b.start = 0
+}
+
+// GetStart return the start position value.
+func (b *Buffer) GetStart() int32{
+	return b.start 
+}
+
 // WriteString implements io.StringWriter.
 func (b *Buffer) WriteString(s string) (int, error) {
 	return b.Write([]byte(s))

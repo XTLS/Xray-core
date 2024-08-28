@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	goReality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -32,6 +33,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/reality/segaro"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -197,6 +199,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		Buffer: buf.MultiBuffer{first},
 	}
 
+	inbound := session.InboundFromContext(ctx)
+	if inbound == nil {
+		panic("no inbound metadata")
+	}
+	var segaroConfig *segaro.SegaroConfig
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
 	var err error
@@ -208,6 +215,36 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		err = errors.New("fallback directly")
 	} else {
 		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+
+		// Try to decode as xtls-segaro-vision
+		if err != nil {
+			storeStartPosition := first.GetStart()
+			first.ResetStart()
+			first.Advance(4) // Skip chunk header
+			var realityConfig *goReality.Config
+			realityConfig, err = segaro.GetRealityServerConfig(&inbound.Conn)
+			if err != nil {
+				return errors.New("can not get goReality.Config")
+			}
+			segaroConfig = &segaro.SegaroConfig{GoRealityConfig: realityConfig}
+			paddingSize := int(segaroConfig.GetPaddingSize())
+			subChunkSize := int(segaroConfig.GetSubChunkSize())
+
+			decodedBuff := segaro.SegaroRemovePadding(buf.MultiBuffer{first}, paddingSize, subChunkSize)
+			
+			decodedBuff.Advance(2) // Skip requestHeader content-length
+			request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, decodedBuff, decodedBuff, h.validator)
+			first.ResetStart()
+			if err != nil {
+				// Decode fail, Revert back
+				first.Advance(storeStartPosition)
+			} else {
+				// Decode success
+				requestAddons.Flow = vless.XSV
+			}
+			decodedBuff.Release()
+			decodedBuff = nil
+		}
 	}
 
 	if err != nil {
@@ -429,10 +466,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	errors.LogInfo(ctx, "received request for ", request.Destination())
 
-	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
 	inbound.Name = "vless"
 	inbound.User = request.User
 
@@ -476,6 +509,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		} else {
 			return errors.New(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
 		}
+	case vless.XSV:
+		inbound.CanSpliceCopy = 3
 	case "":
 		inbound.CanSpliceCopy = 3
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
@@ -519,11 +554,17 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		var err error
 
-		if requestAddons.Flow == vless.XRV {
+		switch requestAddons.Flow {
+		case vless.XRV:
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, ctx1)
 			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
-		} else {
+
+		case vless.XSV:
+			clientReader = segaro.NewSegaroReader(clientReader, trafficState)
+			err = segaro.SegaroRead(clientReader, serverWriter, timer, connection, trafficState, true, segaroConfig)
+
+		default:
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		}
@@ -544,7 +585,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
+		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx, segaroConfig)
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...
@@ -558,9 +599,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		var err error
-		if requestAddons.Flow == vless.XRV {
+
+		switch requestAddons.Flow {
+		case vless.XRV:
 			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, nil, ctx)
-		} else {
+		case vless.XSV:
+			err = segaro.SegaroWrite(serverReader, clientWriter, timer, connection, segaroConfig)
+		default:
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
 		}

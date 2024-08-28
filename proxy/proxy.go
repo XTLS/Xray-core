@@ -37,6 +37,7 @@ var (
 	TlsClientHandShakeStart = []byte{0x16, 0x03}
 	TlsServerHandShakeStart = []byte{0x16, 0x03, 0x03}
 	TlsApplicationDataStart = []byte{0x17, 0x03, 0x03}
+	TlsChangeCipherSpecStart = []byte{0x14, 0x03, 0x03}
 
 	Tls13CipherSuiteDic = map[uint16]string{
 		0x1301: "TLS_AES_128_GCM_SHA256",
@@ -110,6 +111,9 @@ type TrafficState struct {
 	// write link state
 	IsPadding                bool
 	WriterSwitchToDirectCopy bool
+
+	// temporary cache the buffers
+	CacheBuffer []buf.MultiBuffer
 }
 
 func NewTrafficState(userUUID []byte) *TrafficState {

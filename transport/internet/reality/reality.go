@@ -66,6 +66,7 @@ type UConn struct {
 	ServerName string
 	AuthKey    []byte
 	Verified   bool
+	ClientTime time.Time
 }
 
 func (c *UConn) HandshakeAddress() net.Address {
@@ -131,7 +132,8 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		hello.SessionId[1] = core.Version_y
 		hello.SessionId[2] = core.Version_z
 		hello.SessionId[3] = 0 // reserved
-		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
+		uConn.ClientTime = time.Unix(time.Now().Unix(), 0)
+		binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(uConn.ClientTime.Unix()))
 		copy(hello.SessionId[8:], config.ShortId)
 		if config.Show {
 			errors.LogInfo(ctx, fmt.Sprintf("REALITY localAddr: %v\thello.SessionId[:16]: %v\n", localAddr, hello.SessionId[:16]))
