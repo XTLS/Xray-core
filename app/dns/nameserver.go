@@ -62,7 +62,7 @@ func NewServer(dest net.Destination, dispatcher routing.Dispatcher, queryStrateg
 		dest.Network = net.Network_UDP
 	}
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
-		return NewClassicNameServer(dest, dispatcher), nil
+		return NewClassicNameServer(dest, dispatcher, queryStrategy), nil
 	}
 	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
 }
@@ -90,7 +90,7 @@ func NewClient(
 			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
 			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)
 			// The following lines is a solution to avoid core panics（rule index out of range） when setting `localhost` DNS client in config.
-			// Because the `localhost` DNS client will apend len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
+			// Because the `localhost` DNS client will append len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
 			// But `matcherInfos` has no enough length to add rules, which leads to core panics (rule index out of range).
 			// To avoid this, the length of `matcherInfos` must be equal to the expected, so manually append it with Golang default zero value first for later modification.
 			// Related issues:
