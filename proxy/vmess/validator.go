@@ -3,6 +3,7 @@ package vmess
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"fmt"
 	"hash/crc64"
 	"strings"
 	"sync"
@@ -39,7 +40,10 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 
 	v.users = append(v.users, u)
 
-	account := u.Account.(*MemoryAccount)
+	account, ok := u.Account.(*MemoryAccount)
+	if !ok {
+		return fmt.Errorf("expected *MemoryAccount but got %T", u.Account)
+	}
 	if !v.behaviorFused {
 		hashkdf := hmac.New(sha256.New, []byte("VMESSBSKDF"))
 		hashkdf.Write(account.ID.Bytes())
