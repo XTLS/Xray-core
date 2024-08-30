@@ -71,27 +71,6 @@ func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
 	return *c.ScMaxConcurrentPosts
 }
 
-func (m *Multiplexing) GetNormalizedMaxConnectionConcurrency() RandRangeConfig {
-	if m.MaxConnectionConcurrency == nil || m.MaxConnectionConcurrency.To == 0 {
-		return RandRangeConfig{
-			From: 1,
-			To:   3,
-		}
-	}
-
-	return *m.MaxConnectionConcurrency
-}
-
-func (c *Multiplexing) GetNormalizedConnectionLifetime() RandRangeConfig {
-	if c.MaxConnectionLifetime == nil || c.MaxConnectionLifetime.To == 0 {
-		return RandRangeConfig{
-			From: 60000,
-			To:   90000,
-		}
-	}
-	return *c.MaxConnectionLifetime
-}
-
 func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
 	if c.ScMaxEachPostBytes == nil || c.ScMaxEachPostBytes.To == 0 {
 		return RandRangeConfig{
@@ -121,6 +100,49 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	}
 
 	return *c.XPaddingBytes
+}
+
+func (m *Multiplexing) GetNormalizedRequestsPerConnection() RandRangeConfig {
+	if m.RequestsPerConnection == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.RequestsPerConnection
+}
+
+func (m *Multiplexing) GetNormalizedConnectionLifetimeMs() RandRangeConfig {
+	if m.ConnectionLifetimeMs == nil || m.ConnectionLifetimeMs.To == 0 {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+	return *m.ConnectionLifetimeMs
+}
+
+func (m *Multiplexing) GetNormalizedConnections() RandRangeConfig {
+	if m.Connections == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.Connections
+}
+
+func (m *Multiplexing) GetNormalizedConcurrency() RandRangeConfig {
+	if m.Concurrency == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.Concurrency
 }
 
 func init() {

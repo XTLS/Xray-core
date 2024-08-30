@@ -234,14 +234,14 @@ type SplitHTTPConfig struct {
 	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
-	Mux                  SplitHTTPMux      `json:"mux"`
+	HttpMux              SplitHTTPMux      `json:"httpMux"`
 }
 
 type SplitHTTPMux struct {
-	Mode                     string     `json:"mode"`
-	MaxConnectionConcurrency Int32Range `json:"maxConnectionConcurrency"`
-	MaxConnectionLifetime    Int32Range `json:"maxConnectionLifetime"`
-	MaxConnection            int32      `json:"maxConnection"`
+	RequestsPerConnection *Int32Range `json:"requestsPerConnection"`
+	ConnectionLifetimeMs  *Int32Range `json:"connectionLifetimeMs"`
+	Connections           *Int32Range `json:"connections"`
+	Concurrency           *Int32Range `json:"concurrency"`
 }
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
@@ -267,26 +267,13 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 
 	// Multiplexing config
-	muxProtobuf := splithttp.Multiplexing{}
-	switch strings.ToLower(c.Mux.Mode) {
-	case "disabled", "off", "none":
-		muxProtobuf.Mode = splithttp.Multiplexing_DISABLED
-	case "prefer_reuse", "preferreuse", "prefer_existing", "preferexisting", "": // Default: Reuse existing connections before opening new ones
-		muxProtobuf.Mode = splithttp.Multiplexing_PREFER_EXTISTING
-	case "prefer_new", "prefernew": // Open new connections until max limit, then reuse
-		muxProtobuf.Mode = splithttp.Multiplexing_PREFER_NEW
-	default:
-		return nil, errors.New("unsupported splithttp multiplexing mode: ", c.Mux.Mode)
+	muxProtobuf := splithttp.Multiplexing{
+		RequestsPerConnection: splithttpNewRandRangeConfig(c.HttpMux.RequestsPerConnection),
+		ConnectionLifetimeMs:  splithttpNewRandRangeConfig(c.HttpMux.ConnectionLifetimeMs),
+		Connections:           splithttpNewRandRangeConfig(c.HttpMux.Connections),
+		Concurrency:           splithttpNewRandRangeConfig(c.HttpMux.Concurrency),
 	}
-	muxProtobuf.MaxConnectionConcurrency = &splithttp.RandRangeConfig{
-		From: c.Mux.MaxConnectionConcurrency.From,
-		To:   c.Mux.MaxConnectionConcurrency.To,
-	}
-	muxProtobuf.MaxConnectionLifetime = &splithttp.RandRangeConfig{
-		From: c.Mux.MaxConnectionLifetime.From,
-		To:   c.Mux.MaxConnectionLifetime.To,
-	}
-	muxProtobuf.MaxConnections = c.Mux.MaxConnection
+
 	config := &splithttp.Config{
 		Path:                 c.Path,
 		Host:                 c.Host,
@@ -296,7 +283,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
-		Mux:                  &muxProtobuf,
+		HttpMux:              &muxProtobuf,
 	}
 	return config, nil
 }

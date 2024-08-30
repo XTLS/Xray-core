@@ -15,7 +15,7 @@ message Config {
   RandRangeConfig scMinPostsIntervalMs = 6;
   bool noSSEHeader = 7;
   RandRangeConfig xPaddingBytes = 8;
-  Multiplexing mux = 9;
+  Multiplexing httpMux = 9;
 }
 
 message RandRangeConfig {
@@ -24,13 +24,8 @@ message RandRangeConfig {
 }
 
 message Multiplexing {
-  enum MultiplexingMode {
-    DISABLED = 0;
-    PREFER_EXTISTING = 1;
-    PREFER_NEW = 2;
-  }
-  MultiplexingMode mode = 3;
-  RandRangeConfig maxConnectionConcurrency = 4;
-  RandRangeConfig maxConnectionLifetime = 5;
-  int32 maxConnections = 6;
+  RandRangeConfig requestsPerConnection = 4;
+  RandRangeConfig connectionLifetimeMs = 5;
+  RandRangeConfig connections = 6;
+  RandRangeConfig concurrency = 7;
 }
