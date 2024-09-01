@@ -286,24 +286,24 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(net.PacketConn); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
 		return &PacketReader{
-			PacketConn: c,
-			Counter:    counter,
+			PacketConnWrapper: c,
+			Counter:           counter,
 		}
 	}
 	return &buf.PacketReader{Reader: conn}
 }
 
 type PacketReader struct {
-	net.PacketConn
+	*internet.PacketConnWrapper
 	stats.Counter
 }
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
 	b.Resize(0, buf.Size)
-	n, d, err := r.PacketConn.ReadFrom(b.Bytes())
+	n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
 	if err != nil {
 		b.Release()
 		return nil, err
@@ -330,14 +330,13 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 	if statConn != nil {
 		counter = statConn.WriteCounter
 	}
-	if c, ok := iConn.(net.PacketConn); ok {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
 		return &PacketWriter{
-			PacketConn:  c,
-			Counter:     counter,
-			Handler:     h,
-			Context:     ctx,
-			UDPOverride: UDPOverride,
-			Conn:        iConn,
+			PacketConnWrapper: c,
+			Counter:           counter,
+			Handler:           h,
+			Context:           ctx,
+			UDPOverride:       UDPOverride,
 		}
 
 	}
@@ -345,12 +344,11 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 }
 
 type PacketWriter struct {
-	net.PacketConn
+	*internet.PacketConnWrapper
 	stats.Counter
 	*Handler
 	context.Context
 	UDPOverride net.Destination
-	Conn        net.Conn
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -380,9 +378,9 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.Release()
 				continue
 			}
-			n, err = w.PacketConn.WriteTo(b.Bytes(), destAddr)
+			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
 		} else {
-			n, err = w.Conn.Write(b.Bytes())
+			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}
 		b.Release()
 		if err != nil {
