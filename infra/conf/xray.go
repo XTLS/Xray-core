@@ -543,30 +543,6 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 }
 
-func applyTransportConfig(s *StreamConfig, t *TransportConfig) {
-	if s.TCPSettings == nil {
-		s.TCPSettings = t.TCPConfig
-	}
-	if s.KCPSettings == nil {
-		s.KCPSettings = t.KCPConfig
-	}
-	if s.WSSettings == nil {
-		s.WSSettings = t.WSConfig
-	}
-	if s.HTTPSettings == nil {
-		s.HTTPSettings = t.HTTPConfig
-	}
-	if s.DSSettings == nil {
-		s.DSSettings = t.DSConfig
-	}
-	if s.HTTPUPGRADESettings == nil {
-		s.HTTPUPGRADESettings = t.HTTPUPGRADEConfig
-	}
-	if s.SplitHTTPSettings == nil {
-		s.SplitHTTPSettings = t.SplitHTTPConfig
-	}
-}
-
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
 	if err := PostProcessConfigureFile(c); err != nil {
