@@ -42,8 +42,6 @@ func transportProtocolToString(protocol TransportProtocol) string {
 		return "mkcp"
 	case TransportProtocol_WebSocket:
 		return "websocket"
-	case TransportProtocol_DomainSocket:
-		return "domainsocket"
 	case TransportProtocol_HTTPUpgrade:
 		return "httpupgrade"
 	default:

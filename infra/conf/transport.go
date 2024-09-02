@@ -12,7 +12,6 @@ type TransportConfig struct {
 	KCPConfig         *KCPConfig          `json:"kcpSettings"`
 	WSConfig          *WebSocketConfig    `json:"wsSettings"`
 	HTTPConfig        *HTTPConfig         `json:"httpSettings"`
-	DSConfig          *DomainSocketConfig `json:"dsSettings"`
 	QUICConfig        *QUICConfig         `json:"quicSettings"`
 	GRPCConfig        *GRPCConfig         `json:"grpcSettings"`
 	GUNConfig         *GRPCConfig         `json:"gunSettings"`
@@ -65,17 +64,6 @@ func (c *TransportConfig) Build() (*global.Config, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "http",
 			Settings:     serial.ToTypedMessage(ts),
-		})
-	}
-
-	if c.DSConfig != nil {
-		ds, err := c.DSConfig.Build()
-		if err != nil {
-			return nil, errors.New("Failed to build DomainSocket config.").Base(err)
-		}
-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
-			ProtocolName: "domainsocket",
-			Settings:     serial.ToTypedMessage(ds),
 		})
 	}
 
