@@ -128,11 +128,6 @@ func TestXrayConfig(t *testing.T) {
 							}
 						]
 					}
-				},
-				"transport": {
-					"httpSettings": {
-						"path": "/test"
-					}
 				}
 			}`,
 			Parser: createParser(),
