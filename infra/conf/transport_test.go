@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/global"
@@ -12,9 +11,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/grpc"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
-	"github.com/xtls/xray-core/transport/internet/headers/tls"
 	"github.com/xtls/xray-core/transport/internet/kcp"
-	"github.com/xtls/xray-core/transport/internet/quic"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"google.golang.org/protobuf/proto"
@@ -202,12 +199,6 @@ func TestTransportConfig(t *testing.T) {
 				},
 				"wsSettings": {
 					"path": "/t"
-				},
-				"quicSettings": {
-					"key": "abcd",
-					"header": {
-						"type": "dtls"
-					}
 				},
 				"grpcSettings": {
 					"serviceName": "name",
