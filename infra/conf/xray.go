@@ -405,12 +405,15 @@ type Config struct {
 	// and should not be used.
 	OutboundDetours []OutboundDetourConfig `json:"outboundDetour"`
 
+	// Deprecated: Global transport config is no longer used
+	// left for returning error
+	Transport        *TransportConfig        `json:"transport"`
+
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
 	InboundConfigs   []InboundDetourConfig   `json:"inbounds"`
 	OutboundConfigs  []OutboundDetourConfig  `json:"outbounds"`
-	Transport        *TransportConfig        `json:"transport"`
 	Policy           *PolicyConfig           `json:"policy"`
 	API              *APIConfig              `json:"api"`
 	Metrics          *MetricsConfig          `json:"metrics"`
@@ -689,12 +692,6 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	for _, rawInboundConfig := range inbounds {
-		if c.Transport != nil {
-			if rawInboundConfig.StreamSetting == nil {
-				rawInboundConfig.StreamSetting = &StreamConfig{}
-			}
-			applyTransportConfig(rawInboundConfig.StreamSetting, c.Transport)
-		}
 		ic, err := rawInboundConfig.Build()
 		if err != nil {
 			return nil, err
@@ -717,12 +714,6 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	for _, rawOutboundConfig := range outbounds {
-		if c.Transport != nil {
-			if rawOutboundConfig.StreamSetting == nil {
-				rawOutboundConfig.StreamSetting = &StreamConfig{}
-			}
-			applyTransportConfig(rawOutboundConfig.StreamSetting, c.Transport)
-		}
 		oc, err := rawOutboundConfig.Build()
 		if err != nil {
 			return nil, err
