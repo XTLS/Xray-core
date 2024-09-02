@@ -273,16 +273,6 @@ func TestTransportConfig(t *testing.T) {
 						}),
 					},
 					{
-						ProtocolName: "quic",
-						Settings: serial.ToTypedMessage(&quic.Config{
-							Key: "abcd",
-							Security: &protocol.SecurityConfig{
-								Type: protocol.SecurityType_NONE,
-							},
-							Header: serial.ToTypedMessage(&tls.PacketConfig{}),
-						}),
-					},
-					{
 						ProtocolName: "grpc",
 						Settings: serial.ToTypedMessage(&grpc.Config{
 							ServiceName: "name",
