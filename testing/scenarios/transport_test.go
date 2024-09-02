@@ -1,8 +1,6 @@
 package scenarios
 
 import (
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
