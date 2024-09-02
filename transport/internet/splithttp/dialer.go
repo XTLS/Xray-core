@@ -285,12 +285,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
-	lazyRawDownload, remoteAddr, localAddr, err := httpClient.OpenDownload(context.WithoutCancel(ctx), requestURL.String())
+	reader, remoteAddr, localAddr, err := httpClient.OpenDownload(context.WithoutCancel(ctx), requestURL.String())
 	if err != nil {
 		return nil, err
 	}
-
-	reader := &stripOkReader{ReadCloser: lazyRawDownload}
 
 	writer := uploadWriter{
 		uploadPipeWriter,
