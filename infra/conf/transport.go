@@ -13,7 +13,6 @@ type TransportConfig struct {
 	WSConfig          *WebSocketConfig    `json:"wsSettings"`
 	HTTPConfig        *HTTPConfig         `json:"httpSettings"`
 	DSConfig          *DomainSocketConfig `json:"dsSettings"`
-	QUICConfig        *QUICConfig         `json:"quicSettings"`
 	GRPCConfig        *GRPCConfig         `json:"grpcSettings"`
 	GUNConfig         *GRPCConfig         `json:"gunSettings"`
 	HTTPUPGRADEConfig *HttpUpgradeConfig  `json:"httpupgradeSettings"`
@@ -76,17 +75,6 @@ func (c *TransportConfig) Build() (*global.Config, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "domainsocket",
 			Settings:     serial.ToTypedMessage(ds),
-		})
-	}
-
-	if c.QUICConfig != nil {
-		qs, err := c.QUICConfig.Build()
-		if err != nil {
-			return nil, errors.New("Failed to build QUIC config.").Base(err)
-		}
-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
-			ProtocolName: "quic",
-			Settings:     serial.ToTypedMessage(qs),
 		})
 	}
 
