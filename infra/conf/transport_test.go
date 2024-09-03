@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/grpc"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
-	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"google.golang.org/protobuf/proto"
@@ -191,12 +190,6 @@ func TestTransportConfig(t *testing.T) {
 						}
 					}
 				},
-				"kcpSettings": {
-					"mtu": 1200,
-					"header": {
-						"type": "none"
-					}
-				},
 				"wsSettings": {
 					"path": "/t"
 				},
@@ -248,13 +241,6 @@ func TestTransportConfig(t *testing.T) {
 									},
 								},
 							}),
-						}),
-					},
-					{
-						ProtocolName: "mkcp",
-						Settings: serial.ToTypedMessage(&kcp.Config{
-							Mtu:          &kcp.MTU{Value: 1200},
-							HeaderConfig: serial.ToTypedMessage(&noop.Config{}),
 						}),
 					},
 					{
