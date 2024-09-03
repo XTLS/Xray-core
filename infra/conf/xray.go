@@ -553,9 +553,6 @@ func applyTransportConfig(s *StreamConfig, t *TransportConfig) {
 	if s.HTTPSettings == nil {
 		s.HTTPSettings = t.HTTPConfig
 	}
-	if s.DSSettings == nil {
-		s.DSSettings = t.DSConfig
-	}
 	if s.HTTPUPGRADESettings == nil {
 		s.HTTPUPGRADESettings = t.HTTPUPGRADEConfig
 	}
