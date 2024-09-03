@@ -10,7 +10,6 @@ type TransportConfig struct {
 	KCPConfig         *KCPConfig          `json:"kcpSettings"`
 	WSConfig          *WebSocketConfig    `json:"wsSettings"`
 	HTTPConfig        *HTTPConfig         `json:"httpSettings"`
-	DSConfig          *DomainSocketConfig `json:"dsSettings"`
 	GRPCConfig        *GRPCConfig         `json:"grpcSettings"`
 	GUNConfig         *GRPCConfig         `json:"gunSettings"`
 	HTTPUPGRADEConfig *HttpUpgradeConfig  `json:"httpupgradeSettings"`
@@ -22,7 +21,7 @@ func (c *TransportConfig) Build() (*global.Config, error) {
 	config := new(global.Config)
 
 	// if any valid transport config
-	if c.TCPConfig != nil || c.KCPConfig != nil || c.WSConfig != nil || c.HTTPConfig != nil || c.DSConfig != nil || c.GRPCConfig != nil || c.GUNConfig != nil || c.HTTPUPGRADEConfig != nil || c.SplitHTTPConfig != nil {
+	if c.TCPConfig != nil || c.KCPConfig != nil || c.WSConfig != nil || c.HTTPConfig != nil || c.GRPCConfig != nil || c.GUNConfig != nil || c.HTTPUPGRADEConfig != nil || c.SplitHTTPConfig != nil {
 		return nil, errors.New("Global transport config is deprecated")
 	}
 
