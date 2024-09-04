@@ -189,11 +189,11 @@ func PopulateSeed(seed string, addons *proxy.Addons) {
 			LongMin:    900,
 			LongMax:    1400,
 		}
-		addons.Delay = &proxy.DelayConfig{
-			IsRandom: true,
-			MinMillis: 100,
-			MaxMillis: 500,
-		}
+		// addons.Delay = &proxy.DelayConfig{
+		// 	IsRandom: true,
+		// 	MinMillis: 100,
+		// 	MaxMillis: 500,
+		// }
 		addons.Scheduler = &proxy.SchedulerConfig{
 			TimeoutMillis: 600,
 		}

@@ -264,7 +264,7 @@ type VisionWriter struct {
 	addons            *Addons
 	trafficState      *TrafficState
 	ctx               context.Context
-	writeOnceUserUUID []byte
+	writeOnceUserUUID *[]byte
 	isUplink          bool
 	scheduler         *Scheduler
 }
@@ -277,9 +277,9 @@ func NewVisionWriter(writer buf.Writer, addon *Addons, state *TrafficState, isUp
 		addons:            addon,
 		trafficState:      state,
 		ctx:               context,
-		writeOnceUserUUID: w,
+		writeOnceUserUUID: &w,
 		isUplink:          isUplink,
-		scheduler:         NewScheduler(writer, addon, state, context),
+		scheduler:         NewScheduler(writer, addon, state, &w, context),
 	}
 }
 
@@ -299,7 +299,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 	if *isPadding && ShouldStartSeed(w.addons, w.trafficState) {
 		if len(mb) == 1 && mb[0] == nil {
-			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.addons, w.ctx) // we do a long padding to hide vless header
+			mb[0] = XtlsPadding(nil, CommandPaddingContinue, w.writeOnceUserUUID, true, w.addons, w.ctx) // we do a long padding to hide vless header
 		} else {
 			mb = ReshapeMultiBuffer(w.ctx, mb)
 			longPadding := w.trafficState.IsTLS
@@ -318,12 +318,12 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 							*isPadding = false
 						}
 					}
-					mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.addons, w.ctx)
+					mb[i] = XtlsPadding(b, command, w.writeOnceUserUUID, true, w.addons, w.ctx)
 					longPadding = false
 					continue
 				} else if !w.trafficState.IsTLS12orAbove && ShouldStopSeed(w.addons, w.trafficState) {
 					*isPadding = false
-					mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
+					mb[i] = XtlsPadding(b, CommandPaddingEnd, w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
 					break
 				}
 				var command byte = CommandPaddingContinue
@@ -333,7 +333,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						command = CommandPaddingDirect
 					}
 				}
-				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
+				mb[i] = XtlsPadding(b, command, w.writeOnceUserUUID, longPadding, w.addons, w.ctx)
 			}
 		}
 	}
