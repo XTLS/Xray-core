@@ -407,7 +407,7 @@ type Config struct {
 
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
-	Transport        *TransportConfig        `json:"transport"`
+	Transport        *json.RawMessage        `json:"transport"`
 
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
@@ -665,6 +665,10 @@ func (c *Config) Build() (*core.Config, error) {
 			From: uint32(c.Port),
 			To:   uint32(c.Port),
 		}}}
+	}
+
+	if c.Transport != nil {
+		return nil, errors.New("Global transport config is deprecated")
 	}
 
 	for _, rawInboundConfig := range inbounds {
