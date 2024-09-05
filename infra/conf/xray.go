@@ -405,12 +405,15 @@ type Config struct {
 	// and should not be used.
 	OutboundDetours []OutboundDetourConfig `json:"outboundDetour"`
 
+	// Deprecated: Global transport config is no longer used
+	// left for returning error
+	Transport        map[string]json.RawMessage `json:"transport"`
+
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
 	InboundConfigs   []InboundDetourConfig   `json:"inbounds"`
 	OutboundConfigs  []OutboundDetourConfig  `json:"outbounds"`
-	Transport        *TransportConfig        `json:"transport"`
 	Policy           *PolicyConfig           `json:"policy"`
 	API              *APIConfig              `json:"api"`
 	Metrics          *MetricsConfig          `json:"metrics"`
@@ -540,27 +543,6 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 }
 
-func applyTransportConfig(s *StreamConfig, t *TransportConfig) {
-	if s.TCPSettings == nil {
-		s.TCPSettings = t.TCPConfig
-	}
-	if s.KCPSettings == nil {
-		s.KCPSettings = t.KCPConfig
-	}
-	if s.WSSettings == nil {
-		s.WSSettings = t.WSConfig
-	}
-	if s.HTTPSettings == nil {
-		s.HTTPSettings = t.HTTPConfig
-	}
-	if s.HTTPUPGRADESettings == nil {
-		s.HTTPUPGRADESettings = t.HTTPUPGRADEConfig
-	}
-	if s.SplitHTTPSettings == nil {
-		s.SplitHTTPSettings = t.SplitHTTPConfig
-	}
-}
-
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
 	if err := PostProcessConfigureFile(c); err != nil {
@@ -685,13 +667,11 @@ func (c *Config) Build() (*core.Config, error) {
 		}}}
 	}
 
+	if len(c.Transport) > 0 {
+		return nil, errors.New("Global transport config is deprecated")
+	}
+
 	for _, rawInboundConfig := range inbounds {
-		if c.Transport != nil {
-			if rawInboundConfig.StreamSetting == nil {
-				rawInboundConfig.StreamSetting = &StreamConfig{}
-			}
-			applyTransportConfig(rawInboundConfig.StreamSetting, c.Transport)
-		}
 		ic, err := rawInboundConfig.Build()
 		if err != nil {
 			return nil, err
@@ -714,12 +694,6 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	for _, rawOutboundConfig := range outbounds {
-		if c.Transport != nil {
-			if rawOutboundConfig.StreamSetting == nil {
-				rawOutboundConfig.StreamSetting = &StreamConfig{}
-			}
-			applyTransportConfig(rawOutboundConfig.StreamSetting, c.Transport)
-		}
 		oc, err := rawOutboundConfig.Build()
 		if err != nil {
 			return nil, err
