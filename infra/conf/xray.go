@@ -389,22 +389,6 @@ type Config struct {
 	// and should not be used.
 	Port uint16 `json:"port"`
 
-	// Deprecated: InboundConfig exists for historical compatibility
-	// and should not be used.
-	InboundConfig *InboundDetourConfig `json:"inbound"`
-
-	// Deprecated: OutboundConfig exists for historical compatibility
-	// and should not be used.
-	OutboundConfig *OutboundDetourConfig `json:"outbound"`
-
-	// Deprecated: InboundDetours exists for historical compatibility
-	// and should not be used.
-	InboundDetours []InboundDetourConfig `json:"inboundDetour"`
-
-	// Deprecated: OutboundDetours exists for historical compatibility
-	// and should not be used.
-	OutboundDetours []OutboundDetourConfig `json:"outboundDetour"`
-
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport        map[string]json.RawMessage `json:"transport"`
@@ -489,21 +473,6 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.BurstObservatory != nil {
 		c.BurstObservatory = o.BurstObservatory
 	}
-
-	// deprecated attrs... keep them for now
-	if o.InboundConfig != nil {
-		c.InboundConfig = o.InboundConfig
-	}
-	if o.OutboundConfig != nil {
-		c.OutboundConfig = o.OutboundConfig
-	}
-	if o.InboundDetours != nil {
-		c.InboundDetours = o.InboundDetours
-	}
-	if o.OutboundDetours != nil {
-		c.OutboundDetours = o.OutboundDetours
-	}
-	// deprecated attrs
 
 	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
@@ -647,14 +616,6 @@ func (c *Config) Build() (*core.Config, error) {
 
 	var inbounds []InboundDetourConfig
 
-	if c.InboundConfig != nil {
-		inbounds = append(inbounds, *c.InboundConfig)
-	}
-
-	if len(c.InboundDetours) > 0 {
-		inbounds = append(inbounds, c.InboundDetours...)
-	}
-
 	if len(c.InboundConfigs) > 0 {
 		inbounds = append(inbounds, c.InboundConfigs...)
 	}
@@ -680,14 +641,6 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	var outbounds []OutboundDetourConfig
-
-	if c.OutboundConfig != nil {
-		outbounds = append(outbounds, *c.OutboundConfig)
-	}
-
-	if len(c.OutboundDetours) > 0 {
-		outbounds = append(outbounds, c.OutboundDetours...)
-	}
 
 	if len(c.OutboundConfigs) > 0 {
 		outbounds = append(outbounds, c.OutboundConfigs...)
