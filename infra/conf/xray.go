@@ -389,22 +389,6 @@ type Config struct {
 	// and should not be used.
 	Port uint16 `json:"port"`
 
-	// Deprecated: InboundConfig exists for historical compatibility
-	// left for returning error
-	InboundConfig *json.RawMessage `json:"inbound"`
-
-	// Deprecated: OutboundConfig exists for historical compatibility
-	// left for returning error
-	OutboundConfig *json.RawMessage `json:"outbound"`
-
-	// Deprecated: InboundDetours exists for historical compatibility
-	// left for returning error
-	InboundDetours []json.RawMessage `json:"inboundDetour"`
-
-	// Deprecated: OutboundDetours exists for historical compatibility
-	// left for returning error
-	OutboundDetours []json.RawMessage `json:"outboundDetour"`
-
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport        map[string]json.RawMessage `json:"transport"`
@@ -489,21 +473,6 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.BurstObservatory != nil {
 		c.BurstObservatory = o.BurstObservatory
 	}
-
-	// deprecated attrs... keep them for now
-	if o.InboundConfig != nil {
-		c.InboundConfig = o.InboundConfig
-	}
-	if o.OutboundConfig != nil {
-		c.OutboundConfig = o.OutboundConfig
-	}
-	if o.InboundDetours != nil {
-		c.InboundDetours = o.InboundDetours
-	}
-	if o.OutboundDetours != nil {
-		c.OutboundDetours = o.OutboundDetours
-	}
-	// deprecated attrs
 
 	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
@@ -647,14 +616,6 @@ func (c *Config) Build() (*core.Config, error) {
 
 	var inbounds []InboundDetourConfig
 
-	if c.InboundConfig != nil {
-		return nil, errors.New("Global inbound config is deprecated")
-	}
-
-	if len(c.InboundDetours) > 0 {
-		return nil, errors.New("inboundDetours is deprecated")
-	}
-
 	if len(c.InboundConfigs) > 0 {
 		inbounds = append(inbounds, c.InboundConfigs...)
 	}
@@ -680,14 +641,6 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	var outbounds []OutboundDetourConfig
-
-	if c.OutboundConfig != nil {
-		return nil, errors.New("Global outbound config is deprecated")
-	}
-
-	if len(c.OutboundDetours) > 0 {
-		return nil, errors.New("OutboundDetours is deprecated")
-	}
 
 	if len(c.OutboundConfigs) > 0 {
 		outbounds = append(outbounds, c.OutboundConfigs...)
