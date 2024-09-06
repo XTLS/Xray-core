@@ -390,20 +390,20 @@ type Config struct {
 	Port uint16 `json:"port"`
 
 	// Deprecated: InboundConfig exists for historical compatibility
-	// and should not be used.
-	InboundConfig *InboundDetourConfig `json:"inbound"`
+	// left for returning error
+	InboundConfig *json.RawMessage `json:"inbound"`
 
 	// Deprecated: OutboundConfig exists for historical compatibility
-	// and should not be used.
-	OutboundConfig *OutboundDetourConfig `json:"outbound"`
+	// left for returning error
+	OutboundConfig *json.RawMessage `json:"outbound"`
 
 	// Deprecated: InboundDetours exists for historical compatibility
-	// and should not be used.
-	InboundDetours []InboundDetourConfig `json:"inboundDetour"`
+	// left for returning error
+	InboundDetours []json.RawMessage `json:"inboundDetour"`
 
 	// Deprecated: OutboundDetours exists for historical compatibility
-	// and should not be used.
-	OutboundDetours []OutboundDetourConfig `json:"outboundDetour"`
+	// left for returning error
+	OutboundDetours []json.RawMessage `json:"outboundDetour"`
 
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
@@ -648,11 +648,11 @@ func (c *Config) Build() (*core.Config, error) {
 	var inbounds []InboundDetourConfig
 
 	if c.InboundConfig != nil {
-		inbounds = append(inbounds, *c.InboundConfig)
+		return nil, errors.New("Global inbound config is deprecated")
 	}
 
 	if len(c.InboundDetours) > 0 {
-		inbounds = append(inbounds, c.InboundDetours...)
+		return nil, errors.New("inboundDetours is deprecated")
 	}
 
 	if len(c.InboundConfigs) > 0 {
@@ -682,11 +682,11 @@ func (c *Config) Build() (*core.Config, error) {
 	var outbounds []OutboundDetourConfig
 
 	if c.OutboundConfig != nil {
-		outbounds = append(outbounds, *c.OutboundConfig)
+		return nil, errors.New("Global outbound config is deprecated")
 	}
 
 	if len(c.OutboundDetours) > 0 {
-		outbounds = append(outbounds, c.OutboundDetours...)
+		return nil, errors.New("OutboundDetours is deprecated")
 	}
 
 	if len(c.OutboundConfigs) > 0 {
