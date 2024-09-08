@@ -48,21 +48,6 @@ var (
 	ctllog = log.New(os.Stderr, "xctl> ", 0)
 )
 
-func toProtocolList(s []string) ([]proxyman.KnownProtocols, error) {
-	kp := make([]proxyman.KnownProtocols, 0, 8)
-	for _, p := range s {
-		switch strings.ToLower(p) {
-		case "http":
-			kp = append(kp, proxyman.KnownProtocols_HTTP)
-		case "https", "tls", "ssl":
-			kp = append(kp, proxyman.KnownProtocols_TLS)
-		default:
-			return nil, errors.New("Unknown protocol: ", p)
-		}
-	}
-	return kp, nil
-}
-
 type SniffingConfig struct {
 	Enabled         bool        `json:"enabled"`
 	DestOverride    *StringList `json:"destOverride"`
@@ -175,7 +160,6 @@ type InboundDetourConfig struct {
 	Tag            string                         `json:"tag"`
 	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
-	DomainOverride *StringList                    `json:"domainOverride"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
 }
 
@@ -248,13 +232,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 			return nil, errors.New("failed to build sniffing config").Base(err)
 		}
 		receiverSettings.SniffingSettings = s
-	}
-	if c.DomainOverride != nil {
-		kp, err := toProtocolList(*c.DomainOverride)
-		if err != nil {
-			return nil, errors.New("failed to parse inbound detour config").Base(err)
-		}
-		receiverSettings.DomainOverride = kp
 	}
 
 	settings := []byte("{}")
