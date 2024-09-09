@@ -184,11 +184,11 @@ func (m *MaskedMsgWrapper) String() string {
 		switch m.config.MaskAddress {
 		case "half":
 			if len(parts) >= 2 {
-				return fmt.Sprintf("%s:%s::/48", parts[0], parts[1])
+				return fmt.Sprintf("%s:%s::/32", parts[0], parts[1])
 			}
 		case "quarter":
 			if len(parts) >= 1 {
-				return fmt.Sprintf("%s::/32", parts[0])
+				return fmt.Sprintf("%s::/16", parts[0])
 			}
 		case "full":
 			return "Masked IPv6" // Do not use [Masked IPv6] like ipv4, or you will get "[[Masked IPv6]]" (v6 address already has [])
