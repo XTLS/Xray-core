@@ -361,11 +361,6 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 }
 
 type Config struct {
-	// Port of this Point server.
-	// Deprecated: Port exists for historical compatibility
-	// and should not be used.
-	Port uint16 `json:"port"`
-
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport        map[string]json.RawMessage `json:"transport"`
@@ -595,14 +590,6 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if len(c.InboundConfigs) > 0 {
 		inbounds = append(inbounds, c.InboundConfigs...)
-	}
-
-	// Backward compatibility.
-	if len(inbounds) > 0 && inbounds[0].PortList == nil && c.Port > 0 {
-		inbounds[0].PortList = &PortList{[]PortRange{{
-			From: uint32(c.Port),
-			To:   uint32(c.Port),
-		}}}
 	}
 
 	if len(c.Transport) > 0 {

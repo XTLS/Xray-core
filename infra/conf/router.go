@@ -14,11 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type RouterRulesConfig struct {
-	RuleList       []json.RawMessage `json:"rules"`
-	DomainStrategy string            `json:"domainStrategy"`
-}
-
 // StrategyConfig represents a strategy config
 type StrategyConfig struct {
 	Type     string           `json:"type"`
@@ -76,7 +71,6 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 }
 
 type RouterConfig struct {
-	Settings       *RouterRulesConfig `json:"settings"` // Deprecated
 	RuleList       []json.RawMessage  `json:"rules"`
 	DomainStrategy *string            `json:"domainStrategy"`
 	Balancers      []*BalancingRule   `json:"balancers"`
@@ -88,9 +82,6 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 	ds := ""
 	if c.DomainStrategy != nil {
 		ds = *c.DomainStrategy
-	} else if c.Settings != nil {
-		ds = c.Settings.DomainStrategy
-	}
 
 	switch strings.ToLower(ds) {
 	case "alwaysip":
@@ -111,10 +102,6 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 	var rawRuleList []json.RawMessage
 	if c != nil {
 		rawRuleList = c.RuleList
-		if c.Settings != nil {
-			c.RuleList = append(c.RuleList, c.Settings.RuleList...)
-			rawRuleList = c.RuleList
-		}
 	}
 
 	for _, rawRule := range rawRuleList {
