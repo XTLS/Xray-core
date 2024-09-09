@@ -90,7 +90,7 @@ func TestRouterConfig(t *testing.T) {
 						"port": 123,
 						"outboundTag": "test"
 					}
-				]
+				],
 				"balancers": [
 					{
 						"tag": "b1",
