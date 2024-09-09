@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"encoding/base64"
 	"net"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ type FreedomConfig struct {
 	Redirect       string    `json:"redirect"`
 	UserLevel      uint32    `json:"userLevel"`
 	Fragment       *Fragment `json:"fragment"`
-	Noise          *Noise    `json:"noise"`
+	Noise          []*Noise  `json:"noise"`
 	ProxyProtocol  uint32    `json:"proxyProtocol"`
 }
 
@@ -150,73 +151,12 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		}
 	}
 	if c.Noise != nil {
-		config.Noise = new(freedom.Noise)
-		var err, err2 error
-		p := strings.Split(strings.ToLower(c.Noise.Packet), ":")
-		if len(p) != 2 {
-			return nil, errors.New("invalid type for packet")
-		}
-		switch p[0] {
-		case "rand":
-			randValue := strings.Split(p[1], "-")
-			if len(randValue) > 2 {
-				return nil, errors.New("Only 2 values are allowed for rand")
-			}
-			if len(randValue) == 2 {
-				config.Noise.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-				config.Noise.LengthMax, err2 = strconv.ParseUint(randValue[1], 10, 64)
-			}
-			if len(randValue) == 1 {
-				config.Noise.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-				config.Noise.LengthMax = config.Noise.LengthMin
-			}
+		for _, n := range c.Noise {
+			NConfig, err := Parse_noise(n)
 			if err != nil {
-				return nil, errors.New("invalid value for rand LengthMin").Base(err)
+				return nil, err
 			}
-			if err2 != nil {
-				return nil, errors.New("invalid value for rand LengthMax").Base(err2)
-			}
-			if config.Noise.LengthMin > config.Noise.LengthMax {
-				config.Noise.LengthMin, config.Noise.LengthMax = config.Noise.LengthMax, config.Noise.LengthMin
-			}
-			if config.Noise.LengthMin == 0 {
-				return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
-			}
-
-		case "str":
-			//user input string
-			config.Noise.StrNoise = strings.TrimSpace(p[1])
-
-		default:
-			return nil, errors.New("Invalid packet,only rand and str are supported")
-		}
-		if c.Noise.Delay != "" {
-			d := strings.Split(strings.ToLower(c.Noise.Delay), "-")
-			if len(d) > 2 {
-				return nil, errors.New("Invalid delay value")
-			}
-			if len(d) == 2 {
-				config.Noise.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
-				config.Noise.DelayMax, err2 = strconv.ParseUint(d[1], 10, 64)
-
-			} else {
-				config.Noise.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
-				config.Noise.DelayMax = config.Noise.DelayMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid value for DelayMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid value for DelayMax").Base(err2)
-			}
-			if config.Noise.DelayMin > config.Noise.DelayMax {
-				config.Noise.DelayMin, config.Noise.DelayMax = config.Noise.DelayMax, config.Noise.DelayMin
-			}
-			if config.Noise.DelayMin == 0 {
-				return nil, errors.New("DelayMin or DelayMax cannot be 0")
-			}
-		} else {
-			config.Noise.DelayMin = 0
+			config.Noise = append(config.Noise, NConfig)
 		}
 	}
 
@@ -247,4 +187,85 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
 	return config, nil
+}
+
+func Parse_noise(noise *Noise) (*freedom.Noise, error) {
+	var err, err2 error
+	NConfig := new(freedom.Noise)
+
+	packet := strings.SplitN(noise.Packet, ":", 2)
+	if len(packet) != 2 {
+		return nil, errors.New("invalid type for packet")
+	}
+	switch strings.ToLower(packet[0]) {
+	case "rand":
+		randValue := strings.Split(packet[1], "-")
+		if len(randValue) > 2 {
+			return nil, errors.New("Only 2 values are allowed for rand")
+		}
+		if len(randValue) == 2 {
+			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
+			NConfig.LengthMax, err2 = strconv.ParseUint(randValue[1], 10, 64)
+		}
+		if len(randValue) == 1 {
+			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
+			NConfig.LengthMax = NConfig.LengthMin
+		}
+		if err != nil {
+			return nil, errors.New("invalid value for rand LengthMin").Base(err)
+		}
+		if err2 != nil {
+			return nil, errors.New("invalid value for rand LengthMax").Base(err2)
+		}
+		if NConfig.LengthMin > NConfig.LengthMax {
+			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
+		}
+		if NConfig.LengthMin == 0 {
+			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
+		}
+
+	case "str":
+		//user input string
+		NConfig.StrNoise = []byte(strings.TrimSpace(packet[1]))
+
+	case "base64":
+		//user input base64
+		NConfig.StrNoise, err = base64.StdEncoding.DecodeString(strings.TrimSpace(packet[1]))
+		if err != nil {
+			return nil, errors.New("Invalid base64 string")
+		}
+
+	default:
+		return nil, errors.New("Invalid packet,only rand,str,base64 are supported")
+	}
+	if noise.Delay != "" {
+		d := strings.Split(strings.ToLower(noise.Delay), "-")
+		if len(d) > 2 {
+			return nil, errors.New("Invalid delay value")
+		}
+		if len(d) == 2 {
+			NConfig.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
+			NConfig.DelayMax, err2 = strconv.ParseUint(d[1], 10, 64)
+
+		} else {
+			NConfig.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
+			NConfig.DelayMax = NConfig.DelayMin
+		}
+		if err != nil {
+			return nil, errors.New("Invalid value for DelayMin").Base(err)
+		}
+		if err2 != nil {
+			return nil, errors.New("Invalid value for DelayMax").Base(err2)
+		}
+		if NConfig.DelayMin > NConfig.DelayMax {
+			NConfig.DelayMin, NConfig.DelayMax = NConfig.DelayMax, NConfig.DelayMin
+		}
+		if NConfig.DelayMin == 0 {
+			return nil, errors.New("DelayMin or DelayMax cannot be 0")
+		}
+	} else {
+		NConfig.DelayMin = 0
+		NConfig.DelayMax = 0
+	}
+	return NConfig, nil
 }

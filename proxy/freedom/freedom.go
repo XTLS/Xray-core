@@ -209,8 +209,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		} else {
 			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
 			if h.config.Noise != nil {
-				errors.LogDebug(ctx, "NOISE", h.config.Noise.StrNoise, h.config.Noise.LengthMin, h.config.Noise.LengthMax,
-					h.config.Noise.DelayMin, h.config.Noise.DelayMax)
+				errors.LogDebug(ctx, "NOISE", h.config.Noise)
 				writer = &NoisePacketWriter{
 					Writer:      writer,
 					noise:       h.config.Noise,
@@ -396,12 +395,12 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 type NoisePacketWriter struct {
 	buf.Writer
-	noise       *Noise
+	noise       []*Noise
 	firstWrite  bool
 	UDPOverride net.Destination
 }
 
-// MultiBuffer writer with Noise in first packet
+// MultiBuffer writer with Noise before first packet
 func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.firstWrite {
 		w.firstWrite = false
@@ -411,22 +410,23 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		var noise []byte
 		var err error
-		//User input string
-		if w.noise.StrNoise != "" {
-			noise = []byte(w.noise.StrNoise)
-		} else {
-			//Random noise
-			noise, err = GenerateRandomBytes(randBetween(int64(w.noise.LengthMin),
-				int64(w.noise.LengthMax)))
-		}
+		for _, n := range w.noise {
+			//User input string or base64 encoded string
+			if n.StrNoise != nil {
+				noise = n.StrNoise
+			} else {
+				//Random noise
+				noise, err = GenerateRandomBytes(randBetween(int64(n.LengthMin),
+					int64(n.LengthMax)))
+			}
+			if err != nil {
+				return err
+			}
+			w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
 
-		if err != nil {
-			return err
-		}
-		w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
-
-		if w.noise.DelayMin != 0 {
-			time.Sleep(time.Duration(randBetween(int64(w.noise.DelayMin), int64(w.noise.DelayMax))) * time.Millisecond)
+			if n.DelayMin != 0 {
+				time.Sleep(time.Duration(randBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
+			}
 		}
 
 	}
