@@ -1,7 +1,6 @@
 module github.com/xtls/xray-core
 
 go 1.21.4
-toolchain go1.22.5
 
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
