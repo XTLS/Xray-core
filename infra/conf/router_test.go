@@ -64,36 +64,33 @@ func TestRouterConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"strategy": "rules",
-				"settings": {
-					"domainStrategy": "AsIs",
-					"rules": [
-						{
-							"type": "field",
-							"domain": [
-								"baidu.com",
-								"qq.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
-							"ip": [
-								"10.0.0.0/8",
-								"::1/128"
-							],
-							"outboundTag": "test"
-						},{
-							"type": "field",
-							"port": "53, 443, 1000-2000",
-							"outboundTag": "test"
-						},{
-							"type": "field",
-							"port": 123,
-							"outboundTag": "test"
-						}
-					]
-				},
+				"domainStrategy": "AsIs",
+				"rules": [
+					{
+						"type": "field",
+						"domain": [
+							"baidu.com",
+							"qq.com"
+						],
+						"outboundTag": "direct"
+					},
+					{
+						"type": "field",
+						"ip": [
+							"10.0.0.0/8",
+							"::1/128"
+						],
+						"outboundTag": "test"
+					},{
+						"type": "field",
+						"port": "53, 443, 1000-2000",
+						"outboundTag": "test"
+					},{
+						"type": "field",
+						"port": 123,
+						"outboundTag": "test"
+					}
+				]
 				"balancers": [
 					{
 						"tag": "b1",
@@ -225,28 +222,25 @@ func TestRouterConfig(t *testing.T) {
 		},
 		{
 			Input: `{
-				"strategy": "rules",
-				"settings": {
-					"domainStrategy": "IPIfNonMatch",
-					"rules": [
-						{
-							"type": "field",
-							"domain": [
-								"baidu.com",
-								"qq.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
-							"ip": [
-								"10.0.0.0/8",
-								"::1/128"
-							],
-							"outboundTag": "test"
-						}
-					]
-				}
+				"domainStrategy": "IPIfNonMatch",
+				"rules": [
+					{
+						"type": "field",
+						"domain": [
+							"baidu.com",
+							"qq.com"
+						],
+						"outboundTag": "direct"
+					},
+					{
+						"type": "field",
+						"ip": [
+							"10.0.0.0/8",
+							"::1/128"
+						],
+						"outboundTag": "test"
+					}
+				]
 			}`,
 			Parser: createParser(),
 			Output: &router.Config{
