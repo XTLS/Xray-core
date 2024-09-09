@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net"
 	"strconv"
 	"strings"
@@ -14,13 +15,13 @@ import (
 )
 
 type FreedomConfig struct {
-	DomainStrategy string    `json:"domainStrategy"`
-	Timeout        *uint32   `json:"timeout"`
-	Redirect       string    `json:"redirect"`
-	UserLevel      uint32    `json:"userLevel"`
-	Fragment       *Fragment `json:"fragment"`
-	Noise          []*Noise  `json:"noise"`
-	ProxyProtocol  uint32    `json:"proxyProtocol"`
+	DomainStrategy string           `json:"domainStrategy"`
+	Timeout        *uint32          `json:"timeout"`
+	Redirect       string           `json:"redirect"`
+	UserLevel      uint32           `json:"userLevel"`
+	Fragment       *Fragment        `json:"fragment"`
+	Noise          Listable[*Noise] `json:"noise"`
+	ProxyProtocol  uint32           `json:"proxyProtocol"`
 }
 
 type Fragment struct {
@@ -30,8 +31,24 @@ type Fragment struct {
 }
 
 type Noise struct {
-	Packet string `json:"packet"`
-	Delay  string `json:"delay"`
+	Packet string      `json:"packet"`
+	Delay  *Int32Range `json:"delay"`
+}
+
+type Listable[T any] []T
+
+func (l *Listable[T]) UnmarshalJSON(content []byte) error {
+	err := json.Unmarshal(content, (*[]T)(l))
+	if err == nil {
+		return nil
+	}
+	var singleItem T
+	err2 := json.Unmarshal(content, &singleItem)
+	if err2 != nil {
+		return errors.New(err, err2)
+	}
+	*l = []T{singleItem}
+	return nil
 }
 
 // Build implements Buildable
@@ -152,7 +169,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 	if c.Noise != nil {
 		for _, n := range c.Noise {
-			NConfig, err := Parse_noise(n)
+			NConfig, err := ParseNoise(n)
 			if err != nil {
 				return nil, err
 			}
@@ -189,7 +206,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-func Parse_noise(noise *Noise) (*freedom.Noise, error) {
+func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	var err, err2 error
 	NConfig := new(freedom.Noise)
 
@@ -238,31 +255,15 @@ func Parse_noise(noise *Noise) (*freedom.Noise, error) {
 	default:
 		return nil, errors.New("Invalid packet,only rand,str,base64 are supported")
 	}
-	if noise.Delay != "" {
-		d := strings.Split(strings.ToLower(noise.Delay), "-")
-		if len(d) > 2 {
-			return nil, errors.New("Invalid delay value")
-		}
-		if len(d) == 2 {
-			NConfig.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
-			NConfig.DelayMax, err2 = strconv.ParseUint(d[1], 10, 64)
 
+	if noise.Delay != nil {
+		if noise.Delay.From != 0 && noise.Delay.To != 0 {
+			NConfig.DelayMin = uint64(noise.Delay.From)
+			NConfig.DelayMax = uint64(noise.Delay.To)
 		} else {
-			NConfig.DelayMin, err = strconv.ParseUint(d[0], 10, 64)
-			NConfig.DelayMax = NConfig.DelayMin
+			return nil, errors.New("DelayMin or DelayMax cannot be zero")
 		}
-		if err != nil {
-			return nil, errors.New("Invalid value for DelayMin").Base(err)
-		}
-		if err2 != nil {
-			return nil, errors.New("Invalid value for DelayMax").Base(err2)
-		}
-		if NConfig.DelayMin > NConfig.DelayMax {
-			NConfig.DelayMin, NConfig.DelayMax = NConfig.DelayMax, NConfig.DelayMin
-		}
-		if NConfig.DelayMin == 0 {
-			return nil, errors.New("DelayMin or DelayMax cannot be 0")
-		}
+
 	} else {
 		NConfig.DelayMin = 0
 		NConfig.DelayMax = 0
