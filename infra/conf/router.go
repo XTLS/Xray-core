@@ -82,6 +82,7 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 	ds := ""
 	if c.DomainStrategy != nil {
 		ds = *c.DomainStrategy
+	}
 
 	switch strings.ToLower(ds) {
 	case "alwaysip":
