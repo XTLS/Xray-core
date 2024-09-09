@@ -260,6 +260,9 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		if noise.Delay.From != 0 && noise.Delay.To != 0 {
 			NConfig.DelayMin = uint64(noise.Delay.From)
 			NConfig.DelayMax = uint64(noise.Delay.To)
+			if NConfig.DelayMin > NConfig.LengthMax {
+				NConfig.DelayMin, NConfig.DelayMax = NConfig.LengthMax, NConfig.DelayMin
+			}
 		} else {
 			return nil, errors.New("DelayMin or DelayMax cannot be zero")
 		}
