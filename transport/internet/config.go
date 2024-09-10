@@ -3,7 +3,6 @@ package internet
 import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/features"
 )
 
 type ConfigCreator func() interface{}
