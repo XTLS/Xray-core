@@ -10,7 +10,6 @@ type ConfigCreator func() interface{}
 
 var (
 	globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
-	globalTransportSettings           []*TransportConfig
 )
 
 var strategy = [][]byte{
@@ -105,12 +104,6 @@ func (c *StreamConfig) GetTransportSettingsFor(protocol string) (interface{}, er
 		}
 	}
 
-	for _, settings := range globalTransportSettings {
-		if settings.GetUnifiedProtocolName() == protocol {
-			return settings.GetTypedSettings()
-		}
-	}
-
 	return CreateTransportConfig(protocol)
 }
 
@@ -125,12 +118,6 @@ func (c *StreamConfig) GetEffectiveSecuritySettings() (interface{}, error) {
 
 func (c *StreamConfig) HasSecuritySettings() bool {
 	return len(c.SecurityType) > 0
-}
-
-func ApplyGlobalTransportSettings(settings []*TransportConfig) error {
-	features.PrintDeprecatedFeatureWarning("global transport settings")
-	globalTransportSettings = settings
-	return nil
 }
 
 func (c *ProxyConfig) HasTag() bool {
