@@ -162,6 +162,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 			newConnection := uploadConn == nil
 			if newConnection {
 				uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
+				uploadConn = NewConnHolder(uploadConn.(net.Conn))
 				if err != nil {
 					return err
 				}
