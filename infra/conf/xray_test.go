@@ -74,18 +74,15 @@ func TestXrayConfig(t *testing.T) {
 					}
 				}],
 				"routing": {
-					"strategy": "rules",
-					"settings": {
-						"rules": [
-							{
-								"ip": [
-									"10.0.0.0/8"
-								],
-								"type": "field",
-								"outboundTag": "blocked"
-							}
-						]
-					}
+					"rules": [
+						{
+							"ip": [
+								"10.0.0.0/8"
+							],
+							"type": "field",
+							"outboundTag": "blocked"
+						}
+					]
 				}
 			}`,
 			Parser: createParser(),
