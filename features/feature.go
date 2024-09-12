@@ -22,6 +22,6 @@ func PrintDeprecatedFeatureWarning(feature string) {
 }
 
 // PrintRemovedFeatureError prints an error message for removed feature. And after long enough time the message can also be removed, use as an indicator.
-func PrintRemovedFeatureError(feature string) {
-	errors.New("The feature " + feature + " is removed. Please update your config file(s) according to release notes and documentations.")
+func PrintRemovedFeatureError(feature string) (error) {
+	return errors.New("The feature " + feature + " is removed. Please update your config file(s) according to release notes and documentations.")
 }
