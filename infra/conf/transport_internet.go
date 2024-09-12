@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/transport/internet"
 	httpheader "github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/http"
@@ -813,7 +814,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
 	case "xtls":
-		return nil, errors.New(`Please use VLESS flow "xtls-rprx-vision" with TLS or REALITY.`)
+		return nil, return nil, features.PrintRemovedFeatureError(`Legacy XTLS (replaced by xtls-rprx-vision with TLS or REALITY)`)
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}

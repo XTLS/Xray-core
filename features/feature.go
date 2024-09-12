@@ -18,10 +18,10 @@ type Feature interface {
 
 // PrintDeprecatedFeatureWarning prints a warning for deprecated feature.
 func PrintDeprecatedFeatureWarning(feature string) {
-	errors.LogWarning(context.Background(), "You are using a deprecated feature: " + feature + ". Please update your config file(s) with latest configuration format, or update your client software.")
+	errors.LogWarning(context.Background(), "You are using a deprecated feature: " + feature + ". Please update your config file(s), or update your client software.")
 }
 
 // PrintRemovedFeatureError prints an error message for removed feature. And after long enough time the message can also be removed, use as an indicator.
 func PrintRemovedFeatureError(feature string) (error) {
-	return errors.New("The feature " + feature + " is removed. Please update your config file(s) according to release notes and documentations.")
+	return errors.New("The feature " + feature + " has been removed. Please update your config file(s) according to release notes and documentations.")
 }

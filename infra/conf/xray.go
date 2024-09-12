@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/features"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -593,7 +594,7 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	if len(c.Transport) > 0 {
-		return nil, errors.New("Global transport config is deprecated")
+		return nil, features.PrintRemovedFeatureError("Global transport config")
 	}
 
 	for _, rawInboundConfig := range inbounds {
