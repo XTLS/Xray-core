@@ -192,18 +192,28 @@ func (v NetworkMatcher) Apply(ctx routing.Context) bool {
 }
 
 type UserMatcher struct {
-	user []string
+	user    []string
+	pattern []*regexp.Regexp
 }
 
 func NewUserMatcher(users []string) *UserMatcher {
 	usersCopy := make([]string, 0, len(users))
+	patternsCopy := make([]*regexp.Regexp, 0, len(users))
 	for _, user := range users {
 		if len(user) > 0 {
+			if len(user) > 7 && strings.HasPrefix(user, "regexp:") {
+				if re, err := regexp.Compile(user[7:]); err != nil {
+					patternsCopy = append(patternsCopy, re)
+				}
+				// Items of users slice with an invalid regexp syntax are ignored.
+				continue
+			}
 			usersCopy = append(usersCopy, user)
 		}
 	}
 	return &UserMatcher{
-		user: usersCopy,
+		user:    usersCopy,
+		pattern: patternsCopy,
 	}
 }
 
@@ -215,6 +225,11 @@ func (v *UserMatcher) Apply(ctx routing.Context) bool {
 	}
 	for _, u := range v.user {
 		if u == user {
+			return true
+		}
+	}
+	for _, re := range v.pattern {
+		if re.MatchString(user) {
 			return true
 		}
 	}
