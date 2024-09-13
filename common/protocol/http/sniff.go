@@ -90,6 +90,16 @@ func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
 			sh.host = dest.Address.String()
 		}
 	}
+	// Parse request line
+	// Request line is like this
+	// "GET /homo/114514 HTTP/1.1"
+	if len(headers) > 0 {
+		RequestLineParts := bytes.Split(headers[0], []byte{' '})
+		if len(RequestLineParts) == 3 {
+			content.SetAttribute(":method", string(RequestLineParts[0]))
+			content.SetAttribute(":path", string(RequestLineParts[1]))
+		}
+	}
 
 	if len(sh.host) > 0 {
 		return sh, nil
