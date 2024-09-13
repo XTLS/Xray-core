@@ -3,7 +3,6 @@ package splithttp
 import (
 	"context"
 	"math/rand"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,7 +17,6 @@ type muxResource struct {
 }
 
 type muxManager struct {
-	sync.Mutex
 	newResourceFn func() interface{}
 	config        Multiplexing
 	concurrency   int32
@@ -37,9 +35,6 @@ func NewMuxManager(config Multiplexing, newResource func() interface{}) *muxMana
 }
 
 func (m *muxManager) GetResource(ctx context.Context) *muxResource {
-	m.Lock()
-	defer m.Unlock()
-
 	m.removeExpiredConnections(ctx)
 
 	if m.connections > 0 && len(m.instances) < int(m.connections) {
