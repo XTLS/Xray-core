@@ -2,11 +2,13 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 )
 
 type version byte
@@ -56,7 +58,8 @@ func beginWithHTTPMethod(b []byte) error {
 	return errNotHTTPMethod
 }
 
-func SniffHTTP(b []byte) (*SniffHeader, error) {
+func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
+	content := session.ContentFromContext(c)
 	if err := beginWithHTTPMethod(b); err != nil {
 		return nil, err
 	}
@@ -76,8 +79,10 @@ func SniffHTTP(b []byte) (*SniffHeader, error) {
 			continue
 		}
 		key := strings.ToLower(string(parts[0]))
+		value := string(bytes.TrimSpace(parts[1]))
+		content.SetAttribute(key, value) // Put header in attribute
 		if key == "host" {
-			rawHost := strings.ToLower(string(bytes.TrimSpace(parts[1])))
+			rawHost := strings.ToLower(value)
 			dest, err := ParseHost(rawHost, net.Port(80))
 			if err != nil {
 				return nil, err
