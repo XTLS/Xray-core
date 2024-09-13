@@ -163,7 +163,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 
 		key := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
 		iv := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
-		cipher := aeadAESGCMTLS13(key, iv)
+		cipher := AEADAESGCMTLS13(key, iv)
 		nonce := cache.Extend(int32(cipher.NonceSize()))
 		binary.BigEndian.PutUint64(nonce[len(nonce)-8:], uint64(packetNumber))
 		decrypted, err := cipher.Open(b[extHdrLen:extHdrLen], nonce, data, b[:extHdrLen])
