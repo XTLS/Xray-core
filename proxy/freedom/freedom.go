@@ -208,11 +208,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		} else {
 			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
-			if h.config.Noise != nil {
-				errors.LogDebug(ctx, "NOISE", h.config.Noise)
+			if h.config.Noises != nil {
+				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
 					Writer:      writer,
-					noise:       h.config.Noise,
+					noises:      h.config.Noises,
 					firstWrite:  true,
 					UDPOverride: UDPOverride,
 				}
@@ -395,7 +395,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 type NoisePacketWriter struct {
 	buf.Writer
-	noise       []*Noise
+	noises      []*Noise
 	firstWrite  bool
 	UDPOverride net.Destination
 }
@@ -410,7 +410,7 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		var noise []byte
 		var err error
-		for _, n := range w.noise {
+		for _, n := range w.noises {
 			//User input string or base64 encoded string
 			if n.StrNoise != nil {
 				noise = n.StrNoise

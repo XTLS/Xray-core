@@ -2,7 +2,6 @@ package conf
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net"
 	"strconv"
 	"strings"
@@ -15,13 +14,14 @@ import (
 )
 
 type FreedomConfig struct {
-	DomainStrategy string           `json:"domainStrategy"`
-	Timeout        *uint32          `json:"timeout"`
-	Redirect       string           `json:"redirect"`
-	UserLevel      uint32           `json:"userLevel"`
-	Fragment       *Fragment        `json:"fragment"`
-	Noise          Listable[*Noise] `json:"noise"`
-	ProxyProtocol  uint32           `json:"proxyProtocol"`
+	DomainStrategy string    `json:"domainStrategy"`
+	Timeout        *uint32   `json:"timeout"`
+	Redirect       string    `json:"redirect"`
+	UserLevel      uint32    `json:"userLevel"`
+	Fragment       *Fragment `json:"fragment"`
+	Noise          *Noise    `json:"noise"`
+	Noises         []*Noise  `json:"noises"`
+	ProxyProtocol  uint32    `json:"proxyProtocol"`
 }
 
 type Fragment struct {
@@ -33,22 +33,6 @@ type Fragment struct {
 type Noise struct {
 	Packet string      `json:"packet"`
 	Delay  *Int32Range `json:"delay"`
-}
-
-type Listable[T any] []T
-
-func (l *Listable[T]) UnmarshalJSON(content []byte) error {
-	err := json.Unmarshal(content, (*[]T)(l))
-	if err == nil {
-		return nil
-	}
-	var singleItem T
-	err2 := json.Unmarshal(content, &singleItem)
-	if err2 != nil {
-		return errors.New(err, err2)
-	}
-	*l = []T{singleItem}
-	return nil
 }
 
 // Build implements Buildable
@@ -168,12 +152,15 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		}
 	}
 	if c.Noise != nil {
-		for _, n := range c.Noise {
+		return nil, errors.New(`Freedom settings: please use "noises":[{}] instead of "noise":{}`)
+	}
+	if c.Noises != nil {
+		for _, n := range c.Noises {
 			NConfig, err := ParseNoise(n)
 			if err != nil {
-				return nil, err
+				return nil, errors.New(err)
 			}
-			config.Noise = append(config.Noise, NConfig)
+			config.Noises = append(config.Noises, NConfig)
 		}
 	}
 

@@ -48,5 +48,5 @@ message Config {
   uint32 user_level = 4;
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
-  repeated Noise noise = 7;
+  repeated Noise noises = 7;
 }
