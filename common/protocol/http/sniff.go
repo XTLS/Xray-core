@@ -63,7 +63,7 @@ func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
 	ShouldSniffAttr := true
 	// If content.Attributes have information, that means it comes from HTTP inbound PlainHTTP mode.
 	// It will set attributes, so skip it.
-	if len(content.Attributes) != 0 || content == nil {
+	if content == nil || len(content.Attributes) != 0 {
 		ShouldSniffAttr = false
 	}
 	if err := beginWithHTTPMethod(b); err != nil {
