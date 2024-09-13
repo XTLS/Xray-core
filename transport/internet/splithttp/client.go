@@ -29,8 +29,7 @@ type DialerClient interface {
 // implements splithttp.DialerClient in terms of direct network connections
 type DefaultDialerClient struct {
 	transportConfig *Config
-	download        *http.Client
-	upload          *http.Client
+	client          *http.Client
 	isH2            bool
 	isH3            bool
 	// pool of net.Conn, created using dialUploadConn
@@ -79,7 +78,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 
 		req.Header = c.transportConfig.GetRequestHeader()
 
-		response, err := c.download.Do(req)
+		response, err := c.client.Do(req)
 		gotConn.Close()
 		if err != nil {
 			errors.LogInfoInner(ctx, err, "failed to send download http request")
@@ -137,7 +136,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	req.Header = c.transportConfig.GetRequestHeader()
 
 	if c.isH2 || c.isH3 {
-		resp, err := c.upload.Do(req)
+		resp, err := c.client.Do(req)
 		if err != nil {
 			return err
 		}

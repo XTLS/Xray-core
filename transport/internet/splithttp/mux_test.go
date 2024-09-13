@@ -2,7 +2,6 @@ package splithttp_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
 	. "github.com/xtls/xray-core/transport/internet/splithttp"
@@ -10,22 +9,18 @@ import (
 
 type fakeRoundTripper struct{}
 
-func (c *fakeRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	return nil, nil
-}
-
 func TestConnections(t *testing.T) {
 	config := Multiplexing{
 		Connections: &RandRangeConfig{From: 4, To: 4},
 	}
 
-	mux := NewMuxManager(config, func() http.RoundTripper {
+	mux := NewMuxManager(config, func() interface{} {
 		return &fakeRoundTripper{}
 	})
 
 	clients := make(map[interface{}]struct{})
 	for i := 0; i < 8; i++ {
-		clients[mux.GetClient(context.Background())] = struct{}{}
+		clients[mux.GetResource(context.Background())] = struct{}{}
 	}
 
 	if len(clients) != 4 {
@@ -38,13 +33,13 @@ func TestRequestsPerConnection(t *testing.T) {
 		RequestsPerConnection: &RandRangeConfig{From: 2, To: 2},
 	}
 
-	mux := NewMuxManager(config, func() http.RoundTripper {
+	mux := NewMuxManager(config, func() interface{} {
 		return &fakeRoundTripper{}
 	})
 
 	clients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		clients[mux.GetClient(context.Background())] = struct{}{}
+		clients[mux.GetResource(context.Background())] = struct{}{}
 	}
 
 	if len(clients) != 32 {
@@ -57,13 +52,13 @@ func TestConcurrency(t *testing.T) {
 		Concurrency: &RandRangeConfig{From: 2, To: 2},
 	}
 
-	mux := NewMuxManager(config, func() http.RoundTripper {
+	mux := NewMuxManager(config, func() interface{} {
 		return &fakeRoundTripper{}
 	})
 
 	clients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		client := mux.GetClient(context.Background())
+		client := mux.GetResource(context.Background())
 		client.OpenRequests.Add(1)
 		clients[client] = struct{}{}
 	}
@@ -76,13 +71,13 @@ func TestConcurrency(t *testing.T) {
 func TestDefault(t *testing.T) {
 	config := Multiplexing{}
 
-	mux := NewMuxManager(config, func() http.RoundTripper {
+	mux := NewMuxManager(config, func() interface{} {
 		return &fakeRoundTripper{}
 	})
 
 	clients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		client := mux.GetClient(context.Background())
+		client := mux.GetResource(context.Background())
 		client.OpenRequests.Add(1)
 		clients[client] = struct{}{}
 	}

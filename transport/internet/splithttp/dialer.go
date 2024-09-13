@@ -41,31 +41,50 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]DialerClient
+	globalDialerMap    map[dialerConf]*muxManager
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
+func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *muxResource) {
 	if browser_dialer.HasBrowserDialer() {
-		return &BrowserDialerClient{}
+		return &BrowserDialerClient{}, nil
 	}
-
-	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
-	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
 
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]DialerClient)
+		globalDialerMap = make(map[dialerConf]*muxManager)
 	}
+
+	key := dialerConf{dest, streamSettings}
+
+	muxManager, found := globalDialerMap[key]
+
+	if !found {
+		transportConfig := streamSettings.ProtocolSettings.(*Config)
+		var mux Multiplexing
+		if transportConfig.HttpMux != nil {
+			mux = *transportConfig.HttpMux
+		}
+
+		muxManager = NewMuxManager(mux, func() interface{} {
+			return createHTTPClient(dest, streamSettings)
+		})
+		globalDialerMap[key] = muxManager
+	}
+
+	res := muxManager.GetResource(ctx)
+	return res.Resource.(DialerClient), res
+}
+
+func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
+	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
+	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
 
 	if isH3 {
 		dest.Network = net.Network_UDP
-	}
-	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found {
-		return client
 	}
 
 	var gotlsConfig *gotls.Config
@@ -75,10 +94,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
-	var mux Multiplexing
-	if transportConfig.HttpMux != nil {
-		mux = *transportConfig.HttpMux
-	}
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
 		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
@@ -100,8 +115,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return conn, nil
 	}
 
-	var downloadTransport http.RoundTripper
-	var uploadTransport http.RoundTripper
+	var transport http.RoundTripper
 
 	if isH3 {
 		quicConfig := &quic.Config{
@@ -113,67 +127,60 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			MaxIncomingStreams: -1,
 			KeepAlivePeriod:    h3KeepalivePeriod,
 		}
-		roundTripper := NewMuxManager(mux, func() http.RoundTripper {
-			return &http3.RoundTripper{
-				QUICConfig:      quicConfig,
-				TLSClientConfig: gotlsConfig,
-				Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+		transport = &http3.RoundTripper{
+			QUICConfig:      quicConfig,
+			TLSClientConfig: gotlsConfig,
+			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				if err != nil {
+					return nil, err
+				}
+
+				var udpConn net.PacketConn
+				var udpAddr *net.UDPAddr
+
+				switch c := conn.(type) {
+				case *internet.PacketConnWrapper:
+					var ok bool
+					udpConn, ok = c.Conn.(*net.UDPConn)
+					if !ok {
+						return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
+					}
+					udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
 					if err != nil {
 						return nil, err
 					}
-
-					var udpConn net.PacketConn
-					var udpAddr *net.UDPAddr
-
-					switch c := conn.(type) {
-					case *internet.PacketConnWrapper:
-						var ok bool
-						udpConn, ok = c.Conn.(*net.UDPConn)
-						if !ok {
-							return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
-						}
-						udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
-						if err != nil {
-							return nil, err
-						}
-					case *net.UDPConn:
-						udpConn = c
-						udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-						if err != nil {
-							return nil, err
-						}
-					default:
-						udpConn = &internet.FakePacketConn{c}
-						udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-						if err != nil {
-							return nil, err
-						}
+				case *net.UDPConn:
+					udpConn = c
+					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
+					if err != nil {
+						return nil, err
 					}
+				default:
+					udpConn = &internet.FakePacketConn{c}
+					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
+					if err != nil {
+						return nil, err
+					}
+				}
 
-					return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
-				},
-			}
-		})
-		downloadTransport = roundTripper
-		uploadTransport = roundTripper
+				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+			},
+		}
 	} else if isH2 {
-		downloadTransport = NewMuxManager(mux, func() http.RoundTripper {
-			return &http2.Transport{
-				DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
-					return dialContext(ctxInner)
-				},
-				IdleConnTimeout: connIdleTimeout,
-				ReadIdleTimeout: h2KeepalivePeriod,
-			}
-		})
-		uploadTransport = downloadTransport
+		transport = &http2.Transport{
+			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
+				return dialContext(ctxInner)
+			},
+			IdleConnTimeout: connIdleTimeout,
+			ReadIdleTimeout: h2KeepalivePeriod,
+		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
 			return dialContext(ctxInner)
 		}
 
-		downloadTransport = &http.Transport{
+		transport = &http.Transport{
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
 			IdleConnTimeout: connIdleTimeout,
@@ -181,17 +188,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
 		}
-		// we use uploadRawPool for that
-		uploadTransport = nil
 	}
 
 	client := &DefaultDialerClient{
 		transportConfig: transportConfig,
-		download: &http.Client{
-			Transport: downloadTransport,
-		},
-		upload: &http.Client{
-			Transport: uploadTransport,
+		client: &http.Client{
+			Transport: transport,
 		},
 		isH2:           isH2,
 		isH3:           isH3,
@@ -199,7 +201,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialUploadConn: dialContext,
 	}
 
-	globalDialerMap[dialerConf{dest, streamSettings}] = client
 	return client
 }
 
@@ -233,7 +234,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requestURL.Path = transportConfiguration.GetNormalizedPath() + sessionIdUuid.String()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
-	httpClient := getHTTPClient(ctx, dest, streamSettings)
+	httpClient, muxResource := getHTTPClient(ctx, dest, streamSettings)
+	if muxResource != nil {
+		muxResource.OpenRequests.Add(1)
+	}
 
 	maxUploadSize := scMaxEachPostBytes.roll()
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
@@ -312,6 +316,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		reader:     reader,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
+		onClose: func() {
+			if muxResource != nil {
+				muxResource.OpenRequests.Add(-1)
+			}
+		},
 	}
 
 	return stat.Connection(&conn), nil
