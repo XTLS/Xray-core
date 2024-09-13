@@ -30,6 +30,9 @@ type Route interface {
 
 	// GetOutboundTag returns the tag of the outbound the connection was dispatched to.
 	GetOutboundTag() string
+
+	// GetRuleTag returns the matching rule tag for debugging if exists
+	GetRuleTag() string
 }
 
 // RouterType return the type of Router interface. Can be used to implement common.HasType.
