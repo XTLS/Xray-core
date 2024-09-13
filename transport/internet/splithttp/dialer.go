@@ -235,9 +235,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
 	httpClient, muxResource := getHTTPClient(ctx, dest, streamSettings)
-	if muxResource != nil {
-		muxResource.OpenRequests.Add(1)
-	}
 
 	maxUploadSize := scMaxEachPostBytes.roll()
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
@@ -245,7 +242,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// uploadWriter wrapper, exact size limits can be enforced
 	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
 
+	if muxResource != nil {
+		muxResource.OpenRequests.Add(1)
+	}
+
 	go func() {
+		if muxResource != nil {
+			defer muxResource.OpenRequests.Add(-1)
+		}
+
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
 		var requestCounter int64
 
@@ -314,11 +319,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		reader:     reader,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
-		onClose: func() {
-			if muxResource != nil {
-				muxResource.OpenRequests.Add(-1)
-			}
-		},
 	}
 
 	return stat.Connection(&conn), nil

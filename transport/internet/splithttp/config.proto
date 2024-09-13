@@ -24,7 +24,7 @@ message RandRangeConfig {
 }
 
 message Multiplexing {
-  RandRangeConfig requestsPerConnection = 4;
+  RandRangeConfig maxUses = 4;
   RandRangeConfig connectionLifetimeMs = 5;
   RandRangeConfig connections = 6;
   RandRangeConfig concurrency = 7;

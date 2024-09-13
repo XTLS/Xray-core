@@ -78,7 +78,7 @@ func (m *muxManager) GetResource(ctx context.Context) *muxResource {
 
 func (m *muxManager) newResource() *muxResource {
 	leftUsage := int32(-1)
-	if x := m.config.GetNormalizedRequestsPerConnection().roll(); x > 0 {
+	if x := m.config.GetNormalizedMaxUses().roll(); x > 0 {
 		leftUsage = x - 1
 	}
 	expirationTime := time.UnixMilli(0)

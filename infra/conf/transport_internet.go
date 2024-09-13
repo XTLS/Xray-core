@@ -235,10 +235,10 @@ type SplitHTTPConfig struct {
 }
 
 type SplitHTTPMux struct {
-	RequestsPerConnection *Int32Range `json:"requestsPerConnection"`
-	ConnectionLifetimeMs  *Int32Range `json:"connectionLifetimeMs"`
-	Connections           *Int32Range `json:"connections"`
-	Concurrency           *Int32Range `json:"concurrency"`
+	MaxUses              *Int32Range `json:"maxUses"`
+	ConnectionLifetimeMs *Int32Range `json:"connectionLifetimeMs"`
+	Connections          *Int32Range `json:"connections"`
+	Concurrency          *Int32Range `json:"concurrency"`
 }
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
@@ -265,10 +265,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	// Multiplexing config
 	muxProtobuf := splithttp.Multiplexing{
-		RequestsPerConnection: splithttpNewRandRangeConfig(c.HttpMux.RequestsPerConnection),
-		ConnectionLifetimeMs:  splithttpNewRandRangeConfig(c.HttpMux.ConnectionLifetimeMs),
-		Connections:           splithttpNewRandRangeConfig(c.HttpMux.Connections),
-		Concurrency:           splithttpNewRandRangeConfig(c.HttpMux.Concurrency),
+		MaxUses:      splithttpNewRandRangeConfig(c.HttpMux.MaxUses),
+		ConnectionLifetimeMs: splithttpNewRandRangeConfig(c.HttpMux.ConnectionLifetimeMs),
+		Connections:          splithttpNewRandRangeConfig(c.HttpMux.Connections),
+		Concurrency:          splithttpNewRandRangeConfig(c.HttpMux.Concurrency),
 	}
 
 	config := &splithttp.Config{

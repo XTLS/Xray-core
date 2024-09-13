@@ -28,9 +28,9 @@ func TestConnections(t *testing.T) {
 	}
 }
 
-func TestRequestsPerConnection(t *testing.T) {
+func TestMaxUses(t *testing.T) {
 	config := Multiplexing{
-		RequestsPerConnection: &RandRangeConfig{From: 2, To: 2},
+		MaxUses: &RandRangeConfig{From: 2, To: 2},
 	}
 
 	mux := NewMuxManager(config, func() interface{} {
