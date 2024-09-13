@@ -151,14 +151,21 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			}
 		}
 	}
+	if c.Noise != nil && c.Noises != nil {
+		return nil, errors.New(`Freedom settings: Cannot use both "Noises":[{}] and "Noise":{}`)
+	}
 	if c.Noise != nil {
-		return nil, errors.New(`Freedom settings: please use "noises":[{}] instead of "noise":{}`)
+		n, err := ParseNoise(c.Noise)
+		if err != nil {
+			return nil, err
+		}
+		config.Noises = append(config.Noises, n)
 	}
 	if c.Noises != nil {
 		for _, n := range c.Noises {
 			NConfig, err := ParseNoise(n)
 			if err != nil {
-				return nil, errors.New(err)
+				return nil, err
 			}
 			config.Noises = append(config.Noises, NConfig)
 		}
