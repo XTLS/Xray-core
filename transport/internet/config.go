@@ -3,14 +3,12 @@ package internet
 import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/features"
 )
 
 type ConfigCreator func() interface{}
 
 var (
 	globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
-	globalTransportSettings           []*TransportConfig
 )
 
 var strategy = [][]byte{
@@ -42,8 +40,6 @@ func transportProtocolToString(protocol TransportProtocol) string {
 		return "mkcp"
 	case TransportProtocol_WebSocket:
 		return "websocket"
-	case TransportProtocol_DomainSocket:
-		return "domainsocket"
 	case TransportProtocol_HTTPUpgrade:
 		return "httpupgrade"
 	default:
@@ -107,12 +103,6 @@ func (c *StreamConfig) GetTransportSettingsFor(protocol string) (interface{}, er
 		}
 	}
 
-	for _, settings := range globalTransportSettings {
-		if settings.GetUnifiedProtocolName() == protocol {
-			return settings.GetTypedSettings()
-		}
-	}
-
 	return CreateTransportConfig(protocol)
 }
 
@@ -127,12 +117,6 @@ func (c *StreamConfig) GetEffectiveSecuritySettings() (interface{}, error) {
 
 func (c *StreamConfig) HasSecuritySettings() bool {
 	return len(c.SecurityType) > 0
-}
-
-func ApplyGlobalTransportSettings(settings []*TransportConfig) error {
-	features.PrintDeprecatedFeatureWarning("global transport settings")
-	globalTransportSettings = settings
-	return nil
 }
 
 func (c *ProxyConfig) HasTag() bool {

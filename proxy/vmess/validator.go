@@ -39,7 +39,10 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 
 	v.users = append(v.users, u)
 
-	account := u.Account.(*MemoryAccount)
+	account, ok := u.Account.(*MemoryAccount)
+	if !ok {
+		return errors.New("account type is incorrect")
+	}
 	if !v.behaviorFused {
 		hashkdf := hmac.New(sha256.New, []byte("VMESSBSKDF"))
 		hashkdf.Write(account.ID.Bytes())

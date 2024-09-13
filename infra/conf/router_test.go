@@ -64,36 +64,33 @@ func TestRouterConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"strategy": "rules",
-				"settings": {
-					"domainStrategy": "AsIs",
-					"rules": [
-						{
-							"type": "field",
-							"domain": [
-								"baidu.com",
-								"qq.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
-							"ip": [
-								"10.0.0.0/8",
-								"::1/128"
-							],
-							"outboundTag": "test"
-						},{
-							"type": "field",
-							"port": "53, 443, 1000-2000",
-							"outboundTag": "test"
-						},{
-							"type": "field",
-							"port": 123,
-							"outboundTag": "test"
-						}
-					]
-				},
+				"domainStrategy": "AsIs",
+				"rules": [
+					{
+						"type": "field",
+						"domain": [
+							"baidu.com",
+							"qq.com"
+						],
+						"outboundTag": "direct"
+					},
+					{
+						"type": "field",
+						"ip": [
+							"10.0.0.0/8",
+							"::1/128"
+						],
+						"outboundTag": "test"
+					},{
+						"type": "field",
+						"port": "53, 443, 1000-2000",
+						"outboundTag": "test"
+					},{
+						"type": "field",
+						"port": 123,
+						"outboundTag": "test"
+					}
+				],
 				"balancers": [
 					{
 						"tag": "b1",
@@ -225,73 +222,7 @@ func TestRouterConfig(t *testing.T) {
 		},
 		{
 			Input: `{
-				"strategy": "rules",
-				"settings": {
-					"domainStrategy": "IPIfNonMatch",
-					"rules": [
-						{
-							"type": "field",
-							"domain": [
-								"baidu.com",
-								"qq.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
-							"ip": [
-								"10.0.0.0/8",
-								"::1/128"
-							],
-							"outboundTag": "test"
-						}
-					]
-				}
-			}`,
-			Parser: createParser(),
-			Output: &router.Config{
-				DomainStrategy: router.Config_IpIfNonMatch,
-				Rule: []*router.RoutingRule{
-					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "baidu.com",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "qq.com",
-							},
-						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
-						},
-					},
-					{
-						Geoip: []*router.GeoIP{
-							{
-								Cidr: []*router.CIDR{
-									{
-										Ip:     []byte{10, 0, 0, 0},
-										Prefix: 8,
-									},
-									{
-										Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-										Prefix: 128,
-									},
-								},
-							},
-						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "test",
-						},
-					},
-				},
-			},
-		},
-		{
-			Input: `{
-				"domainStrategy": "AsIs",
+				"domainStrategy": "IPIfNonMatch",
 				"rules": [
 					{
 						"type": "field",
@@ -313,7 +244,7 @@ func TestRouterConfig(t *testing.T) {
 			}`,
 			Parser: createParser(),
 			Output: &router.Config{
-				DomainStrategy: router.Config_AsIs,
+				DomainStrategy: router.Config_IpIfNonMatch,
 				Rule: []*router.RoutingRule{
 					{
 						Domain: []*router.Domain{
