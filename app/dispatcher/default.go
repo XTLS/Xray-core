@@ -41,8 +41,14 @@ func (r *cachedReader) Cache(b *buf.Buffer) {
 	if !mb.IsEmpty() {
 		r.cache, _ = buf.MergeMulti(r.cache, mb)
 	}
-	b.Clear()
-	rawBytes := b.Extend(buf.Size)
+	cacheLen := r.cache.Len()
+	if cacheLen <= b.Cap() {
+		b.Clear()
+	} else {
+		b.Release()
+		*b = *buf.NewWithSize(cacheLen)
+	}
+	rawBytes := b.Extend(cacheLen)
 	n := r.cache.Copy(rawBytes)
 	b.Resize(0, int32(n))
 	r.Unlock()
