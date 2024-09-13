@@ -80,7 +80,9 @@ func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
 		}
 		key := strings.ToLower(string(parts[0]))
 		value := string(bytes.TrimSpace(parts[1]))
-		content.SetAttribute(key, value) // Put header in attribute
+		if content != nil {
+			content.SetAttribute(key, value) // Put header in attribute
+		}
 		if key == "host" {
 			rawHost := strings.ToLower(value)
 			dest, err := ParseHost(rawHost, net.Port(80))
@@ -93,7 +95,7 @@ func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
 	// Parse request line
 	// Request line is like this
 	// "GET /homo/114514 HTTP/1.1"
-	if len(headers) > 0 {
+	if len(headers) > 0 && content != nil {
 		RequestLineParts := bytes.Split(headers[0], []byte{' '})
 		if len(RequestLineParts) == 3 {
 			content.SetAttribute(":method", string(RequestLineParts[0]))
