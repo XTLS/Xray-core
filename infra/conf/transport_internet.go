@@ -814,7 +814,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
 	case "xtls":
-		return nil, features.PrintRemovedFeatureError(`Legacy XTLS (replaced by xtls-rprx-vision with TLS or REALITY)`)
+		return nil, features.PrintRemovedFeatureError(`Legacy XTLS`, `xtls-rprx-vision with TLS or REALITY`)
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}

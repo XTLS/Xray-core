@@ -53,7 +53,7 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			return nil, errors.New("Trojan password is not specified.")
 		}
 		if rec.Flow != "" {
-			return nil, features.PrintRemovedFeatureError(`Flow for Trojan`)
+			return nil, features.PrintRemovedFeatureError(`Flow for Trojan`, nil)
 		}
 
 		config.Server[idx] = &protocol.ServerEndpoint{
@@ -107,7 +107,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 
 	for idx, rawUser := range c.Clients {
 		if rawUser.Flow != "" {
-			return nil, features.PrintRemovedFeatureError(`Flow for Trojan`)
+			return nil, features.PrintRemovedFeatureError(`Flow for Trojan`, nil)
 		}
 
 		config.Users[idx] = &protocol.User{

@@ -96,7 +96,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	geoipContainer := router.GeoIPMatcherContainer{}
 
 	for _, endpoint := range config.NameServers {
-		features.PrintDeprecatedFeatureWarning("simple DNS server")
+		features.PrintDeprecatedFeatureWarning("simple DNS server", nil)
 		client, err := NewSimpleClient(ctx, endpoint, clientIP)
 		if err != nil {
 			return nil, errors.New("failed to create client").Base(err)
