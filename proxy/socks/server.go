@@ -56,7 +56,7 @@ func (s *Server) policy() policy.Session {
 	config := s.config
 	p := s.policyManager.ForLevel(config.UserLevel)
 	if config.Timeout > 0 {
-		features.PrintDeprecatedFeatureWarning("Socks timeout", nil)
+		features.PrintDeprecatedFeatureWarning("Socks timeout", "")
 	}
 	if config.Timeout > 0 && config.UserLevel == 0 {
 		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second

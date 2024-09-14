@@ -26,7 +26,7 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 	}
 
 	if legacy != nil {
-		features.PrintDeprecatedFeatureWarning("simple host mapping", nil)
+		features.PrintDeprecatedFeatureWarning("simple host mapping", "")
 
 		for domain, ip := range legacy {
 			matcher, err := strmatcher.Full.New(domain)

@@ -594,7 +594,7 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	if len(c.Transport) > 0 {
-		return nil, features.PrintRemovedFeatureError("Global transport config", `streamSettings in inbounds and outbounds`)
+		return nil, features.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
 	}
 
 	for _, rawInboundConfig := range inbounds {
