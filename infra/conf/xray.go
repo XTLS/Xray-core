@@ -593,7 +593,7 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	if len(c.Transport) > 0 {
-		return nil, errors.New("Global transport config is deprecated")
+		return nil, errors.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
 	}
 
 	for _, rawInboundConfig := range inbounds {
