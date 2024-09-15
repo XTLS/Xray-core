@@ -49,7 +49,7 @@ type Handler struct {
 	server          net.Destination
 	timeout         time.Duration
 	nonIPQuery      string
-	blockType       []int32
+	blockTypes       []int32
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -64,7 +64,7 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.server = config.Server.AsDestination()
 	}
 	h.nonIPQuery = config.Non_IPQuery
-	h.blockType = config.BlockType
+	h.blockTypes = config.BlockTypes
 	return nil
 }
 
@@ -183,9 +183,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 
 			if !h.isOwnLink(ctx) {
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
-				if len(h.blockType) > 0 {
-					for _, blcoktype := range h.blockType {
-						if blcoktype == int32(qType) {
+				if len(h.blockTypes) > 0 {
+					for _, blocktype := range h.blockTypes {
+						if blocktype == int32(qType) {
 							errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
 							return nil
 						}
