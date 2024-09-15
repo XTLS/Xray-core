@@ -7,7 +7,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
-	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 )
 
@@ -26,7 +25,7 @@ func NewStaticHosts(hosts []*Config_HostMapping, legacy map[string]*net.IPOrDoma
 	}
 
 	if legacy != nil {
-		features.PrintDeprecatedFeatureWarning("simple host mapping", "")
+		errors.PrintDeprecatedFeatureWarning("simple host mapping", "")
 
 		for domain, ip := range legacy {
 			matcher, err := strmatcher.Full.New(domain)
