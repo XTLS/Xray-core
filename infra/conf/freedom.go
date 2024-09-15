@@ -33,6 +33,7 @@ type Fragment struct {
 type Noise struct {
 	Packet string      `json:"packet"`
 	Delay  *Int32Range `json:"delay"`
+	Type   string      `json:"type"`
 }
 
 // Build implements Buildable
@@ -204,13 +205,9 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	var err, err2 error
 	NConfig := new(freedom.Noise)
 
-	packet := strings.SplitN(noise.Packet, ":", 2)
-	if len(packet) != 2 {
-		return nil, errors.New("invalid type for packet")
-	}
-	switch strings.ToLower(packet[0]) {
+	switch strings.ToLower(noise.Type) {
 	case "rand":
-		randValue := strings.Split(packet[1], "-")
+		randValue := strings.Split(noise.Packet, "-")
 		if len(randValue) > 2 {
 			return nil, errors.New("Only 2 values are allowed for rand")
 		}
@@ -237,11 +234,11 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 
 	case "str":
 		//user input string
-		NConfig.StrNoise = []byte(strings.TrimSpace(packet[1]))
+		NConfig.StrNoise = []byte(strings.TrimSpace(noise.Packet))
 
 	case "base64":
 		//user input base64
-		NConfig.StrNoise, err = base64.StdEncoding.DecodeString(strings.TrimSpace(packet[1]))
+		NConfig.StrNoise, err = base64.StdEncoding.DecodeString(strings.TrimSpace(noise.Packet))
 		if err != nil {
 			return nil, errors.New("Invalid base64 string")
 		}
