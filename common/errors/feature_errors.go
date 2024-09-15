@@ -1,5 +1,9 @@
 package errors
 
+import (
+	"context"
+)
+
 // PrintDeprecatedFeatureWarning prints a warning for deprecated and going to be removed feature.
 // Do not remove this function even there is no reference to it.
 func PrintDeprecatedFeatureWarning(feature string, migrateFeature string) {
