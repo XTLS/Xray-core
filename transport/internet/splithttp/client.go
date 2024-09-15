@@ -1,8 +1,10 @@
 package splithttp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	gonet "net"
 	"net/http"
@@ -157,29 +159,36 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 
 		var uploadConn any
 
-		for {
-			uploadConn = c.uploadRawPool.Get()
-			newConnection := uploadConn == nil
-			if newConnection {
-				uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
-				uploadConn = NewConnHolder(uploadConn.(net.Conn))
-				if err != nil {
-					return err
-				}
-			}
-
-			_, err = uploadConn.(net.Conn).Write(requestBytes.Bytes())
-
-			// if the write failed, we try another connection from
-			// the pool, until the write on a new connection fails.
-			// failed writes to a pooled connection are normal when
-			// the connection has been closed in the meantime.
-			if err == nil {
-				break
-			} else if newConnection {
+		uploadConn = c.uploadRawPool.Get()
+		newConnection := uploadConn == nil
+		if newConnection {
+			uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
+			if err != nil {
 				return err
 			}
 		}
+
+		conn := uploadConn.(net.Conn)
+		_, err := conn.Write(requestBytes.Bytes())
+		// if the write failed, we try another connection from
+		// the pool, until the write on a new connection fails.
+		// failed writes to a pooled connection are normal when
+		// the connection has been closed in the meantime.
+		if newConnection && err != nil {
+			return err
+		}
+
+		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+		if err != nil {
+			return fmt.Errorf("error while reading response: %s", err.Error())
+		}
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("error response code: %d", resp.StatusCode)
+		}
+
+		// buff := &bytes.Buffer{}
+		// _, err := io.Copy(buff, uploadConnTyped)
+		// common.Must(err)
 
 		c.uploadRawPool.Put(uploadConn)
 	}
