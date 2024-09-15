@@ -31,8 +31,10 @@ type VLessInboundFallback struct {
 type VLessInboundConfig struct {
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
-	Fallback   *VLessInboundFallback   `json:"fallback"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
+
+	// Remove in v25.x
+	Fallback   *VLessInboundFallback   `json:"fallback"`
 }
 
 // Build implements Buildable
@@ -74,8 +76,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	}
 	config.Decryption = c.Decryption
 
-	if c.Fallback != nil {
-		return nil, errors.New(`VLESS settings: please use "fallbacks":[{}] instead of "fallback":{}`)
+	if c.Fallback != nil {  // Remove in v25.x
+		return nil, errors.PrintRemovedFeatureError(`"fallback":{}`, `"fallbacks":[{}]`)
 	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
