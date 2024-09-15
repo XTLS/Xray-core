@@ -231,10 +231,10 @@ type SplitHTTPConfig struct {
 	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
-	Xmux                 SplitHTTPMux      `json:"xmux"`
+	Xmux                 Xmux              `json:"xmux"`
 }
 
-type SplitHTTPMux struct {
+type Xmux struct {
 	ConnectionReuseTimes *Int32Range `json:"connectionReuseTimes"`
 	ConnectionLifetimeMs *Int32Range `json:"connectionLifetimeMs"`
 	Connections          *Int32Range `json:"connections"`
