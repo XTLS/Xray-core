@@ -28,12 +28,7 @@ message Config {
   // Configuration for extensions. The config may not work if corresponding
   // extension is not loaded into Xray. Xray will ignore such config during
   // initialization.
-  repeated xray.common.serial.TypedMessage extension = 6;
-
-  // Transport settings.
-  // Deprecated. Each inbound and outbound should choose their own transport
-  // config. Date to remove: 2020-01-13
-  // xray.transport.Config transport = 5 [deprecated = true];
+  repeated xray.common.serial.TypedMessage extension = 5;
 }
 
 // InboundHandlerConfig is the configuration for inbound handler.

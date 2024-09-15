@@ -23,15 +23,21 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
-	Timeout     uint32         `json:"timeout"`
 	Accounts    []*HTTPAccount `json:"accounts"`
 	Transparent bool           `json:"allowTransparent"`
 	UserLevel   uint32         `json:"userLevel"`
+
+	// Deprecated. Remove before v26.x, for feature error trigger.
+	Timeout     uint32         `json:"timeout"`
 }
 
 func (c *HTTPServerConfig) Build() (proto.Message, error) {
+	if c.Timeout > 0 {  // Remove before v26.x
+		// Change this to PrintRemovedFeatureError before v25.x
+		errors.PrintDeprecatedFeatureWarning("Timeout config in HTTP server", "userLevel")
+	}
 	config := &http.ServerConfig{
-		Timeout:          c.Timeout,
+		Timeout:          c.Timeout,    // Remove before v25.x
 		AllowTransparent: c.Transparent,
 		UserLevel:        c.UserLevel,
 	}
