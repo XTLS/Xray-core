@@ -628,7 +628,7 @@ func (p TransportProtocol) Build() (string, error) {
 		return "mkcp", nil
 	case "ws", "websocket":
 		return "websocket", nil
-	case "h2", "http":
+	case "h2", "h3", "http":
 		return "http", nil
 	case "grpc", "gun":
 		return "grpc", nil

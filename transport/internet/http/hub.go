@@ -2,11 +2,14 @@ package http
 
 import (
 	"context"
+	gotls "crypto/tls"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -23,10 +26,12 @@ import (
 )
 
 type Listener struct {
-	server  *http.Server
-	handler internet.ConnHandler
-	local   net.Addr
-	config  *Config
+	server   *http.Server
+	h3server *http3.Server
+	handler  internet.ConnHandler
+	local    net.Addr
+	config   *Config
+	isH3     bool
 }
 
 func (l *Listener) Addr() net.Addr {
@@ -34,7 +39,14 @@ func (l *Listener) Addr() net.Addr {
 }
 
 func (l *Listener) Close() error {
-	return l.server.Close()
+	if l.h3server != nil {
+		if err := l.h3server.Close(); err != nil {
+			return err
+		}
+	} else if l.server != nil {
+		return l.server.Close()
+	}
+	return errors.New("listener does not have an HTTP/3 server or h2 server")
 }
 
 type flushWriter struct {
@@ -119,43 +131,33 @@ func (l *Listener) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 
 func Listen(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	httpSettings := streamSettings.ProtocolSettings.(*Config)
-	var listener *Listener
-	if port == net.Port(0) { // unix
-		listener = &Listener{
-			handler: handler,
-			local: &net.UnixAddr{
-				Name: address.Domain(),
-				Net:  "unix",
-			},
-			config: httpSettings,
-		}
-	} else { // tcp
-		listener = &Listener{
-			handler: handler,
-			local: &net.TCPAddr{
-				IP:   address.IP(),
-				Port: int(port),
-			},
-			config: httpSettings,
-		}
-	}
-
-	var server *http.Server
 	config := tls.ConfigFromStreamSettings(streamSettings)
+	var tlsConfig *gotls.Config
 	if config == nil {
-		h2s := &http2.Server{}
-
-		server = &http.Server{
-			Addr:              serial.Concat(address, ":", port),
-			Handler:           h2c.NewHandler(listener, h2s),
-			ReadHeaderTimeout: time.Second * 4,
+		tlsConfig = &gotls.Config{}
+	} else {
+		tlsConfig = config.GetTLSConfig()
+	}
+	isH3 := len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
+	listener := &Listener{
+		handler: handler,
+		config: httpSettings,
+		isH3: isH3,
+	}
+	if port == net.Port(0) { // unix
+		listener.local = &net.UnixAddr{
+			Name: address.Domain(),
+			Net:  "unix",
+		}
+	} else if isH3 { // udp
+		listener.local = &net.UDPAddr{
+			IP:   address.IP(),
+			Port: int(port),
 		}
 	} else {
-		server = &http.Server{
-			Addr:              serial.Concat(address, ":", port),
-			TLSConfig:         config.GetTLSConfig(tls.WithNextProto("h2")),
-			Handler:           listener,
-			ReadHeaderTimeout: time.Second * 4,
+		listener.local = &net.TCPAddr{
+			IP:   address.IP(),
+			Port: int(port),
 		}
 	}
 
@@ -163,45 +165,84 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
 
-	listener.server = server
-	go func() {
-		var streamListener net.Listener
-		var err error
-		if port == net.Port(0) { // unix
-			streamListener, err = internet.ListenSystem(ctx, &net.UnixAddr{
-				Name: address.Domain(),
-				Net:  "unix",
-			}, streamSettings.SocketSettings)
-			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to listen on ", address)
-				return
-			}
-		} else { // tcp
-			streamListener, err = internet.ListenSystem(ctx, &net.TCPAddr{
-				IP:   address.IP(),
-				Port: int(port),
-			}, streamSettings.SocketSettings)
-			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to listen on ", address, ":", port)
-				return
-			}
+	if isH3 {
+		Conn, err := internet.ListenSystemPacket(context.Background(), listener.local, streamSettings.SocketSettings)
+		if err != nil {
+			return nil,  errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
 		}
+		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
+		if err != nil {
+			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
+		}
+		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
 
-		if config == nil {
-			if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
-				streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
+		listener.h3server = &http3.Server{
+			Handler: listener,
+		}
+		go func() {
+			if err := listener.h3server.ServeListener(h3listener); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
 			}
-			err = server.Serve(streamListener)
-			if err != nil {
-				errors.LogInfoInner(ctx, err, "stopping serving H2C or REALITY H2")
+		}()
+	} else {
+		var server *http.Server
+		if config == nil {
+			h2s := &http2.Server{}
+	
+			server = &http.Server{
+				Addr:              serial.Concat(address, ":", port),
+				Handler:           h2c.NewHandler(listener, h2s),
+				ReadHeaderTimeout: time.Second * 4,
 			}
 		} else {
-			err = server.ServeTLS(streamListener, "", "")
-			if err != nil {
-				errors.LogInfoInner(ctx, err, "stopping serving TLS H2")
+			server = &http.Server{
+				Addr:              serial.Concat(address, ":", port),
+				TLSConfig:         config.GetTLSConfig(tls.WithNextProto("h2")),
+				Handler:           listener,
+				ReadHeaderTimeout: time.Second * 4,
 			}
 		}
-	}()
+	
+		listener.server = server
+		go func() {
+			var streamListener net.Listener
+			var err error
+			if port == net.Port(0) { // unix
+				streamListener, err = internet.ListenSystem(ctx, &net.UnixAddr{
+					Name: address.Domain(),
+					Net:  "unix",
+				}, streamSettings.SocketSettings)
+				if err != nil {
+					errors.LogErrorInner(ctx, err, "failed to listen on ", address)
+					return
+				}
+			} else { // tcp
+				streamListener, err = internet.ListenSystem(ctx, &net.TCPAddr{
+					IP:   address.IP(),
+					Port: int(port),
+				}, streamSettings.SocketSettings)
+				if err != nil {
+					errors.LogErrorInner(ctx, err, "failed to listen on ", address, ":", port)
+					return
+				}
+			}
+	
+			if config == nil {
+				if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
+					streamListener = goreality.NewListener(streamListener, config.GetREALITYConfig())
+				}
+				err = server.Serve(streamListener)
+				if err != nil {
+					errors.LogInfoInner(ctx, err, "stopping serving H2C or REALITY H2")
+				}
+			} else {
+				err = server.ServeTLS(streamListener, "", "")
+				if err != nil {
+					errors.LogInfoInner(ctx, err, "stopping serving TLS H2")
+				}
+			}
+		}()	
+	}
 
 	return listener, nil
 }

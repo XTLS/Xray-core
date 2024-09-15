@@ -365,7 +365,13 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 // Addr implements net.Listener.Addr().
 func (ln *Listener) Addr() net.Addr {
-	return ln.listener.Addr()
+	if ln.h3listener != nil {
+		return ln.h3listener.Addr()
+	}
+	if ln.listener != nil {
+		return ln.listener.Addr()
+	}
+	return nil
 }
 
 // Close implements net.Listener.Close().
