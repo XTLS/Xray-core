@@ -1,9 +1,6 @@
 package conf
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/proxy/dns"
@@ -16,7 +13,7 @@ type DNSOutboundConfig struct {
 	Port       uint16   `json:"port"`
 	UserLevel  uint32   `json:"userLevel"`
 	NonIPQuery string   `json:"nonIPQuery"`
-	BlockType  string   `json:"blockType"`
+	BlockType  []int32  `json:"blockType"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
@@ -38,17 +35,6 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 		return nil, errors.New(`unknown "nonIPQuery": `, c.NonIPQuery)
 	}
 	config.Non_IPQuery = c.NonIPQuery
-	parts := strings.Split(c.BlockType, ",")
-	var BlockType []int32
-	if c.BlockType != "" {
-		for _, part := range parts {
-			num, err := strconv.Atoi(part)
-			if err != nil {
-				return nil, errors.New("Block type must be int, received:", part)
-			}
-			BlockType = append(BlockType, int32(num))
-		}
-	}
-	config.BlockType = BlockType
+	config.BlockType = c.BlockType
 	return config, nil
 }
