@@ -1,8 +1,6 @@
 package features
 
 import (
-	"context"
-
 	"github.com/xtls/xray-core/common"
 )
 
