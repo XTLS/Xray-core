@@ -105,15 +105,15 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	return *c.XPaddingBytes
 }
 
-func (m *Multiplexing) GetNormalizedMaxUses() RandRangeConfig {
-	if m.MaxUses == nil {
+func (m *Multiplexing) GetNormalizedConnectionReuseTimes() RandRangeConfig {
+	if m.ConnectionReuseTimes == nil {
 		return RandRangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.MaxUses
+	return *m.ConnectionReuseTimes
 }
 
 func (m *Multiplexing) GetNormalizedConnectionLifetimeMs() RandRangeConfig {
