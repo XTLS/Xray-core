@@ -64,8 +64,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if !found {
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		var mux Multiplexing
-		if transportConfig.HttpDemux != nil {
-			mux = *transportConfig.HttpDemux
+		if transportConfig.Xmux != nil {
+			mux = *transportConfig.Xmux
 		}
 
 		muxManager = NewMuxManager(mux, func() interface{} {

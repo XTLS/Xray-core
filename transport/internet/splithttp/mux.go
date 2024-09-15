@@ -38,12 +38,12 @@ func (m *muxManager) GetResource(ctx context.Context) *muxResource {
 	m.removeExpiredConnections(ctx)
 
 	if m.connections > 0 && len(m.instances) < int(m.connections) {
-		errors.LogDebug(ctx, "httpDemux: creating client, connections=", len(m.instances))
+		errors.LogDebug(ctx, "xmux: creating client, connections=", len(m.instances))
 		return m.newResource()
 	}
 
 	if len(m.instances) == 0 {
-		errors.LogDebug(ctx, "httpDemux: creating client because instances is empty, connections=", len(m.instances))
+		errors.LogDebug(ctx, "xmux: creating client because instances is empty, connections=", len(m.instances))
 		return m.newResource()
 	}
 
@@ -60,7 +60,7 @@ func (m *muxManager) GetResource(ctx context.Context) *muxResource {
 	}
 
 	if len(clients) == 0 {
-		errors.LogDebug(ctx, "httpDemux: creating client because concurrency was hit, total clients=", len(m.instances))
+		errors.LogDebug(ctx, "xmux: creating client because concurrency was hit, total clients=", len(m.instances))
 		return m.newResource()
 	}
 
@@ -94,7 +94,7 @@ func (m *muxManager) removeExpiredConnections(ctx context.Context) {
 	for i := 0; i < len(m.instances); i++ {
 		client := m.instances[i]
 		if client.leftUsage == 0 || (client.expirationTime != time.UnixMilli(0) && time.Now().After(client.expirationTime)) {
-			errors.LogDebug(ctx, "httpDemux: removing client, leftUsage = ", client.leftUsage, ", expirationTime = ", client.expirationTime)
+			errors.LogDebug(ctx, "xmux: removing client, leftUsage = ", client.leftUsage, ", expirationTime = ", client.expirationTime)
 			m.instances = append(m.instances[:i], m.instances[i+1:]...)
 			i--
 		}

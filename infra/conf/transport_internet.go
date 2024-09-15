@@ -231,7 +231,7 @@ type SplitHTTPConfig struct {
 	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
-	HttpDemux            SplitHTTPMux      `json:"httpDemux"`
+	Xmux                 SplitHTTPMux      `json:"xmux"`
 }
 
 type SplitHTTPMux struct {
@@ -265,10 +265,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	// Multiplexing config
 	muxProtobuf := splithttp.Multiplexing{
-		ConnectionReuseTimes: splithttpNewRandRangeConfig(c.HttpDemux.ConnectionReuseTimes),
-		ConnectionLifetimeMs: splithttpNewRandRangeConfig(c.HttpDemux.ConnectionLifetimeMs),
-		Connections:          splithttpNewRandRangeConfig(c.HttpDemux.Connections),
-		Concurrency:          splithttpNewRandRangeConfig(c.HttpDemux.Concurrency),
+		ConnectionReuseTimes: splithttpNewRandRangeConfig(c.Xmux.ConnectionReuseTimes),
+		ConnectionLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.ConnectionLifetimeMs),
+		Connections:          splithttpNewRandRangeConfig(c.Xmux.Connections),
+		Concurrency:          splithttpNewRandRangeConfig(c.Xmux.Concurrency),
 	}
 
 	config := &splithttp.Config{
@@ -280,7 +280,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
-		HttpDemux:            &muxProtobuf,
+		Xmux:                 &muxProtobuf,
 	}
 	return config, nil
 }

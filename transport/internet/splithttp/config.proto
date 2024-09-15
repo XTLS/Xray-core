@@ -15,7 +15,7 @@ message Config {
   RandRangeConfig scMinPostsIntervalMs = 6;
   bool noSSEHeader = 7;
   RandRangeConfig xPaddingBytes = 8;
-  Multiplexing httpDemux = 9;
+  Multiplexing xmux = 9;
 }
 
 message RandRangeConfig {
