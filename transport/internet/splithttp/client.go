@@ -1,7 +1,6 @@
 package splithttp
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -176,7 +175,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 				// TODO: Replace 0 here with a config value later
 				// Or add some other condition for optimization purposes
 				if h1UploadConn.UnreadedResponsesCount > 0 {
-					resp, err := http.ReadResponse(bufio.NewReader(h1UploadConn), req)
+					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
