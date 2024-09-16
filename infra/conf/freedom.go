@@ -154,7 +154,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noise != nil {
-		return nil, PrintRemovedFeatureError("noise = { ... }" "noises = [ { ... } ]")
+		return nil, errors.PrintRemovedFeatureError("noise = { ... }", "noises = [ { ... } ]")
 	}
 
 	if c.Noises != nil {
