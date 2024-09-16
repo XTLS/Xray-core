@@ -42,7 +42,7 @@ func TestRequestSerialization(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.Validator)
+	Validator := new(vless.MemoryValidator)
 	Validator.Add(user)
 
 	actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
@@ -83,7 +83,7 @@ func TestInvalidRequest(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.Validator)
+	Validator := new(vless.MemoryValidator)
 	Validator.Add(user)
 
 	_, _, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
@@ -114,7 +114,7 @@ func TestMuxRequest(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.Validator)
+	Validator := new(vless.MemoryValidator)
 	Validator.Add(user)
 
 	actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)

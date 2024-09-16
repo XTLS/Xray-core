@@ -185,13 +185,6 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 	server.ctx = context.WithValue(server.ctx, "cone",
 		platform.NewEnvFlag(platform.UseCone).GetValue(func() string { return "" }) != "true")
 
-	if config.Transport != nil {
-		features.PrintDeprecatedFeatureWarning("global transport settings")
-	}
-	if err := config.Transport.Apply(); err != nil {
-		return true, err
-	}
-
 	for _, appSettings := range config.App {
 		settings, err := appSettings.GetInstance()
 		if err != nil {

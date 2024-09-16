@@ -17,9 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/blackhole"
-	dns_proxy "github.com/xtls/xray-core/proxy/dns"
-	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/transport/internet"
@@ -42,39 +39,10 @@ func TestXrayConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"outbound": {
-					"protocol": "freedom",
-					"settings": {}
-				},
 				"log": {
 					"access": "/var/log/xray/access.log",
 					"loglevel": "error",
 					"error": "/var/log/xray/error.log"
-				},
-				"inbound": {
-					"streamSettings": {
-						"network": "ws",
-						"wsSettings": {
-							"headers": {
-								"host": "example.domain"
-							},
-							"path": ""
-						},
-						"tlsSettings": {
-							"alpn": "h2"
-						},
-						"security": "tls"
-					},
-					"protocol": "vmess",
-					"port": 443,
-					"settings": {
-						"clients": [
-							{
-								"security": "aes-128-gcm",
-								"id": "0cdf8a45-303d-4fed-9780-29aa7f54175e"
-							}
-						]
-					}
 				},
 				"inbounds": [{
 					"streamSettings": {
@@ -105,28 +73,16 @@ func TestXrayConfig(t *testing.T) {
 						]
 					}
 				}],
-				"outboundDetour": [
-					{
-						"tag": "blocked",
-						"protocol": "blackhole"
-					},
-					{
-						"protocol": "dns"
-					}
-				],
 				"routing": {
-					"strategy": "rules",
-					"settings": {
-						"rules": [
-							{
-								"ip": [
-									"10.0.0.0/8"
-								],
-								"type": "field",
-								"outboundTag": "blocked"
-							}
-						]
-					}
+					"rules": [
+						{
+							"ip": [
+								"10.0.0.0/8"
+							],
+							"type": "field",
+							"outboundTag": "blocked"
+						}
+					]
 				}
 			}`,
 			Parser: createParser(),
@@ -163,69 +119,7 @@ func TestXrayConfig(t *testing.T) {
 						},
 					}),
 				},
-				Outbound: []*core.OutboundHandlerConfig{
-					{
-						SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-						}),
-						ProxySettings: serial.ToTypedMessage(&freedom.Config{
-							DomainStrategy: freedom.Config_AS_IS,
-							UserLevel:      0,
-						}),
-					},
-					{
-						Tag: "blocked",
-						SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-						}),
-						ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
-					},
-					{
-						SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-						}),
-						ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-							Server:      &net.Endpoint{},
-							Non_IPQuery: "drop",
-						}),
-					},
-				},
 				Inbound: []*core.InboundHandlerConfig{
-					{
-						ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-							PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(443)}},
-							StreamSettings: &internet.StreamConfig{
-								ProtocolName: "websocket",
-								TransportSettings: []*internet.TransportConfig{
-									{
-										ProtocolName: "websocket",
-										Settings: serial.ToTypedMessage(&websocket.Config{
-											Host: "example.domain",
-											Header: map[string]string{
-												"host": "example.domain",
-											},
-										}),
-									},
-								},
-								SecurityType: "xray.transport.internet.tls.Config",
-								SecuritySettings: []*serial.TypedMessage{
-									serial.ToTypedMessage(&tls.Config{
-										NextProtocol: []string{"h2"},
-									}),
-								},
-							},
-						}),
-						ProxySettings: serial.ToTypedMessage(&inbound.Config{
-							User: []*protocol.User{
-								{
-									Level: 0,
-									Account: serial.ToTypedMessage(&vmess.Account{
-										Id: "0cdf8a45-303d-4fed-9780-29aa7f54175e",
-										SecuritySettings: &protocol.SecurityConfig{
-											Type: protocol.SecurityType_AES128_GCM,
-										},
-									}),
-								},
-							},
-						}),
-					},
 					{
 						ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 							PortList: &net.PortList{Range: []*net.PortRange{{

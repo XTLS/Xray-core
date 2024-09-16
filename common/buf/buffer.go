@@ -207,6 +207,21 @@ func (b *Buffer) Len() int32 {
 	return b.end - b.start
 }
 
+// Cap returns the capacity of the buffer content.
+func (b *Buffer) Cap() int32 {
+	if b == nil {
+		return 0
+	}
+	return int32(len(b.v))
+}
+
+// NewWithSize creates a Buffer with 0 length and capacity with at least the given size.
+func NewWithSize(size int32) *Buffer {
+	return &Buffer{
+		v:         bytespool.Alloc(size),
+	}
+}
+
 // IsEmpty returns true if the buffer is empty.
 func (b *Buffer) IsEmpty() bool {
 	return b.Len() == 0
