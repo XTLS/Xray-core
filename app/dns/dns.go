@@ -94,15 +94,6 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	domainMatcher := &strmatcher.MatcherGroup{}
 	geoipContainer := router.GeoIPMatcherContainer{}
 
-	for _, endpoint := range config.NameServers {
-		errors.PrintDeprecatedFeatureWarning("simple DNS server", "")
-		client, err := NewSimpleClient(ctx, endpoint, clientIP)
-		if err != nil {
-			return nil, errors.New("failed to create client").Base(err)
-		}
-		clients = append(clients, client)
-	}
-
 	for _, ns := range config.NameServer {
 		clientIdx := len(clients)
 		updateDomain := func(domainRule strmatcher.Matcher, originalRuleIdx int, matcherInfos []*DomainMatcherInfo) error {

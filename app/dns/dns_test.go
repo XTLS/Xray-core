@@ -124,15 +124,17 @@ func TestUDPServerSubnet(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: uint32(port),
 						},
-						Port: uint32(port),
 					},
 				},
 				ClientIp: []byte{7, 8, 9, 10},
@@ -183,16 +185,18 @@ func TestUDPServer(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: uint32(port),
 						},
-						Port: uint32(port),
-					},
+					}
 				},
 			}),
 			serial.ToTypedMessage(&dispatcher.Config{}),
@@ -303,15 +307,17 @@ func TestPrioritizedDomain(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: 9999, /* unreachable */
 						},
-						Port: 9999, /* unreachable */
 					},
 				},
 				NameServer: []*NameServer{
@@ -389,15 +395,17 @@ func TestUDPServerIPv6(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: uint32(port),
 						},
-						Port: uint32(port),
 					},
 				},
 			}),
@@ -448,15 +456,17 @@ func TestStaticHostDomain(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: uint32(port),
 						},
-						Port: uint32(port),
 					},
 				},
 				StaticHosts: []*Config_HostMapping{
@@ -631,15 +641,17 @@ func TestLocalDomain(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: 9999, /* unreachable */
 						},
-						Port: 9999, /* unreachable */
 					},
 				},
 				NameServer: []*NameServer{
@@ -859,15 +871,17 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&Config{
-				NameServers: []*net.Endpoint{
+				NameServer: []*NameServer{
 					{
-						Network: net.Network_UDP,
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
+						Address: &net.Endpoint{
+							Network: net.Network_UDP,
+							Address: &net.IPOrDomain{
+								Address: &net.IPOrDomain_Ip{
+									Ip: []byte{127, 0, 0, 1},
+								},
 							},
+							Port: 9999, /* unreachable */
 						},
-						Port: 9999, /* unreachable */
 					},
 				},
 				NameServer: []*NameServer{
