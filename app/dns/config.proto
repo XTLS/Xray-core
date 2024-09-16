@@ -45,17 +45,9 @@ enum QueryStrategy {
 }
 
 message Config {
-  // Nameservers used by this DNS. Only traditional UDP servers are support at
-  // the moment. A special value 'localhost' as a domain address can be set to
-  // use DNS on local system.
-  repeated xray.common.net.Endpoint NameServers = 1 [deprecated = true];
-
   // NameServer list used by this DNS client.
-  repeated NameServer name_server = 5;
-
-  // Static hosts. Domain to IP.
-  // Deprecated. Use static_hosts.
-  map<string, xray.common.net.IPOrDomain> Hosts = 2 [deprecated = true];
+  // A special value 'localhost' as a domain address can be set to use DNS on local system.
+  repeated NameServer name_server = 1;
 
   // Client IP for EDNS client subnet. Must be 4 bytes (IPv4) or 16 bytes
   // (IPv6).
@@ -72,18 +64,18 @@ message Config {
     string proxied_domain = 4;
   }
 
-  repeated HostMapping static_hosts = 4;
+  repeated HostMapping static_hosts = 2;
 
   // Tag is the inbound tag of DNS client.
-  string tag = 6;
+  string tag = 4;
 
-  reserved 7;
+  reserved 5;
 
   // DisableCache disables DNS cache
-  bool disableCache = 8;
+  bool disableCache = 6;
 
-  QueryStrategy query_strategy = 9;
+  QueryStrategy query_strategy = 7;
 
-  bool disableFallback = 10;
-  bool disableFallbackIfMatch = 11;
+  bool disableFallback = 8;
+  bool disableFallbackIfMatch = 9;
 }

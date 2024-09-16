@@ -78,7 +78,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		}
 	}
 
-	hosts, err := NewStaticHosts(config.StaticHosts, config.Hosts)
+	hosts, err := NewStaticHosts(config.StaticHosts)
 	if err != nil {
 		return nil, errors.New("failed to create hosts").Base(err)
 	}
