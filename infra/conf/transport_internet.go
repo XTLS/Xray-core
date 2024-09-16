@@ -235,10 +235,10 @@ type SplitHTTPConfig struct {
 }
 
 type Xmux struct {
-	ConnectionReuseTimes *Int32Range `json:"connectionReuseTimes"`
-	ConnectionLifetimeMs *Int32Range `json:"connectionLifetimeMs"`
-	Connections          *Int32Range `json:"connections"`
-	Concurrency          *Int32Range `json:"concurrency"`
+	cMaxReuseTimes *Int32Range `json:"cMaxReuseTimes"`
+	cMaxLifetimeMs *Int32Range `json:"cMaxLifetimeMs"`
+	maxConnections *Int32Range `json:"connections"`
+	maxConcurrency *Int32Range `json:"concurrency"`
 }
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
@@ -263,12 +263,16 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Host = c.Headers["Host"]
 	}
 
+	if c.Xmux.maxConnections != nil && c.Xmux.maxConcurrency != nil {
+		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
+	}
+
 	// Multiplexing config
 	muxProtobuf := splithttp.Multiplexing{
-		ConnectionReuseTimes: splithttpNewRandRangeConfig(c.Xmux.ConnectionReuseTimes),
-		ConnectionLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.ConnectionLifetimeMs),
-		Connections:          splithttpNewRandRangeConfig(c.Xmux.Connections),
-		Concurrency:          splithttpNewRandRangeConfig(c.Xmux.Concurrency),
+		CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.cMaxReuseTimes),
+		CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.cMaxLifetimeMs),
+		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.maxConnections),
+		MaxConcurrency: splithttpNewRandRangeConfig(c.Xmux.maxConcurrency),
 	}
 
 	config := &splithttp.Config{

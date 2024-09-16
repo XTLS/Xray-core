@@ -27,8 +27,8 @@ type muxManager struct {
 func NewMuxManager(config Multiplexing, newResource func() interface{}) *muxManager {
 	return &muxManager{
 		config:        config,
-		concurrency:   config.GetNormalizedConcurrency().roll(),
-		connections:   config.GetNormalizedConnections().roll(),
+		concurrency:   config.GetNormalizedMaxConcurrency().roll(),
+		connections:   config.GetNormalizedMaxConnections().roll(),
 		newResourceFn: newResource,
 		instances:     make([]*muxResource, 0),
 	}
@@ -73,11 +73,11 @@ func (m *muxManager) GetResource(ctx context.Context) *muxResource {
 
 func (m *muxManager) newResource() *muxResource {
 	leftUsage := int32(-1)
-	if x := m.config.GetNormalizedConnectionReuseTimes().roll(); x > 0 {
+	if x := m.config.GetNormalizedCMaxReuseTimes().roll(); x > 0 {
 		leftUsage = x - 1
 	}
 	expirationTime := time.UnixMilli(0)
-	if x := m.config.GetNormalizedConnectionLifetimeMs().roll(); x > 0 {
+	if x := m.config.GetNormalizedCMaxLifetimeMs().roll(); x > 0 {
 		expirationTime = time.Now().Add(time.Duration(x) * time.Millisecond)
 	}
 

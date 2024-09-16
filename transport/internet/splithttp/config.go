@@ -105,47 +105,47 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	return *c.XPaddingBytes
 }
 
-func (m *Multiplexing) GetNormalizedConnectionReuseTimes() RandRangeConfig {
-	if m.ConnectionReuseTimes == nil {
+func (m *Multiplexing) GetNormalizedCMaxReuseTimes() RandRangeConfig {
+	if m.CMaxReuseTimes == nil {
 		return RandRangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.ConnectionReuseTimes
+	return *m.CMaxReuseTimes
 }
 
-func (m *Multiplexing) GetNormalizedConnectionLifetimeMs() RandRangeConfig {
-	if m.ConnectionLifetimeMs == nil || m.ConnectionLifetimeMs.To == 0 {
+func (m *Multiplexing) GetNormalizedCMaxLifetimeMs() RandRangeConfig {
+	if m.CMaxLifetimeMs == nil || m.CMaxLifetimeMs.To == 0 {
 		return RandRangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
-	return *m.ConnectionLifetimeMs
+	return *m.CMaxLifetimeMs
 }
 
-func (m *Multiplexing) GetNormalizedConnections() RandRangeConfig {
-	if m.Connections == nil {
+func (m *Multiplexing) GetNormalizedMaxConnections() RandRangeConfig {
+	if m.MaxConnections == nil {
 		return RandRangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.Connections
+	return *m.MaxConnections
 }
 
-func (m *Multiplexing) GetNormalizedConcurrency() RandRangeConfig {
-	if m.Concurrency == nil {
+func (m *Multiplexing) GetNormalizedMaxConcurrency() RandRangeConfig {
+	if m.MaxConcurrency == nil {
 		return RandRangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.Concurrency
+	return *m.MaxConcurrency
 }
 
 func init() {

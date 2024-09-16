@@ -9,9 +9,9 @@ import (
 
 type fakeRoundTripper struct{}
 
-func TestConnections(t *testing.T) {
+func TestMaxConnections(t *testing.T) {
 	config := Multiplexing{
-		Connections: &RandRangeConfig{From: 4, To: 4},
+		MaxConnections: &RandRangeConfig{From: 4, To: 4},
 	}
 
 	mux := NewMuxManager(config, func() interface{} {
@@ -28,9 +28,9 @@ func TestConnections(t *testing.T) {
 	}
 }
 
-func TestConnectionReuseTimes(t *testing.T) {
+func TestCMaxReuseTimes(t *testing.T) {
 	config := Multiplexing{
-		ConnectionReuseTimes: &RandRangeConfig{From: 2, To: 2},
+		CMaxReuseTimes: &RandRangeConfig{From: 2, To: 2},
 	}
 
 	mux := NewMuxManager(config, func() interface{} {
@@ -47,9 +47,9 @@ func TestConnectionReuseTimes(t *testing.T) {
 	}
 }
 
-func TestConcurrency(t *testing.T) {
+func TestMaxConcurrency(t *testing.T) {
 	config := Multiplexing{
-		Concurrency: &RandRangeConfig{From: 2, To: 2},
+		MaxConcurrency: &RandRangeConfig{From: 2, To: 2},
 	}
 
 	mux := NewMuxManager(config, func() interface{} {
