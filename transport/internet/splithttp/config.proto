@@ -15,9 +15,17 @@ message Config {
   RandRangeConfig scMinPostsIntervalMs = 6;
   bool noSSEHeader = 7;
   RandRangeConfig xPaddingBytes = 8;
+  Multiplexing xmux = 9;
 }
 
 message RandRangeConfig {
     int32 from = 1;
     int32 to = 2;
+}
+
+message Multiplexing {
+  RandRangeConfig maxConnections = 1;
+  RandRangeConfig maxConcurrency = 2;
+  RandRangeConfig cMaxReuseTimes = 3;
+  RandRangeConfig cMaxLifetimeMs = 4;
 }
