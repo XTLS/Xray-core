@@ -25,7 +25,7 @@ message Noise {
   uint64 length_max = 2;
   uint64 delay_min = 3;
   uint64 delay_max = 4;
-  string str_noise = 5;
+  bytes str_noise = 5;
 }
 
 message Config {
@@ -47,5 +47,5 @@ message Config {
   uint32 user_level = 3;
   Fragment fragment = 4;
   uint32 proxy_protocol = 5;
-  Noise noise = 6;
+  repeated Noise noise = 6;
 }

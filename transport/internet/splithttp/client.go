@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	gonet "net"
 	"net/http"
@@ -29,8 +30,7 @@ type DialerClient interface {
 // implements splithttp.DialerClient in terms of direct network connections
 type DefaultDialerClient struct {
 	transportConfig *Config
-	download        *http.Client
-	upload          *http.Client
+	client          *http.Client
 	isH2            bool
 	isH3            bool
 	// pool of net.Conn, created using dialUploadConn
@@ -79,7 +79,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 
 		req.Header = c.transportConfig.GetRequestHeader()
 
-		response, err := c.download.Do(req)
+		response, err := c.client.Do(req)
 		gotConn.Close()
 		if err != nil {
 			errors.LogInfoInner(ctx, err, "failed to send download http request")
@@ -137,7 +137,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	req.Header = c.transportConfig.GetRequestHeader()
 
 	if c.isH2 || c.isH3 {
-		resp, err := c.upload.Do(req)
+		resp, err := c.client.Do(req)
 		if err != nil {
 			return err
 		}
@@ -152,23 +152,39 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
 		// request
-		requestBytes := new(bytes.Buffer)
-		common.Must(req.Write(requestBytes))
+		requestBuff := new(bytes.Buffer)
+		common.Must(req.Write(requestBuff))
 
 		var uploadConn any
+		var h1UploadConn *H1Conn
 
 		for {
 			uploadConn = c.uploadRawPool.Get()
 			newConnection := uploadConn == nil
 			if newConnection {
-				uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
+				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
 				if err != nil {
 					return err
 				}
+				h1UploadConn = NewH1Conn(newConn)
+				uploadConn = h1UploadConn
+			} else {
+				h1UploadConn = uploadConn.(*H1Conn)
+
+				// TODO: Replace 0 here with a config value later
+				// Or add some other condition for optimization purposes
+				if h1UploadConn.UnreadedResponsesCount > 0 {
+					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
+					if err != nil {
+						return fmt.Errorf("error while reading response: %s", err.Error())
+					}
+					if resp.StatusCode != 200 {
+						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
+					}
+				}
 			}
 
-			_, err = uploadConn.(net.Conn).Write(requestBytes.Bytes())
-
+			_, err := h1UploadConn.Write(requestBuff.Bytes())
 			// if the write failed, we try another connection from
 			// the pool, until the write on a new connection fails.
 			// failed writes to a pooled connection are normal when

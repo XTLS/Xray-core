@@ -105,6 +105,49 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	return *c.XPaddingBytes
 }
 
+func (m *Multiplexing) GetNormalizedCMaxReuseTimes() RandRangeConfig {
+	if m.CMaxReuseTimes == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.CMaxReuseTimes
+}
+
+func (m *Multiplexing) GetNormalizedCMaxLifetimeMs() RandRangeConfig {
+	if m.CMaxLifetimeMs == nil || m.CMaxLifetimeMs.To == 0 {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+	return *m.CMaxLifetimeMs
+}
+
+func (m *Multiplexing) GetNormalizedMaxConnections() RandRangeConfig {
+	if m.MaxConnections == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.MaxConnections
+}
+
+func (m *Multiplexing) GetNormalizedMaxConcurrency() RandRangeConfig {
+	if m.MaxConcurrency == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.MaxConcurrency
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)

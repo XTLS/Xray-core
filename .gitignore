@@ -28,3 +28,6 @@ errorgen
 *.dat
 .vscode
 /build_assets
+
+# Output from dlv test
+**/debug.*
