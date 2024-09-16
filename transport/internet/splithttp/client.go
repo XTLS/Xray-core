@@ -154,41 +154,49 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
 		// request
-		requestBytes := new(bytes.Buffer)
-		common.Must(req.Write(requestBytes))
+		requestBuff := new(bytes.Buffer)
+		common.Must(req.Write(requestBuff))
 
 		var uploadConn any
+		var h1UploadConn *H1Conn
 
-		uploadConn = c.uploadRawPool.Get()
-		newConnection := uploadConn == nil
-		if newConnection {
-			uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
-			if err != nil {
+		for {
+			uploadConn = c.uploadRawPool.Get()
+			newConnection := uploadConn == nil
+			if newConnection {
+				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
+				if err != nil {
+					return err
+				}
+				h1UploadConn = NewH1Conn(newConn)
+				uploadConn = h1UploadConn
+			} else {
+				h1UploadConn = uploadConn.(*H1Conn)
+
+				// TODO: Replace 0 here with a config value later
+				// Or add some other condition for optimization purposes
+				if h1UploadConn.UnreadedResponsesCount > 0 {
+					resp, err := http.ReadResponse(bufio.NewReader(h1UploadConn), req)
+					if err != nil {
+						return fmt.Errorf("error while reading response: %s", err.Error())
+					}
+					if resp.StatusCode != 200 {
+						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
+					}
+				}
+			}
+
+			_, err := h1UploadConn.Write(requestBuff.Bytes())
+			// if the write failed, we try another connection from
+			// the pool, until the write on a new connection fails.
+			// failed writes to a pooled connection are normal when
+			// the connection has been closed in the meantime.
+			if err == nil {
+				break
+			} else if newConnection {
 				return err
 			}
 		}
-
-		conn := uploadConn.(net.Conn)
-		_, err := conn.Write(requestBytes.Bytes())
-		// if the write failed, we try another connection from
-		// the pool, until the write on a new connection fails.
-		// failed writes to a pooled connection are normal when
-		// the connection has been closed in the meantime.
-		if newConnection && err != nil {
-			return err
-		}
-
-		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-		if err != nil {
-			return fmt.Errorf("error while reading response: %s", err.Error())
-		}
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("error response code: %d", resp.StatusCode)
-		}
-
-		// buff := &bytes.Buffer{}
-		// _, err := io.Copy(buff, uploadConnTyped)
-		// common.Must(err)
 
 		c.uploadRawPool.Put(uploadConn)
 	}
