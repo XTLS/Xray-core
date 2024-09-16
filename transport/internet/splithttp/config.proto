@@ -24,8 +24,8 @@ message RandRangeConfig {
 }
 
 message Multiplexing {
-  RandRangeConfig cMaxReuseTimes = 4;
-  RandRangeConfig cMaxLifetimeMs = 5;
-  RandRangeConfig maxConnections = 6;
-  RandRangeConfig maxConcurrency = 7;
+  RandRangeConfig maxConnections = 1;
+  RandRangeConfig maxConcurrency = 2;
+  RandRangeConfig cMaxReuseTimes = 3;
+  RandRangeConfig cMaxLifetimeMs = 4;
 }
