@@ -31,9 +31,9 @@ type Fragment struct {
 }
 
 type Noise struct {
+	Type   string      `json:"type"`
 	Packet string      `json:"packet"`
 	Delay  *Int32Range `json:"delay"`
-	Type   string      `json:"type"`
 }
 
 // Build implements Buildable
@@ -154,8 +154,9 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noise != nil {
-		return nil, errors.New(`Freedom settings:Please use "Noises":[{}] instead of "Noise":{}`)
+		return nil, PrintRemovedFeatureError("noise = { ... }" "noises = [ { ... } ]")
 	}
+
 	if c.Noises != nil {
 		for _, n := range c.Noises {
 			NConfig, err := ParseNoise(n)
