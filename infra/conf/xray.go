@@ -64,10 +64,26 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 			switch strings.ToLower(protocol) {
 			case "http":
 				p = append(p, "http")
+			case "rtsp":
+				p = append(p, "rtsp")
 			case "tls", "https", "ssl":
 				p = append(p, "tls")
+			case "ssh":
+				p = append(p, "ssh")
+			case "ntp":
+				p = append(p, "ntp")
+			case "smb":
+				p = append(p, "smb")
+			case "rdp":
+				p = append(p, "rdp")
+			case "sip":
+				p = append(p, "sip")
+			case "bgp":
+				p = append(p, "bgp")
 			case "quic":
 				p = append(p, "quic")
+			case "ovpn":
+				p = append(p, "ovpn")
 			case "fakedns":
 				p = append(p, "fakedns")
 			case "fakedns+others":
@@ -363,7 +379,7 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 type Config struct {
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
-	Transport        map[string]json.RawMessage `json:"transport"`
+	Transport map[string]json.RawMessage `json:"transport"`
 
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
