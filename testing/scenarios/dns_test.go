@@ -31,8 +31,14 @@ func TestResolveIP(t *testing.T) {
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dns.Config{
-				Hosts: map[string]*net.IPOrDomain{
-					"google.com": net.NewIPOrDomain(dest.Address),
+				StaticHosts: []*dns.Config_HostMapping{
+					{
+						Type:   dns.DomainMatchingType_Full,
+						Domain: "google.com",
+						Ip:     []*byte{
+						        	net.NewIPOrDomain(dest.Address),
+						        },
+					},
 				},
 			}),
 			serial.ToTypedMessage(&router.Config{
