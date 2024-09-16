@@ -196,7 +196,7 @@ func TestUDPServer(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-					}
+					},
 				},
 			}),
 			serial.ToTypedMessage(&dispatcher.Config{}),
