@@ -6,7 +6,6 @@ option go_package = "github.com/xtls/xray-core/app/dns";
 option java_package = "com.xray.app.dns";
 option java_multiple_files = true;
 
-import "common/net/address.proto";
 import "common/net/destination.proto";
 import "app/router/config.proto";
 
