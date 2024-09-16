@@ -319,8 +319,6 @@ func TestPrioritizedDomain(t *testing.T) {
 							Port: 9999, /* unreachable */
 						},
 					},
-				},
-				NameServer: []*NameServer{
 					{
 						Address: &net.Endpoint{
 							Network: net.Network_UDP,
@@ -653,8 +651,6 @@ func TestLocalDomain(t *testing.T) {
 							Port: 9999, /* unreachable */
 						},
 					},
-				},
-				NameServer: []*NameServer{
 					{
 						Address: &net.Endpoint{
 							Network: net.Network_UDP,
@@ -883,8 +879,6 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							Port: 9999, /* unreachable */
 						},
 					},
-				},
-				NameServer: []*NameServer{
 					{
 						Address: &net.Endpoint{
 							Network: net.Network_UDP,
