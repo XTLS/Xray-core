@@ -46,8 +46,8 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 func (s *Server) policy() policy.Session {
 	config := s.config
 	p := s.policyManager.ForLevel(config.UserLevel)
-	// Remove this before v25.x
-	if config.Timeout > 0 && config.UserLevel == 0 {
+	if config.Timeout > 0 && config.UserLevel == 0 {  // Remove this before v25.x
+		errors.PrintDeprecatedFeatureWarning(`timeout config in HTTP inbound`, ``)
 		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second
 	}
 	return p

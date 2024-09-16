@@ -24,8 +24,7 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 	}
 	config.Port = uint32(v.PortValue)
 	config.Networks = v.NetworkList.Build()
-	// Remove before v26.x
-	if v.TimeoutValue > 0 {
+	if v.TimeoutValue > 0 {  // Remove before v26.x
 		// After feature removal, change to PrintRemovedFeatureError, and keep it before v26.x
 		errors.PrintDeprecatedFeatureWarning("timeout config in dokodemo-door", "userLevel")
 		// Remove one line below before v25.x

@@ -121,7 +121,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fallback != nil {  // Remove in v25.x
-		return nil, errors.PrintRemovedFeatureError(`"fallback":{}`, `"fallbacks":[{}]`)
+		return nil, errors.PrintRemovedFeatureError(`"fallback":{} in Trojan`, `"fallbacks":[{}]`)
 	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
