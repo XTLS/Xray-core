@@ -7,9 +7,7 @@ import (
 
 type H1Conn struct {
 	UnreadedResponsesCount int
-	// To reuse response reader, so we won't lose data
-	// If some EOF will accure
-	RespBufReader *bufio.Reader
+	RespBufReader          *bufio.Reader
 	net.Conn
 }
 
