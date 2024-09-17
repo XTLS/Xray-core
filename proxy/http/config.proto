@@ -15,11 +15,11 @@ message Account {
 
 // Config for HTTP proxy server.
 message ServerConfig {
-  map<string, string> accounts = 1;
-  bool allow_transparent = 2;
-  uint32 user_level = 3;
+  map<string, string> accounts = 2;
+  bool allow_transparent = 3;
+  uint32 user_level = 4;
   // Deprecated, remove before v25.x
-  uint32 timeout = 4 [deprecated = true];
+  uint32 timeout = 1 [deprecated = true];
 }
 
 message Header {

@@ -28,7 +28,7 @@ message Config {
   // Configuration for extensions. The config may not work if corresponding
   // extension is not loaded into Xray. Xray will ignore such config during
   // initialization.
-  repeated xray.common.serial.TypedMessage extension = 5;
+  repeated xray.common.serial.TypedMessage extension = 6;
 }
 
 // InboundHandlerConfig is the configuration for inbound handler.

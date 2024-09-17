@@ -65,23 +65,23 @@ message Config {
   string cipher_suites = 9;
 
   // TLS Client Hello fingerprint (uTLS).
-  string fingerprint = 10;
+  string fingerprint = 11;
 
-  bool reject_unknown_sni = 11;
+  bool reject_unknown_sni = 12;
   
   /* @Document A pinned certificate chain sha256 hash.
      @Document If the server's hash does not match this value, the connection will be aborted.
      @Document This value replace allow_insecure.
      @Critical
   */
-  repeated bytes pinned_peer_certificate_chain_sha256 = 12;
+  repeated bytes pinned_peer_certificate_chain_sha256 = 13;
 
   /* @Document A pinned certificate public key sha256 hash.
      @Document If the server's public key hash does not match this value, the connection will be aborted.
      @Document This value replace allow_insecure.
      @Critical
   */
-  repeated bytes pinned_peer_certificate_public_key_sha256 = 13;
+  repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
 
-  string master_key_log = 14;
+  string master_key_log = 15;
 }
