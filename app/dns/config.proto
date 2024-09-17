@@ -46,7 +46,7 @@ enum QueryStrategy {
 message Config {
   // NameServer list used by this DNS client.
   // A special value 'localhost' as a domain address can be set to use DNS on local system.
-  repeated NameServer name_server = 1;
+  repeated NameServer name_server = 5;
 
   // Client IP for EDNS client subnet. Must be 4 bytes (IPv4) or 16 bytes
   // (IPv6).
@@ -63,18 +63,18 @@ message Config {
     string proxied_domain = 4;
   }
 
-  repeated HostMapping static_hosts = 2;
+  repeated HostMapping static_hosts = 4;
 
   // Tag is the inbound tag of DNS client.
-  string tag = 4;
+  string tag = 6;
 
-  reserved 5;
+  reserved 7;
 
   // DisableCache disables DNS cache
-  bool disableCache = 6;
+  bool disableCache = 8;
 
-  QueryStrategy query_strategy = 7;
+  QueryStrategy query_strategy = 9;
 
-  bool disableFallback = 8;
-  bool disableFallbackIfMatch = 9;
+  bool disableFallback = 10;
+  bool disableFallbackIfMatch = 11;
 }
