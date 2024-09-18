@@ -235,8 +235,8 @@ type SplitHTTPConfig struct {
 }
 
 type Xmux struct {
-	MaxConnections *Int32Range `json:"maxConnections"`
 	MaxConcurrency *Int32Range `json:"maxConcurrency"`
+	MaxConnections *Int32Range `json:"maxConnections"`
 	CMaxReuseTimes *Int32Range `json:"cMaxReuseTimes"`
 	CMaxLifetimeMs *Int32Range `json:"cMaxLifetimeMs"`
 }
@@ -269,8 +269,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	// Multiplexing config
 	muxProtobuf := splithttp.Multiplexing{
-		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
 		MaxConcurrency: splithttpNewRandRangeConfig(c.Xmux.MaxConcurrency),
+		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
 		CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.CMaxReuseTimes),
 		CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.CMaxLifetimeMs),
 	}
