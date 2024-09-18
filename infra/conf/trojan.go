@@ -95,9 +95,6 @@ type TrojanUserConfig struct {
 type TrojanServerConfig struct {
 	Clients   []*TrojanUserConfig      `json:"clients"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
-
-	// Remove in v25.x
-	Fallback  *TrojanInboundFallback   `json:"fallback"`
 }
 
 // Build implements Buildable
@@ -120,9 +117,6 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.Fallback != nil {  // Remove in v25.x
-		return nil, errors.PrintRemovedFeatureError(`"fallback":{} in Trojan`, `"fallbacks":[{}]`)
-	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
 		var s string

@@ -18,8 +18,6 @@ message ServerConfig {
   map<string, string> accounts = 2;
   bool allow_transparent = 3;
   uint32 user_level = 4;
-  // Deprecated, remove before v25.x
-  uint32 timeout = 1 [deprecated = true];
 }
 
 message Header {

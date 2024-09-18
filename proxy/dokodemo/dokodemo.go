@@ -62,10 +62,6 @@ func (d *DokodemoDoor) Network() []net.Network {
 func (d *DokodemoDoor) policy() policy.Session {
 	config := d.config
 	p := d.policyManager.ForLevel(config.UserLevel)
-	if config.Timeout > 0 && config.UserLevel == 0 {  // Remove or change this logic before v25.x
-		errors.PrintDeprecatedFeatureWarning(`timeout config in dokodemo`, ``)
-		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second
-	}
 	return p
 }
 
