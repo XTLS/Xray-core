@@ -5,7 +5,6 @@ package dokodemo
 import (
 	"context"
 	"sync/atomic"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
