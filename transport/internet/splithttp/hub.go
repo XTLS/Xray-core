@@ -126,6 +126,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
 	if request.Method == "POST" {
+		// CORS headers for the browser dialer
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+		
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
