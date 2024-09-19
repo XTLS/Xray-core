@@ -193,11 +193,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
-		// CORS headers for the browser dialer to work
-		if h.config.CorsHeader {
-			writer.Header().Set("Access-Control-Allow-Origin", "*")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
-		}
+		// CORS headers for the browser dialer
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 
 		h.config.WriteResponseHeader(writer)
 
