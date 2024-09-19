@@ -5,21 +5,22 @@
 </head>
 <body>
 	<script>
+		"use strict";
+		// Enable a much more aggressive JIT for performance gains
+
 		// Copyright (c) 2021 XRAY. Mozilla Public License 2.0.
-		var url = "ws://" + window.location.host + "/websocket?token=csrfToken";
-		var clientIdleCount = 0;
-		var upstreamGetCount = 0;
-		var upstreamWsCount = 0;
-		var upstreamPostCount = 0;
-		setInterval(check, 1000);
-		function check() {
+		let url = "ws://" + window.location.host + "/websocket?token=csrfToken";
+		let clientIdleCount = 0;
+		let upstreamGetCount = 0;
+		let upstreamWsCount = 0;
+		let upstreamPostCount = 0;
+		let check = function () {
 			if (clientIdleCount > 0) {
 				return;
-			}
-
+			};
 			clientIdleCount += 1;
 			console.log("Prepare", url);
-			var ws = new WebSocket(url);
+			let ws = new WebSocket(url);
 			// arraybuffer is significantly faster in chrome than default
 			// blob, tested with chrome 123
 			ws.binaryType = "arraybuffer";
@@ -31,7 +32,7 @@
 					console.log("Dial WS", url, protocol);
 					const wss = new WebSocket(url, protocol);
 					wss.binaryType = "arraybuffer";
-					var opened = false;
+					let opened = false;
 					ws.onmessage = function (event) {
 						wss.send(event.data)
 					}
@@ -130,7 +131,8 @@
 			ws.onerror = function (event) {
 				ws.close()
 			}
-		}
+		};
+		let checkTask = setInterval(check, 1000);
 	</script>
 </body>
 </html>
