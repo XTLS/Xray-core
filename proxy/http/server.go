@@ -46,9 +46,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 func (s *Server) policy() policy.Session {
 	config := s.config
 	p := s.policyManager.ForLevel(config.UserLevel)
-	if config.Timeout > 0 && config.UserLevel == 0 {
-		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second
-	}
 	return p
 }
 
@@ -302,7 +299,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 			if response.ContentLength >= 0 {
 				response.Header.Set("Proxy-Connection", "keep-alive")
 				response.Header.Set("Connection", "keep-alive")
-				response.Header.Set("Keep-Alive", "timeout=4")
+				response.Header.Set("Keep-Alive", "timeout=60")
 				response.Close = false
 			} else {
 				response.Close = true

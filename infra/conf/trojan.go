@@ -94,7 +94,6 @@ type TrojanUserConfig struct {
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
 	Clients   []*TrojanUserConfig      `json:"clients"`
-	Fallback  *TrojanInboundFallback   `json:"fallback"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
 }
 
@@ -118,9 +117,6 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.Fallback != nil {
-		return nil, errors.New(`Trojan settings: please use "fallbacks":[{}] instead of "fallback":{}`)
-	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
 		var s string

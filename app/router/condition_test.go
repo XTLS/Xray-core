@@ -108,42 +108,6 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Cidr: []*CIDR{
-					{
-						Ip:     []byte{8, 8, 8, 8},
-						Prefix: 32,
-					},
-					{
-						Ip:     []byte{8, 8, 8, 8},
-						Prefix: 32,
-					},
-					{
-						Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
-						Prefix: 128,
-					},
-				},
-			},
-			test: []ruleTest{
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("8.8.8.8"), 80)}),
-					output: true,
-				},
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("8.8.4.4"), 80)}),
-					output: false,
-				},
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334"), 80)}),
-					output: true,
-				},
-				{
-					input:  withBackground(),
-					output: false,
-				},
-			},
-		},
-		{
-			rule: &RoutingRule{
 				Geoip: []*GeoIP{
 					{
 						Cidr: []*CIDR{
@@ -184,10 +148,14 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				SourceCidr: []*CIDR{
+				SourceGeoip: []*GeoIP{
 					{
-						Ip:     []byte{192, 168, 0, 0},
-						Prefix: 16,
+						Cidr: []*CIDR{
+							{
+								Ip:     []byte{192, 168, 0, 0},
+								Prefix: 16,
+							},
+						},
 					},
 				},
 			},

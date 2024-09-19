@@ -64,10 +64,6 @@ message Config {
   // Specify cipher suites, except for TLS 1.3.
   string cipher_suites = 9;
 
-  // Whether the server selects its most preferred ciphersuite.
-  // Deprecated: crypto/tls has ignored this field.
-  bool prefer_server_cipher_suites = 10 [deprecated = true];
-
   // TLS Client Hello fingerprint (uTLS).
   string fingerprint = 11;
 
