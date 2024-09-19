@@ -34,6 +34,7 @@ type Config struct {
 	NoSSEHeader          bool              `protobuf:"varint,7,opt,name=noSSEHeader,proto3" json:"noSSEHeader,omitempty"`
 	XPaddingBytes        *RandRangeConfig  `protobuf:"bytes,8,opt,name=xPaddingBytes,proto3" json:"xPaddingBytes,omitempty"`
 	Xmux                 *Multiplexing     `protobuf:"bytes,9,opt,name=xmux,proto3" json:"xmux,omitempty"`
+	CorsHeader           bool              `protobuf:"varint,10,opt,name=corsHeader,proto3" json:"corsHeader,omitempty"`
 }
 
 func (x *Config) Reset() {
@@ -129,6 +130,13 @@ func (x *Config) GetXmux() *Multiplexing {
 		return x.Xmux
 	}
 	return nil
+}
+
+func (x *Config) GetCorsHeader() bool {
+	if x != nil {
+		return x.CorsHeader
+	}
+	return false
 }
 
 type RandRangeConfig struct {

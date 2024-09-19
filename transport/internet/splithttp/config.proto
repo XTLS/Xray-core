@@ -16,6 +16,7 @@ message Config {
   bool noSSEHeader = 7;
   RandRangeConfig xPaddingBytes = 8;
   Multiplexing xmux = 9;
+  bool corsHeader = 10;
 }
 
 message RandRangeConfig {
