@@ -232,6 +232,7 @@ type SplitHTTPConfig struct {
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
 	Xmux                 Xmux              `json:"xmux"`
+	CorsHeader           bool              `json:"corsHeader"`
 }
 
 type Xmux struct {
@@ -285,6 +286,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
+		CorsHeader:           c.CorsHeader,
 	}
 	return config, nil
 }
