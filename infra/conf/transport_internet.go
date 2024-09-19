@@ -263,7 +263,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Host = c.Headers["Host"]
 	}
 
-	if c.Xmux.MaxConnections != nil && c.Xmux.MaxConcurrency != nil {
+	if c.Xmux.MaxConnections != nil && c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency != nil && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
 
@@ -779,19 +779,19 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 type StreamConfig struct {
-	Network             *TransportProtocol  `json:"network"`
-	Security            string              `json:"security"`
-	TLSSettings         *TLSConfig          `json:"tlsSettings"`
-	REALITYSettings     *REALITYConfig      `json:"realitySettings"`
-	TCPSettings         *TCPConfig          `json:"tcpSettings"`
-	KCPSettings         *KCPConfig          `json:"kcpSettings"`
-	WSSettings          *WebSocketConfig    `json:"wsSettings"`
-	HTTPSettings        *HTTPConfig         `json:"httpSettings"`
-	SocketSettings      *SocketConfig       `json:"sockopt"`
-	GRPCConfig          *GRPCConfig         `json:"grpcSettings"`
-	GUNConfig           *GRPCConfig         `json:"gunSettings"`
-	HTTPUPGRADESettings *HttpUpgradeConfig  `json:"httpupgradeSettings"`
-	SplitHTTPSettings   *SplitHTTPConfig    `json:"splithttpSettings"`
+	Network             *TransportProtocol `json:"network"`
+	Security            string             `json:"security"`
+	TLSSettings         *TLSConfig         `json:"tlsSettings"`
+	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
+	TCPSettings         *TCPConfig         `json:"tcpSettings"`
+	KCPSettings         *KCPConfig         `json:"kcpSettings"`
+	WSSettings          *WebSocketConfig   `json:"wsSettings"`
+	HTTPSettings        *HTTPConfig        `json:"httpSettings"`
+	SocketSettings      *SocketConfig      `json:"sockopt"`
+	GRPCConfig          *GRPCConfig        `json:"grpcSettings"`
+	GUNConfig           *GRPCConfig        `json:"gunSettings"`
+	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
+	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
 }
 
 // Build implements Buildable.
