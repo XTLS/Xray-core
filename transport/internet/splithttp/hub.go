@@ -126,10 +126,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
 	if request.Method == "POST" {
-		// CORS headers for the browser dialer
-		writer.Header().Set("Access-Control-Allow-Origin", "*")
-		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
-		
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
@@ -196,10 +192,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
-
-		// CORS headers for the browser dialer
-		writer.Header().Set("Access-Control-Allow-Origin", "*")
-		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 
 		h.config.WriteResponseHeader(writer)
 
