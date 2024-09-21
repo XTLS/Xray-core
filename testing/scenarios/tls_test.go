@@ -265,7 +265,7 @@ func TestTLSOverKCP(t *testing.T) {
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						Protocol:     internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
@@ -326,7 +326,7 @@ func TestTLSOverKCP(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						Protocol:     internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
@@ -365,7 +365,7 @@ func TestTLSOverWebSocket(t *testing.T) {
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						Protocol:     internet.TransportProtocol_WebSocket,
+						ProtocolName: "websocket",
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
@@ -426,11 +426,11 @@ func TestTLSOverWebSocket(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_WebSocket,
+						ProtocolName:      "websocket",
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_WebSocket,
-								Settings: serial.ToTypedMessage(&websocket.Config{}),
+								ProtocolName: "websocket",
+								Settings:     serial.ToTypedMessage(&websocket.Config{}),
 							},
 						},
 						SecurityType: serial.GetMessageType(&tls.Config{}),
@@ -475,11 +475,11 @@ func TestHTTP2(t *testing.T) {
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_HTTP,
+						ProtocolName:      "http",
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_HTTP,
-								Settings: serial.ToTypedMessage(&http.Config{
+								ProtocolName: "http",
+								Settings:     serial.ToTypedMessage(&http.Config{
 									Host: []string{"example.com"},
 									Path: "/testpath",
 								}),
@@ -545,11 +545,11 @@ func TestHTTP2(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_HTTP,
+						ProtocolName:      "http",
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_HTTP,
-								Settings: serial.ToTypedMessage(&http.Config{
+								ProtocolName: "http",
+								Settings:     serial.ToTypedMessage(&http.Config{
 									Host: []string{"example.com"},
 									Path: "/testpath",
 								}),
