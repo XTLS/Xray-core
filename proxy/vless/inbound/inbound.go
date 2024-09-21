@@ -1,7 +1,5 @@
 package inbound
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"bytes"
 	"context"

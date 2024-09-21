@@ -36,8 +36,6 @@ import (
 	"golang.org/x/net/http2"
 )
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 //go:linkname aesgcmPreferred github.com/refraction-networking/utls.aesgcmPreferred
 func aesgcmPreferred(ciphers []uint16) bool
 
