@@ -185,18 +185,23 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
 	}
+	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+	var serverWriter buf.Writer
+	v := proxy.NewVisionWriter(bufferWriter, requestAddons, trafficState, ctx)
+	scheduler := v.Scheduler
+	serverWriter = v
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+		
 		if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
 			return errors.New("failed to encode request header").Base(err).AtWarning()
 		}
 
-		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, ctx)
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		scheduler.Start()
+		if request.Command == protocol.RequestCommandUDP {
+			serverWriter = encoding.NewMultiLengthPacketWriter(serverWriter)
+		} else if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 		}
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
@@ -221,6 +226,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
 		if err := bufferWriter.SetBuffered(false); err != nil {
 			return errors.New("failed to write A request payload").Base(err).AtWarning()
+		}
+		if requestAddons.Scheduler != nil && requestAddons.Scheduler.PingPong {
+			go func() {
+				scheduler.Trigger <- 2 // client kickstart the pingpong!
+			}()
 		}
 
 		var err error
@@ -266,10 +276,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, trafficState, ob, ctx)
+			err = encoding.XtlsRead(serverReader, clientWriter, timer, scheduler, conn, input, rawInput, trafficState, ob, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
-			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
+			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer), proxy.TriggerScheduler(scheduler))
 		}
 
 		if err != nil {

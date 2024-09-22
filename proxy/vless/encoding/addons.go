@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -52,15 +53,6 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*proxy.Addons, er
 	}
 
 	return addons, nil
-}
-
-// EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, addons *proxy.Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
-	w := proxy.NewVisionWriter(writer, addons, state, context)
-	if request.Command == protocol.RequestCommandUDP {
-		return NewMultiLengthPacketWriter(w)
-	}
-	return w
 }
 
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
@@ -181,7 +173,7 @@ func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 func PopulateSeed(seed string, addons *proxy.Addons) {
 	if len(seed) > 0 {
 		addons.Seed = []byte {1} // only turn on, more TBD
-		addons.Mode = proxy.SeedMode_PaddingPlusDelay
+		addons.Mode = proxy.SeedMode_IndependentScheduler
 		addons.Duration = "0-8"
 		addons.Padding = &proxy.PaddingConfig{
 			RegularMin: 0,
@@ -196,6 +188,7 @@ func PopulateSeed(seed string, addons *proxy.Addons) {
 		// }
 		addons.Scheduler = &proxy.SchedulerConfig{
 			TimeoutMillis: 600,
+			PingPong: strings.Contains(seed, "pingpong"),
 		}
 	} else if addons.Flow == vless.XRV {
 		addons.Seed = []byte {1} // only turn on, more TBD
@@ -244,7 +237,8 @@ func CheckSeed(requestAddons *proxy.Addons, responseAddons *proxy.Addons) error 
 		return errors.New("Delay of one is nil but the other is not nil")
 	}
 	if requestAddons.Scheduler != nil && responseAddons.Scheduler != nil {
-		if requestAddons.Scheduler.TimeoutMillis != responseAddons.Scheduler.TimeoutMillis {
+		if requestAddons.Scheduler.TimeoutMillis != responseAddons.Scheduler.TimeoutMillis ||
+		requestAddons.Scheduler.PingPong != responseAddons.Scheduler.PingPong {
 			return errors.New("Scheduler not match")
 		}
 	} else if requestAddons.Scheduler != nil || responseAddons.Scheduler != nil {

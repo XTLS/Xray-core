@@ -517,6 +517,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	serverReader := link.Reader // .(*pipe.Reader)
 	serverWriter := link.Writer // .(*pipe.Writer)
 	trafficState := proxy.NewTrafficState(account.ID.Bytes(), account.Flow)
+	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
+	var clientWriter buf.Writer
+	v := proxy.NewVisionWriter(bufferWriter, requestAddons, trafficState, ctx)
+	scheduler := v.Scheduler
+	clientWriter = v
+
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
@@ -527,10 +533,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, scheduler, connection, input, rawInput, trafficState, nil, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
-			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
+			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer), proxy.TriggerScheduler(scheduler))
 		}
 
 		if err != nil {
@@ -543,13 +549,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	getResponse := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
-		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
 		if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
 			return errors.New("failed to encode response header").Base(err).AtWarning()
 		}
 
-		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons, trafficState, ctx)
+		scheduler.Start()
+		if request.Command == protocol.RequestCommandUDP {
+			clientWriter = encoding.NewMultiLengthPacketWriter(clientWriter)
+		}
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...

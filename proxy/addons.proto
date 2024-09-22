@@ -38,5 +38,6 @@ message DelayConfig {
 
 message SchedulerConfig {
   uint32 TimeoutMillis = 1; // original traffic will not be sent right away but when scheduler want to send or pending buffer times out
+  bool PingPong = 2;
   // Other TBD  
 }
