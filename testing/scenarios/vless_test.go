@@ -30,6 +30,18 @@ import (
 )
 
 func TestVless(t *testing.T) {
+	testVlessSeed(t, "")
+}
+
+func TestVlessSeedWithFixedTrigger(t *testing.T) {
+	testVlessSeed(t, "1")
+}
+
+func TestVlessSeedWithPingPong(t *testing.T) {
+	testVlessSeed(t, "pingpong")
+}
+
+func testVlessSeed(t *testing.T, seed string) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -57,6 +69,7 @@ func TestVless(t *testing.T) {
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
+								Seed: seed,
 							}),
 						},
 					},
@@ -102,104 +115,7 @@ func TestVless(t *testing.T) {
 								{
 									Account: serial.ToTypedMessage(&vless.Account{
 										Id: userID.String(),
-									}),
-								},
-							},
-						},
-					},
-				}),
-			},
-		},
-	}
-
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
-	common.Must(err)
-	defer CloseAllServers(servers)
-
-	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
-		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
-	}
-	if err := errg.Wait(); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestVlessSeedWithIndependentScheduler(t *testing.T) {
-	tcpServer := tcp.Server{
-		MsgProcessor: xor,
-	}
-	dest, err := tcpServer.Start()
-	common.Must(err)
-	defer tcpServer.Close()
-
-	userID := protocol.NewID(uuid.New())
-	serverPort := tcp.PickPort()
-	serverConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
-						{
-							Account: serial.ToTypedMessage(&vless.Account{
-								Id: userID.String(),
-								Seed: "1",
-							}),
-						},
-					},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
-			},
-		},
-	}
-
-	clientPort := tcp.PickPort()
-	clientConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
-					Networks: []net.Network{net.Network_TCP},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id: userID.String(),
-										Seed: "1",
+										Seed: seed,
 									}),
 								},
 							},
@@ -346,6 +262,18 @@ func TestVlessTls(t *testing.T) {
 }
 
 func TestVlessXtlsVision(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "")
+}
+
+func TestVlessXtlsVisionWithFixedTrigger(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "1")
+}
+
+func TestVlessXtlsVisionWithPingPong(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "pingpong")
+}
+
+func testVlessXtlsVisionWithSeed(t *testing.T, seed string) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -383,6 +311,7 @@ func TestVlessXtlsVision(t *testing.T) {
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id:   userID.String(),
 								Flow: vless.XRV,
+								Seed: seed,
 							}),
 						},
 					},
@@ -429,132 +358,7 @@ func TestVlessXtlsVision(t *testing.T) {
 									Account: serial.ToTypedMessage(&vless.Account{
 										Id:   userID.String(),
 										Flow: vless.XRV,
-									}),
-								},
-							},
-						},
-					},
-				}),
-				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-					StreamSettings: &internet.StreamConfig{
-						ProtocolName: "tcp",
-						TransportSettings: []*internet.TransportConfig{
-							{
-								ProtocolName: "tcp",
-								Settings:     serial.ToTypedMessage(&transtcp.Config{}),
-							},
-						},
-						SecurityType: serial.GetMessageType(&tls.Config{}),
-						SecuritySettings: []*serial.TypedMessage{
-							serial.ToTypedMessage(&tls.Config{
-								AllowInsecure: true,
-							}),
-						},
-					},
-				}),
-			},
-		},
-	}
-
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
-	common.Must(err)
-	defer CloseAllServers(servers)
-
-	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
-		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
-	}
-	if err := errg.Wait(); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestVlessXtlsVisionWithSeed(t *testing.T) {
-	tcpServer := tcp.Server{
-		MsgProcessor: xor,
-	}
-	dest, err := tcpServer.Start()
-	common.Must(err)
-	defer tcpServer.Close()
-
-	userID := protocol.NewID(uuid.New())
-	serverPort := tcp.PickPort()
-	serverConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-					StreamSettings: &internet.StreamConfig{
-						ProtocolName: "tcp",
-						SecurityType: serial.GetMessageType(&tls.Config{}),
-						SecuritySettings: []*serial.TypedMessage{
-							serial.ToTypedMessage(&tls.Config{
-								Certificate: []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil))},
-							}),
-						},
-					},
-				}),
-				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
-						{
-							Account: serial.ToTypedMessage(&vless.Account{
-								Id:   userID.String(),
-								Flow: vless.XRV,
-								Seed: "1",
-							}),
-						},
-					},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
-			},
-		},
-	}
-
-	clientPort := tcp.PickPort()
-	clientConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
-					Networks: []net.Network{net.Network_TCP},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id:   userID.String(),
-										Flow: vless.XRV,
-										Seed: "1",
+										Seed: seed,
 									}),
 								},
 							},

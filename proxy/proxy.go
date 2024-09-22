@@ -266,7 +266,7 @@ type VisionWriter struct {
 	ctx               context.Context
 	writeOnceUserUUID *[]byte
 	isUplink          bool
-	scheduler         *Scheduler
+	Scheduler         *Scheduler
 }
 
 func NewVisionWriter(writer buf.Writer, addon *Addons, state *TrafficState, isUplink bool, context context.Context) *VisionWriter {
@@ -279,7 +279,7 @@ func NewVisionWriter(writer buf.Writer, addon *Addons, state *TrafficState, isUp
 		ctx:               context,
 		writeOnceUserUUID: &w,
 		isUplink:          isUplink,
-		scheduler:         NewScheduler(writer, addon, state, &w, context),
+		Scheduler:         NewScheduler(writer, addon, state, &w, context),
 	}
 }
 
@@ -341,12 +341,24 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.trafficState.StartTime.IsZero() {
 		w.trafficState.StartTime = time.Now()
 	}
-	w.scheduler.Buffer <- mb
-	if w.addons.Scheduler == nil {
-		w.scheduler.Trigger <- -1 // send all buffers
+	w.Scheduler.Buffer <- mb
+	w.Scheduler.Trigger <- -1 // send all buffers if no independent scheduler
+	if w.addons.Scheduler != nil {
+		w.Scheduler.TimeoutLock.Lock()
+		w.Scheduler.TimeoutCounter++
+		w.Scheduler.TimeoutLock.Unlock()
+		go func() {
+			time.Sleep(time.Duration(w.addons.Scheduler.TimeoutMillis) * time.Millisecond)
+			w.Scheduler.TimeoutLock.Lock()
+			w.Scheduler.TimeoutCounter--
+			if w.Scheduler.TimeoutCounter == 0 {
+				w.Scheduler.Trigger <- 0 // send when the latest buffer timeout 
+			}
+			w.Scheduler.TimeoutLock.Unlock()
+		}()
 	}
-	if len(w.scheduler.Error) > 0 {
-		return <-w.scheduler.Error
+	if len(w.Scheduler.Error) > 0 {
+		return <-w.Scheduler.Error
 	}
 	return nil
 }
@@ -596,7 +608,7 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
 // - writer are from *transport.Link
-func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer *signal.ActivityTimer, inTimer *signal.ActivityTimer) error {
+func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net.Conn, writer buf.Writer, timer *signal.ActivityTimer, inTimer *signal.ActivityTimer, scheduler *Scheduler) error {
 	readerConn, readCounter, _ := UnwrapRawConn(readerConn)
 	writerConn, _, writeCounter := UnwrapRawConn(writerConn)
 	reader := buf.NewReader(readerConn)
@@ -659,10 +671,13 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			if readCounter != nil {
 				readCounter.Add(int64(buffer.Len()))
 			}
-			timer.Update()
 			if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 				return werr
 			}
+			timer.Update()
+		}
+		if scheduler != nil {
+			scheduler.Trigger <- 2
 		}
 		if err != nil {
 			return err

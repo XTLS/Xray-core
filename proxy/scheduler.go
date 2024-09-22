@@ -15,6 +15,8 @@ type Scheduler struct {
 	Buffer            chan buf.MultiBuffer
 	Trigger           chan int
 	Error             chan error
+	TimeoutCounter    int
+	TimeoutLock       *sync.Mutex
 	closed            chan int
 	bufferReadLock    *sync.Mutex
 	writer            buf.Writer
@@ -24,11 +26,21 @@ type Scheduler struct {
 	ctx               context.Context
 }
 
+func TriggerScheduler(scheduler *Scheduler) buf.CopyOption {
+	return func(handler *buf.CopyHandler) {
+		handler.OnData = append(handler.OnData, func(buf.MultiBuffer) {
+			scheduler.Trigger <- 2 // send fake buffer if no pending
+		})
+	}
+}
+
 func NewScheduler(w buf.Writer, addon *Addons, state *TrafficState, userUUID *[]byte, context context.Context) *Scheduler {
 	var s = Scheduler{
 		Buffer: make(chan buf.MultiBuffer, 100),
 		Trigger: make(chan int),
 		Error: make(chan error, 100),
+		TimeoutCounter: 0,
+		TimeoutLock: new(sync.Mutex),
 		closed: make(chan int),
 		bufferReadLock: new(sync.Mutex),
 		writer: w,
@@ -37,17 +49,26 @@ func NewScheduler(w buf.Writer, addon *Addons, state *TrafficState, userUUID *[]
 		writeOnceUserUUID: userUUID,
 		ctx: context,
 	}
+	return &s
+}
+
+func(s *Scheduler) Start() {
 	go s.mainLoop()
-	if s.addons.Scheduler != nil {
+	if s.addons.Scheduler != nil && !s.addons.Scheduler.PingPong {
 		go s.exampleIndependentScheduler()
 	}
-	return &s
 }
 
 func(s *Scheduler) mainLoop() {
 	for trigger := range s.Trigger {
 		if len(s.closed) > 0 {
 			return
+		}
+		if trigger == -1 && s.addons.Scheduler != nil {
+			continue 
+		}
+		if trigger == 2 && (s.addons.Scheduler == nil || !s.addons.Scheduler.PingPong) {
+			continue
 		}
 		go func() { // each trigger has independent delay, trigger does not block
 			var d = 0 * time.Millisecond
