@@ -41,8 +41,8 @@ func TestHTTPConnectionHeader(t *testing.T) {
 					StreamSettings: &internet.StreamConfig{
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_TCP,
-								Settings: serial.ToTypedMessage(&tcptransport.Config{
+								ProtocolName: "tcp",
+								Settings:     serial.ToTypedMessage(&tcptransport.Config{
 									HeaderSettings: serial.ToTypedMessage(&http.Config{}),
 								}),
 							},
@@ -103,8 +103,8 @@ func TestHTTPConnectionHeader(t *testing.T) {
 					StreamSettings: &internet.StreamConfig{
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_TCP,
-								Settings: serial.ToTypedMessage(&tcptransport.Config{
+								ProtocolName: "tcp",
+								Settings:     serial.ToTypedMessage(&tcptransport.Config{
 									HeaderSettings: serial.ToTypedMessage(&http.Config{}),
 								}),
 							},

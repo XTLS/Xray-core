@@ -4,5 +4,3 @@
 // together with 'freedom' to talk to final destination, while VMess outbound is usually used on
 // clients with 'socks' for proxying.
 package vmess
-
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen

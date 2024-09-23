@@ -28,25 +28,6 @@ var strategy = [][]byte{
 
 const unknownProtocol = "unknown"
 
-func transportProtocolToString(protocol TransportProtocol) string {
-	switch protocol {
-	case TransportProtocol_TCP:
-		return "tcp"
-	case TransportProtocol_UDP:
-		return "udp"
-	case TransportProtocol_HTTP:
-		return "http"
-	case TransportProtocol_MKCP:
-		return "mkcp"
-	case TransportProtocol_WebSocket:
-		return "websocket"
-	case TransportProtocol_HTTPUpgrade:
-		return "httpupgrade"
-	default:
-		return unknownProtocol
-	}
-}
-
 func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 	if _, found := globalTransportConfigCreatorCache[name]; found {
 		return errors.New("protocol ", name, " is already registered").AtError()
@@ -70,23 +51,15 @@ func (c *TransportConfig) GetTypedSettings() (interface{}, error) {
 }
 
 func (c *TransportConfig) GetUnifiedProtocolName() string {
-	if len(c.ProtocolName) > 0 {
-		return c.ProtocolName
-	}
-
-	return transportProtocolToString(c.Protocol)
+	return c.ProtocolName
 }
 
 func (c *StreamConfig) GetEffectiveProtocol() string {
-	if c == nil {
+	if c == nil || len(c.ProtocolName) == 0 {
 		return "tcp"
 	}
 
-	if len(c.ProtocolName) > 0 {
-		return c.ProtocolName
-	}
-
-	return transportProtocolToString(c.Protocol)
+	return c.ProtocolName
 }
 
 func (c *StreamConfig) GetEffectiveTransportSettings() (interface{}, error) {

@@ -237,7 +237,7 @@ func TestProxyOverKCP(t *testing.T) {
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
@@ -283,7 +283,7 @@ func TestProxyOverKCP(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 			},
@@ -327,7 +327,7 @@ func TestProxyOverKCP(t *testing.T) {
 						Tag: "proxy",
 					},
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 			},
