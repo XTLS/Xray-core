@@ -252,10 +252,23 @@ type Int32Range struct {
 }
 
 func (v *Int32Range) UnmarshalJSON(data []byte) error {
-	var stringrange string
+	var str string
 	var rawint int32
-	if err := json.Unmarshal(data, &stringrange); err == nil {
-		pair := strings.SplitN(stringrange, "-", 2)
+	if err := json.Unmarshal(data, &str); err == nil {
+		// for number in string format like "114" or "-1"
+		if value, err := strconv.Atoi(str); err == nil {
+			v.From = int32(value)
+			v.To = int32(value)
+			return nil
+		}
+		// for empty "", we treat it as 0
+		if str == "" {
+			v.From = 0
+			v.To = 0
+			return nil
+		}
+		// for range value, like "114-514"
+		pair := strings.SplitN(str, "-", 2)
 		if len(pair) == 2 {
 			from, err := strconv.Atoi(pair[0])
 			to, err2 := strconv.Atoi(pair[1])
