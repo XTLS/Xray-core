@@ -21,6 +21,7 @@ type LogConfig struct {
 	LogLevel    string `json:"loglevel"`
 	DNSLog      bool   `json:"dnsLog"`
 	MaskAddress string `json:"maskAddress"`
+	SniffLog    bool   `json:"sniffLog"`
 }
 
 func (v *LogConfig) Build() *log.Config {
@@ -28,9 +29,10 @@ func (v *LogConfig) Build() *log.Config {
 		return nil
 	}
 	config := &log.Config{
-		ErrorLogType:  log.LogType_Console,
-		AccessLogType: log.LogType_Console,
-		EnableDnsLog:  v.DNSLog,
+		ErrorLogType:   log.LogType_Console,
+		AccessLogType:  log.LogType_Console,
+		EnableDnsLog:   v.DNSLog,
+		EnableSniffLog: v.SniffLog,
 	}
 
 	if v.AccessLog == "none" {

@@ -266,7 +266,11 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 			}
 			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
-				errors.LogInfo(ctx, "sniffed domain: ", domain)
+				log.Record(&log.SniffLog{
+					OriginalDestination: destination.String(),
+					Protocol:            result.Protocol(),
+					Domain:              result.Domain()},
+				)
 				destination.Address = net.ParseAddress(domain)
 				protocol := result.Protocol()
 				if resComp, ok := result.(SnifferResultComposite); ok {
@@ -320,7 +324,11 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		}
 		if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 			domain := result.Domain()
-			errors.LogInfo(ctx, "sniffed domain: ", domain)
+			log.Record(&log.SniffLog{
+				OriginalDestination: destination.String(),
+				Protocol:            result.Protocol(),
+				Domain:              result.Domain()},
+			)
 			destination.Address = net.ParseAddress(domain)
 			protocol := result.Protocol()
 			if resComp, ok := result.(SnifferResultComposite); ok {
