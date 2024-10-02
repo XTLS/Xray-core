@@ -24,9 +24,9 @@ type FreedomConfig struct {
 }
 
 type Fragment struct {
-	Packets  string `json:"packets"`
-	Length   string `json:"length"`
-	Interval string `json:"interval"`
+	Packets  string      `json:"packets"`
+	Length   *Int32Range `json:"length"`
+	Interval *Int32Range `json:"interval"`
 }
 
 type Noise struct {
@@ -103,52 +103,24 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		}
 
 		{
-			if c.Fragment.Length == "" {
+			if c.Fragment.Length == nil {
 				return nil, errors.New("Length can't be empty")
 			}
-			lengthMinMax := strings.Split(c.Fragment.Length, "-")
-			if len(lengthMinMax) == 2 {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax, err2 = strconv.ParseUint(lengthMinMax[1], 10, 64)
-			} else {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax = config.Fragment.LengthMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid LengthMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid LengthMax").Base(err2)
-			}
-			if config.Fragment.LengthMin > config.Fragment.LengthMax {
-				config.Fragment.LengthMin, config.Fragment.LengthMax = config.Fragment.LengthMax, config.Fragment.LengthMin
-			}
+			c.Fragment.Length.EnsureOrder()
+			config.Fragment.LengthMin = uint64(c.Fragment.Length.From)
+			config.Fragment.LengthMax = uint64(c.Fragment.Length.To)
 			if config.Fragment.LengthMin == 0 {
 				return nil, errors.New("LengthMin can't be 0")
 			}
 		}
 
 		{
-			if c.Fragment.Interval == "" {
+			if c.Fragment.Interval == nil {
 				return nil, errors.New("Interval can't be empty")
 			}
-			intervalMinMax := strings.Split(c.Fragment.Interval, "-")
-			if len(intervalMinMax) == 2 {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax, err2 = strconv.ParseUint(intervalMinMax[1], 10, 64)
-			} else {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax = config.Fragment.IntervalMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid IntervalMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid IntervalMax").Base(err2)
-			}
-			if config.Fragment.IntervalMin > config.Fragment.IntervalMax {
-				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
-			}
+			c.Fragment.Interval.EnsureOrder()
+			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
+			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
 		}
 	}
 

@@ -286,3 +286,10 @@ func (v *Int32Range) UnmarshalJSON(data []byte) error {
 
 	return errors.New("Invalid integer range, expected either string of form \"1-2\" or plain integer.")
 }
+
+// EnsureOrder() ensures that To will be greater than From (if they are not equal)
+func (r *Int32Range) EnsureOrder() {
+    if r.From > r.To {
+        r.From, r.To = r.To, r.From
+    }
+}
