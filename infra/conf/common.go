@@ -305,7 +305,7 @@ func (r *Int32Range) ensureOrder() {
 	}
 }
 
-// "-114-514"   →  ["114","-514"]
+// "-114-514"   →  ["-114","514"]
 // "-1919--810" →  ["-1919","-810"]
 func splitFromSecondDash(s string) []string {
 	parts := strings.SplitN(s, "-", 3)
