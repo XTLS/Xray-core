@@ -272,7 +272,13 @@ func (v *Int32Range) UnmarshalJSON(data []byte) error {
 			return nil
 		}
 		// for range value, like "114-514"
-		pair := strings.SplitN(str, "-", 2)
+		var pair []string
+		// Process sth like "-114-514" "-1919--810"
+		if strings.HasPrefix(str, "-") {
+			pair = splitFromSecondDash(str)
+		} else {
+			pair = strings.SplitN(str, "-", 2)
+		}
 		if len(pair) == 2 {
 			left, err := strconv.Atoi(pair[0])
 			right, err2 := strconv.Atoi(pair[1])
@@ -297,4 +303,14 @@ func (r *Int32Range) ensureOrder() {
 	if r.From > r.To {
 		r.From, r.To = r.To, r.From
 	}
+}
+
+// "-114-514"   →  ["114","-514"]
+// "-1919--810" →  ["-1919","-810"]
+func splitFromSecondDash(s string) []string {
+	parts := strings.SplitN(s, "-", 3)
+	if len(parts) < 3 {
+		return []string{s}
+	}
+	return []string{parts[0] + "-" + parts[1], parts[2]}
 }
