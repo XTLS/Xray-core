@@ -106,7 +106,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			if c.Fragment.Length == nil {
 				return nil, errors.New("Length can't be empty")
 			}
-			c.Fragment.Length.EnsureOrder()
 			config.Fragment.LengthMin = uint64(c.Fragment.Length.From)
 			config.Fragment.LengthMax = uint64(c.Fragment.Length.To)
 			if config.Fragment.LengthMin == 0 {
@@ -118,7 +117,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			if c.Fragment.Interval == nil {
 				return nil, errors.New("Interval can't be empty")
 			}
-			c.Fragment.Interval.EnsureOrder()
 			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
 			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
 		}

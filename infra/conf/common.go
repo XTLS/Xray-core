@@ -246,12 +246,16 @@ func (v *User) Build() *protocol.User {
 
 // Int32Range deserializes from "1-2" or 1, so can deserialize from both int and number.
 // Negative integers can be passed as sentinel values, but do not parse as ranges.
+// Value will be exchanged if From > To, use .Left and .Right to get original value if need.
 type Int32Range struct {
-	From int32
-	To   int32
+	From  int32
+	To    int32
+	Left  int32
+	Right int32
 }
 
 func (v *Int32Range) UnmarshalJSON(data []byte) error {
+	defer v.ensureOrder()
 	var str string
 	var rawint int32
 	if err := json.Unmarshal(data, &str); err == nil {
@@ -287,9 +291,10 @@ func (v *Int32Range) UnmarshalJSON(data []byte) error {
 	return errors.New("Invalid integer range, expected either string of form \"1-2\" or plain integer.")
 }
 
-// EnsureOrder() ensures that To will be greater than From (if they are not equal)
-func (r *Int32Range) EnsureOrder() {
-    if r.From > r.To {
-        r.From, r.To = r.To, r.From
-    }
+// ensureOrder() ensures that To will be greater than From (if they are not equal)
+func (r *Int32Range) ensureOrder() {
+	r.Left, r.Right = r.From, r.To
+	if r.From > r.To {
+		r.From, r.To = r.To, r.From
+	}
 }
