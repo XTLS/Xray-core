@@ -474,6 +474,7 @@ type REALITYConfig struct {
 	Show         bool            `json:"show"`
 	MasterKeyLog string          `json:"masterKeyLog"`
 	Dest         json.RawMessage `json:"dest"`
+	Target       json.RawMessage `json:"target"`
 	Type         string          `json:"type"`
 	Xver         uint64          `json:"xver"`
 	ServerNames  []string        `json:"serverNames"`
@@ -495,6 +496,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 	config.Show = c.Show
 	config.MasterKeyLog = c.MasterKeyLog
 	var err error
+	if c.Dest == nil {
+		c.Dest = c.Target
+	}
 	if c.Dest != nil {
 		var i uint16
 		var s string
@@ -522,7 +526,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			}
 		}
 		if c.Type == "" {
-			return nil, errors.New(`please fill in a valid value for "dest"`)
+			return nil, errors.New(`please fill in a valid value for "dest" or "target"`)
 		}
 		if c.Xver > 2 {
 			return nil, errors.New(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
