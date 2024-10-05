@@ -248,10 +248,10 @@ func (v *User) Build() *protocol.User {
 // Negative integers can be passed as sentinel values, but do not parse as ranges.
 // Value will be exchanged if From > To, use .Left and .Right to get original value if need.
 type Int32Range struct {
-	From  int32
-	To    int32
 	Left  int32
 	Right int32
+	From  int32
+	To    int32
 }
 
 func (v *Int32Range) UnmarshalJSON(data []byte) error {
@@ -261,39 +261,39 @@ func (v *Int32Range) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &str); err == nil {
 		// for number in string format like "114" or "-1"
 		if value, err := strconv.Atoi(str); err == nil {
-			v.From = int32(value)
-			v.To = int32(value)
+			v.Left = int32(value)
+			v.Right = int32(value)
 			return nil
 		}
 		// for empty "", we treat it as 0
 		if str == "" {
-			v.From = 0
-			v.To = 0
+			v.Left = 0
+			v.Right = 0
 			return nil
 		}
 		// for range value, like "114-514"
 		pair := strings.SplitN(str, "-", 2)
 		if len(pair) == 2 {
-			from, err := strconv.Atoi(pair[0])
-			to, err2 := strconv.Atoi(pair[1])
+			left, err := strconv.Atoi(pair[0])
+			right, err2 := strconv.Atoi(pair[1])
 			if err == nil && err2 == nil {
-				v.From = int32(from)
-				v.To = int32(to)
+				v.Left = int32(left)
+				v.Right = int32(right)
 				return nil
 			}
 		}
 	} else if err := json.Unmarshal(data, &rawint); err == nil {
-		v.From = rawint
-		v.To = rawint
+		v.Left = rawint
+		v.Right = rawint
 		return nil
 	}
 
 	return errors.New("Invalid integer range, expected either string of form \"1-2\" or plain integer.")
 }
 
-// ensureOrder() ensures that To will be greater than From (if they are not equal)
+// ensureOrder() gives value to .From & .To and make sure .From < .To
 func (r *Int32Range) ensureOrder() {
-	r.Left, r.Right = r.From, r.To
+	r.From, r.To = r.Left, r.Right
 	if r.From > r.To {
 		r.From, r.To = r.To, r.From
 	}
