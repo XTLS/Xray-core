@@ -163,29 +163,16 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 }
 
 func ParseNoise(noise *Noise) (*freedom.Noise, error) {
-	var err, err2 error
+	var err error
 	NConfig := new(freedom.Noise)
 
 	switch strings.ToLower(noise.Type) {
 	case "rand":
-		randValue := strings.Split(noise.Packet, "-")
-		if len(randValue) > 2 {
-			return nil, errors.New("Only 2 values are allowed for rand")
-		}
-		if len(randValue) == 2 {
-			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-			NConfig.LengthMax, err2 = strconv.ParseUint(randValue[1], 10, 64)
-		}
-		if len(randValue) == 1 {
-			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-			NConfig.LengthMax = NConfig.LengthMin
-		}
+		min, max, err := ParseRangeString(noise.Packet)
 		if err != nil {
-			return nil, errors.New("invalid value for rand LengthMin").Base(err)
+			return nil, errors.New("invalid value for rand Length").Base(err)
 		}
-		if err2 != nil {
-			return nil, errors.New("invalid value for rand LengthMax").Base(err2)
-		}
+		NConfig.LengthMin, NConfig.LengthMax = uint64(min), uint64(max)
 		if NConfig.LengthMin > NConfig.LengthMax {
 			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
 		}
