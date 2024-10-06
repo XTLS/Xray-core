@@ -247,8 +247,17 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			return
 		}
 		if response.StatusCode != 200 {
-			errors.LogWarning(ctx, "unexpected status", response.StatusCode)
+			errors.LogWarning(ctx, "unexpected status ", response.StatusCode)
 			wrc.Close()
+			{
+				// Abandon `client` if `client.Do(request)` failed
+				// See https://github.com/golang/go/issues/30702
+				globalDialerAccess.Lock()
+				if globalDialerMap[dialerConf{dest, streamSettings}] == client {
+					delete(globalDialerMap, dialerConf{dest, streamSettings})
+				}
+				globalDialerAccess.Unlock()
+			}
 			return
 		}
 		wrc.Set(response.Body)
