@@ -3,7 +3,6 @@ package conf
 import (
 	"encoding/base64"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -67,7 +66,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 
 	if c.Fragment != nil {
 		config.Fragment = new(freedom.Fragment)
-		var err, err2 error
 
 		switch strings.ToLower(c.Fragment.Packets) {
 		case "tlshello":
@@ -80,23 +78,12 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			config.Fragment.PacketsTo = 0
 		default:
 			// TCP Segmentation (range)
-			packetsFromTo := strings.Split(c.Fragment.Packets, "-")
-			if len(packetsFromTo) == 2 {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo, err2 = strconv.ParseUint(packetsFromTo[1], 10, 64)
-			} else {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo = config.Fragment.PacketsFrom
-			}
+			from, to, err := ParseRangeString(c.Fragment.Packets)
 			if err != nil {
 				return nil, errors.New("Invalid PacketsFrom").Base(err)
 			}
-			if err2 != nil {
-				return nil, errors.New("Invalid PacketsTo").Base(err2)
-			}
-			if config.Fragment.PacketsFrom > config.Fragment.PacketsTo {
-				config.Fragment.PacketsFrom, config.Fragment.PacketsTo = config.Fragment.PacketsTo, config.Fragment.PacketsFrom
-			}
+			config.Fragment.PacketsFrom = uint64(from)
+			config.Fragment.PacketsTo = uint64(to)
 			if config.Fragment.PacketsFrom == 0 {
 				return nil, errors.New("PacketsFrom can't be 0")
 			}
@@ -172,7 +159,8 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		if err != nil {
 			return nil, errors.New("invalid value for rand Length").Base(err)
 		}
-		NConfig.LengthMin, NConfig.LengthMax = uint64(min), uint64(max)
+		NConfig.LengthMin = uint64(min)
+		NConfig.LengthMax = uint64(max)
 		if NConfig.LengthMin > NConfig.LengthMax {
 			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
 		}
