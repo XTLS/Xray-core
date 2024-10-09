@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -119,13 +120,19 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	}
 
 	config.IsClient = c.IsClient
+	kernelTunSupported, err := wireguard.KernelTunSupported()
+	if err != nil {
+		errors.LogWarning(context.Background(), fmt.Sprintf("Failed to check kernel TUN support: %v. This may indicate that your OS doesn't support kernel mode or you lack the necessary permissions. Please ensure you have the required privileges.", err))
+		config.KernelMode = false
+		return config, nil
+	}
 	if c.KernelMode != nil {
 		config.KernelMode = *c.KernelMode
-		if config.KernelMode && !wireguard.KernelTunSupported() {
+		if config.KernelMode && !kernelTunSupported {
 			errors.LogWarning(context.Background(), "kernel mode is not supported on your OS or permission is insufficient")
 		}
 	} else {
-		config.KernelMode = wireguard.KernelTunSupported()
+		config.KernelMode = kernelTunSupported
 		if config.KernelMode {
 			errors.LogDebug(context.Background(), "kernel mode is enabled as it's supported and permission is sufficient")
 		}
