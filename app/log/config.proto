@@ -24,4 +24,5 @@ message Config {
   string access_log_path = 5;
   bool enable_dns_log = 6;
   string mask_address= 7;
+  bool enable_sniff_log = 8;
 }
