@@ -9,8 +9,6 @@
 // connections.
 package core
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"fmt"
 	"runtime"
@@ -21,7 +19,7 @@ import (
 var (
 	Version_x byte = 24
 	Version_y byte = 9
-	Version_z byte = 7
+	Version_z byte = 30
 )
 
 var (

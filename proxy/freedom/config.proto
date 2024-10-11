@@ -25,7 +25,7 @@ message Noise {
   uint64 length_max = 2;
   uint64 delay_min = 3;
   uint64 delay_max = 4;
-  string str_noise = 5;
+  bytes str_noise = 5;
 }
 
 message Config {
@@ -43,10 +43,9 @@ message Config {
     FORCE_IP64 = 10;
   }
   DomainStrategy domain_strategy = 1;
-  uint32 timeout = 2 [deprecated = true];
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
-  Noise noise = 7;
+  repeated Noise noises = 7;
 }

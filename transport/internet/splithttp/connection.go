@@ -11,6 +11,7 @@ type splitConn struct {
 	reader     io.ReadCloser
 	remoteAddr net.Addr
 	localAddr  net.Addr
+	onClose    func()
 }
 
 func (c *splitConn) Write(b []byte) (int, error) {
@@ -22,6 +23,10 @@ func (c *splitConn) Read(b []byte) (int, error) {
 }
 
 func (c *splitConn) Close() error {
+	if c.onClose != nil {
+		c.onClose()
+	}
+
 	err := c.writer.Close()
 	err2 := c.reader.Close()
 	if err != nil {

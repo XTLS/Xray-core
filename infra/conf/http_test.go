@@ -15,7 +15,6 @@ func TestHTTPServerConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"timeout": 10,
 				"accounts": [
 					{
 						"user": "my-username",
@@ -32,7 +31,6 @@ func TestHTTPServerConfig(t *testing.T) {
 				},
 				AllowTransparent: true,
 				UserLevel:        1,
-				Timeout:          10,
 			},
 		},
 	})

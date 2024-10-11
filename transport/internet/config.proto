@@ -8,16 +8,6 @@ option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
 
-enum TransportProtocol {
-  TCP = 0;
-  UDP = 1;
-  MKCP = 2;
-  WebSocket = 3;
-  HTTP = 4;
-  HTTPUpgrade = 6;
-  SplitHTTP = 7;
-}
-
 enum DomainStrategy {
   AS_IS = 0;
   USE_IP = 1;
@@ -34,10 +24,6 @@ enum DomainStrategy {
 
 message TransportConfig {
   // Type of network that this settings supports.
-  // Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
-
-  // Type of network that this settings supports.
   string protocol_name = 3;
 
   // Specific settings. Must be of the transports.
@@ -45,9 +31,6 @@ message TransportConfig {
 }
 
 message StreamConfig {
-  // Effective network. Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
-
   // Effective network.
   string protocol_name = 5;
 

@@ -31,18 +31,26 @@ func TestResolveIP(t *testing.T) {
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dns.Config{
-				Hosts: map[string]*net.IPOrDomain{
-					"google.com": net.NewIPOrDomain(dest.Address),
+				StaticHosts: []*dns.Config_HostMapping{
+					{
+						Type:   dns.DomainMatchingType_Full,
+						Domain: "google.com",
+						Ip:     [][]byte{dest.Address.IP()},
+					},
 				},
 			}),
 			serial.ToTypedMessage(&router.Config{
 				DomainStrategy: router.Config_IpIfNonMatch,
 				Rule: []*router.RoutingRule{
 					{
-						Cidr: []*router.CIDR{
+						Geoip: []*router.GeoIP{
 							{
-								Ip:     []byte{127, 0, 0, 0},
-								Prefix: 8,
+								Cidr: []*router.CIDR{
+									{
+										Ip:     []byte{127, 0, 0, 0},
+										Prefix: 8,
+									},
+								},
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{

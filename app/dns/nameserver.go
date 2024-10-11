@@ -163,31 +163,6 @@ func NewClient(
 	return client, err
 }
 
-// NewSimpleClient creates a DNS client with a simple destination.
-func NewSimpleClient(ctx context.Context, endpoint *net.Endpoint, clientIP net.IP) (*Client, error) {
-	client := &Client{}
-	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
-		server, err := NewServer(endpoint.AsDestination(), dispatcher, QueryStrategy_USE_IP)
-		if err != nil {
-			return errors.New("failed to create nameserver").Base(err).AtWarning()
-		}
-		client.server = server
-		client.clientIP = clientIP
-		return nil
-	})
-
-	if len(clientIP) > 0 {
-		switch endpoint.Address.GetAddress().(type) {
-		case *net.IPOrDomain_Domain:
-			errors.LogInfo(ctx, "DNS: client ", endpoint.Address.GetDomain(), " uses clientIP ", clientIP.String())
-		case *net.IPOrDomain_Ip:
-			errors.LogInfo(ctx, "DNS: client ", endpoint.Address.GetIp(), " uses clientIP ", clientIP.String())
-		}
-	}
-
-	return client, err
-}
-
 // Name returns the server name the client manages.
 func (c *Client) Name() string {
 	return c.server.Name()

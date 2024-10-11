@@ -41,8 +41,8 @@ func TestHTTPConnectionHeader(t *testing.T) {
 					StreamSettings: &internet.StreamConfig{
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_TCP,
-								Settings: serial.ToTypedMessage(&tcptransport.Config{
+								ProtocolName: "tcp",
+								Settings:     serial.ToTypedMessage(&tcptransport.Config{
 									HeaderSettings: serial.ToTypedMessage(&http.Config{}),
 								}),
 							},
@@ -78,9 +78,7 @@ func TestHTTPConnectionHeader(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -105,8 +103,8 @@ func TestHTTPConnectionHeader(t *testing.T) {
 					StreamSettings: &internet.StreamConfig{
 						TransportSettings: []*internet.TransportConfig{
 							{
-								Protocol: internet.TransportProtocol_TCP,
-								Settings: serial.ToTypedMessage(&tcptransport.Config{
+								ProtocolName: "tcp",
+								Settings:     serial.ToTypedMessage(&tcptransport.Config{
 									HeaderSettings: serial.ToTypedMessage(&http.Config{}),
 								}),
 							},

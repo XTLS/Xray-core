@@ -55,6 +55,9 @@ func (c *Config) GetRequestHeader() http.Header {
 }
 
 func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
+	// CORS headers for the browser dialer
+	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 	paddingLen := c.GetNormalizedXPaddingBytes().roll()
 	if paddingLen > 0 {
 		writer.Header().Set("X-Padding", strings.Repeat("0", int(paddingLen)))
@@ -103,6 +106,49 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	}
 
 	return *c.XPaddingBytes
+}
+
+func (m *Multiplexing) GetNormalizedCMaxReuseTimes() RandRangeConfig {
+	if m.CMaxReuseTimes == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.CMaxReuseTimes
+}
+
+func (m *Multiplexing) GetNormalizedCMaxLifetimeMs() RandRangeConfig {
+	if m.CMaxLifetimeMs == nil || m.CMaxLifetimeMs.To == 0 {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+	return *m.CMaxLifetimeMs
+}
+
+func (m *Multiplexing) GetNormalizedMaxConnections() RandRangeConfig {
+	if m.MaxConnections == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.MaxConnections
+}
+
+func (m *Multiplexing) GetNormalizedMaxConcurrency() RandRangeConfig {
+	if m.MaxConcurrency == nil {
+		return RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.MaxConcurrency
 }
 
 func init() {

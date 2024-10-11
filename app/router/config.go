@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -63,8 +62,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 
 	if rr.PortList != nil {
 		conds.Add(NewPortMatcher(rr.PortList, false))
-	} else if rr.PortRange != nil {
-		conds.Add(NewPortMatcher(&net.PortList{Range: []*net.PortRange{rr.PortRange}}, false))
 	}
 
 	if rr.SourcePortList != nil {
@@ -73,8 +70,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 
 	if len(rr.Networks) > 0 {
 		conds.Add(NewNetworkMatcher(rr.Networks))
-	} else if rr.NetworkList != nil {
-		conds.Add(NewNetworkMatcher(rr.NetworkList.Network))
 	}
 
 	if len(rr.Geoip) > 0 {
@@ -83,22 +78,10 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			return nil, err
 		}
 		conds.Add(cond)
-	} else if len(rr.Cidr) > 0 {
-		cond, err := NewMultiGeoIPMatcher([]*GeoIP{{Cidr: rr.Cidr}}, false)
-		if err != nil {
-			return nil, err
-		}
-		conds.Add(cond)
 	}
 
 	if len(rr.SourceGeoip) > 0 {
 		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, true)
-		if err != nil {
-			return nil, err
-		}
-		conds.Add(cond)
-	} else if len(rr.SourceCidr) > 0 {
-		cond, err := NewMultiGeoIPMatcher([]*GeoIP{{Cidr: rr.SourceCidr}}, true)
 		if err != nil {
 			return nil, err
 		}
