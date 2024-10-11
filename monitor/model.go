@@ -9,6 +9,8 @@ type Log struct {
 	Level     string    `json:"level,omitempty" bson:"level,omitempty"`
 	Message   string    `json:"message,omitempty" bson:"message,omitempty"`
 	CreatedAt time.Time `json:"created_at" bson:"created_at"`
+	Error     string    `json:"error" bson:"error"`
+	File      string    `json:"file" bson:"file"`
 }
 
 type Destination struct {

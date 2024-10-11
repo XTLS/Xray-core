@@ -28,5 +28,6 @@ func (i *I) ReportIfErr(err any, msg ...any) {
 		Level:     "error",
 		Message:   fmt.Sprint(msg...),
 		CreatedAt: time.Now(),
+		Error:     fmt.Sprint(err),
 	})
 }
