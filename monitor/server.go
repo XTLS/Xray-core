@@ -12,7 +12,9 @@ var (
 )
 
 func init() {
-	go s.LogError(s.Run("0.0.0.0:6171"))
+	go func() {
+		s.LogError(s.Run("0.0.0.0:6171"))
+	}()
 }
 
 func S() *flex.Server[*I] {
