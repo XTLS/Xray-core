@@ -157,7 +157,7 @@ func (tun *netTun) Write(buf [][]byte, offset int) (int, error) {
 // WriteNotify implements channel.Notification
 func (tun *netTun) WriteNotify() {
 	pkt := tun.ep.Read()
-	if pkt.IsNil() {
+	if pkt == nil {
 		return
 	}
 
