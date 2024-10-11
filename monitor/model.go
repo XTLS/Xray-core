@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"time"
 )
@@ -18,5 +19,5 @@ type Destination struct {
 	Command            protocol.RequestCommand `json:"command" bson:"command"`
 	DestinationAddress string                  `json:"destination_address" bson:"destination_address"`
 	DestinationPort    uint16                  `json:"destination_port" bson:"destination_port"`
-	DestinationDomain  string                  `json:"destination_domain" bson:"destination_domain"`
+	AddressFamily      net.AddressFamily       `json:"address_family" bson:"address_family"`
 }

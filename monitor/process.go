@@ -30,12 +30,18 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 
 	requestHeader.Destination()
 
+	var destinationAddress string
+	if requestHeader.Destination().Address.Family().IsIP() {
+		destinationAddress = requestHeader.Destination().Address.IP().String()
+	} else {
+		destinationAddress = requestHeader.Destination().Address.Domain()
+	}
+
 	_, err := i.DestinationCol().InsertOne(ctx, Destination{
 		Port:               requestHeader.Port.Value(),
 		Command:            requestHeader.Command,
-		DestinationAddress: requestHeader.Destination().Address.IP().String(),
+		DestinationAddress: destinationAddress,
 		DestinationPort:    uint16(requestHeader.Destination().Port),
-		DestinationDomain:  requestHeader.Destination().Address.Domain(),
 	})
 
 	i.ReportIfErr(err, "while inserting request header process info")
