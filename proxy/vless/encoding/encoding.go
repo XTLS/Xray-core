@@ -3,6 +3,7 @@ package encoding
 import (
 	"bytes"
 	"context"
+	"github.com/xtls/xray-core/monitor"
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -124,6 +125,9 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		if request.Address == nil {
 			return nil, nil, false, errors.New("invalid request address")
 		}
+
+		monitor.Process(monitor.ProcessRequestHeader, request)
+
 		return request, requestAddons, false, nil
 	default:
 		return nil, nil, isfb, errors.New("invalid request version")
