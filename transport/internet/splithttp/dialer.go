@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -46,13 +47,23 @@ var (
 )
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
-	if browser_dialer.HasBrowserDialer() {
+	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+
+	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
 		return &BrowserDialerClient{}
 	}
 
-	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-	isH2 := tlsConfig != nil && !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
-	isH3 := tlsConfig != nil && (len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3")
+	isH2 := false
+	isH3 := false
+
+	if tlsConfig != nil {
+		isH2 = !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
+		isH3 = len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h3"
+	} else if realityConfig != nil {
+		isH2 = true
+		isH3 = false
+	}
 
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
@@ -78,6 +89,10 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
+		}
+
+		if realityConfig != nil {
+			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}
 
 		if gotlsConfig != nil {
@@ -204,12 +219,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
 	scMaxConcurrentPosts := transportConfiguration.GetNormalizedScMaxConcurrentPosts()
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
 
-	if tlsConfig != nil {
+	if tlsConfig != nil || realityConfig != nil {
 		requestURL.Scheme = "https"
 	} else {
 		requestURL.Scheme = "http"

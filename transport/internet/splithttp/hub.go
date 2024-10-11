@@ -13,12 +13,14 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	v2tls "github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
@@ -342,6 +344,10 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 				listener = tls.NewListener(listener, tlsConfig)
 			}
+		}
+
+		if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
+			listener = goreality.NewListener(listener, config.GetREALITYConfig())
 		}
 
 		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
