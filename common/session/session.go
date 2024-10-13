@@ -105,13 +105,13 @@ type Sockopt struct {
 }
 
 // Some how when using mux, there will be a same ctx between different requests
-// This will cause problem as it‘s designed for single request, like concurrent map writes
+// This will cause problem as it's designed for single request, like concurrent map writes
 // Add a Mutex as a temp solution
 
 // SetAttribute attaches additional string attributes to content.
 func (c *Content) SetAttribute(name string, value string) {
 	if c.isLocked {
-		errors.LogError(context.Background(), "Multiple goroutine is tring to access one routing content, tring to write ", name, ":", value)
+		errors.LogError(context.Background(), "Multiple goroutines are tring to access one routing content, tring to write ", name, ":", value)
 	}
 	c.mu.Lock()
 	c.isLocked = true
