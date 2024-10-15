@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var userStatMutex = SynchronizedMap[string, *sync.Mutex]{}
+var userStatMutex = NewSynchronizedMap(Map[string, *sync.Mutex]{})
 
 func Process(f any, args ...any) {
 	defer func() {
