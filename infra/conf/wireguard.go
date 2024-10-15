@@ -53,6 +53,7 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 type WireGuardConfig struct {
 	IsClient bool `json:""`
 
+	KernelTun      *bool                  `json:"kernelTun"`
 	KernelMode     *bool                  `json:"kernelMode"`
 	SecretKey      string                 `json:"secretKey"`
 	Address        []string               `json:"address"`
@@ -122,19 +123,22 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	config.IsClient = c.IsClient
 	kernelTunSupported, err := wireguard.KernelTunSupported()
 	if err != nil {
-		errors.LogWarning(context.Background(), fmt.Sprintf("Failed to check kernel TUN support: %v. This may indicate that your OS doesn't support kernel mode or you lack the necessary permissions. Please ensure you have the required privileges.", err))
+		errors.LogWarning(context.Background(), fmt.Sprintf("Failed to check kernel TUN support: %v. This may indicate that your OS doesn't support kernel TUN or you lack the necessary permissions. Please ensure you have the required privileges.", err))
 		config.KernelMode = false
 		return config, nil
+	}
+	if c.KernelMode == nil {
+		c.KernelMode = c.KernelTun
 	}
 	if c.KernelMode != nil {
 		config.KernelMode = *c.KernelMode
 		if config.KernelMode && !kernelTunSupported {
-			errors.LogWarning(context.Background(), "kernel mode is not supported on your OS or permission is insufficient")
+			errors.LogWarning(context.Background(), "kernel TUN is not supported on your OS or permission is insufficient")
 		}
 	} else {
 		config.KernelMode = kernelTunSupported
 		if config.KernelMode {
-			errors.LogDebug(context.Background(), "kernel mode is enabled as it's supported and permission is sufficient")
+			errors.LogDebug(context.Background(), "kernel TUN is enabled as it's supported and permission is sufficient")
 		}
 	}
 
