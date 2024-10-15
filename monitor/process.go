@@ -54,7 +54,7 @@ func ProcessWindow(email,
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
-		M{"source": source, "target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
+		M{"target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
 		if !window.DestinationPorts.Contains(port) {
 			window.DestinationPorts.AppendIf(func(v uint16) bool {
 				return !window.DestinationPorts.Contains(v)
@@ -70,6 +70,9 @@ func ProcessWindow(email,
 				cs.Count++
 				cs.DownloadByteCount += downloadByteCount
 				cs.UploadByteCount += uploadByteCount
+				cs.Ips.AppendIf(func(v string) bool {
+					return !cs.Ips.Contains(v)
+				}, source)
 
 				window.Users[email] = cs
 			} else {
@@ -78,6 +81,7 @@ func ProcessWindow(email,
 					UploadByteCount:   uploadByteCount,
 					DownloadByteCount: downloadByteCount,
 					Duration:          duration,
+					Ips:               []string{source},
 				}
 			}
 		}
@@ -85,7 +89,6 @@ func ProcessWindow(email,
 		id := uuid.New()
 		window = Window{
 			Id:        id.String(),
-			Source:    source,
 			Target:    target,
 			StartTime: time.Now(),
 			EndTime:   time.Now().Add(c.WindowSize),
