@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"github.com/amirdlt/flex"
 	. "github.com/amirdlt/flex/util"
+	"github.com/xtls/xray-core/common/protocol"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -53,6 +55,19 @@ func AddAddressInfoIfDoesNotExist(address string, isServer bool) {
 			i.ReportIfErr(err, "while getting address info")
 		}
 	}
+}
+
+func ExtractDestinationAddress(header *protocol.RequestHeader) string {
+	destination := header.Destination()
+
+	var destinationAddress string
+	if destination.Address.Family().IsIP() {
+		destinationAddress = destination.Address.IP().String()
+	} else {
+		destinationAddress = destination.Address.Domain()
+	}
+
+	return strings.ToLower(strings.TrimSpace(destinationAddress))
 }
 
 func Injector() *I {

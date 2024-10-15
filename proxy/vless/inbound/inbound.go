@@ -591,7 +591,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		request.User.Email,
 		request.Destination().Network.String(),
 		remoteAddr,
-		strings.ToLower(strings.TrimSpace(request.Destination().Address.String())),
+		monitor.ExtractDestinationAddress(request),
 		uint16(request.Destination().Port),
 		uint64(0),
 		uint64(0),

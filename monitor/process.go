@@ -8,7 +8,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 )
@@ -34,7 +33,7 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 		return
 	}
 
-	destinationAddress := extractDestinationAddress(requestHeader)
+	destinationAddress := ExtractDestinationAddress(requestHeader)
 	AddAddressInfoIfDoesNotExist(destinationAddress, true)
 }
 
@@ -113,17 +112,4 @@ func ProcessWindow(email,
 	i.ReportIfErr(err)
 
 	userStatMutex.Get(email).Unlock()
-}
-
-func extractDestinationAddress(header *protocol.RequestHeader) string {
-	destination := header.Destination()
-
-	var destinationAddress string
-	if destination.Address.Family().IsIP() {
-		destinationAddress = destination.Address.IP().String()
-	} else {
-		destinationAddress = destination.Address.Domain()
-	}
-
-	return strings.ToLower(strings.TrimSpace(destinationAddress))
 }
