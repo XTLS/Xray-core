@@ -45,11 +45,10 @@ type Address struct {
 }
 
 type CallStat struct {
-	Count             uint64         `json:"count" bson:"count"`
-	UploadByteCount   uint64         `json:"upload_byte_count" bson:"upload_byte_count"`
-	DownloadByteCount uint64         `json:"download_byte_count" bson:"download_byte_count"`
-	Duration          time.Duration  `json:"duration" bson:"duration"`
-	Ips               Stream[string] `json:"ips" bson:"ips"`
+	Count             uint64        `json:"count" bson:"count"`
+	UploadByteCount   uint64        `json:"upload_byte_count" bson:"upload_byte_count"`
+	DownloadByteCount uint64        `json:"download_byte_count" bson:"download_byte_count"`
+	Duration          time.Duration `json:"duration" bson:"duration"`
 }
 
 type Window struct {

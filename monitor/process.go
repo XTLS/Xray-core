@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"errors"
+	"fmt"
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
@@ -52,6 +53,8 @@ func ProcessWindow(email,
 
 	userStatMutex.Get(email).Lock()
 
+	email = fmt.Sprint(email, "::", source)
+
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
 		M{"target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
@@ -70,9 +73,6 @@ func ProcessWindow(email,
 				cs.Count++
 				cs.DownloadByteCount += downloadByteCount
 				cs.UploadByteCount += uploadByteCount
-				cs.Ips.AppendIf(func(v string) bool {
-					return !cs.Ips.Contains(v)
-				}, source)
 
 				window.Users[email] = cs
 			} else {
@@ -81,7 +81,6 @@ func ProcessWindow(email,
 					UploadByteCount:   uploadByteCount,
 					DownloadByteCount: downloadByteCount,
 					Duration:          duration,
-					Ips:               []string{source},
 				}
 			}
 		}
