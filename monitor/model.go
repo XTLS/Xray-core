@@ -52,6 +52,7 @@ type CallStat struct {
 }
 
 type Window struct {
+	Id               string                `json:"id" bson:"_id"`
 	Source           string                `json:"source" bson:"source"`
 	Target           string                `json:"target" bson:"target"`
 	StartTime        time.Time             `json:"start_time" bson:"start_time"`

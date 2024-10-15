@@ -4,6 +4,7 @@ import (
 	"errors"
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
@@ -82,7 +83,9 @@ func ProcessWindow(email,
 			}
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
+		id := uuid.New()
 		window = Window{
+			Id:        id.String(),
 			Source:    source,
 			Target:    target,
 			StartTime: time.Now(),
@@ -101,7 +104,12 @@ func ProcessWindow(email,
 		return
 	}
 
-	_, err := i.WindowCol().UpdateOne(ctx, M{}, M{"$set": window}, options.Update().SetUpsert(true))
+	filter := M{}
+	if window.Id != "" {
+		filter["_id"] = window.Id
+	}
+
+	_, err := i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
 	i.ReportIfErr(err)
 
 	userStatMutex.Get(email).Unlock()
