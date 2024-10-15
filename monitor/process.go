@@ -53,7 +53,7 @@ func ProcessWindow(email,
 
 	userStatMutex.Get(email).Lock()
 
-	email = fmt.Sprint(email, "::", source)
+	email = fmt.Sprint(email, ",ip=", source)
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
