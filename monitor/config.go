@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"encoding/json"
+	. "github.com/amirdlt/flex/util"
 	"os"
 )
 
@@ -12,12 +13,27 @@ type Config struct {
 	} `json:"mongo"`
 }
 
-var c Config
+var (
+	useConfigFile = true
+
+	c Config
+)
 
 func init() {
-	confBytes, err := os.ReadFile("monitor_config.json")
-	if err != nil {
-		i.LogError(err, "could not load config file")
+	var confBytes []byte
+	var err error
+	if useConfigFile {
+		confBytes, _ = json.Marshal(M{
+			"mongo": M{
+				"connection_string": "mongodb://localhost:9213/",
+				"database_name":     "xray_monitor",
+			},
+		})
+	} else {
+		confBytes, err = os.ReadFile("monitor_config.json")
+		if err != nil {
+			i.LogError(err, "could not load config file")
+		}
 	}
 
 	if err := json.Unmarshal(confBytes, &c); err != nil {

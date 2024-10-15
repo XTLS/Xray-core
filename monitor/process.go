@@ -34,11 +34,10 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 	if exists, err := i.AddressCol().Exists(ctx, bson.M{"query": destinationAddress}); err != nil {
 		i.ReportIfErr(err)
 	} else if !exists {
-		if address, err := AddressInfo(destinationAddress, true); err == nil {
+		address, err := AddressInfo(destinationAddress, true)
+		if err == nil {
 			_, err = i.AddressCol().InsertOne(ctx, address)
-			i.ReportIfErr(err, "while inserting request header process info")
-		} else {
-			i.ReportIfErr(err)
+			i.ReportIfErr(err, "while getting address info")
 		}
 	}
 

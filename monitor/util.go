@@ -35,7 +35,7 @@ func AddressInfo(address string, isServer bool) (Address, error) {
 	}
 
 	result.Ip, result.Query = result.Query, address
-	result.IsClient, result.IsServer = isServer, !isServer
+	result.IsServer, result.IsClient = isServer, !isServer
 
 	return result, nil
 }
