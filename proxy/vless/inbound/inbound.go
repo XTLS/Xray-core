@@ -585,7 +585,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	monitor.Process(func() {
-		monitor.MI().LogInfo(trafficState, request.User)
+		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), trafficState)
+		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), request)
 	})
 
 	return nil

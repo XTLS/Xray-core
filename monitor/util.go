@@ -42,6 +42,6 @@ func AddressInfo(address string, isServer bool) (Address, error) {
 	return result, nil
 }
 
-func MI() *I {
+func Injector() *I {
 	return i
 }
