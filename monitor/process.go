@@ -47,13 +47,12 @@ func ProcessWindow(email,
 	downloadByteCount uint64,
 	duration time.Duration) {
 	AddAddressInfoIfDoesNotExist(source, false)
+	email = fmt.Sprint(email, ",ip=", source)
 	if !userStatMutex.ContainKey(email) {
 		userStatMutex.Put(email, &sync.Mutex{})
 	}
 
 	userStatMutex.Get(email).Lock()
-
-	email = fmt.Sprint(email, ",ip=", source)
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
