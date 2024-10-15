@@ -55,7 +55,7 @@ func ProcessWindow(email,
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
-		M{"source": source, "target": target, "end_time": M{"$lte": time.Now()}}).Decode(&window); err == nil {
+		M{"source": source, "target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
 		if !window.DestinationPorts.Contains(port) {
 			window.DestinationPorts.AppendIf(func(v uint16) bool {
 				return !window.DestinationPorts.Contains(v)
