@@ -4,6 +4,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"go.mongodb.org/mongo-driver/bson"
 	"reflect"
+	"strings"
 )
 
 func Process(f any, args ...any) {
@@ -29,7 +30,23 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 		return
 	}
 
-	destination := requestHeader.Destination()
+	destinationAddress := extractDestinationAddress(requestHeader)
+	if exists, err := i.AddressCol().Exists(ctx, bson.M{"query": destinationAddress}); err != nil {
+		i.ReportIfErr(err)
+	} else if !exists {
+		if address, err := AddressInfo(destinationAddress, true); err == nil {
+			_, err = i.AddressCol().InsertOne(ctx, address)
+			i.ReportIfErr(err, "while inserting request header process info")
+		} else {
+			i.ReportIfErr(err)
+		}
+	}
+
+	processWindow(destinationAddress)
+}
+
+func extractDestinationAddress(header *protocol.RequestHeader) string {
+	destination := header.Destination()
 
 	var destinationAddress string
 	if destination.Address.Family().IsIP() {
@@ -38,16 +55,7 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 		destinationAddress = destination.Address.Domain()
 	}
 
-	if exists, err := i.AddressCol().Exists(ctx, bson.M{"query": destinationAddress}); err != nil {
-		i.ReportIfErr(err)
-	} else if !exists {
-		if address, err := AddressInfo(destinationAddress, true); err != nil {
-			_, err = i.AddressCol().InsertOne(ctx, address)
-			i.ReportIfErr(err, "while inserting request header process info")
-		}
-	}
-
-	processWindow(destinationAddress)
+	return strings.ToLower(strings.TrimSpace(destinationAddress))
 }
 
 func processWindow(destinationAddress string) {
