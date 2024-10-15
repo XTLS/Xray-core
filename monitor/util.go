@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/amirdlt/flex"
 	"net/http"
+	"time"
 )
 
 var ctx = context.TODO()
@@ -36,6 +37,11 @@ func AddressInfo(address string, isServer bool) (Address, error) {
 
 	result.Ip, result.Query = result.Query, address
 	result.IsServer, result.IsClient = isServer, !isServer
+	result.UpdatedAt = time.Now()
 
 	return result, nil
+}
+
+func MI() *I {
+	return i
 }

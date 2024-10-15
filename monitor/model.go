@@ -14,33 +14,34 @@ type Log struct {
 }
 
 type Address struct {
-	Ip            string  `json:"ip,omitempty" bson:"ip,omitempty"`
-	Query         string  `json:"query,omitempty" bson:"query,omitempty"`
-	Status        string  `json:"status,omitempty" bson:"status"`
-	Continent     string  `json:"continent,omitempty" bson:"continent,omitempty"`
-	ContinentCode string  `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
-	Country       string  `json:"country,omitempty" bson:"country,omitempty"`
-	CountryCode   string  `json:"countryCode,omitempty" bson:"countryCode,omitempty"`
-	Region        string  `json:"region,omitempty" bson:"region,omitempty"`
-	RegionName    string  `json:"regionName,omitempty" bson:"regionName,omitempty"`
-	City          string  `json:"city,omitempty" bson:"city,omitempty"`
-	District      string  `json:"district,omitempty" bson:"district,omitempty"`
-	Zip           string  `json:"zip,omitempty" bson:"zip,omitempty"`
-	Lat           float64 `json:"lat,omitempty" bson:"lat,omitempty"`
-	Lon           float64 `json:"lon,omitempty" bson:"lon,omitempty"`
-	Timezone      string  `json:"timezone,omitempty" bson:"timezone,omitempty"`
-	Offset        int     `json:"offset,omitempty" bson:"offset,omitempty"`
-	Currency      string  `json:"currency,omitempty" bson:"currency,omitempty"`
-	ISP           string  `json:"isp,omitempty" bson:"isp,omitempty"`
-	Org           string  `json:"org,omitempty" bson:"org,omitempty"`
-	AS            string  `json:"as,omitempty" bson:"as,omitempty"`
-	ASName        string  `json:"asname,omitempty" bson:"asname,omitempty"`
-	Reverse       string  `json:"reverse,omitempty" bson:"reverse,omitempty"`
-	Mobile        bool    `json:"mobile,omitempty" bson:"mobile,omitempty"`
-	Proxy         bool    `json:"proxy,omitempty" bson:"proxy,omitempty"`
-	Hosting       bool    `json:"hosting,omitempty" bson:"hosting,omitempty"`
-	IsClient      bool    `json:"is_client" bson:"is_client"`
-	IsServer      bool    `json:"is_server" bson:"is_server"`
+	Ip            string    `json:"ip,omitempty" bson:"ip,omitempty"`
+	Query         string    `json:"query,omitempty" bson:"query,omitempty"`
+	Status        string    `json:"status,omitempty" bson:"status"`
+	Continent     string    `json:"continent,omitempty" bson:"continent,omitempty"`
+	ContinentCode string    `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
+	Country       string    `json:"country,omitempty" bson:"country,omitempty"`
+	CountryCode   string    `json:"countryCode,omitempty" bson:"countryCode,omitempty"`
+	Region        string    `json:"region,omitempty" bson:"region,omitempty"`
+	RegionName    string    `json:"regionName,omitempty" bson:"regionName,omitempty"`
+	City          string    `json:"city,omitempty" bson:"city,omitempty"`
+	District      string    `json:"district,omitempty" bson:"district,omitempty"`
+	Zip           string    `json:"zip,omitempty" bson:"zip,omitempty"`
+	Lat           float64   `json:"lat,omitempty" bson:"lat,omitempty"`
+	Lon           float64   `json:"lon,omitempty" bson:"lon,omitempty"`
+	Timezone      string    `json:"timezone,omitempty" bson:"timezone,omitempty"`
+	Offset        int       `json:"offset,omitempty" bson:"offset,omitempty"`
+	Currency      string    `json:"currency,omitempty" bson:"currency,omitempty"`
+	ISP           string    `json:"isp,omitempty" bson:"isp,omitempty"`
+	Org           string    `json:"org,omitempty" bson:"org,omitempty"`
+	AS            string    `json:"as,omitempty" bson:"as,omitempty"`
+	ASName        string    `json:"asname,omitempty" bson:"asname,omitempty"`
+	Reverse       string    `json:"reverse,omitempty" bson:"reverse,omitempty"`
+	Mobile        bool      `json:"mobile,omitempty" bson:"mobile,omitempty"`
+	Proxy         bool      `json:"proxy,omitempty" bson:"proxy,omitempty"`
+	Hosting       bool      `json:"hosting,omitempty" bson:"hosting,omitempty"`
+	IsClient      bool      `json:"is_client" bson:"is_client"`
+	IsServer      bool      `json:"is_server" bson:"is_server"`
+	UpdatedAt     time.Time `json:"updated_at" bson:"updated_at"`
 }
 
 type CallStat struct {
