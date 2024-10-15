@@ -1,12 +1,11 @@
 package protocol
 
 import (
-	"runtime"
-
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/uuid"
 	"golang.org/x/sys/cpu"
+	"runtime"
 )
 
 // RequestCommand is a custom command in a proxy request.
@@ -56,14 +55,13 @@ const (
 )
 
 type RequestHeader struct {
-	Version   byte
-	Command   RequestCommand
-	Option    bitmask.Byte
-	Security  SecurityType
-	Port      net.Port
-	Address   net.Address
-	User      *MemoryUser
-	RequestId string
+	Version  byte
+	Command  RequestCommand
+	Option   bitmask.Byte
+	Security SecurityType
+	Port     net.Port
+	Address  net.Address
+	User     *MemoryUser
 }
 
 func (h *RequestHeader) Destination() net.Destination {

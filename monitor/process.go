@@ -1,11 +1,18 @@
 package monitor
 
 import (
+	"errors"
+	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
 	"strings"
+	"sync"
+	"time"
 )
+
+var userStatMutex = SynchronizedMap[string, *sync.Mutex]{}
 
 func Process(f any, args ...any) {
 	defer func() {
@@ -22,26 +29,82 @@ func Process(f any, args ...any) {
 }
 
 func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
-	defer func() {
-		i.ReportIfErr(recover(), "while processing the request header")
-	}()
-
 	if requestHeader == nil || requestHeader.Command == protocol.RequestCommandMux {
 		return
 	}
 
 	destinationAddress := extractDestinationAddress(requestHeader)
-	if exists, err := i.AddressCol().Exists(ctx, bson.M{"query": destinationAddress}); err != nil {
-		i.ReportIfErr(err)
-	} else if !exists {
-		address, err := AddressInfo(destinationAddress, true)
-		if err == nil {
-			_, err = i.AddressCol().InsertOne(ctx, address)
-			i.ReportIfErr(err, "while getting address info")
-		}
+	AddAddressInfoIfDoesNotExist(destinationAddress, true)
+}
+
+func ProcessWindow(email,
+	netType,
+	source,
+	target string,
+	port uint16,
+	uploadByteCount uint64,
+	downloadByteCount uint64,
+	duration time.Duration) {
+	AddAddressInfoIfDoesNotExist(source, false)
+	if !userStatMutex.ContainKey(email) {
+		userStatMutex.Put(email, &sync.Mutex{})
 	}
 
-	processWindow(destinationAddress)
+	userStatMutex.Get(email).Lock()
+
+	var window Window
+	if err := i.WindowCol().FindOne(ctx,
+		M{"source": source, "target": target, "end_time": M{"$lte": time.Now()}}).Decode(&window); err == nil {
+		if !window.DestinationPorts.Contains(port) {
+			window.DestinationPorts.AppendIf(func(v uint16) bool {
+				return !window.DestinationPorts.Contains(v)
+			}, port)
+
+			window.NetworkTypes.AppendIf(func(v string) bool {
+				return !window.NetworkTypes.Contains(v)
+			}, netType)
+
+			if window.Users.ContainKey(email) {
+				cs := window.Users[email]
+				cs.Duration += duration
+				cs.Count++
+				cs.DownloadByteCount += downloadByteCount
+				cs.UploadByteCount += uploadByteCount
+
+				window.Users[email] = cs
+			} else {
+				window.Users[email] = CallStat{
+					Count:             1,
+					UploadByteCount:   uploadByteCount,
+					DownloadByteCount: downloadByteCount,
+					Duration:          duration,
+				}
+			}
+		}
+	} else if errors.Is(err, mongo.ErrNoDocuments) {
+		window = Window{
+			Source:    source,
+			Target:    target,
+			StartTime: time.Now(),
+			EndTime:   time.Now().Add(c.WindowSize),
+			Users: Map[string, CallStat]{email: CallStat{
+				Count:             1,
+				UploadByteCount:   uploadByteCount,
+				DownloadByteCount: downloadByteCount,
+				Duration:          duration,
+			}},
+			DestinationPorts: []uint16{port},
+			NetworkTypes:     []string{netType},
+		}
+	} else {
+		i.ReportIfErr(err)
+		return
+	}
+
+	_, err := i.WindowCol().UpdateOne(ctx, M{}, M{"$set": window}, options.Update().SetUpsert(true))
+	i.ReportIfErr(err)
+
+	userStatMutex.Get(email).Unlock()
 }
 
 func extractDestinationAddress(header *protocol.RequestHeader) string {
@@ -55,8 +118,4 @@ func extractDestinationAddress(header *protocol.RequestHeader) string {
 	}
 
 	return strings.ToLower(strings.TrimSpace(destinationAddress))
-}
-
-func processWindow(destinationAddress string) {
-
 }

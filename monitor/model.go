@@ -52,10 +52,11 @@ type CallStat struct {
 }
 
 type Window struct {
-	Source          string                `json:"source" bson:"source"`
-	Target          string                `json:"target" bson:"target"`
-	StartTime       time.Time             `json:"start_time" bson:"start_time"`
-	EndTime         time.Time             `json:"end_time" bson:"end_time"`
-	Users           Map[string, CallStat] `json:"users" bson:"users"`
-	DestinationPort uint16                `json:"destination_port" bson:"destination_port"`
+	Source           string                `json:"source" bson:"source"`
+	Target           string                `json:"target" bson:"target"`
+	StartTime        time.Time             `json:"start_time" bson:"start_time"`
+	EndTime          time.Time             `json:"end_time" bson:"end_time"`
+	Users            Map[string, CallStat] `json:"users" bson:"users"`
+	DestinationPorts Stream[uint16]        `json:"destination_port" bson:"destination_port"`
+	NetworkTypes     Stream[string]        `json:"network_types" bson:"network_types"`
 }

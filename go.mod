@@ -36,7 +36,7 @@ require (
 
 require (
 	github.com/amirdlt/ffvm v0.0.0-20230729034012-d82432245c0f // indirect
-	github.com/amirdlt/flex v0.0.0-20240305142047-933059c7e92d // indirect
+	github.com/amirdlt/flex v0.0.0-20241015204559-5cc4d982482e // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect

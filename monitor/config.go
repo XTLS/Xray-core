@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	. "github.com/amirdlt/flex/util"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -11,6 +12,7 @@ type Config struct {
 		ConnectionString string `json:"connection_string"`
 		DatabaseName     string `json:"database_name"`
 	} `json:"mongo"`
+	WindowSize time.Duration `json:"window_size"`
 }
 
 var (
@@ -28,6 +30,7 @@ func init() {
 				"connection_string": "mongodb://localhost:9213/",
 				"database_name":     "xray_monitor",
 			},
+			"window_size": time.Hour,
 		})
 	} else {
 		confBytes, err = os.ReadFile("monitor_config.json")

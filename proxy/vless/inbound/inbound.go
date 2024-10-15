@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
-	"github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/monitor"
 	"io"
 	"reflect"
@@ -185,13 +184,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
-
-	monitor.Process(func() {
-		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{
-			"remote_address": iConn.RemoteAddr().String(),
-			"local_address":  iConn.LocalAddr().String(),
-		})
-	})
 
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
@@ -435,6 +427,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
+	remoteAddr, _, _ := net.SplitHostPort(iConn.RemoteAddr().String())
+
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
 	}
@@ -586,11 +580,23 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return nil
 	}
 
+	now := time.Now()
 	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), getResponse); err != nil {
 		common.Interrupt(serverReader)
 		common.Interrupt(serverWriter)
 		return errors.New("connection ends").Base(err).AtInfo()
 	}
+
+	monitor.Process(monitor.ProcessWindow,
+		request.User.Email,
+		request.Destination().Network.String(),
+		remoteAddr,
+		strings.ToLower(strings.TrimSpace(request.Destination().Address.String())),
+		request.Destination().Port,
+		0,
+		0,
+		time.Since(now),
+	)
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/amirdlt/flex"
+	. "github.com/amirdlt/flex/util"
 	"net/http"
 	"time"
 )
@@ -40,6 +41,18 @@ func AddressInfo(address string, isServer bool) (Address, error) {
 	result.UpdatedAt = time.Now()
 
 	return result, nil
+}
+
+func AddAddressInfoIfDoesNotExist(address string, isServer bool) {
+	if exists, err := i.AddressCol().Exists(ctx, M{"_id": address}); err != nil {
+		i.ReportIfErr(err)
+	} else if !exists {
+		addr, err := AddressInfo(address, isServer)
+		if err == nil {
+			_, err = i.AddressCol().InsertOne(ctx, addr)
+			i.ReportIfErr(err, "while getting address info")
+		}
+	}
 }
 
 func Injector() *I {
