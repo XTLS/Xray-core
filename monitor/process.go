@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"github.com/xtls/xray-core/common/protocol"
+	"go.mongodb.org/mongo-driver/bson"
 	"reflect"
 )
 
@@ -24,25 +25,31 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 		i.ReportIfErr(recover(), "while processing the request header")
 	}()
 
-	if requestHeader == nil {
+	if requestHeader == nil || requestHeader.Command == protocol.RequestCommandMux {
 		return
 	}
 
-	requestHeader.Destination()
+	destination := requestHeader.Destination()
 
 	var destinationAddress string
-	if requestHeader.Destination().Address.Family().IsIP() {
-		destinationAddress = requestHeader.Destination().Address.IP().String()
+	if destination.Address.Family().IsIP() {
+		destinationAddress = destination.Address.IP().String()
 	} else {
-		destinationAddress = requestHeader.Destination().Address.Domain()
+		destinationAddress = destination.Address.Domain()
 	}
 
-	_, err := i.DestinationCol().InsertOne(ctx, Destination{
-		Port:               requestHeader.Port.Value(),
-		Command:            requestHeader.Command,
-		DestinationAddress: destinationAddress,
-		DestinationPort:    uint16(requestHeader.Destination().Port),
-	})
+	if exists, err := i.AddressCol().Exists(ctx, bson.M{"query": destinationAddress}); err != nil {
+		i.ReportIfErr(err)
+	} else if !exists {
+		if address, err := AddressInfo(destinationAddress, true); err != nil {
+			_, err = i.AddressCol().InsertOne(ctx, address)
+			i.ReportIfErr(err, "while inserting request header process info")
+		}
+	}
 
-	i.ReportIfErr(err, "while inserting request header process info")
+	processWindow(destinationAddress)
+}
+
+func processWindow(destinationAddress string) {
+
 }

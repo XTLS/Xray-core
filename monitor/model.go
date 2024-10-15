@@ -1,8 +1,7 @@
 package monitor
 
 import (
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
+	. "github.com/amirdlt/flex/util"
 	"time"
 )
 
@@ -14,10 +13,47 @@ type Log struct {
 	File      string    `json:"file" bson:"file"`
 }
 
-type Destination struct {
-	Port               uint16                  `json:"port" bson:"port"`
-	Command            protocol.RequestCommand `json:"command" bson:"command"`
-	DestinationAddress string                  `json:"destination_address" bson:"destination_address"`
-	DestinationPort    uint16                  `json:"destination_port" bson:"destination_port"`
-	AddressFamily      net.AddressFamily       `json:"address_family" bson:"address_family"`
+type Address struct {
+	Ip            string  `json:"ip,omitempty" bson:"ip,omitempty"`
+	Query         string  `json:"query,omitempty" bson:"query,omitempty"`
+	Status        string  `json:"status,omitempty" bson:"status"`
+	Continent     string  `json:"continent,omitempty" bson:"continent,omitempty"`
+	ContinentCode string  `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
+	Country       string  `json:"country,omitempty" bson:"country,omitempty"`
+	CountryCode   string  `json:"countryCode,omitempty" bson:"countryCode,omitempty"`
+	Region        string  `json:"region,omitempty" bson:"region,omitempty"`
+	RegionName    string  `json:"regionName,omitempty" bson:"regionName,omitempty"`
+	City          string  `json:"city,omitempty" bson:"city,omitempty"`
+	District      string  `json:"district,omitempty" bson:"district,omitempty"`
+	Zip           string  `json:"zip,omitempty" bson:"zip,omitempty"`
+	Lat           float64 `json:"lat,omitempty" bson:"lat,omitempty"`
+	Lon           float64 `json:"lon,omitempty" bson:"lon,omitempty"`
+	Timezone      string  `json:"timezone,omitempty" bson:"timezone,omitempty"`
+	Offset        int     `json:"offset,omitempty" bson:"offset,omitempty"`
+	Currency      string  `json:"currency,omitempty" bson:"currency,omitempty"`
+	ISP           string  `json:"isp,omitempty" bson:"isp,omitempty"`
+	Org           string  `json:"org,omitempty" bson:"org,omitempty"`
+	AS            string  `json:"as,omitempty" bson:"as,omitempty"`
+	ASName        string  `json:"asname,omitempty" bson:"asname,omitempty"`
+	Reverse       string  `json:"reverse,omitempty" bson:"reverse,omitempty"`
+	Mobile        bool    `json:"mobile,omitempty" bson:"mobile,omitempty"`
+	Proxy         bool    `json:"proxy,omitempty" bson:"proxy,omitempty"`
+	Hosting       bool    `json:"hosting,omitempty" bson:"hosting,omitempty"`
+	IsClient      bool    `json:"is_client" bson:"is_client"`
+	IsServer      bool    `json:"is_server" bson:"is_server"`
+}
+
+type CallStat struct {
+	Count    uint64        `json:"count" bson:"count"`
+	Size     uint64        `json:"size" bson:"size"`
+	Duration time.Duration `json:"duration" bson:"duration"`
+}
+
+type Window struct {
+	Source          string                `json:"source" bson:"source"`
+	Target          string                `json:"target" bson:"target"`
+	StartTime       time.Time             `json:"start_time" bson:"start_time"`
+	EndTime         time.Time             `json:"end_time" bson:"end_time"`
+	Users           Map[string, CallStat] `json:"users" bson:"users"`
+	DestinationPort uint16                `json:"destination_port" bson:"destination_port"`
 }

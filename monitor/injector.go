@@ -11,12 +11,16 @@ type I struct {
 	*flex.BasicInjector
 }
 
-func (i *I) DestinationCol() *mongo.Collection {
-	return DestinationCol
+func (i *I) LogCol() *mongo.Collection {
+	return logCol
 }
 
-func (i *I) LogCol() *mongo.Collection {
-	return LogCol
+func (i *I) AddressCol() *mongo.Collection {
+	return addressCol
+}
+
+func (i *I) WindowCol() *mongo.Collection {
+	return windowCol
 }
 
 func (i *I) ReportIfErr(err any, msg ...any) {

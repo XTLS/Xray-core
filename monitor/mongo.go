@@ -5,14 +5,17 @@ import (
 )
 
 var (
-	DestinationCol *mongo.Collection
-	LogCol         *mongo.Collection
+	windowCol  *mongo.Collection
+	addressCol *mongo.Collection
+
+	logCol *mongo.Collection
 )
 
 func init() {
 	s.SetDefaultMongoClient(c.Mongo.ConnectionString)
 	db := s.GetMongoClient("").GetDatabase(c.Mongo.DatabaseName)
 
-	DestinationCol = db.GetCollection("destination")
-	LogCol = db.GetCollection("log")
+	windowCol = db.GetCollection("window")
+	addressCol = db.GetCollection("address")
+	logCol = db.GetCollection("log")
 }

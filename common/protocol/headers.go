@@ -29,6 +29,19 @@ func (c RequestCommand) TransferType() TransferType {
 	}
 }
 
+func (c RequestCommand) String() string {
+	switch c {
+	case RequestCommandTCP:
+		return "tcp"
+	case RequestCommandUDP:
+		return "udp"
+	case RequestCommandMux:
+		return "mux"
+	default:
+		return "invalid"
+	}
+}
+
 const (
 	// [DEPRECATED 2023-06] RequestOptionChunkStream indicates request payload is chunked. Each chunk consists of length, authentication and payload.
 	RequestOptionChunkStream bitmask.Byte = 0x01
@@ -43,13 +56,14 @@ const (
 )
 
 type RequestHeader struct {
-	Version  byte
-	Command  RequestCommand
-	Option   bitmask.Byte
-	Security SecurityType
-	Port     net.Port
-	Address  net.Address
-	User     *MemoryUser
+	Version   byte
+	Command   RequestCommand
+	Option    bitmask.Byte
+	Security  SecurityType
+	Port      net.Port
+	Address   net.Address
+	User      *MemoryUser
+	RequestId string
 }
 
 func (h *RequestHeader) Destination() net.Destination {
