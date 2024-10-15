@@ -134,21 +134,21 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					return nil, err
 				}
 				address := net.ParseAddress(rawHost)
-	
+
 				hctx = c.ContextWithID(hctx, c.IDFromContext(ctx))
 				hctx = session.ContextWithOutbounds(hctx, session.OutboundsFromContext(ctx))
 				hctx = session.ContextWithTimeoutOnly(hctx, true)
-	
+
 				pconn, err := internet.DialSystem(hctx, net.TCPDestination(address, port), sockopt)
 				if err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
-	
+
 				if realityConfigs != nil {
 					return reality.UClient(pconn, realityConfigs, hctx, dest)
 				}
-	
+
 				var cn tls.Interface
 				if fingerprint := tls.GetFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
 					cn = tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
@@ -156,12 +156,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 					cn = tls.Client(pconn, tlsConfig).(*tls.Conn)
 				}
 				if err := cn.HandshakeContext(ctx); err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						errors.LogErrorInner(ctx, err, "failed to dial to " + addr)
+						errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 						return nil, err
 					}
 				}
@@ -224,7 +224,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			Host:   dest.NetAddr(),
 			Path:   httpSettings.getNormalizedPath(),
 		},
-		Header:     httpHeaders,
+		Header: httpHeaders,
 	}
 	// Disable any compression method from server.
 	request.Header.Set("Accept-Encoding", "identity")
@@ -232,22 +232,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	wrc := &WaitReadCloser{Wait: make(chan struct{})}
 	go func() {
 		response, err := client.Do(request)
-		if err != nil {
-			errors.LogWarningInner(ctx, err, "failed to dial to ", dest)
-			wrc.Close()
-			{
-				// Abandon `client` if `client.Do(request)` failed
-				// See https://github.com/golang/go/issues/30702
-				globalDialerAccess.Lock()
-				if globalDialerMap[dialerConf{dest, streamSettings}] == client {
-					delete(globalDialerMap, dialerConf{dest, streamSettings})
-				}
-				globalDialerAccess.Unlock()
+		if err != nil || response.StatusCode != 200 {
+			if err != nil {
+				errors.LogWarningInner(ctx, err, "failed to dial to ", dest)
+			} else {
+				errors.LogWarning(ctx, "unexpected status ", response.StatusCode)
 			}
-			return
-		}
-		if response.StatusCode != 200 {
-			errors.LogWarning(ctx, "unexpected status ", response.StatusCode)
 			wrc.Close()
 			{
 				// Abandon `client` if `client.Do(request)` failed
