@@ -1,6 +1,6 @@
 {
   "mongo": {
-    "connection_string": "mongodb://localhost:27017",
+    "connection_string": "mongodb://localhost:9213",
     "database_name": "xray_monitor"
   }
 }
