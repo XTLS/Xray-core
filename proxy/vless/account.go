@@ -16,6 +16,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		ID:         protocol.NewID(id),
 		Flow:       a.Flow,       // needs parser here?
 		Encryption: a.Encryption, // needs parser here?
+		Seed:       a.Seed,
 	}, nil
 }
 
@@ -27,6 +28,8 @@ type MemoryAccount struct {
 	Flow string
 	// Encryption of the account. Used for client connections, and only accepts "none" for now.
 	Encryption string
+	// Seed. Details TBD
+	Seed string
 }
 
 // Equals implements protocol.Account.Equals().

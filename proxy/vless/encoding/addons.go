@@ -1,8 +1,10 @@
 package encoding
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -12,9 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
-	switch addons.Flow {
-	case vless.XRV:
+func EncodeHeaderAddons(buffer *buf.Buffer, addons *proxy.Addons) error {
+	if addons.Flow == vless.XRV || len(addons.Seed) > 0 {
 		bytes, err := proto.Marshal(addons)
 		if err != nil {
 			return errors.New("failed to marshal addons protobuf value").Base(err)
@@ -25,17 +26,16 @@ func EncodeHeaderAddons(buffer *buf.Buffer, addons *Addons) error {
 		if _, err := buffer.Write(bytes); err != nil {
 			return errors.New("failed to write addons protobuf value").Base(err)
 		}
-	default:
+	} else {
 		if err := buffer.WriteByte(0); err != nil {
 			return errors.New("failed to write addons protobuf length").Base(err)
 		}
 	}
-
 	return nil
 }
 
-func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
-	addons := new(Addons)
+func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*proxy.Addons, error) {
+	addons := new(proxy.Addons)
 	buffer.Clear()
 	if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
 		return nil, errors.New("failed to read addons protobuf length").Base(err)
@@ -50,37 +50,18 @@ func DecodeHeaderAddons(buffer *buf.Buffer, reader io.Reader) (*Addons, error) {
 		if err := proto.Unmarshal(buffer.Bytes(), addons); err != nil {
 			return nil, errors.New("failed to unmarshal addons protobuf value").Base(err)
 		}
-
-		// Verification.
-		switch addons.Flow {
-		default:
-		}
 	}
 
 	return addons, nil
 }
 
-// EncodeBodyAddons returns a Writer that auto-encrypt content written by caller.
-func EncodeBodyAddons(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons, state *proxy.TrafficState, context context.Context) buf.Writer {
-	if request.Command == protocol.RequestCommandUDP {
-		return NewMultiLengthPacketWriter(writer.(buf.Writer))
-	}
-	w := buf.NewWriter(writer)
-	if requestAddons.Flow == vless.XRV {
-		w = proxy.NewVisionWriter(w, state, context)
-	}
-	return w
-}
-
 // DecodeBodyAddons returns a Reader from which caller can fetch decrypted body.
-func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *Addons) buf.Reader {
-	switch addons.Flow {
-	default:
-		if request.Command == protocol.RequestCommandUDP {
-			return NewLengthPacketReader(reader)
-		}
+func DecodeBodyAddons(reader io.Reader, request *protocol.RequestHeader, addons *proxy.Addons, state *proxy.TrafficState, context context.Context) buf.Reader {
+	r := proxy.NewVisionReader(buf.NewReader(reader), addons, state, context)
+	if request.Command == protocol.RequestCommandUDP {
+		return NewLengthPacketReader(&buf.BufferedReader{Reader: r})
 	}
-	return buf.NewReader(reader)
+	return r
 }
 
 func NewMultiLengthPacketWriter(writer buf.Writer) *MultiLengthPacketWriter {
@@ -187,4 +168,81 @@ func (r *LengthPacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		mb = append(mb, b)
 	}
 	return mb, nil
+}
+
+func PopulateSeed(seed string, addons *proxy.Addons) {
+	if len(seed) > 0 {
+		addons.Seed = []byte {1} // only turn on, more TBD
+		addons.Mode = proxy.SeedMode_IndependentScheduler
+		addons.Duration = "0-8"
+		addons.Padding = &proxy.PaddingConfig{
+			RegularMin: 0,
+			RegularMax: 256,
+			LongMin:    900,
+			LongMax:    1400,
+		}
+		// addons.Delay = &proxy.DelayConfig{
+		// 	IsRandom: true,
+		// 	MinMillis: 100,
+		// 	MaxMillis: 500,
+		// }
+		addons.Scheduler = &proxy.SchedulerConfig{
+			TimeoutMillis: 600,
+			PingPong: strings.Contains(seed, "pingpong"),
+		}
+	} else if addons.Flow == vless.XRV {
+		addons.Seed = []byte {1} // only turn on, more TBD
+		addons.Mode = proxy.SeedMode_PaddingOnly
+		addons.Duration = "0-8"
+		addons.Padding = &proxy.PaddingConfig{
+			RegularMin: 0,
+			RegularMax: 256,
+			LongMin:    900,
+			LongMax:    1400,
+		}
+	}
+}
+
+func CheckSeed(requestAddons *proxy.Addons, responseAddons *proxy.Addons) error {
+	if !bytes.Equal(requestAddons.Seed, responseAddons.Seed) {
+		return errors.New("Seed bytes not match", requestAddons.Seed, responseAddons.Seed)
+	}
+	if responseAddons.Flow == vless.XRV && len(responseAddons.Seed) == 0 && requestAddons.Mode == proxy.SeedMode_Unknown {
+		// old vision server config allow empty seed from clients for backwards compatibility
+		return nil
+	}
+	if requestAddons.Mode != responseAddons.Mode {
+		return errors.New("Mode not match", requestAddons.Mode, responseAddons.Mode)
+	}
+	if requestAddons.Duration != responseAddons.Duration {
+		return errors.New("Duration not match", requestAddons.Duration, responseAddons.Duration)
+	}
+	if requestAddons.Padding != nil && responseAddons.Padding != nil {
+		if requestAddons.Padding.RegularMin != responseAddons.Padding.RegularMin || 
+		requestAddons.Padding.RegularMax != responseAddons.Padding.RegularMax || 
+		requestAddons.Padding.LongMin != responseAddons.Padding.LongMin || 
+		requestAddons.Padding.LongMax != responseAddons.Padding.LongMax {
+			return errors.New("Padding not match")
+		}
+	} else if requestAddons.Padding != nil || responseAddons.Padding != nil {
+		return errors.New("Padding of one is nil but the other is not nil")
+	}
+	if requestAddons.Delay != nil && responseAddons.Delay != nil {
+		if requestAddons.Delay.IsRandom != responseAddons.Delay.IsRandom || 
+		requestAddons.Delay.MinMillis != responseAddons.Delay.MinMillis || 
+		requestAddons.Delay.MaxMillis != responseAddons.Delay.MaxMillis {
+			return errors.New("Delay not match")
+		}
+	} else if requestAddons.Delay != nil || responseAddons.Delay != nil {
+		return errors.New("Delay of one is nil but the other is not nil")
+	}
+	if requestAddons.Scheduler != nil && responseAddons.Scheduler != nil {
+		if requestAddons.Scheduler.TimeoutMillis != responseAddons.Scheduler.TimeoutMillis ||
+		requestAddons.Scheduler.PingPong != responseAddons.Scheduler.PingPong {
+			return errors.New("Scheduler not match")
+		}
+	} else if requestAddons.Scheduler != nil || responseAddons.Scheduler != nil {
+		return errors.New("Scheduler of one is nil but the other is not nil")
+	}
+	return nil
 }

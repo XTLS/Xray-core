@@ -30,6 +30,18 @@ import (
 )
 
 func TestVless(t *testing.T) {
+	testVlessSeed(t, "")
+}
+
+func TestVlessSeedWithFixedTrigger(t *testing.T) {
+	testVlessSeed(t, "1")
+}
+
+func TestVlessSeedWithPingPong(t *testing.T) {
+	testVlessSeed(t, "pingpong")
+}
+
+func testVlessSeed(t *testing.T, seed string) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -57,6 +69,7 @@ func TestVless(t *testing.T) {
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
+								Seed: seed,
 							}),
 						},
 					},
@@ -102,6 +115,7 @@ func TestVless(t *testing.T) {
 								{
 									Account: serial.ToTypedMessage(&vless.Account{
 										Id: userID.String(),
+										Seed: seed,
 									}),
 								},
 							},
@@ -248,6 +262,18 @@ func TestVlessTls(t *testing.T) {
 }
 
 func TestVlessXtlsVision(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "")
+}
+
+func TestVlessXtlsVisionWithFixedTrigger(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "1")
+}
+
+func TestVlessXtlsVisionWithPingPong(t *testing.T) {
+	testVlessXtlsVisionWithSeed(t, "pingpong")
+}
+
+func testVlessXtlsVisionWithSeed(t *testing.T, seed string) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -285,6 +311,7 @@ func TestVlessXtlsVision(t *testing.T) {
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id:   userID.String(),
 								Flow: vless.XRV,
+								Seed: seed,
 							}),
 						},
 					},
@@ -331,6 +358,7 @@ func TestVlessXtlsVision(t *testing.T) {
 									Account: serial.ToTypedMessage(&vless.Account{
 										Id:   userID.String(),
 										Flow: vless.XRV,
+										Seed: seed,
 									}),
 								},
 							},
@@ -343,7 +371,7 @@ func TestVlessXtlsVision(t *testing.T) {
 						TransportSettings: []*internet.TransportConfig{
 							{
 								ProtocolName: "tcp",
-								Settings:     serial.ToTypedMessage(&transtcp.Config{}),
+								Settings: serial.ToTypedMessage(&transtcp.Config{}),
 							},
 						},
 						SecurityType: serial.GetMessageType(&tls.Config{}),

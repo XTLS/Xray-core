@@ -13,4 +13,6 @@ message Account {
   string flow = 2;
   // Encryption settings. Only applies to client side, and only accepts "none" for now.
   string encryption = 3;
+  // Seed settings. Details TBD
+  string seed = 4;
 }
