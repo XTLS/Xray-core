@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
-	"github.com/xtls/xray-core/monitor"
 	"io"
 	"reflect"
 	"strconv"
@@ -583,11 +582,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		common.Interrupt(serverWriter)
 		return errors.New("connection ends").Base(err).AtInfo()
 	}
-
-	monitor.Process(func() {
-		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), trafficState)
-		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), request)
-	})
 
 	return nil
 }
