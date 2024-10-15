@@ -20,6 +20,7 @@ type Instance struct {
 	errorLogger  log.Handler
 	active       bool
 	dns          bool
+	sniff        bool
 }
 
 // New creates a new log.Instance based on the given config.
@@ -28,6 +29,7 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 		config: config,
 		active: false,
 		dns:    config.EnableDnsLog,
+		sniff:  config.EnableSniffLog,
 	}
 	log.RegisterHandler(g)
 
@@ -116,6 +118,10 @@ func (g *Instance) Handle(msg log.Message) {
 		}
 	case *log.DNSLog:
 		if g.dns && g.accessLogger != nil {
+			g.accessLogger.Handle(Msg)
+		}
+	case *log.SniffLog:
+		if g.sniff && g.accessLogger != nil {
 			g.accessLogger.Handle(Msg)
 		}
 	case *log.GeneralMessage:
