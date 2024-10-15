@@ -14,8 +14,8 @@ type Log struct {
 }
 
 type Address struct {
+	Query         string    `json:"query" bson:"_id"`
 	Ip            string    `json:"ip,omitempty" bson:"ip,omitempty"`
-	Query         string    `json:"query,omitempty" bson:"query,omitempty"`
 	Status        string    `json:"status,omitempty" bson:"status"`
 	Continent     string    `json:"continent,omitempty" bson:"continent,omitempty"`
 	ContinentCode string    `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
@@ -45,9 +45,10 @@ type Address struct {
 }
 
 type CallStat struct {
-	Count    uint64        `json:"count" bson:"count"`
-	Size     uint64        `json:"size" bson:"size"`
-	Duration time.Duration `json:"duration" bson:"duration"`
+	Count             uint64        `json:"count" bson:"count"`
+	UploadByteCount   uint64        `json:"upload_byte_count" bson:"upload_byte_count"`
+	DownloadByteCount uint64        `json:"download_byte_count" bson:"download_byte_count"`
+	Duration          time.Duration `json:"duration" bson:"duration"`
 }
 
 type Window struct {

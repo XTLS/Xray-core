@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"github.com/amirdlt/flex/util"
+	"github.com/xtls/xray-core/monitor"
 	"io"
 	"reflect"
 	"strconv"
@@ -183,6 +185,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
 	}
+
+	monitor.Process(func() {
+		_, _ = monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{
+			"remote_address": iConn.RemoteAddr().String(),
+			"local_address":  iConn.LocalAddr().String(),
+		})
+	})
 
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
