@@ -592,7 +592,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		request.Destination().Network.String(),
 		remoteAddr,
 		strings.ToLower(strings.TrimSpace(request.Destination().Address.String())),
-		request.Destination().Port,
+		uint16(request.Destination().Port),
 		0,
 		0,
 		time.Since(now),
