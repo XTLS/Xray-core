@@ -44,7 +44,8 @@ func ProcessWindow(email,
 	port uint16,
 	uploadByteCount uint64,
 	downloadByteCount uint64,
-	duration time.Duration) {
+	duration time.Duration,
+	err error) {
 	AddAddressInfoIfDoesNotExist(source, false)
 	if !userStatMutex.ContainKey(email) {
 		userStatMutex.Put(email, &sync.Mutex{})
@@ -55,13 +56,17 @@ func ProcessWindow(email,
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
 		M{"target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
-		window.DestinationPorts.AppendIf(func(v uint16) bool {
+		window.DestinationPorts = window.DestinationPorts.AppendIf(func(v uint16) bool {
 			return !window.DestinationPorts.Contains(v)
 		}, port)
 
-		window.NetworkTypes.AppendIf(func(v string) bool {
+		window.NetworkTypes = window.NetworkTypes.AppendIf(func(v string) bool {
 			return !window.NetworkTypes.Contains(v)
 		}, netType)
+
+		window.Errors = window.Errors.AppendIf(func(v string) bool {
+			return !window.Errors.Contains(v)
+		}, err.Error())
 
 		user := window.Users.Find(func(v *CallStat) bool {
 			return v != nil && v.Ip == source
@@ -111,7 +116,7 @@ func ProcessWindow(email,
 		filter["_id"] = window.Id
 	}
 
-	_, err := i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
+	_, err = i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
 	i.ReportIfErr(err)
 
 	userStatMutex.Get(email).Unlock()

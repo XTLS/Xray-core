@@ -595,6 +595,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			uint64(statConn.WriteCounter.Value()),
 			uint64(statConn.ReadCounter.Value()),
 			time.Since(now),
+			err,
 		)
 
 		return errors.New("connection ends").Base(err).AtInfo()
@@ -609,6 +610,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		uint64(statConn.WriteCounter.Value()),
 		uint64(statConn.ReadCounter.Value()),
 		time.Since(now),
+		nil,
 	)
 
 	return nil
