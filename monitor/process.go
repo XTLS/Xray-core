@@ -51,7 +51,7 @@ func ProcessWindow(email,
 	uploadByteCount uint64,
 	downloadByteCount uint64,
 	duration time.Duration,
-	err error) {
+	errStream error) {
 	AddAddressInfoIfDoesNotExist(source, false)
 	if !userStatMutex.ContainKey(email) {
 		userStatMutex.Put(email, &sync.Mutex{})
@@ -72,7 +72,7 @@ func ProcessWindow(email,
 
 		window.Errors = window.Errors.AppendIf(func(v string) bool {
 			return !window.Errors.Contains(v)
-		}, err.Error())
+		}, errStream.Error())
 
 		user := window.Users.Find(func(v *CallStat) bool {
 			return v != nil && v.Ip == source
@@ -111,6 +111,7 @@ func ProcessWindow(email,
 			}},
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},
+			Errors:           []string{errStream.Error()},
 		}
 	} else {
 		i.ReportIfErr(err)
@@ -122,7 +123,7 @@ func ProcessWindow(email,
 		filter["_id"] = window.Id
 	}
 
-	_, err = i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
+	_, err := i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
 	i.ReportIfErr(err)
 
 	userStatMutex.Get(email).Unlock()
