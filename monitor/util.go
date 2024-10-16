@@ -2,11 +2,13 @@ package monitor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/amirdlt/flex"
 	. "github.com/amirdlt/flex/util"
+	"github.com/google/uuid"
 	"github.com/xtls/xray-core/common/protocol"
 	"net/http"
 	"strings"
@@ -68,6 +70,24 @@ func ExtractDestinationAddress(header *protocol.RequestHeader) string {
 	}
 
 	return strings.ToLower(strings.TrimSpace(destinationAddress))
+}
+
+func GenerateUUID(prefix string, v any) string {
+	if v == nil {
+		return fmt.Sprint(prefix, "--", uuid.New())
+	}
+
+	h, err := Hash(v, HashOptions{IgnoreZeroValue: true, SlicesAsSets: true})
+	if err != nil {
+		panic(err)
+	}
+
+	return fmt.Sprint(prefix, "--", uuid.NewHash(
+		sha256.New(),
+		[16]byte{},
+		[]byte(fmt.Sprint(h)),
+		4,
+	))
 }
 
 func Injector() *I {

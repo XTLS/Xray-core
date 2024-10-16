@@ -53,11 +53,11 @@ func ProcessWindow(email,
 	duration time.Duration,
 	errStream error) {
 	AddAddressInfoIfDoesNotExist(source, false)
-	if !userStatMutex.ContainKey(email) {
-		userStatMutex.Put(email, &sync.Mutex{})
+	if !userStatMutex.ContainKey(source) {
+		userStatMutex.Put(source, &sync.Mutex{})
 	}
 
-	userStatMutex.Get(email).Lock()
+	userStatMutex.Get(source).Lock()
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
@@ -84,7 +84,17 @@ func ProcessWindow(email,
 			cs.Count++
 			cs.DownloadByteCount += downloadByteCount
 			cs.UploadByteCount += uploadByteCount
+			if err == nil {
+				cs.SuccessCount++
+			} else {
+				cs.FailureCount++
+			}
 		} else {
+			var successCount uint64
+			if err == nil {
+				successCount = 1
+			}
+
 			window.Users = window.Users.Append(&CallStat{
 				Count:             1,
 				UploadByteCount:   uploadByteCount,
@@ -92,6 +102,8 @@ func ProcessWindow(email,
 				Duration:          duration,
 				Ip:                source,
 				Email:             email,
+				SuccessCount:      successCount,
+				FailureCount:      1 - successCount,
 			})
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
@@ -126,5 +138,5 @@ func ProcessWindow(email,
 	_, err := i.WindowCol().UpdateOne(ctx, filter, M{"$set": window}, options.Update().SetUpsert(true))
 	i.ReportIfErr(err)
 
-	userStatMutex.Get(email).Unlock()
+	userStatMutex.Get(source).Unlock()
 }

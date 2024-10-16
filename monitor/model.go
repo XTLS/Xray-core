@@ -52,6 +52,8 @@ type CallStat struct {
 	Duration          time.Duration `json:"duration" bson:"duration"`
 	Email             string        `json:"email" bson:"email"`
 	Ip                string        `json:"ip" bson:"ip"`
+	SuccessCount      uint64        `json:"success_count" bson:"success_count"`
+	FailureCount      uint64        `json:"failure_count" bson:"failure_count"`
 }
 
 type Window struct {
