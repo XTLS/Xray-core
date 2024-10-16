@@ -1,6 +1,7 @@
 module github.com/xtls/xray-core
 
 go 1.21.4
+toolchain go1.22.5
 
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
@@ -12,7 +13,7 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.8.0
-	github.com/quic-go/quic-go v0.46.0
+	github.com/quic-go/quic-go v0.48.0
 	github.com/refraction-networking/utls v1.6.7
 	github.com/sagernet/sing v0.4.3
 	github.com/sagernet/sing-shadowsocks v0.2.7
@@ -45,7 +46,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/onsi/ginkgo/v2 v2.19.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/quic-go/qpack v0.4.0 // indirect
+	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	go.uber.org/mock v0.4.0 // indirect
