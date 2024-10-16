@@ -243,7 +243,10 @@ type Xmux struct {
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
 	if input == nil {
-		return nil
+		return &splithttp.RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
 	}
 
 	return &splithttp.RandRangeConfig{
@@ -273,6 +276,16 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
 		CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.CMaxReuseTimes),
 		CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.CMaxLifetimeMs),
+	}
+
+	if muxProtobuf.MaxConcurrency.To == 0 &&
+		muxProtobuf.MaxConnections.To == 0 &&
+		muxProtobuf.CMaxReuseTimes.To == 0 &&
+		muxProtobuf.CMaxLifetimeMs.To == 0 {
+		muxProtobuf.MaxConcurrency.From = 16
+		muxProtobuf.MaxConcurrency.To = 32
+		muxProtobuf.CMaxReuseTimes.From = 64
+		muxProtobuf.CMaxReuseTimes.To = 128
 	}
 
 	config := &splithttp.Config{
