@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"errors"
-	"fmt"
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
@@ -47,7 +46,6 @@ func ProcessWindow(email,
 	downloadByteCount uint64,
 	duration time.Duration) {
 	AddAddressInfoIfDoesNotExist(source, false)
-	email = fmt.Sprint(email, ",ip=", source)
 	if !userStatMutex.ContainKey(email) {
 		userStatMutex.Put(email, &sync.Mutex{})
 	}
@@ -66,21 +64,25 @@ func ProcessWindow(email,
 				return !window.NetworkTypes.Contains(v)
 			}, netType)
 
-			if window.Users.ContainKey(email) {
-				cs := window.Users[email]
+			user := window.Users.Find(func(v *CallStat) bool {
+				return v != nil && v.Ip == source
+			})
+
+			if !user.IsEmpty() {
+				cs := user[0]
 				cs.Duration += duration
 				cs.Count++
 				cs.DownloadByteCount += downloadByteCount
 				cs.UploadByteCount += uploadByteCount
-
-				window.Users[email] = cs
 			} else {
-				window.Users[email] = CallStat{
+				window.Users = window.Users.Append(&CallStat{
 					Count:             1,
 					UploadByteCount:   uploadByteCount,
 					DownloadByteCount: downloadByteCount,
 					Duration:          duration,
-				}
+					Ip:                source,
+					Email:             email,
+				})
 			}
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
@@ -90,11 +92,12 @@ func ProcessWindow(email,
 			Target:    target,
 			StartTime: time.Now(),
 			EndTime:   time.Now().Add(c.WindowSize),
-			Users: Map[string, CallStat]{email: CallStat{
+			Users: Stream[*CallStat]{&CallStat{
 				Count:             1,
 				UploadByteCount:   uploadByteCount,
 				DownloadByteCount: downloadByteCount,
 				Duration:          duration,
+				Email:             email,
 			}},
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},

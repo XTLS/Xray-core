@@ -49,14 +49,16 @@ type CallStat struct {
 	UploadByteCount   uint64        `json:"upload_byte_count" bson:"upload_byte_count"`
 	DownloadByteCount uint64        `json:"download_byte_count" bson:"download_byte_count"`
 	Duration          time.Duration `json:"duration" bson:"duration"`
+	Email             string        `json:"email" bson:"email"`
+	Ip                string        `json:"ip" bson:"ip"`
 }
 
 type Window struct {
-	Id               string                `json:"id" bson:"_id"`
-	Target           string                `json:"target" bson:"target"`
-	StartTime        time.Time             `json:"start_time" bson:"start_time"`
-	EndTime          time.Time             `json:"end_time" bson:"end_time"`
-	Users            Map[string, CallStat] `json:"users" bson:"users"`
-	DestinationPorts Stream[uint16]        `json:"destination_port" bson:"destination_port"`
-	NetworkTypes     Stream[string]        `json:"network_types" bson:"network_types"`
+	Id               string            `json:"id" bson:"_id"`
+	Target           string            `json:"target" bson:"target"`
+	StartTime        time.Time         `json:"start_time" bson:"start_time"`
+	EndTime          time.Time         `json:"end_time" bson:"end_time"`
+	Users            Stream[*CallStat] `json:"users" bson:"users"`
+	DestinationPorts Stream[uint16]    `json:"destination_port" bson:"destination_port"`
+	NetworkTypes     Stream[string]    `json:"network_types" bson:"network_types"`
 }
