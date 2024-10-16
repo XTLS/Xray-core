@@ -64,7 +64,7 @@ type Window struct {
 	Users            Stream[*CallStat] `json:"users" bson:"users"`
 	DestinationPorts Stream[uint16]    `json:"destination_port" bson:"destination_port"`
 	NetworkTypes     Stream[string]    `json:"network_types" bson:"network_types"`
-	Errors           Stream[string]    `json:"errors" bson:"errors"`
+	Errors           Map[string, int]  `json:"errors" bson:"errors"`
 }
 
 type Global struct {

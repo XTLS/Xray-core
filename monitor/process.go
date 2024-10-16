@@ -22,6 +22,10 @@ func Process(f any, args ...any) {
 	funcValue := reflect.ValueOf(f)
 	argsValues := make([]reflect.Value, len(args))
 	for i, arg := range args {
+		if arg == nil && reflect.TypeOf(arg) == reflect.TypeOf(errors.New("")) {
+			arg = errors.New("")
+		}
+
 		argsValues[i] = reflect.ValueOf(arg)
 	}
 
@@ -51,7 +55,7 @@ func ProcessWindow(email,
 	uploadByteCount uint64,
 	downloadByteCount uint64,
 	duration time.Duration,
-	errStream error) {
+	streamErr error) {
 	AddAddressInfoIfDoesNotExist(source, false)
 	if !userStatMutex.ContainKey(source) {
 		userStatMutex.Put(source, &sync.Mutex{})
@@ -70,9 +74,9 @@ func ProcessWindow(email,
 			return !window.NetworkTypes.Contains(v)
 		}, netType)
 
-		window.Errors = window.Errors.AppendIf(func(v string) bool {
-			return !window.Errors.Contains(v)
-		}, errStream.Error())
+		if err != nil && err.Error() != "" {
+			window.Errors[err.Error()]++
+		}
 
 		user := window.Users.Find(func(v *CallStat) bool {
 			return v != nil && v.Ip == source
@@ -123,7 +127,7 @@ func ProcessWindow(email,
 			}},
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},
-			Errors:           []string{errStream.Error()},
+			Errors:           Map[string, int]{streamErr.Error(): 1},
 		}
 	} else {
 		i.ReportIfErr(err)
