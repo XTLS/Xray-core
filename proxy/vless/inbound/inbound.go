@@ -585,6 +585,18 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), getResponse); err != nil {
 		common.Interrupt(serverReader)
 		common.Interrupt(serverWriter)
+
+		monitor.Process(monitor.ProcessWindow,
+			request.User.Email,
+			request.Destination().Network.String(),
+			remoteAddr,
+			monitor.ExtractDestinationAddress(request),
+			uint16(request.Destination().Port),
+			uint64(statConn.WriteCounter.Value()),
+			uint64(statConn.ReadCounter.Value()),
+			time.Since(now),
+		)
+
 		return errors.New("connection ends").Base(err).AtInfo()
 	}
 

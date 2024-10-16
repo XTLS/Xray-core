@@ -55,35 +55,33 @@ func ProcessWindow(email,
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
 		M{"target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
-		if !window.DestinationPorts.Contains(port) {
-			window.DestinationPorts.AppendIf(func(v uint16) bool {
-				return !window.DestinationPorts.Contains(v)
-			}, port)
+		window.DestinationPorts.AppendIf(func(v uint16) bool {
+			return !window.DestinationPorts.Contains(v)
+		}, port)
 
-			window.NetworkTypes.AppendIf(func(v string) bool {
-				return !window.NetworkTypes.Contains(v)
-			}, netType)
+		window.NetworkTypes.AppendIf(func(v string) bool {
+			return !window.NetworkTypes.Contains(v)
+		}, netType)
 
-			user := window.Users.Find(func(v *CallStat) bool {
-				return v != nil && v.Ip == source
+		user := window.Users.Find(func(v *CallStat) bool {
+			return v != nil && v.Ip == source
+		})
+
+		if !user.IsEmpty() {
+			cs := user[0]
+			cs.Duration += duration
+			cs.Count++
+			cs.DownloadByteCount += downloadByteCount
+			cs.UploadByteCount += uploadByteCount
+		} else {
+			window.Users = window.Users.Append(&CallStat{
+				Count:             1,
+				UploadByteCount:   uploadByteCount,
+				DownloadByteCount: downloadByteCount,
+				Duration:          duration,
+				Ip:                source,
+				Email:             email,
 			})
-
-			if !user.IsEmpty() {
-				cs := user[0]
-				cs.Duration += duration
-				cs.Count++
-				cs.DownloadByteCount += downloadByteCount
-				cs.UploadByteCount += uploadByteCount
-			} else {
-				window.Users = window.Users.Append(&CallStat{
-					Count:             1,
-					UploadByteCount:   uploadByteCount,
-					DownloadByteCount: downloadByteCount,
-					Duration:          duration,
-					Ip:                source,
-					Email:             email,
-				})
-			}
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
 		id := uuid.New()
