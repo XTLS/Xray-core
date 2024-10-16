@@ -582,10 +582,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	now := time.Now()
-	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), getResponse); err != nil {
-		common.Interrupt(serverReader)
-		common.Interrupt(serverWriter)
-
+	defer func() {
 		monitor.Process(monitor.ProcessWindow,
 			request.User.Email,
 			request.Destination().Network.String(),
@@ -597,21 +594,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			time.Since(now),
 			err,
 		)
+	}()
+
+	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), getResponse); err != nil {
+		common.Interrupt(serverReader)
+		common.Interrupt(serverWriter)
 
 		return errors.New("connection ends").Base(err).AtInfo()
 	}
-
-	monitor.Process(monitor.ProcessWindow,
-		request.User.Email,
-		request.Destination().Network.String(),
-		remoteAddr,
-		monitor.ExtractDestinationAddress(request),
-		uint16(request.Destination().Port),
-		uint64(statConn.WriteCounter.Value()),
-		uint64(statConn.ReadCounter.Value()),
-		time.Since(now),
-		nil,
-	)
 
 	return nil
 }

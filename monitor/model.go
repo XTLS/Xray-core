@@ -66,3 +66,10 @@ type Window struct {
 	NetworkTypes     Stream[string]    `json:"network_types" bson:"network_types"`
 	Errors           Stream[string]    `json:"errors" bson:"errors"`
 }
+
+type Global struct {
+	CallStat
+
+	Id             string    `json:"id" bson:"_id"`
+	LastConnection time.Time `json:"last_connection" bson:"last_connection"`
+}

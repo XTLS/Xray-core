@@ -23,6 +23,10 @@ func (i *I) WindowCol() *mongo.Collection {
 	return windowCol
 }
 
+func (i *I) OnlineStatCol() *mongo.Collection {
+	return onlineStatCol
+}
+
 func (i *I) ReportIfErr(err any, msg ...any) {
 	if err == nil {
 		return

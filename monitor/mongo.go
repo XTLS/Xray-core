@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	windowCol  *mongo.Collection
-	addressCol *mongo.Collection
+	windowCol     *mongo.Collection
+	addressCol    *mongo.Collection
+	onlineStatCol *mongo.Collection
 
 	logCol *mongo.Collection
 )
@@ -17,5 +18,6 @@ func init() {
 
 	windowCol = db.GetCollection("window")
 	addressCol = db.GetCollection("address")
+	onlineStatCol = db.GetCollection("online_stat")
 	logCol = db.GetCollection("log")
 }
