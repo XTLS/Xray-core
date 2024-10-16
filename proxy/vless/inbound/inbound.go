@@ -181,7 +181,8 @@ func (*Handler) Network() []net.Network {
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	iConn := connection
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
+	statConn, ok := iConn.(*stat.CounterConnection)
+	if ok {
 		iConn = statConn.Connection
 	}
 
@@ -593,8 +594,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		remoteAddr,
 		monitor.ExtractDestinationAddress(request),
 		uint16(request.Destination().Port),
-		uint64(0),
-		uint64(0),
+		uint64(statConn.WriteCounter.Value()),
+		uint64(statConn.ReadCounter.Value()),
 		time.Since(now),
 	)
 
