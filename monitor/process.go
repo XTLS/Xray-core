@@ -25,7 +25,13 @@ func Process(f any, args ...any) {
 		argsValues[i] = reflect.ValueOf(arg)
 	}
 
-	go funcValue.Call(argsValues)
+	go func() {
+		defer func() {
+			i.ReportIfErr(recover(), "while executing a job")
+		}()
+
+		funcValue.Call(argsValues)
+	}()
 }
 
 func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
