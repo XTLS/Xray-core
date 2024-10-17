@@ -29,7 +29,7 @@ func Process(f any, args ...any) {
 	argsValues := make([]reflect.Value, len(args))
 	for i, arg := range args {
 		if arg == nil {
-			argsValues[i] = reflect.Zero(reflect.TypeOf(arg))
+			argsValues[i] = reflect.Zero(funcValue.Type().In(i))
 		} else {
 			argsValues[i] = reflect.ValueOf(arg)
 		}
