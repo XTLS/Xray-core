@@ -74,6 +74,8 @@ func ProcessWindow(email,
 
 	userStatMutex.Get(source).Lock()
 
+	hasStreamErr := streamErr != nil && streamErr.Error() != ""
+
 	var downloadByteCount, uploadByteCount uint64
 	if statConn, ok := connection.(*stat.CounterConnection); ok {
 		downloadByteCount = uint64(statConn.WriteCounter.Value())
@@ -91,7 +93,7 @@ func ProcessWindow(email,
 			return !window.NetworkTypes.Contains(v)
 		}, netType)
 
-		if streamErr != nil && streamErr.Error() != "" {
+		if hasStreamErr {
 			errs := window.Errors.Find(func(v *XError) bool {
 				return v != nil && v.Message == streamErr.Error()
 			})
@@ -113,14 +115,14 @@ func ProcessWindow(email,
 			cs.Count++
 			cs.DownloadByteCount += downloadByteCount
 			cs.UploadByteCount += uploadByteCount
-			if streamErr == nil {
-				cs.SuccessCount++
-			} else {
+			if hasStreamErr {
 				cs.FailureCount++
+			} else {
+				cs.SuccessCount++
 			}
 		} else {
 			var successCount uint64
-			if streamErr == nil {
+			if !hasStreamErr {
 				successCount = 1
 			}
 
@@ -138,12 +140,12 @@ func ProcessWindow(email,
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
 		id := uuid.New()
 		var errs Stream[*XError]
-		if streamErr != nil && streamErr.Error() != "" {
+		if hasStreamErr {
 			errs = Stream[*XError]{&XError{streamErr.Error(), 1}}
 		}
 
 		var successCount uint64
-		if streamErr == nil {
+		if !hasStreamErr {
 			successCount = 1
 		}
 
