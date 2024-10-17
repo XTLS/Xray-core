@@ -93,11 +93,11 @@ func ProcessWindow(email,
 
 		if err != nil && err.Error() != "" {
 			errs := window.Errors.Find(func(v *XError) bool {
-				return v != nil && v.Message == err.Error()
+				return v != nil && v.Message == streamErr.Error()
 			})
 
 			if errs.IsEmpty() {
-				window.Errors = window.Errors.Append(&XError{err.Error(), 1})
+				window.Errors = window.Errors.Append(&XError{streamErr.Error(), 1})
 			} else {
 				errs[0].Count++
 			}
@@ -113,14 +113,14 @@ func ProcessWindow(email,
 			cs.Count++
 			cs.DownloadByteCount += downloadByteCount
 			cs.UploadByteCount += uploadByteCount
-			if err == nil {
+			if streamErr == nil {
 				cs.SuccessCount++
 			} else {
 				cs.FailureCount++
 			}
 		} else {
 			var successCount uint64
-			if err == nil {
+			if streamErr == nil {
 				successCount = 1
 			}
 
@@ -138,8 +138,8 @@ func ProcessWindow(email,
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
 		id := uuid.New()
 		var errs Stream[*XError]
-		if err != nil && err.Error() != "" {
-			errs = Stream[*XError]{&XError{err.Error(), 1}}
+		if streamErr != nil && streamErr.Error() != "" {
+			errs = Stream[*XError]{&XError{streamErr.Error(), 1}}
 		}
 
 		var successCount uint64
