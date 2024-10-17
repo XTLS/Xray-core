@@ -136,6 +136,11 @@ func ProcessWindow(email,
 			errs = Stream[*XError]{&XError{err.Error(), 1}}
 		}
 
+		var successCount uint64
+		if err == nil {
+			successCount = 1
+		}
+
 		window = Window{
 			Id:        id.String(),
 			Target:    target,
@@ -148,6 +153,8 @@ func ProcessWindow(email,
 				Duration:          duration,
 				Ip:                source,
 				Email:             email,
+				SuccessCount:      successCount,
+				FailureCount:      1 - successCount,
 			}},
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},
