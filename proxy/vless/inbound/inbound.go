@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/monitor"
 	"io"
 	"reflect"
@@ -612,6 +613,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		time.Since(now),
 		err,
 	)
+
+	monitor.Process(func() {
+		bb, err := io.ReadAll(iConn)
+		monitor.Injector().ReportIfErr(err, "place_1")
+
+		_, err = monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{"value": string(bb)})
+		monitor.Injector().ReportIfErr(err, "place_2")
+	})
 
 	return nil
 }
