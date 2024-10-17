@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"errors"
+	"fmt"
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
@@ -20,15 +21,29 @@ func Process(f any, args ...any) {
 	}()
 
 	funcValue := reflect.ValueOf(f)
+	if funcValue.Kind() != reflect.Func {
+		i.ReportIfErr(fmt.Errorf("provided argument is not a function: %T", f), "invalid function type")
+		return
+	}
+
 	argsValues := make([]reflect.Value, len(args))
 	for i, arg := range args {
-		argsValues[i] = reflect.ValueOf(arg)
+		if arg == nil {
+			argsValues[i] = reflect.Zero(reflect.TypeOf(arg))
+		} else {
+			argsValues[i] = reflect.ValueOf(arg)
+		}
 	}
 
 	go func() {
 		defer func() {
 			i.ReportIfErr(recover(), "while executing a job")
 		}()
+
+		if len(argsValues) != funcValue.Type().NumIn() {
+			i.ReportIfErr(fmt.Errorf("mismatch in number of arguments: expected %d, got %d", funcValue.Type().NumIn(), len(argsValues)), "argument mismatch")
+			return
+		}
 
 		funcValue.Call(argsValues)
 	}()
