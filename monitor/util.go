@@ -12,10 +12,14 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
-var ctx = context.TODO()
+var (
+	ctx                = context.TODO()
+	getAddressInfoLock = &sync.Mutex{}
+)
 
 var i = &I{
 	BasicInjector: &flex.BasicInjector{},
@@ -48,6 +52,9 @@ func AddressInfo(address string, isServer bool) (Address, error) {
 }
 
 func AddAddressInfoIfDoesNotExist(address string, isServer bool) {
+	getAddressInfoLock.Lock()
+	defer getAddressInfoLock.Unlock()
+
 	if exists, err := i.AddressCol().Exists(ctx, M{"_id": address}); err != nil {
 		i.ReportIfErr(err)
 	} else if !exists {
