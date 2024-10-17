@@ -1,14 +1,10 @@
 package buf
 
 import (
-	"context"
-	"github.com/amirdlt/flex/util"
-	"github.com/xtls/xray-core/monitor"
-	"io"
-
 	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"io"
 )
 
 const (
@@ -103,12 +99,6 @@ func (b *Buffer) Release() {
 // Clear clears the content of the buffer, results an empty buffer with
 // Len() = 0.
 func (b *Buffer) Clear() {
-	start, end := b.start, b.end
-	monitor.Process(func() {
-		_, err := monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{"value": string(b.v[start:end])})
-		monitor.Injector().ReportIfErr(err, "place_2")
-	})
-
 	b.start = 0
 	b.end = 0
 }
