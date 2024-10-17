@@ -91,7 +91,7 @@ func ProcessWindow(email,
 			return !window.NetworkTypes.Contains(v)
 		}, netType)
 
-		if err != nil && err.Error() != "" {
+		if streamErr != nil && streamErr.Error() != "" {
 			errs := window.Errors.Find(func(v *XError) bool {
 				return v != nil && v.Message == streamErr.Error()
 			})
@@ -143,7 +143,7 @@ func ProcessWindow(email,
 		}
 
 		var successCount uint64
-		if err == nil {
+		if streamErr == nil {
 			successCount = 1
 		}
 
