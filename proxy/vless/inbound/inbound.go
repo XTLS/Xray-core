@@ -615,10 +615,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	)
 
 	monitor.Process(func() {
-		bb, err := io.ReadAll(iConn)
-		monitor.Injector().ReportIfErr(err, "place_1")
-
-		_, err = monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{"value": string(bb)})
+		_, err = monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{"value": string(rawInput.Bytes())})
 		monitor.Injector().ReportIfErr(err, "place_2")
 	})
 
