@@ -6,6 +6,7 @@ import (
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
@@ -63,8 +64,7 @@ func ProcessWindow(email,
 	source,
 	target string,
 	port uint16,
-	uploadByteCount uint64,
-	downloadByteCount uint64,
+	connection stat.Connection,
 	duration time.Duration,
 	streamErr error) {
 	AddAddressInfoIfDoesNotExist(source, false)
@@ -73,6 +73,12 @@ func ProcessWindow(email,
 	}
 
 	userStatMutex.Get(source).Lock()
+
+	var downloadByteCount, uploadByteCount uint64
+	if statConn, ok := connection.(*stat.CounterConnection); ok {
+		downloadByteCount = uint64(statConn.WriteCounter.Value())
+		uploadByteCount = uint64(statConn.ReadCounter.Value())
+	}
 
 	var window Window
 	if err := i.WindowCol().FindOne(ctx,
