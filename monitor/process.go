@@ -22,8 +22,8 @@ func Process(f any, args ...any) {
 	funcValue := reflect.ValueOf(f)
 	argsValues := make([]reflect.Value, len(args))
 	for i, arg := range args {
-		if arg == nil && reflect.TypeOf(arg) == reflect.TypeOf(errors.New("")) {
-			arg = errors.New("")
+		if arg == nil {
+			arg = reflect.ValueOf(errors.New(""))
 		}
 
 		argsValues[i] = reflect.ValueOf(arg)
