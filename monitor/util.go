@@ -56,6 +56,15 @@ func AddAddressInfoIfDoesNotExist(address string, isServer bool) {
 			_, err = i.AddressCol().InsertOne(ctx, addr)
 			i.ReportIfErr(err, "while getting address info")
 		}
+	} else if exists, _ := i.AddressCol().Exists(ctx, M{"_id": address, "is_server": isServer}); !exists {
+		update := M{}
+		if isServer {
+			update["is_server"] = true
+		} else {
+			update["is_client"] = true
+		}
+
+		_, _ = i.AddressCol().UpdateOne(ctx, M{"_id": address}, M{"$set": update})
 	}
 }
 
