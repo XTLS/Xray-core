@@ -22,10 +22,6 @@ func Process(f any, args ...any) {
 	funcValue := reflect.ValueOf(f)
 	argsValues := make([]reflect.Value, len(args))
 	for i, arg := range args {
-		if arg == nil {
-			arg = reflect.ValueOf(errors.New(""))
-		}
-
 		argsValues[i] = reflect.ValueOf(arg)
 	}
 
@@ -75,7 +71,15 @@ func ProcessWindow(email,
 		}, netType)
 
 		if err != nil && err.Error() != "" {
-			window.Errors[err.Error()]++
+			errs := window.Errors.Find(func(v *XError) bool {
+				return v != nil && v.Message == err.Error()
+			})
+
+			if errs.IsEmpty() {
+				window.Errors = window.Errors.Append(&XError{err.Error(), 1})
+			} else {
+				errs[0].Count++
+			}
 		}
 
 		user := window.Users.Find(func(v *CallStat) bool {
@@ -112,6 +116,11 @@ func ProcessWindow(email,
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
 		id := uuid.New()
+		var errs Stream[*XError]
+		if err != nil && err.Error() != "" {
+			errs = Stream[*XError]{&XError{err.Error(), 1}}
+		}
+
 		window = Window{
 			Id:        id.String(),
 			Target:    target,
@@ -127,7 +136,7 @@ func ProcessWindow(email,
 			}},
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},
-			Errors:           Map[string, int]{streamErr.Error(): 1},
+			Errors:           errs,
 		}
 	} else {
 		i.ReportIfErr(err)

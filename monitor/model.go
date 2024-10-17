@@ -56,6 +56,11 @@ type CallStat struct {
 	FailureCount      uint64        `json:"failure_count" bson:"failure_count"`
 }
 
+type XError struct {
+	Message string `json:"message" bson:"message"`
+	Count   uint64 `json:"count" bson:"count"`
+}
+
 type Window struct {
 	Id               string            `json:"id" bson:"_id"`
 	Target           string            `json:"target" bson:"target"`
@@ -64,7 +69,7 @@ type Window struct {
 	Users            Stream[*CallStat] `json:"users" bson:"users"`
 	DestinationPorts Stream[uint16]    `json:"destination_port" bson:"destination_port"`
 	NetworkTypes     Stream[string]    `json:"network_types" bson:"network_types"`
-	Errors           Map[string, int]  `json:"errors" bson:"errors"`
+	Errors           Stream[*XError]   `json:"errors" bson:"errors"`
 }
 
 type Global struct {
