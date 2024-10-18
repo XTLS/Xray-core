@@ -55,7 +55,7 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 	}
 
 	destinationAddress := ExtractDestinationAddress(requestHeader)
-	target, subTarget, type_ := SplitAddress(destinationAddress)
+	subTarget, target, type_ := SplitAddress(destinationAddress)
 	AddAddressInfoIfDoesNotExist(target, subTarget, type_, true)
 }
 
@@ -68,7 +68,7 @@ func ProcessWindow(email,
 	duration time.Duration,
 	streamErr error) {
 	var subTarget, type_ string
-	target, subTarget, type_ = SplitAddress(target)
+	subTarget, target, type_ = SplitAddress(target)
 	AddAddressInfoIfDoesNotExist(target, subTarget, type_, false)
 	if !userStatMutex.ContainKey(source) {
 		userStatMutex.Put(source, &sync.Mutex{})
