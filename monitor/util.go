@@ -67,7 +67,7 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 		IsClient:     !isServer,
 		IsServer:     isServer,
 		Tags:         nil,
-		Continents:   []string{fmt.Sprint(result.ContinentCode, ":", result.ContinentCode)},
+		Continents:   []string{fmt.Sprint(result.ContinentCode, ":", result.Continent)},
 		Regions:      []string{fmt.Sprint(result.Region, ":", result.RegionName)},
 		Cities:       Stream[string]{}.AppendIfNotEmpty(result.City),
 		Districts:    Stream[string]{}.AppendIfNotEmpty(result.District),
