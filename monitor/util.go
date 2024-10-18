@@ -31,7 +31,7 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 	var address string
 	switch type_ {
 	case "ipv4", "ipv6":
-		address = address[:len(target)-3] + subTarget
+		address = target[:len(target)-3] + subTarget
 	case "domain":
 		address = strings.TrimPrefix(target, "*.")
 		if subTarget != "" {
