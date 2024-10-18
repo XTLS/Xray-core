@@ -1,5 +1,5 @@
-//go:build go1.23
-// +build go1.23
+//go:build !go1.23
+// +build !go1.23
 
 package wireguard
 
@@ -197,7 +197,7 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 					Timeout: 15 * time.Second,
 				})
 
-				handler(xnet.UDPDestination(xnet.IPAddress(id.LocalAddress.AsSlice()), xnet.Port(id.LocalPort)), gonet.NewUDPConn(&wq, ep))
+				handler(xnet.UDPDestination(xnet.IPAddress(id.LocalAddress.AsSlice()), xnet.Port(id.LocalPort)), gonet.NewUDPConn(stack, &wq, ep))
 			}(r)
 		})
 		stack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)

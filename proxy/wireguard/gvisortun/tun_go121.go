@@ -1,5 +1,5 @@
-//go:build go1.23
-// +build go1.23
+//go:build !go1.23
+// +build !go1.23
 
 /* SPDX-License-Identifier: MIT
  *
@@ -160,7 +160,7 @@ func (tun *netTun) Write(buf [][]byte, offset int) (int, error) {
 // WriteNotify implements channel.Notification
 func (tun *netTun) WriteNotify() {
 	pkt := tun.ep.Read()
-	if pkt == nil {
+	if pkt.IsNil() {
 		return
 	}
 
