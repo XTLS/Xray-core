@@ -669,7 +669,7 @@ func (p TransportProtocol) Build() (string, error) {
 		return "websocket", nil
 	case "h2", "h3", "http":
 		return "http", nil
-	case "grpc", "gun":
+	case "grpc":
 		return "grpc", nil
 	case "httpupgrade":
 		return "httpupgrade", nil
@@ -807,7 +807,6 @@ type StreamConfig struct {
 	HTTPSettings        *HTTPConfig        `json:"httpSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 	GRPCConfig          *GRPCConfig        `json:"grpcSettings"`
-	GUNConfig           *GRPCConfig        `json:"gunSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
 }
@@ -899,9 +898,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			ProtocolName: "http",
 			Settings:     serial.ToTypedMessage(ts),
 		})
-	}
-	if c.GRPCConfig == nil {
-		c.GRPCConfig = c.GUNConfig
 	}
 	if c.GRPCConfig != nil {
 		gs, err := c.GRPCConfig.Build()
