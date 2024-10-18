@@ -103,7 +103,7 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 			_, err = i.AddressCol().InsertOne(ctx, addr)
 			i.ReportIfErr(err, "while getting address info")
 		}
-	} else if exist, err := i.AddressCol().Exists(ctx, M{"_id": target, "sub_target": subTarget}); !exist && subTarget != "" && err == nil {
+	} else if exist, err := i.AddressCol().Exists(ctx, M{"_id": target, "sub_targets": subTarget}); !exist && subTarget != "" && err == nil {
 		addr, err := AddressInfo(target, subTarget, type_, isServer)
 		if err == nil {
 			addressRecord.Cities = addressRecord.Cities.AppendIfNotExistAndNotEmpty(addr.Cities...)
