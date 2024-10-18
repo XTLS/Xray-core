@@ -14,36 +14,58 @@ type Log struct {
 	StackTrace Stream[string] `json:"stack_trace" bson:"stack_trace"`
 }
 
+type AddressResponse struct {
+	Query         string  `json:"query" bson:"_id"`
+	Ip            string  `json:"ip,omitempty" bson:"ip,omitempty"`
+	Status        string  `json:"status,omitempty" bson:"status"`
+	Continent     string  `json:"continent,omitempty" bson:"continent,omitempty"`
+	ContinentCode string  `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
+	Country       string  `json:"country,omitempty" bson:"country,omitempty"`
+	CountryCode   string  `json:"countryCode,omitempty" bson:"countryCode,omitempty"`
+	Region        string  `json:"region,omitempty" bson:"region,omitempty"`
+	RegionName    string  `json:"regionName,omitempty" bson:"regionName,omitempty"`
+	City          string  `json:"city,omitempty" bson:"city,omitempty"`
+	District      string  `json:"district,omitempty" bson:"district,omitempty"`
+	Zip           string  `json:"zip,omitempty" bson:"zip,omitempty"`
+	Lat           float64 `json:"lat,omitempty" bson:"lat,omitempty"`
+	Lon           float64 `json:"lon,omitempty" bson:"lon,omitempty"`
+	Timezone      string  `json:"timezone,omitempty" bson:"timezone,omitempty"`
+	Offset        int     `json:"offset,omitempty" bson:"offset,omitempty"`
+	Currency      string  `json:"currency,omitempty" bson:"currency,omitempty"`
+	ISP           string  `json:"isp,omitempty" bson:"isp,omitempty"`
+	Org           string  `json:"org,omitempty" bson:"org,omitempty"`
+	AS            string  `json:"as,omitempty" bson:"as,omitempty"`
+	ASName        string  `json:"asname,omitempty" bson:"asname,omitempty"`
+	Reverse       string  `json:"reverse,omitempty" bson:"reverse,omitempty"`
+	Mobile        bool    `json:"mobile,omitempty" bson:"mobile,omitempty"`
+	Proxy         bool    `json:"proxy,omitempty" bson:"proxy,omitempty"`
+	Hosting       bool    `json:"hosting,omitempty" bson:"hosting,omitempty"`
+}
+
 type Address struct {
-	Query         string         `json:"query" bson:"_id"`
-	Ip            string         `json:"ip,omitempty" bson:"ip,omitempty"`
-	Status        string         `json:"status,omitempty" bson:"status"`
-	Continent     string         `json:"continent,omitempty" bson:"continent,omitempty"`
-	ContinentCode string         `json:"continentCode,omitempty" bson:"continentCode,omitempty"`
-	Country       string         `json:"country,omitempty" bson:"country,omitempty"`
-	CountryCode   string         `json:"countryCode,omitempty" bson:"countryCode,omitempty"`
-	Region        string         `json:"region,omitempty" bson:"region,omitempty"`
-	RegionName    string         `json:"regionName,omitempty" bson:"regionName,omitempty"`
-	City          string         `json:"city,omitempty" bson:"city,omitempty"`
-	District      string         `json:"district,omitempty" bson:"district,omitempty"`
-	Zip           string         `json:"zip,omitempty" bson:"zip,omitempty"`
-	Lat           float64        `json:"lat,omitempty" bson:"lat,omitempty"`
-	Lon           float64        `json:"lon,omitempty" bson:"lon,omitempty"`
-	Timezone      string         `json:"timezone,omitempty" bson:"timezone,omitempty"`
-	Offset        int            `json:"offset,omitempty" bson:"offset,omitempty"`
-	Currency      string         `json:"currency,omitempty" bson:"currency,omitempty"`
-	ISP           string         `json:"isp,omitempty" bson:"isp,omitempty"`
-	Org           string         `json:"org,omitempty" bson:"org,omitempty"`
-	AS            string         `json:"as,omitempty" bson:"as,omitempty"`
-	ASName        string         `json:"asname,omitempty" bson:"asname,omitempty"`
-	Reverse       string         `json:"reverse,omitempty" bson:"reverse,omitempty"`
-	Mobile        bool           `json:"mobile,omitempty" bson:"mobile,omitempty"`
-	Proxy         bool           `json:"proxy,omitempty" bson:"proxy,omitempty"`
-	Hosting       bool           `json:"hosting,omitempty" bson:"hosting,omitempty"`
-	IsClient      bool           `json:"is_client" bson:"is_client"`
-	IsServer      bool           `json:"is_server" bson:"is_server"`
-	UpdatedAt     time.Time      `json:"updated_at" bson:"updated_at"`
-	Tags          Stream[string] `json:"tags" bson:"tags"`
+	Target       string         `json:"target" bson:"_id"`
+	SubTargets   Stream[string] `json:"sub_targets,omitempty" bson:"sub_targets,omitempty"`
+	Countries    Stream[string] `json:"countries,omitempty" bson:"countries,omitempty"`
+	UpdatedAt    time.Time      `json:"updated_at" bson:"updated_at"`
+	IsClient     bool           `json:"is_client" bson:"is_client"`
+	IsServer     bool           `json:"is_server" bson:"is_server"`
+	Tags         Stream[string] `json:"tags,omitempty" bson:"tags,omitempty"`
+	Continents   Stream[string] `json:"continents,omitempty" bson:"continents,omitempty"`
+	Regions      Stream[string] `json:"regions,omitempty" bson:"regions,omitempty"`
+	Cities       Stream[string] `json:"cities,omitempty" bson:"cities,omitempty"`
+	Districts    Stream[string] `json:"districts,omitempty" bson:"districts,omitempty"`
+	Zips         Stream[string] `json:"zips,omitempty" bson:"zips,omitempty"`
+	Coordination Stream[string] `json:"Coordination,omitempty" bson:"coordination,omitempty"`
+	Timezones    Stream[string] `json:"timezones,omitempty" bson:"timezones,omitempty"`
+	Offsets      Stream[int]    `json:"offsets,omitempty" bson:"offsets,omitempty"`
+	Currencies   Stream[string] `json:"currencies,omitempty" bson:"currencies,omitempty"`
+	Isps         Stream[string] `json:"isps,omitempty" bson:"isps,omitempty"`
+	Orgs         Stream[string] `json:"orgs,omitempty" bson:"orgs,omitempty"`
+	ASs          Stream[string] `json:"ass,omitempty" bson:"ass,omitempty"`
+	Reverses     Stream[string] `json:"reverses,omitempty" bson:"reverses,omitempty"`
+	IsMobile     Stream[bool]   `json:"is_mobile,omitempty" bson:"is_mobile,omitempty"`
+	IsProxy      Stream[bool]   `json:"is_proxy,omitempty" bson:"is_proxy,omitempty"`
+	Type         string         `json:"type" bson:"type"`
 }
 
 type CallStat struct {

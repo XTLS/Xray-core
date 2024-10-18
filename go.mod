@@ -4,7 +4,7 @@ go 1.21.4
 
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
-	github.com/amirdlt/flex v0.0.0-20241015204559-5cc4d982482e
+	github.com/amirdlt/flex v0.0.0-20241018122926-faee574f3a6c
 	github.com/cloudflare/circl v1.4.0
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	. "github.com/amirdlt/flex/util"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -56,7 +55,8 @@ func ProcessRequestHeader(requestHeader *protocol.RequestHeader) {
 	}
 
 	destinationAddress := ExtractDestinationAddress(requestHeader)
-	AddAddressInfoIfDoesNotExist(destinationAddress, true)
+	target, subTarget, type_ := SplitAddress(destinationAddress)
+	AddAddressInfoIfDoesNotExist(target, subTarget, type_, true)
 }
 
 func ProcessWindow(email,
@@ -67,15 +67,14 @@ func ProcessWindow(email,
 	connection stat.Connection,
 	duration time.Duration,
 	streamErr error) {
-	AddAddressInfoIfDoesNotExist(source, false)
+	var subTarget, type_ string
+	target, subTarget, type_ = SplitAddress(target)
+	AddAddressInfoIfDoesNotExist(target, subTarget, type_, false)
 	if !userStatMutex.ContainKey(source) {
 		userStatMutex.Put(source, &sync.Mutex{})
 	}
 
 	userStatMutex.Get(source).Lock()
-
-	var subTarget string
-	subTarget, target = SplitAddress(target)
 
 	hasStreamErr := streamErr != nil && streamErr.Error() != ""
 
@@ -145,7 +144,6 @@ func ProcessWindow(email,
 			})
 		}
 	} else if errors.Is(err, mongo.ErrNoDocuments) {
-		id := uuid.New()
 		var errs Stream[*XError]
 		if hasStreamErr {
 			errs = Stream[*XError]{&XError{streamErr.Error(), 1}}
@@ -162,7 +160,6 @@ func ProcessWindow(email,
 		}
 
 		window = Window{
-			Id:        id.String(),
 			Target:    target,
 			StartTime: time.Now(),
 			EndTime:   time.Now().Add(c.WindowSize),
@@ -181,6 +178,8 @@ func ProcessWindow(email,
 			Errors:           errs,
 			SubTargets:       subTargets,
 		}
+
+		window.Id = GenerateUUID("window", M{"target": target, "start_time": window.StartTime, "end_time": window.StartTime})
 	} else {
 		i.ReportIfErr(err)
 		return
