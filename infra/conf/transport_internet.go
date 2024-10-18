@@ -484,10 +484,10 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 }
 
 type REALITYConfig struct {
-	Show         bool            `json:"show"`
 	MasterKeyLog string          `json:"masterKeyLog"`
-	Dest         json.RawMessage `json:"dest"`
+	Show         bool            `json:"show"`
 	Target       json.RawMessage `json:"target"`
+	Dest         json.RawMessage `json:"dest"`
 	Type         string          `json:"type"`
 	Xver         uint64          `json:"xver"`
 	ServerNames  []string        `json:"serverNames"`
@@ -506,10 +506,10 @@ type REALITYConfig struct {
 
 func (c *REALITYConfig) Build() (proto.Message, error) {
 	config := new(reality.Config)
-	config.Show = c.Show
 	config.MasterKeyLog = c.MasterKeyLog
+	config.Show = c.Show
 	var err error
-	if c.Dest == nil {
+	if c.Target != nil {
 		c.Dest = c.Target
 	}
 	if c.Dest != nil {
@@ -539,7 +539,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			}
 		}
 		if c.Type == "" {
-			return nil, errors.New(`please fill in a valid value for "dest" or "target"`)
+			return nil, errors.New(`please fill in a valid value for "target"`)
 		}
 		if c.Xver > 2 {
 			return nil, errors.New(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
@@ -856,7 +856,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
-	if c.TCPSettings == nil {
+	if c.RAWSettings != nil {
 		c.TCPSettings = c.RAWSettings
 	}
 	if c.TCPSettings != nil {
