@@ -74,6 +74,9 @@ func ProcessWindow(email,
 
 	userStatMutex.Get(source).Lock()
 
+	var subTarget string
+	subTarget, target = SplitAddress(target)
+
 	hasStreamErr := streamErr != nil && streamErr.Error() != ""
 
 	var downloadByteCount, uploadByteCount uint64
@@ -86,12 +89,16 @@ func ProcessWindow(email,
 	if err := i.WindowCol().FindOne(ctx,
 		M{"target": target, "end_time": M{"$gte": time.Now()}}).Decode(&window); err == nil {
 		window.DestinationPorts = window.DestinationPorts.AppendIf(func(v uint16) bool {
-			return !window.DestinationPorts.Contains(v)
+			return v != 0 && !window.DestinationPorts.Contains(v)
 		}, port)
 
 		window.NetworkTypes = window.NetworkTypes.AppendIf(func(v string) bool {
-			return !window.NetworkTypes.Contains(v)
+			return v != "" && !window.NetworkTypes.Contains(v)
 		}, netType)
+
+		window.SubTargets = window.SubTargets.AppendIf(func(v string) bool {
+			return subTarget != "" && !window.SubTargets.Contains(v)
+		}, subTarget)
 
 		if hasStreamErr {
 			errs := window.Errors.Find(func(v *XError) bool {
@@ -149,6 +156,11 @@ func ProcessWindow(email,
 			successCount = 1
 		}
 
+		var subTargets []string
+		if subTarget != "" {
+			subTargets = append(subTargets, subTarget)
+		}
+
 		window = Window{
 			Id:        id.String(),
 			Target:    target,
@@ -167,6 +179,7 @@ func ProcessWindow(email,
 			DestinationPorts: []uint16{port},
 			NetworkTypes:     []string{netType},
 			Errors:           errs,
+			SubTargets:       subTargets,
 		}
 	} else {
 		i.ReportIfErr(err)
