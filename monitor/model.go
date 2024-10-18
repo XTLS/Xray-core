@@ -71,7 +71,7 @@ type Window struct {
 	DestinationPorts Stream[uint16]    `json:"destination_port" bson:"destination_port"`
 	NetworkTypes     Stream[string]    `json:"network_types" bson:"network_types"`
 	Errors           Stream[*XError]   `json:"errors" bson:"errors"`
-	SubTargets       Stream[string]    `json:"sub_domains" bson:"sub_domains"`
+	SubTargets       Stream[string]    `json:"sub_targets" bson:"sub_targets"`
 }
 
 type Global struct {
