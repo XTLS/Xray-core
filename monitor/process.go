@@ -156,7 +156,7 @@ func ProcessWindow(email,
 			successCount = 1
 		}
 
-		var subTargets []string
+		subTargets := make([]string, 0)
 		if subTarget != "" {
 			subTargets = append(subTargets, subTarget)
 		}

@@ -124,7 +124,7 @@ func SplitAddress(address string) (string, string) {
 			parts := strings.Split(address, ":")
 			if len(parts) == 8 {
 				// Return first 6 parts and wildcard for last 2
-				return strings.Join(parts[:6], ":"),
+				return strings.Join(parts[6:], ":"),
 					strings.Join(parts[:6], ":") + ":*:*"
 			}
 		} else {
@@ -133,7 +133,7 @@ func SplitAddress(address string) (string, string) {
 			parts := strings.Split(ipv4, ".")
 			if len(parts) == 4 {
 				// Return first 2 parts and wildcard for last 2
-				return strings.Join(parts[:2], "."),
+				return strings.Join(parts[2:], "."),
 					strings.Join(parts[:2], ".") + ".*.*"
 			}
 		}
