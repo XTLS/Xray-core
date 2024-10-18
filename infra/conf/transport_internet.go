@@ -838,8 +838,8 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
 	case "reality":
-		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" {
-			return nil, errors.New("REALITY only supports TCP, H2 and gRPC for now.")
+		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "splithttp" {
+			return nil, errors.New("REALITY only supports TCP, H2, gRPC and SplitHTTP for now.")
 		}
 		if c.REALITYSettings == nil {
 			return nil, errors.New(`REALITY: Empty "realitySettings".`)
