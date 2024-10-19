@@ -60,8 +60,10 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 	}
 
 	addressRecord := Address{
-		Target:       target,
-		SubTargets:   Stream[string]{}.AppendIfNotEmpty(subTarget),
+		Target: target,
+		SubTargets: Stream[string]{}.AppendIf(func(v string) bool {
+			return type_ != "domain" || v != ""
+		}, subTarget),
 		Countries:    []string{fmt.Sprint(result.CountryCode, ":", result.Country)},
 		UpdatedAt:    time.Now(),
 		IsClient:     !isServer,
