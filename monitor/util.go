@@ -82,9 +82,11 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 		Reverses:     Stream[string]{}.AppendIfNotEmpty(result.Reverse),
 		IsMobile:     []bool{result.Mobile},
 		IsProxy:      []bool{result.Proxy},
-		ResolvedIps:  Stream[string]{}.AppendIfNotEmpty(result.Query),
-		Type:         type_,
-		Status:       result.Status,
+		ResolvedIps: Stream[string]{}.AppendIf(func(v string) bool {
+			return type_ == "domain" && v != ""
+		}, result.Query),
+		Type:   type_,
+		Status: result.Status,
 	}
 
 	time.Sleep(time.Millisecond * 100)
