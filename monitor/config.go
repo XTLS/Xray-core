@@ -30,7 +30,7 @@ func init() {
 				"connection_string": "mongodb://localhost:9213/",
 				"database_name":     "xray_monitor",
 			},
-			"window_size": time.Hour,
+			"window_size": 4 * time.Hour,
 		})
 	} else {
 		confBytes, err = os.ReadFile("monitor_config.json")

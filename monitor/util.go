@@ -82,7 +82,9 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 		Reverses:     Stream[string]{}.AppendIfNotEmpty(result.Reverse),
 		IsMobile:     []bool{result.Mobile},
 		IsProxy:      []bool{result.Proxy},
+		ResolvedIps:  Stream[string]{}.AppendIfNotEmpty(result.Query),
 		Type:         type_,
+		Status:       result.Status,
 	}
 
 	time.Sleep(time.Millisecond * 100)
@@ -97,7 +99,7 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 	var addressRecord Address
 	if err := i.AddressCol().FindOne(ctx, M{"_id": target}).Decode(&addressRecord); err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
 		i.ReportIfErr(err)
-	} else if errors.Is(err, mongo.ErrNoDocuments) {
+	} else if errors.Is(err, mongo.ErrNoDocuments) || addressRecord.Status != "success" {
 		addr, err := AddressInfo(target, subTarget, type_, isServer)
 		if err == nil {
 			_, err = i.AddressCol().InsertOne(ctx, addr)
@@ -114,7 +116,7 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 			addressRecord.Districts = addressRecord.Districts.AppendIfNotExistAndNotEmpty(addressRecord.Districts...)
 			addressRecord.Isps = addressRecord.Isps.AppendIfNotExistAndNotEmpty(addressRecord.Isps...)
 			addressRecord.Orgs = addressRecord.Orgs.AppendIfNotExistAndNotEmpty(addressRecord.Orgs...)
-			addressRecord.SubTargets = addressRecord.SubTargets.AppendIfNotExistAndNotEmpty(subTarget)
+			addressRecord.SubTargets = addressRecord.SubTargets.AppendIfNotExist(subTarget)
 			addressRecord.IsMobile = addressRecord.IsMobile.AppendIfNotExistAndNotEmpty(addressRecord.IsMobile...)
 			addressRecord.IsProxy = addressRecord.IsProxy.AppendIfNotExistAndNotEmpty(addressRecord.IsProxy...)
 			addressRecord.Coordination = addressRecord.Coordination.AppendIfNotExistAndNotEmpty(addressRecord.Coordination...)
@@ -125,6 +127,10 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 				addressRecord.IsServer = true
 			} else {
 				addressRecord.IsClient = true
+			}
+
+			if addressRecord.Type == "domain" {
+				addressRecord.ResolvedIps = addressRecord.ResolvedIps.AppendIfNotExistAndNotEmpty(addressRecord.ResolvedIps...)
 			}
 
 			addressRecord.UpdatedAt = time.Now()

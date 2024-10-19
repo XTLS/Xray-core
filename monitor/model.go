@@ -66,6 +66,8 @@ type Address struct {
 	IsMobile     Stream[bool]   `json:"is_mobile,omitempty" bson:"is_mobile,omitempty"`
 	IsProxy      Stream[bool]   `json:"is_proxy,omitempty" bson:"is_proxy,omitempty"`
 	Type         string         `json:"type" bson:"type"`
+	ResolvedIps  Stream[string] `json:"resolved_ips,omitempty" bson:"resolved_ips,omitempty"`
+	Status       string         `json:"-" bson:"status"`
 }
 
 type CallStat struct {
