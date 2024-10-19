@@ -91,6 +91,8 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 		Status: result.Status,
 	}
 
+	setTagOfAddress(&addressRecord)
+
 	time.Sleep(time.Millisecond * 100)
 
 	return addressRecord, nil
@@ -127,6 +129,7 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 			addressRecord.Regions = addressRecord.Regions.AppendIfNotExistAndNotEmpty(addr.Regions...)
 			addressRecord.Zips = addressRecord.Zips.AppendIfNotExistAndNotEmpty(addr.Zips...)
 			addressRecord.Reverses = addressRecord.Reverses.AppendIfNotExistAndNotEmpty(addr.Reverses...)
+			addressRecord.Tags = addressRecord.Tags.AppendIfNotExistAndNotEmpty(addr.Tags...)
 			if isServer {
 				addressRecord.IsServer = true
 			} else {
@@ -237,4 +240,66 @@ func SplitAddress(address string) (string, string, string) {
 	// For domains with more than 3 parts
 	prefix := strings.Join(parts[:len(parts)-2], ".")
 	return prefix, "*." + domainSuffix, "domain"
+}
+
+func setTagOfAddress(addr *Address) {
+	tagFinder := func() []string {
+		if addr == nil || addr.Status != "success" {
+			return []string{}
+		}
+
+		values := Stream[string]{}.
+			AddAll(addr.ASs).
+			AddAll(addr.Isps).
+			AddAll(addr.Orgs).
+			Append(addr.Target).
+			AddAll(addr.SubTargets).
+			AddAll(addr.Reverses).
+			Update(func(v string) string {
+				return strings.TrimSpace(strings.ToLower(v))
+			})
+
+		tagToKeywords := Map[string, Stream[string]]{
+			"whatsapp":   []string{"whatsapp"},
+			"facebook":   []string{"facebook"},
+			"telegram":   []string{"telegram"},
+			"x":          []string{"x.com", "twitter"},
+			"porn":       []string{"pornhub", "xnxx", "porn"},
+			"discord":    []string{"discord"},
+			"google":     []string{"google"},
+			"cloudflare": []string{"cloudflare"},
+			"youtube":    []string{"youtube"},
+			"chatgpt":    []string{"chatgpt", "openai", "poe"},
+			"tiktok":     []string{"tiktok"},
+		}
+
+		tagToParents := Map[string, Stream[string]]{
+			"whatsapp": []string{"social_media"},
+		}
+
+		tM := Map[string, any]{}
+		for tag, keywords := range tagToKeywords {
+			if tM.ContainKey(tag) {
+				continue
+			}
+
+			for _, keyword := range keywords {
+				if strings.Contains(strings.Join(values, " "), keyword) {
+					tM[tag] = nil
+					tagToKeywords.Remove(tag)
+				}
+			}
+		}
+
+		tags := tM.Keys()
+		for tag, _ := range tM {
+			if tagToParents.ContainKey(tag) {
+				tags.AddAll(tagToParents[tag])
+			}
+		}
+
+		return tags
+	}
+
+	addr.Tags = addr.Tags.AppendIfNotExistAndNotEmpty(tagFinder()...)
 }
