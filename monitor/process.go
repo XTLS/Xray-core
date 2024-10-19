@@ -67,9 +67,10 @@ func ProcessWindow(email,
 	connection stat.Connection,
 	duration time.Duration,
 	streamErr error) {
-	var subTarget, type_ string
-	subTarget, target, type_ = SplitAddress(target)
-	AddAddressInfoIfDoesNotExist(target, subTarget, type_, false)
+	var subTarget string
+	subTarget, target, _ = SplitAddress(target)
+	subSource, sourceA, sourceAddrType := SplitAddress(source)
+	AddAddressInfoIfDoesNotExist(sourceA, subSource, sourceAddrType, false)
 	if !userStatMutex.ContainKey(source) {
 		userStatMutex.Put(source, &sync.Mutex{})
 	}
