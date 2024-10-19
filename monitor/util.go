@@ -62,7 +62,7 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 	addressRecord := Address{
 		Target: target,
 		SubTargets: Stream[string]{}.AppendIf(func(v string) bool {
-			return type_ != "domain" || v != ""
+			return type_ == "domain" || v != ""
 		}, subTarget),
 		Countries:    []string{fmt.Sprint(result.CountryCode, ":", result.Country)},
 		UpdatedAt:    time.Now(),
@@ -103,9 +103,9 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 	var addressRecord Address
 	if err := i.AddressCol().FindOne(ctx, M{"_id": target}).Decode(&addressRecord); err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
 		i.ReportIfErr(err)
-	} else if errors.Is(err, mongo.ErrNoDocuments) || addressRecord.Status != "success" {
+	} else if errors.Is(err, mongo.ErrNoDocuments) {
 		addr, err := AddressInfo(target, subTarget, type_, isServer)
-		if err == nil {
+		if err == nil && addr.Status == "success" {
 			_, err = i.AddressCol().InsertOne(ctx, addr)
 			i.ReportIfErr(err, "while getting address info")
 		}
@@ -114,19 +114,19 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 		if err == nil && addr.Status == "success" {
 			addressRecord.Cities = addressRecord.Cities.AppendIfNotExistAndNotEmpty(addr.Cities...)
 			addressRecord.ASs = addressRecord.ASs.AppendIfNotExistAndNotEmpty(addr.ASs...)
-			addressRecord.Continents = addressRecord.Continents.AppendIfNotExistAndNotEmpty(addressRecord.Continents...)
-			addressRecord.Countries = addressRecord.Countries.AppendIfNotExistAndNotEmpty(addressRecord.Countries...)
-			addressRecord.Currencies = addressRecord.Currencies.AppendIfNotExistAndNotEmpty(addressRecord.Currencies...)
-			addressRecord.Districts = addressRecord.Districts.AppendIfNotExistAndNotEmpty(addressRecord.Districts...)
-			addressRecord.Isps = addressRecord.Isps.AppendIfNotExistAndNotEmpty(addressRecord.Isps...)
-			addressRecord.Orgs = addressRecord.Orgs.AppendIfNotExistAndNotEmpty(addressRecord.Orgs...)
+			addressRecord.Continents = addressRecord.Continents.AppendIfNotExistAndNotEmpty(addr.Continents...)
+			addressRecord.Countries = addressRecord.Countries.AppendIfNotExistAndNotEmpty(addr.Countries...)
+			addressRecord.Currencies = addressRecord.Currencies.AppendIfNotExistAndNotEmpty(addr.Currencies...)
+			addressRecord.Districts = addressRecord.Districts.AppendIfNotExistAndNotEmpty(addr.Districts...)
+			addressRecord.Isps = addressRecord.Isps.AppendIfNotExistAndNotEmpty(addr.Isps...)
+			addressRecord.Orgs = addressRecord.Orgs.AppendIfNotExistAndNotEmpty(addr.Orgs...)
 			addressRecord.SubTargets = addressRecord.SubTargets.AppendIfNotExist(subTarget)
-			addressRecord.IsMobile = addressRecord.IsMobile.AppendIfNotExistAndNotEmpty(addressRecord.IsMobile...)
-			addressRecord.IsProxy = addressRecord.IsProxy.AppendIfNotExistAndNotEmpty(addressRecord.IsProxy...)
-			addressRecord.Coordination = addressRecord.Coordination.AppendIfNotExistAndNotEmpty(addressRecord.Coordination...)
-			addressRecord.Regions = addressRecord.Regions.AppendIfNotExistAndNotEmpty(addressRecord.Regions...)
-			addressRecord.Zips = addressRecord.Zips.AppendIfNotExistAndNotEmpty(addressRecord.Zips...)
-			addressRecord.Reverses = addressRecord.Reverses.AppendIfNotExistAndNotEmpty(addressRecord.Reverses...)
+			addressRecord.IsMobile = addressRecord.IsMobile.AppendIfNotExistAndNotEmpty(addr.IsMobile...)
+			addressRecord.IsProxy = addressRecord.IsProxy.AppendIfNotExistAndNotEmpty(addr.IsProxy...)
+			addressRecord.Coordination = addressRecord.Coordination.AppendIfNotExistAndNotEmpty(addr.Coordination...)
+			addressRecord.Regions = addressRecord.Regions.AppendIfNotExistAndNotEmpty(addr.Regions...)
+			addressRecord.Zips = addressRecord.Zips.AppendIfNotExistAndNotEmpty(addr.Zips...)
+			addressRecord.Reverses = addressRecord.Reverses.AppendIfNotExistAndNotEmpty(addr.Reverses...)
 			if isServer {
 				addressRecord.IsServer = true
 			} else {
