@@ -20,7 +20,7 @@ import (
 
 var (
 	ctx                = context.TODO()
-	getAddressInfoLock = &sync.Mutex{}
+	addAddressInfoLock = &sync.Mutex{}
 )
 
 var i = &I{
@@ -85,7 +85,7 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 		IsMobile:     []bool{result.Mobile},
 		IsProxy:      []bool{result.Proxy},
 		ResolvedIps: Stream[string]{}.AppendIf(func(v string) bool {
-			return type_ == "domain" && v != ""
+			return type_ == "domain" && v != "" && result.Status == "success"
 		}, result.Query),
 		Type:   type_,
 		Status: result.Status,
@@ -97,8 +97,8 @@ func AddressInfo(target, subTarget, type_ string, isServer bool) (Address, error
 }
 
 func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool) {
-	getAddressInfoLock.Lock()
-	defer getAddressInfoLock.Unlock()
+	addAddressInfoLock.Lock()
+	defer addAddressInfoLock.Unlock()
 
 	var addressRecord Address
 	if err := i.AddressCol().FindOne(ctx, M{"_id": target}).Decode(&addressRecord); err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
@@ -111,7 +111,7 @@ func AddAddressInfoIfDoesNotExist(target, subTarget, type_ string, isServer bool
 		}
 	} else if exist, err := i.AddressCol().Exists(ctx, M{"_id": target, "sub_targets": subTarget}); !exist && subTarget != "" && err == nil {
 		addr, err := AddressInfo(target, subTarget, type_, isServer)
-		if err == nil {
+		if err == nil && addr.Status == "success" {
 			addressRecord.Cities = addressRecord.Cities.AppendIfNotExistAndNotEmpty(addr.Cities...)
 			addressRecord.ASs = addressRecord.ASs.AppendIfNotExistAndNotEmpty(addr.ASs...)
 			addressRecord.Continents = addressRecord.Continents.AppendIfNotExistAndNotEmpty(addressRecord.Continents...)
