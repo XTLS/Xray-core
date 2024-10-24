@@ -243,7 +243,10 @@ type Xmux struct {
 
 func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
 	if input == nil {
-		return nil
+		return &splithttp.RandRangeConfig{
+			From: 0,
+			To:   0,
+		}
 	}
 
 	return &splithttp.RandRangeConfig{
@@ -273,6 +276,16 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
 		CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.CMaxReuseTimes),
 		CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.CMaxLifetimeMs),
+	}
+
+	if muxProtobuf.MaxConcurrency.To == 0 &&
+		muxProtobuf.MaxConnections.To == 0 &&
+		muxProtobuf.CMaxReuseTimes.To == 0 &&
+		muxProtobuf.CMaxLifetimeMs.To == 0 {
+		muxProtobuf.MaxConcurrency.From = 16
+		muxProtobuf.MaxConcurrency.To = 32
+		muxProtobuf.CMaxReuseTimes.From = 64
+		muxProtobuf.CMaxReuseTimes.To = 128
 	}
 
 	config := &splithttp.Config{
@@ -471,10 +484,10 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 }
 
 type REALITYConfig struct {
-	Show         bool            `json:"show"`
 	MasterKeyLog string          `json:"masterKeyLog"`
-	Dest         json.RawMessage `json:"dest"`
+	Show         bool            `json:"show"`
 	Target       json.RawMessage `json:"target"`
+	Dest         json.RawMessage `json:"dest"`
 	Type         string          `json:"type"`
 	Xver         uint64          `json:"xver"`
 	ServerNames  []string        `json:"serverNames"`
@@ -493,10 +506,10 @@ type REALITYConfig struct {
 
 func (c *REALITYConfig) Build() (proto.Message, error) {
 	config := new(reality.Config)
-	config.Show = c.Show
 	config.MasterKeyLog = c.MasterKeyLog
+	config.Show = c.Show
 	var err error
-	if c.Dest == nil {
+	if c.Target != nil {
 		c.Dest = c.Target
 	}
 	if c.Dest != nil {
@@ -526,7 +539,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			}
 		}
 		if c.Type == "" {
-			return nil, errors.New(`please fill in a valid value for "dest" or "target"`)
+			return nil, errors.New(`please fill in a valid value for "target"`)
 		}
 		if c.Xver > 2 {
 			return nil, errors.New(`invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
@@ -656,7 +669,7 @@ func (p TransportProtocol) Build() (string, error) {
 		return "websocket", nil
 	case "h2", "h3", "http":
 		return "http", nil
-	case "grpc", "gun":
+	case "grpc":
 		return "grpc", nil
 	case "httpupgrade":
 		return "httpupgrade", nil
@@ -794,7 +807,6 @@ type StreamConfig struct {
 	HTTPSettings        *HTTPConfig        `json:"httpSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 	GRPCConfig          *GRPCConfig        `json:"grpcSettings"`
-	GUNConfig           *GRPCConfig        `json:"gunSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
 }
@@ -844,7 +856,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
-	if c.TCPSettings == nil {
+	if c.RAWSettings != nil {
 		c.TCPSettings = c.RAWSettings
 	}
 	if c.TCPSettings != nil {
@@ -886,9 +898,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			ProtocolName: "http",
 			Settings:     serial.ToTypedMessage(ts),
 		})
-	}
-	if c.GRPCConfig == nil {
-		c.GRPCConfig = c.GUNConfig
 	}
 	if c.GRPCConfig != nil {
 		gs, err := c.GRPCConfig.Build()

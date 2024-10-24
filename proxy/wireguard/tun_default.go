@@ -11,6 +11,6 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 	return nil, errors.New("not implemented")
 }
 
-func KernelTunSupported() bool {
-	return false
+func KernelTunSupported() (bool, error) {
+	return false, nil
 }

@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"strings"
@@ -52,7 +51,7 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 type WireGuardConfig struct {
 	IsClient bool `json:""`
 
-	KernelMode     *bool                  `json:"kernelMode"`
+	NoKernelTun    bool                   `json:"noKernelTun"`
 	SecretKey      string                 `json:"secretKey"`
 	Address        []string               `json:"address"`
 	Peers          []*WireGuardPeerConfig `json:"peers"`
@@ -119,17 +118,7 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	}
 
 	config.IsClient = c.IsClient
-	if c.KernelMode != nil {
-		config.KernelMode = *c.KernelMode
-		if config.KernelMode && !wireguard.KernelTunSupported() {
-			errors.LogWarning(context.Background(), "kernel mode is not supported on your OS or permission is insufficient")
-		}
-	} else {
-		config.KernelMode = wireguard.KernelTunSupported()
-		if config.KernelMode {
-			errors.LogDebug(context.Background(), "kernel mode is enabled as it's supported and permission is sufficient")
-		}
-	}
+	config.NoKernelTun = c.NoKernelTun
 
 	return config, nil
 }

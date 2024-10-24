@@ -26,7 +26,7 @@ func TestWireGuardConfig(t *testing.T) {
 				"mtu": 1300,
 				"workers": 2,
 				"domainStrategy": "ForceIPv6v4",
-				"kernelMode": false
+				"noKernelTun": false
 			}`,
 			Parser: loadJSON(creator),
 			Output: &wireguard.DeviceConfig{
@@ -45,7 +45,7 @@ func TestWireGuardConfig(t *testing.T) {
 				Mtu:            1300,
 				NumWorkers:     2,
 				DomainStrategy: wireguard.DeviceConfig_FORCE_IP64,
-				KernelMode:     false,
+				NoKernelTun:    false,
 			},
 		},
 	})

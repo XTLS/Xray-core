@@ -32,6 +32,7 @@
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
+  - [wulabing/xray_docker](https://github.com/wulabing/xray_docker)
 - Web Panel - **Warning: These panels are verified to support HTTPS or SSH port forwarding only. Please DO NOT use plain HTTP panels like 3X-UI, as they are believed to be bought by Iran GFW and your data security will be dangerous. If you are already using 3X-UI, please switch to the following panels.**
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Xray-UI](https://github.com/qist/xray-ui)
