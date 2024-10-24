@@ -33,12 +33,10 @@
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
   - [wulabing/xray_docker](https://github.com/wulabing/xray_docker)
-- Web Panel
-  - [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [Xray-UI](https://github.com/qist/xray-ui)
-  - [Hiddify](https://github.com/hiddify/hiddify-config)
-  - [Marzneshin](https://github.com/marzneshin/marzneshin)
+- Web Panel - **Warning: These panels are verified to support HTTPS or SSH port forwarding only. Please DO NOT use plain HTTP panels like 3X-UI, as they are believed to be bought by Iran GFW and your data security will be dangerous. If you are already using 3X-UI, please switch to the following panels.**
   - [Marzban](https://github.com/Gozargah/Marzban)
-  - [Libertea](https://github.com/VZiChoushaDui/Libertea)
+  - [Xray-UI](https://github.com/qist/xray-ui)
+  - [Hiddify](https://github.com/hiddify/Hiddify-Manager)
 - One Click
   - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
