@@ -259,46 +259,22 @@ func setTagOfAddress(addr *Address) {
 				return strings.TrimSpace(strings.ToLower(v))
 			})
 
-		tagToKeywords := Map[string, Stream[string]]{
-			"whatsapp":   []string{"whatsapp"},
-			"facebook":   []string{"facebook"},
-			"telegram":   []string{"telegram"},
-			"x":          []string{"x.com", "twitter"},
-			"porn":       []string{"pornhub", "xnxx", "porn"},
-			"discord":    []string{"discord"},
-			"google":     []string{"google"},
-			"cloudflare": []string{"cloudflare"},
-			"youtube":    []string{"youtube"},
-			"chatgpt":    []string{"chatgpt", "openai", "poe"},
-			"tiktok":     []string{"tiktok"},
-		}
-
-		tagToParents := Map[string, Stream[string]]{
-			"whatsapp": []string{"social_media"},
-		}
-
 		tM := Map[string, any]{}
-		for tag, keywords := range tagToKeywords {
-			if tM.ContainKey(tag) {
-				continue
-			}
+		properties := strings.Join(values, "/")
+		for category, tagRegex := range categoryToTagRegex {
+			for tag, regex := range tagRegex {
+				if tM.ContainKey(tag) {
+					continue
+				}
 
-			for _, keyword := range keywords {
-				if strings.Contains(strings.Join(values, " "), keyword) {
+				if regex.MatchString(properties) {
 					tM[tag] = nil
-					tagToKeywords.Remove(tag)
+					tM[category] = nil
 				}
 			}
 		}
 
-		tags := tM.Keys()
-		for tag, _ := range tM {
-			if tagToParents.ContainKey(tag) {
-				tags.AddAll(tagToParents[tag])
-			}
-		}
-
-		return tags
+		return tM.Keys()
 	}
 
 	addr.Tags = addr.Tags.AppendIfNotExistAndNotEmpty(tagFinder()...)
