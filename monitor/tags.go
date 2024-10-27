@@ -188,4 +188,35 @@ var categoryToTagRegex = Map[string, Map[string, *regexp.Regexp]]{
 		"binance":   regexp.MustCompile(`binance`),
 		"robinhood": regexp.MustCompile(`robinhood`),
 	},
+	"isp": {
+		"irancell":      regexp.MustCompile(`irancell`),
+		"mci":           regexp.MustCompile(`mci|hamrahaval|hamraheaval|mci\.ir|mobile.communication.company.*iran`),
+		"mokhaberat":    regexp.MustCompile(`mokhaberat|tci|telecommunication\s+company\s+of\s+iran`),
+		"rightel":       regexp.MustCompile(`rightel`),
+		"shatel":        regexp.MustCompile(`shatel`),
+		"pars_online":   regexp.MustCompile(`parsonline|pars\s*online`),
+		"hiweb":         regexp.MustCompile(`hiweb`),
+		"afranet":       regexp.MustCompile(`afranet`),
+		"asiatech":      regexp.MustCompile(`asiatech`),
+		"mobinnet":      regexp.MustCompile(`mobinnet`),
+		"zitel":         regexp.MustCompile(`zitel`),
+		"netafraz":      regexp.MustCompile(`netafraz`),
+		"pishgaman":     regexp.MustCompile(`pishgaman`),
+		"samantel":      regexp.MustCompile(`samantel`),
+		"fanap_telecom": regexp.MustCompile(`fanaptelecom|fanap`),
+		"respina":       regexp.MustCompile(`respina`),
+		"sibnet":        regexp.MustCompile(`sibnet`),
+		"pardis":        regexp.MustCompile(`pardis`),
+		"faratel":       regexp.MustCompile(`faratel`),
+		"sepanta":       regexp.MustCompile(`sepanta`),
+		"datak":         regexp.MustCompile(`datak`),
+	},
+}
+
+func TagCategories() Stream[string] {
+	return categoryToTagRegex.Keys()
+}
+
+func TagsOfACategory(category string) Stream[string] {
+	return categoryToTagRegex.GetOrDefault(category, Map[string, *regexp.Regexp]{}).Keys()
 }
