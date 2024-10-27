@@ -129,11 +129,11 @@ func (c *UConn) NegotiatedProtocol() string {
 }
 
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
-	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
+	utlsConn := utls.UClient(c, CopyConfig(config), *fingerprint)
 	return &UConn{UConn: utlsConn}
 }
 
-func copyConfig(c *tls.Config) *utls.Config {
+func CopyConfig(c *tls.Config) *utls.Config {
 	return &utls.Config{
 		RootCAs:               c.RootCAs,
 		ServerName:            c.ServerName,
