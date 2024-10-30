@@ -232,6 +232,8 @@ type SplitHTTPConfig struct {
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
 	Xmux                 Xmux              `json:"xmux"`
+	DownloadAddrPort     string            `json:"downloadAddrPort"`
+	DownloadStreamConfig *StreamConfig     `json:"downloadStreamConfig"`
 }
 
 type Xmux struct {
@@ -288,6 +290,11 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		muxProtobuf.CMaxReuseTimes.To = 128
 	}
 
+	var downloadStreamConfig *internet.StreamConfig
+	if c.DownloadAddrPort != "" {
+		downloadStreamConfig, _ = c.DownloadStreamConfig.Build() // just panic
+	}
+
 	config := &splithttp.Config{
 		Path:                 c.Path,
 		Host:                 c.Host,
@@ -298,6 +305,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
+		DownloadAddrPort:     c.DownloadAddrPort,
+		DownloadStreamConfig: downloadStreamConfig,
 	}
 	return config, nil
 }
