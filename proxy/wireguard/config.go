@@ -32,6 +32,7 @@ func (c *DeviceConfig) fallbackIP6() bool {
 
 func (c *DeviceConfig) createTun() tunCreator {
 	if c.NoKernelTun {
+		errors.LogWarning(context.Background(), "Using gVisor TUN.")
 		return createGVisorTun
 	}
 	kernelTunSupported, err := KernelTunSupported()
@@ -40,8 +41,9 @@ func (c *DeviceConfig) createTun() tunCreator {
 		return createGVisorTun
 	}
 	if !kernelTunSupported {
-		errors.LogWarning(context.Background(), "Using gVisor TUN. Kernel TUN is not supported on your OS, or your permission is insufficient.)")
+		errors.LogWarning(context.Background(), "Using gVisor TUN. Kernel TUN is not supported on your OS, or your permission is insufficient.")
 		return createGVisorTun
 	}
+	errors.LogWarning(context.Background(), "Using kernel TUN.")
 	return createKernelTun
 }
