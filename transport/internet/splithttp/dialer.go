@@ -254,6 +254,30 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpClient, muxResource := getHTTPClient(ctx, dest, streamSettings)
 
+	var httpClient2 DialerClient
+	var requestURL2 url.URL
+	if transportConfiguration.DownloadSettings != nil {
+		dest2 := net.Destination{
+			Address: transportConfiguration.DownloadSettings.Address.AsAddress(), // just panic
+			Port:    net.Port(transportConfiguration.DownloadSettings.Port),
+			Network: net.Network_TCP,
+		}
+		memory2 := common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings)).(*internet.MemoryStreamConfig)
+		httpClient2, _ = getHTTPClient(ctx, dest2, memory2) // no multiplex
+		if tls.ConfigFromStreamSettings(memory2) != nil || reality.ConfigFromStreamSettings(memory2) != nil {
+			requestURL2.Scheme = "https"
+		} else {
+			requestURL2.Scheme = "http"
+		}
+		config2 := memory2.ProtocolSettings.(*Config)
+		requestURL2.Host = config2.Host
+		if requestURL2.Host == "" {
+			requestURL2.Host = dest2.NetAddr()
+		}
+		requestURL2.Path = requestURL.Path // the same
+		requestURL2.RawQuery = config2.GetNormalizedQuery()
+	}
+
 	maxUploadSize := scMaxEachPostBytes.roll()
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
 	// code relies on this behavior. Subtract 1 so that together with
@@ -321,7 +345,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
-	reader, remoteAddr, localAddr, err := httpClient.OpenDownload(context.WithoutCancel(ctx), requestURL.String())
+	httpClient3 := httpClient
+	requestURL3 := requestURL
+	if httpClient2 != nil {
+		httpClient3 = httpClient2
+		requestURL3 = requestURL2
+	}
+
+	reader, remoteAddr, localAddr, err := httpClient3.OpenDownload(context.WithoutCancel(ctx), requestURL3.String())
 	if err != nil {
 		return nil, err
 	}

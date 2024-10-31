@@ -232,6 +232,7 @@ type SplitHTTPConfig struct {
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
 	Xmux                 Xmux              `json:"xmux"`
+	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 }
 
 type Xmux struct {
@@ -298,6 +299,12 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
+	}
+	var err error
+	if c.DownloadSettings != nil {
+		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
+			return nil, errors.New(`Failed to build "downloadSettings".`).Base(err)
+		}
 	}
 	return config, nil
 }
@@ -673,7 +680,7 @@ func (p TransportProtocol) Build() (string, error) {
 		return "grpc", nil
 	case "httpupgrade":
 		return "httpupgrade", nil
-	case "splithttp":
+	case "xhttp", "splithttp":
 		return "splithttp", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
@@ -796,6 +803,8 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 type StreamConfig struct {
+	Address             *Address           `json:"address"`
+	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
@@ -808,13 +817,18 @@ type StreamConfig struct {
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 	GRPCConfig          *GRPCConfig        `json:"grpcSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
+	XHTTPSettings       *SplitHTTPConfig   `json:"xhttpSettings"`
 	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
 }
 
 // Build implements Buildable.
 func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	config := &internet.StreamConfig{
+		Port:         uint32(c.Port),
 		ProtocolName: "tcp",
+	}
+	if c.Address != nil {
+		config.Address = c.Address.Build()
 	}
 	if c.Network != nil {
 		protocol, err := c.Network.Build()
@@ -839,7 +853,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecurityType = tm.Type
 	case "reality":
 		if config.ProtocolName != "tcp" && config.ProtocolName != "http" && config.ProtocolName != "grpc" && config.ProtocolName != "splithttp" {
-			return nil, errors.New("REALITY only supports TCP, H2, gRPC and SplitHTTP for now.")
+			return nil, errors.New("REALITY only supports RAW, H2, gRPC and XHTTP for now.")
 		}
 		if c.REALITYSettings == nil {
 			return nil, errors.New(`REALITY: Empty "realitySettings".`)
@@ -919,10 +933,13 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
+	if c.XHTTPSettings != nil {
+		c.SplitHTTPSettings = c.XHTTPSettings
+	}
 	if c.SplitHTTPSettings != nil {
 		hs, err := c.SplitHTTPSettings.Build()
 		if err != nil {
-			return nil, errors.New("Failed to build SplitHTTP config.").Base(err)
+			return nil, errors.New("Failed to build XHTTP config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "splithttp",
