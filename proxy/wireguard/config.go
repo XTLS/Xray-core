@@ -31,6 +31,11 @@ func (c *DeviceConfig) fallbackIP6() bool {
 }
 
 func (c *DeviceConfig) createTun() tunCreator {
+	// System TUN not support promiscuous mode yet, don't use it when work in inbound mode
+	// See tun_linux.go createKernelTun()
+	if !c.IsClient {
+		return createGVisorTun
+	}
 	if c.NoKernelTun {
 		errors.LogWarning(context.Background(), "Using gVisor TUN.")
 		return createGVisorTun
