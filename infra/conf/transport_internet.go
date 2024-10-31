@@ -232,8 +232,7 @@ type SplitHTTPConfig struct {
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
 	Xmux                 Xmux              `json:"xmux"`
-	DownloadAddrPort     string            `json:"downloadAddrPort"`
-	DownloadStreamConfig *StreamConfig     `json:"downloadStreamConfig"`
+	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 }
 
 type Xmux struct {
@@ -290,11 +289,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		muxProtobuf.CMaxReuseTimes.To = 128
 	}
 
-	var downloadStreamConfig *internet.StreamConfig
-	if c.DownloadAddrPort != "" {
-		downloadStreamConfig, _ = c.DownloadStreamConfig.Build() // just panic
-	}
-
 	config := &splithttp.Config{
 		Path:                 c.Path,
 		Host:                 c.Host,
@@ -305,8 +299,12 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
-		DownloadAddrPort:     c.DownloadAddrPort,
-		DownloadStreamConfig: downloadStreamConfig,
+	}
+	var err error
+	if c.DownloadSettings != nil {
+		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
+			return nil, errors.New(`Failed to build "downloadSettings".`).Base(err)
+		}
 	}
 	return config, nil
 }
@@ -805,6 +803,8 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 type StreamConfig struct {
+	Address             *Address           `json:"address"`
+	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
@@ -824,7 +824,11 @@ type StreamConfig struct {
 // Build implements Buildable.
 func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	config := &internet.StreamConfig{
+		Port:         uint32(c.Port),
 		ProtocolName: "tcp",
+	}
+	if c.Address != nil {
+		config.Address = c.Address.Build()
 	}
 	if c.Network != nil {
 		protocol, err := c.Network.Build()

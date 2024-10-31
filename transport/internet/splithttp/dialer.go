@@ -256,14 +256,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	var httpClient2 DialerClient
 	var requestURL2 url.URL
-	if transportConfiguration.DownloadAddrPort != "" {
-		addr2, port2, _ := net.SplitHostPort(transportConfiguration.DownloadAddrPort)
+	if transportConfiguration.DownloadSettings != nil {
 		dest2 := net.Destination{
-			Address: net.ParseAddress(addr2),
-			Port:    common.Must2(net.PortFromString(port2)).(net.Port),
+			Address: transportConfiguration.DownloadSettings.Address.AsAddress(), // just panic
+			Port:    net.Port(transportConfiguration.DownloadSettings.Port),
 			Network: net.Network_TCP,
 		}
-		memory2 := common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadStreamConfig)).(*internet.MemoryStreamConfig)
+		memory2 := common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings)).(*internet.MemoryStreamConfig)
 		httpClient2, _ = getHTTPClient(ctx, dest2, memory2) // no multiplex
 		if tls.ConfigFromStreamSettings(memory2) != nil || reality.ConfigFromStreamSettings(memory2) != nil {
 			requestURL2.Scheme = "https"

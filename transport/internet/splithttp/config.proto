@@ -18,8 +18,7 @@ message Config {
   bool noSSEHeader = 7;
   RandRangeConfig xPaddingBytes = 8;
   Multiplexing xmux = 9;
-  string downloadAddrPort = 10;
-  xray.transport.internet.StreamConfig downloadStreamConfig = 11;
+  xray.transport.internet.StreamConfig downloadSettings = 10;
 }
 
 message RandRangeConfig {

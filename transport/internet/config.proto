@@ -7,6 +7,7 @@ option java_package = "com.xray.transport.internet";
 option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
+import "common/net/address.proto";
 
 enum DomainStrategy {
   AS_IS = 0;
@@ -31,6 +32,9 @@ message TransportConfig {
 }
 
 message StreamConfig {
+  xray.common.net.IPOrDomain address = 8;
+  uint32 port = 9;
+
   // Effective network.
   string protocol_name = 5;
 
