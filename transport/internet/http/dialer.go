@@ -120,6 +120,15 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			},
 		}
 		transport = roundTripper
+
+		if fingerprint := tls.GetQuicFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
+			quicSpec, err := quic.QUICID2Spec(*fingerprint)
+			if err != nil {
+				errors.LogError(ctx, "unknown fingerprint: ", tlsConfigs.Fingerprint)
+			} else {
+				transport = http3.GetURoundTripper(roundTripper, &quicSpec, nil)
+			}
+		}
 	} else {
 		transportH2 := &http2.Transport{
 			DialTLSContext: func(hctx context.Context, string, addr string, tlsConfig *gotls.Config) (net.Conn, error) {

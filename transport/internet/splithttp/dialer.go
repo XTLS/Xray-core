@@ -73,7 +73,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		}
 
 		muxManager = NewMuxManager(mux, func() interface{} {
-			return createHTTPClient(dest, streamSettings)
+			return createHTTPClient(ctx, dest, streamSettings)
 		})
 		globalDialerMap[key] = muxManager
 	}
@@ -82,7 +82,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	return res.Resource.(DialerClient), res
 }
 
-func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
+func createHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
@@ -145,7 +145,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			MaxIncomingStreams: -1,
 			KeepAlivePeriod:    h3KeepalivePeriod,
 		}
-		transport = &http3.RoundTripper{
+		roundTripper := &http3.RoundTripper{
 			QuicConfig:      quicConfig,
 			TLSClientConfig: tls.CopyConfig(gotlsConfig),
 			Dial: func(ctx context.Context, addr string, tlsCfg *utls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
@@ -184,6 +184,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
 			},
+		}
+		transport = roundTripper
+		if fingerprint := tls.GetQuicFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+			quicSpec, err := quic.QUICID2Spec(*fingerprint)
+			if err != nil {
+				errors.LogError(ctx, "unknown fingerprint: ", tlsConfig.Fingerprint)
+			} else {
+				transport = http3.GetURoundTripper(roundTripper, &quicSpec, nil)
+			}
 		}
 	} else if isH2 {
 		transport = &http2.Transport{
