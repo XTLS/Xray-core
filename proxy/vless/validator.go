@@ -13,6 +13,9 @@ type Validator interface {
 	Get(id uuid.UUID) *protocol.MemoryUser
 	Add(u *protocol.MemoryUser) error
 	Del(email string) error
+	GetByEmail(email string) *protocol.MemoryUser
+	GetAll() []*protocol.MemoryUser
+	GetCount() int64
 }
 
 // MemoryValidator stores valid VLESS users.
@@ -59,7 +62,7 @@ func (v *MemoryValidator) Get(id uuid.UUID) *protocol.MemoryUser {
 }
 
 // Get a VLESS user with email, nil if user doesn't exist.
-func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
+func (v *MemoryValidator) GetByEmail(email string) *protocol.MemoryUser {
 	u, _ := v.email.Load(email)
 	if u != nil {
 		return u.(*protocol.MemoryUser)
@@ -68,7 +71,7 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 }
 
 // Get all users
-func (v *Validator) GetAll() []*protocol.MemoryUser {
+func (v *MemoryValidator) GetAll() []*protocol.MemoryUser {
 	var u = make([]*protocol.MemoryUser, 0, 100)
 	v.email.Range(func(key, value interface{}) bool {
 		u = append(u, value.(*protocol.MemoryUser))
@@ -78,7 +81,7 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 }
 
 // Get users count
-func (v *Validator) GetCount() int64 {
+func (v *MemoryValidator) GetCount() int64 {
 	var c int64 = 0
 	v.email.Range(func(key, value interface{}) bool {
 		c++

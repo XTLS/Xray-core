@@ -324,11 +324,9 @@ type Account struct {
 
 func (x *Account) Reset() {
 	*x = Account{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_proxy_shadowsocks_2022_config_proto_msgTypes[4]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
+	mi := &file_proxy_shadowsocks_2022_config_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
 func (x *Account) String() string {
@@ -569,80 +567,6 @@ func init() { file_proxy_shadowsocks_2022_config_proto_init() }
 func file_proxy_shadowsocks_2022_config_proto_init() {
 	if File_proxy_shadowsocks_2022_config_proto != nil {
 		return
-	}
-	if !protoimpl.UnsafeEnabled {
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ServerConfig); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MultiUserServerConfig); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RelayDestination); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RelayServerConfig); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Account); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_proxy_shadowsocks_2022_config_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ClientConfig); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

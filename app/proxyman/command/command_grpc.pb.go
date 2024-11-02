@@ -82,8 +82,9 @@ func (c *handlerServiceClient) AlterInbound(ctx context.Context, in *AlterInboun
 }
 
 func (c *handlerServiceClient) GetInboundUsers(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetInboundUserResponse)
-	err := c.cc.Invoke(ctx, HandlerService_GetInboundUsers_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, HandlerService_GetInboundUsers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +92,9 @@ func (c *handlerServiceClient) GetInboundUsers(ctx context.Context, in *GetInbou
 }
 
 func (c *handlerServiceClient) GetInboundUsersCount(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUsersCountResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetInboundUsersCountResponse)
-	err := c.cc.Invoke(ctx, HandlerService_GetInboundUsersCount_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, HandlerService_GetInboundUsersCount_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
