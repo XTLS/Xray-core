@@ -52,7 +52,7 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			return nil, errors.New("Trojan password is not specified.")
 		}
 		if rec.Flow != "" {
-			return nil, errors.New(`Trojan doesn't support "flow" anymore.`)
+			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
 		}
 
 		config.Server[idx] = &protocol.ServerEndpoint{
@@ -94,7 +94,6 @@ type TrojanUserConfig struct {
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
 	Clients   []*TrojanUserConfig      `json:"clients"`
-	Fallback  *TrojanInboundFallback   `json:"fallback"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
 }
 
@@ -106,7 +105,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 
 	for idx, rawUser := range c.Clients {
 		if rawUser.Flow != "" {
-			return nil, errors.New(`Trojan doesn't support "flow" anymore.`)
+			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
 		}
 
 		config.Users[idx] = &protocol.User{
@@ -118,9 +117,6 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.Fallback != nil {
-		return nil, errors.New(`Trojan settings: please use "fallbacks":[{}] instead of "fallback":{}`)
-	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
 		var s string

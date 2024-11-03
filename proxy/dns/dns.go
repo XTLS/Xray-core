@@ -49,6 +49,7 @@ type Handler struct {
 	server          net.Destination
 	timeout         time.Duration
 	nonIPQuery      string
+	blockTypes       []int32
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -63,6 +64,7 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.server = config.Server.AsDestination()
 	}
 	h.nonIPQuery = config.Non_IPQuery
+	h.blockTypes = config.BlockTypes
 	return nil
 }
 
@@ -84,12 +86,12 @@ func parseIPQuery(b []byte) (r bool, domain string, id uint16, qType dnsmessage.
 		errors.LogInfoInner(context.Background(), err, "question")
 		return
 	}
+	domain = q.Name.String()
 	qType = q.Type
 	if qType != dnsmessage.TypeA && qType != dnsmessage.TypeAAAA {
 		return
 	}
 
-	domain = q.Name.String()
 	r = true
 	return
 }
@@ -181,10 +183,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 
 			if !h.isOwnLink(ctx) {
 				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
+				if len(h.blockTypes) > 0 {
+					for _, blocktype := range h.blockTypes {
+						if blocktype == int32(qType) {
+							errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
+							return nil
+						}
+					}
+				}
 				if isIPQuery {
 					go h.handleIPQuery(id, qType, domain, writer)
 				}
-				if isIPQuery || h.nonIPQuery == "drop" || qType == 65 {
+				if isIPQuery || h.nonIPQuery == "drop" {
 					b.Release()
 					continue
 				}

@@ -37,7 +37,7 @@ func init() {
 type MultiUserInbound struct {
 	sync.Mutex
 	networks []net.Network
-	users    []*User
+	users    []*protocol.MemoryUser
 	service  *shadowaead_2022.MultiService[int]
 }
 
@@ -49,9 +49,22 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 			net.Network_UDP,
 		}
 	}
+	memUsers := []*protocol.MemoryUser{}
+	for i, user := range config.Users {
+		if user.Email == "" {
+			u := uuid.New()
+			user.Email = "unnamed-user-" + strconv.Itoa(i) + "-" + u.String()
+		}
+		u, err := user.ToMemoryUser()
+		if err != nil {
+			return nil, errors.New("failed to get shadowsocks user").Base(err).AtError()
+		}
+		memUsers = append(memUsers, u)
+	}
+
 	inbound := &MultiUserInbound{
 		networks: networks,
-		users:    config.Users,
+		users:    memUsers,
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -64,16 +77,9 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	if err != nil {
 		return nil, errors.New("create service").Base(err)
 	}
-
-	for i, user := range config.Users {
-		if user.Email == "" {
-			u := uuid.New()
-			user.Email = "unnamed-user-" + strconv.Itoa(i) + "-" + u.String()
-		}
-	}
 	err = service.UpdateUsersWithPasswords(
-		C.MapIndexed(config.Users, func(index int, it *User) int { return index }),
-		C.Map(config.Users, func(it *User) string { return it.Key }),
+		C.MapIndexed(memUsers, func(index int, it *protocol.MemoryUser) int { return index }),
+		C.Map(memUsers, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),
 	)
 	if err != nil {
 		return nil, errors.New("create service").Base(err)
@@ -88,25 +94,20 @@ func (i *MultiUserInbound) AddUser(ctx context.Context, u *protocol.MemoryUser) 
 	i.Lock()
 	defer i.Unlock()
 
-	account := u.Account.(*MemoryAccount)
-	if account.Email != "" {
+	if u.Email != "" {
 		for idx := range i.users {
-			if i.users[idx].Email == account.Email {
-				return errors.New("User ", account.Email, " already exists.")
+			if i.users[idx].Email == u.Email {
+				return errors.New("User ", u.Email, " already exists.")
 			}
 		}
 	}
-	i.users = append(i.users, &User{
-		Key:   account.Key,
-		Email: account.Email,
-		Level: account.Level,
-	})
+	i.users = append(i.users, u)
 
 	// sync to multi service
 	// Considering implements shadowsocks2022 in xray-core may have better performance.
 	i.service.UpdateUsersWithPasswords(
-		C.MapIndexed(i.users, func(index int, it *User) int { return index }),
-		C.Map(i.users, func(it *User) string { return it.Key }),
+		C.MapIndexed(i.users, func(index int, it *protocol.MemoryUser) int { return index }),
+		C.Map(i.users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),
 	)
 
 	return nil
@@ -142,11 +143,44 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	// sync to multi service
 	// Considering implements shadowsocks2022 in xray-core may have better performance.
 	i.service.UpdateUsersWithPasswords(
-		C.MapIndexed(i.users, func(index int, it *User) int { return index }),
-		C.Map(i.users, func(it *User) string { return it.Key }),
+		C.MapIndexed(i.users, func(index int, it *protocol.MemoryUser) int { return index }),
+		C.Map(i.users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),
 	)
 
 	return nil
+}
+
+// GetUser implements proxy.UserManager.GetUser().
+func (i *MultiUserInbound) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	if email == "" {
+		return nil
+	}
+	
+	i.Lock()
+	defer i.Unlock()
+
+	for _, u := range i.users {
+		if strings.EqualFold(u.Email, email) {
+			return u
+		}
+	}
+	return nil
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (i *MultiUserInbound) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	i.Lock()
+	defer i.Unlock()
+	dst := make([]*protocol.MemoryUser, len(i.users))
+	copy(dst, i.users)
+	return dst
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (i *MultiUserInbound) GetUsersCount(context.Context) int64 {
+	i.Lock()
+	defer i.Unlock()
+	return int64(len(i.users))
 }
 
 func (i *MultiUserInbound) Network() []net.Network {
@@ -194,10 +228,7 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	inbound := session.InboundFromContext(ctx)
 	userInt, _ := A.UserFromContext[int](ctx)
 	user := i.users[userInt]
-	inbound.User = &protocol.MemoryUser{
-		Email: user.Email,
-		Level: uint32(user.Level),
-	}
+	inbound.User = user
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
@@ -222,10 +253,7 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	inbound := session.InboundFromContext(ctx)
 	userInt, _ := A.UserFromContext[int](ctx)
 	user := i.users[userInt]
-	inbound.User = &protocol.MemoryUser{
-		Email: user.Email,
-		Level: uint32(user.Level),
-	}
+	inbound.User = user
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,

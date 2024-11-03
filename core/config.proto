@@ -7,7 +7,6 @@ option java_package = "com.xray.core";
 option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
-import "transport/global/config.proto";
 
 // Config is the master config of Xray. Xray takes this config as input and
 // functions accordingly.
@@ -25,11 +24,6 @@ message Config {
   // implement the Feature interface, and its config type must be registered
   // through common.RegisterConfig.
   repeated xray.common.serial.TypedMessage app = 4;
-
-  // Transport settings.
-  // Deprecated. Each inbound and outbound should choose their own transport
-  // config. Date to remove: 2020-01-13
-  xray.transport.Config transport = 5 [deprecated = true];
 
   // Configuration for extensions. The config may not work if corresponding
   // extension is not loaded into Xray. Xray will ignore such config during

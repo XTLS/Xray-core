@@ -3,14 +3,12 @@ package internet
 import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/features"
 )
 
 type ConfigCreator func() interface{}
 
 var (
 	globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
-	globalTransportSettings           []*TransportConfig
 )
 
 var strategy = [][]byte{
@@ -29,27 +27,6 @@ var strategy = [][]byte{
 }
 
 const unknownProtocol = "unknown"
-
-func transportProtocolToString(protocol TransportProtocol) string {
-	switch protocol {
-	case TransportProtocol_TCP:
-		return "tcp"
-	case TransportProtocol_UDP:
-		return "udp"
-	case TransportProtocol_HTTP:
-		return "http"
-	case TransportProtocol_MKCP:
-		return "mkcp"
-	case TransportProtocol_WebSocket:
-		return "websocket"
-	case TransportProtocol_DomainSocket:
-		return "domainsocket"
-	case TransportProtocol_HTTPUpgrade:
-		return "httpupgrade"
-	default:
-		return unknownProtocol
-	}
-}
 
 func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 	if _, found := globalTransportConfigCreatorCache[name]; found {
@@ -74,23 +51,15 @@ func (c *TransportConfig) GetTypedSettings() (interface{}, error) {
 }
 
 func (c *TransportConfig) GetUnifiedProtocolName() string {
-	if len(c.ProtocolName) > 0 {
-		return c.ProtocolName
-	}
-
-	return transportProtocolToString(c.Protocol)
+	return c.ProtocolName
 }
 
 func (c *StreamConfig) GetEffectiveProtocol() string {
-	if c == nil {
+	if c == nil || len(c.ProtocolName) == 0 {
 		return "tcp"
 	}
 
-	if len(c.ProtocolName) > 0 {
-		return c.ProtocolName
-	}
-
-	return transportProtocolToString(c.Protocol)
+	return c.ProtocolName
 }
 
 func (c *StreamConfig) GetEffectiveTransportSettings() (interface{}, error) {
@@ -104,12 +73,6 @@ func (c *StreamConfig) GetTransportSettingsFor(protocol string) (interface{}, er
 			if settings.GetUnifiedProtocolName() == protocol {
 				return settings.GetTypedSettings()
 			}
-		}
-	}
-
-	for _, settings := range globalTransportSettings {
-		if settings.GetUnifiedProtocolName() == protocol {
-			return settings.GetTypedSettings()
 		}
 	}
 
@@ -127,12 +90,6 @@ func (c *StreamConfig) GetEffectiveSecuritySettings() (interface{}, error) {
 
 func (c *StreamConfig) HasSecuritySettings() bool {
 	return len(c.SecurityType) > 0
-}
-
-func ApplyGlobalTransportSettings(settings []*TransportConfig) error {
-	features.PrintDeprecatedFeatureWarning("global transport settings")
-	globalTransportSettings = settings
-	return nil
 }
 
 func (c *ProxyConfig) HasTag() bool {

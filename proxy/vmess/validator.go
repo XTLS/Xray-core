@@ -39,7 +39,10 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 
 	v.users = append(v.users, u)
 
-	account := u.Account.(*MemoryAccount)
+	account, ok := u.Account.(*MemoryAccount)
+	if !ok {
+		return errors.New("account type is incorrect")
+	}
 	if !v.behaviorFused {
 		hashkdf := hmac.New(sha256.New, []byte("VMESSBSKDF"))
 		hashkdf.Write(account.ID.Bytes())
@@ -51,6 +54,20 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 	v.aeadDecoderHolder.AddUser(cmdkeyfl, u)
 
 	return nil
+}
+
+func (v *TimedUserValidator) GetUsers() []*protocol.MemoryUser {
+	v.Lock()
+	defer v.Unlock()
+	dst := make([]*protocol.MemoryUser, len(v.users))
+	copy(dst, v.users)
+	return dst
+}
+
+func (v *TimedUserValidator) GetCount() int64 {
+	v.Lock()
+	defer v.Unlock()
+	return int64(len(v.users))
 }
 
 func (v *TimedUserValidator) GetAEAD(userHash []byte) (*protocol.MemoryUser, bool, error) {

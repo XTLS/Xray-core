@@ -7,17 +7,7 @@ option java_package = "com.xray.transport.internet";
 option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
-
-enum TransportProtocol {
-  TCP = 0;
-  UDP = 1;
-  MKCP = 2;
-  WebSocket = 3;
-  HTTP = 4;
-  DomainSocket = 5;
-  HTTPUpgrade = 6;
-  SplitHTTP = 7;
-}
+import "common/net/address.proto";
 
 enum DomainStrategy {
   AS_IS = 0;
@@ -35,10 +25,6 @@ enum DomainStrategy {
 
 message TransportConfig {
   // Type of network that this settings supports.
-  // Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
-
-  // Type of network that this settings supports.
   string protocol_name = 3;
 
   // Specific settings. Must be of the transports.
@@ -46,8 +32,8 @@ message TransportConfig {
 }
 
 message StreamConfig {
-  // Effective network. Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
+  xray.common.net.IPOrDomain address = 8;
+  uint32 port = 9;
 
   // Effective network.
   string protocol_name = 5;

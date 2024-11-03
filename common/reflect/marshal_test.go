@@ -6,10 +6,39 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xtls/xray-core/common/protocol"
 	. "github.com/xtls/xray-core/common/reflect"
 	cserial "github.com/xtls/xray-core/common/serial"
 	iserial "github.com/xtls/xray-core/infra/conf/serial"
+	"github.com/xtls/xray-core/proxy/shadowsocks"
 )
+
+func TestMashalAccount(t *testing.T) {
+	account := &shadowsocks.Account{
+		Password:   "shadowsocks-password",
+		CipherType: shadowsocks.CipherType_CHACHA20_POLY1305,
+	}
+
+	user := &protocol.User{
+		Level:   0,
+		Email:   "love@v2ray.com",
+		Account: cserial.ToTypedMessage(account),
+	}
+
+	j, ok := MarshalToJson(user, false)
+	if !ok || strings.Contains(j, "_TypedMessage_") {
+
+		t.Error("marshal account failed")
+	}
+
+	kws := []string{"CHACHA20_POLY1305", "cipherType", "shadowsocks-password"}
+	for _, kw := range kws {
+		if !strings.Contains(j, kw) {
+			t.Error("marshal account failed")
+		}
+	}
+	// t.Log(j)
+}
 
 func TestMashalStruct(t *testing.T) {
 	type Foo = struct {
@@ -36,8 +65,8 @@ func TestMashalStruct(t *testing.T) {
 		Arr: &arr,
 	}
 
-	s, ok1 := MarshalToJson(f1)
-	sp, ok2 := MarshalToJson(&f1)
+	s, ok1 := MarshalToJson(f1, true)
+	sp, ok2 := MarshalToJson(&f1, true)
 
 	if !ok1 || !ok2 || s != sp {
 		t.Error("marshal failed")
@@ -69,7 +98,7 @@ func TestMarshalConfigJson(t *testing.T) {
 	}
 
 	tmsg := cserial.ToTypedMessage(bc)
-	tc, ok := MarshalToJson(tmsg)
+	tc, ok := MarshalToJson(tmsg, true)
 	if !ok {
 		t.Error("marshal config failed")
 	}
@@ -79,15 +108,14 @@ func TestMarshalConfigJson(t *testing.T) {
 	keywords := []string{
 		"4784f9b8-a879-4fec-9718-ebddefa47750",
 		"bing.com",
-		"DomainStrategy",
-		"InboundTag",
-		"Level",
-		"Stats",
-		"UserDownlink",
-		"UserUplink",
-		"System",
-		"InboundDownlink",
-		"OutboundUplink",
+		"inboundTag",
+		"level",
+		"stats",
+		"userDownlink",
+		"userUplink",
+		"system",
+		"inboundDownlink",
+		"outboundUplink",
 	}
 	for _, kw := range keywords {
 		if !strings.Contains(tc, kw) {

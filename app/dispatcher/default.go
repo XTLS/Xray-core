@@ -1,7 +1,5 @@
 package dispatcher
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"context"
 	"regexp"
@@ -41,8 +39,14 @@ func (r *cachedReader) Cache(b *buf.Buffer) {
 	if !mb.IsEmpty() {
 		r.cache, _ = buf.MergeMulti(r.cache, mb)
 	}
-	b.Clear()
-	rawBytes := b.Extend(buf.Size)
+	cacheLen := r.cache.Len()
+	if cacheLen <= b.Cap() {
+		b.Clear()
+	} else {
+		b.Release()
+		*b = *buf.NewWithSize(cacheLen)
+	}
+	rawBytes := b.Extend(cacheLen)
 	n := r.cache.Copy(rawBytes)
 	b.Resize(0, int32(n))
 	r.Unlock()
@@ -433,7 +437,11 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 			outTag := route.GetOutboundTag()
 			if h := d.ohm.GetHandler(outTag); h != nil {
 				isPickRoute = 2
-				errors.LogInfo(ctx, "taking detour [", outTag, "] for [", destination, "]")
+				if route.GetRuleTag() == "" {
+					errors.LogInfo(ctx, "taking detour [", outTag, "] for [", destination, "]")
+				} else {
+					errors.LogInfo(ctx, "Hit route rule: [", route.GetRuleTag(), "] so taking detour [", outTag, "] for [", destination, "]")
+				}
 				handler = h
 			} else {
 				errors.LogWarning(ctx, "non existing outTag: ", outTag)

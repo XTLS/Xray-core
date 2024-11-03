@@ -78,6 +78,15 @@ type UserManager interface {
 
 	// RemoveUser removes a user by email.
 	RemoveUser(context.Context, string) error
+	
+	// Get user by email.
+	GetUser(context.Context, string) *protocol.MemoryUser
+
+	// Get all users.
+	GetUsers(context.Context) []*protocol.MemoryUser
+
+	// Get users count.
+	GetUsersCount(context.Context) int64
 }
 
 type GetInbound interface {
@@ -319,7 +328,7 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 
 // XtlsUnpadding remove padding and parse command
 func XtlsUnpadding(b *buf.Buffer, s *TrafficState, ctx context.Context) *buf.Buffer {
-	if s.RemainingCommand == -1 && s.RemainingContent == -1 && s.RemainingPadding == -1 { // inital state
+	if s.RemainingCommand == -1 && s.RemainingContent == -1 && s.RemainingPadding == -1 { // initial state
 		if b.Len() >= 21 && bytes.Equal(s.UserUUID, b.BytesTo(16)) {
 			b.Advance(16)
 			s.RemainingCommand = 5

@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	gonet "net"
 	"net/http"
@@ -29,8 +30,7 @@ type DialerClient interface {
 // implements splithttp.DialerClient in terms of direct network connections
 type DefaultDialerClient struct {
 	transportConfig *Config
-	download        *http.Client
-	upload          *http.Client
+	client          *http.Client
 	isH2            bool
 	isH3            bool
 	// pool of net.Conn, created using dialUploadConn
@@ -49,6 +49,8 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 	var downResponse io.ReadCloser
 	gotDownResponse := done.New()
 
+	ctx, ctxCancel := context.WithCancel(ctx)
+
 	go func() {
 		trace := &httptrace.ClientTrace{
 			GotConn: func(connInfo httptrace.GotConnInfo) {
@@ -61,8 +63,10 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		// in case we hit an error, we want to unblock this part
 		defer gotConn.Close()
 
+		ctx = httptrace.WithClientTrace(ctx, trace)
+
 		req, err := http.NewRequestWithContext(
-			httptrace.WithClientTrace(ctx, trace),
+			ctx,
 			"GET",
 			baseURL,
 			nil,
@@ -75,7 +79,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 
 		req.Header = c.transportConfig.GetRequestHeader()
 
-		response, err := c.download.Do(req)
+		response, err := c.client.Do(req)
 		gotConn.Close()
 		if err != nil {
 			errors.LogInfoInner(ctx, err, "failed to send download http request")
@@ -94,16 +98,17 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		gotDownResponse.Close()
 	}()
 
-	if c.isH3 {
-		gotConn.Close()
+	if !c.isH3 {
+		// in quic-go, sometimes gotConn is never closed for the lifetime of
+		// the entire connection, and the download locks up
+		// https://github.com/quic-go/quic-go/issues/3342
+		// for other HTTP versions, we want to block Dial until we know the
+		// remote address of the server, for logging purposes
+		<-gotConn.Wait()
 	}
 
-	// we want to block Dial until we know the remote address of the server,
-	// for logging purposes
-	<-gotConn.Wait()
-
 	lazyDownload := &LazyReader{
-		CreateReader: func() (io.ReadCloser, error) {
+		CreateReader: func() (io.Reader, error) {
 			<-gotDownResponse.Wait()
 			if downResponse == nil {
 				return nil, errors.New("downResponse failed")
@@ -112,7 +117,15 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		},
 	}
 
-	return lazyDownload, remoteAddr, localAddr, nil
+	// workaround for https://github.com/quic-go/quic-go/issues/2143 --
+	// always cancel request context so that Close cancels any Read.
+	// Should then match the behavior of http2 and http1.
+	reader := downloadBody{
+		lazyDownload,
+		ctxCancel,
+	}
+
+	return reader, remoteAddr, localAddr, nil
 }
 
 func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
@@ -124,7 +137,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 	req.Header = c.transportConfig.GetRequestHeader()
 
 	if c.isH2 || c.isH3 {
-		resp, err := c.upload.Do(req)
+		resp, err := c.client.Do(req)
 		if err != nil {
 			return err
 		}
@@ -139,23 +152,39 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
 		// request
-		requestBytes := new(bytes.Buffer)
-		common.Must(req.Write(requestBytes))
+		requestBuff := new(bytes.Buffer)
+		common.Must(req.Write(requestBuff))
 
 		var uploadConn any
+		var h1UploadConn *H1Conn
 
 		for {
 			uploadConn = c.uploadRawPool.Get()
 			newConnection := uploadConn == nil
 			if newConnection {
-				uploadConn, err = c.dialUploadConn(context.WithoutCancel(ctx))
+				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
 				if err != nil {
 					return err
 				}
+				h1UploadConn = NewH1Conn(newConn)
+				uploadConn = h1UploadConn
+			} else {
+				h1UploadConn = uploadConn.(*H1Conn)
+
+				// TODO: Replace 0 here with a config value later
+				// Or add some other condition for optimization purposes
+				if h1UploadConn.UnreadedResponsesCount > 0 {
+					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
+					if err != nil {
+						return fmt.Errorf("error while reading response: %s", err.Error())
+					}
+					if resp.StatusCode != 200 {
+						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
+					}
+				}
 			}
 
-			_, err = uploadConn.(net.Conn).Write(requestBytes.Bytes())
-
+			_, err := h1UploadConn.Write(requestBuff.Bytes())
 			// if the write failed, we try another connection from
 			// the pool, until the write on a new connection fails.
 			// failed writes to a pooled connection are normal when
@@ -170,5 +199,15 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		c.uploadRawPool.Put(uploadConn)
 	}
 
+	return nil
+}
+
+type downloadBody struct {
+	io.Reader
+	cancel context.CancelFunc
+}
+
+func (c downloadBody) Close() error {
+	c.cancel()
 	return nil
 }

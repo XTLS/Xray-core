@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
@@ -65,9 +66,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -81,6 +80,85 @@ func TestSocksBridgeTCP(t *testing.T) {
 							User: []*protocol.User{
 								{
 									Account: serial.ToTypedMessage(&socks.Account{
+										Username: "Test Account",
+										Password: "Test Password",
+									}),
+								},
+							},
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	if err := testTCPConn(clientPort, 1024, time.Second*2)(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestSocksWithHttpRequest(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&socks.ServerConfig{
+					AuthType: socks.AuthType_PASSWORD,
+					Accounts: map[string]string{
+						"Test Account": "Test Password",
+					},
+					Address:    net.NewIPOrDomain(net.LocalHostIP),
+					UdpEnabled: false,
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					Address: net.NewIPOrDomain(dest.Address),
+					Port:    uint32(dest.Port),
+					Networks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&http.ClientConfig{
+					Server: []*protocol.ServerEndpoint{
+						{
+							Address: net.NewIPOrDomain(net.LocalHostIP),
+							Port:    uint32(serverPort),
+							User: []*protocol.User{
+								{
+									Account: serial.ToTypedMessage(&http.Account{
 										Username: "Test Account",
 										Password: "Test Password",
 									}),
@@ -137,9 +215,7 @@ func TestSocksBridageUDP(t *testing.T) {
 					ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 						Address: net.NewIPOrDomain(dest.Address),
 						Port:    uint32(dest.Port),
-						NetworkList: &net.NetworkList{
-							Network: []net.Network{net.Network_UDP},
-						},
+						Networks: []net.Network{net.Network_UDP},
 					}),
 				},
 			},
@@ -173,9 +249,7 @@ func TestSocksBridageUDP(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_UDP},
-					},
+					Networks: []net.Network{net.Network_UDP},
 				}),
 			},
 		},
@@ -256,9 +330,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 					ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 						Address: net.NewIPOrDomain(dest.Address),
 						Port:    uint32(dest.Port),
-						NetworkList: &net.NetworkList{
-							Network: []net.Network{net.Network_UDP},
-						},
+						Networks: []net.Network{net.Network_UDP},
 					}),
 				},
 			},
@@ -296,9 +368,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_UDP},
-					},
+					Networks: []net.Network{net.Network_UDP},
 				}),
 			},
 		},

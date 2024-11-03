@@ -55,9 +55,7 @@ func TestPassiveConnection(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -165,9 +163,7 @@ func TestProxy(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -241,7 +237,7 @@ func TestProxyOverKCP(t *testing.T) {
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
@@ -287,7 +283,7 @@ func TestProxyOverKCP(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 			},
@@ -305,9 +301,7 @@ func TestProxyOverKCP(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -333,7 +327,7 @@ func TestProxyOverKCP(t *testing.T) {
 						Tag: "proxy",
 					},
 					StreamSettings: &internet.StreamConfig{
-						Protocol: internet.TransportProtocol_MKCP,
+						ProtocolName: "mkcp",
 					},
 				}),
 			},
@@ -394,9 +388,7 @@ func TestBlackhole(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 			{
@@ -407,9 +399,7 @@ func TestBlackhole(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest2.Address),
 					Port:    uint32(dest2.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -430,7 +420,9 @@ func TestBlackhole(t *testing.T) {
 						TargetTag: &router.RoutingRule_Tag{
 							Tag: "blocked",
 						},
-						PortRange: net.SinglePortRange(dest2.Port),
+						PortList: &net.PortList{
+							Range: []*net.PortRange{net.SinglePortRange(dest2.Port)},
+						},
 					},
 				},
 			}),
@@ -522,9 +514,7 @@ func TestUDPConnection(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(dest.Address),
 					Port:    uint32(dest.Port),
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_UDP},
-					},
+					Networks: []net.Network{net.Network_UDP},
 				}),
 			},
 		},
@@ -560,16 +550,15 @@ func TestDomainSniffing(t *testing.T) {
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(sniffingPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-					DomainOverride: []proxyman.KnownProtocols{
-						proxyman.KnownProtocols_TLS,
+					SniffingSettings: &proxyman.SniffingConfig{
+						Enabled:             true,
+						DestinationOverride: []string{"tls"},
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
 					Address: net.NewIPOrDomain(net.LocalHostIP),
 					Port:    443,
-					NetworkList: &net.NetworkList{
-						Network: []net.Network{net.Network_TCP},
-					},
+					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
 			{

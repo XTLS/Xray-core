@@ -34,7 +34,7 @@ func (c *gRPCServiceClient) TunCustomName(ctx context.Context, name, tun string,
 	if err != nil {
 		return nil, err
 	}
-	x := &gRPCServiceTunClient{stream}
+	x := &grpc.GenericClientStream[Hunk, Hunk]{ClientStream: stream}
 	return x, nil
 }
 
@@ -43,7 +43,7 @@ func (c *gRPCServiceClient) TunMultiCustomName(ctx context.Context, name, tunMul
 	if err != nil {
 		return nil, err
 	}
-	x := &gRPCServiceTunMultiClient{stream}
+	x := &grpc.GenericClientStream[MultiHunk, MultiHunk]{ClientStream: stream}
 	return x, nil
 }
 

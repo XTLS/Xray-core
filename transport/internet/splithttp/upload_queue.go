@@ -51,8 +51,10 @@ func (h *uploadQueue) Close() error {
 	h.writeCloseMutex.Lock()
 	defer h.writeCloseMutex.Unlock()
 
-	h.closed = true
-	close(h.pushedPackets)
+	if !h.closed {
+		h.closed = true
+		close(h.pushedPackets)
+	}
 	return nil
 }
 

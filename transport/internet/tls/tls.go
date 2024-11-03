@@ -12,8 +12,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 type Interface interface {
 	net.Conn
 	HandshakeContext(ctx context.Context) error

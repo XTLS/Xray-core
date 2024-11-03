@@ -20,6 +20,13 @@ message Fragment {
   uint64 interval_min = 5;
   uint64 interval_max = 6;
 }
+message Noise {
+  uint64 length_min = 1;
+  uint64 length_max = 2;
+  uint64 delay_min = 3;
+  uint64 delay_max = 4;
+  bytes str_noise = 5;
+}
 
 message Config {
   enum DomainStrategy {
@@ -36,9 +43,9 @@ message Config {
     FORCE_IP64 = 10;
   }
   DomainStrategy domain_strategy = 1;
-  uint32 timeout = 2 [deprecated = true];
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
+  repeated Noise noises = 7;
 }

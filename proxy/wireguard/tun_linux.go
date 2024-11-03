@@ -200,6 +200,9 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		r := netlink.NewRule()
 		r.Table, r.Family, r.Src = ipv6TableIndex, unix.AF_INET6, addr.IPNet
 		out.rules = append(out.rules, r)
+		r = netlink.NewRule()
+		r.Table, r.Family, r.OifName = ipv6TableIndex, unix.AF_INET6, n
+		out.rules = append(out.rules, r)
 	}
 
 	for _, addr := range out.linkAddrs {
@@ -228,10 +231,15 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 	return out, nil
 }
 
-func KernelTunSupported() bool {
-	// run a superuser permission check to check
-	// if the current user has the sufficient permission
-	// to create a tun device.
+func KernelTunSupported() (bool, error) {
+	var hdr unix.CapUserHeader
+	hdr.Version = unix.LINUX_CAPABILITY_VERSION_3
+	hdr.Pid = 0 // 0 means current process
 
-	return unix.Geteuid() == 0 // 0 means root
+	var data unix.CapUserData
+	if err := unix.Capget(&hdr, &data); err != nil {
+		return false, fmt.Errorf("failed to get capabilities: %v", err)
+	}
+
+	return (data.Effective & (1 << unix.CAP_NET_ADMIN)) != 0, nil
 }

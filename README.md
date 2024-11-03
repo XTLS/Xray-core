@@ -4,6 +4,10 @@
 
 [README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
 
+## Donation & NFTs
+
+[Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633)
+
 ## License
 
 [Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
@@ -18,6 +22,8 @@
 
 [Project X Channel](https://t.me/projectXtls)
 
+[Project VLESS](https://t.me/projectVless) (non-Chinese)
+
 ## Installation
 
 - Linux Script
@@ -26,11 +32,11 @@
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
-- Web Panel
-  - [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [Xray-UI](https://github.com/qist/xray-ui)
-  - [Hiddify](https://github.com/hiddify/hiddify-config)
+  - [wulabing/xray_docker](https://github.com/wulabing/xray_docker)
+- Web Panel - **WARNING: Please DO NOT USE plain HTTP panels like 3X-UI**, as they are believed to be bribed by Iran GFW for supporting plain HTTP by default and refused to change (https://github.com/XTLS/Xray-core/pull/3884#issuecomment-2439595331), which has already put many users' data security in danger in the past few years. **If you are already using 3X-UI, please switch to the following panels, which are verified to support HTTPS and SSH port forwarding only:**
   - [Marzban](https://github.com/Gozargah/Marzban)
-  - [Libertea](https://github.com/VZiChoushaDui/Libertea)
+  - [Xray-UI](https://github.com/qist/xray-ui)
+  - [Hiddify](https://github.com/hiddify/Hiddify-Manager)
 - One Click
   - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool)
@@ -71,6 +77,7 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
 - iOS & macOS arm64
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
