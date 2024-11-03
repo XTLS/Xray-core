@@ -7,6 +7,7 @@ type MemoryStreamConfig struct {
 	SecurityType     string
 	SecuritySettings interface{}
 	SocketSettings   *SocketConfig
+	DownloadSettings *MemoryStreamConfig
 }
 
 // ToMemoryStreamConfig converts a StreamConfig to MemoryStreamConfig. It returns a default non-nil MemoryStreamConfig for nil input.
