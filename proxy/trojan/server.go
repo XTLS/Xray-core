@@ -125,6 +125,21 @@ func (s *Server) RemoveUser(ctx context.Context, e string) error {
 	return s.validator.Del(e)
 }
 
+// GetUser implements proxy.UserManager.GetUser().
+func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	return s.validator.GetByEmail(email)
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return s.validator.GetAll()
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.GetCount()
+}
+
 // Network implements proxy.Inbound.Network().
 func (s *Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}

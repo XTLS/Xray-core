@@ -50,3 +50,33 @@ func (v *Validator) Get(hash string) *protocol.MemoryUser {
 	}
 	return nil
 }
+
+
+// Get a trojan user with hashed key, nil if user doesn't exist.
+func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
+	u, _ := v.email.Load(email)
+	if u != nil {
+		return u.(*protocol.MemoryUser)
+	}
+	return nil
+}
+
+// Get all users
+func (v *Validator) GetAll() []*protocol.MemoryUser {
+	var u = make([]*protocol.MemoryUser, 0, 100)
+	v.email.Range(func(key, value interface{}) bool {
+		u = append(u, value.(*protocol.MemoryUser))
+		return true
+	})
+	return u
+}
+
+// Get users count
+func (v *Validator) GetCount() int64 {
+	var c int64 = 0
+	v.email.Range(func(key, value interface{}) bool {
+		c++
+		return true
+	})
+	return c
+}
