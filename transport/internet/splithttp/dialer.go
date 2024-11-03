@@ -252,18 +252,24 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requestURL.Path = transportConfiguration.GetNormalizedPath() + sessionIdUuid.String()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
-	httpClient, muxResource := getHTTPClient(ctx, dest, streamSettings)
+	httpClient, muxRes := getHTTPClient(ctx, dest, streamSettings)
 
 	var httpClient2 DialerClient
+	var muxRes2 *muxResource
 	var requestURL2 url.URL
 	if transportConfiguration.DownloadSettings != nil {
+		globalDialerAccess.Lock()
+		if streamSettings.DownloadSettings == nil {
+			streamSettings.DownloadSettings = common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings)).(*internet.MemoryStreamConfig)
+		}
+		globalDialerAccess.Unlock()
+		memory2 := streamSettings.DownloadSettings
 		dest2 := net.Destination{
 			Address: transportConfiguration.DownloadSettings.Address.AsAddress(), // just panic
 			Port:    net.Port(transportConfiguration.DownloadSettings.Port),
 			Network: net.Network_TCP,
 		}
-		memory2 := common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings)).(*internet.MemoryStreamConfig)
-		httpClient2, _ = getHTTPClient(ctx, dest2, memory2) // no multiplex
+		httpClient2, muxRes2 = getHTTPClient(ctx, dest2, memory2)
 		if tls.ConfigFromStreamSettings(memory2) != nil || reality.ConfigFromStreamSettings(memory2) != nil {
 			requestURL2.Scheme = "https"
 		} else {
@@ -284,13 +290,19 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// uploadWriter wrapper, exact size limits can be enforced
 	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
 
-	if muxResource != nil {
-		muxResource.OpenRequests.Add(1)
+	if muxRes != nil {
+		muxRes.OpenRequests.Add(1)
+	}
+	if muxRes2 != nil {
+		muxRes2.OpenRequests.Add(1)
 	}
 
 	go func() {
-		if muxResource != nil {
-			defer muxResource.OpenRequests.Add(-1)
+		if muxRes != nil {
+			defer muxRes.OpenRequests.Add(-1)
+		}
+		if muxRes2 != nil {
+			defer muxRes2.OpenRequests.Add(-1)
 		}
 
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
