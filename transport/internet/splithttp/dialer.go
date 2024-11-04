@@ -264,12 +264,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
-		dest2 := net.Destination{
-			Address: transportConfiguration.DownloadSettings.Address.AsAddress(), // just panic
-			Port:    net.Port(transportConfiguration.DownloadSettings.Port),
-			Network: net.Network_TCP,
-		}
-		httpClient2, muxRes2 = getHTTPClient(ctx, dest2, memory2)
+		httpClient2, muxRes2 = getHTTPClient(ctx, *memory2.Destination, memory2) // just panic
 		if tls.ConfigFromStreamSettings(memory2) != nil || reality.ConfigFromStreamSettings(memory2) != nil {
 			requestURL2.Scheme = "https"
 		} else {
@@ -278,7 +273,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		config2 := memory2.ProtocolSettings.(*Config)
 		requestURL2.Host = config2.Host
 		if requestURL2.Host == "" {
-			requestURL2.Host = dest2.NetAddr()
+			requestURL2.Host = memory2.Destination.NetAddr()
 		}
 		requestURL2.Path = requestURL.Path // the same
 		requestURL2.RawQuery = config2.GetNormalizedQuery()

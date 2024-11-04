@@ -1,7 +1,10 @@
 package internet
 
+import "github.com/xtls/xray-core/common/net"
+
 // MemoryStreamConfig is a parsed form of StreamConfig. This is used to reduce the number of Protobuf parsings.
 type MemoryStreamConfig struct {
+	Destination      *net.Destination
 	ProtocolName     string
 	ProtocolSettings interface{}
 	SecurityType     string
@@ -23,6 +26,13 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 	}
 
 	if s != nil {
+		if s.Address != nil {
+			mss.Destination = &net.Destination{
+				Address: s.Address.AsAddress(),
+				Port:    net.Port(s.Port),
+				Network: net.Network_TCP,
+			}
+		}
 		mss.SocketSettings = s.SocketSettings
 	}
 
