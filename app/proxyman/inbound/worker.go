@@ -464,7 +464,8 @@ func (w *dsWorker) callback(conn stat.Connection) {
 		}
 	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		// Unix have no source addr, so we use gateway as source for log.
+		Source:  net.UnixDestination(w.address),
 		Gateway: net.UnixDestination(w.address),
 		Tag:     w.tag,
 		Conn:    conn,
