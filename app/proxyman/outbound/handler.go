@@ -54,7 +54,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	return uplinkCounter, downlinkCounter
 }
 
-// Handler is an implements of outbound.Handler.
+// Handler implements outbound.Handler.
 type Handler struct {
 	tag             string
 	senderSettings  *proxyman.SenderConfig

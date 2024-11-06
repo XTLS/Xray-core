@@ -52,7 +52,7 @@ func newHTTPClient(ctxv context.Context, handler string, timeout time.Duration) 
 // MeasureDelay returns the delay time of the request to dest
 func (s *pingClient) MeasureDelay() (time.Duration, error) {
 	if s.httpClient == nil {
-		panic("pingClient no initialized")
+		panic("pingClient not initialized")
 	}
 	req, err := http.NewRequest(http.MethodHead, s.destination, nil)
 	if err != nil {
