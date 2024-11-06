@@ -2,7 +2,7 @@ package internet
 
 import "github.com/xtls/xray-core/common/net"
 
-// MemoryStreamConfig is a parsed form of StreamConfig. This is used to reduce the number of Protobuf parsings.
+// MemoryStreamConfig is a parsed form of StreamConfig. It is used to reduce the number of Protobuf parses.
 type MemoryStreamConfig struct {
 	Destination      *net.Destination
 	ProtocolName     string
