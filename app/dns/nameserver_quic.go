@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/refraction-networking/uquic"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -400,7 +400,9 @@ func (s *QUICNameServer) openConnection() (quic.Connection, error) {
 		HandshakeIdleTimeout: handshakeTimeout,
 	}
 	tlsConfig.ServerName = s.destination.Address.String()
-	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
+	utlsConf := tls.CopyConfig(tlsConfig.GetTLSConfig())
+	utlsConf.NextProtos = []string{ "http/1.1", http2.NextProtoTLS, NextProtoDQ }
+	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), utlsConf, quicConfig)
 	log.Record(&log.AccessMessage{
 		From:   "DNS",
 		To:     s.destination,

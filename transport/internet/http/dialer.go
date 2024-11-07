@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/http3"
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -79,9 +80,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			KeepAlivePeriod:    h3KeepalivePeriod,
 		}
 		roundTripper := &http3.RoundTripper{
-			QUICConfig:      quicConfig,
-			TLSClientConfig: tlsConfigs.GetTLSConfig(tls.WithDestination(dest)),
-			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			QuicConfig:      quicConfig,
+			TLSClientConfig: tls.CopyConfig(tlsConfigs.GetTLSConfig(tls.WithDestination(dest))),
+			Dial: func(ctx context.Context, addr string, tlsCfg *utls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
 					return nil, err
@@ -119,6 +120,15 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 			},
 		}
 		transport = roundTripper
+
+		if fingerprint := tls.GetQuicFingerprint(tlsConfigs.Fingerprint); fingerprint != nil {
+			quicSpec, err := quic.QUICID2Spec(*fingerprint)
+			if err != nil {
+				errors.LogError(ctx, "unknown fingerprint: ", tlsConfigs.Fingerprint)
+			} else {
+				transport = http3.GetURoundTripper(roundTripper, &quicSpec, nil)
+			}
+		}
 	} else {
 		transportH2 := &http2.Transport{
 			DialTLSContext: func(hctx context.Context, string, addr string, tlsConfig *gotls.Config) (net.Conn, error) {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
+	"github.com/refraction-networking/uquic"
+	"github.com/refraction-networking/uquic/http3"
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -170,7 +170,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		if err != nil {
 			return nil,  errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
 		}
-		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
+		h3listener, err := quic.ListenEarly(Conn, config.GetUTLSConfig(), nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
 		}

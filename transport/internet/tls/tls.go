@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/refraction-networking/uquic"
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -129,11 +130,11 @@ func (c *UConn) NegotiatedProtocol() string {
 }
 
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
-	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
+	utlsConn := utls.UClient(c, CopyConfig(config), *fingerprint)
 	return &UConn{UConn: utlsConn}
 }
 
-func copyConfig(c *tls.Config) *utls.Config {
+func CopyConfig(c *tls.Config) *utls.Config {
 	return &utls.Config{
 		RootCAs:               c.RootCAs,
 		ServerName:            c.ServerName,
@@ -154,6 +155,18 @@ func init() {
 		}
 		i++
 	}
+
+	bigInt, _ = rand.Int(rand.Reader, big.NewInt(int64(len(QuicAllFingerprints))))
+	stopAt = int(bigInt.Int64())
+	i = 0
+	for _, v := range QuicAllFingerprints {
+		if i == stopAt {
+			QuicPresetFingerprints["random"] = v
+			break
+		}
+		i++
+	}
+
 	weights := utls.DefaultWeights
 	weights.TLSVersMax_Set_VersionTLS13 = 1
 	weights.FirstKeyShare_Set_CurveP256 = 0
@@ -177,6 +190,35 @@ func GetFingerprint(name string) (fingerprint *utls.ClientHelloID) {
 		return
 	}
 	return
+}
+
+func GetQuicFingerprint(name string) (fingerprint *quic.QUICID) {
+	if name == "" {
+		return
+	}
+	if fingerprint = QuicPresetFingerprints[name]; fingerprint != nil {
+		return
+	}
+	if fingerprint = QuicAllFingerprints[name]; fingerprint != nil {
+		return
+	}
+	return
+}
+
+var QuicPresetFingerprints = map[string]*quic.QUICID {
+	"chrome":     &quic.QUICChrome_115,
+	"firefox":    &quic.QUICFirefox_116,
+	"random":     nil,
+}
+
+var QuicAllFingerprints = map[string]*quic.QUICID {
+	"quicchrome_115":      &quic.QUICChrome_115,
+	"quicchrome_115_ipv4": &quic.QUICChrome_115_IPv4,
+	"quicchrome_115_ipv6": &quic.QUICChrome_115_IPv6,
+	"quicfirefox_116":     &quic.QUICFirefox_116,
+	"quicfirefox_116a":    &quic.QUICFirefox_116A,
+	"quicfirefox_116b":    &quic.QUICFirefox_116B,
+	"quicfirefox_116c":    &quic.QUICFirefox_116C,
 }
 
 var PresetFingerprints = map[string]*utls.ClientHelloID{
