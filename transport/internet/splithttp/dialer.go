@@ -275,7 +275,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if requestURL2.Host == "" {
 			requestURL2.Host = memory2.Destination.NetAddr()
 		}
-		requestURL2.Path = requestURL.Path // the same
+		requestURL2.Path = config2.GetNormalizedPath() + sessionIdUuid.String()
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
 	}
 
