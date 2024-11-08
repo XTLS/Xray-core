@@ -71,9 +71,9 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 }
 
 type RouterConfig struct {
-	RuleList       []json.RawMessage  `json:"rules"`
-	DomainStrategy *string            `json:"domainStrategy"`
-	Balancers      []*BalancingRule   `json:"balancers"`
+	RuleList       []json.RawMessage `json:"rules"`
+	DomainStrategy *string           `json:"domainStrategy"`
+	Balancers      []*BalancingRule  `json:"balancers"`
 
 	DomainMatcher string `json:"domainMatcher"`
 }

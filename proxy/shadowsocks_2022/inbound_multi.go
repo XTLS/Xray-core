@@ -155,7 +155,7 @@ func (i *MultiUserInbound) GetUser(ctx context.Context, email string) *protocol.
 	if email == "" {
 		return nil
 	}
-	
+
 	i.Lock()
 	defer i.Unlock()
 

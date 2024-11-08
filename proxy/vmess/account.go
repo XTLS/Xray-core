@@ -38,8 +38,8 @@ func (a *MemoryAccount) ToProto() proto.Message {
 		test = test + "NoTerminationSignal"
 	}
 	return &Account{
-		Id: a.ID.String(),
-		TestsEnabled: test,
+		Id:               a.ID.String(),
+		TestsEnabled:     test,
 		SecuritySettings: &protocol.SecurityConfig{Type: a.Security},
 	}
 }

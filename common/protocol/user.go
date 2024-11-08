@@ -41,8 +41,8 @@ func ToProtoUser(mu *MemoryUser) *User {
 	}
 	return &User{
 		Account: serial.ToTypedMessage(mu.Account.ToProto()),
-		Email: mu.Email,
-		Level: mu.Level,
+		Email:   mu.Email,
+		Level:   mu.Level,
 	}
 }
 

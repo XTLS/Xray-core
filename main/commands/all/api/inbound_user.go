@@ -39,7 +39,7 @@ func executeInboundUser(cmd *base.Command, args []string) {
 
 	client := handlerService.NewHandlerServiceClient(conn)
 	r := &handlerService.GetInboundUserRequest{
-		Tag: tag,
+		Tag:   tag,
 		Email: email,
 	}
 	resp, err := client.GetInboundUsers(ctx, r)

@@ -20,7 +20,7 @@ func (w *Writer) Close() error {
 }
 
 func (w *Writer) Len() int32 {
-    return w.pipe.Len()
+	return w.pipe.Len()
 }
 
 // Interrupt implements common.Interruptible.

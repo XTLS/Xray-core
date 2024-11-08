@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/tls"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"bytes"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -70,7 +70,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			continue
 		}
 		index := len(certs) - 1
-		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool){
+		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
 			cert := certs[index]
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
@@ -162,7 +162,7 @@ func (c *Config) getCustomCA() []*Certificate {
 	for _, certificate := range c.Certificate {
 		if certificate.Usage == Certificate_AUTHORITY_ISSUE {
 			certs = append(certs, certificate)
-			setupOcspTicker(certificate, func(isReloaded, isOcspstapling bool){ })
+			setupOcspTicker(certificate, func(isReloaded, isOcspstapling bool) {})
 		}
 	}
 	return certs

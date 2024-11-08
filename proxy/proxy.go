@@ -78,7 +78,7 @@ type UserManager interface {
 
 	// RemoveUser removes a user by email.
 	RemoveUser(context.Context, string) error
-	
+
 	// Get user by email.
 	GetUser(context.Context, string) *protocol.MemoryUser
 
