@@ -40,5 +40,8 @@ jobs:
           path: resources
           key: xray-geodat-
           enableCrossOsArchive: true
+      - name: Format
+        if: matrix.os == 'ubuntu-latest'
+        run: if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then echo "::error ::Please run 'gofmt -w .' on the project root" && exit 1; fi
       - name: Test
         run: go test -timeout 1h -v ./...
