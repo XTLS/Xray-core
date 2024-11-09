@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/tls"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"bytes"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -70,7 +70,7 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			continue
 		}
 		index := len(certs) - 1
-		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool){
+		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
 			cert := certs[index]
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
@@ -162,7 +162,7 @@ func (c *Config) getCustomCA() []*Certificate {
 	for _, certificate := range c.Certificate {
 		if certificate.Usage == Certificate_AUTHORITY_ISSUE {
 			certs = append(certs, certificate)
-			setupOcspTicker(certificate, func(isReloaded, isOcspstapling bool){ })
+			setupOcspTicker(certificate, func(isReloaded, isOcspstapling bool) {})
 		}
 	}
 	return certs
@@ -344,6 +344,10 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.ServerName = sn
 	}
 
+	if len(c.CurvePreferences) > 0 {
+		config.CurvePreferences = ParseCurveName(c.CurvePreferences)
+	}
+
 	if len(config.NextProtos) == 0 {
 		config.NextProtos = []string{"h2", "http/1.1"}
 	}
@@ -428,4 +432,22 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 		return nil
 	}
 	return config
+}
+
+func ParseCurveName(curveNames []string) []tls.CurveID {
+	curveMap := map[string]tls.CurveID{
+		"CurveP256":             tls.CurveP256,
+		"CurveP384":             tls.CurveP384,
+		"CurveP521":             tls.CurveP521,
+		"X25519":                tls.X25519,
+		"x25519Kyber768Draft00": 0x6399,
+	}
+
+	var curveIDs []tls.CurveID
+	for _, name := range curveNames {
+		if curveID, ok := curveMap[name]; ok {
+			curveIDs = append(curveIDs, curveID)
+		}
+	}
+	return curveIDs
 }
