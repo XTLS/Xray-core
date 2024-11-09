@@ -42,8 +42,8 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 
 func (a *MemoryAccount) ToProto() proto.Message {
 	return &Account{
-		Id: a.ID.String(),
-		Flow: a.Flow,
+		Id:         a.ID.String(),
+		Flow:       a.Flow,
 		Encryption: a.Encryption,
 	}
 }

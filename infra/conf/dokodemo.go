@@ -6,11 +6,11 @@ import (
 )
 
 type DokodemoConfig struct {
-	Host         *Address     `json:"address"`
-	PortValue    uint16       `json:"port"`
-	NetworkList  *NetworkList `json:"network"`
-	Redirect     bool         `json:"followRedirect"`
-	UserLevel    uint32       `json:"userLevel"`
+	Host        *Address     `json:"address"`
+	PortValue   uint16       `json:"port"`
+	NetworkList *NetworkList `json:"network"`
+	Redirect    bool         `json:"followRedirect"`
+	UserLevel   uint32       `json:"userLevel"`
 }
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {

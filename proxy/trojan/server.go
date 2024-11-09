@@ -361,14 +361,14 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 		cs := tlsConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		errors.LogInfo(ctx, "realName = " + name)
-		errors.LogInfo(ctx, "realAlpn = " + alpn)
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
 	} else if realityConn, ok := iConn.(*reality.Conn); ok {
 		cs := realityConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		errors.LogInfo(ctx, "realName = " + name)
-		errors.LogInfo(ctx, "realAlpn = " + alpn)
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
 	}
 	name = strings.ToLower(name)
 	alpn = strings.ToLower(alpn)
@@ -418,7 +418,7 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 						}
 						if k == '?' || k == ' ' {
 							path = string(firstBytes[i:j])
-							errors.LogInfo(ctx, "realPath = " + path)
+							errors.LogInfo(ctx, "realPath = "+path)
 							if pfb[path] == nil {
 								path = ""
 							}

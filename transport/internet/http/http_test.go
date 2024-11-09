@@ -103,7 +103,7 @@ func TestH3Connection(t *testing.T) {
 		SecurityType:     "tls",
 		SecuritySettings: &tls.Config{
 			NextProtocol: []string{"h3"},
-			Certificate: []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("www.example.com")))},
+			Certificate:  []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("www.example.com")))},
 		},
 	}, func(conn stat.Connection) {
 		go func() {
@@ -133,7 +133,7 @@ func TestH3Connection(t *testing.T) {
 		ProtocolSettings: &Config{},
 		SecurityType:     "tls",
 		SecuritySettings: &tls.Config{
-			NextProtocol: []string{"h3"},
+			NextProtocol:  []string{"h3"},
 			ServerName:    "www.example.com",
 			AllowInsecure: true,
 		},

@@ -45,7 +45,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
-	
+
 	return c, nil
 }
 
