@@ -233,6 +233,7 @@ type SplitHTTPConfig struct {
 	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
 	Xmux                 Xmux              `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
+	Mode                 string            `json:"mode"`
 }
 
 type Xmux struct {
@@ -289,6 +290,14 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		muxProtobuf.CMaxReuseTimes.To = 128
 	}
 
+	switch c.Mode {
+	case "":
+		c.Mode = "auto"
+	case "auto", "packet-up", "stream-up":
+	default:
+		return nil, errors.New("unsupported mode: " + c.Mode)
+	}
+
 	config := &splithttp.Config{
 		Path:                 c.Path,
 		Host:                 c.Host,
@@ -299,6 +308,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		NoSSEHeader:          c.NoSSEHeader,
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
+		Mode:                 c.Mode,
 	}
 	var err error
 	if c.DownloadSettings != nil {

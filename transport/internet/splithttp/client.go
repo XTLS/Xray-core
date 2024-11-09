@@ -25,6 +25,10 @@ type DialerClient interface {
 	// (ctx, baseURL) -> (downloadReader, remoteAddr, localAddr)
 	// baseURL already contains sessionId
 	OpenDownload(context.Context, string) (io.ReadCloser, net.Addr, net.Addr, error)
+
+	// (ctx, baseURL) -> uploadWriter
+	// baseURL already contains sessionId
+	OpenUpload(context.Context, string) io.WriteCloser
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -36,6 +40,14 @@ type DefaultDialerClient struct {
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
+}
+
+func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io.WriteCloser {
+	reader, writer := io.Pipe()
+	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL, reader)
+	req.Header = c.transportConfig.GetRequestHeader()
+	go c.client.Do(req)
+	return writer
 }
 
 func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {

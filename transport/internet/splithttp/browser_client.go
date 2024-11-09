@@ -14,6 +14,10 @@ import (
 // has no fields because everything is global state :O)
 type BrowserDialerClient struct{}
 
+func (c *BrowserDialerClient) OpenUpload(ctx context.Context, baseURL string) io.WriteCloser {
+	panic("not implemented yet")
+}
+
 func (c *BrowserDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
 	conn, err := browser_dialer.DialGet(baseURL)
 	dummyAddr := &gonet.IPAddr{}
