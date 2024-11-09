@@ -100,6 +100,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
+	h.config.WriteResponseHeader(writer)
+
 	sessionId := ""
 	subpath := strings.Split(request.URL.Path[len(h.path):], "/")
 	if len(subpath) > 0 {
@@ -127,8 +129,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	currentSession := h.upsertSession(sessionId)
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
-	h.config.WriteResponseHeader(writer)
-
 	if request.Method == "POST" {
 		seq := ""
 		if len(subpath) > 1 {
@@ -136,16 +136,27 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if seq == "" {
+			if h.config.Mode == "packet-up" {
+				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			err = currentSession.uploadQueue.Push(Packet{
 				Reader: request.Body,
 			})
 			if err != nil {
-				errors.LogInfoInner(context.Background(), err, "failed to upload")
-				writer.WriteHeader(http.StatusBadRequest)
+				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
+				writer.WriteHeader(http.StatusConflict)
 			} else {
 				writer.WriteHeader(http.StatusOK)
 				<-request.Context().Done()
 			}
+			return
+		}
+
+		if h.config.Mode == "stream-up" {
+			errors.LogInfo(context.Background(), "packet-up mode is not allowed")
+			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -158,14 +169,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to upload")
+			errors.LogInfoInner(context.Background(), err, "failed to upload (ReadAll)")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		seqInt, err := strconv.ParseUint(seq, 10, 64)
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to upload")
+			errors.LogInfoInner(context.Background(), err, "failed to upload (ParseUint)")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -176,7 +187,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		})
 
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to upload")
+			errors.LogInfoInner(context.Background(), err, "failed to upload (PushPayload)")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -230,6 +241,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		conn.Close()
 	} else {
+		errors.LogInfo(context.Background(), "unsupported method: ", request.Method)
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
