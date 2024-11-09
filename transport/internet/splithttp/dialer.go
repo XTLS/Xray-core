@@ -254,9 +254,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	httpClient, muxRes := getHTTPClient(ctx, dest, streamSettings)
 
-	var httpClient2 DialerClient
+	httpClient2 := httpClient
+	requestURL2 := requestURL
 	var muxRes2 *muxResource
-	var requestURL2 url.URL
 	if transportConfiguration.DownloadSettings != nil {
 		globalDialerAccess.Lock()
 		if streamSettings.DownloadSettings == nil {
@@ -279,11 +279,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
 	}
 
-	maxUploadSize := scMaxEachPostBytes.roll()
-	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
-	// code relies on this behavior. Subtract 1 so that together with
-	// uploadWriter wrapper, exact size limits can be enforced
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
+	reader, remoteAddr, localAddr, err := httpClient2.OpenDownload(context.WithoutCancel(ctx), requestURL2.String())
+	if err != nil {
+		return nil, err
+	}
 
 	if muxRes != nil {
 		muxRes.OpenRequests.Add(1)
@@ -291,15 +290,48 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if muxRes2 != nil {
 		muxRes2.OpenRequests.Add(1)
 	}
+	closed := false
+
+	conn := splitConn{
+		writer:     nil,
+		reader:     reader,
+		remoteAddr: remoteAddr,
+		localAddr:  localAddr,
+		onClose: func() {
+			if closed {
+				return
+			}
+			closed = true
+			if muxRes != nil {
+				muxRes.OpenRequests.Add(-1)
+			}
+			if muxRes2 != nil {
+				muxRes2.OpenRequests.Add(-1)
+			}
+		},
+	}
+
+	mode := transportConfiguration.Mode
+	if mode == "auto" && realityConfig != nil {
+		mode = "stream-up"
+	}
+	if mode == "stream-up" {
+		conn.writer = httpClient.OpenUpload(ctx, requestURL.String())
+		return stat.Connection(&conn), nil
+	}
+
+	maxUploadSize := scMaxEachPostBytes.roll()
+	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
+	// code relies on this behavior. Subtract 1 so that together with
+	// uploadWriter wrapper, exact size limits can be enforced
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
+
+	conn.writer = uploadWriter{
+		uploadPipeWriter,
+		maxUploadSize,
+	}
 
 	go func() {
-		if muxRes != nil {
-			defer muxRes.OpenRequests.Add(-1)
-		}
-		if muxRes2 != nil {
-			defer muxRes2.OpenRequests.Add(-1)
-		}
-
 		requestsLimiter := semaphore.New(int(scMaxConcurrentPosts.roll()))
 		var requestCounter int64
 
@@ -351,30 +383,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			}
 		}
 	}()
-
-	httpClient3 := httpClient
-	requestURL3 := requestURL
-	if httpClient2 != nil {
-		httpClient3 = httpClient2
-		requestURL3 = requestURL2
-	}
-
-	reader, remoteAddr, localAddr, err := httpClient3.OpenDownload(context.WithoutCancel(ctx), requestURL3.String())
-	if err != nil {
-		return nil, err
-	}
-
-	writer := uploadWriter{
-		uploadPipeWriter,
-		maxUploadSize,
-	}
-
-	conn := splitConn{
-		writer:     writer,
-		reader:     reader,
-		remoteAddr: remoteAddr,
-		localAddr:  localAddr,
-	}
 
 	return stat.Connection(&conn), nil
 }

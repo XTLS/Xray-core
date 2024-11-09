@@ -127,6 +127,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	currentSession := h.upsertSession(sessionId)
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
+	h.config.WriteResponseHeader(writer)
+
 	if request.Method == "POST" {
 		seq := ""
 		if len(subpath) > 1 {
@@ -134,8 +136,16 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if seq == "" {
-			errors.LogInfo(context.Background(), "no seq on request:", request.URL.Path)
-			writer.WriteHeader(http.StatusBadRequest)
+			err = currentSession.uploadQueue.Push(Packet{
+				Reader: request.Body,
+			})
+			if err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to upload")
+				writer.WriteHeader(http.StatusBadRequest)
+			} else {
+				writer.WriteHeader(http.StatusOK)
+				<-request.Context().Done()
+			}
 			return
 		}
 
@@ -171,7 +181,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		h.config.WriteResponseHeader(writer)
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" {
 		responseFlusher, ok := writer.(http.Flusher)
@@ -194,8 +203,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
-
-		h.config.WriteResponseHeader(writer)
 
 		writer.WriteHeader(http.StatusOK)
 
