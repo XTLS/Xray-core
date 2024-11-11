@@ -52,12 +52,12 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 	// and we set recover() here to prevent crash.
 	// TODO: Thoroughly fix this panic
 	defer func() {
-        if r := recover(); r != nil {
-			errors.LogError(context.Background(),"Failed to sniff QUIC: ", r)
-            resultReturn = nil
-            errorReturn = common.ErrNoClue
-        }
-    }()
+		if r := recover(); r != nil {
+			errors.LogError(context.Background(), "Failed to sniff QUIC: ", r)
+			resultReturn = nil
+			errorReturn = common.ErrNoClue
+		}
+	}()
 
 	// Crypto data separated across packets
 	cryptoLen := 0
