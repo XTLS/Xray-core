@@ -456,6 +456,7 @@ type TLSConfig struct {
 	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
 	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
+	CurvePreferences                     *StringList      `json:"curvePreferences"`
 	MasterKeyLog                         string           `json:"masterKeyLog"`
 }
 
@@ -477,6 +478,9 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
+	}
+	if c.CurvePreferences != nil && len(*c.CurvePreferences) > 0 {
+		config.CurvePreferences = []string(*c.CurvePreferences)
 	}
 	config.EnableSessionResumption = c.EnableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
