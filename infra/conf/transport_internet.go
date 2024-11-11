@@ -234,6 +234,7 @@ type SplitHTTPConfig struct {
 	Xmux                 Xmux              `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Mode                 string            `json:"mode"`
+	Extra                json.RawMessage   `json:"extra"`
 }
 
 type Xmux struct {
@@ -259,6 +260,18 @@ func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
 
 // Build implements Buildable.
 func (c *SplitHTTPConfig) Build() (proto.Message, error) {
+	if c.Extra != nil {
+		var extra SplitHTTPConfig
+		if err := json.Unmarshal(c.Extra, &extra); err != nil {
+			return nil, errors.New(`Failed to unmarshal "extra".`).Base(err)
+		}
+		extra.Host = c.Host
+		extra.Path = c.Path
+		extra.Mode = c.Mode
+		extra.Extra = c.Extra
+		c = &extra
+	}
+
 	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
 	// If we don't do that, http host will be overwritten as address.
 	// Host priority: Host field > headers field > address.
@@ -312,6 +325,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 	var err error
 	if c.DownloadSettings != nil {
+		if c.Extra != nil {
+			c.DownloadSettings.SocketSettings = nil
+		}
 		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
 			return nil, errors.New(`Failed to build "downloadSettings".`).Base(err)
 		}
