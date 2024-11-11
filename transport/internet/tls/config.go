@@ -447,6 +447,8 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 	for _, name := range curveNames {
 		if curveID, ok := curveMap[strings.ToLower(name)]; ok {
 			curveIDs = append(curveIDs, curveID)
+		} else {
+			errors.LogWarning(context.Background(), "unsupported curve name: "+name)
 		}
 	}
 	return curveIDs
