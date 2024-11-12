@@ -22,7 +22,7 @@ VOLUME /etc/xray
 ARG TZ=Asia/Shanghai
 ENV TZ=$TZ
 ENTRYPOINT [ "/usr/bin/xray" ]
-CMD [ "-config", "/etc/xray/config.json" ]
+CMD [ "-confdir", "/etc/xray/" ]
 
 ARG flavor=v2fly
 COPY --from=build --chmod=644 /$flavor /usr/share/xray
