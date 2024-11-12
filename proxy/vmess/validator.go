@@ -81,7 +81,7 @@ func (v *TimedUserValidator) GetAEAD(userHash []byte) (*protocol.MemoryUser, boo
 	if err != nil {
 		return nil, false, err
 	}
-	return userd.(*protocol.MemoryUser), true, err
+	return userd.(*protocol.MemoryUser), true, nil
 }
 
 func (v *TimedUserValidator) Remove(email string) bool {
