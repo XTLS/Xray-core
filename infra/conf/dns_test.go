@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
@@ -24,32 +23,11 @@ func init() {
 		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "resources", "geoip.dat")))
 	}
 
-	geositeFilePath := filepath.Join(wd, "geosite.dat")
 	os.Setenv("xray.location.asset", wd)
-	geositeFile, err := os.OpenFile(geositeFilePath, os.O_CREATE|os.O_WRONLY, 0o600)
-	common.Must(err)
-	defer geositeFile.Close()
-
-	list := &router.GeoSiteList{
-		Entry: []*router.GeoSite{
-			{
-				CountryCode: "TEST",
-				Domain: []*router.Domain{
-					{Type: router.Domain_Full, Value: "example.com"},
-				},
-			},
-		},
-	}
-
-	listBytes, err := proto.Marshal(list)
-	common.Must(err)
-	common.Must2(geositeFile.Write(listBytes))
 }
 
 func TestDNSConfigParsing(t *testing.T) {
-	geositePath := platform.GetAssetLocation("geosite.dat")
 	defer func() {
-		os.Remove(geositePath)
 		os.Unsetenv("xray.location.asset")
 	}()
 
