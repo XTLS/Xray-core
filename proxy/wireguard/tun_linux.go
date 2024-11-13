@@ -4,16 +4,18 @@ package wireguard
 
 import (
 	"context"
-	"errors"
+	goerrors "errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"os"
+	"sync"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/sagernet/sing/common/control"
 	"github.com/vishvananda/netlink"
+	"github.com/xtls/xray-core/common/errors"
 	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 
@@ -25,6 +27,23 @@ type deviceNet struct {
 	linkAddrs []netlink.Addr
 	routes    []*netlink.Route
 	rules     []*netlink.Rule
+}
+
+var (
+	tableIndex int = 10230
+	mu         sync.Mutex
+)
+
+func allocateIPv6TableIndex() int {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if tableIndex > 10230 {
+		errors.LogInfo(context.Background(), "allocate new ipv6 table index: ", tableIndex)
+	}
+	currentIndex := tableIndex
+	tableIndex++
+	return currentIndex
 }
 
 func newDeviceNet(interfaceName string) *deviceNet {
@@ -68,7 +87,7 @@ func (d *deviceNet) Close() (err error) {
 	if len(errs) == 0 {
 		return nil
 	}
-	return errors.Join(errs...)
+	return goerrors.Join(errs...)
 }
 
 func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (t Tunnel, err error) {
@@ -138,7 +157,7 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		}
 	}
 
-	ipv6TableIndex := 1023
+	ipv6TableIndex := allocateIPv6TableIndex()
 	if v6 != nil {
 		r := &netlink.Route{Table: ipv6TableIndex}
 		for {
