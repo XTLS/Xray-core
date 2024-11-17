@@ -258,6 +258,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
+	Name          *string          `json:"name"`
 	Protocol      string           `json:"protocol"`
 	SendThrough   *string          `json:"sendThrough"`
 	Tag           string           `json:"tag"`
