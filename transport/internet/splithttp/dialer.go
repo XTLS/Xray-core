@@ -324,7 +324,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
 	// code relies on this behavior. Subtract 1 so that together with
 	// uploadWriter wrapper, exact size limits can be enforced
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
+	// uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - buf.Size))
 
 	conn.writer = uploadWriter{
 		uploadPipeWriter,
@@ -400,10 +401,12 @@ type uploadWriter struct {
 }
 
 func (w uploadWriter) Write(b []byte) (int, error) {
-	capacity := int(w.maxLen - w.Len())
-	if capacity > 0 && capacity < len(b) {
-		b = b[:capacity]
-	}
+	/*
+		capacity := int(w.maxLen - w.Len())
+		if capacity > 0 && capacity < len(b) {
+			b = b[:capacity]
+		}
+	*/
 
 	buffer := buf.New()
 	n, err := buffer.Write(b)
