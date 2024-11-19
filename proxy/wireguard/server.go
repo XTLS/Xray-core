@@ -144,19 +144,18 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		Reason: "",
 	})
 
-	if s.info.inboundTag != nil {
-		ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
-	}
-
 	// what the hell is this?
 	// useless and making bugs
 
+	//  if s.info.inboundTag != nil {
+	//  ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
+	//  }
 	//	if s.info.outboundTag != nil {
 	//		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{s.info.outboundTag})
 	//	}
-	//if s.info.contentTag != nil {
-	//	ctx = session.ContextWithContent(ctx, s.info.contentTag)
-	//}
+	//  if s.info.contentTag != nil {
+	//	    ctx = session.ContextWithContent(ctx, s.info.contentTag)
+	//  }
 
 	link, err := s.info.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
