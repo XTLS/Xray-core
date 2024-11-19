@@ -143,3 +143,35 @@ make
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/XTLS/Xray-core.svg)](https://starchart.cc/XTLS/Xray-core)
+
+## Chapter 8: XTLS Protocol
+
+### 8.1 Overview
+
+XTLS (eXpress Transport Layer Security) is a protocol designed to optimize the performance of TLS by reducing the overhead associated with encryption and decryption processes. It aims to provide a more efficient and faster secure communication channel compared to traditional TLS.
+
+### 8.2 Key Features
+
+- **Reduced Overhead**: XTLS minimizes the overhead of encryption and decryption, resulting in improved performance.
+- **Compatibility**: XTLS is designed to be compatible with existing TLS implementations, making it easier to integrate into existing systems.
+- **Security**: XTLS maintains the security properties of TLS, ensuring secure communication between parties.
+
+### 8.3 Use Cases
+
+XTLS is suitable for scenarios where performance is critical, such as:
+
+- High-traffic websites and applications
+- Real-time communication systems
+- Streaming services
+
+### 8.4 Implementation
+
+To implement XTLS, follow these steps:
+
+1. **Install XTLS**: Ensure that XTLS is installed on your server and client systems.
+2. **Configure XTLS**: Update your server and client configurations to use XTLS for secure communication.
+3. **Test XTLS**: Verify that XTLS is working correctly by performing tests and monitoring performance improvements.
+
+### 8.5 Conclusion
+
+XTLS is a powerful protocol that enhances the performance of secure communication channels. By reducing the overhead associated with encryption and decryption, XTLS provides a faster and more efficient alternative to traditional TLS.
