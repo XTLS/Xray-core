@@ -144,8 +144,10 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		Reason: "",
 	})
 
-	// what the hell is this?
-	// useless and making bugs
+	// what's this?
+	// Session information should not be shared between different connections
+	// why reuse them in server level? This will cause incorrect destoverride and unexpected routing behavior.
+	// Disable it temporarily. Maybe s.info should be removed.
 
 	//  if s.info.inboundTag != nil {
 	//  ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
