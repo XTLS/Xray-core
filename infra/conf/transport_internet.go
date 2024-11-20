@@ -306,7 +306,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.Mode {
 	case "":
 		c.Mode = "auto"
-	case "auto", "packet-up", "stream-up":
+	case "auto", "packet-up", "stream-up", "fakegrpc-up":
 	default:
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}

@@ -26,9 +26,9 @@ type DialerClient interface {
 	// baseURL already contains sessionId
 	OpenDownload(context.Context, string) (io.ReadCloser, net.Addr, net.Addr, error)
 
-	// (ctx, baseURL) -> uploadWriter
+	// (ctx, baseURL, mode) -> uploadWriter
 	// baseURL already contains sessionId
-	OpenUpload(context.Context, string) io.WriteCloser
+	OpenUpload(context.Context, string, string) io.WriteCloser
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -42,10 +42,13 @@ type DefaultDialerClient struct {
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
-func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io.WriteCloser {
+func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL, mode string) io.WriteCloser {
 	reader, writer := io.Pipe()
 	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL, reader)
 	req.Header = c.transportConfig.GetRequestHeader()
+	if mode == "fakegrpc-up" {
+		req.Header.Add("Content-Type", "application/grpc")
+	}
 	go c.client.Do(req)
 	return writer
 }

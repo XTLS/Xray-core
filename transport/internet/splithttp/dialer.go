@@ -312,11 +312,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	mode := transportConfiguration.Mode
-	if mode == "auto" && realityConfig != nil {
-		mode = "stream-up"
+	if mode == "auto" {
+		if tlsConfig == nil && realityConfig == nil {
+			mode = "packet-up"
+		} else {
+			mode = "fakegrpc-up"
+		}
 	}
-	if mode == "stream-up" {
-		conn.writer = httpClient.OpenUpload(ctx, requestURL.String())
+	if mode != "packet-up" {
+		conn.writer = httpClient.OpenUpload(ctx, requestURL.String(), mode)
 		return stat.Connection(&conn), nil
 	}
 
