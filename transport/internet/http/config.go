@@ -8,7 +8,7 @@ import (
 
 func (c *Config) getHosts() []string {
 	if len(c.Host) == 0 {
-		return []string{"www.example.com"}
+		return []string{""}
 	}
 	return c.Host
 }
