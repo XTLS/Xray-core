@@ -217,7 +217,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	Host := httpSettings.getRandomHost()
 	if Host == "" && net.ParseAddress(dest.NetAddr()).Family().IsDomain() {
-		Host = dest.Address.Domain()
+		Host = dest.Address.String()
 	} else if Host == "" {
 		Host = "www.example.com"
 	}
