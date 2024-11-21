@@ -46,6 +46,9 @@ func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io
 	reader, writer := io.Pipe()
 	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL, reader)
 	req.Header = c.transportConfig.GetRequestHeader()
+	if !c.transportConfig.NoGRPCHeader {
+		req.Header.Set("Content-Type", "application/grpc")
+	}
 	go c.client.Do(req)
 	return writer
 }
