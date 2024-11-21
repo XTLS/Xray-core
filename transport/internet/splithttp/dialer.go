@@ -313,14 +313,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	mode := transportConfiguration.Mode
 	if mode == "auto" {
-		if tlsConfig == nil && realityConfig == nil {
-			mode = "packet-up"
-		} else {
-			mode = "fakegrpc-up"
+		mode = "packet-up"
+		if (tlsConfig != nil && len(tlsConfig.NextProtocol) != 1) || realityConfig != nil {
+			mode = "stream-up"
 		}
 	}
-	if mode != "packet-up" {
-		conn.writer = httpClient.OpenUpload(ctx, requestURL.String(), mode)
+	errors.LogInfo(ctx, "XHTTP is using mode: "+mode)
+	if mode == "stream-up" {
+		conn.writer = httpClient.OpenUpload(ctx, requestURL.String())
 		return stat.Connection(&conn), nil
 	}
 

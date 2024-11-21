@@ -235,6 +235,7 @@ type SplitHTTPConfig struct {
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Mode                 string            `json:"mode"`
 	Extra                json.RawMessage   `json:"extra"`
+	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 }
 
 type Xmux struct {
@@ -306,7 +307,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.Mode {
 	case "":
 		c.Mode = "auto"
-	case "auto", "packet-up", "stream-up", "fakegrpc-up":
+	case "auto", "packet-up", "stream-up":
 	default:
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}
@@ -322,6 +323,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
 		Xmux:                 &muxProtobuf,
 		Mode:                 c.Mode,
+		NoGRPCHeader:         c.NoGRPCHeader,
 	}
 	var err error
 	if c.DownloadSettings != nil {
