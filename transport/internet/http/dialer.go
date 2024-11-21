@@ -215,9 +215,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}
 
+	Host := httpSettings.getRandomHost()
+	if Host == "" && net.ParseAddress(dest.NetAddr()).Family().IsDomain() {
+		Host = dest.Address.String()
+	} else if Host == "" {
+		Host = "www.example.com"
+	}
+
 	request := &http.Request{
 		Method: httpMethod,
-		Host:   httpSettings.getRandomHost(),
+		Host:   Host,
 		Body:   breader,
 		URL: &url.URL{
 			Scheme: "https",
