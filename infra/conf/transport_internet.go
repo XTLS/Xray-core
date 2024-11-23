@@ -236,6 +236,7 @@ type SplitHTTPConfig struct {
 	Mode                 string            `json:"mode"`
 	Extra                json.RawMessage   `json:"extra"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
+	KeepAlivePeriod      int64             `json:"keepAlivePeriod"`
 }
 
 type Xmux struct {
@@ -324,6 +325,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		Xmux:                 &muxProtobuf,
 		Mode:                 c.Mode,
 		NoGRPCHeader:         c.NoGRPCHeader,
+		KeepAlivePeriod:      c.KeepAlivePeriod,
 	}
 	var err error
 	if c.DownloadSettings != nil {
