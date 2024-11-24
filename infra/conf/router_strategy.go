@@ -46,20 +46,22 @@ type strategyLeastLoadConfig struct {
 
 // healthCheckSettings holds settings for health Checker
 type healthCheckSettings struct {
-	Destination   string            `json:"destination"`
-	Connectivity  string            `json:"connectivity"`
-	Interval      duration.Duration `json:"interval"`
-	SamplingCount int               `json:"sampling"`
-	Timeout       duration.Duration `json:"timeout"`
+	Destination          string            `json:"destination"`
+	Connectivity         string            `json:"connectivity"`
+	Interval             duration.Duration `json:"interval"`
+	SamplingCount        int               `json:"sampling"`
+	Timeout              duration.Duration `json:"timeout"`
+	ExpectedResponseCode []int32           `json:"expectedResponseCode"`
 }
 
 func (h healthCheckSettings) Build() (proto.Message, error) {
 	return &burst.HealthPingConfig{
-		Destination:   h.Destination,
-		Connectivity:  h.Connectivity,
-		Interval:      int64(h.Interval),
-		Timeout:       int64(h.Timeout),
-		SamplingCount: int32(h.SamplingCount),
+		Destination:          h.Destination,
+		Connectivity:         h.Connectivity,
+		Interval:             int64(h.Interval),
+		Timeout:              int64(h.Timeout),
+		SamplingCount:        int32(h.SamplingCount),
+		ExpectedResponseCode: h.ExpectedResponseCode,
 	}, nil
 }
 

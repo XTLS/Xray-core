@@ -13,11 +13,12 @@ import (
 
 // HealthPingSettings holds settings for health Checker
 type HealthPingSettings struct {
-	Destination   string        `json:"destination"`
-	Connectivity  string        `json:"connectivity"`
-	Interval      time.Duration `json:"interval"`
-	SamplingCount int           `json:"sampling"`
-	Timeout       time.Duration `json:"timeout"`
+	Destination          string        `json:"destination"`
+	Connectivity         string        `json:"connectivity"`
+	Interval             time.Duration `json:"interval"`
+	SamplingCount        int           `json:"sampling"`
+	Timeout              time.Duration `json:"timeout"`
+	ExpectedResponseCode []int32       `json:"expectedResponseCode"`
 }
 
 // HealthPing is the health checker for balancers
@@ -36,11 +37,12 @@ func NewHealthPing(ctx context.Context, config *HealthPingConfig) *HealthPing {
 	settings := &HealthPingSettings{}
 	if config != nil {
 		settings = &HealthPingSettings{
-			Connectivity:  strings.TrimSpace(config.Connectivity),
-			Destination:   strings.TrimSpace(config.Destination),
-			Interval:      time.Duration(config.Interval),
-			SamplingCount: int(config.SamplingCount),
-			Timeout:       time.Duration(config.Timeout),
+			Connectivity:         strings.TrimSpace(config.Connectivity),
+			Destination:          strings.TrimSpace(config.Destination),
+			Interval:             time.Duration(config.Interval),
+			SamplingCount:        int(config.SamplingCount),
+			Timeout:              time.Duration(config.Timeout),
+			ExpectedResponseCode: config.ExpectedResponseCode,
 		}
 	}
 	if settings.Destination == "" {
@@ -48,6 +50,7 @@ func NewHealthPing(ctx context.Context, config *HealthPingConfig) *HealthPing {
 		// https://github.com/chromium/chromium/blob/main/components/safety_check/url_constants.cc#L10
 		// https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/safety_check/url_constants.cc#10
 		settings.Destination = "https://connectivitycheck.gstatic.com/generate_204"
+		settings.ExpectedResponseCode = []int32{ 204 }
 	}
 	if settings.Interval == 0 {
 		settings.Interval = time.Duration(1) * time.Minute
@@ -152,6 +155,7 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 			h.Settings.Destination,
 			h.Settings.Timeout,
 			handler,
+			h.Settings.ExpectedResponseCode,
 		)
 		for i := 0; i < rounds; i++ {
 			delay := time.Duration(0)

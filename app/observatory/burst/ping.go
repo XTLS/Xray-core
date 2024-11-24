@@ -5,26 +5,30 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/tagged"
 )
 
 type pingClient struct {
-	destination string
-	httpClient  *http.Client
+	destination          string
+	httpClient           *http.Client
+	expectedResponseCode []int32
 }
 
-func newPingClient(ctx context.Context, destination string, timeout time.Duration, handler string) *pingClient {
+func newPingClient(ctx context.Context, destination string, timeout time.Duration, handler string, expectedResponseCode []int32) *pingClient {
 	return &pingClient{
-		destination: destination,
-		httpClient:  newHTTPClient(ctx, handler, timeout),
+		destination:          destination,
+		httpClient:           newHTTPClient(ctx, handler, timeout),
+		expectedResponseCode: expectedResponseCode,
 	}
 }
 
 func newDirectPingClient(destination string, timeout time.Duration) *pingClient {
 	return &pingClient{
-		destination: destination,
-		httpClient:  &http.Client{Timeout: timeout},
+		destination:          destination,
+		httpClient:           &http.Client{Timeout: timeout},
+		expectedResponseCode: []int32{},
 	}
 }
 
@@ -62,6 +66,18 @@ func (s *pingClient) MeasureDelay() (time.Duration, error) {
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return rttFailed, err
+	}
+	if len(s.expectedResponseCode) > 0 {
+		found := false
+		for _, c := range s.expectedResponseCode {
+			if c == int32(resp.StatusCode) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return rttFailed, errors.New("Unexpected response code: ", resp.StatusCode, " expected: ", s.expectedResponseCode)
+		}
 	}
 	// don't wait for body
 	resp.Body.Close()
