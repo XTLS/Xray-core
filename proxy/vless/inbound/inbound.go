@@ -496,7 +496,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	case "":
 		inbound.CanSpliceCopy = 3
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
-			return errors.New("account " + account.ID.String() + " is not able to use the flow \"none\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
+			return errors.New("account " + account.ID.String() + " is rejected since the client flow is empty. Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
 		return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()
