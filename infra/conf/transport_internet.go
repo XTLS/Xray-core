@@ -149,6 +149,7 @@ type WebSocketConfig struct {
 	Path                string            `json:"path"`
 	Headers             map[string]string `json:"headers"`
 	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
+	Heartbeat           uint32            `json:"heartbeat"`
 }
 
 // Build implements Buildable.
@@ -178,6 +179,7 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 		Header:              c.Headers,
 		AcceptProxyProtocol: c.AcceptProxyProtocol,
 		Ed:                  ed,
+		Heartbeat:           c.Heartbeat,
 	}
 	return config, nil
 }

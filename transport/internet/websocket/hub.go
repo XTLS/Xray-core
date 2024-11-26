@@ -73,7 +73,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
-	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader))
+	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader, h.ln.config.Heartbeat))
 }
 
 type Listener struct {
