@@ -281,7 +281,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	mode := transportConfiguration.Mode
-	if mode == "auto" {
+	if mode == "" || mode == "auto" {
 		mode = "packet-up"
 		if (tlsConfig != nil && (len(tlsConfig.NextProtocol) != 1 || tlsConfig.NextProtocol[0] == "h2")) || realityConfig != nil {
 			mode = "stream-up"

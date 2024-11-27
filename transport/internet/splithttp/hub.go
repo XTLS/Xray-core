@@ -116,7 +116,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		sessionId = subpath[0]
 	}
 
-	if sessionId == "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
+	if sessionId == "" && h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
 		errors.LogInfo(context.Background(), "stream-one mode is not allowed")
 		writer.WriteHeader(http.StatusBadRequest)
 		return
@@ -147,7 +147,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		if seq == "" {
-			if h.config.Mode != "auto" && h.config.Mode != "stream-up" {
+			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
 				writer.WriteHeader(http.StatusBadRequest)
 				return
@@ -168,7 +168,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		if h.config.Mode != "auto" && h.config.Mode != "packet-up" {
+		if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "packet-up" {
 			errors.LogInfo(context.Background(), "packet-up mode is not allowed")
 			writer.WriteHeader(http.StatusBadRequest)
 			return
