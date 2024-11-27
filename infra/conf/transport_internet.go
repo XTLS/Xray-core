@@ -307,7 +307,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.Mode {
 	case "":
 		c.Mode = "auto"
-	case "auto", "packet-up", "stream-up":
+	case "auto", "packet-up", "stream-up", "stream-one":
 	default:
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}
@@ -327,6 +327,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 	var err error
 	if c.DownloadSettings != nil {
+		if c.Mode == "stream-one" {
+			return nil, errors.New(`Can not use "downloadSettings" in "stream-one" mode.`)
+		}
 		if c.Extra != nil {
 			c.DownloadSettings.SocketSettings = nil
 		}
