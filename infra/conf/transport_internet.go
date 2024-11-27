@@ -713,6 +713,7 @@ func (p TransportProtocol) Build() (string, error) {
 		errors.PrintDeprecatedFeatureWarning("HTTP transport", "XHTTP transport")
 		return "http", nil
 	case "grpc":
+		errors.PrintMigrateFeatureInfo("gRPC transport", "XHTTP transport")
 		return "grpc", nil
 	case "httpupgrade":
 		return "httpupgrade", nil
