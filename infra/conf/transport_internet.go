@@ -710,6 +710,7 @@ func (p TransportProtocol) Build() (string, error) {
 	case "ws", "websocket":
 		return "websocket", nil
 	case "h2", "h3", "http":
+		errors.PrintDeprecatedFeatureWarning("HTTP transport", "XHTTP transport")
 		return "http", nil
 	case "grpc":
 		return "grpc", nil
