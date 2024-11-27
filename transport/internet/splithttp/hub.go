@@ -159,8 +159,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
-				if request.Header.Get("Content-Type") == "grpc" {
-					writer.Header().Set("Content-Type", "grpc")
+				if request.Header.Get("Content-Type") == "application/grpc" {
+					writer.Header().Set("Content-Type", "application/grpc")
 				}
 				writer.WriteHeader(http.StatusOK)
 				<-request.Context().Done()
@@ -227,8 +227,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		// teeing the response stream into their cache, causing slowdowns.
 		writer.Header().Set("Cache-Control", "no-store")
 
-		if request.Header.Get("Content-Type") == "grpc" {
-			writer.Header().Set("Content-Type", "grpc")
+		if request.Header.Get("Content-Type") == "application/grpc" {
+			writer.Header().Set("Content-Type", "application/grpc")
 		} else if !h.config.NoSSEHeader {
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
