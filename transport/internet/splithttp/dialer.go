@@ -3,6 +3,7 @@ package splithttp
 import (
 	"context"
 	gotls "crypto/tls"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -279,9 +280,33 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
 	}
 
-	reader, remoteAddr, localAddr, err := httpClient2.OpenDownload(context.WithoutCancel(ctx), requestURL2.String())
-	if err != nil {
-		return nil, err
+	mode := transportConfiguration.Mode
+	if mode == "" || mode == "auto" {
+		mode = "packet-up"
+		if (tlsConfig != nil && (len(tlsConfig.NextProtocol) != 1 || tlsConfig.NextProtocol[0] == "h2")) || realityConfig != nil {
+			mode = "stream-up"
+		}
+		if realityConfig != nil && transportConfiguration.DownloadSettings == nil {
+			mode = "stream-one"
+		}
+	}
+	errors.LogInfo(ctx, "XHTTP is using mode: "+mode)
+
+	var writer io.WriteCloser
+	var reader io.ReadCloser
+	var remoteAddr, localAddr net.Addr
+	var err error
+
+	if mode == "stream-one" {
+		requestURL.Path = transportConfiguration.GetNormalizedPath()
+		writer, reader = httpClient.Open(context.WithoutCancel(ctx), requestURL.String())
+		remoteAddr = &net.TCPAddr{}
+		localAddr = &net.TCPAddr{}
+	} else {
+		reader, remoteAddr, localAddr, err = httpClient2.OpenDownload(context.WithoutCancel(ctx), requestURL2.String())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if muxRes != nil {
@@ -293,7 +318,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	closed := false
 
 	conn := splitConn{
-		writer:     nil,
+		writer:     writer,
 		reader:     reader,
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
@@ -311,14 +336,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
-	mode := transportConfiguration.Mode
-	if mode == "auto" {
-		mode = "packet-up"
-		if (tlsConfig != nil && len(tlsConfig.NextProtocol) != 1) || realityConfig != nil {
-			mode = "stream-up"
-		}
+	if mode == "stream-one" {
+		return stat.Connection(&conn), nil
 	}
-	errors.LogInfo(ctx, "XHTTP is using mode: "+mode)
 	if mode == "stream-up" {
 		conn.writer = httpClient.OpenUpload(ctx, requestURL.String())
 		return stat.Connection(&conn), nil

@@ -102,14 +102,22 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.WriteResponseHeader(writer)
 
+	validRange := h.config.GetNormalizedXPaddingBytes()
+	x_padding := int32(len(request.URL.Query().Get("x_padding")))
+	if validRange.To > 0 && (x_padding < validRange.From || x_padding > validRange.To) {
+		errors.LogInfo(context.Background(), "invalid x_padding length:", x_padding)
+		writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	sessionId := ""
 	subpath := strings.Split(request.URL.Path[len(h.path):], "/")
 	if len(subpath) > 0 {
 		sessionId = subpath[0]
 	}
 
-	if sessionId == "" {
-		errors.LogInfo(context.Background(), "no sessionid on request:", request.URL.Path)
+	if sessionId == "" && h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
+		errors.LogInfo(context.Background(), "stream-one mode is not allowed")
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -126,17 +134,20 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
-	currentSession := h.upsertSession(sessionId)
+	var currentSession *httpSession
+	if sessionId != "" {
+		currentSession = h.upsertSession(sessionId)
+	}
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
-	if request.Method == "POST" {
+	if request.Method == "POST" && sessionId != "" {
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
 		}
 
 		if seq == "" {
-			if h.config.Mode == "packet-up" {
+			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
 				writer.WriteHeader(http.StatusBadRequest)
 				return
@@ -148,13 +159,16 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
+				if request.Header.Get("Content-Type") == "application/grpc" {
+					writer.Header().Set("Content-Type", "application/grpc")
+				}
 				writer.WriteHeader(http.StatusOK)
 				<-request.Context().Done()
 			}
 			return
 		}
 
-		if h.config.Mode == "stream-up" {
+		if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "packet-up" {
 			errors.LogInfo(context.Background(), "packet-up mode is not allowed")
 			writer.WriteHeader(http.StatusBadRequest)
 			return
@@ -193,16 +207,18 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		writer.WriteHeader(http.StatusOK)
-	} else if request.Method == "GET" {
+	} else if request.Method == "GET" || sessionId == "" {
 		responseFlusher, ok := writer.(http.Flusher)
 		if !ok {
 			panic("expected http.ResponseWriter to be an http.Flusher")
 		}
 
-		// after GET is done, the connection is finished. disable automatic
-		// session reaping, and handle it in defer
-		currentSession.isFullyConnected.Close()
-		defer h.sessions.Delete(sessionId)
+		if sessionId != "" {
+			// after GET is done, the connection is finished. disable automatic
+			// session reaping, and handle it in defer
+			currentSession.isFullyConnected.Close()
+			defer h.sessions.Delete(sessionId)
+		}
 
 		// magic header instructs nginx + apache to not buffer response body
 		writer.Header().Set("X-Accel-Buffering", "no")
@@ -210,7 +226,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		// Should be able to prevent overloading the cache, or stop CDNs from
 		// teeing the response stream into their cache, causing slowdowns.
 		writer.Header().Set("Cache-Control", "no-store")
-		if !h.config.NoSSEHeader {
+
+		if request.Header.Get("Content-Type") == "application/grpc" {
+			writer.Header().Set("Content-Type", "application/grpc")
+		} else if !h.config.NoSSEHeader {
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
@@ -227,8 +246,11 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				downloadDone:    downloadDone,
 				responseFlusher: responseFlusher,
 			},
-			reader:     currentSession.uploadQueue,
+			reader:     request.Body,
 			remoteAddr: remoteAddr,
+		}
+		if sessionId != "" {
+			conn.reader = currentSession.uploadQueue
 		}
 
 		h.ln.addConn(stat.Connection(&conn))
