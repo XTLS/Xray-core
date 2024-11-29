@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/tagged"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,6 +33,7 @@ type Observer struct {
 	finished *done.Instance
 
 	ohm outbound.Manager
+	dispatcher routing.Dispatcher
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
@@ -131,7 +133,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 					return errors.New("cannot understand address").Base(err)
 				}
 				trackedCtx := session.TrackedConnectionError(o.ctx, errorCollectorForRequest)
-				conn, err := tagged.Dialer(trackedCtx, dest, outbound)
+				conn, err := tagged.Dialer(trackedCtx, o.dispatcher, dest, outbound)
 				if err != nil {
 					return errors.New("cannot dial remote address ", dest).Base(err)
 				}
@@ -215,8 +217,10 @@ func (o *Observer) findStatusLocationLockHolderOnly(outbound string) int {
 
 func New(ctx context.Context, config *Config) (*Observer, error) {
 	var outboundManager outbound.Manager
-	err := core.RequireFeatures(ctx, func(om outbound.Manager) {
+	var dispatcher routing.Dispatcher
+	err := core.RequireFeatures(ctx, func(om outbound.Manager, rd routing.Dispatcher) {
 		outboundManager = om
+		dispatcher = rd
 	})
 	if err != nil {
 		return nil, errors.New("Cannot get depended features").Base(err)
@@ -225,6 +229,7 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 		config: config,
 		ctx:    ctx,
 		ohm:    outboundManager,
+		dispatcher: dispatcher,
 	}, nil
 }
 
