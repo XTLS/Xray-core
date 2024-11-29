@@ -32,10 +32,10 @@ import (
 const connIdleTimeout = 300 * time.Second
 
 // consistent with quic-go
-const h3KeepalivePeriod = 10 * time.Second
+const quicgoH3KeepAlivePeriod = 10 * time.Second
 
 // consistent with chrome
-const h2KeepalivePeriod = 45 * time.Second
+const chromeH2KeepAlivePeriod = 45 * time.Second
 
 type dialerConf struct {
 	net.Destination
@@ -133,9 +133,17 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		return conn, nil
 	}
 
+	keepAlivePeriod := time.Duration(streamSettings.ProtocolSettings.(*Config).KeepAlivePeriod) * time.Second
+
 	var transport http.RoundTripper
 
 	if isH3 {
+		if keepAlivePeriod == 0 {
+			keepAlivePeriod = quicgoH3KeepAlivePeriod
+		}
+		if keepAlivePeriod < 0 {
+			keepAlivePeriod = 0
+		}
 		quicConfig := &quic.Config{
 			MaxIdleTimeout: connIdleTimeout,
 
@@ -143,7 +151,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
 			MaxIncomingStreams: -1,
-			KeepAlivePeriod:    h3KeepalivePeriod,
+			KeepAlivePeriod:    keepAlivePeriod,
 		}
 		transport = &http3.RoundTripper{
 			QUICConfig:      quicConfig,
@@ -186,12 +194,18 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			},
 		}
 	} else if isH2 {
+		if keepAlivePeriod == 0 {
+			keepAlivePeriod = chromeH2KeepAlivePeriod
+		}
+		if keepAlivePeriod < 0 {
+			keepAlivePeriod = 0
+		}
 		transport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
 			IdleConnTimeout: connIdleTimeout,
-			ReadIdleTimeout: h2KeepalivePeriod,
+			ReadIdleTimeout: keepAlivePeriod,
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
@@ -202,7 +216,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			DialTLSContext:  httpDialContext,
 			DialContext:     httpDialContext,
 			IdleConnTimeout: connIdleTimeout,
-			// chunked transfer download with keepalives is buggy with
+			// chunked transfer download with KeepAlives is buggy with
 			// http.Client and our custom dial context.
 			DisableKeepAlives: true,
 		}
