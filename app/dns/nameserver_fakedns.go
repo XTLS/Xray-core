@@ -21,6 +21,10 @@ func (FakeDNSServer) Name() string {
 }
 
 func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ net.IP, opt dns.IPOption, _ bool) ([]net.IP, error) {
+	if f.fakeDNSEngine == nil {
+		return nil, errors.New("Unable to locate a fake DNS Engine").AtError()
+	}
+
 	var ips []net.Address
 	if fkr0, ok := f.fakeDNSEngine.(dns.FakeDNSEngineRev0); ok {
 		ips = fkr0.GetFakeIPForDomain3(domain, opt.IPv4Enable, opt.IPv6Enable)

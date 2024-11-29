@@ -78,7 +78,11 @@ func NewClient(
 ) (*Client, error) {
 	client := &Client{}
 
-	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher, fd dns.FakeDNSEngine) error {
+	var fd dns.FakeDNSEngine
+	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
+		core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) { // FakeDNSEngine is optional
+			fd = fdns
+		})
 		// Create a new server for each client for now
 		server, err := NewServer(ns.Address.AsDestination(), dispatcher, ns.GetQueryStrategy(), fd)
 		if err != nil {
