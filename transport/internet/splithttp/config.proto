@@ -21,7 +21,7 @@ message Config {
   xray.transport.internet.StreamConfig downloadSettings = 10;
   string mode = 11;
   bool noGRPCHeader = 12;
-  int64 KeepAlivePeriod = 13;
+  int64 keepAlivePeriod = 13;
 }
 
 message RandRangeConfig {

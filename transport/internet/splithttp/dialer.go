@@ -31,10 +31,10 @@ import (
 const connIdleTimeout = 300 * time.Second
 
 // consistent with quic-go
-const defaultH3KeepAlivePeriod = 10 * time.Second
+const quicgoH3KeepAlivePeriod = 10 * time.Second
 
 // consistent with chrome
-const defaultH2KeepAlivePeriod = 45 * time.Second
+const chromeH2KeepAlivePeriod = 45 * time.Second
 
 type dialerConf struct {
 	net.Destination
@@ -132,12 +132,16 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		return conn, nil
 	}
 
+	keepAlivePeriod := time.Duration(streamSettings.ProtocolSettings.(*Config).KeepAlivePeriod) * time.Second
+
 	var transport http.RoundTripper
 
 	if isH3 {
-		h3KeepAlivePeriod := defaultH3KeepAlivePeriod
-		if streamSettings.ProtocolSettings.(*Config).KeepAlivePeriod != 0 {
-			h3KeepAlivePeriod = time.Duration(streamSettings.DownloadSettings.ProtocolSettings.(*Config).KeepAlivePeriod) * time.Second
+		if keepAlivePeriod == 0 {
+			keepAlivePeriod = quicgoH3KeepAlivePeriod
+		}
+		if keepAlivePeriod < 0 {
+			keepAlivePeriod = 0
 		}
 		quicConfig := &quic.Config{
 			MaxIdleTimeout: connIdleTimeout,
@@ -146,7 +150,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
 			MaxIncomingStreams: -1,
-			KeepAlivePeriod:    h3KeepAlivePeriod,
+			KeepAlivePeriod:    keepAlivePeriod,
 		}
 		transport = &http3.RoundTripper{
 			QUICConfig:      quicConfig,
@@ -189,16 +193,18 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			},
 		}
 	} else if isH2 {
-		h2KeepAlivePeriod := defaultH2KeepAlivePeriod
-		if streamSettings.ProtocolSettings.(*Config).KeepAlivePeriod != 0 {
-			h2KeepAlivePeriod = time.Duration(streamSettings.DownloadSettings.ProtocolSettings.(*Config).KeepAlivePeriod) * time.Second
+		if keepAlivePeriod == 0 {
+			keepAlivePeriod = chromeH2KeepAlivePeriod
+		}
+		if keepAlivePeriod < 0 {
+			keepAlivePeriod = 0
 		}
 		transport = &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
 			IdleConnTimeout: connIdleTimeout,
-			ReadIdleTimeout: h2KeepAlivePeriod,
+			ReadIdleTimeout: keepAlivePeriod,
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
