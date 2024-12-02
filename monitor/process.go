@@ -13,7 +13,11 @@ import (
 	"time"
 )
 
-var userStatMutex = NewSynchronizedMap(Map[string, *sync.Mutex]{})
+var (
+	maxGoroutinesForProcess        = 20
+	goroutineCountLimiterSemaphore = make(chan any, maxGoroutinesForProcess)
+	userStatMutex                  = NewSynchronizedMap(Map[string, *sync.Mutex]{})
+)
 
 func Process(f any, args ...any) {
 	defer func() {
@@ -35,9 +39,11 @@ func Process(f any, args ...any) {
 		}
 	}
 
+	goroutineCountLimiterSemaphore <- nil
 	go func() {
 		defer func() {
 			i.ReportIfErr(recover(), "while executing a job")
+			<-goroutineCountLimiterSemaphore
 		}()
 
 		if len(argsValues) != funcValue.Type().NumIn() {
