@@ -30,9 +30,9 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 // Process implements OutboundHandler.Dispatch().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds) - 1]
+	ob := outbounds[len(outbounds)-1]
 	ob.Name = "blackhole"
-	
+
 	nBytes := h.response.WriteTo(link.Writer)
 	if nBytes > 0 {
 		// Sleep a little here to make sure the response is sent to client.

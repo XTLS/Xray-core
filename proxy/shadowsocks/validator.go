@@ -74,6 +74,40 @@ func (v *Validator) Del(email string) error {
 	return nil
 }
 
+// GetByEmail Get a Shadowsocks user with a non-empty Email.
+func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
+	if email == "" {
+		return nil
+	}
+
+	v.Lock()
+	defer v.Unlock()
+
+	email = strings.ToLower(email)
+	for _, u := range v.users {
+		if strings.EqualFold(u.Email, email) {
+			return u
+		}
+	}
+	return nil
+}
+
+// GetAll get all users
+func (v *Validator) GetAll() []*protocol.MemoryUser {
+	v.Lock()
+	defer v.Unlock()
+	dst := make([]*protocol.MemoryUser, len(v.users))
+	copy(dst, v.users)
+	return dst
+}
+
+// GetCount get users count
+func (v *Validator) GetCount() int64 {
+	v.Lock()
+	defer v.Unlock()
+	return int64(len(v.users))
+}
+
 // Get a Shadowsocks user.
 func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol.MemoryUser, aead cipher.AEAD, ret []byte, ivLen int32, err error) {
 	v.RLock()

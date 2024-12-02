@@ -56,7 +56,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	}
 	client := encoding.NewGRPCServiceClient(conn)
 	if grpcSettings.MultiMode {
-		errors.LogDebug(ctx, "using gRPC multi mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunMultiStreamName() + "`")
+		errors.LogDebug(ctx, "using gRPC multi mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunMultiStreamName()+"`")
 		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunMultiStreamName())
 		if err != nil {
 			return nil, errors.New("Cannot dial gRPC").Base(err)
@@ -64,7 +64,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		return encoding.NewMultiHunkConn(grpcService, nil), nil
 	}
 
-	errors.LogDebug(ctx, "using gRPC tun mode service name: `" + grpcSettings.getServiceName() + "` stream name: `" + grpcSettings.getTunStreamName() + "`")
+	errors.LogDebug(ctx, "using gRPC tun mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunStreamName()+"`")
 	grpcService, err := client.(encoding.GRPCServiceClientX).TunCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunStreamName())
 	if err != nil {
 		return nil, errors.New("Cannot dial gRPC").Base(err)

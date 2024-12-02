@@ -424,8 +424,8 @@ func Test_maxUpload(t *testing.T) {
 		ProtocolSettings: &Config{
 			Path: "/sh",
 			ScMaxEachPostBytes: &RandRangeConfig{
-				From: 100,
-				To:   100,
+				From: 10000,
+				To:   10000,
 			},
 		},
 	}
@@ -434,7 +434,7 @@ func Test_maxUpload(t *testing.T) {
 	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func(c stat.Connection) {
 			defer c.Close()
-			var b [1024]byte
+			var b [10240]byte
 			c.SetReadDeadline(time.Now().Add(2 * time.Second))
 			n, err := c.Read(b[:])
 			if err != nil {
@@ -452,11 +452,11 @@ func Test_maxUpload(t *testing.T) {
 	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
 	// send a slightly too large upload
-	var upload [101]byte
+	var upload [10001]byte
 	_, err = conn.Write(upload[:])
 	common.Must(err)
 
-	var b [1024]byte
+	var b [10240]byte
 	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
@@ -464,7 +464,7 @@ func Test_maxUpload(t *testing.T) {
 	}
 	common.Must(conn.Close())
 
-	if uploadSize > 100 || uploadSize == 0 {
+	if uploadSize > 10000 || uploadSize == 0 {
 		t.Error("incorrect upload size: ", uploadSize)
 	}
 

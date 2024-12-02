@@ -14,6 +14,14 @@ import (
 // has no fields because everything is global state :O)
 type BrowserDialerClient struct{}
 
+func (c *BrowserDialerClient) Open(ctx context.Context, pureURL string) (io.WriteCloser, io.ReadCloser) {
+	panic("not implemented yet")
+}
+
+func (c *BrowserDialerClient) OpenUpload(ctx context.Context, baseURL string) io.WriteCloser {
+	panic("not implemented yet")
+}
+
 func (c *BrowserDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
 	conn, err := browser_dialer.DialGet(baseURL)
 	dummyAddr := &gonet.IPAddr{}
@@ -21,7 +29,7 @@ func (c *BrowserDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		return nil, dummyAddr, dummyAddr, err
 	}
 
-	return websocket.NewConnection(conn, dummyAddr, nil), conn.RemoteAddr(), conn.LocalAddr(), nil
+	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
 func (c *BrowserDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {

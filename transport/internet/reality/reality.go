@@ -255,7 +255,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			// Do not close the connection
 		}()
 		time.Sleep(time.Duration(randBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
-		return nil, errors.New("REALITY: processed invalid connection")
+		return nil, errors.New("REALITY: processed invalid connection").AtWarning()
 	}
 	return uConn, nil
 }

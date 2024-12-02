@@ -31,7 +31,13 @@ func (c *DeviceConfig) fallbackIP6() bool {
 }
 
 func (c *DeviceConfig) createTun() tunCreator {
+	if !c.IsClient {
+		// See tun_linux.go createKernelTun()
+		errors.LogWarning(context.Background(), "Using gVisor TUN. WG inbound doesn't support kernel TUN yet.")
+		return createGVisorTun
+	}
 	if c.NoKernelTun {
+		errors.LogWarning(context.Background(), "Using gVisor TUN. NoKernelTun is set to true.")
 		return createGVisorTun
 	}
 	kernelTunSupported, err := KernelTunSupported()
@@ -40,8 +46,9 @@ func (c *DeviceConfig) createTun() tunCreator {
 		return createGVisorTun
 	}
 	if !kernelTunSupported {
-		errors.LogWarning(context.Background(), "Using gVisor TUN. Kernel TUN is not supported on your OS, or your permission is insufficient.)")
+		errors.LogWarning(context.Background(), "Using gVisor TUN. Kernel TUN is not supported on your OS, or your permission is insufficient.")
 		return createGVisorTun
 	}
+	errors.LogWarning(context.Background(), "Using kernel TUN.")
 	return createKernelTun
 }

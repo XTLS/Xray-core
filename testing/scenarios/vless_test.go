@@ -85,8 +85,8 @@ func TestVless(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
 					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -190,8 +190,8 @@ func TestVlessTls(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
 					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -215,7 +215,7 @@ func TestVlessTls(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						ProtocolName:      "tcp",
+						ProtocolName: "tcp",
 						TransportSettings: []*internet.TransportConfig{
 							{
 								ProtocolName: "tcp",
@@ -313,8 +313,8 @@ func TestVlessXtlsVision(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
 					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -339,7 +339,7 @@ func TestVlessXtlsVision(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						ProtocolName:      "tcp",
+						ProtocolName: "tcp",
 						TransportSettings: []*internet.TransportConfig{
 							{
 								ProtocolName: "tcp",
@@ -403,12 +403,12 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 						SecurityType: serial.GetMessageType(&reality.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&reality.Config{
-								Show: true,
-								Dest: "www.google.com:443", // use google for now, may fail in some region
+								Show:        true,
+								Dest:        "www.google.com:443", // use google for now, may fail in some region
 								ServerNames: []string{"www.google.com"},
-								PrivateKey: privateKey,
-								ShortIds: shortIds,
-								Type: "tcp",
+								PrivateKey:  privateKey,
+								ShortIds:    shortIds,
+								Type:        "tcp",
 							}),
 						},
 					},
@@ -447,8 +447,8 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(dest.Address),
-					Port:    uint32(dest.Port),
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
 					Networks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -473,7 +473,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						ProtocolName:      "tcp",
+						ProtocolName: "tcp",
 						TransportSettings: []*internet.TransportConfig{
 							{
 								ProtocolName: "tcp",
@@ -483,12 +483,12 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 						SecurityType: serial.GetMessageType(&reality.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&reality.Config{
-								Show: true,
+								Show:        true,
 								Fingerprint: "chrome",
-								ServerName: "www.google.com",
-								PublicKey: publicKey,
-								ShortId: shortIds[0],
-								SpiderX: "/",
+								ServerName:  "www.google.com",
+								PublicKey:   publicKey,
+								ShortId:     shortIds[0],
+								SpiderX:     "/",
 							}),
 						},
 					},

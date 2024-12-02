@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	StatsService_GetStats_FullMethodName    = "/xray.app.stats.command.StatsService/GetStats"
-	StatsService_QueryStats_FullMethodName  = "/xray.app.stats.command.StatsService/QueryStats"
-	StatsService_GetSysStats_FullMethodName = "/xray.app.stats.command.StatsService/GetSysStats"
+	StatsService_GetStats_FullMethodName       = "/xray.app.stats.command.StatsService/GetStats"
+	StatsService_GetStatsOnline_FullMethodName = "/xray.app.stats.command.StatsService/GetStatsOnline"
+	StatsService_QueryStats_FullMethodName     = "/xray.app.stats.command.StatsService/QueryStats"
+	StatsService_GetSysStats_FullMethodName    = "/xray.app.stats.command.StatsService/GetSysStats"
 )
 
 // StatsServiceClient is the client API for StatsService service.
@@ -29,6 +30,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StatsServiceClient interface {
 	GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsResponse, error)
+	GetStatsOnline(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsResponse, error)
 	QueryStats(ctx context.Context, in *QueryStatsRequest, opts ...grpc.CallOption) (*QueryStatsResponse, error)
 	GetSysStats(ctx context.Context, in *SysStatsRequest, opts ...grpc.CallOption) (*SysStatsResponse, error)
 }
@@ -45,6 +47,16 @@ func (c *statsServiceClient) GetStats(ctx context.Context, in *GetStatsRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetStatsResponse)
 	err := c.cc.Invoke(ctx, StatsService_GetStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statsServiceClient) GetStatsOnline(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStatsResponse)
+	err := c.cc.Invoke(ctx, StatsService_GetStatsOnline_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +88,7 @@ func (c *statsServiceClient) GetSysStats(ctx context.Context, in *SysStatsReques
 // for forward compatibility.
 type StatsServiceServer interface {
 	GetStats(context.Context, *GetStatsRequest) (*GetStatsResponse, error)
+	GetStatsOnline(context.Context, *GetStatsRequest) (*GetStatsResponse, error)
 	QueryStats(context.Context, *QueryStatsRequest) (*QueryStatsResponse, error)
 	GetSysStats(context.Context, *SysStatsRequest) (*SysStatsResponse, error)
 	mustEmbedUnimplementedStatsServiceServer()
@@ -90,6 +103,9 @@ type UnimplementedStatsServiceServer struct{}
 
 func (UnimplementedStatsServiceServer) GetStats(context.Context, *GetStatsRequest) (*GetStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetStats not implemented")
+}
+func (UnimplementedStatsServiceServer) GetStatsOnline(context.Context, *GetStatsRequest) (*GetStatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStatsOnline not implemented")
 }
 func (UnimplementedStatsServiceServer) QueryStats(context.Context, *QueryStatsRequest) (*QueryStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryStats not implemented")
@@ -132,6 +148,24 @@ func _StatsService_GetStats_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(StatsServiceServer).GetStats(ctx, req.(*GetStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatsService_GetStatsOnline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatsServiceServer).GetStatsOnline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatsService_GetStatsOnline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatsServiceServer).GetStatsOnline(ctx, req.(*GetStatsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -182,6 +216,10 @@ var StatsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStats",
 			Handler:    _StatsService_GetStats_Handler,
+		},
+		{
+			MethodName: "GetStatsOnline",
+			Handler:    _StatsService_GetStatsOnline_Handler,
 		},
 		{
 			MethodName: "QueryStats",

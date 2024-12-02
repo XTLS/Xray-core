@@ -128,8 +128,24 @@ func (c *Content) SetAttribute(name string, value string) {
 
 // Attribute retrieves additional string attributes from content.
 func (c *Content) Attribute(name string) string {
+	c.mu.Lock()
+	c.isLocked = true
+	defer func() {
+		c.isLocked = false
+		c.mu.Unlock()
+	}()
 	if c.Attributes == nil {
 		return ""
 	}
 	return c.Attributes[name]
+}
+
+func (c *Content) AttributeLen() int {
+	c.mu.Lock()
+	c.isLocked = true
+	defer func() {
+		c.isLocked = false
+		c.mu.Unlock()
+	}()
+	return len(c.Attributes)
 }

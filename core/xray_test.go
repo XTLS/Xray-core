@@ -54,8 +54,8 @@ func TestXrayClose(t *testing.T) {
 					Listen: net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address: net.NewIPOrDomain(net.LocalHostIP),
-					Port:    uint32(0),
+					Address:  net.NewIPOrDomain(net.LocalHostIP),
+					Port:     uint32(0),
 					Networks: []net.Network{net.Network_TCP},
 				}),
 			},

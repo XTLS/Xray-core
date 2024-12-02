@@ -11,7 +11,7 @@ import (
 )
 
 // RandomStrategy represents a random balancing strategy
-type RandomStrategy struct{
+type RandomStrategy struct {
 	FallbackTag string
 
 	ctx         context.Context

@@ -13,7 +13,7 @@ type DNSOutboundConfig struct {
 	Port       uint16   `json:"port"`
 	UserLevel  uint32   `json:"userLevel"`
 	NonIPQuery string   `json:"nonIPQuery"`
-	BlockTypes  []int32  `json:"blockTypes"`
+	BlockTypes []int32  `json:"blockTypes"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {

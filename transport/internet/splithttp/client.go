@@ -25,6 +25,14 @@ type DialerClient interface {
 	// (ctx, baseURL) -> (downloadReader, remoteAddr, localAddr)
 	// baseURL already contains sessionId
 	OpenDownload(context.Context, string) (io.ReadCloser, net.Addr, net.Addr, error)
+
+	// (ctx, baseURL) -> uploadWriter
+	// baseURL already contains sessionId
+	OpenUpload(context.Context, string) io.WriteCloser
+
+	// (ctx, pureURL) -> (uploadWriter, downloadReader)
+	// pureURL can not contain sessionId
+	Open(context.Context, string) (io.WriteCloser, io.ReadCloser)
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -36,6 +44,41 @@ type DefaultDialerClient struct {
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
+}
+
+func (c *DefaultDialerClient) Open(ctx context.Context, pureURL string) (io.WriteCloser, io.ReadCloser) {
+	reader, writer := io.Pipe()
+	req, _ := http.NewRequestWithContext(ctx, "POST", pureURL, reader)
+	req.Header = c.transportConfig.GetRequestHeader()
+	if !c.transportConfig.NoGRPCHeader {
+		req.Header.Set("Content-Type", "application/grpc")
+	}
+	wrc := &WaitReadCloser{Wait: make(chan struct{})}
+	go func() {
+		response, err := c.client.Do(req)
+		if err != nil || response.StatusCode != 200 {
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "failed to open ", pureURL)
+			} else {
+				errors.LogInfo(ctx, "unexpected status ", response.StatusCode)
+			}
+			wrc.Close()
+			return
+		}
+		wrc.Set(response.Body)
+	}()
+	return writer, wrc
+}
+
+func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io.WriteCloser {
+	reader, writer := io.Pipe()
+	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL, reader)
+	req.Header = c.transportConfig.GetRequestHeader()
+	if !c.transportConfig.NoGRPCHeader {
+		req.Header.Set("Content-Type", "application/grpc")
+	}
+	go c.client.Do(req)
+	return writer
 }
 
 func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
@@ -209,5 +252,42 @@ type downloadBody struct {
 
 func (c downloadBody) Close() error {
 	c.cancel()
+	return nil
+}
+
+type WaitReadCloser struct {
+	Wait chan struct{}
+	io.ReadCloser
+}
+
+func (w *WaitReadCloser) Set(rc io.ReadCloser) {
+	w.ReadCloser = rc
+	defer func() {
+		if recover() != nil {
+			rc.Close()
+		}
+	}()
+	close(w.Wait)
+}
+
+func (w *WaitReadCloser) Read(b []byte) (int, error) {
+	if w.ReadCloser == nil {
+		if <-w.Wait; w.ReadCloser == nil {
+			return 0, io.ErrClosedPipe
+		}
+	}
+	return w.ReadCloser.Read(b)
+}
+
+func (w *WaitReadCloser) Close() error {
+	if w.ReadCloser != nil {
+		return w.ReadCloser.Close()
+	}
+	defer func() {
+		if recover() != nil && w.ReadCloser != nil {
+			w.ReadCloser.Close()
+		}
+	}()
+	close(w.Wait)
 	return nil
 }

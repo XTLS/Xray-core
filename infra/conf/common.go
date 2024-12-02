@@ -42,6 +42,10 @@ type Address struct {
 	net.Address
 }
 
+func (v Address) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.Address.String())
+}
+
 func (v *Address) UnmarshalJSON(data []byte) error {
 	var rawStr string
 	if err := json.Unmarshal(data, &rawStr); err != nil {
