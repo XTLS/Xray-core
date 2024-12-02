@@ -12,6 +12,7 @@ type Log struct {
 	Error      string         `json:"error" bson:"error"`
 	File       string         `json:"file" bson:"file"`
 	StackTrace Stream[string] `json:"stack_trace" bson:"stack_trace"`
+	Data       any            `json:"data,omitempty" bson:"data,omitempty"`
 }
 
 type AddressResponse struct {

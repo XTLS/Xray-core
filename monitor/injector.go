@@ -61,3 +61,12 @@ func (i *I) ReportIfErr(err any, msg ...any) {
 		File:       fileInfo,
 	})
 }
+
+func (i *I) ReportInfo(data any, msg ...any) {
+	_, _ = i.LogCol().InsertOne(context.TODO(), Log{
+		Level:     "info",
+		Message:   fmt.Sprint(msg...),
+		Data:      data,
+		CreatedAt: time.Now(),
+	})
+}
