@@ -28,9 +28,13 @@ func (l *LeastPingStrategy) InjectContext(ctx context.Context) {
 }
 
 func (l *LeastPingStrategy) PickOutbound(strings []string) string {
+	if l.observatory == nil {
+		errors.LogError(l.ctx, "observer is nil")
+		return ""
+	}
 	observeReport, err := l.observatory.GetObservation(l.ctx)
 	if err != nil {
-		errors.LogInfoInner(l.ctx, err, "cannot get observe report")
+		errors.LogInfoInner(l.ctx, err, "cannot get observer report")
 		return ""
 	}
 	outboundsList := outboundList(strings)
