@@ -18,7 +18,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
@@ -43,18 +42,20 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]*grpc.ClientConn
-	globalDialerAccess sync.Mutex
+	once sync.Once
+	pool *PoolManage
 )
 
 func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	conn, err := getGrpcClient(ctx, dest, streamSettings)
+	conn, err := getGrpcClient2(ctx, dest, streamSettings)
 	if err != nil {
 		return nil, errors.New("Cannot dial gRPC").Base(err)
 	}
+
 	client := encoding.NewGRPCServiceClient(conn)
+
 	if grpcSettings.MultiMode {
 		errors.LogDebug(ctx, "using gRPC multi mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunMultiStreamName()+"`")
 		grpcService, err := client.(encoding.GRPCServiceClientX).TunMultiCustomName(ctx, grpcSettings.getServiceName(), grpcSettings.getTunMultiStreamName())
@@ -73,21 +74,19 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 	return encoding.NewHunkConn(grpcService, nil), nil
 }
 
-func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
-	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
+func getGrpcClient2(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*ClientConn, error) {
+	once.Do(func() {
+		pool = NewPoolManage(getGrpcClient)
+	})
+	return pool.GetConn(ctx, dest, streamSettings)
+}
 
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
-	}
+func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
+
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
-
-	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
-		return client, nil
-	}
 
 	dialOptions := []grpc.DialOption{
 		grpc.WithConnectParams(grpc.ConnectParams{
@@ -171,7 +170,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if grpcSettings.UserAgent != "" {
 		dialOptions = append(dialOptions, grpc.WithUserAgent(grpcSettings.UserAgent))
 	}
-
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {
 		grpcDestHost = dest.Address.Domain()
@@ -179,10 +177,8 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		grpcDestHost = dest.Address.IP().String()
 	}
 
-	conn, err := grpc.Dial(
+	return grpc.NewClient(
 		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	globalDialerMap[dialerConf{dest, streamSettings}] = conn
-	return conn, err
 }

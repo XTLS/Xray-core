@@ -12,4 +12,5 @@ message Config {
   bool permit_without_stream = 6;
   int32 initial_windows_size = 7;
   string user_agent = 8;
+  int32 conn_number = 9;
 }

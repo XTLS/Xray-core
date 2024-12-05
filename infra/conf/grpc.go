@@ -14,6 +14,7 @@ type GRPCConfig struct {
 	PermitWithoutStream bool   `json:"permit_without_stream"`
 	InitialWindowsSize  int32  `json:"initial_windows_size"`
 	UserAgent           string `json:"user_agent"`
+	ConnNumber          int32  `json:"conn_number"`
 }
 
 func (g *GRPCConfig) Build() (proto.Message, error) {
@@ -27,6 +28,9 @@ func (g *GRPCConfig) Build() (proto.Message, error) {
 		// default window size of gRPC-go
 		g.InitialWindowsSize = 0
 	}
+	if g.ConnNumber <= 0 {
+		g.ConnNumber = 1
+	}
 
 	return &grpc.Config{
 		Authority:           g.Authority,
@@ -37,5 +41,6 @@ func (g *GRPCConfig) Build() (proto.Message, error) {
 		PermitWithoutStream: g.PermitWithoutStream,
 		InitialWindowsSize:  g.InitialWindowsSize,
 		UserAgent:           g.UserAgent,
+		ConnNumber:          g.ConnNumber,
 	}, nil
 }
