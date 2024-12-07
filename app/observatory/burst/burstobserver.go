@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -88,13 +89,15 @@ func (o *Observer) Close() error {
 
 func New(ctx context.Context, config *Config) (*Observer, error) {
 	var outboundManager outbound.Manager
-	err := core.RequireFeatures(ctx, func(om outbound.Manager) {
+	var dispatcher routing.Dispatcher
+	err := core.RequireFeatures(ctx, func(om outbound.Manager, rd routing.Dispatcher) {
 		outboundManager = om
+		dispatcher = rd
 	})
 	if err != nil {
 		return nil, errors.New("Cannot get depended features").Base(err)
 	}
-	hp := NewHealthPing(ctx, config.PingConfig)
+	hp := NewHealthPing(ctx, dispatcher, config.PingConfig)
 	return &Observer{
 		config: config,
 		ctx:    ctx,
