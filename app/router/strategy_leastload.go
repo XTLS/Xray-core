@@ -61,6 +61,7 @@ func (s *LeastLoadStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
 	core.RequireFeaturesAsync(s.ctx, func(observatory extension.Observatory) {
 		s.observer = observatory
+		errors.LogDebug(s.ctx, "InjectContext ", observatory)
 	})
 }
 
