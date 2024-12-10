@@ -3,7 +3,6 @@ package splithttp
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	gonet "net"
 
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
@@ -33,7 +32,7 @@ func (c *BrowserDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 }
 
 func (c *BrowserDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
-	bytes, err := ioutil.ReadAll(payload)
+	bytes, err := io.ReadAll(payload)
 	if err != nil {
 		return err
 	}
