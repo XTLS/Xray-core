@@ -576,7 +576,6 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, err
 		}
 		config.App = append(config.App, serial.ToTypedMessage(r))
-		errors.LogDebug(context.Background(), "Config append Observatory")
 	}
 
 	if c.BurstObservatory != nil {
@@ -585,7 +584,6 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, err
 		}
 		config.App = append(config.App, serial.ToTypedMessage(r))
-		errors.LogDebug(context.Background(), "Config append BurstObservatory")
 	}
 
 	var inbounds []InboundDetourConfig
