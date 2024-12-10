@@ -165,6 +165,7 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 	}
 	// Priority: host > serverName > address
 	for k, v := range c.Headers {
+		errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
 		if c.Host == "" {
 			c.Host = v
 		}
