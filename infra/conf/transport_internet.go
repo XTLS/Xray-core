@@ -164,10 +164,11 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 		}
 	}
 	// Priority: host > serverName > address
-	for k := range c.Headers {
-		if strings.ToLower(k) == "host" {
-			return nil, errors.New(`"headers" can't contain "host"`)
+	for k, v := range c.Headers {
+		if c.Host == "" {
+			c.Host = v
 		}
+		delete(c.Headers, k)
 	}
 	config := &websocket.Config{
 		Path:                path,
