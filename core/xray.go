@@ -316,7 +316,7 @@ func (s *Instance) RequireFeaturesAsync(callback interface{}) {
 	go func() {
 		var finished = false
 		for i := 0; !finished; i++ {
-			if i > 1000 {
+			if i > 100000 {
 				errors.LogError(s.ctx, "RequireFeaturesAsync failed after count ", i)
 				break;
 			}
