@@ -172,7 +172,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 }
 
 func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
-	req, err := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, payload)
 	if err != nil {
 		return err
 	}

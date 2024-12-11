@@ -5,6 +5,7 @@ import (
 	gotls "crypto/tls"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strconv"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/signal/semaphore"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
@@ -405,7 +407,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			seq := requestCounter
 			requestCounter += 1
 
+			wroteRequest := done.New()
+
 			go func() {
+				defer wroteRequest.Close()
 				defer requestsLimiter.Signal()
 
 				// this intentionally makes a shallow-copy of the struct so we
@@ -414,6 +419,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				url.Path += "/" + strconv.FormatInt(seq, 10)
 				// reassign query to get different padding
 				url.RawQuery = transportConfiguration.GetNormalizedQuery()
+
+				ctx := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+					WroteRequest: func(httptrace.WroteRequestInfo) {
+						wroteRequest.Close()
+					},
+				})
 
 				err := httpClient.SendUploadRequest(
 					context.WithoutCancel(ctx),
@@ -434,6 +445,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 
 				lastWrite = time.Now()
+			}
+
+			if _, ok := httpClient.(*DefaultDialerClient); ok {
+				<-wroteRequest.Wait()
 			}
 		}
 	}()
