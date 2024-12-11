@@ -163,13 +163,13 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 			path = u.String()
 		}
 	}
-	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
-	// If we don't do that, http host will be overwritten as address.
-	// Host priority: Host field > headers field > address.
-	if c.Host == "" && c.Headers["host"] != "" {
-		c.Host = c.Headers["host"]
-	} else if c.Host == "" && c.Headers["Host"] != "" {
-		c.Host = c.Headers["Host"]
+	// Priority (client): host > serverName > address
+	for k, v := range c.Headers {
+		errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
+		if c.Host == "" {
+			c.Host = v
+		}
+		delete(c.Headers, k)
 	}
 	config := &websocket.Config{
 		Path:                path,
@@ -202,15 +202,11 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 			path = u.String()
 		}
 	}
-	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
-	// If we don't do that, http host will be overwritten as address.
-	// Host priority: Host field > headers field > address.
-	if c.Host == "" && c.Headers["host"] != "" {
-		c.Host = c.Headers["host"]
-		delete(c.Headers, "host")
-	} else if c.Host == "" && c.Headers["Host"] != "" {
-		c.Host = c.Headers["Host"]
-		delete(c.Headers, "Host")
+	// Priority (client): host > serverName > address
+	for k := range c.Headers {
+		if strings.ToLower(k) == "host" {
+			return nil, errors.New(`"headers" can't contain "host"`)
+		}
 	}
 	config := &httpupgrade.Config{
 		Path:                path,
@@ -274,13 +270,11 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c = &extra
 	}
 
-	// If http host is not set in the Host field, but in headers field, we add it to Host Field here.
-	// If we don't do that, http host will be overwritten as address.
-	// Host priority: Host field > headers field > address.
-	if c.Host == "" && c.Headers["host"] != "" {
-		c.Host = c.Headers["host"]
-	} else if c.Host == "" && c.Headers["Host"] != "" {
-		c.Host = c.Headers["Host"]
+	// Priority (client): host > serverName > address
+	for k := range c.Headers {
+		if strings.ToLower(k) == "host" {
+			return nil, errors.New(`"headers" can't contain "host"`)
+		}
 	}
 
 	if c.Xmux.MaxConnections != nil && c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency != nil && c.Xmux.MaxConcurrency.To > 0 {

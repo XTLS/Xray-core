@@ -23,7 +23,6 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Header {
 		header.Add(k, v)
 	}
-	header.Set("Host", c.Host)
 	return header
 }
 

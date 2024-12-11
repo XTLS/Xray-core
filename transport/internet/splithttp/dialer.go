@@ -259,8 +259,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL.Scheme = "http"
 	}
 	requestURL.Host = transportConfiguration.Host
+	if requestURL.Host == "" && tlsConfig != nil {
+		requestURL.Host = tlsConfig.ServerName
+	}
+	if requestURL.Host == "" && realityConfig != nil {
+		requestURL.Host = realityConfig.ServerName
+	}
 	if requestURL.Host == "" {
-		requestURL.Host = dest.NetAddr()
+		requestURL.Host = dest.Address.String()
 	}
 
 	sessionIdUuid := uuid.New()
@@ -279,16 +285,25 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
-		httpClient2, muxRes2 = getHTTPClient(ctx, *memory2.Destination, memory2) // just panic
-		if tls.ConfigFromStreamSettings(memory2) != nil || reality.ConfigFromStreamSettings(memory2) != nil {
+		dest2 := *memory2.Destination // just panic
+		httpClient2, muxRes2 = getHTTPClient(ctx, dest2, memory2)
+		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
+		realityConfig2 := reality.ConfigFromStreamSettings(memory2)
+		if tlsConfig2 != nil || realityConfig2 != nil {
 			requestURL2.Scheme = "https"
 		} else {
 			requestURL2.Scheme = "http"
 		}
 		config2 := memory2.ProtocolSettings.(*Config)
 		requestURL2.Host = config2.Host
+		if requestURL2.Host == "" && tlsConfig2 != nil {
+			requestURL2.Host = tlsConfig2.ServerName
+		}
+		if requestURL2.Host == "" && realityConfig2 != nil {
+			requestURL2.Host = realityConfig2.ServerName
+		}
 		if requestURL2.Host == "" {
-			requestURL2.Host = memory2.Destination.NetAddr()
+			requestURL2.Host = dest2.Address.String()
 		}
 		requestURL2.Path = config2.GetNormalizedPath() + sessionIdUuid.String()
 		requestURL2.RawQuery = config2.GetNormalizedQuery()

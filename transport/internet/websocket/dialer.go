@@ -58,11 +58,12 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	protocol := "ws"
 
-	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
+	tConfig := tls.ConfigFromStreamSettings(streamSettings)
+	if tConfig != nil {
 		protocol = "wss"
-		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
+		tlsConfig := tConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		dialer.TLSClientConfig = tlsConfig
-		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
+		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
 			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (gonet.Conn, error) {
 				// Like the NetDial in the dialer
 				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
@@ -103,6 +104,14 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	header := wsSettings.GetRequestHeader()
+	// See dialer.DialContext()
+	header.Set("Host", wsSettings.Host)
+	if header.Get("Host") == "" && tConfig != nil {
+		header.Set("Host", tConfig.ServerName)
+	}
+	if header.Get("Host") == "" {
+		header.Set("Host", dest.Address.String())
+	}
 	if ed != nil {
 		// RawURLEncoding is support by both V2Ray/V2Fly and XRay.
 		header.Set("Sec-WebSocket-Protocol", base64.RawURLEncoding.EncodeToString(ed))
