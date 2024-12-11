@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/app/observatory"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
@@ -21,19 +20,19 @@ func (l *LeastPingStrategy) GetPrincipleTarget(strings []string) []string {
 
 func (l *LeastPingStrategy) InjectContext(ctx context.Context) {
 	l.ctx = ctx
+	core.RequireFeaturesAsync(l.ctx, func(observatory extension.Observatory) {
+		l.observatory = observatory
+	})
 }
 
 func (l *LeastPingStrategy) PickOutbound(strings []string) string {
 	if l.observatory == nil {
-		common.Must(core.RequireFeatures(l.ctx, func(observatory extension.Observatory) error {
-			l.observatory = observatory
-			return nil
-		}))
+		errors.LogError(l.ctx, "observer is nil")
+		return ""
 	}
-
 	observeReport, err := l.observatory.GetObservation(l.ctx)
 	if err != nil {
-		errors.LogInfoInner(l.ctx, err, "cannot get observe report")
+		errors.LogInfoInner(l.ctx, err, "cannot get observer report")
 		return ""
 	}
 	outboundsList := outboundList(strings)
