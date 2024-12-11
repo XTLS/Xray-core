@@ -163,7 +163,7 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 			path = u.String()
 		}
 	}
-	// Priority: host > serverName > address
+	// Priority (client): host > serverName > address
 	for k, v := range c.Headers {
 		errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
 		if c.Host == "" {
@@ -202,7 +202,7 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 			path = u.String()
 		}
 	}
-	// Priority: host > serverName > address
+	// Priority (client): host > serverName > address
 	for k := range c.Headers {
 		if strings.ToLower(k) == "host" {
 			return nil, errors.New(`"headers" can't contain "host"`)
@@ -270,7 +270,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c = &extra
 	}
 
-	// Priority: host > serverName > address
+	// Priority (client): host > serverName > address
 	for k := range c.Headers {
 		if strings.ToLower(k) == "host" {
 			return nil, errors.New(`"headers" can't contain "host"`)
