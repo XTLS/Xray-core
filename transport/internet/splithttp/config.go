@@ -47,7 +47,7 @@ func (c *Config) GetNormalizedQuery() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
-	for k, v := range c.Header {
+	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
 
@@ -64,15 +64,12 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	}
 }
 
-func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
-	if c.ScMaxConcurrentPosts == nil || c.ScMaxConcurrentPosts.To == 0 {
-		return RandRangeConfig{
-			From: 100,
-			To:   100,
-		}
+func (c *Config) GetNormalizedScMaxBufferedPosts() int {
+	if c.ScMaxBufferedPosts == 0 {
+		return 30
 	}
 
-	return *c.ScMaxConcurrentPosts
+	return int(c.ScMaxBufferedPosts)
 }
 
 func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {

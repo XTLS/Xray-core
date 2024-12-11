@@ -221,35 +221,28 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 type SplitHTTPConfig struct {
 	Host                 string            `json:"host"`
 	Path                 string            `json:"path"`
+	Mode                 string            `json:"mode"`
 	Headers              map[string]string `json:"headers"`
-	ScMaxConcurrentPosts *Int32Range       `json:"scMaxConcurrentPosts"`
-	ScMaxEachPostBytes   *Int32Range       `json:"scMaxEachPostBytes"`
-	ScMinPostsIntervalMs *Int32Range       `json:"scMinPostsIntervalMs"`
+	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
+	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
-	XPaddingBytes        *Int32Range       `json:"xPaddingBytes"`
+	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
+	ScMaxBufferedPosts   int64             `json:"scMaxConcurrentPosts"`
+	KeepAlivePeriod      int64             `json:"keepAlivePeriod"`
 	Xmux                 Xmux              `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
-	Mode                 string            `json:"mode"`
 	Extra                json.RawMessage   `json:"extra"`
-	NoGRPCHeader         bool              `json:"noGRPCHeader"`
-	KeepAlivePeriod      int64             `json:"keepAlivePeriod"`
 }
 
 type Xmux struct {
-	MaxConcurrency *Int32Range `json:"maxConcurrency"`
-	MaxConnections *Int32Range `json:"maxConnections"`
-	CMaxReuseTimes *Int32Range `json:"cMaxReuseTimes"`
-	CMaxLifetimeMs *Int32Range `json:"cMaxLifetimeMs"`
+	MaxConcurrency Int32Range `json:"maxConcurrency"`
+	MaxConnections Int32Range `json:"maxConnections"`
+	CMaxReuseTimes Int32Range `json:"cMaxReuseTimes"`
+	CMaxLifetimeMs Int32Range `json:"cMaxLifetimeMs"`
 }
 
-func splithttpNewRandRangeConfig(input *Int32Range) *splithttp.RandRangeConfig {
-	if input == nil {
-		return &splithttp.RandRangeConfig{
-			From: 0,
-			To:   0,
-		}
-	}
-
+func splithttpNewRandRangeConfig(input Int32Range) *splithttp.RandRangeConfig {
 	return &splithttp.RandRangeConfig{
 		From: input.From,
 		To:   input.To,
@@ -270,35 +263,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c = &extra
 	}
 
-	// Priority (client): host > serverName > address
-	for k := range c.Headers {
-		if strings.ToLower(k) == "host" {
-			return nil, errors.New(`"headers" can't contain "host"`)
-		}
-	}
-
-	if c.Xmux.MaxConnections != nil && c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency != nil && c.Xmux.MaxConcurrency.To > 0 {
-		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
-	}
-
-	// Multiplexing config
-	muxProtobuf := splithttp.Multiplexing{
-		MaxConcurrency: splithttpNewRandRangeConfig(c.Xmux.MaxConcurrency),
-		MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
-		CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.CMaxReuseTimes),
-		CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.CMaxLifetimeMs),
-	}
-
-	if muxProtobuf.MaxConcurrency.To == 0 &&
-		muxProtobuf.MaxConnections.To == 0 &&
-		muxProtobuf.CMaxReuseTimes.To == 0 &&
-		muxProtobuf.CMaxLifetimeMs.To == 0 {
-		muxProtobuf.MaxConcurrency.From = 16
-		muxProtobuf.MaxConcurrency.To = 32
-		muxProtobuf.CMaxReuseTimes.From = 64
-		muxProtobuf.CMaxReuseTimes.To = 128
-	}
-
 	switch c.Mode {
 	case "":
 		c.Mode = "auto"
@@ -307,21 +271,46 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}
 
+	// Priority (client): host > serverName > address
+	for k := range c.Headers {
+		if strings.ToLower(k) == "host" {
+			return nil, errors.New(`"headers" can't contain "host"`)
+		}
+	}
+
+	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
+		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
+	}
+	if c.Xmux.MaxConcurrency.To == 0 &&
+		c.Xmux.MaxConnections.To == 0 &&
+		c.Xmux.CMaxReuseTimes.To == 0 &&
+		c.Xmux.CMaxLifetimeMs.To == 0 {
+		c.Xmux.MaxConcurrency.From = 16
+		c.Xmux.MaxConcurrency.To = 32
+		c.Xmux.CMaxReuseTimes.From = 64
+		c.Xmux.CMaxReuseTimes.To = 128
+	}
+
 	config := &splithttp.Config{
-		Path:                 c.Path,
 		Host:                 c.Host,
-		Header:               c.Headers,
-		ScMaxConcurrentPosts: splithttpNewRandRangeConfig(c.ScMaxConcurrentPosts),
+		Path:                 c.Path,
+		Mode:                 c.Mode,
+		Headers:              c.Headers,
+		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
+		NoGRPCHeader:         c.NoGRPCHeader,
+		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   splithttpNewRandRangeConfig(c.ScMaxEachPostBytes),
 		ScMinPostsIntervalMs: splithttpNewRandRangeConfig(c.ScMinPostsIntervalMs),
-		NoSSEHeader:          c.NoSSEHeader,
-		XPaddingBytes:        splithttpNewRandRangeConfig(c.XPaddingBytes),
-		Xmux:                 &muxProtobuf,
-		Mode:                 c.Mode,
-		NoGRPCHeader:         c.NoGRPCHeader,
+		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		KeepAlivePeriod:      c.KeepAlivePeriod,
+		Xmux: &splithttp.Multiplexing{
+			MaxConcurrency: splithttpNewRandRangeConfig(c.Xmux.MaxConcurrency),
+			MaxConnections: splithttpNewRandRangeConfig(c.Xmux.MaxConnections),
+			CMaxReuseTimes: splithttpNewRandRangeConfig(c.Xmux.CMaxReuseTimes),
+			CMaxLifetimeMs: splithttpNewRandRangeConfig(c.Xmux.CMaxLifetimeMs),
+		},
 	}
-	var err error
+
 	if c.DownloadSettings != nil {
 		if c.Mode == "stream-one" {
 			return nil, errors.New(`Can not use "downloadSettings" in "stream-one" mode.`)
@@ -329,10 +318,12 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		if c.Extra != nil {
 			c.DownloadSettings.SocketSettings = nil
 		}
+		var err error
 		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
 			return nil, errors.New(`Failed to build "downloadSettings".`).Base(err)
 		}
 	}
+
 	return config, nil
 }
 

@@ -11,17 +11,17 @@ import "transport/internet/config.proto";
 message Config {
   string host = 1;
   string path = 2;
-  map<string, string> header = 3;
-  RandRangeConfig scMaxConcurrentPosts = 4;
-  RandRangeConfig scMaxEachPostBytes = 5;
-  RandRangeConfig scMinPostsIntervalMs = 6;
+  string mode = 3;
+  map<string, string> headers = 4;
+  RandRangeConfig xPaddingBytes = 5;
+  bool noGRPCHeader = 6;
   bool noSSEHeader = 7;
-  RandRangeConfig xPaddingBytes = 8;
-  Multiplexing xmux = 9;
-  xray.transport.internet.StreamConfig downloadSettings = 10;
-  string mode = 11;
-  bool noGRPCHeader = 12;
-  int64 keepAlivePeriod = 13;
+  RandRangeConfig scMaxEachPostBytes = 8;
+  RandRangeConfig scMinPostsIntervalMs = 9;
+  int64 scMaxBufferedPosts = 10;
+  int64 keepAlivePeriod = 11;
+  Multiplexing xmux = 12;
+  xray.transport.internet.StreamConfig downloadSettings = 13;
 }
 
 message RandRangeConfig {
