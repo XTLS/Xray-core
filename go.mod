@@ -2,6 +2,8 @@ module github.com/xtls/xray-core
 
 go 1.21.4
 
+replace github.com/quic-go/quic-go v0.46.0 => github.com/xtls/quic-go v0.46.2
+
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 	github.com/cloudflare/circl v1.4.0

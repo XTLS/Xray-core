@@ -141,14 +141,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		gotDownResponse.Close()
 	}()
 
-	if !c.isH3 {
-		// in quic-go, sometimes gotConn is never closed for the lifetime of
-		// the entire connection, and the download locks up
-		// https://github.com/quic-go/quic-go/issues/3342
-		// for other HTTP versions, we want to block Dial until we know the
-		// remote address of the server, for logging purposes
-		<-gotConn.Wait()
-	}
+	<-gotConn.Wait()
 
 	lazyDownload := &LazyReader{
 		CreateReader: func() (io.Reader, error) {
@@ -172,7 +165,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 }
 
 func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
-	req, err := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, payload)
 	if err != nil {
 		return err
 	}

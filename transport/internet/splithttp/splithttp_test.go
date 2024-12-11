@@ -109,7 +109,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 
 	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), &internet.MemoryStreamConfig{
 		ProtocolName:     "splithttp",
-		ProtocolSettings: &Config{Path: "sh", Header: map[string]string{"X-Forwarded-For": "1.1.1.1"}},
+		ProtocolSettings: &Config{Path: "sh", Headers: map[string]string{"X-Forwarded-For": "1.1.1.1"}},
 	})
 
 	common.Must(err)
