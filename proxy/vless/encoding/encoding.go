@@ -28,7 +28,7 @@ var addrParser = protocol.NewAddressParser(
 )
 
 // EncodeRequestHeader writes encoded request header into the given writer.
-func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons) error {
+func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requestAddons *proxy.Addons) error {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -62,7 +62,7 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator vless.Validator) (*protocol.RequestHeader, *Addons, bool, error) {
+func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator vless.Validator) (*protocol.RequestHeader, *proxy.Addons, bool, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -131,7 +131,7 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 }
 
 // EncodeResponseHeader writes encoded response header into the given writer.
-func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, responseAddons *Addons) error {
+func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, responseAddons *proxy.Addons) error {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -151,7 +151,7 @@ func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, res
 }
 
 // DecodeResponseHeader decodes and returns (if successful) a ResponseHeader from an input stream.
-func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*Addons, error) {
+func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*proxy.Addons, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -172,7 +172,7 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 }
 
 // XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ob *session.Outbound, ctx context.Context) error {
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, scheduler *proxy.Scheduler, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ob *session.Outbound, ctx context.Context) error {
 	err := func() error {
 		for {
 			if trafficState.ReaderSwitchToDirectCopy {
@@ -188,11 +188,10 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer,
 						ob.CanSpliceCopy = 1
 					}
 				}
-				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer, inTimer)
+				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer, inTimer, scheduler)
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				timer.Update()
 				if trafficState.ReaderSwitchToDirectCopy {
 					// XTLS Vision processes struct TLS Conn's input and rawInput
 					if inputBuffer, err := buf.ReadFrom(input); err == nil {
@@ -209,7 +208,9 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer,
 				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 					return werr
 				}
+				timer.Update()
 			}
+			scheduler.Trigger <- 2
 			if err != nil {
 				return err
 			}
