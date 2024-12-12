@@ -1,6 +1,7 @@
 name: Test
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -42,3 +43,31 @@ jobs:
           enableCrossOsArchive: true
       - name: Test
         run: go test -timeout 1h -v ./...
+
+  freebsd:
+    permissions:
+      contents: read
+    name: test (freebsd)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v4
+      - name: Restore Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: resources
+          key: xray-geodat-
+          enableCrossOsArchive: true
+      - name: Start VM
+        id: vm
+        uses: vmactions/freebsd-vm@v1
+        with:
+          prepare: |
+            pkg install -y go123
+            pw user add -n action -m
+      - name: Test
+        shell: freebsd {0}
+        run: |
+          cd $GITHUB_WORKSPACE
+          go123 version
+          su action -c 'go123 test -timeout 1h -v ./...'
