@@ -333,30 +333,30 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, errors.New("failed to listen unix domain socket(for SH) on ", address).Base(err)
+			return nil, errors.New("failed to listen UNIX domain socket for XHTTP on ", address).Base(err)
 		}
-		errors.LogInfo(ctx, "listening unix domain socket(for SH) on ", address)
+		errors.LogInfo(ctx, "listening UNIX domain socket for XHTTP on ", address)
 	} else if l.isH3 { // quic
 		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
 			IP:   address.IP(),
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, errors.New("failed to listen UDP(for SH3) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
 		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
-			return nil, errors.New("failed to listen QUIC(for SH3) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
 		l.h3listener = h3listener
-		errors.LogInfo(ctx, "listening QUIC(for SH3) on ", address, ":", port)
+		errors.LogInfo(ctx, "listening QUIC for XHTTP/3 on ", address, ":", port)
 
 		l.h3server = &http3.Server{
 			Handler: handler,
 		}
 		go func() {
 			if err := l.h3server.ServeListener(l.h3listener); err != nil {
-				errors.LogWarningInner(ctx, err, "failed to serve http3 for splithttp")
+				errors.LogWarningInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
 			}
 		}()
 	} else { // tcp
@@ -369,9 +369,9 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Port: int(port),
 		}, streamSettings.SocketSettings)
 		if err != nil {
-			return nil, errors.New("failed to listen TCP(for SH) on ", address, ":", port).Base(err)
+			return nil, errors.New("failed to listen TCP for XHTTP on ", address, ":", port).Base(err)
 		}
-		errors.LogInfo(ctx, "listening TCP(for SH) on ", address, ":", port)
+		errors.LogInfo(ctx, "listening TCP for XHTTP on ", address, ":", port)
 	}
 
 	// tcp/unix (h1/h2)
@@ -397,7 +397,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
-				errors.LogWarningInner(ctx, err, "failed to serve http for splithttp")
+				errors.LogWarningInner(ctx, err, "failed to serve HTTP for XHTTP")
 			}
 		}()
 	}

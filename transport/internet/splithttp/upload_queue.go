@@ -52,7 +52,7 @@ func (h *uploadQueue) Push(p Packet) error {
 		if p.Reader != nil {
 			p.Reader.Close()
 		}
-		return errors.New("splithttp packet queue closed")
+		return errors.New("packet queue closed")
 	}
 
 	h.pushedPackets <- p
