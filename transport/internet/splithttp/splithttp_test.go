@@ -423,7 +423,7 @@ func Test_maxUpload(t *testing.T) {
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "/sh",
-			ScMaxEachPostBytes: &RandRangeConfig{
+			ScMaxEachPostBytes: &RangeConfig{
 				From: 10000,
 				To:   10000,
 			},

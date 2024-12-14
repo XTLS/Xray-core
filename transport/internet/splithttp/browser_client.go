@@ -13,6 +13,10 @@ import (
 // has no fields because everything is global state :O)
 type BrowserDialerClient struct{}
 
+func (c *BrowserDialerClient) IsClosed() bool {
+	panic("not implemented yet")
+}
+
 func (c *BrowserDialerClient) Open(ctx context.Context, pureURL string) (io.WriteCloser, io.ReadCloser) {
 	panic("not implemented yet")
 }
