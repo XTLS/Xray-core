@@ -18,6 +18,8 @@ import (
 
 // interface to abstract between use of browser dialer, vs net/http
 type DialerClient interface {
+	IsClosed() bool
+
 	// (ctx, baseURL, payload) -> err
 	// baseURL already contains sessionId and seq
 	SendUploadRequest(context.Context, string, io.ReadWriteCloser, int64) error
@@ -39,10 +41,15 @@ type DialerClient interface {
 type DefaultDialerClient struct {
 	transportConfig *Config
 	client          *http.Client
+	closed          bool
 	httpVersion     string
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
+}
+
+func (c *DefaultDialerClient) IsClosed() bool {
+	return c.closed
 }
 
 func (c *DefaultDialerClient) Open(ctx context.Context, pureURL string) (io.WriteCloser, io.ReadCloser) {
@@ -59,6 +66,8 @@ func (c *DefaultDialerClient) Open(ctx context.Context, pureURL string) (io.Writ
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to open ", pureURL)
 			} else {
+				// c.closed = true
+				response.Body.Close()
 				errors.LogInfo(ctx, "unexpected status ", response.StatusCode)
 			}
 			wrc.Close()
@@ -76,7 +85,14 @@ func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io
 	if !c.transportConfig.NoGRPCHeader {
 		req.Header.Set("Content-Type", "application/grpc")
 	}
-	go c.client.Do(req)
+	go func() {
+		if resp, err := c.client.Do(req); err == nil {
+			if resp.StatusCode != 200 {
+				// c.closed = true
+			}
+			resp.Body.Close()
+		}
+	}()
 	return writer
 }
 
@@ -130,6 +146,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		}
 
 		if response.StatusCode != 200 {
+			// c.closed = true
 			response.Body.Close()
 			errors.LogInfo(ctx, "invalid status code on download:", response.Status)
 			gotDownResponse.Close()
@@ -180,6 +197,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
+			// c.closed = true
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
@@ -214,6 +232,8 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					if resp.StatusCode != 200 {
+						// c.closed = true
+						// resp.Body.Close() // I'm not sure
 						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
 					}
 				}

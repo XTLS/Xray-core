@@ -9,80 +9,84 @@ import (
 
 type fakeRoundTripper struct{}
 
+func (f *fakeRoundTripper) IsClosed() bool {
+	return false
+}
+
 func TestMaxConnections(t *testing.T) {
-	config := Multiplexing{
-		MaxConnections: &RandRangeConfig{From: 4, To: 4},
+	xmuxConfig := XmuxConfig{
+		MaxConnections: &RangeConfig{From: 4, To: 4},
 	}
 
-	mux := NewMuxManager(config, func() interface{} {
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
-	clients := make(map[interface{}]struct{})
+	xmuxClients := make(map[interface{}]struct{})
 	for i := 0; i < 8; i++ {
-		clients[mux.GetResource(context.Background())] = struct{}{}
+		xmuxClients[xmuxManager.GetXmuxClient(context.Background())] = struct{}{}
 	}
 
-	if len(clients) != 4 {
-		t.Error("did not get 4 distinct clients, got ", len(clients))
+	if len(xmuxClients) != 4 {
+		t.Error("did not get 4 distinct clients, got ", len(xmuxClients))
 	}
 }
 
 func TestCMaxReuseTimes(t *testing.T) {
-	config := Multiplexing{
-		CMaxReuseTimes: &RandRangeConfig{From: 2, To: 2},
+	xmuxConfig := XmuxConfig{
+		CMaxReuseTimes: &RangeConfig{From: 2, To: 2},
 	}
 
-	mux := NewMuxManager(config, func() interface{} {
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
-	clients := make(map[interface{}]struct{})
+	xmuxClients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		clients[mux.GetResource(context.Background())] = struct{}{}
+		xmuxClients[xmuxManager.GetXmuxClient(context.Background())] = struct{}{}
 	}
 
-	if len(clients) != 32 {
-		t.Error("did not get 32 distinct clients, got ", len(clients))
+	if len(xmuxClients) != 32 {
+		t.Error("did not get 32 distinct clients, got ", len(xmuxClients))
 	}
 }
 
 func TestMaxConcurrency(t *testing.T) {
-	config := Multiplexing{
-		MaxConcurrency: &RandRangeConfig{From: 2, To: 2},
+	xmuxConfig := XmuxConfig{
+		MaxConcurrency: &RangeConfig{From: 2, To: 2},
 	}
 
-	mux := NewMuxManager(config, func() interface{} {
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
-	clients := make(map[interface{}]struct{})
+	xmuxClients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		client := mux.GetResource(context.Background())
-		client.OpenRequests.Add(1)
-		clients[client] = struct{}{}
+		xmuxClient := xmuxManager.GetXmuxClient(context.Background())
+		xmuxClient.OpenUsage.Add(1)
+		xmuxClients[xmuxClient] = struct{}{}
 	}
 
-	if len(clients) != 32 {
-		t.Error("did not get 32 distinct clients, got ", len(clients))
+	if len(xmuxClients) != 32 {
+		t.Error("did not get 32 distinct clients, got ", len(xmuxClients))
 	}
 }
 
 func TestDefault(t *testing.T) {
-	config := Multiplexing{}
+	xmuxConfig := XmuxConfig{}
 
-	mux := NewMuxManager(config, func() interface{} {
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
-	clients := make(map[interface{}]struct{})
+	xmuxClients := make(map[interface{}]struct{})
 	for i := 0; i < 64; i++ {
-		client := mux.GetResource(context.Background())
-		client.OpenRequests.Add(1)
-		clients[client] = struct{}{}
+		xmuxClient := xmuxManager.GetXmuxClient(context.Background())
+		xmuxClient.OpenUsage.Add(1)
+		xmuxClients[xmuxClient] = struct{}{}
 	}
 
-	if len(clients) != 1 {
-		t.Error("did not get 1 distinct clients, got ", len(clients))
+	if len(xmuxClients) != 1 {
+		t.Error("did not get 1 distinct clients, got ", len(xmuxClients))
 	}
 }
