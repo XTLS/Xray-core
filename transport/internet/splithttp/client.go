@@ -66,7 +66,7 @@ func (c *DefaultDialerClient) Open(ctx context.Context, pureURL string) (io.Writ
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to open ", pureURL)
 			} else {
-				c.closed = true
+				// c.closed = true
 				response.Body.Close()
 				errors.LogInfo(ctx, "unexpected status ", response.StatusCode)
 			}
@@ -88,7 +88,7 @@ func (c *DefaultDialerClient) OpenUpload(ctx context.Context, baseURL string) io
 	go func() {
 		if resp, err := c.client.Do(req); err == nil {
 			if resp.StatusCode != 200 {
-				c.closed = true
+				// c.closed = true
 			}
 			resp.Body.Close()
 		}
@@ -146,7 +146,7 @@ func (c *DefaultDialerClient) OpenDownload(ctx context.Context, baseURL string) 
 		}
 
 		if response.StatusCode != 200 {
-			c.closed = true
+			// c.closed = true
 			response.Body.Close()
 			errors.LogInfo(ctx, "invalid status code on download:", response.Status)
 			gotDownResponse.Close()
@@ -197,7 +197,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
-			c.closed = true
+			// c.closed = true
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
@@ -232,7 +232,7 @@ func (c *DefaultDialerClient) SendUploadRequest(ctx context.Context, url string,
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					if resp.StatusCode != 200 {
-						c.closed = true
+						// c.closed = true
 						// resp.Body.Close() // I'm not sure
 						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
 					}
