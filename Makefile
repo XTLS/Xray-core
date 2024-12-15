@@ -17,13 +17,13 @@ LDFLAGS = -X github.com/xtls/xray-core/core.build=$(VERSION) -s -w -buildid=
 PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
 PREFIX ?= $(shell go env GOPATH)
-ifeq ($(GOOS),windows)
+ifeq ($(shell go env GOOS),windows)
 OUTPUT = $(NAME).exe
 ADDITION = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 else
 OUTPUT = $(NAME)
 endif
-ifeq ($(shell echo "$(GOARCH)" | grep -Eq "(mips|mipsle)" && echo true),true) # 
+ifeq ($(shell echo "$(shell go env GOARCH)" | grep -Eq "(mips|mipsle)" && echo true),true) # 
 ADDITION = GOMIPS=softfloat go build -o $(NAME)_softfloat -trimpath -ldflags "$(LDFLAGS)" -v $(MAIN)
 endif
 .PHONY: clean build
