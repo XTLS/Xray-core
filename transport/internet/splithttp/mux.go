@@ -2,101 +2,113 @@ package splithttp
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
+	"math"
+	"math/big"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
 )
 
-type muxResource struct {
-	Resource       interface{}
-	OpenRequests   atomic.Int32
+type XmuxConn interface {
+	IsClosed() bool
+}
+
+type XmuxClient struct {
+	XmuxConn       XmuxConn
+	OpenUsage      atomic.Int32
 	leftUsage      int32
 	expirationTime time.Time
+	LeftRequests   atomic.Int32
 }
 
-type muxManager struct {
-	newResourceFn func() interface{}
-	config        Multiplexing
-	concurrency   int32
-	connections   int32
-	instances     []*muxResource
+type XmuxManager struct {
+	xmuxConfig  XmuxConfig
+	concurrency int32
+	connections int32
+	newConnFunc func() XmuxConn
+	xmuxClients []*XmuxClient
 }
 
-func NewMuxManager(config Multiplexing, newResource func() interface{}) *muxManager {
-	return &muxManager{
-		config:        config,
-		concurrency:   config.GetNormalizedMaxConcurrency().roll(),
-		connections:   config.GetNormalizedMaxConnections().roll(),
-		newResourceFn: newResource,
-		instances:     make([]*muxResource, 0),
+func NewXmuxManager(xmuxConfig XmuxConfig, newConnFunc func() XmuxConn) *XmuxManager {
+	return &XmuxManager{
+		xmuxConfig:  xmuxConfig,
+		concurrency: xmuxConfig.GetNormalizedMaxConcurrency().rand(),
+		connections: xmuxConfig.GetNormalizedMaxConnections().rand(),
+		newConnFunc: newConnFunc,
+		xmuxClients: make([]*XmuxClient, 0),
 	}
 }
 
-func (m *muxManager) GetResource(ctx context.Context) *muxResource {
-	m.removeExpiredConnections(ctx)
+func (m *XmuxManager) newXmuxClient() *XmuxClient {
+	xmuxClient := &XmuxClient{
+		XmuxConn:       m.newConnFunc(),
+		leftUsage:      -1,
+		expirationTime: time.UnixMilli(0),
+	}
+	if x := m.xmuxConfig.GetNormalizedCMaxReuseTimes().rand(); x > 0 {
+		xmuxClient.leftUsage = x - 1
+	}
+	if x := m.xmuxConfig.GetNormalizedCMaxLifetimeMs().rand(); x > 0 {
+		xmuxClient.expirationTime = time.Now().Add(time.Duration(x) * time.Millisecond)
+	}
+	xmuxClient.LeftRequests.Store(math.MaxInt32)
+	if x := m.xmuxConfig.GetNormalizedCMaxRequestTimes().rand(); x > 0 {
+		xmuxClient.LeftRequests.Store(x)
+	}
+	m.xmuxClients = append(m.xmuxClients, xmuxClient)
+	return xmuxClient
+}
 
-	if m.connections > 0 && len(m.instances) < int(m.connections) {
-		errors.LogDebug(ctx, "xmux: creating client, connections=", len(m.instances))
-		return m.newResource()
+func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when locking
+	for i := 0; i < len(m.xmuxClients); {
+		xmuxClient := m.xmuxClients[i]
+		if xmuxClient.XmuxConn.IsClosed() ||
+			xmuxClient.leftUsage == 0 ||
+			(xmuxClient.expirationTime != time.UnixMilli(0) && time.Now().After(xmuxClient.expirationTime)) ||
+			xmuxClient.LeftRequests.Load() <= 0 {
+			errors.LogDebug(ctx, "XMUX: removing xmuxClient, IsClosed() = ", xmuxClient.XmuxConn.IsClosed(),
+				", OpenUsage = ", xmuxClient.OpenUsage.Load(),
+				", leftUsage = ", xmuxClient.leftUsage,
+				", expirationTime = ", xmuxClient.expirationTime,
+				", LeftRequests = ", xmuxClient.LeftRequests.Load())
+			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
+		} else {
+			i++
+		}
 	}
 
-	if len(m.instances) == 0 {
-		errors.LogDebug(ctx, "xmux: creating client because instances is empty, connections=", len(m.instances))
-		return m.newResource()
+	if len(m.xmuxClients) == 0 {
+		errors.LogDebug(ctx, "XMUX: creating xmuxClient because xmuxClients is empty")
+		return m.newXmuxClient()
 	}
 
-	clients := make([]*muxResource, 0)
+	if m.connections > 0 && len(m.xmuxClients) < int(m.connections) {
+		errors.LogDebug(ctx, "XMUX: creating xmuxClient because maxConnections was not hit, xmuxClients = ", len(m.xmuxClients))
+		return m.newXmuxClient()
+	}
+
+	xmuxClients := make([]*XmuxClient, 0)
 	if m.concurrency > 0 {
-		for _, client := range m.instances {
-			openRequests := client.OpenRequests.Load()
-			if openRequests < m.concurrency {
-				clients = append(clients, client)
+		for _, xmuxClient := range m.xmuxClients {
+			if xmuxClient.OpenUsage.Load() < m.concurrency {
+				xmuxClients = append(xmuxClients, xmuxClient)
 			}
 		}
 	} else {
-		clients = m.instances
+		xmuxClients = m.xmuxClients
 	}
 
-	if len(clients) == 0 {
-		errors.LogDebug(ctx, "xmux: creating client because concurrency was hit, total clients=", len(m.instances))
-		return m.newResource()
+	if len(xmuxClients) == 0 {
+		errors.LogDebug(ctx, "XMUX: creating xmuxClient because maxConcurrency was hit, xmuxClients = ", len(m.xmuxClients))
+		return m.newXmuxClient()
 	}
 
-	client := clients[rand.Intn(len(clients))]
-	if client.leftUsage > 0 {
-		client.leftUsage -= 1
+	i, _ := rand.Int(rand.Reader, big.NewInt(int64(len(xmuxClients))))
+	xmuxClient := xmuxClients[i.Int64()]
+	if xmuxClient.leftUsage > 0 {
+		xmuxClient.leftUsage -= 1
 	}
-	return client
-}
-
-func (m *muxManager) newResource() *muxResource {
-	leftUsage := int32(-1)
-	if x := m.config.GetNormalizedCMaxReuseTimes().roll(); x > 0 {
-		leftUsage = x - 1
-	}
-	expirationTime := time.UnixMilli(0)
-	if x := m.config.GetNormalizedCMaxLifetimeMs().roll(); x > 0 {
-		expirationTime = time.Now().Add(time.Duration(x) * time.Millisecond)
-	}
-
-	client := &muxResource{
-		Resource:       m.newResourceFn(),
-		leftUsage:      leftUsage,
-		expirationTime: expirationTime,
-	}
-	m.instances = append(m.instances, client)
-	return client
-}
-
-func (m *muxManager) removeExpiredConnections(ctx context.Context) {
-	for i := 0; i < len(m.instances); i++ {
-		client := m.instances[i]
-		if client.leftUsage == 0 || (client.expirationTime != time.UnixMilli(0) && time.Now().After(client.expirationTime)) {
-			errors.LogDebug(ctx, "xmux: removing client, leftUsage = ", client.leftUsage, ", expirationTime = ", client.expirationTime)
-			m.instances = append(m.instances[:i], m.instances[i+1:]...)
-			i--
-		}
-	}
+	return xmuxClient
 }
