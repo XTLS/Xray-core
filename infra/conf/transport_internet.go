@@ -173,7 +173,6 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 			delete(c.Headers, k)
 		}
 	}
-	
 	config := &websocket.Config{
 		Path:                path,
 		Host:                c.Host,
