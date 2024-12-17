@@ -165,12 +165,15 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 	}
 	// Priority (client): host > serverName > address
 	for k, v := range c.Headers {
-		errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
-		if c.Host == "" {
-			c.Host = v
+		if strings.ToLower(k) == "host"{
+			errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
+			if c.Host == "" {
+				c.Host = v
+			}
+			delete(c.Headers, k)
 		}
-		delete(c.Headers, k)
 	}
+	
 	config := &websocket.Config{
 		Path:                path,
 		Host:                c.Host,
