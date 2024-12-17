@@ -3,10 +3,10 @@ package conf
 import (
 	"encoding/json"
 
-	"github.com/golang/protobuf/proto"
-
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/blackhole"
+	"google.golang.org/protobuf/proto"
 )
 
 type NoneResponse struct{}
@@ -30,7 +30,7 @@ func (v *BlackholeConfig) Build() (proto.Message, error) {
 	if v.Response != nil {
 		response, _, err := configLoader.Load(v.Response)
 		if err != nil {
-			return nil, newError("Config: Failed to parse Blackhole response config.").Base(err)
+			return nil, errors.New("Config: Failed to parse Blackhole response config.").Base(err)
 		}
 		responseSettings, err := response.(Buildable).Build()
 		if err != nil {
@@ -42,12 +42,10 @@ func (v *BlackholeConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-var (
-	configLoader = NewJSONConfigLoader(
-		ConfigCreatorCache{
-			"none": func() interface{} { return new(NoneResponse) },
-			"http": func() interface{} { return new(HTTPResponse) },
-		},
-		"type",
-		"")
-)
+var configLoader = NewJSONConfigLoader(
+	ConfigCreatorCache{
+		"none": func() interface{} { return new(NoneResponse) },
+		"http": func() interface{} { return new(HTTPResponse) },
+	},
+	"type",
+	"")

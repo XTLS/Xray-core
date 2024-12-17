@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/features/routing"
@@ -15,7 +16,7 @@ import (
 func CreateObject(v *Instance, config interface{}) (interface{}, error) {
 	ctx := v.ctx
 	if v != nil {
-		ctx = context.WithValue(ctx, xrayKey, v)
+		ctx = toContext(v.ctx, v)
 	}
 	return common.CreateObject(ctx, config)
 }
@@ -46,10 +47,13 @@ func StartInstance(configFormat string, configBytes []byte) (*Instance, error) {
 //
 // xray:api:stable
 func Dial(ctx context.Context, v *Instance, dest net.Destination) (net.Conn, error) {
+	ctx = toContext(ctx, v)
+
 	dispatcher := v.GetFeature(routing.DispatcherType())
 	if dispatcher == nil {
-		return nil, newError("routing.Dispatcher is not registered in Xray core")
+		return nil, errors.New("routing.Dispatcher is not registered in Xray core")
 	}
+
 	r, err := dispatcher.(routing.Dispatcher).Dispatch(ctx, dest)
 	if err != nil {
 		return nil, err
@@ -70,9 +74,11 @@ func Dial(ctx context.Context, v *Instance, dest net.Destination) (net.Conn, err
 //
 // xray:api:beta
 func DialUDP(ctx context.Context, v *Instance) (net.PacketConn, error) {
+	ctx = toContext(ctx, v)
+
 	dispatcher := v.GetFeature(routing.DispatcherType())
 	if dispatcher == nil {
-		return nil, newError("routing.Dispatcher is not registered in Xray core")
+		return nil, errors.New("routing.Dispatcher is not registered in Xray core")
 	}
 	return udp.DialDispatcher(ctx, dispatcher.(routing.Dispatcher))
 }

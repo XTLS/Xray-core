@@ -7,38 +7,33 @@ option java_package = "com.xray.transport.internet";
 option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
-
-enum TransportProtocol {
-  TCP = 0;
-  UDP = 1;
-  MKCP = 2;
-  WebSocket = 3;
-  HTTP = 4;
-  DomainSocket = 5;
-}
+import "common/net/address.proto";
 
 enum DomainStrategy {
   AS_IS = 0;
   USE_IP = 1;
   USE_IP4 = 2;
   USE_IP6 = 3;
+  USE_IP46 = 4;
+  USE_IP64 = 5;
+  FORCE_IP = 6;
+  FORCE_IP4 = 7;
+  FORCE_IP6 = 8;
+  FORCE_IP46 = 9;
+  FORCE_IP64 = 10;
 }
 
 message TransportConfig {
-  // Type of network that this settings supports.
-  // Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
-
-  // Type of network that this settings supports.
+  // Transport protocol name.
   string protocol_name = 3;
 
-  // Specific settings. Must be of the transports.
+  // Specific transport protocol settings.
   xray.common.serial.TypedMessage settings = 2;
 }
 
 message StreamConfig {
-  // Effective network. Deprecated. Use the string form below.
-  TransportProtocol protocol = 1 [ deprecated = true ];
+  xray.common.net.IPOrDomain address = 8;
+  uint32 port = 9;
 
   // Effective network.
   string protocol_name = 5;
@@ -48,7 +43,7 @@ message StreamConfig {
   // Type of security. Must be a message name of the settings proto.
   string security_type = 3;
 
-  // Settings for transport security. For now the only choice is TLS.
+  // Transport security settings. They can be either TLS or REALITY.
   repeated xray.common.serial.TypedMessage security_settings = 4;
 
   SocketConfig socket_settings = 6;
@@ -57,6 +52,13 @@ message StreamConfig {
 message ProxyConfig {
   string tag = 1;
   bool transportLayerProxy = 2;
+}
+
+message CustomSockopt {
+  string level = 1;
+  string opt = 2;
+  string value = 3;
+  string type = 4;
 }
 
 // SocketConfig is options to be applied on network sockets.
@@ -90,5 +92,28 @@ message SocketConfig {
   bool accept_proxy_protocol = 7;
 
   DomainStrategy domain_strategy = 8;
+
   string dialer_proxy = 9;
+
+  int32 tcp_keep_alive_interval = 10;
+
+  int32 tcp_keep_alive_idle = 11;
+  
+  string tcp_congestion = 12;
+  
+  string interface = 13;
+
+  bool   v6only = 14;
+
+  int32 tcp_window_clamp = 15;
+
+  int32 tcp_user_timeout = 16;
+
+  int32 tcp_max_seg = 17;
+
+  bool tcp_no_delay = 18;
+
+  bool tcp_mptcp = 19;
+
+  repeated CustomSockopt customSockopt = 20;
 }

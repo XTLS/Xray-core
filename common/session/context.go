@@ -1,30 +1,29 @@
 package session
 
-import "context"
+import (
+	"context"
+	_ "unsafe"
 
-type sessionKey int
-
-const (
-	idSessionKey sessionKey = iota
-	inboundSessionKey
-	outboundSessionKey
-	contentSessionKey
-	muxPreferedSessionKey
-	sockoptSessionKey
+	"github.com/xtls/xray-core/common/ctx"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/routing"
 )
 
-// ContextWithID returns a new context with the given ID.
-func ContextWithID(ctx context.Context, id ID) context.Context {
-	return context.WithValue(ctx, idSessionKey, id)
-}
+//go:linkname IndependentCancelCtx context.newCancelCtx
+func IndependentCancelCtx(parent context.Context) context.Context
 
-// IDFromContext returns ID in this context, or 0 if not contained.
-func IDFromContext(ctx context.Context) ID {
-	if id, ok := ctx.Value(idSessionKey).(ID); ok {
-		return id
-	}
-	return 0
-}
+const (
+	inboundSessionKey         ctx.SessionKey = 1
+	outboundSessionKey        ctx.SessionKey = 2
+	contentSessionKey         ctx.SessionKey = 3
+	muxPreferredSessionKey    ctx.SessionKey = 4
+	sockoptSessionKey         ctx.SessionKey = 5
+	trackedConnectionErrorKey ctx.SessionKey = 6
+	dispatcherKey             ctx.SessionKey = 7
+	timeoutOnlyKey            ctx.SessionKey = 8
+	allowedNetworkKey         ctx.SessionKey = 9
+	handlerSessionKey         ctx.SessionKey = 10
+)
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
 	return context.WithValue(ctx, inboundSessionKey, inbound)
@@ -37,13 +36,29 @@ func InboundFromContext(ctx context.Context) *Inbound {
 	return nil
 }
 
-func ContextWithOutbound(ctx context.Context, outbound *Outbound) context.Context {
-	return context.WithValue(ctx, outboundSessionKey, outbound)
+func ContextWithOutbounds(ctx context.Context, outbounds []*Outbound) context.Context {
+	return context.WithValue(ctx, outboundSessionKey, outbounds)
 }
 
-func OutboundFromContext(ctx context.Context) *Outbound {
-	if outbound, ok := ctx.Value(outboundSessionKey).(*Outbound); ok {
-		return outbound
+func ContextCloneOutbounds(ctx context.Context) context.Context {
+	outbounds := OutboundsFromContext(ctx)
+	newOutbounds := make([]*Outbound, len(outbounds))
+	for i, ob := range outbounds {
+		if ob == nil {
+			continue
+		}
+
+		// copy outbound by value
+		v := *ob
+		newOutbounds[i] = &v
+	}
+
+	return ContextWithOutbounds(ctx, newOutbounds)
+}
+
+func OutboundsFromContext(ctx context.Context) []*Outbound {
+	if outbounds, ok := ctx.Value(outboundSessionKey).([]*Outbound); ok {
+		return outbounds
 	}
 	return nil
 }
@@ -59,14 +74,14 @@ func ContentFromContext(ctx context.Context) *Content {
 	return nil
 }
 
-// ContextWithMuxPrefered returns a new context with the given bool
-func ContextWithMuxPrefered(ctx context.Context, forced bool) context.Context {
-	return context.WithValue(ctx, muxPreferedSessionKey, forced)
+// ContextWithMuxPreferred returns a new context with the given bool
+func ContextWithMuxPreferred(ctx context.Context, forced bool) context.Context {
+	return context.WithValue(ctx, muxPreferredSessionKey, forced)
 }
 
-// MuxPreferedFromContext returns value in this context, or false if not contained.
-func MuxPreferedFromContext(ctx context.Context) bool {
-	if val, ok := ctx.Value(muxPreferedSessionKey).(bool); ok {
+// MuxPreferredFromContext returns value in this context, or false if not contained.
+func MuxPreferredFromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(muxPreferredSessionKey).(bool); ok {
 		return val
 	}
 	return false
@@ -83,4 +98,67 @@ func SockoptFromContext(ctx context.Context) *Sockopt {
 		return sockopt
 	}
 	return nil
+}
+
+func GetForcedOutboundTagFromContext(ctx context.Context) string {
+	if ContentFromContext(ctx) == nil {
+		return ""
+	}
+	return ContentFromContext(ctx).Attribute("forcedOutboundTag")
+}
+
+func SetForcedOutboundTagToContext(ctx context.Context, tag string) context.Context {
+	if contentFromContext := ContentFromContext(ctx); contentFromContext == nil {
+		ctx = ContextWithContent(ctx, &Content{})
+	}
+	ContentFromContext(ctx).SetAttribute("forcedOutboundTag", tag)
+	return ctx
+}
+
+type TrackedRequestErrorFeedback interface {
+	SubmitError(err error)
+}
+
+func SubmitOutboundErrorToOriginator(ctx context.Context, err error) {
+	if errorTracker := ctx.Value(trackedConnectionErrorKey); errorTracker != nil {
+		errorTracker := errorTracker.(TrackedRequestErrorFeedback)
+		errorTracker.SubmitError(err)
+	}
+}
+
+func TrackedConnectionError(ctx context.Context, tracker TrackedRequestErrorFeedback) context.Context {
+	return context.WithValue(ctx, trackedConnectionErrorKey, tracker)
+}
+
+func ContextWithDispatcher(ctx context.Context, dispatcher routing.Dispatcher) context.Context {
+	return context.WithValue(ctx, dispatcherKey, dispatcher)
+}
+
+func DispatcherFromContext(ctx context.Context) routing.Dispatcher {
+	if dispatcher, ok := ctx.Value(dispatcherKey).(routing.Dispatcher); ok {
+		return dispatcher
+	}
+	return nil
+}
+
+func ContextWithTimeoutOnly(ctx context.Context, only bool) context.Context {
+	return context.WithValue(ctx, timeoutOnlyKey, only)
+}
+
+func TimeoutOnlyFromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(timeoutOnlyKey).(bool); ok {
+		return val
+	}
+	return false
+}
+
+func ContextWithAllowedNetwork(ctx context.Context, network net.Network) context.Context {
+	return context.WithValue(ctx, allowedNetworkKey, network)
+}
+
+func AllowedNetworkFromContext(ctx context.Context) net.Network {
+	if val, ok := ctx.Value(allowedNetworkKey).(net.Network); ok {
+		return val
+	}
+	return net.Network_Unknown
 }

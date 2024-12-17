@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/xtls/xray-core/common/protocol/http"
@@ -88,7 +89,7 @@ first_name=John&last_name=Doe&action=Submit`,
 	}
 
 	for _, test := range cases {
-		header, err := SniffHTTP([]byte(test.input))
+		header, err := SniffHTTP([]byte(test.input), context.TODO())
 		if test.err {
 			if err == nil {
 				t.Errorf("Expect error but nil, in test: %v", test)

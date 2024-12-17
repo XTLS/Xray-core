@@ -1,13 +1,8 @@
 package base
 
-import (
-	"os"
-	"path"
-)
-
 // CommandEnvHolder is a struct holds the environment info of commands
 type CommandEnvHolder struct {
-	// Excutable name of current binary
+	// Executable name of current binary
 	Exec string
 	// commands column width of current command
 	CommandsWidth int
@@ -17,10 +12,12 @@ type CommandEnvHolder struct {
 var CommandEnv CommandEnvHolder
 
 func init() {
-	exec, err := os.Executable()
-	if err != nil {
-		return
-	}
-	CommandEnv.Exec = path.Base(exec)
+	/*
+		exec, err := os.Executable()
+		if err != nil {
+			return
+		}
+		CommandEnv.Exec = path.Base(exec)
+	*/
 	CommandEnv.Exec = "xray"
 }

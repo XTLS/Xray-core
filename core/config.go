@@ -4,12 +4,12 @@ import (
 	"io"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/cmdarg"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/main/confloader"
+	"google.golang.org/protobuf/proto"
 )
 
 // ConfigFormat is a configurable format of Xray config file.
@@ -19,35 +19,62 @@ type ConfigFormat struct {
 	Loader    ConfigLoader
 }
 
+type ConfigSource struct {
+	Name   string
+	Format string
+}
+
 // ConfigLoader is a utility to load Xray config from external source.
 type ConfigLoader func(input interface{}) (*Config, error)
 
 // ConfigBuilder is a builder to build core.Config from filenames and formats
-type ConfigBuilder func(files []string, formats []string) (*Config, error)
+type ConfigBuilder func(files []*ConfigSource) (*Config, error)
+
+// ConfigsMerger merges multiple json configs into a single one
+type ConfigsMerger func(files []*ConfigSource) (string, error)
 
 var (
 	configLoaderByName    = make(map[string]*ConfigFormat)
 	configLoaderByExt     = make(map[string]*ConfigFormat)
 	ConfigBuilderForFiles ConfigBuilder
+	ConfigMergedFormFiles ConfigsMerger
 )
 
 // RegisterConfigLoader add a new ConfigLoader.
 func RegisterConfigLoader(format *ConfigFormat) error {
 	name := strings.ToLower(format.Name)
 	if _, found := configLoaderByName[name]; found {
-		return newError(format.Name, " already registered.")
+		return errors.New(format.Name, " already registered.")
 	}
 	configLoaderByName[name] = format
 
 	for _, ext := range format.Extension {
 		lext := strings.ToLower(ext)
 		if f, found := configLoaderByExt[lext]; found {
-			return newError(ext, " already registered to ", f.Name)
+			return errors.New(ext, " already registered to ", f.Name)
 		}
 		configLoaderByExt[lext] = format
 	}
 
 	return nil
+}
+
+func GetMergedConfig(args cmdarg.Arg) (string, error) {
+	var files []*ConfigSource
+	supported := []string{"json", "yaml", "toml"}
+	for _, file := range args {
+		format := getFormat(file)
+		for _, s := range supported {
+			if s == format {
+				files = append(files, &ConfigSource{
+					Name:   file,
+					Format: format,
+				})
+				break
+			}
+		}
+	}
+	return ConfigMergedFormFiles(files)
 }
 
 func GetFormatByExtension(ext string) string {
@@ -58,7 +85,7 @@ func GetFormatByExtension(ext string) string {
 		return "yaml"
 	case "toml":
 		return "toml"
-	case "json":
+	case "json", "jsonc":
 		return "json"
 	default:
 		return ""
@@ -80,7 +107,7 @@ func getFormat(filename string) string {
 func LoadConfig(formatName string, input interface{}) (*Config, error) {
 	switch v := input.(type) {
 	case cmdarg.Arg:
-		formats := make([]string, len(v))
+		files := make([]*ConfigSource, len(v))
 		hasProtobuf := false
 		for i, file := range v {
 			var f string
@@ -96,13 +123,16 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			}
 
 			if f == "" {
-				return nil, newError("Failed to get format of ", file).AtWarning()
+				return nil, errors.New("Failed to get format of ", file).AtWarning()
 			}
 
 			if f == "protobuf" {
 				hasProtobuf = true
 			}
-			formats[i] = f
+			files[i] = &ConfigSource{
+				Name:   file,
+				Format: f,
+			}
 		}
 
 		// only one protobuf config file is allowed
@@ -110,22 +140,21 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 			if len(v) == 1 {
 				return configLoaderByName["protobuf"].Loader(v)
 			} else {
-				return nil, newError("Only one protobuf config file is allowed").AtWarning()
+				return nil, errors.New("Only one protobuf config file is allowed").AtWarning()
 			}
 		}
 
 		// to avoid import cycle
-		return ConfigBuilderForFiles(v, formats)
-
+		return ConfigBuilderForFiles(files)
 	case io.Reader:
 		if f, found := configLoaderByName[formatName]; found {
 			return f.Loader(v)
 		} else {
-			return nil, newError("Unable to load config in", formatName).AtWarning()
+			return nil, errors.New("Unable to load config in", formatName).AtWarning()
 		}
 	}
 
-	return nil, newError("Unable to load config").AtWarning()
+	return nil, errors.New("Unable to load config").AtWarning()
 }
 
 func loadProtobufConfig(data []byte) (*Config, error) {
@@ -153,7 +182,7 @@ func init() {
 				common.Must(err)
 				return loadProtobufConfig(data)
 			default:
-				return nil, newError("unknow type")
+				return nil, errors.New("unknown type")
 			}
 		},
 	}))

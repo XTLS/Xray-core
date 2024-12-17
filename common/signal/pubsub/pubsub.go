@@ -87,8 +87,7 @@ func (s *Service) Subscribe(name string) *Subscriber {
 		done:   done.New(),
 	}
 	s.Lock()
-	subs := append(s.subs[name], sub)
-	s.subs[name] = subs
+	s.subs[name] = append(s.subs[name], sub)
 	s.Unlock()
 	common.Must(s.ctask.Start())
 	return sub

@@ -55,7 +55,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	}
 	p, ok := rawProxy.(proxy.Inbound)
 	if !ok {
-		return nil, newError("not an inbound proxy.")
+		return nil, errors.New("not an inbound proxy.")
 	}
 
 	h := &AlwaysOnInboundHandler{
@@ -67,7 +67,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	uplinkCounter, downlinkCounter := getStatCounter(core.MustFromContext(ctx), tag)
 
 	nl := p.Network()
-	pr := receiverConfig.PortRange
+	pl := receiverConfig.PortList
 	address := receiverConfig.Listen.AsAddress()
 	if address == nil {
 		address = net.AnyIP
@@ -75,7 +75,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
 	if err != nil {
-		return nil, newError("failed to parse stream config").Base(err).AtWarning()
+		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
 	}
 
 	if receiverConfig.ReceiveOriginalDestination {
@@ -87,9 +87,9 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		}
 		mss.SocketSettings.ReceiveOriginalDestAddress = true
 	}
-	if pr == nil {
+	if pl == nil {
 		if net.HasNetwork(nl, net.Network_UNIX) {
-			newError("creating unix domain socket worker on ", address).AtDebug().WriteToLog()
+			errors.LogDebug(ctx, "creating unix domain socket worker on ", address)
 
 			worker := &dsWorker{
 				address:         address,
@@ -105,41 +105,43 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 			h.workers = append(h.workers, worker)
 		}
 	}
-	if pr != nil {
-		for port := pr.From; port <= pr.To; port++ {
-			if net.HasNetwork(nl, net.Network_TCP) {
-				newError("creating stream worker on ", address, ":", port).AtDebug().WriteToLog()
+	if pl != nil {
+		for _, pr := range pl.Range {
+			for port := pr.From; port <= pr.To; port++ {
+				if net.HasNetwork(nl, net.Network_TCP) {
+					errors.LogDebug(ctx, "creating stream worker on ", address, ":", port)
 
-				worker := &tcpWorker{
-					address:         address,
-					port:            net.Port(port),
-					proxy:           p,
-					stream:          mss,
-					recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
-					tag:             tag,
-					dispatcher:      h.mux,
-					sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
-					uplinkCounter:   uplinkCounter,
-					downlinkCounter: downlinkCounter,
-					ctx:             ctx,
+					worker := &tcpWorker{
+						address:         address,
+						port:            net.Port(port),
+						proxy:           p,
+						stream:          mss,
+						recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
+						tag:             tag,
+						dispatcher:      h.mux,
+						sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
+						uplinkCounter:   uplinkCounter,
+						downlinkCounter: downlinkCounter,
+						ctx:             ctx,
+					}
+					h.workers = append(h.workers, worker)
 				}
-				h.workers = append(h.workers, worker)
-			}
 
-			if net.HasNetwork(nl, net.Network_UDP) {
-				worker := &udpWorker{
-					tag:             tag,
-					proxy:           p,
-					address:         address,
-					port:            net.Port(port),
-					dispatcher:      h.mux,
-					sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
-					uplinkCounter:   uplinkCounter,
-					downlinkCounter: downlinkCounter,
-					stream:          mss,
-					ctx:             ctx,
+				if net.HasNetwork(nl, net.Network_UDP) {
+					worker := &udpWorker{
+						tag:             tag,
+						proxy:           p,
+						address:         address,
+						port:            net.Port(port),
+						dispatcher:      h.mux,
+						sniffingConfig:  receiverConfig.GetEffectiveSniffingSettings(),
+						uplinkCounter:   uplinkCounter,
+						downlinkCounter: downlinkCounter,
+						stream:          mss,
+						ctx:             ctx,
+					}
+					h.workers = append(h.workers, worker)
 				}
-				h.workers = append(h.workers, worker)
 			}
 		}
 	}
@@ -165,7 +167,7 @@ func (h *AlwaysOnInboundHandler) Close() error {
 	}
 	errs = append(errs, h.mux.Close())
 	if err := errors.Combine(errs...); err != nil {
-		return newError("failed to close all resources").Base(err)
+		return errors.New("failed to close all resources").Base(err)
 	}
 	return nil
 }

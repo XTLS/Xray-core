@@ -2,58 +2,84 @@ package internet
 
 import (
 	"context"
+	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pires/go-proxyproto"
+	"github.com/sagernet/sing/common/control"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 )
 
-var (
-	effectiveListener = DefaultListener{}
-)
-
-type controller func(network, address string, fd uintptr) error
+var effectiveListener = DefaultListener{}
 
 type DefaultListener struct {
-	controllers []controller
+	controllers []control.Func
 }
 
-func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []controller) func(network, address string, c syscall.RawConn) error {
+type combinedListener struct {
+	net.Listener
+	locker *FileLocker // for unix domain socket
+}
+
+func (cl *combinedListener) Close() error {
+	if cl.locker != nil {
+		cl.locker.Release()
+		cl.locker = nil
+	}
+	return cl.Listener.Close()
+}
+
+func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []control.Func) func(network, address string, c syscall.RawConn) error {
 	return func(network, address string, c syscall.RawConn) error {
 		return c.Control(func(fd uintptr) {
+			for _, controller := range controllers {
+				if err := controller(network, address, c); err != nil {
+					errors.LogInfoInner(ctx, err, "failed to apply external controller")
+				}
+			}
+
 			if sockopt != nil {
 				if err := applyInboundSocketOptions(network, fd, sockopt); err != nil {
-					newError("failed to apply socket options to incoming connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
+					errors.LogInfoInner(ctx, err, "failed to apply socket options to incoming connection")
 				}
 			}
 
 			setReusePort(fd)
-
-			for _, controller := range controllers {
-				if err := controller(network, address, fd); err != nil {
-					newError("failed to apply external controller").Base(err).WriteToLog(session.ExportIDToError(ctx))
-				}
-			}
 		})
 	}
 }
 
-func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (net.Listener, error) {
+func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (l net.Listener, err error) {
 	var lc net.ListenConfig
-	var l net.Listener
-	var err error
 	var network, address string
+	// callback is called after the Listen function returns
+	callback := func(l net.Listener, err error) (net.Listener, error) {
+		return l, err
+	}
+
 	switch addr := addr.(type) {
 	case *net.TCPAddr:
 		network = addr.Network()
 		address = addr.String()
 		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
+		if sockopt != nil {
+			if sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0 {
+				lc.KeepAlive = time.Duration(-1)
+			}
+			if sockopt.TcpMptcp {
+				lc.SetMultipathTCP(true)
+			}
+		}
 	case *net.UnixAddr:
 		lc.Control = nil
 		network = addr.Network()
 		address = addr.Name
+
 		if (runtime.GOOS == "linux" || runtime.GOOS == "android") && address[0] == '@' {
 			// linux abstract unix domain socket is lockfree
 			if len(address) > 1 && address[1] == '@' {
@@ -63,19 +89,48 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				address = string(fullAddr)
 			}
 		} else {
+			// split permission from address
+			var filePerm *os.FileMode
+			if s := strings.Split(address, ","); len(s) == 2 {
+				address = s[0]
+				perm, perr := strconv.ParseUint(s[1], 8, 32)
+				if perr != nil {
+					return nil, errors.New("failed to parse permission: " + s[1]).Base(perr)
+				}
+
+				mode := os.FileMode(perm)
+				filePerm = &mode
+			}
 			// normal unix domain socket needs lock
 			locker := &FileLocker{
 				path: address + ".lock",
 			}
-			err := locker.Acquire()
-			if err != nil {
+			if err := locker.Acquire(); err != nil {
 				return nil, err
 			}
-			ctx = context.WithValue(ctx, address, locker)
+
+			// set callback to combine listener and set permission
+			callback = func(l net.Listener, err error) (net.Listener, error) {
+				if err != nil {
+					locker.Release()
+					return l, err
+				}
+				l = &combinedListener{Listener: l, locker: locker}
+				if filePerm == nil {
+					return l, nil
+				}
+				err = os.Chmod(address, *filePerm)
+				if err != nil {
+					l.Close()
+					return nil, errors.New("failed to set permission for " + address).Base(err)
+				}
+				return l, nil
+			}
 		}
 	}
 
 	l, err = lc.Listen(ctx, network, address)
+	l, err = callback(l, err)
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
@@ -95,9 +150,9 @@ func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sock
 // The controller can be used to operate on file descriptors before they are put into use.
 //
 // xray:api:beta
-func RegisterListenerController(controller func(network, address string, fd uintptr) error) error {
+func RegisterListenerController(controller control.Func) error {
 	if controller == nil {
-		return newError("nil listener controller")
+		return errors.New("nil listener controller")
 	}
 
 	effectiveListener.controllers = append(effectiveListener.controllers, controller)

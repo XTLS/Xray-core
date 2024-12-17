@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -107,7 +106,7 @@ func TestMultiBufferReadAllToByte(t *testing.T) {
 		common.Must(err)
 
 		if l := len(b); l != 8*1024 {
-			t.Error("unexpceted length from ReadAllToBytes", l)
+			t.Error("unexpected length from ReadAllToBytes", l)
 		}
 	}
 	{
@@ -119,7 +118,7 @@ func TestMultiBufferReadAllToByte(t *testing.T) {
 		common.Must(err)
 		f.Close()
 
-		cnt, err := ioutil.ReadFile(dat)
+		cnt, err := os.ReadFile(dat)
 		common.Must(err)
 
 		if d := cmp.Diff(buf2, cnt); d != "" {
@@ -140,7 +139,7 @@ func TestMultiBufferCopy(t *testing.T) {
 	mb.Copy(lbdst)
 
 	if d := cmp.Diff(lb, lbdst); d != "" {
-		t.Error("unexpceted different from MultiBufferCopy ", d)
+		t.Error("unexpected different from MultiBufferCopy ", d)
 	}
 }
 

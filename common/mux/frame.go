@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -58,6 +59,7 @@ type FrameMetadata struct {
 	SessionID     uint16
 	Option        bitmask.Byte
 	SessionStatus SessionStatus
+	GlobalID      [8]byte
 }
 
 func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
@@ -81,6 +83,9 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 		if err := addrParser.WriteAddressPort(b, f.Target.Address, f.Target.Port); err != nil {
 			return err
 		}
+		if b.UDP != nil { // make sure it's user's proxy request
+			b.Write(f.GlobalID[:]) // no need to check whether it's empty
+		}
 	} else if b.UDP != nil {
 		b.WriteByte(byte(TargetNetworkUDP))
 		addrParser.WriteAddressPort(b, b.UDP.Address, b.UDP.Port)
@@ -98,7 +103,7 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader) error {
 		return err
 	}
 	if metaLen > 512 {
-		return newError("invalid metalen ", metaLen).AtError()
+		return errors.New("invalid metalen ", metaLen).AtError()
 	}
 
 	b := buf.New()
@@ -114,7 +119,7 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader) error {
 // Visible for testing only.
 func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 	if b.Len() < 4 {
-		return newError("insufficient buffer: ", b.Len())
+		return errors.New("insufficient buffer: ", b.Len())
 	}
 
 	f.SessionID = binary.BigEndian.Uint16(b.BytesTo(2))
@@ -122,16 +127,17 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 	f.Option = bitmask.Byte(b.Byte(3))
 	f.Target.Network = net.Network_Unknown
 
-	if f.SessionStatus == SessionStatusNew || (f.SessionStatus == SessionStatusKeep && b.Len() != 4) {
+	if f.SessionStatus == SessionStatusNew || (f.SessionStatus == SessionStatusKeep && b.Len() > 4 &&
+		TargetNetwork(b.Byte(4)) == TargetNetworkUDP) { // MUST check the flag first
 		if b.Len() < 8 {
-			return newError("insufficient buffer: ", b.Len())
+			return errors.New("insufficient buffer: ", b.Len())
 		}
 		network := TargetNetwork(b.Byte(4))
 		b.Advance(5)
 
 		addr, port, err := addrParser.ReadAddressPort(nil, b)
 		if err != nil {
-			return newError("failed to parse address and port").Base(err)
+			return errors.New("failed to parse address and port").Base(err)
 		}
 
 		switch network {
@@ -140,8 +146,14 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer) error {
 		case TargetNetworkUDP:
 			f.Target = net.UDPDestination(addr, port)
 		default:
-			return newError("unknown network type: ", network)
+			return errors.New("unknown network type: ", network)
 		}
+	}
+
+	// Application data is essential, to test whether the pipe is closed.
+	if f.SessionStatus == SessionStatusNew && f.Option.Has(OptionData) &&
+		f.Target.Network == net.Network_UDP && b.Len() >= 8 {
+		copy(f.GlobalID[:], b.Bytes())
 	}
 
 	return nil

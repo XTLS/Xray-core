@@ -25,3 +25,17 @@ func (r *Reader) ReadMultiBufferTimeout(d time.Duration) (buf.MultiBuffer, error
 func (r *Reader) Interrupt() {
 	r.pipe.Interrupt()
 }
+
+// ReturnAnError makes ReadMultiBuffer return an error, only once.
+func (r *Reader) ReturnAnError(err error) {
+	r.pipe.errChan <- err
+}
+
+// Recover catches an error set by ReturnAnError, if exists.
+func (r *Reader) Recover() (err error) {
+	select {
+	case err = <-r.pipe.errChan:
+	default:
+	}
+	return
+}

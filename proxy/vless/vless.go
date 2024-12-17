@@ -5,10 +5,6 @@
 // clients with 'socks' for proxying.
 package vless
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 const (
-	XRO = "xtls-rprx-origin"
-	XRD = "xtls-rprx-direct"
-	XRS = "xtls-rprx-splice"
+	XRV = "xtls-rprx-vision"
 )

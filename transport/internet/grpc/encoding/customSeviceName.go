@@ -6,20 +6,20 @@ import (
 	"google.golang.org/grpc"
 )
 
-func ServerDesc(name string) grpc.ServiceDesc {
+func ServerDesc(name, tun, tunMulti string) grpc.ServiceDesc {
 	return grpc.ServiceDesc{
 		ServiceName: name,
 		HandlerType: (*GRPCServiceServer)(nil),
 		Methods:     []grpc.MethodDesc{},
 		Streams: []grpc.StreamDesc{
 			{
-				StreamName:    "Tun",
+				StreamName:    tun,
 				Handler:       _GRPCService_Tun_Handler,
 				ServerStreams: true,
 				ClientStreams: true,
 			},
 			{
-				StreamName:    "TunMulti",
+				StreamName:    tunMulti,
 				Handler:       _GRPCService_TunMulti_Handler,
 				ServerStreams: true,
 				ClientStreams: true,
@@ -29,32 +29,32 @@ func ServerDesc(name string) grpc.ServiceDesc {
 	}
 }
 
-func (c *gRPCServiceClient) TunCustomName(ctx context.Context, name string, opts ...grpc.CallOption) (GRPCService_TunClient, error) {
-	stream, err := c.cc.NewStream(ctx, &ServerDesc(name).Streams[0], "/"+name+"/Tun", opts...)
+func (c *gRPCServiceClient) TunCustomName(ctx context.Context, name, tun string, opts ...grpc.CallOption) (GRPCService_TunClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ServerDesc(name, tun, "").Streams[0], "/"+name+"/"+tun, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &gRPCServiceTunClient{stream}
+	x := &grpc.GenericClientStream[Hunk, Hunk]{ClientStream: stream}
 	return x, nil
 }
 
-func (c *gRPCServiceClient) TunMultiCustomName(ctx context.Context, name string, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error) {
-	stream, err := c.cc.NewStream(ctx, &ServerDesc(name).Streams[0], "/"+name+"/TunMulti", opts...)
+func (c *gRPCServiceClient) TunMultiCustomName(ctx context.Context, name, tunMulti string, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ServerDesc(name, "", tunMulti).Streams[1], "/"+name+"/"+tunMulti, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &gRPCServiceTunMultiClient{stream}
+	x := &grpc.GenericClientStream[MultiHunk, MultiHunk]{ClientStream: stream}
 	return x, nil
 }
 
 type GRPCServiceClientX interface {
-	TunCustomName(ctx context.Context, name string, opts ...grpc.CallOption) (GRPCService_TunClient, error)
-	TunMultiCustomName(ctx context.Context, name string, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error)
+	TunCustomName(ctx context.Context, name, tun string, opts ...grpc.CallOption) (GRPCService_TunClient, error)
+	TunMultiCustomName(ctx context.Context, name, tunMulti string, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error)
 	Tun(ctx context.Context, opts ...grpc.CallOption) (GRPCService_TunClient, error)
 	TunMulti(ctx context.Context, opts ...grpc.CallOption) (GRPCService_TunMultiClient, error)
 }
 
-func RegisterGRPCServiceServerX(s *grpc.Server, srv GRPCServiceServer, name string) {
-	desc := ServerDesc(name)
+func RegisterGRPCServiceServerX(s *grpc.Server, srv GRPCServiceServer, name, tun, tunMulti string) {
+	desc := ServerDesc(name, tun, tunMulti)
 	s.RegisterService(&desc, srv)
 }

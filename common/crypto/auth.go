@@ -2,12 +2,13 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"crypto/rand"
 	"io"
-	"math/rand"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/bytespool"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 )
 
@@ -39,8 +40,12 @@ func GenerateIncreasingNonce(nonce []byte) BytesGenerator {
 	}
 }
 
-func GenerateInitialAEADNonce() BytesGenerator {
-	return GenerateIncreasingNonce([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+func GenerateAEADNonceWithSize(nonceSize int) BytesGenerator {
+	c := make([]byte, nonceSize)
+	for i := 0; i < nonceSize; i++ {
+		c[i] = 0xFF
+	}
+	return GenerateIncreasingNonce(c)
 }
 
 type Authenticator interface {
@@ -59,7 +64,7 @@ type AEADAuthenticator struct {
 func (v *AEADAuthenticator) Open(dst, cipherText []byte) ([]byte, error) {
 	iv := v.NonceGenerator()
 	if len(iv) != v.AEAD.NonceSize() {
-		return nil, newError("invalid AEAD nonce size: ", len(iv))
+		return nil, errors.New("invalid AEAD nonce size: ", len(iv))
 	}
 
 	var additionalData []byte
@@ -72,7 +77,7 @@ func (v *AEADAuthenticator) Open(dst, cipherText []byte) ([]byte, error) {
 func (v *AEADAuthenticator) Seal(dst, plainText []byte) ([]byte, error) {
 	iv := v.NonceGenerator()
 	if len(iv) != v.AEAD.NonceSize() {
-		return nil, newError("invalid AEAD nonce size: ", len(iv))
+		return nil, errors.New("invalid AEAD nonce size: ", len(iv))
 	}
 
 	var additionalData []byte
@@ -127,7 +132,7 @@ func (r *AuthenticationReader) readSize() (uint16, uint16, error) {
 	return size, padding, err
 }
 
-var errSoft = newError("waiting for more data")
+var errSoft = errors.New("waiting for more data")
 
 func (r *AuthenticationReader) readBuffer(size int32, padding int32) (*buf.Buffer, error) {
 	b := buf.New()
@@ -174,7 +179,7 @@ func (r *AuthenticationReader) readInternal(soft bool, mb *buf.MultiBuffer) erro
 	if size <= buf.Size {
 		b, err := r.readBuffer(int32(size), int32(padding))
 		if err != nil {
-			return nil
+			return err
 		}
 		*mb = append(*mb, b)
 		return nil
@@ -251,7 +256,7 @@ func (w *AuthenticationWriter) seal(b []byte) (*buf.Buffer, error) {
 	sizeBytes := w.sizeParser.SizeBytes()
 	totalSize := sizeBytes + encryptedSize + paddingSize
 	if totalSize > buf.Size {
-		return nil, newError("size too large: ", totalSize)
+		return nil, errors.New("size too large: ", totalSize)
 	}
 
 	eb := buf.New()
@@ -261,7 +266,8 @@ func (w *AuthenticationWriter) seal(b []byte) (*buf.Buffer, error) {
 		return nil, err
 	}
 	if paddingSize > 0 {
-		// With size of the chunk and padding length encrypted, the content of padding doesn't matter much.
+		// These paddings will send in clear text.
+		// To avoid leakage of PRNG internal state, a cryptographically secure PRNG should be used.
 		paddingBytes := eb.Extend(paddingSize)
 		common.Must2(rand.Read(paddingBytes))
 	}
@@ -290,7 +296,6 @@ func (w *AuthenticationWriter) writeStream(mb buf.MultiBuffer) error {
 		mb = nb
 
 		eb, err := w.seal(rawBytes[:nBytes])
-
 		if err != nil {
 			buf.ReleaseMulti(mb2Write)
 			return err

@@ -11,18 +11,29 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 )
 
-var (
-	_ buf.Writer = (*connection)(nil)
-)
+var _ buf.Writer = (*connection)(nil)
 
 // connection is a wrapper for net.Conn over WebSocket connection.
+// remoteAddr is used to pass "virtual" remote IP addresses in X-Forwarded-For.
+// so we shouldn't directly read it form conn.
 type connection struct {
 	conn       *websocket.Conn
 	reader     io.Reader
 	remoteAddr net.Addr
 }
 
-func newConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
+func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader, heartbeatPeriod uint32) *connection {
+	if heartbeatPeriod != 0 {
+		go func() {
+			for {
+				time.Sleep(time.Duration(heartbeatPeriod) * time.Second)
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
+					break
+				}
+			}
+		}()
+	}
+
 	return &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
@@ -76,15 +87,15 @@ func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 func (c *connection) Close() error {
-	var errors []interface{}
+	var errs []interface{}
 	if err := c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 	if err := c.conn.Close(); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
-	if len(errors) > 0 {
-		return newError("failed to close connection").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close connection").Base(errors.New(serial.Concat(errs...)))
 	}
 	return nil
 }

@@ -2,11 +2,13 @@ package core
 
 import (
 	"context"
-	"os"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
@@ -86,7 +88,7 @@ func (r *resolution) resolve(allFeatures []features.Feature) (bool, error) {
 	return true, err
 }
 
-// Instance combines all functionalities in Xray.
+// Instance combines all Xray features.
 type Instance struct {
 	access             sync.Mutex
 	features           []features.Feature
@@ -104,7 +106,7 @@ func AddInboundHandler(server *Instance, config *InboundHandlerConfig) error {
 	}
 	handler, ok := rawHandler.(inbound.Handler)
 	if !ok {
-		return newError("not an InboundHandler")
+		return errors.New("not an InboundHandler")
 	}
 	if err := inboundManager.AddHandler(server.ctx, handler); err != nil {
 		return err
@@ -130,7 +132,7 @@ func AddOutboundHandler(server *Instance, config *OutboundHandlerConfig) error {
 	}
 	handler, ok := rawHandler.(outbound.Handler)
 	if !ok {
-		return newError("not an OutboundHandler")
+		return errors.New("not an OutboundHandler")
 	}
 	if err := outboundManager.AddHandler(server.ctx, handler); err != nil {
 		return err
@@ -155,11 +157,17 @@ func RequireFeatures(ctx context.Context, callback interface{}) error {
 	return v.RequireFeatures(callback)
 }
 
+// RequireFeaturesAsync registers a callback, which will be called when all dependent features are registered. The order of app init doesn't matter
+func RequireFeaturesAsync(ctx context.Context, callback interface{}) {
+	v := MustFromContext(ctx)
+	v.RequireFeaturesAsync(callback)
+}
+
 // New returns a new Xray instance based on given configuration.
 // The instance is not started at this point.
 // To ensure Xray instance works properly, the config must contain one Dispatcher, one InboundHandlerManager and one OutboundHandlerManager. Other features are optional.
 func New(config *Config) (*Instance, error) {
-	var server = &Instance{ctx: context.Background()}
+	server := &Instance{ctx: context.Background()}
 
 	done, err := initInstanceWithConfig(config, server)
 	if done {
@@ -170,7 +178,7 @@ func New(config *Config) (*Instance, error) {
 }
 
 func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
-	var server = &Instance{ctx: ctx}
+	server := &Instance{ctx: ctx}
 
 	done, err := initInstanceWithConfig(config, server)
 	if done {
@@ -181,14 +189,8 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
-	server.ctx = context.WithValue(server.ctx, "cone", os.Getenv("XRAY_CONE_DISABLED") != "true")
-
-	if config.Transport != nil {
-		features.PrintDeprecatedFeatureWarning("global transport settings")
-	}
-	if err := config.Transport.Apply(); err != nil {
-		return true, err
-	}
+	server.ctx = context.WithValue(server.ctx, "cone",
+		platform.NewEnvFlag(platform.UseCone).GetValue(func() string { return "" }) != "true")
 
 	for _, appSettings := range config.App {
 		settings, err := appSettings.GetInstance()
@@ -233,7 +235,7 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 	)
 
 	if server.featureResolutions != nil {
-		return true, newError("not all dependency are resolved.")
+		return true, errors.New("not all dependencies are resolved.")
 	}
 
 	if err := addInboundHandlers(server, config.Inbound); err != nil {
@@ -258,14 +260,14 @@ func (s *Instance) Close() error {
 
 	s.running = false
 
-	var errors []interface{}
+	var errs []interface{}
 	for _, f := range s.features {
 		if err := f.Close(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	if len(errors) > 0 {
-		return newError("failed to close all features").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all features").Base(errors.New(serial.Concat(errs...)))
 	}
 
 	return nil
@@ -295,13 +297,43 @@ func (s *Instance) RequireFeatures(callback interface{}) error {
 	return nil
 }
 
+// RequireFeaturesAsync registers a callback, which will be called when all dependent features are registered. The order of app init doesn't matter
+func (s *Instance) RequireFeaturesAsync(callback interface{}) {
+	callbackType := reflect.TypeOf(callback)
+	if callbackType.Kind() != reflect.Func {
+		panic("not a function")
+	}
+
+	var featureTypes []reflect.Type
+	for i := 0; i < callbackType.NumIn(); i++ {
+		featureTypes = append(featureTypes, reflect.PtrTo(callbackType.In(i)))
+	}
+
+	r := resolution{
+		deps:     featureTypes,
+		callback: callback,
+	}
+	go func() {
+		var finished = false
+		for i := 0; !finished; i++ {
+			if i > 100000 {
+				errors.LogError(s.ctx, "RequireFeaturesAsync failed after count ", i)
+				break;
+			}
+			finished, _ = r.resolve(s.features)
+			time.Sleep(time.Millisecond)
+		}
+		s.featureResolutions = append(s.featureResolutions, r)
+	}()
+}
+
 // AddFeature registers a feature into current Instance.
 func (s *Instance) AddFeature(feature features.Feature) error {
 	s.features = append(s.features, feature)
 
 	if s.running {
 		if err := feature.Start(); err != nil {
-			newError("failed to start feature").Base(err).WriteToLog()
+			errors.LogInfoInner(s.ctx, err, "failed to start feature")
 		}
 		return nil
 	}
@@ -349,7 +381,7 @@ func (s *Instance) Start() error {
 		}
 	}
 
-	newError("Xray ", Version(), " started").AtWarning().WriteToLog()
+	errors.LogWarning(s.ctx, "Xray ", Version(), " started")
 
 	return nil
 }

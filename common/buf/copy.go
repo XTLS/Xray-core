@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 type dataHandler func(MultiBuffer)
@@ -40,6 +41,17 @@ func CountSize(sc *SizeCounter) CopyOption {
 	}
 }
 
+// AddToStatCounter a CopyOption add to stat counter
+func AddToStatCounter(sc stats.Counter) CopyOption {
+	return func(handler *copyHandler) {
+		handler.onData = append(handler.onData, func(b MultiBuffer) {
+			if sc != nil {
+				sc.Add(int64(b.Len()))
+			}
+		})
+	}
+}
+
 type readError struct {
 	error
 }
@@ -48,7 +60,7 @@ func (e readError) Error() string {
 	return e.error.Error()
 }
 
-func (e readError) Inner() error {
+func (e readError) Unwrap() error {
 	return e.error
 }
 
@@ -66,7 +78,7 @@ func (e writeError) Error() string {
 	return e.error.Error()
 }
 
-func (e writeError) Inner() error {
+func (e writeError) Unwrap() error {
 	return e.error
 }
 
@@ -108,7 +120,7 @@ func Copy(reader Reader, writer Writer, options ...CopyOption) error {
 	return nil
 }
 
-var ErrNotTimeoutReader = newError("not a TimeoutReader")
+var ErrNotTimeoutReader = errors.New("not a TimeoutReader")
 
 func CopyOnceTimeout(reader Reader, writer Writer, timeout time.Duration) error {
 	timeoutReader, ok := reader.(TimeoutReader)

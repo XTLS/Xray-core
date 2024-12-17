@@ -53,7 +53,7 @@ func MergeBytes(dest MultiBuffer, src []byte) MultiBuffer {
 	return dest
 }
 
-// ReleaseMulti release all content of the MultiBuffer, and returns an empty MultiBuffer.
+// ReleaseMulti releases all content of the MultiBuffer, and returns an empty MultiBuffer.
 func ReleaseMulti(mb MultiBuffer) MultiBuffer {
 	for i := range mb {
 		mb[i].Release()
@@ -203,6 +203,19 @@ func SplitSize(mb MultiBuffer, size int32) (MultiBuffer, MultiBuffer) {
 	return mb, r
 }
 
+// SplitMulti splits the beginning of the MultiBuffer into first one, the index i and after into second one
+func SplitMulti(mb MultiBuffer, i int) (MultiBuffer, MultiBuffer) {
+	mb2 := make(MultiBuffer, 0, len(mb))
+	if i < len(mb) && i >= 0 {
+		mb2 = append(mb2, mb[i:]...)
+		for j := i; j < len(mb); j++ {
+			mb[j] = nil
+		}
+		mb = mb[:i]
+	}
+	return mb, mb2
+}
+
 // WriteMultiBuffer writes all buffers from the MultiBuffer to the Writer one by one, and return error if any, with leftover MultiBuffer.
 func WriteMultiBuffer(writer io.Writer, mb MultiBuffer) (MultiBuffer, error) {
 	for {
@@ -235,7 +248,7 @@ func (mb MultiBuffer) Len() int32 {
 	return size
 }
 
-// IsEmpty return true if the MultiBuffer has no content.
+// IsEmpty returns true if the MultiBuffer has no content.
 func (mb MultiBuffer) IsEmpty() bool {
 	for _, b := range mb {
 		if !b.IsEmpty() {
@@ -283,14 +296,14 @@ func (c *MultiBufferContainer) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// WriteMultiBuffer implement Writer.
+// WriteMultiBuffer implements Writer.
 func (c *MultiBufferContainer) WriteMultiBuffer(b MultiBuffer) error {
 	mb, _ := MergeMulti(c.MultiBuffer, b)
 	c.MultiBuffer = mb
 	return nil
 }
 
-// Close implement io.Closer.
+// Close implements io.Closer.
 func (c *MultiBufferContainer) Close() error {
 	c.MultiBuffer = ReleaseMulti(c.MultiBuffer)
 	return nil

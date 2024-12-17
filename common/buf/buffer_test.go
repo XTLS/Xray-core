@@ -77,6 +77,7 @@ func TestBufferByte(t *testing.T) {
 		buffer.Release()
 	}
 }
+
 func TestBufferResize(t *testing.T) {
 	buffer := New()
 	defer buffer.Release()

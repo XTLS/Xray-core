@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/xtls/xray-core/common/bytespool"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -18,19 +19,28 @@ var pool = bytespool.GetPool(Size)
 // the buffer into an internal buffer pool, in order to recreate a buffer more
 // quickly.
 type Buffer struct {
-	v     []byte
-	start int32
-	end   int32
-	UDP   *net.Destination
+	v         []byte
+	start     int32
+	end       int32
+	unmanaged bool
+	UDP       *net.Destination
 }
 
-// New creates a Buffer with 0 length and 2K capacity.
+// New creates a Buffer with 0 length and 8K capacity.
 func New() *Buffer {
+	buf := pool.Get().([]byte)
+	if cap(buf) >= Size {
+		buf = buf[:Size]
+	} else {
+		buf = make([]byte, Size)
+	}
+
 	return &Buffer{
-		v: pool.Get().([]byte),
+		v: buf,
 	}
 }
 
+// NewExisted creates a managed, standard size Buffer with an existed bytearray
 func NewExisted(b []byte) *Buffer {
 	if cap(b) < Size {
 		panic("Invalid buffer")
@@ -47,24 +57,43 @@ func NewExisted(b []byte) *Buffer {
 	}
 }
 
+// FromBytes creates a Buffer with an existed bytearray
+func FromBytes(b []byte) *Buffer {
+	return &Buffer{
+		v:         b,
+		end:       int32(len(b)),
+		unmanaged: true,
+	}
+}
+
 // StackNew creates a new Buffer object on stack.
 // This method is for buffers that is released in the same function.
 func StackNew() Buffer {
+	buf := pool.Get().([]byte)
+	if cap(buf) >= Size {
+		buf = buf[:Size]
+	} else {
+		buf = make([]byte, Size)
+	}
+
 	return Buffer{
-		v: pool.Get().([]byte),
+		v: buf,
 	}
 }
 
 // Release recycles the buffer into an internal buffer pool.
 func (b *Buffer) Release() {
-	if b == nil || b.v == nil {
+	if b == nil || b.v == nil || b.unmanaged {
 		return
 	}
 
 	p := b.v
 	b.v = nil
 	b.Clear()
-	pool.Put(p)
+
+	if cap(p) == Size {
+		pool.Put(p)
+	}
 	b.UDP = nil
 }
 
@@ -132,6 +161,19 @@ func (b *Buffer) BytesTo(to int32) []byte {
 	return b.v[b.start : b.start+to]
 }
 
+// Check makes sure that 0 <= b.start <= b.end.
+func (b *Buffer) Check() {
+	if b.start < 0 {
+		b.start = 0
+	}
+	if b.end < 0 {
+		b.end = 0
+	}
+	if b.start > b.end {
+		b.start = b.end
+	}
+}
+
 // Resize cuts the buffer at the given position.
 func (b *Buffer) Resize(from, to int32) {
 	if from < 0 {
@@ -145,6 +187,7 @@ func (b *Buffer) Resize(from, to int32) {
 	}
 	b.end = b.start + to
 	b.start += from
+	b.Check()
 }
 
 // Advance cuts the buffer at the given position.
@@ -153,6 +196,7 @@ func (b *Buffer) Advance(from int32) {
 		from += b.Len()
 	}
 	b.start += from
+	b.Check()
 }
 
 // Len returns the length of the buffer content.
@@ -161,6 +205,21 @@ func (b *Buffer) Len() int32 {
 		return 0
 	}
 	return b.end - b.start
+}
+
+// Cap returns the capacity of the buffer content.
+func (b *Buffer) Cap() int32 {
+	if b == nil {
+		return 0
+	}
+	return int32(len(b.v))
+}
+
+// NewWithSize creates a Buffer with 0 length and capacity with at least the given size.
+func NewWithSize(size int32) *Buffer {
+	return &Buffer{
+		v: bytespool.Alloc(size),
+	}
 }
 
 // IsEmpty returns true if the buffer is empty.
@@ -183,7 +242,7 @@ func (b *Buffer) Write(data []byte) (int, error) {
 // WriteByte writes a single byte into the buffer.
 func (b *Buffer) WriteByte(v byte) error {
 	if b.IsFull() {
-		return newError("buffer full")
+		return errors.New("buffer full")
 	}
 	b.v[b.end] = v
 	b.end++
@@ -193,6 +252,28 @@ func (b *Buffer) WriteByte(v byte) error {
 // WriteString implements io.StringWriter.
 func (b *Buffer) WriteString(s string) (int, error) {
 	return b.Write([]byte(s))
+}
+
+// ReadByte implements io.ByteReader
+func (b *Buffer) ReadByte() (byte, error) {
+	if b.start == b.end {
+		return 0, io.EOF
+	}
+
+	nb := b.v[b.start]
+	b.start++
+	return nb, nil
+}
+
+// ReadBytes implements bufio.Reader.ReadBytes
+func (b *Buffer) ReadBytes(length int32) ([]byte, error) {
+	if b.end-b.start < length {
+		return nil, io.EOF
+	}
+
+	nb := b.v[b.start : b.start+length]
+	b.start += length
+	return nb, nil
 }
 
 // Read implements io.Reader.Read().
@@ -221,7 +302,7 @@ func (b *Buffer) ReadFullFrom(reader io.Reader, size int32) (int64, error) {
 	end := b.end + size
 	if end > int32(len(b.v)) {
 		v := end
-		return 0, newError("out of bound: ", v)
+		return 0, errors.New("out of bound: ", v)
 	}
 	n, err := io.ReadFull(reader, b.v[b.end:end])
 	b.end += int32(n)

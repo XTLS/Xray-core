@@ -27,6 +27,8 @@ type Stats struct {
 	UserUplink bool
 	// Whether or not to enable stat counter for user downlink traffic.
 	UserDownlink bool
+	// Whether or not to enable online map for user.
+	UserOnline bool
 }
 
 // Buffer contains settings for internal buffer.
@@ -83,12 +85,8 @@ func ManagerType() interface{} {
 var defaultBufferSize int32
 
 func init() {
-	const key = "xray.ray.buffer.size"
 	const defaultValue = -17
-	size := platform.EnvFlag{
-		Name:    key,
-		AltName: platform.NormalizeEnvName(key),
-	}.GetValueAsInt(defaultValue)
+	size := platform.NewEnvFlag(platform.BufferSize).GetValueAsInt(defaultValue)
 
 	switch size {
 	case 0:
@@ -127,6 +125,7 @@ func SessionDefault() Session {
 		Stats: Stats{
 			UserUplink:   false,
 			UserDownlink: false,
+			UserOnline:   false,
 		},
 		Buffer: defaultBufferPolicy(),
 	}

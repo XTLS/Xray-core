@@ -31,6 +31,8 @@ message Certificate {
 
   // If true, one-Time Loading
   bool One_time_loading = 7;
+
+  bool build_chain = 8;
 }
 
 message Config {
@@ -62,9 +64,27 @@ message Config {
   // Specify cipher suites, except for TLS 1.3.
   string cipher_suites = 9;
 
-  // Whether the server selects its most preferred ciphersuite.
-  bool prefer_server_cipher_suites = 10;
-
   // TLS Client Hello fingerprint (uTLS).
   string fingerprint = 11;
+
+  bool reject_unknown_sni = 12;
+  
+  /* @Document A pinned certificate chain sha256 hash.
+     @Document If the server's hash does not match this value, the connection will be aborted.
+     @Document This value replace allow_insecure.
+     @Critical
+  */
+  repeated bytes pinned_peer_certificate_chain_sha256 = 13;
+
+  /* @Document A pinned certificate public key sha256 hash.
+     @Document If the server's public key hash does not match this value, the connection will be aborted.
+     @Document This value replace allow_insecure.
+     @Critical
+  */
+  repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
+
+  string master_key_log = 15;
+
+  // Lists of string as CurvePreferences values.
+  repeated string curve_preferences = 16;
 }

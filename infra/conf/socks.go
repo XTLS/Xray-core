@@ -3,10 +3,11 @@ package conf
 import (
 	"encoding/json"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/socks"
+	"google.golang.org/protobuf/proto"
 )
 
 type SocksAccount struct {
@@ -31,7 +32,6 @@ type SocksServerConfig struct {
 	Accounts   []*SocksAccount `json:"accounts"`
 	UDP        bool            `json:"udp"`
 	Host       *Address        `json:"ip"`
-	Timeout    uint32          `json:"timeout"`
 	UserLevel  uint32          `json:"userLevel"`
 }
 
@@ -43,7 +43,7 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	case AuthMethodUserPass:
 		config.AuthType = socks.AuthType_PASSWORD
 	default:
-		// newError("unknown socks auth method: ", v.AuthMethod, ". Default to noauth.").AtWarning().WriteToLog()
+		// errors.New("unknown socks auth method: ", v.AuthMethod, ". Default to noauth.").AtWarning().WriteToLog()
 		config.AuthType = socks.AuthType_NO_AUTH
 	}
 
@@ -59,7 +59,6 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 		config.Address = v.Host.Build()
 	}
 
-	config.Timeout = v.Timeout
 	config.UserLevel = v.UserLevel
 	return config, nil
 }
@@ -69,6 +68,7 @@ type SocksRemoteConfig struct {
 	Port    uint16            `json:"port"`
 	Users   []json.RawMessage `json:"users"`
 }
+
 type SocksClientConfig struct {
 	Servers []*SocksRemoteConfig `json:"servers"`
 }
@@ -84,11 +84,11 @@ func (v *SocksClientConfig) Build() (proto.Message, error) {
 		for _, rawUser := range serverConfig.Users {
 			user := new(protocol.User)
 			if err := json.Unmarshal(rawUser, user); err != nil {
-				return nil, newError("failed to parse Socks user").Base(err).AtError()
+				return nil, errors.New("failed to parse Socks user").Base(err).AtError()
 			}
 			account := new(SocksAccount)
 			if err := json.Unmarshal(rawUser, account); err != nil {
-				return nil, newError("failed to parse socks account").Base(err).AtError()
+				return nil, errors.New("failed to parse socks account").Base(err).AtError()
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
 			server.User = append(server.User, user)

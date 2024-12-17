@@ -6,20 +6,11 @@ option go_package = "github.com/xtls/xray-core/transport/internet/websocket";
 option java_package = "com.xray.transport.internet.websocket";
 option java_multiple_files = true;
 
-message Header {
-  string key = 1;
-  string value = 2;
-}
-
 message Config {
-  reserved 1;
-
-  // URL path to the WebSocket service. Empty value means root(/).
-  string path = 2;
-
-  repeated Header header = 3;
-
+  string host = 1;
+  string path = 2; // URL path to the WebSocket service. Empty value means root(/).
+  map<string, string> header = 3;
   bool accept_proxy_protocol = 4;
-
   uint32 ed = 5;
+  uint32 heartbeatPeriod = 6;
 }

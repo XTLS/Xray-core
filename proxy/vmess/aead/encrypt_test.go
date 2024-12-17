@@ -16,7 +16,7 @@ func TestOpenVMessAEADHeader(t *testing.T) {
 	copy(keyw[:], key)
 	sealed := SealVMessAEADHeader(keyw, TestHeader)
 
-	var AEADR = bytes.NewReader(sealed)
+	AEADR := bytes.NewReader(sealed)
 
 	var authid [16]byte
 
@@ -35,7 +35,7 @@ func TestOpenVMessAEADHeader2(t *testing.T) {
 	copy(keyw[:], key)
 	sealed := SealVMessAEADHeader(keyw, TestHeader)
 
-	var AEADR = bytes.NewReader(sealed)
+	AEADR := bytes.NewReader(sealed)
 
 	var authid [16]byte
 
@@ -57,7 +57,7 @@ func TestOpenVMessAEADHeader4(t *testing.T) {
 		var sealedm [16]byte
 		copy(sealedm[:], sealed)
 		sealed[i] ^= 0xff
-		var AEADR = bytes.NewReader(sealed)
+		AEADR := bytes.NewReader(sealed)
 
 		var authid [16]byte
 
@@ -85,7 +85,7 @@ func TestOpenVMessAEADHeader4Massive(t *testing.T) {
 			var sealedm [16]byte
 			copy(sealedm[:], sealed)
 			sealed[i] ^= 0xff
-			var AEADR = bytes.NewReader(sealed)
+			AEADR := bytes.NewReader(sealed)
 
 			var authid [16]byte
 

@@ -2,11 +2,9 @@ package trojan
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -14,33 +12,25 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 func init() {
 	common.Must(common.RegisterConfig((*ServerConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return NewServer(ctx, config.(*ServerConfig))
 	}))
-
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-
-	xtlsShow := platform.NewEnvFlag("xray.trojan.xtls.show").GetValue(func() string { return defaultFlagValue })
-	if xtlsShow == "true" {
-		xtls_show = true
-	}
 }
 
 // Server is an inbound connection handler that handles messages in trojan protocol.
@@ -57,11 +47,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
-			return nil, newError("failed to get trojan user").Base(err).AtError()
+			return nil, errors.New("failed to get trojan user").Base(err).AtError()
 		}
 
 		if err := validator.Add(u); err != nil {
-			return nil, newError("failed to add user").Base(err).AtError()
+			return nil, errors.New("failed to add user").Base(err).AtError()
 		}
 	}
 
@@ -135,34 +125,46 @@ func (s *Server) RemoveUser(ctx context.Context, e string) error {
 	return s.validator.Del(e)
 }
 
+// GetUser implements proxy.UserManager.GetUser().
+func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	return s.validator.GetByEmail(email)
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return s.validator.GetAll()
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.GetCount()
+}
+
 // Network implements proxy.Inbound.Network().
 func (s *Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
 // Process implements proxy.Inbound.Process().
-func (s *Server) Process(ctx context.Context, network net.Network, conn internet.Connection, dispatcher routing.Dispatcher) error {
-	sid := session.ExportIDToError(ctx)
-
+func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	iConn := conn
-	statConn, ok := iConn.(*internet.StatCouterConnection)
+	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
 		iConn = statConn.Connection
 	}
 
 	sessionPolicy := s.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return newError("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	first := buf.New()
-	defer first.Release()
-
+	first := buf.FromBytes(make([]byte, buf.Size))
+	first.Clear()
 	firstLen, err := first.ReadFrom(conn)
 	if err != nil {
-		return newError("failed to read first request").Base(err)
+		return errors.New("failed to read first request").Base(err)
 	}
-	newError("firstLen = ", firstLen).AtInfo().WriteToLog(sid)
+	errors.LogInfo(ctx, "firstLen = ", firstLen)
 
 	bufferedReader := &buf.BufferedReader{
 		Reader: buf.NewReader(conn),
@@ -177,7 +179,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	shouldFallback := false
 	if firstLen < 58 || first.Byte(56) != '\r' {
 		// invalid protocol
-		err = newError("not trojan protocol")
+		err = errors.New("not trojan protocol")
 		log.Record(&log.AccessMessage{
 			From:   conn.RemoteAddr(),
 			To:     "",
@@ -190,7 +192,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 		user = s.validator.Get(hexString(first.BytesTo(56)))
 		if user == nil {
 			// invalid user, let's fallback
-			err = newError("not a valid user")
+			err = errors.New("not a valid user")
 			log.Record(&log.AccessMessage{
 				From:   conn.RemoteAddr(),
 				To:     "",
@@ -203,9 +205,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 	}
 
 	if isfb && shouldFallback {
-		return s.fallback(ctx, sid, err, sessionPolicy, conn, iConn, napfb, first, firstLen, bufferedReader)
+		return s.fallback(ctx, err, sessionPolicy, conn, iConn, napfb, first, firstLen, bufferedReader)
 	} else if shouldFallback {
-		return newError("invalid protocol or invalid user")
+		return errors.New("invalid protocol or invalid user")
 	}
 
 	clientReader := &ConnReader{Reader: bufferedReader}
@@ -216,56 +218,22 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 			Status: log.AccessRejected,
 			Reason: err,
 		})
-		return newError("failed to create request from: ", conn.RemoteAddr()).Base(err)
+		return errors.New("failed to create request from: ", conn.RemoteAddr()).Base(err)
 	}
 
 	destination := clientReader.Target
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
-		return newError("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		panic("no inbound metadata")
-	}
+	inbound.Name = "trojan"
+	inbound.CanSpliceCopy = 3
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
-	}
-
-	// handle tcp request
-	account, ok := user.Account.(*MemoryAccount)
-	if !ok {
-		return newError("user account is not valid")
-	}
-
-	var rawConn syscall.RawConn
-
-	switch clientReader.Flow {
-	case XRO, XRD:
-		if account.Flow == clientReader.Flow {
-			if destination.Address.Family().IsDomain() && destination.Address.Domain() == muxCoolAddress {
-				return newError(clientReader.Flow + " doesn't support Mux").AtWarning()
-			}
-			if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-				xtlsConn.RPRX = true
-				xtlsConn.SHOW = xtls_show
-				xtlsConn.MARK = "XTLS"
-				if clientReader.Flow == XRD {
-					xtlsConn.DirectMode = true
-					if sc, ok := xtlsConn.Connection.(syscall.Conn); ok {
-						rawConn, _ = sc.SyscallConn()
-					}
-				}
-			} else {
-				return newError(`failed to use ` + clientReader.Flow + `, maybe "security" is not "xtls"`).AtWarning()
-			}
-		} else {
-			return newError(account.Password + " is not able to use " + clientReader.Flow).AtWarning()
-		}
-	case "":
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -276,8 +244,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn internet
 		Email:  user.Email,
 	})
 
-	newError("received request for ", destination).WriteToLog(sid)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher, iConn, rawConn, statConn)
+	errors.LogInfo(ctx, "received request for ", destination)
+	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
@@ -288,7 +256,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 		}
 
 		if err := clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}); err != nil {
-			newError("failed to write response").Base(err).AtWarning().WriteToLog(session.ExportIDToError(ctx))
+			errors.LogWarningInner(ctx, err, "failed to write response")
 		}
 	})
 
@@ -305,7 +273,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 			mb, err := clientReader.ReadMultiBuffer()
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
-					return newError("unexpected EOF").Base(err)
+					return errors.New("unexpected EOF").Base(err)
 				}
 				return nil
 			}
@@ -326,7 +294,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 					Email:  user.Email,
 				})
 			}
-			newError("tunnelling request to ", destination).WriteToLog(session.ExportIDToError(ctx))
+			errors.LogInfo(ctx, "tunnelling request to ", destination)
 
 			if !s.cone || dest == nil {
 				dest = &destination
@@ -343,31 +311,21 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Session,
 	destination net.Destination,
 	clientReader buf.Reader,
-	clientWriter buf.Writer, dispatcher routing.Dispatcher, iConn internet.Connection, rawConn syscall.RawConn, statConn *internet.StatCouterConnection) error {
+	clientWriter buf.Writer, dispatcher routing.Dispatcher,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
-		return newError("failed to dispatch request to ", destination).Base(err)
+		return errors.New("failed to dispatch request to ", destination).Base(err)
 	}
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		var err error
-		if rawConn != nil {
-			var counter stats.Counter
-			if statConn != nil {
-				counter = statConn.ReadCounter
-			}
-			err = ReadV(clientReader, link.Writer, timer, iConn.(*xtls.Conn), rawConn, counter, nil)
-		} else {
-			err = buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer))
-		}
-		if err != nil {
-			return newError("failed to transfer request").Base(err)
+		if buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer)) != nil {
+			return errors.New("failed to transfer request").Base(err)
 		}
 		return nil
 	}
@@ -376,26 +334,26 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		if err := buf.Copy(link.Reader, clientWriter, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to write response").Base(err)
+			return errors.New("failed to write response").Base(err)
 		}
 		return nil
 	}
 
-	var requestDonePost = task.OnSuccess(requestDone, task.Close(link.Writer))
+	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))
-		return newError("connection ends").Base(err)
+		return errors.New("connection ends").Base(err)
 	}
 
 	return nil
 }
 
-func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err error, sessionPolicy policy.Session, connection internet.Connection, iConn internet.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
+func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.Session, connection stat.Connection, iConn stat.Connection, napfb map[string]map[string]map[string]*Fallback, first *buf.Buffer, firstLen int64, reader buf.Reader) error {
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
-		newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
+		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
 	}
-	newError("fallback starts").Base(err).AtInfo().WriteToLog(sid)
+	errors.LogInfoInner(ctx, err, "fallback starts")
 
 	name := ""
 	alpn := ""
@@ -403,14 +361,14 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		cs := tlsConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		newError("realName = " + name).AtInfo().WriteToLog(sid)
-		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-	} else if xtlsConn, ok := iConn.(*xtls.Conn); ok {
-		cs := xtlsConn.ConnectionState()
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
+	} else if realityConn, ok := iConn.(*reality.Conn); ok {
+		cs := realityConn.ConnectionState()
 		name = cs.ServerName
 		alpn = cs.NegotiatedProtocol
-		newError("realName = " + name).AtInfo().WriteToLog(sid)
-		newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
+		errors.LogInfo(ctx, "realName = "+name)
+		errors.LogInfo(ctx, "realAlpn = "+alpn)
 	}
 	name = strings.ToLower(name)
 	alpn = strings.ToLower(alpn)
@@ -432,7 +390,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	}
 	apfb := napfb[name]
 	if apfb == nil {
-		return newError(`failed to find the default "name" config`).AtWarning()
+		return errors.New(`failed to find the default "name" config`).AtWarning()
 	}
 
 	if apfb[alpn] == nil {
@@ -440,7 +398,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	}
 	pfb := apfb[alpn]
 	if pfb == nil {
-		return newError(`failed to find the default "alpn" config`).AtWarning()
+		return errors.New(`failed to find the default "alpn" config`).AtWarning()
 	}
 
 	path := ""
@@ -460,7 +418,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 						}
 						if k == '?' || k == ' ' {
 							path = string(firstBytes[i:j])
-							newError("realPath = " + path).AtInfo().WriteToLog(sid)
+							errors.LogInfo(ctx, "realPath = "+path)
 							if pfb[path] == nil {
 								path = ""
 							}
@@ -474,7 +432,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	}
 	fb := pfb[path]
 	if fb == nil {
-		return newError(`failed to find the default "path" config`).AtWarning()
+		return errors.New(`failed to find the default "path" config`).AtWarning()
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -490,7 +448,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 		}
 		return nil
 	}); err != nil {
-		return newError("failed to dial to " + fb.Dest).Base(err).AtWarning()
+		return errors.New("failed to dial to " + fb.Dest).Base(err).AtWarning()
 	}
 	defer conn.Close()
 
@@ -550,11 +508,11 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 				common.Must2(pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)}))
 			}
 			if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pro}); err != nil {
-				return newError("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
+				return errors.New("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
 			}
 		}
 		if err := buf.Copy(reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to fallback request payload").Base(err).AtInfo()
+			return errors.New("failed to fallback request payload").Base(err).AtInfo()
 		}
 		return nil
 	}
@@ -564,7 +522,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	getResponse := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 		if err := buf.Copy(serverReader, writer, buf.UpdateActivity(timer)); err != nil {
-			return newError("failed to deliver response payload").Base(err).AtInfo()
+			return errors.New("failed to deliver response payload").Base(err).AtInfo()
 		}
 		return nil
 	}
@@ -572,7 +530,7 @@ func (s *Server) fallback(ctx context.Context, sid errors.ExportOption, err erro
 	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), task.OnSuccess(getResponse, task.Close(writer))); err != nil {
 		common.Must(common.Interrupt(serverReader))
 		common.Must(common.Interrupt(serverWriter))
-		return newError("fallback ends").Base(err).AtInfo()
+		return errors.New("fallback ends").Base(err).AtInfo()
 	}
 
 	return nil

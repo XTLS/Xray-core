@@ -1,22 +1,13 @@
 package trojan
 
 import (
-	"context"
 	"encoding/binary"
-	fmt "fmt"
 	"io"
-	"runtime"
-	"syscall"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/xtls"
 )
 
 var (
@@ -27,25 +18,13 @@ var (
 		protocol.AddressFamilyByte(0x04, net.AddressFamilyIPv6),
 		protocol.AddressFamilyByte(0x03, net.AddressFamilyDomain),
 	)
-
-	xtls_show = false
 )
 
 const (
 	maxLength = 8192
-	// XRS is constant for XTLS splice mode
-	XRS = "xtls-rprx-splice"
-	// XRD is constant for XTLS direct mode
-	XRD = "xtls-rprx-direct"
-	// XRO is constant for XTLS origin mode
-	XRO = "xtls-rprx-origin"
 
 	commandTCP byte = 1
 	commandUDP byte = 3
-
-	// for XTLS
-	commandXRD byte = 0xf0 // XTLS direct mode
-	commandXRO byte = 0xf1 // XTLS origin mode
 )
 
 // ConnWriter is TCP Connection Writer Wrapper for trojan protocol
@@ -53,7 +32,6 @@ type ConnWriter struct {
 	io.Writer
 	Target     net.Destination
 	Account    *MemoryAccount
-	Flow       string
 	headerSent bool
 }
 
@@ -61,7 +39,7 @@ type ConnWriter struct {
 func (c *ConnWriter) Write(p []byte) (n int, err error) {
 	if !c.headerSent {
 		if err := c.writeHeader(); err != nil {
-			return 0, newError("failed to write request header").Base(err)
+			return 0, errors.New("failed to write request header").Base(err)
 		}
 	}
 
@@ -90,10 +68,6 @@ func (c *ConnWriter) writeHeader() error {
 	command := commandTCP
 	if c.Target.Network == net.Network_UDP {
 		command = commandUDP
-	} else if c.Flow == XRD {
-		command = commandXRD
-	} else if c.Flow == XRO {
-		command = commandXRO
 	}
 
 	if _, err := buffer.Write(c.Account.Key); err != nil {
@@ -187,34 +161,30 @@ func (c *ConnReader) ParseHeader() error {
 	var command [1]byte
 	var hash [56]byte
 	if _, err := io.ReadFull(c.Reader, hash[:]); err != nil {
-		return newError("failed to read user hash").Base(err)
+		return errors.New("failed to read user hash").Base(err)
 	}
 
 	if _, err := io.ReadFull(c.Reader, crlf[:]); err != nil {
-		return newError("failed to read crlf").Base(err)
+		return errors.New("failed to read crlf").Base(err)
 	}
 
 	if _, err := io.ReadFull(c.Reader, command[:]); err != nil {
-		return newError("failed to read command").Base(err)
+		return errors.New("failed to read command").Base(err)
 	}
 
 	network := net.Network_TCP
 	if command[0] == commandUDP {
 		network = net.Network_UDP
-	} else if command[0] == commandXRD {
-		c.Flow = XRD
-	} else if command[0] == commandXRO {
-		c.Flow = XRO
 	}
 
 	addr, port, err := addrParser.ReadAddressPort(nil, c.Reader)
 	if err != nil {
-		return newError("failed to read address and port").Base(err)
+		return errors.New("failed to read address and port").Base(err)
 	}
 	c.Target = net.Destination{Network: network, Address: addr, Port: port}
 
 	if _, err := io.ReadFull(c.Reader, crlf[:]); err != nil {
-		return newError("failed to read crlf").Base(err)
+		return errors.New("failed to read crlf").Base(err)
 	}
 
 	c.headerParsed = true
@@ -248,22 +218,22 @@ type PacketReader struct {
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	addr, port, err := addrParser.ReadAddressPort(nil, r)
 	if err != nil {
-		return nil, newError("failed to read address and port").Base(err)
+		return nil, errors.New("failed to read address and port").Base(err)
 	}
 
 	var lengthBuf [2]byte
 	if _, err := io.ReadFull(r, lengthBuf[:]); err != nil {
-		return nil, newError("failed to read payload length").Base(err)
+		return nil, errors.New("failed to read payload length").Base(err)
 	}
 
 	remain := int(binary.BigEndian.Uint16(lengthBuf[:]))
 	if remain > maxLength {
-		return nil, newError("oversize payload")
+		return nil, errors.New("oversize payload")
 	}
 
 	var crlf [2]byte
 	if _, err := io.ReadFull(r, crlf[:]); err != nil {
-		return nil, newError("failed to read crlf").Base(err)
+		return nil, errors.New("failed to read crlf").Base(err)
 	}
 
 	dest := net.UDPDestination(addr, port)
@@ -280,74 +250,11 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		n, err := b.ReadFullFrom(r, int32(length))
 		if err != nil {
 			buf.ReleaseMulti(mb)
-			return nil, newError("failed to read payload").Base(err)
+			return nil, errors.New("failed to read payload").Base(err)
 		}
 
 		remain -= int(n)
 	}
 
 	return mb, nil
-}
-
-func ReadV(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn *xtls.Conn, rawConn syscall.RawConn, counter stats.Counter, sctx context.Context) error {
-	err := func() error {
-		var ct stats.Counter
-		for {
-			if conn.DirectIn {
-				conn.DirectIn = false
-				if sctx != nil {
-					if inbound := session.InboundFromContext(sctx); inbound != nil && inbound.Conn != nil {
-						iConn := inbound.Conn
-						statConn, ok := iConn.(*internet.StatCouterConnection)
-						if ok {
-							iConn = statConn.Connection
-						}
-						if xc, ok := iConn.(*xtls.Conn); ok {
-							iConn = xc.Connection
-						}
-						if tc, ok := iConn.(*net.TCPConn); ok {
-							if conn.SHOW {
-								fmt.Println(conn.MARK, "Splice")
-							}
-							runtime.Gosched() // necessary
-							w, err := tc.ReadFrom(conn.Connection)
-							if counter != nil {
-								counter.Add(w)
-							}
-							if statConn != nil && statConn.WriteCounter != nil {
-								statConn.WriteCounter.Add(w)
-							}
-							return err
-						} else {
-							panic("XTLS Splice: not TCP inbound")
-						}
-					} else {
-						//panic("XTLS Splice: nil inbound or nil inbound.Conn")
-					}
-				}
-				reader = buf.NewReadVReader(conn.Connection, rawConn)
-				ct = counter
-				if conn.SHOW {
-					fmt.Println(conn.MARK, "ReadV")
-				}
-			}
-			buffer, err := reader.ReadMultiBuffer()
-			if !buffer.IsEmpty() {
-				if ct != nil {
-					ct.Add(int64(buffer.Len()))
-				}
-				timer.Update()
-				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
-					return werr
-				}
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}()
-	if err != nil && errors.Cause(err) != io.EOF {
-		return err
-	}
-	return nil
 }

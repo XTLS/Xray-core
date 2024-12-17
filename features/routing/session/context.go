@@ -70,7 +70,12 @@ func (ctx *Context) GetTargetDomain() string {
 	if ctx.Outbound == nil || !ctx.Outbound.Target.IsValid() {
 		return ""
 	}
-	dest := ctx.Outbound.Target
+	dest := ctx.Outbound.RouteTarget
+	if dest.IsValid() && dest.Address.Family().IsDomain() {
+		return dest.Address.Domain()
+	}
+
+	dest = ctx.Outbound.Target
 	if !dest.Address.Family().IsDomain() {
 		return ""
 	}
@@ -109,11 +114,21 @@ func (ctx *Context) GetAttributes() map[string]string {
 	return ctx.Content.Attributes
 }
 
+// GetSkipDNSResolve implements routing.Context.
+func (ctx *Context) GetSkipDNSResolve() bool {
+	if ctx.Content == nil {
+		return false
+	}
+	return ctx.Content.SkipDNSResolve
+}
+
 // AsRoutingContext creates a context from context.context with session info.
 func AsRoutingContext(ctx context.Context) routing.Context {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds)-1]
 	return &Context{
 		Inbound:  session.InboundFromContext(ctx),
-		Outbound: session.OutboundFromContext(ctx),
+		Outbound: ob,
 		Content:  session.ContentFromContext(ctx),
 	}
 }

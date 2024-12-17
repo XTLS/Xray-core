@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Browser Dialer</title>
+</head>
+<body>
+	<script>
+		"use strict";
+		// Enable a much more aggressive JIT for performance gains
+
+		// Copyright (c) 2021 XRAY. Mozilla Public License 2.0.
+		let url = "ws://" + window.location.host + "/websocket?token=csrfToken";
+		let clientIdleCount = 0;
+		let upstreamGetCount = 0;
+		let upstreamWsCount = 0;
+		let upstreamPostCount = 0;
+		let check = function () {
+			if (clientIdleCount > 0) {
+				return;
+			};
+			clientIdleCount += 1;
+			console.log("Prepare", url);
+			let ws = new WebSocket(url);
+			// arraybuffer is significantly faster in chrome than default
+			// blob, tested with chrome 123
+			ws.binaryType = "arraybuffer";
+			// note: this event listener is later overwritten after the
+			// handshake has completed. do not attempt to modernize it without
+			// double-checking that this continues to work
+			ws.onmessage = function (event) {
+				clientIdleCount -= 1;
+				let [method, url, protocol] = event.data.split(" ");
+				switch (method) {
+					case "WS": {
+						upstreamWsCount += 1;
+						console.log("Dial WS", url, protocol);
+						const wss = new WebSocket(url, protocol);
+						wss.binaryType = "arraybuffer";
+						let opened = false;
+						ws.onmessage = function (event) {
+							wss.send(event.data)
+						};
+						wss.onopen = function (event) {
+							opened = true;
+							ws.send("ok")
+						};
+						wss.onmessage = function (event) {
+							ws.send(event.data)
+						};
+						wss.onclose = function (event) {
+							upstreamWsCount -= 1;
+							console.log("Dial WS DONE, remaining: ", upstreamWsCount);
+							ws.close()
+						};
+						wss.onerror = function (event) {
+							!opened && ws.send("fail")
+							wss.close()
+						};
+						ws.onclose = function (event) {
+							wss.close()
+						};
+						break;
+					};
+					case "GET": {
+						(async () => {
+							console.log("Dial GET", url);
+							ws.send("ok");
+							const controller = new AbortController();
+
+							/*
+							Aborting a streaming response in JavaScript
+							requires two levers to be pulled:
+
+							First, the streaming read itself has to be cancelled using
+							reader.cancel(), only then controller.abort() will actually work.
+
+							If controller.abort() alone is called while a
+							reader.read() is ongoing, it will block until the server closes the
+							response, the page is refreshed or the network connection is lost.
+							*/
+
+							let reader = null;
+							ws.onclose = (event) => {
+								try {
+									reader && reader.cancel();
+								} catch(e) {};
+
+								try {
+									controller.abort();
+								} catch(e) {};
+							};
+
+							try {
+								upstreamGetCount += 1;
+								const response = await fetch(url, {signal: controller.signal});
+
+								const body = await response.body;
+								reader = body.getReader();
+
+								while (true) {
+									const { done, value } = await reader.read();
+									ws.send(value);
+									if (done) break;
+								};
+							} finally {
+								upstreamGetCount -= 1;
+								console.log("Dial GET DONE, remaining: ", upstreamGetCount);
+								ws.close();
+							};
+						})();
+						break;
+					};
+					case "POST": {
+						upstreamPostCount += 1;
+						console.log("Dial POST", url);
+						ws.send("ok");
+						ws.onmessage = async (event) => {
+							try {
+								const response = await fetch(
+									url,
+									{method: "POST", body: event.data}
+								);
+								if (response.ok) {
+									ws.send("ok");
+								} else {
+									console.error("bad status code");
+									ws.send("fail");
+								};
+							} finally {
+								upstreamPostCount -= 1;
+								console.log("Dial POST DONE, remaining: ", upstreamPostCount);
+								ws.close();
+							};
+						};
+						break;
+					};
+				};
+
+				check();
+			};
+			ws.onerror = function (event) {
+				ws.close();
+			};
+		};
+		let checkTask = setInterval(check, 1000);
+	</script>
+</body>
+</html>

@@ -9,6 +9,8 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	c "github.com/xtls/xray-core/common/ctx"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -18,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -54,18 +57,19 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 	return s.SocketSettings.Tproxy
 }
 
-func (w *tcpWorker) callback(conn internet.Connection) {
+func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
-	ctx = session.ContextWithID(ctx, sid)
+	ctx = c.ContextWithID(ctx, sid)
 
+	outbounds := []*session.Outbound{{}}
 	if w.recvOrigDest {
 		var dest net.Destination
 		switch getTProxyType(w.stream) {
 		case internet.SocketConfig_Redirect:
 			d, err := tcp.GetOriginalDestination(conn)
 			if err != nil {
-				newError("failed to get original destination").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfoInner(ctx, err, "failed to get original destination")
 			} else {
 				dest = d
 			}
@@ -73,14 +77,13 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 			dest = net.DestinationFromAddr(conn.LocalAddr())
 		}
 		if dest.IsValid() {
-			ctx = session.ContextWithOutbound(ctx, &session.Outbound{
-				Target: dest,
-			})
+			outbounds[0].Target = dest
 		}
 	}
+	ctx = session.ContextWithOutbounds(ctx, outbounds)
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
-		conn = &internet.StatCouterConnection{
+		conn = &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  w.uplinkCounter,
 			WriteCounter: w.downlinkCounter,
@@ -99,16 +102,15 @@ func (w *tcpWorker) callback(conn internet.Connection) {
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+		content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
 	if err := w.proxy.Process(ctx, net.Network_TCP, conn, w.dispatcher); err != nil {
-		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "connection ends")
 	}
 	cancel()
-	if err := conn.Close(); err != nil {
-		newError("failed to close connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
-	}
+	conn.Close()
 }
 
 func (w *tcpWorker) Proxy() proxy.Inbound {
@@ -117,28 +119,28 @@ func (w *tcpWorker) Proxy() proxy.Inbound {
 
 func (w *tcpWorker) Start() error {
 	ctx := context.Background()
-	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn internet.Connection) {
+	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn stat.Connection) {
 		go w.callback(conn)
 	})
 	if err != nil {
-		return newError("failed to listen TCP on ", w.port).AtWarning().Base(err)
+		return errors.New("failed to listen TCP on ", w.port).AtWarning().Base(err)
 	}
 	w.hub = hub
 	return nil
 }
 
 func (w *tcpWorker) Close() error {
-	var errors []interface{}
+	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 		if err := common.Close(w.proxy); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 
 	return nil
@@ -158,6 +160,11 @@ type udpConn struct {
 	done             *done.Instance
 	uplink           stats.Counter
 	downlink         stats.Counter
+	inactive         bool
+}
+
+func (c *udpConn) setInactive() {
+	c.inactive = true
 }
 
 func (c *udpConn) updateActivity() {
@@ -301,13 +308,13 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		go func() {
 			ctx := w.ctx
 			sid := session.NewID()
-			ctx = session.ContextWithID(ctx, sid)
+			ctx = c.ContextWithID(ctx, sid)
 
+			outbounds := []*session.Outbound{{}}
 			if originalDest.IsValid() {
-				ctx = session.ContextWithOutbound(ctx, &session.Outbound{
-					Target: originalDest,
-				})
+				outbounds[0].Target = originalDest
 			}
+			ctx = session.ContextWithOutbounds(ctx, outbounds)
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
 				Gateway: net.UDPDestination(w.address, w.port),
@@ -318,13 +325,18 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 				content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 				content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+				content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 			}
 			ctx = session.ContextWithContent(ctx, content)
 			if err := w.proxy.Process(ctx, net.Network_UDP, conn, w.dispatcher); err != nil {
-				newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+				errors.LogInfoInner(ctx, err, "connection ends")
 			}
 			conn.Close()
-			w.removeConn(id)
+			// conn not removed by checker TODO may be lock worker here is better
+			if !conn.inactive {
+				conn.setInactive()
+				w.removeConn(id)
+			}
 		}()
 	}
 }
@@ -348,12 +360,15 @@ func (w *udpWorker) clean() error {
 	defer w.Unlock()
 
 	if len(w.activeConn) == 0 {
-		return newError("no more connections. stopping...")
+		return errors.New("no more connections. stopping...")
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 300 {
-			delete(w.activeConn, addr)
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
+			if !conn.inactive {
+				conn.setInactive()
+				delete(w.activeConn, addr)
+			}
 			conn.Close()
 		}
 	}
@@ -389,26 +404,26 @@ func (w *udpWorker) Close() error {
 	w.Lock()
 	defer w.Unlock()
 
-	var errors []interface{}
+	var errs []interface{}
 
 	if w.hub != nil {
 		if err := w.hub.Close(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
 
 	if w.checker != nil {
 		if err := w.checker.Close(); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
 
 	if err := common.Close(w.proxy); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 	return nil
 }
@@ -436,20 +451,21 @@ type dsWorker struct {
 	ctx context.Context
 }
 
-func (w *dsWorker) callback(conn internet.Connection) {
+func (w *dsWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	sid := session.NewID()
-	ctx = session.ContextWithID(ctx, sid)
+	ctx = c.ContextWithID(ctx, sid)
 
 	if w.uplinkCounter != nil || w.downlinkCounter != nil {
-		conn = &internet.StatCouterConnection{
+		conn = &stat.CounterConnection{
 			Connection:   conn,
 			ReadCounter:  w.uplinkCounter,
 			WriteCounter: w.downlinkCounter,
 		}
 	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		// Unix have no source addr, so we use gateway as source for log.
+		Source:  net.UnixDestination(w.address),
 		Gateway: net.UnixDestination(w.address),
 		Tag:     w.tag,
 		Conn:    conn,
@@ -461,15 +477,16 @@ func (w *dsWorker) callback(conn internet.Connection) {
 		content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
 		content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 		content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
+		content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 	}
 	ctx = session.ContextWithContent(ctx, content)
 
 	if err := w.proxy.Process(ctx, net.Network_UNIX, conn, w.dispatcher); err != nil {
-		newError("connection ends").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "connection ends")
 	}
 	cancel()
 	if err := conn.Close(); err != nil {
-		newError("failed to close connection").Base(err).WriteToLog(session.ExportIDToError(ctx))
+		errors.LogInfoInner(ctx, err, "failed to close connection")
 	}
 }
 
@@ -480,30 +497,31 @@ func (w *dsWorker) Proxy() proxy.Inbound {
 func (w *dsWorker) Port() net.Port {
 	return net.Port(0)
 }
+
 func (w *dsWorker) Start() error {
 	ctx := context.Background()
-	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn internet.Connection) {
+	hub, err := internet.ListenUnix(ctx, w.address, w.stream, func(conn stat.Connection) {
 		go w.callback(conn)
 	})
 	if err != nil {
-		return newError("failed to listen Unix Domain Socket on ", w.address).AtWarning().Base(err)
+		return errors.New("failed to listen Unix Domain Socket on ", w.address).AtWarning().Base(err)
 	}
 	w.hub = hub
 	return nil
 }
 
 func (w *dsWorker) Close() error {
-	var errors []interface{}
+	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 		if err := common.Close(w.proxy); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 		}
 	}
-	if len(errors) > 0 {
-		return newError("failed to close all resources").Base(newError(serial.Concat(errors...)))
+	if len(errs) > 0 {
+		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
 
 	return nil

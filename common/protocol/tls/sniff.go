@@ -20,8 +20,10 @@ func (h *SniffHeader) Domain() string {
 	return h.domain
 }
 
-var errNotTLS = errors.New("not TLS header")
-var errNotClientHello = errors.New("not client hello")
+var (
+	errNotTLS         = errors.New("not TLS header")
+	errNotClientHello = errors.New("not client hello")
+)
 
 func IsValidTLSVersion(major, minor byte) bool {
 	return major == 3

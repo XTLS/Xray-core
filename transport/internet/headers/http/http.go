@@ -1,7 +1,5 @@
 package http
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"bufio"
 	"bytes"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 const (
@@ -28,9 +27,9 @@ const (
 )
 
 var (
-	ErrHeaderToLong = newError("Header too long.")
+	ErrHeaderToLong = errors.New("Header too long.")
 
-	ErrHeaderMisMatch = newError("Header Mismatch.")
+	ErrHeaderMisMatch = errors.New("Header Mismatch.")
 )
 
 type Reader interface {
@@ -90,7 +89,7 @@ func (h *HeaderReader) Read(reader io.Reader) (*buf.Buffer, error) {
 			buffer.Clear()
 			copy(buffer.Extend(lenEnding), leftover)
 
-			if _, err := readRequest(bufio.NewReader(bytes.NewReader(headerBuf.Bytes())), false); err != io.ErrUnexpectedEOF {
+			if _, err := readRequest(bufio.NewReader(bytes.NewReader(headerBuf.Bytes()))); err != io.ErrUnexpectedEOF {
 				return nil, err
 			}
 		}
@@ -110,7 +109,7 @@ func (h *HeaderReader) Read(reader io.Reader) (*buf.Buffer, error) {
 	}
 
 	// Parse the request
-	if req, err := readRequest(bufio.NewReader(bytes.NewReader(headerBuf.Bytes())), false); err != nil {
+	if req, err := readRequest(bufio.NewReader(bytes.NewReader(headerBuf.Bytes()))); err != nil {
 		return nil, err
 	} else {
 		h.req = req
@@ -151,7 +150,7 @@ func (w *HeaderWriter) Write(writer io.Writer) error {
 	if w.header == nil {
 		return nil
 	}
-	err := buf.WriteAllBytes(writer, w.header.Bytes())
+	err := buf.WriteAllBytes(writer, w.header.Bytes(), nil)
 	w.header.Release()
 	w.header = nil
 	return err

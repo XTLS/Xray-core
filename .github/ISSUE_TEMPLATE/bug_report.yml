@@ -1,0 +1,87 @@
+name: Bug report
+description: "Submit Xray-core bug"
+body:
+  - type: checkboxes
+    attributes:
+      label: Integrity requirements
+      description: |-
+        Please check all of the following options to prove that you have read and understood the requirements, otherwise this issue will be closed.
+      options:
+        - label: I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.
+          required: true
+        - label: I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.
+          required: true
+        - label: I searched issues and did not find any similar issues.
+          required: true
+        - label: The problem can be successfully reproduced in the latest Release
+          required: true
+  - type: textarea
+    attributes:
+      label: Description
+      description: |-
+        Please provide a detailed description of the error. And the information you think valuable.
+        If the problem occurs after the update, please provide the **specific** version
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction Method
+      description: |-
+        Based on the configuration you provided below, provide the method to reproduce the bug.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |-
+        ## Configuration and Log Section
+        
+        ### For config
+        Please provide the configuration files that can reproduce the problem, including the server and client.
+        Don't just paste a big exported config file here. Eliminate useless inbound/outbound, rules, options, this can help determine the problem, if you really want to get help.
+
+        ### For logs
+        Please set the log level to debug and dnsLog to true first.
+        Restart Xray-core, then operate according to the reproduction method, try to reduce the irrelevant part in the log.
+        Remember to delete parts with personal information (such as UUID and IP).
+        Provide the log of Xray-core, not the log output by the panel or other things.
+
+        ### Finally
+        After removing parts that do not affect reproduction, provide the actual running **complete** file, do not only provide inbound or outbound or a few lines of logs based on your own judgment.
+        Put the content between the preset ```<details><pre><code>``` ```</code></pre></details>``` in the text box.
+        If the problem is very clear that only related to one end (such as core startup failure/crash after correctly writing the config according to the documents), N/A can be filled in for unnecessary areas below.
+  - type: textarea
+    attributes:
+      label: Client config
+      value: |-
+        <details><pre><code>
+
+        </code></pre></details>
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Server config
+      value: |-
+        <details><pre><code>
+
+        </code></pre></details>
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Client log
+      value: |-
+        <details><pre><code>
+
+        </code></pre></details>
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Server log
+      value: |-
+        <details><pre><code>
+
+        </code></pre></details>
+    validations:
+      required: true

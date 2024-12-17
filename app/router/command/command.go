@@ -1,23 +1,70 @@
 package command
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"google.golang.org/grpc"
 )
 
 // routingServer is an implementation of RoutingService.
 type routingServer struct {
 	router       routing.Router
 	routingStats stats.Channel
+}
+
+func (s *routingServer) GetBalancerInfo(ctx context.Context, request *GetBalancerInfoRequest) (*GetBalancerInfoResponse, error) {
+	var ret GetBalancerInfoResponse
+	ret.Balancer = &BalancerMsg{}
+	if bo, ok := s.router.(routing.BalancerOverrider); ok {
+		{
+			res, err := bo.GetOverrideTarget(request.GetTag())
+			if err != nil {
+				return nil, err
+			}
+			ret.Balancer.Override = &OverrideInfo{
+				Target: res,
+			}
+		}
+	}
+
+	if pt, ok := s.router.(routing.BalancerPrincipleTarget); ok {
+		{
+			res, err := pt.GetPrincipleTarget(request.GetTag())
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "unable to obtain principle target")
+			} else {
+				ret.Balancer.PrincipleTarget = &PrincipleTargetInfo{Tag: res}
+			}
+		}
+	}
+	return &ret, nil
+}
+
+func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *OverrideBalancerTargetRequest) (*OverrideBalancerTargetResponse, error) {
+	if bo, ok := s.router.(routing.BalancerOverrider); ok {
+		return &OverrideBalancerTargetResponse{}, bo.SetOverrideTarget(request.BalancerTag, request.Target)
+	}
+	return nil, errors.New("unsupported router implementation")
+}
+
+func (s *routingServer) AddRule(ctx context.Context, request *AddRuleRequest) (*AddRuleResponse, error) {
+	if bo, ok := s.router.(routing.Router); ok {
+		return &AddRuleResponse{}, bo.AddRule(request.Config, request.ShouldAppend)
+	}
+	return nil, errors.New("unsupported router implementation")
+
+}
+func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRuleRequest) (*RemoveRuleResponse, error) {
+	if bo, ok := s.router.(routing.Router); ok {
+		return &RemoveRuleResponse{}, bo.RemoveRule(request.RuleTag)
+	}
+	return nil, errors.New("unsupported router implementation")
 }
 
 // NewRoutingServer creates a statistics service with statistics manager.
@@ -30,7 +77,7 @@ func NewRoutingServer(router routing.Router, routingStats stats.Channel) Routing
 
 func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest) (*RoutingContext, error) {
 	if request.RoutingContext == nil {
-		return nil, newError("Invalid routing request.")
+		return nil, errors.New("Invalid routing request.")
 	}
 	route, err := s.router.PickRoute(AsRoutingContext(request.RoutingContext))
 	if err != nil {
@@ -45,7 +92,7 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 
 func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequest, stream RoutingService_SubscribeRoutingStatsServer) error {
 	if s.routingStats == nil {
-		return newError("Routing statistics not enabled.")
+		return errors.New("Routing statistics not enabled.")
 	}
 	genMessage := AsProtobufMessage(request.FieldSelectors)
 	subscriber, err := stats.SubscribeRunnableChannel(s.routingStats)
@@ -57,11 +104,11 @@ func (s *routingServer) SubscribeRoutingStats(request *SubscribeRoutingStatsRequ
 		select {
 		case value, ok := <-subscriber:
 			if !ok {
-				return newError("Upstream closed the subscriber channel.")
+				return errors.New("Upstream closed the subscriber channel.")
 			}
 			route, ok := value.(routing.Route)
 			if !ok {
-				return newError("Upstream sent malformed statistics.")
+				return errors.New("Upstream sent malformed statistics.")
 			}
 			err := stream.Send(genMessage(route))
 			if err != nil {

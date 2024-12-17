@@ -56,7 +56,7 @@ message ResponseConfig {
 
 message Config {
   // Settings for authenticating requests. If not set, client side will not send
-  // authenication header, and server side will bypass authentication.
+  // authentication header, and server side will bypass authentication.
   RequestConfig request = 1;
 
   // Settings for authenticating responses. If not set, client side will bypass

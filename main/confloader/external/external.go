@@ -1,11 +1,8 @@
 package external
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform/ctlcmd"
 	"github.com/xtls/xray-core/main/confloader"
 )
@@ -24,10 +22,10 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 		data, err = FetchHTTPContent(arg)
 
 	case arg == "stdin:":
-		data, err = ioutil.ReadAll(os.Stdin)
+		data, err = io.ReadAll(os.Stdin)
 
 	default:
-		data, err = ioutil.ReadFile(arg)
+		data, err = os.ReadFile(arg)
 	}
 
 	if err != nil {
@@ -40,11 +38,11 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 func FetchHTTPContent(target string) ([]byte, error) {
 	parsedTarget, err := url.Parse(target)
 	if err != nil {
-		return nil, newError("invalid URL: ", target).Base(err)
+		return nil, errors.New("invalid URL: ", target).Base(err)
 	}
 
 	if s := strings.ToLower(parsedTarget.Scheme); s != "http" && s != "https" {
-		return nil, newError("invalid scheme: ", parsedTarget.Scheme)
+		return nil, errors.New("invalid scheme: ", parsedTarget.Scheme)
 	}
 
 	client := &http.Client{
@@ -56,17 +54,17 @@ func FetchHTTPContent(target string) ([]byte, error) {
 		Close:  true,
 	})
 	if err != nil {
-		return nil, newError("failed to dial to ", target).Base(err)
+		return nil, errors.New("failed to dial to ", target).Base(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, newError("unexpected HTTP status code: ", resp.StatusCode)
+		return nil, errors.New("unexpected HTTP status code: ", resp.StatusCode)
 	}
 
 	content, err := buf.ReadAllToBytes(resp.Body)
 	if err != nil {
-		return nil, newError("failed to read HTTP response").Base(err)
+		return nil, errors.New("failed to read HTTP response").Base(err)
 	}
 
 	return content, nil

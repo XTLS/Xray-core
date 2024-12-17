@@ -1,7 +1,5 @@
 package reverse
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"context"
 
@@ -14,7 +12,7 @@ import (
 )
 
 const (
-	internalDomain = "reverse.internal.example.com"
+	internalDomain = "reverse.internal.v2fly.org" // make reverse proxy compatible with v2fly
 )
 
 func isDomain(dest net.Destination, domain string) bool {

@@ -4,8 +4,11 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/bittorrent"
 	"github.com/xtls/xray-core/common/protocol/http"
+	"github.com/xtls/xray-core/common/protocol/quic"
 	"github.com/xtls/xray-core/common/protocol/tls"
 )
 
@@ -22,6 +25,7 @@ type protocolSnifferWithMetadata struct {
 	// for both TCP and UDP connections
 	// It will not be shown as a traffic type for routing unless there is no other successful sniffing.
 	metadataSniffer bool
+	network         net.Network
 }
 
 type Sniffer struct {
@@ -31,24 +35,31 @@ type Sniffer struct {
 func NewSniffer(ctx context.Context) *Sniffer {
 	ret := &Sniffer{
 		sniffer: []protocolSnifferWithMetadata{
-			{func(c context.Context, b []byte) (SniffResult, error) { return http.SniffHTTP(b) }, false},
-			{func(c context.Context, b []byte) (SniffResult, error) { return tls.SniffTLS(b) }, false},
-			{func(c context.Context, b []byte) (SniffResult, error) { return bittorrent.SniffBittorrent(b) }, false},
+			{func(c context.Context, b []byte) (SniffResult, error) { return http.SniffHTTP(b, c) }, false, net.Network_TCP},
+			{func(c context.Context, b []byte) (SniffResult, error) { return tls.SniffTLS(b) }, false, net.Network_TCP},
+			{func(c context.Context, b []byte) (SniffResult, error) { return bittorrent.SniffBittorrent(b) }, false, net.Network_TCP},
+			{func(c context.Context, b []byte) (SniffResult, error) { return quic.SniffQUIC(b) }, false, net.Network_UDP},
+			{func(c context.Context, b []byte) (SniffResult, error) { return bittorrent.SniffUTP(b) }, false, net.Network_UDP},
 		},
 	}
 	if sniffer, err := newFakeDNSSniffer(ctx); err == nil {
+		others := ret.sniffer
 		ret.sniffer = append(ret.sniffer, sniffer)
+		fakeDNSThenOthers, err := newFakeDNSThenOthers(ctx, sniffer, others)
+		if err == nil {
+			ret.sniffer = append([]protocolSnifferWithMetadata{fakeDNSThenOthers}, ret.sniffer...)
+		}
 	}
 	return ret
 }
 
-var errUnknownContent = newError("unknown content")
+var errUnknownContent = errors.New("unknown content")
 
-func (s *Sniffer) Sniff(c context.Context, payload []byte) (SniffResult, error) {
+func (s *Sniffer) Sniff(c context.Context, payload []byte, network net.Network) (SniffResult, error) {
 	var pendingSniffer []protocolSnifferWithMetadata
 	for _, si := range s.sniffer {
 		s := si.protocolSniffer
-		if si.metadataSniffer {
+		if si.metadataSniffer || si.network != network {
 			continue
 		}
 		result, err := s(c, payload)
@@ -120,4 +131,8 @@ func (c compositeResult) ProtocolForDomainResult() string {
 
 type SnifferResultComposite interface {
 	ProtocolForDomainResult() string
+}
+
+type SnifferIsProtoSubsetOf interface {
+	IsProtoSubsetOf(protocolName string) bool
 }

@@ -1,12 +1,18 @@
 package tls
 
 import (
+	"bytes"
+	"context"
+	"crypto/hmac"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -14,9 +20,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 )
 
-var (
-	globalSessionCache = tls.NewLRUClientSessionCache(128)
-)
+var globalSessionCache = tls.NewLRUClientSessionCache(128)
 
 // ParseCertificate converts a cert.Certificate to Certificate.
 func ParseCertificate(c *cert.Certificate) *Certificate {
@@ -34,7 +38,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	root := x509.NewCertPool()
 	for _, cert := range c.Certificate {
 		if !root.AppendCertsFromPEM(cert.Certificate) {
-			return nil, newError("failed to append cert").AtWarning()
+			return nil, errors.New("failed to append cert").AtWarning()
 		}
 	}
 	return root, nil
@@ -47,70 +51,82 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
-		keyPair, err := tls.X509KeyPair(entry.Certificate, entry.Key)
-		if err != nil {
-			newError("ignoring invalid X509 key pair").Base(err).AtWarning().WriteToLog()
-			continue
-		}
-		keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
-		if err != nil {
-			newError("ignoring invalid certificate").Base(err).AtWarning().WriteToLog()
-			continue
-		}
-		certs = append(certs, &keyPair)
-		if !entry.OneTimeLoading {
-			var isOcspstapling bool
-			hotReloadCertInterval := uint64(3600)
-			if entry.OcspStapling != 0 {
-				hotReloadCertInterval = entry.OcspStapling
-				isOcspstapling = true
+		getX509KeyPair := func() *tls.Certificate {
+			keyPair, err := tls.X509KeyPair(entry.Certificate, entry.Key)
+			if err != nil {
+				errors.LogWarningInner(context.Background(), err, "ignoring invalid X509 key pair")
+				return nil
 			}
-			index := len(certs) - 1
-			go func(cert *tls.Certificate, index int) {
-				t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
-				for {
-					if entry.CertificatePath != "" && entry.KeyPath != "" {
-						newCert, err := filesystem.ReadFile(entry.CertificatePath)
-						if err != nil {
-							newError("failed to parse certificate").Base(err).AtError().WriteToLog()
-							<-t.C
-							continue
-						}
-						newKey, err := filesystem.ReadFile(entry.KeyPath)
-						if err != nil {
-							newError("failed to parse key").Base(err).AtError().WriteToLog()
-							<-t.C
-							continue
-						}
-						if string(newCert) != string(entry.Certificate) && string(newKey) != string(entry.Key) {
-							newKeyPair, err := tls.X509KeyPair(newCert, newKey)
-							if err != nil {
-								newError("ignoring invalid X509 key pair").Base(err).AtError().WriteToLog()
-								<-t.C
-								continue
-							}
-							if newKeyPair.Leaf, err = x509.ParseCertificate(newKeyPair.Certificate[0]); err != nil {
-								newError("ignoring invalid certificate").Base(err).AtError().WriteToLog()
-								<-t.C
-								continue
-							}
-							cert = &newKeyPair
-						}
-					}
-					if isOcspstapling {
-						if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
-							newError("ignoring invalid OCSP").Base(err).AtWarning().WriteToLog()
-						} else if string(newOCSPData) != string(cert.OCSPStaple) {
-							cert.OCSPStaple = newOCSPData
-						}
-					}
-					certs[index] = cert
-					<-t.C
-				}
-			}(certs[len(certs)-1], index)
+			keyPair.Leaf, err = x509.ParseCertificate(keyPair.Certificate[0])
+			if err != nil {
+				errors.LogWarningInner(context.Background(), err, "ignoring invalid certificate")
+				return nil
+			}
+			return &keyPair
 		}
+		if keyPair := getX509KeyPair(); keyPair != nil {
+			certs = append(certs, keyPair)
+		} else {
+			continue
+		}
+		index := len(certs) - 1
+		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
+			cert := certs[index]
+			if isReloaded {
+				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
+					cert = newKeyPair
+				} else {
+					return
+				}
+			}
+			if isOcspstapling {
+				if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
+					errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
+				} else if string(newOCSPData) != string(cert.OCSPStaple) {
+					cert.OCSPStaple = newOCSPData
+				}
+			}
+			certs[index] = cert
+		})
 	}
 	return certs
+}
+
+func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstapling bool)) {
+	go func() {
+		if entry.OneTimeLoading {
+			return
+		}
+		var isOcspstapling bool
+		hotReloadCertInterval := uint64(3600)
+		if entry.OcspStapling != 0 {
+			hotReloadCertInterval = entry.OcspStapling
+			isOcspstapling = true
+		}
+		t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
+		for {
+			var isReloaded bool
+			if entry.CertificatePath != "" && entry.KeyPath != "" {
+				newCert, err := filesystem.ReadFile(entry.CertificatePath)
+				if err != nil {
+					errors.LogErrorInner(context.Background(), err, "failed to parse certificate")
+					return
+				}
+				newKey, err := filesystem.ReadFile(entry.KeyPath)
+				if err != nil {
+					errors.LogErrorInner(context.Background(), err, "failed to parse key")
+					return
+				}
+				if string(newCert) != string(entry.Certificate) || string(newKey) != string(entry.Key) {
+					entry.Certificate = newCert
+					entry.Key = newKey
+					isReloaded = true
+				}
+			}
+			callback(isReloaded, isOcspstapling)
+			<-t.C
+		}
+	}()
 }
 
 func isCertificateExpired(c *tls.Certificate) bool {
@@ -121,19 +137,22 @@ func isCertificateExpired(c *tls.Certificate) bool {
 	}
 
 	// If leaf is not there, the certificate is probably not used yet. We trust user to provide a valid certificate.
-	return c.Leaf != nil && c.Leaf.NotAfter.Before(time.Now().Add(-time.Minute))
+	return c.Leaf != nil && c.Leaf.NotAfter.Before(time.Now().Add(time.Minute*2))
 }
 
 func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, error) {
 	parent, err := cert.ParseCertificate(rawCA.Certificate, rawCA.Key)
 	if err != nil {
-		return nil, newError("failed to parse raw certificate").Base(err)
+		return nil, errors.New("failed to parse raw certificate").Base(err)
 	}
 	newCert, err := cert.Generate(parent, cert.CommonName(domain), cert.DNSNames(domain))
 	if err != nil {
-		return nil, newError("failed to generate new certificate for ", domain).Base(err)
+		return nil, errors.New("failed to generate new certificate for ", domain).Base(err)
 	}
 	newCertPEM, newKeyPEM := newCert.ToPEM()
+	if rawCA.BuildChain {
+		newCertPEM = bytes.Join([][]byte{newCertPEM, rawCA.Certificate}, []byte("\n"))
+	}
 	cert, err := tls.X509KeyPair(newCertPEM, newKeyPEM)
 	return &cert, err
 }
@@ -143,6 +162,7 @@ func (c *Config) getCustomCA() []*Certificate {
 	for _, certificate := range c.Certificate {
 		if certificate.Usage == Certificate_AUTHORITY_ISSUE {
 			certs = append(certs, certificate)
+			setupOcspTicker(certificate, func(isReloaded, isOcspstapling bool) {})
 		}
 	}
 	return certs
@@ -173,6 +193,9 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 			for _, certificate := range c.Certificates {
 				if !isCertificateExpired(&certificate) {
 					newCerts = append(newCerts, certificate)
+				} else if certificate.Leaf != nil {
+					expTime := certificate.Leaf.NotAfter.Format(time.RFC3339)
+					errors.LogInfo(context.Background(), "old certificate for ", domain, " (expire on ", expTime, ") discarded")
 				}
 			}
 
@@ -187,8 +210,16 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 			if rawCert.Usage == Certificate_AUTHORITY_ISSUE {
 				newCert, err := issueCertificate(rawCert, domain)
 				if err != nil {
-					newError("failed to issue new certificate for ", domain).Base(err).WriteToLog()
+					errors.LogInfoInner(context.Background(), err, "failed to issue new certificate for ", domain)
 					continue
+				}
+				parsed, err := x509.ParseCertificate(newCert.Certificate[0])
+				if err == nil {
+					newCert.Leaf = parsed
+					expTime := parsed.NotAfter.Format(time.RFC3339)
+					errors.LogInfo(context.Background(), "new certificate for ", domain, " (expire on ", expTime, ") issued")
+				} else {
+					errors.LogInfoInner(context.Background(), err, "failed to parse new certificate for ", domain)
 				}
 
 				access.Lock()
@@ -200,7 +231,7 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 		}
 
 		if issuedCertificate == nil {
-			return nil, newError("failed to create a new certificate for ", domain)
+			return nil, errors.New("failed to create a new certificate for ", domain)
 		}
 
 		access.Lock()
@@ -211,13 +242,13 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		if len(certs) == 0 {
-			return nil, newError("empty certs")
+			return nil, errNoCertificates
 		}
 		sni := strings.ToLower(hello.ServerName)
-		if len(certs) == 1 || sni == "" {
+		if !rejectUnknownSNI && (len(certs) == 1 || sni == "") {
 			return certs[0], nil
 		}
 		gsni := "*"
@@ -234,6 +265,9 @@ func getNewGetCertficateFunc(certs []*tls.Certificate) func(hello *tls.ClientHel
 				}
 			}
 		}
+		if rejectUnknownSNI {
+			return nil, errNoCertificates
+		}
 		return certs[0], nil
 	}
 }
@@ -242,11 +276,38 @@ func (c *Config) parseServerName() string {
 	return c.ServerName
 }
 
+func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if c.PinnedPeerCertificateChainSha256 != nil {
+		hashValue := GenerateCertChainHash(rawCerts)
+		for _, v := range c.PinnedPeerCertificateChainSha256 {
+			if hmac.Equal(hashValue, v) {
+				return nil
+			}
+		}
+		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
+	}
+
+	if c.PinnedPeerCertificatePublicKeySha256 != nil {
+		for _, v := range verifiedChains {
+			for _, cert := range v {
+				publicHash := GenerateCertPublicKeyHash(cert)
+				for _, c := range c.PinnedPeerCertificatePublicKeySha256 {
+					if hmac.Equal(publicHash, c) {
+						return nil
+					}
+				}
+			}
+		}
+		return errors.New("peer public key is unrecognized.")
+	}
+	return nil
+}
+
 // GetTLSConfig converts this Config into tls.Config.
 func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	root, err := c.getCertPool()
 	if err != nil {
-		newError("failed to load system root certificate").AtError().Base(err).WriteToLog()
+		errors.LogErrorInner(context.Background(), err, "failed to load system root certificate")
 	}
 
 	if c == nil {
@@ -265,6 +326,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		InsecureSkipVerify:     c.AllowInsecure,
 		NextProtos:             c.NextProtocol,
 		SessionTicketsDisabled: !c.EnableSessionResumption,
+		VerifyPeerCertificate:  c.verifyPeerCert,
 	}
 
 	for _, opt := range opts {
@@ -275,11 +337,15 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertficateFunc(c.BuildCertificates())
+		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
 		config.ServerName = sn
+	}
+
+	if len(c.CurvePreferences) > 0 {
+		config.CurvePreferences = ParseCurveName(c.CurvePreferences)
 	}
 
 	if len(config.NextProtos) == 0 {
@@ -320,7 +386,14 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
-	config.PreferServerCipherSuites = c.PreferServerCipherSuites
+	if len(c.MasterKeyLog) > 0 && c.MasterKeyLog != "none" {
+		writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "failed to open ", c.MasterKeyLog, " as master key log")
+		} else {
+			config.KeyLogWriter = writer
+		}
+	}
 
 	return config
 }
@@ -329,10 +402,13 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 type Option func(*tls.Config)
 
 // WithDestination sets the server name in TLS config.
+// Due to the incorrect structure of GetTLSConfig(), the config.ServerName will always be empty.
+// So the real logic for SNI is:
+// set it to dest -> overwrite it with servername(if it's len>0).
 func WithDestination(dest net.Destination) Option {
 	return func(config *tls.Config) {
-		if dest.Address.Family().IsDomain() && config.ServerName == "" {
-			config.ServerName = dest.Address.Domain()
+		if config.ServerName == "" {
+			config.ServerName = dest.Address.String()
 		}
 	}
 }
@@ -356,4 +432,24 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 		return nil
 	}
 	return config
+}
+
+func ParseCurveName(curveNames []string) []tls.CurveID {
+	curveMap := map[string]tls.CurveID{
+		"curvep256":             tls.CurveP256,
+		"curvep384":             tls.CurveP384,
+		"curvep521":             tls.CurveP521,
+		"x25519":                tls.X25519,
+		"x25519kyber768draft00": 0x6399,
+	}
+
+	var curveIDs []tls.CurveID
+	for _, name := range curveNames {
+		if curveID, ok := curveMap[strings.ToLower(name)]; ok {
+			curveIDs = append(curveIDs, curveID)
+		} else {
+			errors.LogWarning(context.Background(), "unsupported curve name: "+name)
+		}
+	}
+	return curveIDs
 }

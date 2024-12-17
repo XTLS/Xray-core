@@ -1,37 +1,21 @@
 package router_test
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
-
-	"github.com/golang/protobuf/proto"
 
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
+	"google.golang.org/protobuf/proto"
 )
-
-func init() {
-	wd, err := os.Getwd()
-	common.Must(err)
-
-	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
-		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "release", "config", "geoip.dat")))
-	}
-	if _, err := os.Stat(platform.GetAssetLocation("geosite.dat")); err != nil && os.IsNotExist(err) {
-		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geosite.dat"), filepath.Join(wd, "..", "..", "release", "config", "geosite.dat")))
-	}
-}
 
 func withBackground() routing.Context {
 	return &routing_session.Context{}
@@ -109,42 +93,6 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Cidr: []*CIDR{
-					{
-						Ip:     []byte{8, 8, 8, 8},
-						Prefix: 32,
-					},
-					{
-						Ip:     []byte{8, 8, 8, 8},
-						Prefix: 32,
-					},
-					{
-						Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
-						Prefix: 128,
-					},
-				},
-			},
-			test: []ruleTest{
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("8.8.8.8"), 80)}),
-					output: true,
-				},
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("8.8.4.4"), 80)}),
-					output: false,
-				},
-				{
-					input:  withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334"), 80)}),
-					output: true,
-				},
-				{
-					input:  withBackground(),
-					output: false,
-				},
-			},
-		},
-		{
-			rule: &RoutingRule{
 				Geoip: []*GeoIP{
 					{
 						Cidr: []*CIDR{
@@ -185,10 +133,14 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				SourceCidr: []*CIDR{
+				SourceGeoip: []*GeoIP{
 					{
-						Ip:     []byte{192, 168, 0, 0},
-						Prefix: 16,
+						Cidr: []*CIDR{
+							{
+								Ip:     []byte{192, 168, 0, 0},
+								Prefix: 16,
+							},
+						},
 					},
 				},
 			},
@@ -308,12 +260,27 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Protocol:   []string{"http"},
-				Attributes: "attrs[':path'].startswith('/test')",
+				Protocol: []string{"http"},
+				Attributes: map[string]string{
+					":path": "/test",
+				},
 			},
 			test: []ruleTest{
 				{
 					input:  withContent(&session.Content{Protocol: "http/1.1", Attributes: map[string]string{":path": "/test/1"}}),
+					output: true,
+				},
+			},
+		},
+		{
+			rule: &RoutingRule{
+				Attributes: map[string]string{
+					"Custom": "p([a-z]+)ch",
+				},
+			},
+			test: []ruleTest{
+				{
+					input:  withContent(&session.Content{Attributes: map[string]string{"custom": "peach"}}),
 					output: true,
 				},
 			},
@@ -334,10 +301,15 @@ func TestRoutingRule(t *testing.T) {
 }
 
 func loadGeoSite(country string) ([]*Domain, error) {
-	geositeBytes, err := filesystem.ReadAsset("geosite.dat")
+	path, err := getAssetPath("geosite.dat")
 	if err != nil {
 		return nil, err
 	}
+	geositeBytes, err := filesystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
 	var geositeList GeoSiteList
 	if err := proto.Unmarshal(geositeBytes, &geositeList); err != nil {
 		return nil, err

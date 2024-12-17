@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/task"
 )
 
@@ -41,7 +42,7 @@ func generate(domainNames []string, isCA bool, jsonOutput bool, fileOutput strin
 
 	cert, err := Generate(nil, opts...)
 	if err != nil {
-		return newError("failed to generate TLS certificate").Base(err)
+		return errors.New("failed to generate TLS certificate").Base(err)
 	}
 
 	if jsonOutput {
@@ -73,6 +74,7 @@ func printJSON(certificate *Certificate) {
 	os.Stdout.Write(content)
 	os.Stdout.WriteString("\n")
 }
+
 func printFile(certificate *Certificate, name string) error {
 	certPEM, keyPEM := certificate.ToPEM()
 	return task.Run(context.Background(), func() error {
@@ -81,6 +83,7 @@ func printFile(certificate *Certificate, name string) error {
 		return writeFile(keyPEM, name+"_key.pem")
 	})
 }
+
 func writeFile(content []byte, name string) error {
 	f, err := os.Create(name)
 	if err != nil {

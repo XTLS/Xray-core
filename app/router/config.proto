@@ -6,6 +6,7 @@ option go_package = "github.com/xtls/xray-core/app/router";
 option java_package = "com.xray.app.router";
 option java_multiple_files = true;
 
+import "common/serial/typed_message.proto";
 import "common/net/port.proto";
 import "common/net/network.proto";
 
@@ -54,6 +55,7 @@ message CIDR {
 message GeoIP {
   string country_code = 1;
   repeated CIDR cidr = 2;
+  bool reverse_match = 3;
 }
 
 message GeoIPList {
@@ -77,13 +79,10 @@ message RoutingRule {
     // Tag of routing balancer.
     string balancing_tag = 12;
   }
+    string rule_tag = 18;
 
   // List of domains for target domain matching.
   repeated Domain domain = 2;
-
-  // List of CIDRs for target IP address matching.
-  // Deprecated. Use geoip below.
-  repeated CIDR cidr = 3 [deprecated = true];
 
   // List of GeoIPs for target IP address matching. If this entry exists, the
   // cidr above will have no effect. GeoIP fields with the same country code are
@@ -91,21 +90,11 @@ message RoutingRule {
   // runtime. For customized GeoIPs, please leave country code empty.
   repeated GeoIP geoip = 10;
 
-  // A range of port [from, to]. If the destination port is in this range, this
-  // rule takes effect. Deprecated. Use port_list.
-  xray.common.net.PortRange port_range = 4 [deprecated = true];
-
   // List of ports.
   xray.common.net.PortList port_list = 14;
 
-  // List of networks. Deprecated. Use networks.
-  xray.common.net.NetworkList network_list = 5 [deprecated = true];
-
   // List of networks for matching.
   repeated xray.common.net.Network networks = 13;
-
-  // List of CIDRs for source IP address matching.
-  repeated CIDR source_cidr = 6 [deprecated = true];
 
   // List of GeoIPs for source IP address matching. If this entry exists, the
   // source_cidr above will have no effect.
@@ -118,7 +107,7 @@ message RoutingRule {
   repeated string inbound_tag = 8;
   repeated string protocol = 9;
 
-  string attributes = 15;
+  map<string, string> attributes = 15;
 
   string domain_matcher = 17;
 }
@@ -126,6 +115,28 @@ message RoutingRule {
 message BalancingRule {
   string tag = 1;
   repeated string outbound_selector = 2;
+  string strategy = 3;
+  xray.common.serial.TypedMessage strategy_settings = 4;
+  string fallback_tag = 5;
+}
+
+message StrategyWeight {
+  bool regexp = 1;
+  string match = 2;
+  float value =3;
+}
+
+message StrategyLeastLoadConfig {
+  // weight settings
+  repeated StrategyWeight costs = 2;
+  // RTT baselines for selecting, int64 values of time.Duration
+  repeated int64 baselines = 3;
+  // expected nodes count to select
+  int32 expected = 4;
+  // max acceptable rtt, filter away high delay nodes. default 0
+  int64 maxRTT = 5;
+  // acceptable failure rate
+  float tolerance = 6;
 }
 
 message Config {

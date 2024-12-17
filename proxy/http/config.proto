@@ -15,14 +15,19 @@ message Account {
 
 // Config for HTTP proxy server.
 message ServerConfig {
-  uint32 timeout = 1 [deprecated = true];
   map<string, string> accounts = 2;
   bool allow_transparent = 3;
   uint32 user_level = 4;
+}
+
+message Header {
+  string key = 1;
+  string value = 2;
 }
 
 // ClientConfig is the protobuf config for HTTP proxy client.
 message ClientConfig {
   // Sever is a list of HTTP server addresses.
   repeated xray.common.protocol.ServerEndpoint server = 1;
+  repeated Header header = 2;
 }

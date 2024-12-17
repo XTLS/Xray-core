@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -69,7 +68,7 @@ func TestReadUsernamePassword(t *testing.T) {
 				t.Error("for input: ", testCase.Input, " expect username ", testCase.Username, " but actually ", username)
 			}
 			if testCase.Password != password {
-				t.Error("for input: ", testCase.Input, " expect passowrd ", testCase.Password, " but actually ", password)
+				t.Error("for input: ", testCase.Input, " expect password ", testCase.Password, " but actually ", password)
 			}
 		}
 	}

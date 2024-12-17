@@ -1,12 +1,14 @@
 package log
 
-//go:generate go run github.com/xtls/xray-core/common/errors/errorgen
-
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 )
 
@@ -29,13 +31,13 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	}
 	log.RegisterHandler(g)
 
-	// start logger instantly on inited
-	// other modules would log during init
+	// start logger now,
+	// then other modules will be able to log during initialization
 	if err := g.startInternal(); err != nil {
 		return nil, err
 	}
 
-	newError("Logger started").AtDebug().WriteToLog()
+	errors.LogDebug(ctx, "Logger started")
 	return g, nil
 }
 
@@ -77,10 +79,10 @@ func (g *Instance) startInternal() error {
 	g.active = true
 
 	if err := g.initAccessLogger(); err != nil {
-		return newError("failed to initialize access logger").Base(err).AtWarning()
+		return errors.New("failed to initialize access logger").Base(err).AtWarning()
 	}
 	if err := g.initErrorLogger(); err != nil {
-		return newError("failed to initialize error logger").Base(err).AtWarning()
+		return errors.New("failed to initialize error logger").Base(err).AtWarning()
 	}
 
 	return nil
@@ -100,18 +102,25 @@ func (g *Instance) Handle(msg log.Message) {
 		return
 	}
 
+	var Msg log.Message
+	if g.config.MaskAddress != "" {
+		Msg = &MaskedMsgWrapper{Message: msg, config: g.config}
+	} else {
+		Msg = msg
+	}
+
 	switch msg := msg.(type) {
 	case *log.AccessMessage:
 		if g.accessLogger != nil {
-			g.accessLogger.Handle(msg)
+			g.accessLogger.Handle(Msg)
 		}
 	case *log.DNSLog:
 		if g.dns && g.accessLogger != nil {
-			g.accessLogger.Handle(msg)
+			g.accessLogger.Handle(Msg)
 		}
 	case *log.GeneralMessage:
 		if g.errorLogger != nil && msg.Severity <= g.config.ErrorLogLevel {
-			g.errorLogger.Handle(msg)
+			g.errorLogger.Handle(Msg)
 		}
 	default:
 		// Swallow
@@ -120,7 +129,7 @@ func (g *Instance) Handle(msg log.Message) {
 
 // Close implements common.Closable.Close().
 func (g *Instance) Close() error {
-	newError("Logger closing").AtDebug().WriteToLog()
+	errors.LogDebug(context.Background(), "Logger closing")
 
 	g.Lock()
 	defer g.Unlock()
@@ -138,6 +147,56 @@ func (g *Instance) Close() error {
 	g.errorLogger = nil
 
 	return nil
+}
+
+// MaskedMsgWrapper is to wrap the string() method to mask IP addresses in the log.
+type MaskedMsgWrapper struct {
+	log.Message
+	config *Config
+}
+
+func (m *MaskedMsgWrapper) String() string {
+	str := m.Message.String()
+
+	ipv4Regex := regexp.MustCompile(`(\d{1,3}\.){3}\d{1,3}`)
+	ipv6Regex := regexp.MustCompile(`((?:[\da-fA-F]{0,4}:[\da-fA-F]{0,4}){2,7})(?:[\/\\%](\d{1,3}))?`)
+
+	// Process ipv4
+	maskedMsg := ipv4Regex.ReplaceAllStringFunc(str, func(ip string) string {
+		parts := strings.Split(ip, ".")
+		switch m.config.MaskAddress {
+		case "half":
+			return fmt.Sprintf("%s.%s.*.*", parts[0], parts[1])
+		case "quarter":
+			return fmt.Sprintf("%s.*.*.*", parts[0])
+		case "full":
+			return "[Masked IPv4]"
+		default:
+			return ip
+		}
+	})
+
+	// process ipv6
+	maskedMsg = ipv6Regex.ReplaceAllStringFunc(maskedMsg, func(ip string) string {
+		parts := strings.Split(ip, ":")
+		switch m.config.MaskAddress {
+		case "half":
+			if len(parts) >= 2 {
+				return fmt.Sprintf("%s:%s::/32", parts[0], parts[1])
+			}
+		case "quarter":
+			if len(parts) >= 1 {
+				return fmt.Sprintf("%s::/16", parts[0])
+			}
+		case "full":
+			return "Masked IPv6" // Do not use [Masked IPv6] like ipv4, or you will get "[[Masked IPv6]]" (v6 address already has [])
+		default:
+			return ip
+		}
+		return ip
+	})
+
+	return maskedMsg
 }
 
 func init() {
