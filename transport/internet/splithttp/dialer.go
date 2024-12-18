@@ -308,6 +308,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		globalDialerAccess.Lock()
 		if streamSettings.DownloadSettings == nil {
 			streamSettings.DownloadSettings = common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings)).(*internet.MemoryStreamConfig)
+			if streamSettings.DownloadSettings.SocketSettings == nil {
+				streamSettings.DownloadSettings.SocketSettings = streamSettings.SocketSettings
+			}
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
