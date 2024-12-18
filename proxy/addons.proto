@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package xray.proxy;
+option csharp_namespace = "Xray.Proxy";
+option go_package = "github.com/xtls/xray-core/proxy";
+option java_package = "com.xray.proxy";
+option java_multiple_files = true;
+
+message Addons {
+  string Flow = 1;
+  bytes Seed = 2;
+  SeedMode Mode = 3;
+  string Duration = 4;  // "0-8" means apply to number of packets, "1000b-" means start applying once both side exchange 1kb data, counting two-ways
+  PaddingConfig Padding = 5;
+  DelayConfig Delay = 6;
+  SchedulerConfig Scheduler = 7;
+}
+
+enum SeedMode {
+  Unknown = 0;
+  PaddingOnly = 1;
+  PaddingPlusDelay = 2;
+  IndependentScheduler = 3;
+}
+
+message PaddingConfig {
+  uint32 RegularMin = 1;
+  uint32 RegularMax = 2;
+  uint32 LongMin = 3;
+  uint32 LongMax = 4;
+}
+
+message DelayConfig {
+  bool IsRandom = 1;
+  uint32 MinMillis = 2;
+  uint32 MaxMillis = 3;
+}
+
+message SchedulerConfig {
+  uint32 TimeoutMillis = 1; // original traffic will not be sent right away but when scheduler want to send or pending buffer times out
+  bool PingPong = 2;
+  // Other TBD  
+}
