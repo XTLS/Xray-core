@@ -409,6 +409,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
 
+	if scMaxEachPostBytes.From <= buf.Size {
+		panic("`scMaxEachPostBytes` should be bigger than " + strconv.Itoa(buf.Size))
+	}
+
 	maxUploadSize := scMaxEachPostBytes.rand()
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
 	// code relies on this behavior. Subtract 1 so that together with
