@@ -14,6 +14,7 @@ type GRPCConfig struct {
 	PermitWithoutStream bool   `json:"permit_without_stream"`
 	InitialWindowsSize  int32  `json:"initial_windows_size"`
 	UserAgent           string `json:"user_agent"`
+	MultiConnections	int32  `json:"multi_connections"`
 }
 
 func (g *GRPCConfig) Build() (proto.Message, error) {
@@ -37,5 +38,6 @@ func (g *GRPCConfig) Build() (proto.Message, error) {
 		PermitWithoutStream: g.PermitWithoutStream,
 		InitialWindowsSize:  g.InitialWindowsSize,
 		UserAgent:           g.UserAgent,
+		MultiConnections:    g.MultiConnections,
 	}, nil
 }

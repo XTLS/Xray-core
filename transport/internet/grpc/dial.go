@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	c "github.com/xtls/xray-core/common/ctx"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -42,8 +43,61 @@ type dialerConf struct {
 	*internet.MemoryStreamConfig
 }
 
+type globalDialers struct {
+	connMap map[dialerConf][]*grpc.ClientConn
+}
+
+// getClientConn returns a client connection from the global dialer if the connections already reached the target number
+// otherwise return nil
+func (d *globalDialers) getClientConn(conf dialerConf) (*grpc.ClientConn, int) {
+	if d.connMap == nil {
+		d.connMap = make(map[dialerConf][]*grpc.ClientConn)
+	}
+	if d.connMap[conf] == nil {
+		d.connMap[conf] = []*grpc.ClientConn{}
+	}
+
+	conns := d.connMap[conf]
+
+	targetConnsNum := conf.MemoryStreamConfig.ProtocolSettings.(*Config).MultiConnections
+	if targetConnsNum > int32(len(conns)) {
+		return nil, 0
+	} else {
+		index := dice.Roll(len(conns))
+		return conns[index], index
+	}
+}
+
+// addClientConn adds a client connection to the global dialer
+func (d *globalDialers) addClientConn(conf dialerConf, conn *grpc.ClientConn) error {
+	if d.connMap == nil {
+		d.connMap = make(map[dialerConf][]*grpc.ClientConn)
+	}
+	if d.connMap[conf] == nil {
+		d.connMap[conf] = []*grpc.ClientConn{}
+	}
+
+	conns := d.connMap[conf]
+	targetConnsNum := conf.MemoryStreamConfig.ProtocolSettings.(*Config).MultiConnections
+	if targetConnsNum <= int32(len(conns)) {
+		return errors.New("failed to add client connection beacuse reach the limit")
+	} else {
+		conns = append(conns, conn)
+		d.connMap[conf] = conns
+		return nil
+	}
+}
+
+// updateClientConnWithIndex updates a client connection with the given index
+// in the case if the clientConn is shutting down, replace it with the new one
+func (d *globalDialers) updateClientConnWithIndex(conf dialerConf, conn *grpc.ClientConn, index int) error {
+	conns := d.connMap[conf]
+	conns[index] = conn
+	return nil
+}
+
 var (
-	globalDialerMap    map[dialerConf]*grpc.ClientConn
+	globalDialer       globalDialers
 	globalDialerAccess sync.Mutex
 )
 
@@ -77,15 +131,13 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
-	}
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
+	client, index := globalDialer.getClientConn(dialerConf{dest, streamSettings})
+	if client != nil && client.GetState() != connectivity.Shutdown {
 		return client, nil
 	}
 
@@ -183,6 +235,14 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	globalDialerMap[dialerConf{dest, streamSettings}] = conn
+	if client == nil {
+		err := globalDialer.addClientConn(dialerConf{dest, streamSettings}, conn)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if client != nil && client.GetState() == connectivity.Shutdown {
+		globalDialer.updateClientConnWithIndex(dialerConf{dest, streamSettings}, conn, index)
+	}
 	return conn, err
 }
