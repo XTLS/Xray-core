@@ -372,7 +372,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
 		xmuxClient2.OpenUsage.Add(1)
 	}
-	var once atomic.Int32
+	var closed atomic.Int32
 
 	conn := splitConn{
 		writer:     writer,
@@ -380,7 +380,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
 		onClose: func() {
-			if once.Add(-1) < 0 {
+			if closed.Add(1) > 1 {
 				return
 			}
 			if xmuxClient != nil {
