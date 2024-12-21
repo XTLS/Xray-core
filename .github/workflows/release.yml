@@ -78,9 +78,7 @@ jobs:
         # Include amd64 on all platforms.
         goos: [windows, freebsd, openbsd, linux, darwin]
         goarch: [amd64, 386]
-        gotoolchain: [""]
         patch-assetname: [""]
-
         exclude:
           # Exclude i386 on darwin
           - goarch: 386
@@ -155,16 +153,6 @@ jobs:
             goarch: arm
             goarm: 7
           # END OPENBSD ARM
-          # BEGIN Windows 7
-          - goos: windows
-            goarch: amd64
-            gotoolchain: 1.21.4
-            patch-assetname: win7-64
-          - goos: windows
-            goarch: 386
-            gotoolchain: 1.21.4
-            patch-assetname: win7-32
-          # END Windows 7
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -187,7 +175,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.gotoolchain || '1.23' }}
+          go-version-file: go.mod
           check-latest: true
 
       - name: Get project dependencies
