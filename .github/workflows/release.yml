@@ -78,7 +78,6 @@ jobs:
         # Include amd64 on all platforms.
         goos: [windows, freebsd, openbsd, linux, darwin]
         goarch: [amd64, 386]
-        gotoolchain: [""]
         patch-assetname: [""]
         exclude:
           # Exclude i386 on darwin
