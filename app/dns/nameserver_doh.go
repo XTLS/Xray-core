@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -35,7 +34,6 @@ type DoHNameServer struct {
 	ips           map[string]*record
 	pub           *pubsub.Service
 	cleanup       *task.Periodic
-	reqID         uint32
 	httpClient    *http.Client
 	dohURL        string
 	name          string
@@ -222,7 +220,7 @@ func (s *DoHNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 }
 
 func (s *DoHNameServer) newReqID() uint16 {
-	return uint16(atomic.AddUint32(&s.reqID, 1))
+	return 0
 }
 
 func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
