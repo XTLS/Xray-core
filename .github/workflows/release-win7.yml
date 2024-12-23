@@ -41,9 +41,10 @@ jobs:
         run: |
           cd ./src
           . ./all.bash
-          cd ../
+          cd ${{ github.workspace }}
           mkdir -p patched-go
           rsync -a --exclude 'patched-go' ./ 'patched-go'
+
       - name: Save patched builder
         uses: actions/cache/save@v4
         with:
@@ -82,6 +83,7 @@ jobs:
                   echo "unhit=true" >> $GITHUB_OUTPUT
               fi
             done
+
       - name: Save Cache
         uses: actions/cache/save@v4
         if: ${{ steps.update.outputs.unhit }}
@@ -117,9 +119,10 @@ jobs:
           _NAME=${{ matrix.assetname }}
           echo "GOOS: ${{ matrix.goos }}, GOARCH: ${{ matrix.goarch }}, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
       - name: Checkout codebase
         uses: actions/checkout@v4
-
+      
       - name: Restore Go builder
         uses: actions/cache/restore@v4
         with:
@@ -129,20 +132,21 @@ jobs:
       - name: Download dependencies and build Xray
         run: |
           echo "Setup environment..."
-          export PATH=$PATH:$PWD/patched-go/bin
-          ./patched-go/bin/go version
-          ./patched-go/bin/go env -w GOPATH=$PWD
-          ./patched-go/bin/go env -w GOROOT=$PWD/patched-go
+          export PATH=$PATH:${{ github.workspace }}/patched-go/bin
+          ${{ github.workspace }}/patched-go/bin/go version
+          ${{ github.workspace }}/patched-go/bin/go env -w GOPATH=${{ github.workspace }}
+          ${{ github.workspace }}/patched-go/bin/go env -w GOROOT=${{ github.workspace }}/patched-go
           echo "Download dependencies..."
-          ./patched-go/bin/go mod download
+          ${{ github.workspace }}/patched-go/bin/go mod download
           echo "Build Xray..."
           mkdir -p build_assets
-          ./patched-go/bin/go clean -v -i $PWD
+          ${{ github.workspace }}/patched-go/bin/go clean -v -i $PWD
           rm -f xray xray.exe wxray.exe xray_softfloat
-          ./patched-go/bin/go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" -v ./main
-          ./patched-go/bin/go build -o wxray.exe -trimpath -ldflags "-H windowsgui -s -w -buildid=" -v ./main
+          ${{ github.workspace }}/patched-go/bin/go build -o xray.exe -trimpath -ldflags "-X github.com/xtls/xray-core/core.build=win7-${{ github.ref_name }}-${{ github.sha }} -s -w -buildid=" -v ./main
+          ${{ github.workspace }}/patched-go/bin/go build -o wxray.exe -trimpath -ldflags "-H windowsgui -X github.com/xtls/xray-core/core.build=win7-${{ github.ref_name }}-${{ github.sha }} -s -w -buildid=" -v ./main
           echo "Build completed."
           find . -maxdepth 1 -type f -regex './\(wxray\|xray\).exe' -exec mv {} ./build_assets/ \;
+
       - name: Restore Cache
         uses: actions/cache/restore@v4
         with:
@@ -154,6 +158,7 @@ jobs:
           mv -f resources/* build_assets
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
+
       - name: Create ZIP archive
         if: github.event_name == 'release'
         shell: bash
@@ -168,15 +173,18 @@ jobs:
           do
             openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
+
       - name: Change the name
         run: |
           mv build_assets Xray-${{ env.ASSET_NAME }}
+
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Xray-${{ env.ASSET_NAME }}
           path: |
             ./Xray-${{ env.ASSET_NAME }}/*
+
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
