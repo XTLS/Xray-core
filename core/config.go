@@ -70,6 +70,7 @@ func GetMergedConfig(args cmdarg.Arg) (string, error) {
 				Name:   file,
 				Format: format,
 			})
+		}
 	}
 	return ConfigMergedFormFiles(files)
 }
