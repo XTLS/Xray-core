@@ -8,14 +8,14 @@ on:
     branches:
       - main
     paths:
-      # - "**/*.go"
+       - "**/*.go"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/release-win7.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      # - "**/*.go"
+       - "**/*.go"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/release-win7.yml"
