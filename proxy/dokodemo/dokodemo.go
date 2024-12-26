@@ -114,7 +114,14 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	plcy := d.policy()
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
+
+	var timer *signal.ActivityTimer
+	// if dns req, set a short timeout value
+	if dest.Port == 53 {
+		timer = signal.CancelAfterInactivity(ctx, cancel, 10*time.Second)
+	} else {
+		timer = signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
+	}
 
 	if inbound != nil {
 		inbound.Timer = timer
