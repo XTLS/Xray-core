@@ -180,7 +180,6 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				return err
 			}
 			writer = NewPacketWriter(pConn, &dest, mark, back)
-			defer writer.(*PacketWriter).Close()
 			/*
 				sockopt := &internet.SocketConfig{
 					Tproxy: internet.SocketConfig_TProxy,
@@ -218,6 +217,10 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
+
+		if pw, ok := writer.(*PacketWriter); ok {
+			defer pw.Close()
+		}
 
 		if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transport response").Base(err)
