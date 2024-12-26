@@ -27,7 +27,6 @@ func TestSocksInboundConfig(t *testing.T) {
 				],
 				"udp": false,
 				"ip": "127.0.0.1",
-				"timeout": 5,
 				"userLevel": 1
 			}`,
 			Parser: loadJSON(creator),
@@ -42,7 +41,6 @@ func TestSocksInboundConfig(t *testing.T) {
 						Ip: []byte{127, 0, 0, 1},
 					},
 				},
-				Timeout:   5,
 				UserLevel: 1,
 			},
 		},

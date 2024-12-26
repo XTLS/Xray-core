@@ -12,8 +12,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 // ErrNoClue is for the situation that existing information is not enough to make a decision. For example, Router may return this error when there is no suitable route.
 var ErrNoClue = errors.New("not enough information for making a decision")
 
@@ -40,7 +38,7 @@ func Error2(v interface{}, err error) error {
 func envFile() (string, error) {
 	if file := os.Getenv("GOENV"); file != "" {
 		if file == "off" {
-			return "", fmt.Errorf("GOENV=off")
+			return "", errors.New("GOENV=off")
 		}
 		return file, nil
 	}
@@ -49,7 +47,7 @@ func envFile() (string, error) {
 		return "", err
 	}
 	if dir == "" {
-		return "", fmt.Errorf("missing user-config dir")
+		return "", errors.New("missing user-config dir")
 	}
 	return filepath.Join(dir, "go", "env"), nil
 }
@@ -62,7 +60,7 @@ func GetRuntimeEnv(key string) (string, error) {
 		return "", err
 	}
 	if file == "" {
-		return "", fmt.Errorf("missing runtime env file")
+		return "", errors.New("missing runtime env file")
 	}
 	var data []byte
 	var runtimeEnv string

@@ -14,6 +14,14 @@ func Roll(n int) int {
 	return rand.Intn(n)
 }
 
+// RollInt63n returns a non-negative number between 0 (inclusive) and n (exclusive).
+func RollInt63n(n int64) int64 {
+	if n == 1 {
+		return 0
+	}
+	return rand.Int63n(n)
+}
+
 // Roll returns a non-negative number between 0 (inclusive) and n (exclusive).
 func RollDeterministic(n int, seed int64) int {
 	if n == 1 {

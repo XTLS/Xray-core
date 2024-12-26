@@ -6,10 +6,9 @@ import (
 	"encoding/binary"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go"
+	"github.com/xtls/quic-go"
 
 	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/buf"
@@ -39,7 +38,6 @@ type QUICNameServer struct {
 	ips           map[string]*record
 	pub           *pubsub.Service
 	cleanup       *task.Periodic
-	reqID         uint32
 	name          string
 	destination   *net.Destination
 	connection    quic.Connection
@@ -158,7 +156,7 @@ func (s *QUICNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 }
 
 func (s *QUICNameServer) newReqID() uint16 {
-	return uint16(atomic.AddUint32(&s.reqID, 1))
+	return 0
 }
 
 func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
@@ -302,7 +300,7 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
+		if err == nil || err == dns_feature.ErrEmptyResponse {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, err

@@ -7,8 +7,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
-const protocolName = "mkcp"
-
 // GetMTUValue returns the value of MTU settings.
 func (c *Config) GetMTUValue() uint32 {
 	if c == nil || c.Mtu == nil {

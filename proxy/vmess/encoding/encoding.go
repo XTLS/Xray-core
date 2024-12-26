@@ -5,8 +5,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 )
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 const (
 	Version = byte(1)
 )

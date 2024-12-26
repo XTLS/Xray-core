@@ -1,7 +1,5 @@
 package inbound
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 import (
 	"bytes"
 	"context"
@@ -45,7 +43,21 @@ func init() {
 		}); err != nil {
 			return nil, err
 		}
-		return New(ctx, config.(*Config), dc)
+
+		c := config.(*Config)
+
+		validator := new(vless.MemoryValidator)
+		for _, user := range c.Clients {
+			u, err := user.ToMemoryUser()
+			if err != nil {
+				return nil, errors.New("failed to get VLESS user").Base(err).AtError()
+			}
+			if err := validator.Add(u); err != nil {
+				return nil, errors.New("failed to initiate user").Base(err).AtError()
+			}
+		}
+
+		return New(ctx, c, dc, validator)
 	}))
 }
 
@@ -53,30 +65,20 @@ func init() {
 type Handler struct {
 	inboundHandlerManager feature_inbound.Manager
 	policyManager         policy.Manager
-	validator             *vless.Validator
+	validator             vless.Validator
 	dns                   dns.Client
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
 // New creates a new VLess inbound handler.
-func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
+func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		validator:             new(vless.Validator),
 		dns:                   dc,
-	}
-
-	for _, user := range config.Clients {
-		u, err := user.ToMemoryUser()
-		if err != nil {
-			return nil, errors.New("failed to get VLESS user").Base(err).AtError()
-		}
-		if err := handler.AddUser(ctx, u); err != nil {
-			return nil, errors.New("failed to initiate user").Base(err).AtError()
-		}
+		validator:             validator,
 	}
 
 	if config.Fallbacks != nil {
@@ -168,6 +170,21 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
 	return h.validator.Del(e)
+}
+
+// GetUser implements proxy.UserManager.GetUser().
+func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	return h.validator.GetByEmail(email)
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (h *Handler) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return h.validator.GetAll()
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (h *Handler) GetUsersCount(context.Context) int64 {
+	return h.validator.GetCount()
 }
 
 // Network implements proxy.Inbound.Network().
@@ -474,12 +491,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 			}
 		} else {
-			return errors.New(account.ID.String() + " is not able to use " + requestAddons.Flow).AtWarning()
+			return errors.New("account " + account.ID.String() + " is not able to use the flow " + requestAddons.Flow).AtWarning()
 		}
 	case "":
 		inbound.CanSpliceCopy = 3
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
-			return errors.New(account.ID.String() + " is not able to use \"\". Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
+			return errors.New("account " + account.ID.String() + " is rejected since the client flow is empty. Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
 		return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()

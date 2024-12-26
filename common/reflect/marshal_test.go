@@ -204,9 +204,7 @@ func getConfig() string {
 			  "security": "none",
 			  "wsSettings": {
 				"path": "/?ed=2048",
-				"headers": {
-				  "Host": "bing.com"
-				}
+				"host": "bing.com"
 			  }
 			}
 		  }

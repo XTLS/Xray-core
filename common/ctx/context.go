@@ -7,7 +7,7 @@ type SessionKey int
 // ID of a session.
 type ID uint32
 
-const(
+const (
 	idSessionKey SessionKey = 0
 )
 

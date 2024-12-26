@@ -14,4 +14,5 @@ message Config {
   xray.common.net.Endpoint server = 1;
   uint32 user_level = 2;
   string non_IP_query = 3;
+  repeated int32 block_types = 4;
 }

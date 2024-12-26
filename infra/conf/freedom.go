@@ -1,8 +1,8 @@
 package conf
 
 import (
+	"encoding/base64"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/GFW-knocker/Xray-core/common/errors"
@@ -14,10 +14,11 @@ import (
 
 type FreedomConfig struct {
 	DomainStrategy string    `json:"domainStrategy"`
-	Timeout        *uint32   `json:"timeout"`
 	Redirect       string    `json:"redirect"`
 	UserLevel      uint32    `json:"userLevel"`
 	Fragment       *Fragment `json:"fragment"`
+	Noise          *Noise    `json:"noise"`
+	Noises         []*Noise  `json:"noises"`
 	ProxyProtocol  uint32    `json:"proxyProtocol"`
 }
 
@@ -29,6 +30,12 @@ type Fragment struct {
 	Host1_domain string `json:"host1_domain"`
 	Host2_header string `json:"host2_header"`
 	Host2_domain string `json:"host2_domain"`
+}
+
+type Noise struct {
+	Type   string      `json:"type"`
+	Packet string      `json:"packet"`
+	Delay  *Int32Range `json:"delay"`
 }
 
 // Build implements Buildable
@@ -63,7 +70,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 
 	if c.Fragment != nil {
 		config.Fragment = new(freedom.Fragment)
-		var err, err2 error
 
 		config.Fragment.FakeHost = false
 
@@ -83,75 +89,34 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			config.Fragment.PacketsTo = 0
 		default:
 			// TCP Segmentation (range)
-			packetsFromTo := strings.Split(c.Fragment.Packets, "-")
-			if len(packetsFromTo) == 2 {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo, err2 = strconv.ParseUint(packetsFromTo[1], 10, 64)
-			} else {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo = config.Fragment.PacketsFrom
-			}
+			from, to, err := ParseRangeString(c.Fragment.Packets)
 			if err != nil {
 				return nil, errors.New("Invalid PacketsFrom").Base(err)
 			}
-			if err2 != nil {
-				return nil, errors.New("Invalid PacketsTo").Base(err2)
-			}
-			if config.Fragment.PacketsFrom > config.Fragment.PacketsTo {
-				config.Fragment.PacketsFrom, config.Fragment.PacketsTo = config.Fragment.PacketsTo, config.Fragment.PacketsFrom
-			}
+			config.Fragment.PacketsFrom = uint64(from)
+			config.Fragment.PacketsTo = uint64(to)
 			if config.Fragment.PacketsFrom == 0 {
 				return nil, errors.New("PacketsFrom can't be 0")
 			}
 		}
 
 		{
-			if c.Fragment.Length == "" {
+			if c.Fragment.Length == nil {
 				return nil, errors.New("Length can't be empty")
 			}
-			lengthMinMax := strings.Split(c.Fragment.Length, "-")
-			if len(lengthMinMax) == 2 {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax, err2 = strconv.ParseUint(lengthMinMax[1], 10, 64)
-			} else {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax = config.Fragment.LengthMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid LengthMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid LengthMax").Base(err2)
-			}
-			if config.Fragment.LengthMin > config.Fragment.LengthMax {
-				config.Fragment.LengthMin, config.Fragment.LengthMax = config.Fragment.LengthMax, config.Fragment.LengthMin
-			}
+			config.Fragment.LengthMin = uint64(c.Fragment.Length.From)
+			config.Fragment.LengthMax = uint64(c.Fragment.Length.To)
 			if config.Fragment.LengthMin == 0 {
 				return nil, errors.New("LengthMin can't be 0")
 			}
 		}
 
 		{
-			if c.Fragment.Interval == "" {
+			if c.Fragment.Interval == nil {
 				return nil, errors.New("Interval can't be empty")
 			}
-			intervalMinMax := strings.Split(c.Fragment.Interval, "-")
-			if len(intervalMinMax) == 2 {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax, err2 = strconv.ParseUint(intervalMinMax[1], 10, 64)
-			} else {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax = config.Fragment.IntervalMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid IntervalMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid IntervalMax").Base(err2)
-			}
-			if config.Fragment.IntervalMin > config.Fragment.IntervalMax {
-				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
-			}
+			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
+			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
 		}
 
 		{
@@ -182,9 +147,20 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 
 	}
 
-	if c.Timeout != nil {
-		config.Timeout = *c.Timeout
+	if c.Noise != nil {
+		return nil, errors.PrintRemovedFeatureError("noise = { ... }", "noises = [ { ... } ]")
 	}
+
+	if c.Noises != nil {
+		for _, n := range c.Noises {
+			NConfig, err := ParseNoise(n)
+			if err != nil {
+				return nil, err
+			}
+			config.Noises = append(config.Noises, NConfig)
+		}
+	}
+
 	config.UserLevel = c.UserLevel
 	if len(c.Redirect) > 0 {
 		host, portStr, err := net.SplitHostPort(c.Redirect)
@@ -209,4 +185,56 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
 	return config, nil
+}
+
+func ParseNoise(noise *Noise) (*freedom.Noise, error) {
+	var err error
+	NConfig := new(freedom.Noise)
+
+	switch strings.ToLower(noise.Type) {
+	case "rand":
+		min, max, err := ParseRangeString(noise.Packet)
+		if err != nil {
+			return nil, errors.New("invalid value for rand Length").Base(err)
+		}
+		NConfig.LengthMin = uint64(min)
+		NConfig.LengthMax = uint64(max)
+		if NConfig.LengthMin > NConfig.LengthMax {
+			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
+		}
+		if NConfig.LengthMin == 0 {
+			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
+		}
+
+	case "str":
+		//user input string
+		NConfig.StrNoise = []byte(strings.TrimSpace(noise.Packet))
+
+	case "base64":
+		//user input base64
+		NConfig.StrNoise, err = base64.StdEncoding.DecodeString(strings.TrimSpace(noise.Packet))
+		if err != nil {
+			return nil, errors.New("Invalid base64 string")
+		}
+
+	default:
+		return nil, errors.New("Invalid packet,only rand,str,base64 are supported")
+	}
+
+	if noise.Delay != nil {
+		if noise.Delay.From != 0 && noise.Delay.To != 0 {
+			NConfig.DelayMin = uint64(noise.Delay.From)
+			NConfig.DelayMax = uint64(noise.Delay.To)
+			if NConfig.DelayMin > NConfig.LengthMax {
+				NConfig.DelayMin, NConfig.DelayMax = NConfig.LengthMax, NConfig.DelayMin
+			}
+		} else {
+			return nil, errors.New("DelayMin or DelayMax cannot be zero")
+		}
+
+	} else {
+		NConfig.DelayMin = 0
+		NConfig.DelayMax = 0
+	}
+	return NConfig, nil
 }

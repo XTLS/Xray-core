@@ -22,7 +22,18 @@ type connection struct {
 	remoteAddr net.Addr
 }
 
-func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader) *connection {
+func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader, heartbeatPeriod uint32) *connection {
+	if heartbeatPeriod != 0 {
+		go func() {
+			for {
+				time.Sleep(time.Duration(heartbeatPeriod) * time.Second)
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
+					break
+				}
+			}
+		}()
+	}
+
 	return &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,

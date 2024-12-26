@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 func IsValidHTTPHost(request string, config string) bool {
 	r := strings.ToLower(request)
 	c := strings.ToLower(config)

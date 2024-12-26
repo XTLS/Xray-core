@@ -50,12 +50,9 @@ import (
 	_ "github.com/GFW-knocker/Xray-core/proxy/wireguard"
 
 	// Transports
-	_ "github.com/GFW-knocker/Xray-core/transport/internet/domainsocket"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/grpc"
-	_ "github.com/GFW-knocker/Xray-core/transport/internet/http"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/httpupgrade"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/kcp"
-	_ "github.com/GFW-knocker/Xray-core/transport/internet/quic"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/reality"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/splithttp"
 	_ "github.com/GFW-knocker/Xray-core/transport/internet/tcp"

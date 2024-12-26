@@ -14,7 +14,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/signal"
 	"github.com/GFW-knocker/Xray-core/common/task"
 	"github.com/GFW-knocker/Xray-core/core"
-	"github.com/GFW-knocker/Xray-core/features/dns"
 	"github.com/GFW-knocker/Xray-core/features/policy"
 	"github.com/GFW-knocker/Xray-core/transport"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
@@ -25,8 +24,6 @@ import (
 type Client struct {
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
-	version       Version
-	dns           dns.Client
 }
 
 // NewClient create a new Socks5 client based on the given config.
@@ -47,10 +44,6 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	c := &Client{
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		version:       config.Version,
-	}
-	if config.Version == Version_SOCKS4 {
-		c.dns = v.GetFeature(dns.ClientType()).(dns.Client)
 	}
 
 	return c, nil
@@ -102,30 +95,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		Command: protocol.RequestCommandTCP,
 		Address: destination.Address,
 		Port:    destination.Port,
-	}
-
-	switch c.version {
-	case Version_SOCKS4:
-		if request.Address.Family().IsDomain() {
-			ips, err := c.dns.LookupIP(request.Address.Domain(), dns.IPOption{
-				IPv4Enable: true,
-			})
-			if err != nil {
-				return err
-			} else if len(ips) == 0 {
-				return dns.ErrEmptyResponse
-			}
-			request.Address = net.IPAddress(ips[0])
-		}
-		fallthrough
-	case Version_SOCKS4A:
-		request.Version = socks4Version
-
-		if destination.Network == net.Network_UDP {
-			return errors.New("udp is not supported in socks4")
-		} else if destination.Address.Family().IsIPv6() {
-			return errors.New("ipv6 is not supported in socks4")
-		}
 	}
 
 	if destination.Network == net.Network_UDP {

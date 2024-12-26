@@ -1,10 +1,13 @@
 package protocol
 
-import "github.com/GFW-knocker/Xray-core/common/errors"
+import (
+	"github.com/GFW-knocker/Xray-core/common/errors"
+	"github.com/GFW-knocker/Xray-core/common/serial"
+)
 
 func (u *User) GetTypedAccount() (Account, error) {
 	if u.GetAccount() == nil {
-		return nil, errors.New("Account missing").AtWarning()
+		return nil, errors.New("Account is missing").AtWarning()
 	}
 
 	rawAccount, err := u.Account.GetInstance()
@@ -30,6 +33,17 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 		Email:   u.Email,
 		Level:   u.Level,
 	}, nil
+}
+
+func ToProtoUser(mu *MemoryUser) *User {
+	if mu == nil {
+		return nil
+	}
+	return &User{
+		Account: serial.ToTypedMessage(mu.Account.ToProto()),
+		Email:   mu.Email,
+		Level:   mu.Level,
+	}
 }
 
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.

@@ -1,7 +1,5 @@
 package command
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 import (
 	"context"
 	"runtime"
@@ -40,6 +38,20 @@ func (s *statsServer) GetStats(ctx context.Context, request *GetStatsRequest) (*
 	} else {
 		value = c.Value()
 	}
+	return &GetStatsResponse{
+		Stat: &Stat{
+			Name:  request.Name,
+			Value: value,
+		},
+	}, nil
+}
+
+func (s *statsServer) GetStatsOnline(ctx context.Context, request *GetStatsRequest) (*GetStatsResponse, error) {
+	c := s.stats.GetOnlineMap(request.Name)
+	if c == nil {
+		return nil, errors.New(request.Name, " not found.")
+	}
+	value := int64(c.Count())
 	return &GetStatsResponse{
 		Stat: &Stat{
 			Name:  request.Name,

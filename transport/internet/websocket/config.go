@@ -7,8 +7,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/transport/internet"
 )
 
-const protocolName = "websocket"
-
 func (c *Config) GetNormalizedPath() string {
 	path := c.Path
 	if path == "" {
@@ -31,7 +29,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	// GFW-Knocker
 	uagent := header.Get("User-Agent")
 	if uagent == "" {
-		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	}
 
 	return header

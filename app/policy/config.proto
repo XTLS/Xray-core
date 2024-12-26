@@ -22,6 +22,7 @@ message Policy {
   message Stats {
     bool user_uplink = 1;
     bool user_downlink = 2;
+    bool user_online = 3;
   }
 
   message Buffer {

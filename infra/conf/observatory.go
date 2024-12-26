@@ -2,7 +2,7 @@ package conf
 
 import (
 	"google.golang.org/protobuf/proto"
-	
+
 	"github.com/GFW-knocker/Xray-core/app/observatory"
 	"github.com/GFW-knocker/Xray-core/app/observatory/burst"
 	"github.com/GFW-knocker/Xray-core/infra/conf/cfgcommon/duration"

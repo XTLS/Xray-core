@@ -1,7 +1,5 @@
 package reverse
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 import (
 	"context"
 

@@ -16,7 +16,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/signal"
 	"github.com/GFW-knocker/Xray-core/common/task"
 	"github.com/GFW-knocker/Xray-core/core"
-	"github.com/GFW-knocker/Xray-core/features"
 	"github.com/GFW-knocker/Xray-core/features/policy"
 	"github.com/GFW-knocker/Xray-core/features/routing"
 	"github.com/GFW-knocker/Xray-core/proxy/http"
@@ -55,12 +54,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 func (s *Server) policy() policy.Session {
 	config := s.config
 	p := s.policyManager.ForLevel(config.UserLevel)
-	if config.Timeout > 0 {
-		features.PrintDeprecatedFeatureWarning("Socks timeout")
-	}
-	if config.Timeout > 0 && config.UserLevel == 0 {
-		p.Timeouts.ConnectionIdle = time.Duration(config.Timeout) * time.Second
-	}
 	return p
 }
 

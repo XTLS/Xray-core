@@ -16,8 +16,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/errors"
 )
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 type Certificate struct {
 	// certificate in ASN.1 DER format
 	Certificate []byte

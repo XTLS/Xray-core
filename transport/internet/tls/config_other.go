@@ -51,5 +51,5 @@ func (c *Config) getCertPool() (*x509.CertPool, error) {
 			return nil, errors.New("append cert to root").AtWarning().Base(err)
 		}
 	}
-	return pool, err
+	return pool, nil
 }

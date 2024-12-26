@@ -31,7 +31,6 @@ type VLessInboundFallback struct {
 type VLessInboundConfig struct {
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
-	Fallback   *VLessInboundFallback   `json:"fallback"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
 }
 
@@ -74,9 +73,6 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	}
 	config.Decryption = c.Decryption
 
-	if c.Fallback != nil {
-		return nil, errors.New(`VLESS settings: please use "fallbacks":[{}] instead of "fallback":{}`)
-	}
 	for _, fb := range c.Fallbacks {
 		var i uint16
 		var s string

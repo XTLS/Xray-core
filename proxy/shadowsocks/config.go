@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
+	"google.golang.org/protobuf/proto"
 	"io"
 
 	"github.com/GFW-knocker/Xray-core/common"
@@ -20,8 +21,10 @@ import (
 
 // MemoryAccount is an account type converted from Account.
 type MemoryAccount struct {
-	Cipher Cipher
-	Key    []byte
+	Cipher     Cipher
+	CipherType CipherType
+	Key        []byte
+	Password   string
 
 	replayFilter antireplay.GeneralizedReplayFilter
 }
@@ -34,6 +37,14 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 		return bytes.Equal(a.Key, account.Key)
 	}
 	return false
+}
+
+func (a *MemoryAccount) ToProto() proto.Message {
+	return &Account{
+		CipherType: a.CipherType,
+		Password:   a.Password,
+		IvCheck:    a.replayFilter != nil,
+	}
 }
 
 func (a *MemoryAccount) CheckIV(iv []byte) error {
@@ -106,8 +117,10 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		return nil, errors.New("failed to get cipher").Base(err)
 	}
 	return &MemoryAccount{
-		Cipher: Cipher,
-		Key:    passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
+		Cipher:     Cipher,
+		CipherType: a.CipherType,
+		Key:        passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
+		Password:   a.Password,
 		replayFilter: func() antireplay.GeneralizedReplayFilter {
 			if a.IvCheck {
 				return antireplay.NewBloomRing()

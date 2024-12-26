@@ -6,7 +6,6 @@ option go_package = "github.com/GFW-knocker/Xray-core/app/dns";
 option java_package = "com.xray.app.dns";
 option java_multiple_files = true;
 
-import "common/net/address.proto";
 import "common/net/destination.proto";
 import "app/router/config.proto";
 
@@ -45,17 +44,9 @@ enum QueryStrategy {
 }
 
 message Config {
-  // Nameservers used by this DNS. Only traditional UDP servers are support at
-  // the moment. A special value 'localhost' as a domain address can be set to
-  // use DNS on local system.
-  repeated xray.common.net.Endpoint NameServers = 1 [deprecated = true];
-
   // NameServer list used by this DNS client.
+  // A special value 'localhost' as a domain address can be set to use DNS on local system.
   repeated NameServer name_server = 5;
-
-  // Static hosts. Domain to IP.
-  // Deprecated. Use static_hosts.
-  map<string, xray.common.net.IPOrDomain> Hosts = 2 [deprecated = true];
 
   // Client IP for EDNS client subnet. Must be 4 bytes (IPv4) or 16 bytes
   // (IPv6).

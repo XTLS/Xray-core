@@ -9,8 +9,6 @@
 // connections.
 package core
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 import (
 	"fmt"
 	"runtime"
@@ -19,9 +17,9 @@ import (
 )
 
 var (
-	Version_x byte = 1
-	Version_y byte = 8
-	Version_z byte = 23
+	Version_x byte = 24
+	Version_y byte = 12
+	Version_z byte = 18
 )
 
 var (

@@ -7,8 +7,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/main/commands/base"
 )
 
-// go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 func init() {
 	base.RootCommand.Commands = append(
 		base.RootCommand.Commands,

@@ -1,6 +1,7 @@
 package router_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,16 +14,25 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func init() {
-	wd, err := os.Getwd()
-	common.Must(err)
+func getAssetPath(file string) (string, error) {
+	path := platform.GetAssetLocation(file)
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		path := filepath.Join("..", "..", "resources", file)
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("can't find %s in standard asset locations or {project_root}/resources", file)
+		}
+		if err != nil {
+			return "", fmt.Errorf("can't stat %s: %v", path, err)
+		}
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("can't stat %s: %v", path, err)
+	}
 
-	if _, err := os.Stat(platform.GetAssetLocation("geoip.dat")); err != nil && os.IsNotExist(err) {
-		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geoip.dat"), filepath.Join(wd, "..", "..", "resources", "geoip.dat")))
-	}
-	if _, err := os.Stat(platform.GetAssetLocation("geosite.dat")); err != nil && os.IsNotExist(err) {
-		common.Must(filesystem.CopyFile(platform.GetAssetLocation("geosite.dat"), filepath.Join(wd, "..", "..", "resources", "geosite.dat")))
-	}
+	return path, nil
 }
 
 func TestGeoIPMatcherContainer(t *testing.T) {
@@ -217,10 +227,15 @@ func TestGeoIPMatcher6US(t *testing.T) {
 }
 
 func loadGeoIP(country string) ([]*router.CIDR, error) {
-	geoipBytes, err := filesystem.ReadAsset("geoip.dat")
+	path, err := getAssetPath("geoip.dat")
 	if err != nil {
 		return nil, err
 	}
+	geoipBytes, err := filesystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
 	var geoipList router.GeoIPList
 	if err := proto.Unmarshal(geoipBytes, &geoipList); err != nil {
 		return nil, err

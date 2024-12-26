@@ -1,7 +1,5 @@
 package retry // import "github.com/GFW-knocker/Xray-core/common/retry"
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 import (
 	"time"
 

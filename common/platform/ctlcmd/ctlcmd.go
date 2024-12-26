@@ -12,8 +12,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/platform"
 )
 
-//go:generate go run github.com/GFW-knocker/Xray-core/common/errors/errorgen
-
 func Run(args []string, input io.Reader) (buf.MultiBuffer, error) {
 	xctl := platform.GetToolLocation("xctl")
 	if _, err := os.Stat(xctl); err != nil {

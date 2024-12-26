@@ -126,9 +126,13 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 			if user.Cipher != "" {
 				return nil, errors.New("shadowsocks 2022 (multi-user): users must have empty method")
 			}
-			config.Users = append(config.Users, &shadowsocks_2022.User{
-				Key:   user.Password,
-				Email: user.Email,
+			account := &shadowsocks_2022.Account{
+				Key: user.Password,
+			}
+			config.Users = append(config.Users, &protocol.User{
+				Email:   user.Email,
+				Level:   uint32(user.Level),
+				Account: serial.ToTypedMessage(account),
 			})
 		}
 		return config, nil

@@ -3,7 +3,6 @@ package splithttp
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	gonet "net"
 
 	"github.com/GFW-knocker/Xray-core/transport/internet/browser_dialer"
@@ -14,18 +13,26 @@ import (
 // has no fields because everything is global state :O)
 type BrowserDialerClient struct{}
 
-func (c *BrowserDialerClient) OpenDownload(ctx context.Context, baseURL string) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
-	conn, err := browser_dialer.DialGet(baseURL)
+func (c *BrowserDialerClient) IsClosed() bool {
+	panic("not implemented yet")
+}
+
+func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body io.Reader, uploadOnly bool) (io.ReadCloser, gonet.Addr, gonet.Addr, error) {
+	if body != nil {
+		panic("not implemented yet")
+	}
+
+	conn, err := browser_dialer.DialGet(url)
 	dummyAddr := &gonet.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
 	}
 
-	return websocket.NewConnection(conn, dummyAddr, nil), conn.RemoteAddr(), conn.LocalAddr(), nil
+	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
-func (c *BrowserDialerClient) SendUploadRequest(ctx context.Context, url string, payload io.ReadWriteCloser, contentLength int64) error {
-	bytes, err := ioutil.ReadAll(payload)
+func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, body io.Reader, contentLength int64) error {
+	bytes, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}

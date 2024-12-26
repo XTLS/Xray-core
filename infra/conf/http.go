@@ -23,7 +23,6 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
-	Timeout     uint32         `json:"timeout"`
 	Accounts    []*HTTPAccount `json:"accounts"`
 	Transparent bool           `json:"allowTransparent"`
 	UserLevel   uint32         `json:"userLevel"`
@@ -31,7 +30,6 @@ type HTTPServerConfig struct {
 
 func (c *HTTPServerConfig) Build() (proto.Message, error) {
 	config := &http.ServerConfig{
-		Timeout:          c.Timeout,
 		AllowTransparent: c.Transparent,
 		UserLevel:        c.UserLevel,
 	}
