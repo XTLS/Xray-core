@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -45,22 +44,13 @@ func getFeature(allFeatures []features.Feature, t reflect.Type) features.Feature
 	return nil
 }
 
-func (r *resolution) resolve(allFeatures []features.Feature) (bool, error) {
-	var fs []features.Feature
-	for _, d := range r.deps {
-		f := getFeature(allFeatures, d)
-		if f == nil {
-			return false, nil
-		}
-		fs = append(fs, f)
-	}
-
+func (r *resolution) callbackResolution(allFeatures []features.Feature) error {
 	callback := reflect.ValueOf(r.callback)
 	var input []reflect.Value
 	callbackType := callback.Type()
 	for i := 0; i < callbackType.NumIn(); i++ {
 		pt := callbackType.In(i)
-		for _, f := range fs {
+		for _, f := range allFeatures {
 			if reflect.TypeOf(f).AssignableTo(pt) {
 				input = append(input, reflect.ValueOf(f))
 				break
@@ -85,15 +75,17 @@ func (r *resolution) resolve(allFeatures []features.Feature) (bool, error) {
 		}
 	}
 
-	return true, err
+	return err
 }
 
 // Instance combines all Xray features.
 type Instance struct {
-	access             sync.Mutex
-	features           []features.Feature
-	featureResolutions []resolution
-	running            bool
+	statusLock                 sync.Mutex
+	features                   []features.Feature
+	pendingResolutions         []resolution
+	pendingOptionalResolutions []resolution
+	running                    bool
+	resolveLock                sync.Mutex
 
 	ctx context.Context
 }
@@ -154,13 +146,14 @@ func addOutboundHandlers(server *Instance, configs []*OutboundHandlerConfig) err
 // See Instance.RequireFeatures for more information.
 func RequireFeatures(ctx context.Context, callback interface{}) error {
 	v := MustFromContext(ctx)
-	return v.RequireFeatures(callback)
+	return v.RequireFeatures(callback, false)
 }
 
-// RequireFeaturesAsync registers a callback, which will be called when all dependent features are registered. The order of app init doesn't matter
-func RequireFeaturesAsync(ctx context.Context, callback interface{}) {
+// OptionalFeatures is a helper function to aquire features from Instance in context.
+// See Instance.RequireFeatures for more information.
+func OptionalFeatures(ctx context.Context, callback interface{}) error {
 	v := MustFromContext(ctx)
-	v.RequireFeaturesAsync(callback)
+	return v.RequireFeatures(callback, true)
 }
 
 // New returns a new Xray instance based on given configuration.
@@ -234,9 +227,12 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 		}(),
 	)
 
-	if server.featureResolutions != nil {
+	server.resolveLock.Lock()
+	if server.pendingResolutions != nil {
+		server.resolveLock.Unlock()
 		return true, errors.New("not all dependencies are resolved.")
 	}
+	server.resolveLock.Unlock()
 
 	if err := addInboundHandlers(server, config.Inbound); err != nil {
 		return true, err
@@ -255,8 +251,8 @@ func (s *Instance) Type() interface{} {
 
 // Close shutdown the Xray instance.
 func (s *Instance) Close() error {
-	s.access.Lock()
-	defer s.access.Unlock()
+	s.statusLock.Lock()
+	defer s.statusLock.Unlock()
 
 	s.running = false
 
@@ -275,7 +271,7 @@ func (s *Instance) Close() error {
 
 // RequireFeatures registers a callback, which will be called when all dependent features are registered.
 // The callback must be a func(). All its parameters must be features.Feature.
-func (s *Instance) RequireFeatures(callback interface{}) error {
+func (s *Instance) RequireFeatures(callback interface{}, optional bool) error {
 	callbackType := reflect.TypeOf(callback)
 	if callbackType.Kind() != reflect.Func {
 		panic("not a function")
@@ -290,47 +286,32 @@ func (s *Instance) RequireFeatures(callback interface{}) error {
 		deps:     featureTypes,
 		callback: callback,
 	}
-	if finished, err := r.resolve(s.features); finished {
-		return err
-	}
-	s.featureResolutions = append(s.featureResolutions, r)
-	return nil
-}
 
-// RequireFeaturesAsync registers a callback, which will be called when all dependent features are registered. The order of app init doesn't matter
-func (s *Instance) RequireFeaturesAsync(callback interface{}) {
-	callbackType := reflect.TypeOf(callback)
-	if callbackType.Kind() != reflect.Func {
-		panic("not a function")
-	}
-
-	var featureTypes []reflect.Type
-	for i := 0; i < callbackType.NumIn(); i++ {
-		featureTypes = append(featureTypes, reflect.PtrTo(callbackType.In(i)))
-	}
-
-	r := resolution{
-		deps:     featureTypes,
-		callback: callback,
-	}
-	go func() {
-		var finished = false
-		for i := 0; !finished; i++ {
-			if i > 100000 {
-				errors.LogError(s.ctx, "RequireFeaturesAsync failed after count ", i)
-				break;
-			}
-			finished, _ = r.resolve(s.features)
-			time.Sleep(time.Millisecond)
+	s.resolveLock.Lock()
+	foundAll := true
+	for _, d := range r.deps {
+		f := getFeature(s.features, d)
+		if f == nil {
+			foundAll = false
+			break
 		}
-		s.featureResolutions = append(s.featureResolutions, r)
-	}()
+	}
+	if foundAll {
+		s.resolveLock.Unlock()
+		return r.callbackResolution(s.features)
+	} else {
+		if optional {
+			s.pendingOptionalResolutions = append(s.pendingOptionalResolutions, r)
+		} else {
+			s.pendingResolutions = append(s.pendingResolutions, r)
+		}
+		s.resolveLock.Unlock()
+		return nil
+	}
 }
 
 // AddFeature registers a feature into current Instance.
 func (s *Instance) AddFeature(feature features.Feature) error {
-	s.features = append(s.features, feature)
-
 	if s.running {
 		if err := feature.Start(); err != nil {
 			errors.LogInfoInner(s.ctx, err, "failed to start feature")
@@ -338,27 +319,52 @@ func (s *Instance) AddFeature(feature features.Feature) error {
 		return nil
 	}
 
-	if s.featureResolutions == nil {
-		return nil
-	}
+	s.resolveLock.Lock()
+	s.features = append(s.features, feature)
 
-	var pendingResolutions []resolution
-	for _, r := range s.featureResolutions {
-		finished, err := r.resolve(s.features)
-		if finished && err != nil {
-			return err
+	var availableResolution []resolution
+	var pending []resolution
+	for _, r := range s.pendingResolutions {
+		foundAll := true
+		for _, d := range r.deps {
+			f := getFeature(s.features, d)
+			if f == nil {
+				foundAll = false
+				break
+			}
 		}
-		if !finished {
-			pendingResolutions = append(pendingResolutions, r)
+		if foundAll {
+			availableResolution = append(availableResolution, r)
+		} else {
+			pending = append(pending, r)
 		}
 	}
-	if len(pendingResolutions) == 0 {
-		s.featureResolutions = nil
-	} else if len(pendingResolutions) < len(s.featureResolutions) {
-		s.featureResolutions = pendingResolutions
-	}
+	s.pendingResolutions = pending
 
-	return nil
+	var pendingOptional []resolution
+	for _, r := range s.pendingOptionalResolutions {
+		foundAll := true
+		for _, d := range r.deps {
+			f := getFeature(s.features, d)
+			if f == nil {
+				foundAll = false
+				break
+			}
+		}
+		if foundAll {
+			availableResolution = append(availableResolution, r)
+		} else {
+			pendingOptional = append(pendingOptional, r)
+		}
+	}
+	s.pendingOptionalResolutions = pendingOptional
+	s.resolveLock.Unlock()
+	
+	var err error
+	for _, r := range availableResolution {
+		err = r.callbackResolution(s.features) // only return the last error for now
+	}
+	return err
 }
 
 // GetFeature returns a feature of the given type, or nil if such feature is not registered.
@@ -371,8 +377,8 @@ func (s *Instance) GetFeature(featureType interface{}) features.Feature {
 //
 // xray:api:stable
 func (s *Instance) Start() error {
-	s.access.Lock()
-	defer s.access.Unlock()
+	s.statusLock.Lock()
+	defer s.statusLock.Unlock()
 
 	s.running = true
 	for _, f := range s.features {

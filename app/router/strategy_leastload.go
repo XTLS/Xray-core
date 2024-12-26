@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/app/observatory"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
@@ -59,9 +60,10 @@ type node struct {
 
 func (s *LeastLoadStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
-	core.RequireFeaturesAsync(s.ctx, func(observatory extension.Observatory) {
+	common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
 		s.observer = observatory
-	})
+		return nil
+	}))
 }
 
 func (s *LeastLoadStrategy) PickOutbound(candidates []string) string {

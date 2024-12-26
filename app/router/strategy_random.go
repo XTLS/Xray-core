@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/app/observatory"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
@@ -20,9 +21,10 @@ type RandomStrategy struct {
 func (s *RandomStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
 	if len(s.FallbackTag) > 0 {
-		core.RequireFeaturesAsync(s.ctx, func(observatory extension.Observatory) {
+		common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
 			s.observatory = observatory
-		})
+			return nil
+		}))
 	}
 }
 

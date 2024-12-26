@@ -177,7 +177,7 @@ func (s *service) Register(server *grpc.Server) {
 	common.Must(s.v.RequireFeatures(func(im inbound.Manager, om outbound.Manager) {
 		hs.ihm = im
 		hs.ohm = om
-	}))
+	}, false))
 	RegisterHandlerServiceServer(server, hs)
 
 	// For compatibility purposes

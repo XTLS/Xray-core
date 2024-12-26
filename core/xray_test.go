@@ -30,7 +30,7 @@ func TestXrayDependency(t *testing.T) {
 			t.Error("expected dns client fulfilled, but actually nil")
 		}
 		wait <- true
-	})
+	}, false)
 	instance.AddFeature(localdns.New())
 	<-wait
 }
