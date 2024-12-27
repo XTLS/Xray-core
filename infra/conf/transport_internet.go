@@ -17,7 +17,6 @@ import (
 	"github.com/GFW-knocker/Xray-core/common/protocol"
 	"github.com/GFW-knocker/Xray-core/common/serial"
 	"github.com/GFW-knocker/Xray-core/transport/internet"
-	"github.com/GFW-knocker/Xray-core/transport/internet/domainsocket"
 	"github.com/GFW-knocker/Xray-core/transport/internet/httpupgrade"
 	"github.com/GFW-knocker/Xray-core/transport/internet/kcp"
 	"github.com/GFW-knocker/Xray-core/transport/internet/quic"
@@ -374,21 +373,6 @@ func (c *QUICConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type DomainSocketConfig struct {
-	Path     string `json:"path"`
-	Abstract bool   `json:"abstract"`
-	Padding  bool   `json:"padding"`
-}
-
-// Build implements Buildable.
-func (c *DomainSocketConfig) Build() (proto.Message, error) {
-	return &domainsocket.Config{
-		Path:     c.Path,
-		Abstract: c.Abstract,
-		Padding:  c.Padding,
-	}, nil
-}
-
 func readFileOrString(f string, s []string) ([]byte, error) {
 	if len(f) > 0 {
 		return filesystem.ReadFile(f)
@@ -711,8 +695,6 @@ func (p TransportProtocol) Build() (string, error) {
 		return "splithttp", nil
 	case "kcp", "mkcp":
 		return "mkcp", nil
-	case "quic":
-		return "quic", nil
 	case "grpc":
 		errors.PrintDeprecatedFeatureWarning("gRPC transport (with unnecessary costs, etc.)", "XHTTP stream-up H2")
 		return "grpc", nil
@@ -725,7 +707,8 @@ func (p TransportProtocol) Build() (string, error) {
 	case "h2", "h3", "http":
 		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")
 	case "quic":
-		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
+		errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
+		return "quic", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
