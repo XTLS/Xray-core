@@ -5,6 +5,7 @@ import (
 	sync "sync"
 
 	"github.com/GFW-knocker/Xray-core/app/observatory"
+	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/extension"
@@ -31,9 +32,10 @@ type RoundRobinStrategy struct {
 func (s *RoundRobinStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
 	if len(s.FallbackTag) > 0 {
-		core.RequireFeaturesAsync(s.ctx, func(observatory extension.Observatory) {
+		common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
 			s.observatory = observatory
-		})
+			return nil
+		}))
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/GFW-knocker/Xray-core/app/observatory"
+	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
 	"github.com/GFW-knocker/Xray-core/features/extension"
@@ -20,9 +21,10 @@ func (l *LeastPingStrategy) GetPrincipleTarget(strings []string) []string {
 
 func (l *LeastPingStrategy) InjectContext(ctx context.Context) {
 	l.ctx = ctx
-	core.RequireFeaturesAsync(l.ctx, func(observatory extension.Observatory) {
+	common.Must(core.RequireFeatures(l.ctx, func(observatory extension.Observatory) error {
 		l.observatory = observatory
-	})
+		return nil
+	}))
 }
 
 func (l *LeastPingStrategy) PickOutbound(strings []string) string {

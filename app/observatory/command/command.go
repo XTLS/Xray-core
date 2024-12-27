@@ -38,7 +38,7 @@ func init() {
 		sv := &service{v: s}
 		err := s.RequireFeatures(func(Observatory extension.Observatory) {
 			sv.observatory = Observatory
-		})
+		}, false)
 		if err != nil {
 			return nil, err
 		}

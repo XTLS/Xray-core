@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/GFW-knocker/Xray-core/app/observatory"
+	"github.com/GFW-knocker/Xray-core/common"
 	"github.com/GFW-knocker/Xray-core/common/dice"
 	"github.com/GFW-knocker/Xray-core/common/errors"
 	"github.com/GFW-knocker/Xray-core/core"
@@ -59,9 +60,10 @@ type node struct {
 
 func (s *LeastLoadStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
-	core.RequireFeaturesAsync(s.ctx, func(observatory extension.Observatory) {
+	common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
 		s.observer = observatory
-	})
+		return nil
+	}))
 }
 
 func (s *LeastLoadStrategy) PickOutbound(candidates []string) string {
