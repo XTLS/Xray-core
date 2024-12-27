@@ -176,7 +176,7 @@ func main() {
 	}
 
 	/*
-		targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/XTLS/Xray-core/HEAD/core/config.pb.go")
+		targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/GFW-knocker/Xray-core/HEAD/core/config.pb.go")
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)

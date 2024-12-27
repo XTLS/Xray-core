@@ -24,8 +24,8 @@ var (
 
 var (
 	build    = "Custom"
-	codename = "Xray, Penetrates Everything."
-	intro    = "A unified platform for anti-censorship."
+	codename = "MahsaNG Xray-core"
+	intro    = "in memory of Mahsa Amini."
 )
 
 // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
