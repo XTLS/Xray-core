@@ -287,8 +287,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	if c.Xmux == (XmuxConfig{}) {
 		c.Xmux.MaxConcurrency.From = 16
 		c.Xmux.MaxConcurrency.To = 32
-		c.Xmux.CMaxReuseTimes.From = 64
-		c.Xmux.CMaxReuseTimes.To = 128
+		c.Xmux.CMaxReuseTimes.From = 256
+		c.Xmux.CMaxReuseTimes.To = 512
 		c.Xmux.HMaxRequestTimes.From = 800
 		c.Xmux.HMaxRequestTimes.To = 900
 	}
