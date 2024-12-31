@@ -103,7 +103,7 @@ message SocketConfig {
   
   string interface = 13;
 
-  bool   v6only = 14;
+  bool v6only = 14;
 
   int32 tcp_window_clamp = 15;
 
@@ -111,7 +111,7 @@ message SocketConfig {
 
   int32 tcp_max_seg = 17;
 
-  bool tcp_no_delay = 18;
+  bool penetrate = 18;
 
   bool tcp_mptcp = 19;
 

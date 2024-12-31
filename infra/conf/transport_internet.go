@@ -262,7 +262,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		extra.Host = c.Host
 		extra.Path = c.Path
 		extra.Mode = c.Mode
-		extra.Extra = c.Extra
 		c = &extra
 	}
 
@@ -317,9 +316,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	if c.DownloadSettings != nil {
 		if c.Mode == "stream-one" {
 			return nil, errors.New(`Can not use "downloadSettings" in "stream-one" mode.`)
-		}
-		if c.Extra != nil {
-			c.DownloadSettings.SocketSettings = nil
 		}
 		var err error
 		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
@@ -689,7 +685,7 @@ type SocketConfig struct {
 	TCPCongestion        string                 `json:"tcpCongestion"`
 	TCPWindowClamp       int32                  `json:"tcpWindowClamp"`
 	TCPMaxSeg            int32                  `json:"tcpMaxSeg"`
-	TcpNoDelay           bool                   `json:"tcpNoDelay"`
+	Penetrate            bool                   `json:"penetrate"`
 	TCPUserTimeout       int32                  `json:"tcpUserTimeout"`
 	V6only               bool                   `json:"v6only"`
 	Interface            string                 `json:"interface"`
@@ -776,7 +772,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpCongestion:        c.TCPCongestion,
 		TcpWindowClamp:       c.TCPWindowClamp,
 		TcpMaxSeg:            c.TCPMaxSeg,
-		TcpNoDelay:           c.TcpNoDelay,
+		Penetrate:            c.Penetrate,
 		TcpUserTimeout:       c.TCPUserTimeout,
 		V6Only:               c.V6only,
 		Interface:            c.Interface,
