@@ -102,8 +102,7 @@ jobs:
       - name: Setup patched builder
         run: |
           GOSDK=$(go env GOROOT)
-          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/
-go-for-win7-linux-amd64.zip
+          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
           rm -r $GOSDK/*
           unzip ./go-for-win7-linux-amd64.zip -d $GOSDK
 
