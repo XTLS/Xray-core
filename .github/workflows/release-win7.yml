@@ -24,33 +24,6 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go compiler
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
-          check-latest: true
-
-      - name: Download patched Go
-        uses: actions/checkout@v4
-        with:
-          # To change the repository of toolchail, change it here
-          repository: 'MetaCubeX/go'
-          ref: 'release-branch.go1.23'
-
-      - name: Build patched Go
-        run: |
-          cd ./src
-          . ./all.bash
-          cd ${{ github.workspace }}
-          mkdir -p patched-go
-          rsync -a --exclude 'patched-go' ./ 'patched-go'
-
-      - name: Save patched builder
-        uses: actions/cache/save@v4
-        with:
-          path: patched-go
-          key: xray-patched-go-${{ github.sha }}-${{ github.run_number }}
-
       - name: Restore Cache
         uses: actions/cache/restore@v4
         with:
@@ -120,31 +93,30 @@ jobs:
           echo "GOOS: ${{ matrix.goos }}, GOARCH: ${{ matrix.goarch }}, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Setup patched builder
+        run: |
+          GOSDK=$(go env GOROOT)
+          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/
+go-for-win7-linux-amd64.zip
+          rm -r $GOSDK/*
+          unzip ./go-for-win7-linux-amd64.zip -d $GOSDK
+
       - name: Checkout codebase
         uses: actions/checkout@v4
 
-      - name: Restore Go builder
-        uses: actions/cache/restore@v4
-        with:
-          path: patched-go
-          key: xray-patched-go-${{ github.sha }}-${{ github.run_number }}
+      - name: Get project dependencies
+        run: go mod download
 
-      - name: Download dependencies and build Xray
+      - name: Build Xray
         run: |
-          echo "Setup environment..."
-          export PATH=$PATH:${{ github.workspace }}/patched-go/bin
-          ${{ github.workspace }}/patched-go/bin/go version
-          ${{ github.workspace }}/patched-go/bin/go env -w GOPATH=${{ github.workspace }}
-          ${{ github.workspace }}/patched-go/bin/go env -w GOROOT=${{ github.workspace }}/patched-go
-          echo "Download dependencies..."
-          ${{ github.workspace }}/patched-go/bin/go mod download
-          echo "Build Xray..."
           mkdir -p build_assets
-          ${{ github.workspace }}/patched-go/bin/go clean -v -i $PWD
-          rm -f xray xray.exe wxray.exe xray_softfloat
-          ${{ github.workspace }}/patched-go/bin/go build -o xray.exe -trimpath -ldflags "-X github.com/xtls/xray-core/core.build=win7-${{ github.ref_name }}-${{ github.sha }} -s -w -buildid=" -v ./main
-          ${{ github.workspace }}/patched-go/bin/go build -o wxray.exe -trimpath -ldflags "-H windowsgui -X github.com/xtls/xray-core/core.build=win7-${{ github.ref_name }}-${{ github.sha }} -s -w -buildid=" -v ./main
-          echo "Build completed."
+          make
           find . -maxdepth 1 -type f -regex './\(wxray\|xray\).exe' -exec mv {} ./build_assets/ \;
 
       - name: Restore Cache
