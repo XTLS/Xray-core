@@ -16,11 +16,11 @@ type XmuxConn interface {
 }
 
 type XmuxClient struct {
-	XmuxConn       XmuxConn
-	OpenUsage      atomic.Int32
-	leftUsage      int32
-	expirationTime time.Time
-	LeftRequests   atomic.Int32
+	XmuxConn     XmuxConn
+	OpenUsage    atomic.Int32
+	leftUsage    int32
+	LeftRequests atomic.Int32
+	UnreusableAt time.Time
 }
 
 type XmuxManager struct {
@@ -43,19 +43,18 @@ func NewXmuxManager(xmuxConfig XmuxConfig, newConnFunc func() XmuxConn) *XmuxMan
 
 func (m *XmuxManager) newXmuxClient() *XmuxClient {
 	xmuxClient := &XmuxClient{
-		XmuxConn:       m.newConnFunc(),
-		leftUsage:      -1,
-		expirationTime: time.UnixMilli(0),
+		XmuxConn:  m.newConnFunc(),
+		leftUsage: -1,
 	}
 	if x := m.xmuxConfig.GetNormalizedCMaxReuseTimes().rand(); x > 0 {
 		xmuxClient.leftUsage = x - 1
 	}
-	if x := m.xmuxConfig.GetNormalizedCMaxLifetimeMs().rand(); x > 0 {
-		xmuxClient.expirationTime = time.Now().Add(time.Duration(x) * time.Millisecond)
-	}
 	xmuxClient.LeftRequests.Store(math.MaxInt32)
-	if x := m.xmuxConfig.GetNormalizedCMaxRequestTimes().rand(); x > 0 {
+	if x := m.xmuxConfig.GetNormalizedHMaxRequestTimes().rand(); x > 0 {
 		xmuxClient.LeftRequests.Store(x)
+	}
+	if x := m.xmuxConfig.GetNormalizedHMaxReusableSecs().rand(); x > 0 {
+		xmuxClient.UnreusableAt = time.Now().Add(time.Duration(x) * time.Second)
 	}
 	m.xmuxClients = append(m.xmuxClients, xmuxClient)
 	return xmuxClient
@@ -66,13 +65,13 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 		xmuxClient := m.xmuxClients[i]
 		if xmuxClient.XmuxConn.IsClosed() ||
 			xmuxClient.leftUsage == 0 ||
-			(xmuxClient.expirationTime != time.UnixMilli(0) && time.Now().After(xmuxClient.expirationTime)) ||
-			xmuxClient.LeftRequests.Load() <= 0 {
+			xmuxClient.LeftRequests.Load() <= 0 ||
+			(xmuxClient.UnreusableAt != time.Time{} && time.Now().After(xmuxClient.UnreusableAt)) {
 			errors.LogDebug(ctx, "XMUX: removing xmuxClient, IsClosed() = ", xmuxClient.XmuxConn.IsClosed(),
 				", OpenUsage = ", xmuxClient.OpenUsage.Load(),
 				", leftUsage = ", xmuxClient.leftUsage,
-				", expirationTime = ", xmuxClient.expirationTime,
-				", LeftRequests = ", xmuxClient.LeftRequests.Load())
+				", LeftRequests = ", xmuxClient.LeftRequests.Load(),
+				", UnreusableAt = ", xmuxClient.UnreusableAt)
 			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
 		} else {
 			i++

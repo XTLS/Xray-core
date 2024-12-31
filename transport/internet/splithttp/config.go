@@ -64,12 +64,15 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	}
 }
 
-func (c *Config) GetNormalizedScMaxBufferedPosts() int {
-	if c.ScMaxBufferedPosts == 0 {
-		return 30
+func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
+	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
+		return RangeConfig{
+			From: 100,
+			To:   1000,
+		}
 	}
 
-	return int(c.ScMaxBufferedPosts)
+	return *c.XPaddingBytes
 }
 
 func (c *Config) GetNormalizedScMaxEachPostBytes() RangeConfig {
@@ -94,47 +97,23 @@ func (c *Config) GetNormalizedScMinPostsIntervalMs() RangeConfig {
 	return *c.ScMinPostsIntervalMs
 }
 
-func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
-	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
-		return RangeConfig{
-			From: 100,
-			To:   1000,
-		}
+func (c *Config) GetNormalizedScMaxBufferedPosts() int {
+	if c.ScMaxBufferedPosts == 0 {
+		return 30
 	}
 
-	return *c.XPaddingBytes
+	return int(c.ScMaxBufferedPosts)
 }
 
-func (m *XmuxConfig) GetNormalizedCMaxRequestTimes() RangeConfig {
-	if m.HMaxRequestTimes == nil {
+func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
+	if m.MaxConcurrency == nil {
 		return RangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.HMaxRequestTimes
-}
-
-func (m *XmuxConfig) GetNormalizedCMaxReuseTimes() RangeConfig {
-	if m.CMaxReuseTimes == nil {
-		return RangeConfig{
-			From: 0,
-			To:   0,
-		}
-	}
-
-	return *m.CMaxReuseTimes
-}
-
-func (m *XmuxConfig) GetNormalizedCMaxLifetimeMs() RangeConfig {
-	if m.CMaxLifetimeMs == nil {
-		return RangeConfig{
-			From: 0,
-			To:   0,
-		}
-	}
-	return *m.CMaxLifetimeMs
+	return *m.MaxConcurrency
 }
 
 func (m *XmuxConfig) GetNormalizedMaxConnections() RangeConfig {
@@ -148,15 +127,37 @@ func (m *XmuxConfig) GetNormalizedMaxConnections() RangeConfig {
 	return *m.MaxConnections
 }
 
-func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
-	if m.MaxConcurrency == nil {
+func (m *XmuxConfig) GetNormalizedCMaxReuseTimes() RangeConfig {
+	if m.CMaxReuseTimes == nil {
 		return RangeConfig{
 			From: 0,
 			To:   0,
 		}
 	}
 
-	return *m.MaxConcurrency
+	return *m.CMaxReuseTimes
+}
+
+func (m *XmuxConfig) GetNormalizedHMaxRequestTimes() RangeConfig {
+	if m.HMaxRequestTimes == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.HMaxRequestTimes
+}
+
+func (m *XmuxConfig) GetNormalizedHMaxReusableSecs() RangeConfig {
+	if m.HMaxReusableSecs == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.HMaxReusableSecs
 }
 
 func init() {
