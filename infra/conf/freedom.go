@@ -2,6 +2,7 @@ package conf
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"net"
 	"strings"
 
@@ -168,6 +169,13 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	case "str":
 		//user input string
 		NConfig.StrNoise = []byte(strings.TrimSpace(noise.Packet))
+
+	case "hex":
+		// user input hex - Decode hex string into byte slice
+		NConfig.StrNoise, err = hex.DecodeString(noise.Packet)
+		if err != nil {
+			return nil, errors.New("Invalid hex string: ", err)
+		}
 
 	case "base64":
 		//user input base64
