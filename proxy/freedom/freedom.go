@@ -419,7 +419,7 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			}
 			w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
 
-			if n.DelayMin != 0 {
+			if n.DelayMin != 0 || n.DelayMax != 0 {
 				time.Sleep(time.Duration(randBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
 			}
 		}

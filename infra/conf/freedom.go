@@ -161,9 +161,6 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		}
 		NConfig.LengthMin = uint64(min)
 		NConfig.LengthMax = uint64(max)
-		if NConfig.LengthMin > NConfig.LengthMax {
-			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
-		}
 		if NConfig.LengthMin == 0 {
 			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
 		}
@@ -180,23 +177,12 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		}
 
 	default:
-		return nil, errors.New("Invalid packet,only rand,str,base64 are supported")
+		return nil, errors.New("Invalid packet, only rand/str/base64 are supported")
 	}
 
 	if noise.Delay != nil {
-		if noise.Delay.From != 0 && noise.Delay.To != 0 {
-			NConfig.DelayMin = uint64(noise.Delay.From)
-			NConfig.DelayMax = uint64(noise.Delay.To)
-			if NConfig.DelayMin > NConfig.LengthMax {
-				NConfig.DelayMin, NConfig.DelayMax = NConfig.LengthMax, NConfig.DelayMin
-			}
-		} else {
-			return nil, errors.New("DelayMin or DelayMax cannot be zero")
-		}
-
-	} else {
-		NConfig.DelayMin = 0
-		NConfig.DelayMax = 0
+		NConfig.DelayMin = uint64(noise.Delay.From)
+		NConfig.DelayMax = uint64(noise.Delay.To)
 	}
 	return NConfig, nil
 }
