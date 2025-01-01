@@ -7,13 +7,14 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
 )
 
-// Manager is to manage all inbound handlers.
+// Manager manages all inbound handlers.
 type Manager struct {
 	access          sync.RWMutex
 	untaggedHandler []inbound.Handler
@@ -157,6 +158,9 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 		ctx = session.ContextWithSockopt(ctx, &session.Sockopt{
 			Mark: streamSettings.SocketSettings.Mark,
 		})
+	}
+	if streamSettings != nil && streamSettings.ProtocolName == "splithttp" {
+		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
 	allocStrategy := receiverSettings.AllocationStrategy

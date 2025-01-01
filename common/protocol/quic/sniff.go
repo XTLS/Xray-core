@@ -1,13 +1,14 @@
 package quic
 
 import (
+	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/tls"
 	"encoding/binary"
 	"io"
 
-	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/xtls/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/bytespool"
@@ -46,7 +47,18 @@ var (
 	errNotQuicInitial = errors.New("not initial packet")
 )
 
-func SniffQUIC(b []byte) (*SniffHeader, error) {
+func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
+	// In extremely rare cases, this sniffer may cause slice error
+	// and we set recover() here to prevent crash.
+	// TODO: Thoroughly fix this panic
+	defer func() {
+		if r := recover(); r != nil {
+			errors.LogError(context.Background(), "Failed to sniff QUIC: ", r)
+			resultReturn = nil
+			errorReturn = common.ErrNoClue
+		}
+	}()
+
 	// Crypto data separated across packets
 	cryptoLen := 0
 	cryptoData := bytespool.Alloc(int32(len(b)))

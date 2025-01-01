@@ -3,7 +3,6 @@ package conf
 import (
 	"encoding/base64"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -24,9 +23,9 @@ type FreedomConfig struct {
 }
 
 type Fragment struct {
-	Packets  string `json:"packets"`
-	Length   string `json:"length"`
-	Interval string `json:"interval"`
+	Packets  string      `json:"packets"`
+	Length   *Int32Range `json:"length"`
+	Interval *Int32Range `json:"interval"`
 }
 
 type Noise struct {
@@ -67,7 +66,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 
 	if c.Fragment != nil {
 		config.Fragment = new(freedom.Fragment)
-		var err, err2 error
 
 		switch strings.ToLower(c.Fragment.Packets) {
 		case "tlshello":
@@ -80,75 +78,34 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			config.Fragment.PacketsTo = 0
 		default:
 			// TCP Segmentation (range)
-			packetsFromTo := strings.Split(c.Fragment.Packets, "-")
-			if len(packetsFromTo) == 2 {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo, err2 = strconv.ParseUint(packetsFromTo[1], 10, 64)
-			} else {
-				config.Fragment.PacketsFrom, err = strconv.ParseUint(packetsFromTo[0], 10, 64)
-				config.Fragment.PacketsTo = config.Fragment.PacketsFrom
-			}
+			from, to, err := ParseRangeString(c.Fragment.Packets)
 			if err != nil {
 				return nil, errors.New("Invalid PacketsFrom").Base(err)
 			}
-			if err2 != nil {
-				return nil, errors.New("Invalid PacketsTo").Base(err2)
-			}
-			if config.Fragment.PacketsFrom > config.Fragment.PacketsTo {
-				config.Fragment.PacketsFrom, config.Fragment.PacketsTo = config.Fragment.PacketsTo, config.Fragment.PacketsFrom
-			}
+			config.Fragment.PacketsFrom = uint64(from)
+			config.Fragment.PacketsTo = uint64(to)
 			if config.Fragment.PacketsFrom == 0 {
 				return nil, errors.New("PacketsFrom can't be 0")
 			}
 		}
 
 		{
-			if c.Fragment.Length == "" {
+			if c.Fragment.Length == nil {
 				return nil, errors.New("Length can't be empty")
 			}
-			lengthMinMax := strings.Split(c.Fragment.Length, "-")
-			if len(lengthMinMax) == 2 {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax, err2 = strconv.ParseUint(lengthMinMax[1], 10, 64)
-			} else {
-				config.Fragment.LengthMin, err = strconv.ParseUint(lengthMinMax[0], 10, 64)
-				config.Fragment.LengthMax = config.Fragment.LengthMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid LengthMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid LengthMax").Base(err2)
-			}
-			if config.Fragment.LengthMin > config.Fragment.LengthMax {
-				config.Fragment.LengthMin, config.Fragment.LengthMax = config.Fragment.LengthMax, config.Fragment.LengthMin
-			}
+			config.Fragment.LengthMin = uint64(c.Fragment.Length.From)
+			config.Fragment.LengthMax = uint64(c.Fragment.Length.To)
 			if config.Fragment.LengthMin == 0 {
 				return nil, errors.New("LengthMin can't be 0")
 			}
 		}
 
 		{
-			if c.Fragment.Interval == "" {
+			if c.Fragment.Interval == nil {
 				return nil, errors.New("Interval can't be empty")
 			}
-			intervalMinMax := strings.Split(c.Fragment.Interval, "-")
-			if len(intervalMinMax) == 2 {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax, err2 = strconv.ParseUint(intervalMinMax[1], 10, 64)
-			} else {
-				config.Fragment.IntervalMin, err = strconv.ParseUint(intervalMinMax[0], 10, 64)
-				config.Fragment.IntervalMax = config.Fragment.IntervalMin
-			}
-			if err != nil {
-				return nil, errors.New("Invalid IntervalMin").Base(err)
-			}
-			if err2 != nil {
-				return nil, errors.New("Invalid IntervalMax").Base(err2)
-			}
-			if config.Fragment.IntervalMin > config.Fragment.IntervalMax {
-				config.Fragment.IntervalMin, config.Fragment.IntervalMax = config.Fragment.IntervalMax, config.Fragment.IntervalMin
-			}
+			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
+			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
 		}
 	}
 
@@ -193,32 +150,17 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 }
 
 func ParseNoise(noise *Noise) (*freedom.Noise, error) {
-	var err, err2 error
+	var err error
 	NConfig := new(freedom.Noise)
 
 	switch strings.ToLower(noise.Type) {
 	case "rand":
-		randValue := strings.Split(noise.Packet, "-")
-		if len(randValue) > 2 {
-			return nil, errors.New("Only 2 values are allowed for rand")
-		}
-		if len(randValue) == 2 {
-			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-			NConfig.LengthMax, err2 = strconv.ParseUint(randValue[1], 10, 64)
-		}
-		if len(randValue) == 1 {
-			NConfig.LengthMin, err = strconv.ParseUint(randValue[0], 10, 64)
-			NConfig.LengthMax = NConfig.LengthMin
-		}
+		min, max, err := ParseRangeString(noise.Packet)
 		if err != nil {
-			return nil, errors.New("invalid value for rand LengthMin").Base(err)
+			return nil, errors.New("invalid value for rand Length").Base(err)
 		}
-		if err2 != nil {
-			return nil, errors.New("invalid value for rand LengthMax").Base(err2)
-		}
-		if NConfig.LengthMin > NConfig.LengthMax {
-			NConfig.LengthMin, NConfig.LengthMax = NConfig.LengthMax, NConfig.LengthMin
-		}
+		NConfig.LengthMin = uint64(min)
+		NConfig.LengthMax = uint64(max)
 		if NConfig.LengthMin == 0 {
 			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
 		}
@@ -235,23 +177,12 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		}
 
 	default:
-		return nil, errors.New("Invalid packet,only rand,str,base64 are supported")
+		return nil, errors.New("Invalid packet, only rand/str/base64 are supported")
 	}
 
 	if noise.Delay != nil {
-		if noise.Delay.From != 0 && noise.Delay.To != 0 {
-			NConfig.DelayMin = uint64(noise.Delay.From)
-			NConfig.DelayMax = uint64(noise.Delay.To)
-			if NConfig.DelayMin > NConfig.LengthMax {
-				NConfig.DelayMin, NConfig.DelayMax = NConfig.LengthMax, NConfig.DelayMin
-			}
-		} else {
-			return nil, errors.New("DelayMin or DelayMax cannot be zero")
-		}
-
-	} else {
-		NConfig.DelayMin = 0
-		NConfig.DelayMax = 0
+		NConfig.DelayMin = uint64(noise.Delay.From)
+		NConfig.DelayMax = uint64(noise.Delay.To)
 	}
 	return NConfig, nil
 }

@@ -14,7 +14,7 @@ import (
 )
 
 func TestQUICNameServer(t *testing.T) {
-	url, err := url.Parse("quic://dns.adguard.com")
+	url, err := url.Parse("quic://dns.adguard-dns.com")
 	common.Must(err)
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP)
 	common.Must(err)
@@ -42,7 +42,7 @@ func TestQUICNameServer(t *testing.T) {
 }
 
 func TestQUICNameServerWithIPv4Override(t *testing.T) {
-	url, err := url.Parse("quic://dns.adguard.com")
+	url, err := url.Parse("quic://dns.adguard-dns.com")
 	common.Must(err)
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP4)
 	common.Must(err)
@@ -65,7 +65,7 @@ func TestQUICNameServerWithIPv4Override(t *testing.T) {
 }
 
 func TestQUICNameServerWithIPv6Override(t *testing.T) {
-	url, err := url.Parse("quic://dns.adguard.com")
+	url, err := url.Parse("quic://dns.adguard-dns.com")
 	common.Must(err)
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP6)
 	common.Must(err)

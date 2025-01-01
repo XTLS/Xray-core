@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/tagged"
 )
 
@@ -14,10 +15,10 @@ type pingClient struct {
 	httpClient  *http.Client
 }
 
-func newPingClient(ctx context.Context, destination string, timeout time.Duration, handler string) *pingClient {
+func newPingClient(ctx context.Context, dispatcher routing.Dispatcher, destination string, timeout time.Duration, handler string) *pingClient {
 	return &pingClient{
 		destination: destination,
-		httpClient:  newHTTPClient(ctx, handler, timeout),
+		httpClient:  newHTTPClient(ctx, dispatcher, handler, timeout),
 	}
 }
 
@@ -28,7 +29,7 @@ func newDirectPingClient(destination string, timeout time.Duration) *pingClient 
 	}
 }
 
-func newHTTPClient(ctxv context.Context, handler string, timeout time.Duration) *http.Client {
+func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler string, timeout time.Duration) *http.Client {
 	tr := &http.Transport{
 		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -36,7 +37,7 @@ func newHTTPClient(ctxv context.Context, handler string, timeout time.Duration) 
 			if err != nil {
 				return nil, err
 			}
-			return tagged.Dialer(ctxv, dest, handler)
+			return tagged.Dialer(ctxv, dispatcher, dest, handler)
 		},
 	}
 	return &http.Client{
@@ -52,7 +53,7 @@ func newHTTPClient(ctxv context.Context, handler string, timeout time.Duration) 
 // MeasureDelay returns the delay time of the request to dest
 func (s *pingClient) MeasureDelay() (time.Duration, error) {
 	if s.httpClient == nil {
-		panic("pingClient no initialized")
+		panic("pingClient not initialized")
 	}
 	req, err := http.NewRequest(http.MethodHead, s.destination, nil)
 	if err != nil {

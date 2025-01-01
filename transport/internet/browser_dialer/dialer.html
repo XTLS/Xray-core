@@ -24,7 +24,10 @@
 			// arraybuffer is significantly faster in chrome than default
 			// blob, tested with chrome 123
 			ws.binaryType = "arraybuffer";
-			ws.addEventListener("message", (event) => {
+			// note: this event listener is later overwritten after the
+			// handshake has completed. do not attempt to modernize it without
+			// double-checking that this continues to work
+			ws.onmessage = function (event) {
 				clientIdleCount -= 1;
 				let [method, url, protocol] = event.data.split(" ");
 				switch (method) {
@@ -134,10 +137,10 @@
 				};
 
 				check();
-			});
-			ws.addEventListener("error", (event) => {
+			};
+			ws.onerror = function (event) {
 				ws.close();
-			});
+			};
 		};
 		let checkTask = setInterval(check, 1000);
 	</script>

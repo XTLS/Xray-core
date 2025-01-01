@@ -11,7 +11,7 @@ import (
 )
 
 // RandomStrategy represents a random balancing strategy
-type RandomStrategy struct{
+type RandomStrategy struct {
 	FallbackTag string
 
 	ctx         context.Context
@@ -20,6 +20,12 @@ type RandomStrategy struct{
 
 func (s *RandomStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
+	if len(s.FallbackTag) > 0 {
+		common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
+			s.observatory = observatory
+			return nil
+		}))
+	}
 }
 
 func (s *RandomStrategy) GetPrincipleTarget(strings []string) []string {
@@ -27,12 +33,6 @@ func (s *RandomStrategy) GetPrincipleTarget(strings []string) []string {
 }
 
 func (s *RandomStrategy) PickOutbound(candidates []string) string {
-	if len(s.FallbackTag) > 0 && s.observatory == nil {
-		common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
-			s.observatory = observatory
-			return nil
-		}))
-	}
 	if s.observatory != nil {
 		observeReport, err := s.observatory.GetObservation(s.ctx)
 		if err == nil {

@@ -3,7 +3,8 @@ package trojan
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	fmt "fmt"
+	"fmt"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/protocol"
@@ -31,6 +32,12 @@ func (a *MemoryAccount) Equals(another protocol.Account) bool {
 		return a.Password == account.Password
 	}
 	return false
+}
+
+func (a *MemoryAccount) ToProto() proto.Message {
+	return &Account{
+		Password: a.Password,
+	}
 }
 
 func hexSha224(password string) []byte {

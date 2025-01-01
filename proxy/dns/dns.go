@@ -27,7 +27,7 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
 		if err := core.RequireFeatures(ctx, func(dnsClient dns.Client, policyManager policy.Manager) error {
-			core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
+			core.OptionalFeatures(ctx, func(fdns dns.FakeDNSEngine) {
 				h.fdns = fdns
 			})
 			return h.Init(config.(*Config), dnsClient, policyManager)
@@ -49,7 +49,7 @@ type Handler struct {
 	server          net.Destination
 	timeout         time.Duration
 	nonIPQuery      string
-	blockTypes       []int32
+	blockTypes      []int32
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {

@@ -12,4 +12,5 @@ message Config {
   map<string, string> header = 3;
   bool accept_proxy_protocol = 4;
   uint32 ed = 5;
+  uint32 heartbeatPeriod = 6;
 }

@@ -24,6 +24,7 @@ var (
 		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
 		"http":          func() interface{} { return new(HTTPServerConfig) },
 		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
+		"mixed":         func() interface{} { return new(SocksServerConfig) },
 		"socks":         func() interface{} { return new(SocksServerConfig) },
 		"vless":         func() interface{} { return new(VLessInboundConfig) },
 		"vmess":         func() interface{} { return new(VMessInboundConfig) },
@@ -363,7 +364,7 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 type Config struct {
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
-	Transport        map[string]json.RawMessage `json:"transport"`
+	Transport map[string]json.RawMessage `json:"transport"`
 
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`

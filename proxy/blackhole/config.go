@@ -17,7 +17,7 @@ Content-Length: 0
 
 // ResponseConfig is the configuration for blackhole responses.
 type ResponseConfig interface {
-	// WriteTo writes predefined response to the give buffer.
+	// WriteTo writes a predefined response to the specified buffer.
 	WriteTo(buf.Writer) int32
 }
 

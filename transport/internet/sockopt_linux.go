@@ -103,11 +103,6 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 
-		if config.TcpNoDelay {
-			if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
-				return errors.New("failed to set TCP_NODELAY", err)
-			}
-		}
 		if len(config.CustomSockopt) > 0 {
 			for _, custom := range config.CustomSockopt {
 				var level = 0x6 // default TCP

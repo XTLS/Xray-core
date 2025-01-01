@@ -37,7 +37,7 @@ func (c *Config) GetNormalizedQuery() string {
 		query += "&"
 	}
 
-	paddingLen := c.GetNormalizedXPaddingBytes().roll()
+	paddingLen := c.GetNormalizedXPaddingBytes().rand()
 	if paddingLen > 0 {
 		query += "x_padding=" + strings.Repeat("0", int(paddingLen))
 	}
@@ -47,7 +47,7 @@ func (c *Config) GetNormalizedQuery() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
-	for k, v := range c.Header {
+	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
 
@@ -58,48 +58,15 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	// CORS headers for the browser dialer
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
-	paddingLen := c.GetNormalizedXPaddingBytes().roll()
+	paddingLen := c.GetNormalizedXPaddingBytes().rand()
 	if paddingLen > 0 {
 		writer.Header().Set("X-Padding", strings.Repeat("0", int(paddingLen)))
 	}
 }
 
-func (c *Config) GetNormalizedScMaxConcurrentPosts() RandRangeConfig {
-	if c.ScMaxConcurrentPosts == nil || c.ScMaxConcurrentPosts.To == 0 {
-		return RandRangeConfig{
-			From: 100,
-			To:   100,
-		}
-	}
-
-	return *c.ScMaxConcurrentPosts
-}
-
-func (c *Config) GetNormalizedScMaxEachPostBytes() RandRangeConfig {
-	if c.ScMaxEachPostBytes == nil || c.ScMaxEachPostBytes.To == 0 {
-		return RandRangeConfig{
-			From: 1000000,
-			To:   1000000,
-		}
-	}
-
-	return *c.ScMaxEachPostBytes
-}
-
-func (c *Config) GetNormalizedScMinPostsIntervalMs() RandRangeConfig {
-	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
-		return RandRangeConfig{
-			From: 30,
-			To:   30,
-		}
-	}
-
-	return *c.ScMinPostsIntervalMs
-}
-
-func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
+func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
 	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
-		return RandRangeConfig{
+		return RangeConfig{
 			From: 100,
 			To:   1000,
 		}
@@ -108,41 +75,39 @@ func (c *Config) GetNormalizedXPaddingBytes() RandRangeConfig {
 	return *c.XPaddingBytes
 }
 
-func (m *Multiplexing) GetNormalizedCMaxReuseTimes() RandRangeConfig {
-	if m.CMaxReuseTimes == nil {
-		return RandRangeConfig{
-			From: 0,
-			To:   0,
+func (c *Config) GetNormalizedScMaxEachPostBytes() RangeConfig {
+	if c.ScMaxEachPostBytes == nil || c.ScMaxEachPostBytes.To == 0 {
+		return RangeConfig{
+			From: 1000000,
+			To:   1000000,
 		}
 	}
 
-	return *m.CMaxReuseTimes
+	return *c.ScMaxEachPostBytes
 }
 
-func (m *Multiplexing) GetNormalizedCMaxLifetimeMs() RandRangeConfig {
-	if m.CMaxLifetimeMs == nil || m.CMaxLifetimeMs.To == 0 {
-		return RandRangeConfig{
-			From: 0,
-			To:   0,
-		}
-	}
-	return *m.CMaxLifetimeMs
-}
-
-func (m *Multiplexing) GetNormalizedMaxConnections() RandRangeConfig {
-	if m.MaxConnections == nil {
-		return RandRangeConfig{
-			From: 0,
-			To:   0,
+func (c *Config) GetNormalizedScMinPostsIntervalMs() RangeConfig {
+	if c.ScMinPostsIntervalMs == nil || c.ScMinPostsIntervalMs.To == 0 {
+		return RangeConfig{
+			From: 30,
+			To:   30,
 		}
 	}
 
-	return *m.MaxConnections
+	return *c.ScMinPostsIntervalMs
 }
 
-func (m *Multiplexing) GetNormalizedMaxConcurrency() RandRangeConfig {
+func (c *Config) GetNormalizedScMaxBufferedPosts() int {
+	if c.ScMaxBufferedPosts == 0 {
+		return 30
+	}
+
+	return int(c.ScMaxBufferedPosts)
+}
+
+func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
 	if m.MaxConcurrency == nil {
-		return RandRangeConfig{
+		return RangeConfig{
 			From: 0,
 			To:   0,
 		}
@@ -151,13 +116,57 @@ func (m *Multiplexing) GetNormalizedMaxConcurrency() RandRangeConfig {
 	return *m.MaxConcurrency
 }
 
+func (m *XmuxConfig) GetNormalizedMaxConnections() RangeConfig {
+	if m.MaxConnections == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.MaxConnections
+}
+
+func (m *XmuxConfig) GetNormalizedCMaxReuseTimes() RangeConfig {
+	if m.CMaxReuseTimes == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.CMaxReuseTimes
+}
+
+func (m *XmuxConfig) GetNormalizedHMaxRequestTimes() RangeConfig {
+	if m.HMaxRequestTimes == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.HMaxRequestTimes
+}
+
+func (m *XmuxConfig) GetNormalizedHMaxReusableSecs() RangeConfig {
+	if m.HMaxReusableSecs == nil {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return *m.HMaxReusableSecs
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)
 	}))
 }
 
-func (c RandRangeConfig) roll() int32 {
+func (c RangeConfig) rand() int32 {
 	if c.From == c.To {
 		return c.From
 	}

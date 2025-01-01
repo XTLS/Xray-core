@@ -106,7 +106,7 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DefaultDispatcher)
 		if err := core.RequireFeatures(ctx, func(om outbound.Manager, router routing.Router, pm policy.Manager, sm stats.Manager, dc dns.Client) error {
-			core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
+			core.OptionalFeatures(ctx, func(fdns dns.FakeDNSEngine) {
 				d.fdns = fdns
 			})
 			return d.Init(config.(*Config), om, router, pm, sm, dc)
@@ -179,6 +179,18 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 					Counter: c,
 					Writer:  outboundLink.Writer,
 				}
+			}
+		}
+
+		if p.Stats.UserOnline {
+			name := "user>>>" + user.Email + ">>>online"
+			if om, _ := stats.GetOrRegisterOnlineMap(d.stats, name); om != nil {
+				sessionInbounds := session.InboundFromContext(ctx)
+				userIP := sessionInbounds.Source.Address.String()
+				om.AddIP(userIP)
+				// log Online user with ips
+				// errors.LogDebug(ctx, "user>>>" + user.Email + ">>>online", om.Count(), om.List())
+
 			}
 		}
 	}

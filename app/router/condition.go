@@ -202,7 +202,7 @@ func NewUserMatcher(users []string) *UserMatcher {
 	for _, user := range users {
 		if len(user) > 0 {
 			if len(user) > 7 && strings.HasPrefix(user, "regexp:") {
-				if re, err := regexp.Compile(user[7:]); err != nil {
+				if re, err := regexp.Compile(user[7:]); err == nil {
 					patternsCopy = append(patternsCopy, re)
 				}
 				// Items of users slice with an invalid regexp syntax are ignored.

@@ -4,6 +4,7 @@ package session // import "github.com/xtls/xray-core/common/session"
 import (
 	"context"
 	"math/rand"
+	"sync"
 
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -65,7 +66,7 @@ type Outbound struct {
 	Tag string
 	// Name of the outbound proxy that handles the connection.
 	Name string
-	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings 
+	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
 	Conn net.Conn
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
@@ -91,6 +92,10 @@ type Content struct {
 	Attributes map[string]string
 
 	SkipDNSResolve bool
+
+	mu sync.Mutex
+
+	isLocked bool
 }
 
 // Sockopt is the settings for socket connection.
@@ -99,8 +104,22 @@ type Sockopt struct {
 	Mark int32
 }
 
+// Some how when using mux, there will be a same ctx between different requests
+// This will cause problem as it's designed for single request, like concurrent map writes
+// Add a Mutex as a temp solution
+
 // SetAttribute attaches additional string attributes to content.
 func (c *Content) SetAttribute(name string, value string) {
+	if c.isLocked {
+		errors.LogError(context.Background(), "Multiple goroutines are tring to access one routing content, tring to write ", name, ":", value)
+	}
+	c.mu.Lock()
+	c.isLocked = true
+	defer func() {
+		c.isLocked = false
+		c.mu.Unlock()
+	}()
+
 	if c.Attributes == nil {
 		c.Attributes = make(map[string]string)
 	}
@@ -109,8 +128,24 @@ func (c *Content) SetAttribute(name string, value string) {
 
 // Attribute retrieves additional string attributes from content.
 func (c *Content) Attribute(name string) string {
+	c.mu.Lock()
+	c.isLocked = true
+	defer func() {
+		c.isLocked = false
+		c.mu.Unlock()
+	}()
 	if c.Attributes == nil {
 		return ""
 	}
 	return c.Attributes[name]
+}
+
+func (c *Content) AttributeLen() int {
+	c.mu.Lock()
+	c.isLocked = true
+	defer func() {
+		c.isLocked = false
+		c.mu.Unlock()
+	}()
+	return len(c.Attributes)
 }
