@@ -407,8 +407,8 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		var err error
 		for _, n := range w.noises {
 			//User input string or base64 encoded string
-			if n.StrNoise != nil {
-				noise = n.StrNoise
+			if n.Packet != nil {
+				noise = n.Packet
 			} else {
 				//Random noise
 				noise, err = GenerateRandomBytes(randBetween(int64(n.LengthMin),
