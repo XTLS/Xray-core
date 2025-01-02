@@ -25,11 +25,7 @@ message Noise {
   uint64 length_max = 2;
   uint64 delay_min = 3;
   uint64 delay_max = 4;
-
-  // Deprecated: noises now support binary data, str will be converted in infra/conf
-  bytes str_noise = 5;
-
-  bytes noise = 6;
+  bytes noise = 5;
 }
 
 message Config {
