@@ -168,9 +168,7 @@ jobs:
           check-latest: true
 
       - name: Get project dependencies
-        run: |
-          go mod tidy
-          go mod download
+        run: go mod download
       
       - name: Build Xray
         run: |
