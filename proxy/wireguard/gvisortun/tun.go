@@ -1,6 +1,3 @@
-//go:build go1.23
-// +build go1.23
-
 /* SPDX-License-Identifier: MIT
  *
  * Copyright (C) 2017-2022 WireGuard LLC. All Rights Reserved.
