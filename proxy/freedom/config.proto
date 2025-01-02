@@ -25,7 +25,7 @@ message Noise {
   uint64 length_max = 2;
   uint64 delay_min = 3;
   uint64 delay_max = 4;
-  bytes str_noise = 5;
+  bytes packet = 5;
 }
 
 message Config {
