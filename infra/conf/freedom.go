@@ -153,8 +153,9 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	var err error
 	NConfig := new(freedom.Noise)
+	noise.Packet = strings.TrimSpace(noise.Packet)
 
-	switch strings.ToLower(noise.Type) {
+	switch noise.Type {
 	case "rand":
 		min, max, err := ParseRangeString(noise.Packet)
 		if err != nil {
@@ -168,7 +169,7 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 
 	case "str":
 		// user input string
-		NConfig.Packet = []byte(strings.TrimSpace(noise.Packet))
+		NConfig.Packet = []byte(noise.Packet)
 
 	case "hex":
 		// user input hex
@@ -179,7 +180,7 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 
 	case "base64":
 		// user input base64
-		NConfig.Packet, err = base64.StdEncoding.DecodeString(strings.TrimSpace(noise.Packet))
+		NConfig.Packet, err = base64.RawURLEncoding.DecodeString(strings.NewReplacer("+", "-", "/", "_", "=", "").Replace(noise.Packet))
 		if err != nil {
 			return nil, errors.New("Invalid base64 string").Base(err)
 		}
