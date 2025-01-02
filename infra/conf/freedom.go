@@ -167,11 +167,11 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 
 	case "str":
 		//user input string
-		NConfig.Noise = []byte(strings.TrimSpace(noise.Packet))
+		NConfig.Packet = []byte(strings.TrimSpace(noise.Packet))
 
 	case "base64":
 		//user input base64
-		NConfig.Noise, err = base64.StdEncoding.DecodeString(strings.TrimSpace(noise.Packet))
+		NConfig.Packet, err = base64.StdEncoding.DecodeString(strings.TrimSpace(noise.Packet))
 		if err != nil {
 			return nil, errors.New("Invalid base64 string")
 		}
