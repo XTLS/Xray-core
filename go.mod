@@ -29,7 +29,7 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	google.golang.org/grpc v1.69.2
 	google.golang.org/protobuf v1.36.1
-	gvisor.dev/gvisor v0.0.0-20241010231727-f350fc8d7241
+	gvisor.dev/gvisor v0.0.0-20241227193629-b8cde430ca0a
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.3.0
 )
