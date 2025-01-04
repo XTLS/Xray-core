@@ -6,6 +6,11 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/build/*'
+      - '.github/ISSUE_TEMPLATE/*'
+      - '.github/dependabot.yml'
+      - '.gitignore'
 
 jobs:
   build-image:

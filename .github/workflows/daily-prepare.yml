@@ -10,6 +10,9 @@ on:
   schedule:
     # Update assets on 11:45 (UTC) and 23:45 (UTC), per 12 hours
     - cron: '45 11,23 * * *'
+  release:
+    # Check for update on release
+    types: [published]
   push:
     # Prevent triggering update request storm
     paths:

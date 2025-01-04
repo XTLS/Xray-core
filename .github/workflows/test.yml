@@ -2,8 +2,20 @@ name: Test
 
 on:
   push:
+    paths-ignore:
+      - '.github/build/*'
+      - '.github/docker/*'
+      - '.github/ISSUE_TEMPLATE/*'
+      - '.github/dependabot.yml'
+      - '.gitignore'
   pull_request:
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '.github/build/*'
+      - '.github/docker/*'
+      - '.github/ISSUE_TEMPLATE/*'
+      - '.github/dependabot.yml'
+      - '.gitignore'
 
 jobs:
   test:
