@@ -8,11 +8,8 @@ name: Timely assets update
 on:
   workflow_dispatch:
   schedule:
-    # Update assets on 11:45 (UTC) and 23:45 (UTC), per 12 hours
-    - cron: '45 11,23 * * *'
-  release:
-    # Check for update on release
-    types: [published]
+    # Update assets on every hour (xx:45)
+    - cron: '45 * * * *'
   push:
     # Prevent triggering update request storm
     paths:

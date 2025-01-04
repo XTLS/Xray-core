@@ -10,19 +10,9 @@ on:
   workflow_dispatch:
   release:
     types: [published]
-    paths-ignore:
-      - '.github/docker/*'
-      - '.github/ISSUE_TEMPLATE/*'
-      - '.github/dependabot.yml'
-      - '.gitignore'
   push:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths-ignore:
-      - '.github/docker/*'
-      - '.github/ISSUE_TEMPLATE/*'
-      - '.github/dependabot.yml'
-      - '.gitignore'
 
 jobs:
   build:
