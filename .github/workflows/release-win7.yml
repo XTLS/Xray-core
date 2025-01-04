@@ -15,51 +15,7 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Restore Cache
-        uses: actions/cache/restore@v4
-        with:
-          path: resources
-          key: xray-geodat-
-
-      - name: Update Geodat
-        id: update
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 60
-          retry_wait_seconds: 60
-          max_attempts: 60
-          command: |
-            [ -d 'resources' ] || mkdir resources
-            LIST=('geoip geoip geoip' 'domain-list-community dlc geosite')
-            for i in "${LIST[@]}"
-            do
-              INFO=($(echo $i | awk 'BEGIN{FS=" ";OFS=" "} {print $1,$2,$3}'))
-              FILE_NAME="${INFO[2]}.dat"
-              echo -e "Verifying HASH key..."
-              HASH="$(curl -sL "https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat.sha256sum" | awk -F ' ' '{print $1}')"
-              if [ -s "./resources/${FILE_NAME}" ] && [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ]; then
-                  continue
-              else
-                  echo -e "Downloading https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat..."
-                  curl -L "https://raw.githubusercontent.com/v2fly/${INFO[0]}/release/${INFO[1]}.dat" -o ./resources/${FILE_NAME}
-                  echo -e "Verifying HASH key..."
-                  [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ] || { echo -e "The HASH key of ${FILE_NAME} does not match cloud one."; exit 1; }
-                  echo "unhit=true" >> $GITHUB_OUTPUT
-              fi
-            done
-
-      - name: Save Cache
-        uses: actions/cache/save@v4
-        if: ${{ steps.update.outputs.unhit }}
-        with:
-          path: resources
-          key: xray-geodat-${{ github.sha }}-${{ github.run_number }}
-
   build:
-    needs: prepare
     permissions:
       contents: write
     strategy:
@@ -112,7 +68,7 @@ jobs:
           make
           find . -maxdepth 1 -type f -regex './\(wxray\|xray\).exe' -exec mv {} ./build_assets/ \;
 
-      - name: Restore Cache
+      - name: Restore Geodat Cache
         uses: actions/cache/restore@v4
         with:
           path: resources

@@ -22,7 +22,7 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-      - name: Restore Cache
+      - name: Restore Geodat Cache
         uses: actions/cache/restore@v4
         with:
           path: resources
