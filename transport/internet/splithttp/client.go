@@ -55,11 +55,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 		},
 	})
 
-	method := "GET"
+	method := "GET" // stream-down
 	if body != nil {
-		method = "POST"
+		method = "POST" // stream-up/one
 	}
-	req, _ := http.NewRequestWithContext(ctx, method, url, body)
+	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
 	req.Header = c.transportConfig.GetRequestHeader()
 	if method == "POST" && !c.transportConfig.NoGRPCHeader {
 		req.Header.Set("Content-Type", "application/grpc")
@@ -69,17 +69,20 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 	go func() {
 		resp, err := c.client.Do(req)
 		if err != nil {
+			if !uploadOnly {
+				c.closed = true
+			}
 			errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			gotConn.Close()
 			wrc.Close()
 			return
 		}
 		if resp.StatusCode != 200 && !uploadOnly {
-			// c.closed = true
 			errors.LogInfo(ctx, "unexpected status ", resp.StatusCode)
 		}
-		if resp.StatusCode != 200 || uploadOnly {
-			resp.Body.Close()
+		if resp.StatusCode != 200 || uploadOnly { // stream-up
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close() // if it is called immediately, the upload will be interrupted also
 			wrc.Close()
 			return
 		}
@@ -91,7 +94,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body io.Reader, contentLength int64) error {
-	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), "POST", url, body)
 	if err != nil {
 		return err
 	}
@@ -101,13 +104,14 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body i
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
 		if err != nil {
+			c.closed = true
 			return err
 		}
 
+		io.Copy(io.Discard, resp.Body)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
-			// c.closed = true
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
@@ -139,11 +143,12 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body i
 				if h1UploadConn.UnreadedResponsesCount > 0 {
 					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
+						c.closed = true
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
+					io.Copy(io.Discard, resp.Body)
+					defer resp.Body.Close()
 					if resp.StatusCode != 200 {
-						// c.closed = true
-						// resp.Body.Close() // I'm not sure
 						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
 					}
 				}

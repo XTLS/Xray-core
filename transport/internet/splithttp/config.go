@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -36,10 +37,11 @@ func (c *Config) GetNormalizedQuery() string {
 	if query != "" {
 		query += "&"
 	}
+	query += "x_version=" + core.Version()
 
 	paddingLen := c.GetNormalizedXPaddingBytes().rand()
 	if paddingLen > 0 {
-		query += "x_padding=" + strings.Repeat("0", int(paddingLen))
+		query += "&x_padding=" + strings.Repeat("0", int(paddingLen))
 	}
 
 	return query
@@ -58,6 +60,7 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	// CORS headers for the browser dialer
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+	writer.Header().Set("X-Version", core.Version())
 	paddingLen := c.GetNormalizedXPaddingBytes().rand()
 	if paddingLen > 0 {
 		writer.Header().Set("X-Padding", strings.Repeat("0", int(paddingLen)))

@@ -1,6 +1,7 @@
 package splithttp
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -102,6 +103,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.WriteResponseHeader(writer)
 
+	clientVer := []int{0, 0, 0}
+	x_version := strings.Split(request.URL.Query().Get("x_version"), ".")
+	for j := 0; j < 3 && len(x_version) > j; j++ {
+		clientVer[j], _ = strconv.Atoi(x_version[j])
+	}
+
 	validRange := h.config.GetNormalizedXPaddingBytes()
 	x_padding := int32(len(request.URL.Query().Get("x_padding")))
 	if validRange.To > 0 && (x_padding < validRange.From || x_padding > validRange.To) {
@@ -160,6 +167,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.WriteHeader(http.StatusConflict)
 			} else {
 				writer.WriteHeader(http.StatusOK)
+				if request.ProtoMajor != 1 && len(clientVer) > 0 && clientVer[0] >= 25 {
+					paddingLen := h.config.GetNormalizedXPaddingBytes().rand()
+					if paddingLen > 0 {
+						writer.Write(bytes.Repeat([]byte{'0'}, int(paddingLen)))
+					}
+					writer.(http.Flusher).Flush()
+				}
 				<-request.Context().Done()
 			}
 			return
