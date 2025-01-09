@@ -266,6 +266,9 @@ func isTLSConn(conn stat.Connection) bool {
 		if _, ok := conn.(*tls.Conn); ok {
 			return true
 		}
+		if _, ok := conn.(*tls.UConn); ok {
+			return true
+		}
 	}
 	return false
 }
