@@ -11,7 +11,7 @@ type Context interface {
 	// GetInboundTag returns the tag of the inbound the connection was from.
 	GetInboundTag() string
 
-	// GetSourcesIPs returns the source IPs bound to the connection.
+	// GetSourceIPs returns the source IPs bound to the connection.
 	GetSourceIPs() []net.IP
 
 	// GetSourcePort returns the source port of the connection.
