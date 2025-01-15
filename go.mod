@@ -27,7 +27,7 @@ require (
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.29.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
-	google.golang.org/grpc v1.69.2
+	google.golang.org/grpc v1.69.4
 	google.golang.org/protobuf v1.36.2
 	gvisor.dev/gvisor v0.0.0-20240320123526-dc6abceb7ff0
 	h12.io/socks v1.0.3
