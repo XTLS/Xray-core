@@ -79,12 +79,11 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	switch network {
 	case net.Network_TCP:
 		firstbyte := make([]byte, 1)
-		n, err := conn.Read(firstbyte)
-		if n == 0 && goerrors.Is(err, io.EOF) {
-			errors.LogDebug(ctx, "Connection closed immediately, likely health check connection")
-			return nil
-		}
-		if n != 1 {
+		if n, err := conn.Read(firstbyte); n == 0 {
+			if goerrors.Is(err, io.EOF) {
+				errors.LogInfo(ctx, "Connection closed immediately, likely health check connection")
+				return nil
+			}
 			return errors.New("failed to read from connection").Base(err)
 		}
 		if firstbyte[0] != 5 && firstbyte[0] != 4 { // Check if it is Socks5/4/4a
