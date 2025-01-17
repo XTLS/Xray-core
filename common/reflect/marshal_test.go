@@ -225,8 +225,7 @@ func getConfig() string {
           "tcpFastOpen": true,
           "acceptProxyProtocol": false,
           "tcpcongestion": "bbr",
-          "tcpMptcp": true,
-          "tcpNoDelay": true
+          "tcpMptcp": true
         }
       },
       "sniffing": {
