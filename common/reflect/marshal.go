@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"slices"
 	"strings"
 
 	cnet "github.com/xtls/xray-core/common/net"
@@ -32,6 +31,9 @@ func JSONMarshalWithoutEscape(t interface{}) ([]byte, error) {
 }
 
 func marshalTypedMessage(v *cserial.TypedMessage, ignoreNullValue bool, insertTypeInfo bool) interface{} {
+	if v == nil {
+		return nil
+	}
 	tmsg, err := v.GetInstance()
 	if err != nil {
 		return nil
@@ -56,7 +58,9 @@ func marshalSlice(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) in
 }
 
 func isNullValue(f reflect.StructField, rv reflect.Value) bool {
-	if rv.Kind() == reflect.String && rv.Len() == 0 {
+	if rv.Kind() == reflect.Struct {
+		return false
+	} else if rv.Kind() == reflect.String && rv.Len() == 0 {
 		return true
 	} else if !isValueKind(rv.Kind()) && rv.IsNil() {
 		return true
@@ -182,6 +186,12 @@ func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 	case *conf.PortList:
 		cpl := v.(*conf.PortList)
 		return serializePortList(cpl.Build())
+	case conf.Int32Range:
+		i32rng := v.(conf.Int32Range)
+		if i32rng.Left == i32rng.Right {
+			return i32rng.Left, true
+		}
+		return i32rng.String(), true
 	case cnet.Address:
 		if addr := v.(cnet.Address); addr != nil {
 			return addr.String(), true
@@ -192,28 +202,29 @@ func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 	}
 }
 
-var valueKinds = []reflect.Kind{
-	reflect.Bool,
-	reflect.Int,
-	reflect.Int8,
-	reflect.Int16,
-	reflect.Int32,
-	reflect.Int64,
-	reflect.Uint,
-	reflect.Uint8,
-	reflect.Uint16,
-	reflect.Uint32,
-	reflect.Uint64,
-	reflect.Uintptr,
-	reflect.Float32,
-	reflect.Float64,
-	reflect.Complex64,
-	reflect.Complex128,
-	reflect.String,
-}
-
 func isValueKind(kind reflect.Kind) bool {
-	return slices.Contains(valueKinds, kind)
+	switch kind {
+	case reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.String:
+		return true
+	default:
+		return false
+	}
 }
 
 func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) interface{} {
