@@ -121,7 +121,7 @@
 
 								while (true) {
 									const { done, value } = await reader.read();
-									ws.send(value);
+									if (value) ws.send(value);  // don't send back "undefined" string when received nothing
 									if (done) break;
 								}
 							} finally {
