@@ -113,9 +113,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	validRange := h.config.GetNormalizedXPaddingBytes()
 	paddingLength := -1
 
-	const paddingQuery = "x_padding"
 	if referrerPadding := request.Header.Get("Referer"); referrerPadding != "" {
-		// Browser dialer cannot control the host part of referrer header, so not checking it
+		// Browser dialer cannot control the host part of referrer header, so only check the query
 		if referrerURL, err := url.Parse(referrerPadding); err == nil {
 			if query := referrerURL.Query(); query.Has(paddingQuery) {
 				paddingLength = len(query.Get(paddingQuery))
@@ -201,10 +200,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		payload, err := io.ReadAll(request.Body)
+		payload, err := io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
 
 		if len(payload) > scMaxEachPostBytes {
-			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request had size ", len(payload), ". Adjust scMaxEachPostBytes on the server to be at least as large as client.")
+			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")
 			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
