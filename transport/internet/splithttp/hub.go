@@ -7,6 +7,7 @@ import (
 	"io"
 	gonet "net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,9 +111,23 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
-	x_padding := int32(len(request.URL.Query().Get("x_padding")))
-	if validRange.To > 0 && (x_padding < validRange.From || x_padding > validRange.To) {
-		errors.LogInfo(context.Background(), "invalid x_padding length:", x_padding)
+	paddingLength := -1
+
+	if referrerPadding := request.Header.Get("Referer"); referrerPadding != "" {
+		// Browser dialer cannot control the host part of referrer header, so only check the query
+		if referrerURL, err := url.Parse(referrerPadding); err == nil {
+			if query := referrerURL.Query(); query.Has(paddingQuery) {
+				paddingLength = len(query.Get(paddingQuery))
+			}
+		}
+	}
+
+	if paddingLength == -1 {
+		paddingLength = len(request.URL.Query().Get(paddingQuery))
+	}
+
+	if validRange.To > 0 && (int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To) {
+		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -185,10 +200,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		payload, err := io.ReadAll(request.Body)
+		payload, err := io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
 
 		if len(payload) > scMaxEachPostBytes {
-			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request had size ", len(payload), ". Adjust scMaxEachPostBytes on the server to be at least as large as client.")
+			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")
 			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
