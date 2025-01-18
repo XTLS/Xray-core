@@ -54,7 +54,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
 	if browser_dialer.HasBrowserDialer() && realityConfig != nil {
-		return &BrowserDialerClient{}, nil
+		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
 	}
 
 	globalDialerAccess.Lock()

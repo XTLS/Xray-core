@@ -7,6 +7,7 @@ import (
 	"io"
 	gonet "net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,9 +111,24 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
-	x_padding := int32(len(request.URL.Query().Get("x_padding")))
-	if validRange.To > 0 && (x_padding < validRange.From || x_padding > validRange.To) {
-		errors.LogInfo(context.Background(), "invalid x_padding length:", x_padding)
+	paddingLength := -1
+
+	const paddingQuery = "x_padding"
+	if referrerPadding := request.Header.Get("Referer"); referrerPadding != "" {
+		// Browser dialer cannot control the host part of referrer header, so not checking it
+		if referrerURL, err := url.Parse(referrerPadding); err == nil {
+			if query := referrerURL.Query(); query.Has(paddingQuery) {
+				paddingLength = len(query.Get(paddingQuery))
+			}
+		}
+	}
+
+	if paddingLength == -1 {
+		paddingLength = len(request.URL.Query().Get(paddingQuery))
+	}
+
+	if validRange.To > 0 && (int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To) {
+		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}

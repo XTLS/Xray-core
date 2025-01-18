@@ -9,9 +9,10 @@ import (
 	"github.com/xtls/xray-core/transport/internet/websocket"
 )
 
-// implements splithttp.DialerClient in terms of browser dialer
-// has no fields because everything is global state :O)
-type BrowserDialerClient struct{}
+// BrowserDialerClient implements splithttp.DialerClient in terms of browser dialer
+type BrowserDialerClient struct {
+	transportConfig *Config
+}
 
 func (c *BrowserDialerClient) IsClosed() bool {
 	panic("not implemented yet")
@@ -22,7 +23,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body i
 		panic("not implemented yet")
 	}
 
-	conn, err := browser_dialer.DialGet(url)
+	conn, err := browser_dialer.DialGet(url, c.transportConfig.GetRequestHeader())
 	dummyAddr := &gonet.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
@@ -37,7 +38,7 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, body i
 		return err
 	}
 
-	err = browser_dialer.DialPost(url, bytes)
+	err = browser_dialer.DialPost(url, c.transportConfig.GetRequestHeader(), bytes)
 	if err != nil {
 		return err
 	}

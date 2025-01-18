@@ -11,6 +11,8 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 )
 
+const referrerHeaderPaddingPrefix = "https://padding.xray.internal/?x_padding="
+
 func (c *Config) GetNormalizedPath() string {
 	pathAndQuery := strings.SplitN(c.Path, "?", 2)
 	path := pathAndQuery[0]
@@ -39,11 +41,6 @@ func (c *Config) GetNormalizedQuery() string {
 	}
 	query += "x_version=" + core.Version()
 
-	paddingLen := c.GetNormalizedXPaddingBytes().rand()
-	if paddingLen > 0 {
-		query += "&x_padding=" + strings.Repeat("0", int(paddingLen))
-	}
-
 	return query
 }
 
@@ -53,6 +50,15 @@ func (c *Config) GetRequestHeader() http.Header {
 		header.Add(k, v)
 	}
 
+	paddingLen := c.GetNormalizedXPaddingBytes().rand()
+	if paddingLen > 0 {
+		// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
+		// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
+		// 'X' is assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
+		// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
+		// h3's similar QPACK feature uses the same huffman table.
+		header.Set("Referer", referrerHeaderPaddingPrefix+strings.Repeat("X", int(paddingLen)))
+	}
 	return header
 }
 
@@ -63,7 +69,7 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	writer.Header().Set("X-Version", core.Version())
 	paddingLen := c.GetNormalizedXPaddingBytes().rand()
 	if paddingLen > 0 {
-		writer.Header().Set("X-Padding", strings.Repeat("0", int(paddingLen)))
+		writer.Header().Set("X-Padding", strings.Repeat("X", int(paddingLen)))
 	}
 }
 
