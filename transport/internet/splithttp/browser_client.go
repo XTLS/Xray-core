@@ -24,7 +24,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body i
 		return nil, nil, nil, errors.New("bidirectional streaming for browser dialer not implemented yet")
 	}
 
-	conn, err := browser_dialer.DialGet(url, c.transportConfig.GetRequestHeader())
+	conn, err := browser_dialer.DialGet(url, c.transportConfig.GetRequestHeader(url))
 	dummyAddr := &gonet.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
@@ -39,7 +39,7 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, body i
 		return err
 	}
 
-	err = browser_dialer.DialPost(url, c.transportConfig.GetRequestHeader(), bytes)
+	err = browser_dialer.DialPost(url, c.transportConfig.GetRequestHeader(url), bytes)
 	if err != nil {
 		return err
 	}

@@ -104,29 +104,28 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.WriteResponseHeader(writer)
 
-	clientVer := []int{0, 0, 0}
-	x_version := strings.Split(request.URL.Query().Get("x_version"), ".")
-	for j := 0; j < 3 && len(x_version) > j; j++ {
-		clientVer[j], _ = strconv.Atoi(x_version[j])
-	}
+	/*
+		clientVer := []int{0, 0, 0}
+		x_version := strings.Split(request.URL.Query().Get("x_version"), ".")
+		for j := 0; j < 3 && len(x_version) > j; j++ {
+			clientVer[j], _ = strconv.Atoi(x_version[j])
+		}
+	*/
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
-	paddingLength := -1
+	paddingLength := 0
 
-	if referrerPadding := request.Header.Get("Referer"); referrerPadding != "" {
-		// Browser dialer cannot control the host part of referrer header, so only check the query
-		if referrerURL, err := url.Parse(referrerPadding); err == nil {
-			if query := referrerURL.Query(); query.Has(paddingQuery) {
-				paddingLength = len(query.Get(paddingQuery))
-			}
+	referrer := request.Header.Get("Referer")
+	if referrer != "" {
+		if referrerURL, err := url.Parse(referrer); err == nil {
+			// Browser dialer cannot control the host part of referrer header, so only check the query
+			paddingLength = len(referrerURL.Query().Get("x_padding"))
 		}
+	} else {
+		paddingLength = len(request.URL.Query().Get("x_padding"))
 	}
 
-	if paddingLength == -1 {
-		paddingLength = len(request.URL.Query().Get(paddingQuery))
-	}
-
-	if validRange.To > 0 && (int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To) {
+	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
 		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
@@ -181,13 +180,24 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
+				writer.Header().Set("X-Accel-Buffering", "no")
+				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
-				if request.ProtoMajor != 1 && len(clientVer) > 0 && clientVer[0] >= 25 {
-					paddingLen := h.config.GetNormalizedXPaddingBytes().rand()
-					if paddingLen > 0 {
-						writer.Write(bytes.Repeat([]byte{'0'}, int(paddingLen)))
-					}
-					writer.(http.Flusher).Flush()
+				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
+				if referrer != "" && scStreamUpServerSecs.To > 0 {
+					go func() {
+						defer func() {
+							recover()
+						}()
+						for {
+							_, err := writer.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
+							if err != nil {
+								break
+							}
+							writer.(http.Flusher).Flush()
+							time.Sleep(time.Duration(scStreamUpServerSecs.rand()) * time.Second)
+						}
+					}()
 				}
 				<-request.Context().Done()
 			}

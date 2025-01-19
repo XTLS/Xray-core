@@ -33,6 +33,7 @@ message Config {
   RangeConfig scMaxEachPostBytes = 8;
   RangeConfig scMinPostsIntervalMs = 9;
   int64 scMaxBufferedPosts = 10;
-  XmuxConfig xmux = 11;
-  xray.transport.internet.StreamConfig downloadSettings = 12;
+  RangeConfig scStreamUpServerSecs = 11;
+  XmuxConfig xmux = 12;
+  xray.transport.internet.StreamConfig downloadSettings = 13;
 }
