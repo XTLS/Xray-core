@@ -34,23 +34,6 @@ func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, _ net.IP, 
 		err = dns.ErrEmptyResponse
 	}
 
-	// If ipv4 or ipv6 is disabled, filter out the unwanted IPs
-	if err != nil && (!option.IPv4Enable || !option.IPv6Enable) {
-		var FilteredIPs []net.IP
-		for _, ip := range ips {
-			if option.IPv4Enable && len(ip) == net.IPv4len {
-				FilteredIPs = append(FilteredIPs, ip)
-			}
-			if option.IPv6Enable && len(ip) == net.IPv6len {
-				FilteredIPs = append(FilteredIPs, ip)
-			}
-		}
-		if len(FilteredIPs) == 0 {
-			err = dns.ErrEmptyResponse
-		}
-		ips = FilteredIPs
-	}
-
 	if len(ips) > 0 {
 		errors.LogInfo(ctx, "Localhost got answer: ", domain, " -> ", ips)
 		log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
