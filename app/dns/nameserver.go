@@ -43,7 +43,7 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		}
 		switch {
 		case strings.EqualFold(u.String(), "localhost"):
-			return NewLocalNameServer(), nil
+			return NewLocalNameServer(queryStrategy), nil
 		case strings.EqualFold(u.Scheme, "https"): // DOH Remote mode
 			return NewDoHNameServer(u, dispatcher, queryStrategy)
 		case strings.EqualFold(u.Scheme, "https+local"): // DOH Local mode
