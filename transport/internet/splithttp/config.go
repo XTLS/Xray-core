@@ -8,11 +8,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
 )
-
-const paddingQuery = "x_padding"
 
 func (c *Config) GetNormalizedPath() string {
 	pathAndQuery := strings.SplitN(c.Path, "?", 2)
@@ -37,42 +34,31 @@ func (c *Config) GetNormalizedQuery() string {
 		query = pathAndQuery[1]
 	}
 
-	if query != "" {
-		query += "&"
-	}
-	query += "x_version=" + core.Version()
+	/*
+		if query != "" {
+			query += "&"
+		}
+		query += "x_version=" + core.Version()
+	*/
 
 	return query
 }
 
-func (c *Config) GetRequestHeader() http.Header {
+func (c *Config) GetRequestHeader(rawURL string) http.Header {
 	header := http.Header{}
 	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
 
-	paddingLen := c.GetNormalizedXPaddingBytes().rand()
-	if paddingLen > 0 {
-		query, err := url.ParseQuery(c.GetNormalizedQuery())
-		if err != nil {
-			query = url.Values{}
-		}
-		// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
-		// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
-		// 'X' is assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
-		// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
-		// h3's similar QPACK feature uses the same huffman table.
-		query.Set(paddingQuery, strings.Repeat("X", int(paddingLen)))
+	u, _ := url.Parse(rawURL)
+	// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
+	// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
+	// 'X' is assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
+	// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
+	// h3's similar QPACK feature uses the same huffman table.
+	u.RawQuery = "x_padding=" + strings.Repeat("X", int(c.GetNormalizedXPaddingBytes().rand()))
+	header.Set("Referer", u.String())
 
-		referrer := url.URL{
-			Scheme:   "https", // maybe http actually, but this part is not being checked
-			Host:     c.Host,
-			Path:     c.GetNormalizedPath(),
-			RawQuery: query.Encode(),
-		}
-
-		header.Set("Referer", referrer.String())
-	}
 	return header
 }
 
@@ -80,11 +66,8 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	// CORS headers for the browser dialer
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
-	writer.Header().Set("X-Version", core.Version())
-	paddingLen := c.GetNormalizedXPaddingBytes().rand()
-	if paddingLen > 0 {
-		writer.Header().Set("X-Padding", strings.Repeat("X", int(paddingLen)))
-	}
+	// writer.Header().Set("X-Version", core.Version())
+	writer.Header().Set("X-Padding", strings.Repeat("X", int(c.GetNormalizedXPaddingBytes().rand())))
 }
 
 func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
@@ -126,6 +109,17 @@ func (c *Config) GetNormalizedScMaxBufferedPosts() int {
 	}
 
 	return int(c.ScMaxBufferedPosts)
+}
+
+func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
+	if c.ScStreamUpServerSecs == nil || c.ScStreamUpServerSecs.To == 0 {
+		return RangeConfig{
+			From: 20,
+			To:   80,
+		}
+	}
+
+	return *c.ScMinPostsIntervalMs
 }
 
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
