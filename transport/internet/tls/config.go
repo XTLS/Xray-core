@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -303,6 +304,14 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 	return nil
 }
 
+type RandCarrier struct {
+	ServerNameToVerify string
+}
+
+func (r *RandCarrier) Read(p []byte) (n int, err error) {
+	return rand.Read(p)
+}
+
 // GetTLSConfig converts this Config into tls.Config.
 func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	root, err := c.getCertPool()
@@ -321,6 +330,9 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	config := &tls.Config{
+		Rand: &RandCarrier{
+			ServerNameToVerify: c.ServerNameToVerify,
+		},
 		ClientSessionCache:     globalSessionCache,
 		RootCAs:                root,
 		InsecureSkipVerify:     c.AllowInsecure,

@@ -134,12 +134,17 @@ func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) ne
 }
 
 func copyConfig(c *tls.Config) *utls.Config {
+	serverNameToVerify := ""
+	if r, ok := c.Rand.(*RandCarrier); ok {
+		serverNameToVerify = r.ServerNameToVerify
+	}
 	return &utls.Config{
-		RootCAs:               c.RootCAs,
-		ServerName:            c.ServerName,
-		InsecureSkipVerify:    c.InsecureSkipVerify,
-		VerifyPeerCertificate: c.VerifyPeerCertificate,
-		KeyLogWriter:          c.KeyLogWriter,
+		RootCAs:                    c.RootCAs,
+		ServerName:                 c.ServerName,
+		InsecureSkipVerify:         c.InsecureSkipVerify,
+		VerifyPeerCertificate:      c.VerifyPeerCertificate,
+		KeyLogWriter:               c.KeyLogWriter,
+		InsecureServerNameToVerify: serverNameToVerify,
 	}
 }
 

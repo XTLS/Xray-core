@@ -410,6 +410,7 @@ type TLSConfig struct {
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 	CurvePreferences                     *StringList      `json:"curvePreferences"`
 	MasterKeyLog                         string           `json:"masterKeyLog"`
+	ServerNameToVerify                   string           `json:"serverNameToVerify"`
 }
 
 // Build implements Buildable.
@@ -468,6 +469,10 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 
 	config.MasterKeyLog = c.MasterKeyLog
+	config.ServerNameToVerify = c.ServerNameToVerify
+	if config.ServerNameToVerify != "" && config.Fingerprint == "unsafe" {
+		return nil, errors.New(`serverNameToVerify only works with uTLS for now`)
+	}
 
 	return config, nil
 }
