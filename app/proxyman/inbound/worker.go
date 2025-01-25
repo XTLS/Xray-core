@@ -2,6 +2,7 @@ package inbound
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -463,9 +464,19 @@ func (w *dsWorker) callback(conn stat.Connection) {
 			WriteCounter: w.downlinkCounter,
 		}
 	}
+	// For most of time, unix obviously have no source addr. But if we leave it empty, it will cause panic.
+	// So we use gateway as source for log.
+	// However, there are some special situations where a valid source address might be available.
+	// Such as the source address parsed from X-Forwarded-For in websocket.
+	// In that case, we keep it.
+	var source net.Destination
+	if !strings.Contains(conn.RemoteAddr().String(), "unix") {
+		source = net.DestinationFromAddr(conn.RemoteAddr())
+	} else {
+		source = net.UnixDestination(w.address)
+	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
-		// Unix have no source addr, so we use gateway as source for log.
-		Source:  net.UnixDestination(w.address),
+		Source:  source,
 		Gateway: net.UnixDestination(w.address),
 		Tag:     w.tag,
 		Conn:    conn,
