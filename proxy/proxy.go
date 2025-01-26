@@ -110,7 +110,8 @@ type TrafficState struct {
 
 	// reader link state
 	WithinPaddingBuffers     bool
-	ReaderSwitchToDirectCopy bool
+	DownlinkReaderDirectCopy bool
+	UplinkReaderDirectCopy   bool
 	RemainingCommand         int32
 	RemainingContent         int32
 	RemainingPadding         int32
@@ -118,7 +119,8 @@ type TrafficState struct {
 
 	// write link state
 	IsPadding                bool
-	WriterSwitchToDirectCopy bool
+	DownlinkWriterDirectCopy bool
+	UplinkWriterDirectCopy   bool
 }
 
 func NewTrafficState(userUUID []byte) *TrafficState {
@@ -131,13 +133,15 @@ func NewTrafficState(userUUID []byte) *TrafficState {
 		Cipher:                   0,
 		RemainingServerHello:     -1,
 		WithinPaddingBuffers:     true,
-		ReaderSwitchToDirectCopy: false,
+		DownlinkReaderDirectCopy: false,
+		UplinkReaderDirectCopy:   false,
 		RemainingCommand:         -1,
 		RemainingContent:         -1,
 		RemainingPadding:         -1,
 		CurrentCommand:           0,
 		IsPadding:                true,
-		WriterSwitchToDirectCopy: false,
+		DownlinkWriterDirectCopy: false,
+		UplinkWriterDirectCopy:   false,
 	}
 }
 
@@ -147,13 +151,15 @@ type VisionReader struct {
 	buf.Reader
 	trafficState *TrafficState
 	ctx          context.Context
+	isUplink     bool
 }
 
-func NewVisionReader(reader buf.Reader, state *TrafficState, context context.Context) *VisionReader {
+func NewVisionReader(reader buf.Reader, state *TrafficState, isUplink bool, context context.Context) *VisionReader {
 	return &VisionReader{
 		Reader:       reader,
 		trafficState: state,
 		ctx:          context,
+		isUplink:     isUplink,
 	}
 }
 
@@ -175,7 +181,11 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 				w.trafficState.WithinPaddingBuffers = false
 			} else if w.trafficState.CurrentCommand == 2 {
 				w.trafficState.WithinPaddingBuffers = false
-				w.trafficState.ReaderSwitchToDirectCopy = true
+				if w.isUplink {
+					w.trafficState.UplinkReaderDirectCopy = true
+				} else {
+					w.trafficState.DownlinkReaderDirectCopy = true
+				}
 			} else {
 				errors.LogInfo(w.ctx, "XtlsRead unknown command ", w.trafficState.CurrentCommand, buffer.Len())
 			}
@@ -194,9 +204,10 @@ type VisionWriter struct {
 	trafficState      *TrafficState
 	ctx               context.Context
 	writeOnceUserUUID []byte
+	isUplink          bool
 }
 
-func NewVisionWriter(writer buf.Writer, state *TrafficState, context context.Context) *VisionWriter {
+func NewVisionWriter(writer buf.Writer, state *TrafficState, isUplink bool, context context.Context) *VisionWriter {
 	w := make([]byte, len(state.UserUUID))
 	copy(w, state.UserUUID)
 	return &VisionWriter{
@@ -204,6 +215,7 @@ func NewVisionWriter(writer buf.Writer, state *TrafficState, context context.Con
 		trafficState:      state,
 		ctx:               context,
 		writeOnceUserUUID: w,
+		isUplink:          isUplink,
 	}
 }
 
@@ -221,7 +233,11 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		for i, b := range mb {
 			if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) {
 				if w.trafficState.EnableXtls {
-					w.trafficState.WriterSwitchToDirectCopy = true
+					if w.isUplink {
+						w.trafficState.UplinkWriterDirectCopy = true
+					} else {
+						w.trafficState.DownlinkWriterDirectCopy = true
+					}
 				}
 				var command byte = CommandPaddingContinue
 				if i == len(mb)-1 {
