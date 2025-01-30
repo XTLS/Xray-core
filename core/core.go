@@ -19,7 +19,7 @@ import (
 var (
 	Version_x byte = 25
 	Version_y byte = 1
-	Version_z byte = 1
+	Version_z byte = 30
 )
 
 var (
