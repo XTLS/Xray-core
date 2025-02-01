@@ -42,7 +42,8 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 	// Modify random bytes using algorithm described at:
 	// https://cr.yp.to/ecdh.html.
 	privateKey[0] &= 248
-	privateKey[31] &= 127 | 64
+	privateKey[31] &= 127
+	privateKey[31] |= 64
 
 	if publicKey, err = curve25519.X25519(privateKey, curve25519.Basepoint); err != nil {
 		output = err.Error()
