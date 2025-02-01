@@ -24,7 +24,9 @@
 
 [Project X Channel](https://t.me/projectXtls)
 
-[Project VLESS](https://t.me/projectVless) (non-Chinese)
+[Project VLESS](https://t.me/projectVless) (Русский)
+
+[Project XHTTP](https://t.me/projectXhttp) (Persian)
 
 ## Installation
 
