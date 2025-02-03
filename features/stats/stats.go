@@ -30,6 +30,8 @@ type OnlineMap interface {
 	AddIP(string)
 	// List is the current OnlineMap ip list.
 	List() []string
+	// IpTimeMap return client ips and their last access time.
+	IpTimeMap() map[string]int64
 }
 
 // Channel is the interface for stats channel.

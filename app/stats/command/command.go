@@ -60,6 +60,19 @@ func (s *statsServer) GetStatsOnline(ctx context.Context, request *GetStatsReque
 	}, nil
 }
 
+func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStatsRequest) (*GetStatsOnlineIpListResponse, error) {
+	c := s.stats.GetOnlineMap(request.Name)
+
+	if c == nil {
+		return nil, errors.New(request.Name, " not found.")
+	}
+
+	return &GetStatsOnlineIpListResponse{
+		Name: request.Name,
+		Ips:  c.IpTimeMap(),
+	}, nil
+}
+
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
 	matcher, err := strmatcher.Substr.New(request.Pattern)
 	if err != nil {
