@@ -27,5 +27,6 @@ var CmdAPI = &base.Command{
 		cmdRemoveRules,
 		cmdSourceIpBlock,
 		cmdOnlineStats,
+		cmdOnlineStatsIpList,
 	},
 }
