@@ -79,15 +79,12 @@ func (c *OnlineMap) RemoveExpiredIPs(list map[string]time.Time) map[string]time.
 	return list
 }
 
-func (c *OnlineMap) IpTimeMap() map[string]int64 {
+func (c *OnlineMap) IpTimeMap() map[string]time.Time {
 	list := c.ipList
-	c.ipList = c.RemoveExpiredIPs(list)
-	c.value = len(list)
-
-	m := make(map[string]int64)
-	now := time.Now()
-	for k, v := range c.ipList {
-		m[k] = now.Unix() - v.Unix()
+	if time.Since(c.lastCleanup) > c.cleanupPeriod {
+		list = c.RemoveExpiredIPs(list)
+		c.lastCleanup = time.Now()
 	}
-	return m
+
+	return c.ipList
 }
