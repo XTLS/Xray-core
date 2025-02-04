@@ -8,6 +8,7 @@ import (
 	"math/big"
 	gonet "net"
 	"os"
+	"strings"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
