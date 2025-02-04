@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func init() {
@@ -90,6 +91,9 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 			addr := handshake.HandshakeAddressContext(ctx)
 			if addr != nil {
 				dest.Address = addr
+				if conn.(*tls.Conn).ConnectionState().NegotiatedProtocol == "http/1.1" {
+					ctx = session.ContextWithMitmAlpn11(ctx, true)
+				}
 				destinationOverridden = true
 			}
 		}

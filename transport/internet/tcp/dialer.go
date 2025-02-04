@@ -2,10 +2,12 @@ package tcp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -24,7 +26,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
-			if len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "http/1.1" {
+			if len(tlsConfig.NextProtos) == 1 && (tlsConfig.NextProtos[0] == "http/1.1" ||
+				(strings.ToLower(tlsConfig.NextProtos[0]) == "frommitm" && session.MitmAlpn11FromContext(ctx))) {
 				if err := conn.(*tls.UConn).WebsocketHandshakeContext(ctx); err != nil {
 					return nil, err
 				}
@@ -34,6 +37,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}
 		} else {
+			if len(tlsConfig.NextProtos) == 1 && strings.ToLower(tlsConfig.NextProtos[0]) == "frommitm" {
+				if session.MitmAlpn11FromContext(ctx) {
+					tlsConfig.NextProtos = []string{"http/1.1"} // new slice
+				} else {
+					tlsConfig.NextProtos = nil
+				}
+			}
 			conn = tls.Client(conn, tlsConfig)
 		}
 	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {

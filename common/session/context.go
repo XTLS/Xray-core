@@ -23,6 +23,7 @@ const (
 	timeoutOnlyKey            ctx.SessionKey = 8
 	allowedNetworkKey         ctx.SessionKey = 9
 	handlerSessionKey         ctx.SessionKey = 10
+	mitmAlpn11Key             ctx.SessionKey = 11
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -161,4 +162,15 @@ func AllowedNetworkFromContext(ctx context.Context) net.Network {
 		return val
 	}
 	return net.Network_Unknown
+}
+
+func ContextWithMitmAlpn11(ctx context.Context, alpn11 bool) context.Context {
+	return context.WithValue(ctx, mitmAlpn11Key, alpn11)
+}
+
+func MitmAlpn11FromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(mitmAlpn11Key).(bool); ok {
+		return val
+	}
+	return false
 }
