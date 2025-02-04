@@ -8,7 +8,6 @@ import (
 	"math/big"
 	gonet "net"
 	"os"
-	"strings"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -275,8 +274,12 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			ob := outbounds[len(outbounds)-1]
 			if h.senderSettings.ViaCidr == "" {
 				if h.senderSettings.Via.AsAddress().Family().IsDomain() && h.senderSettings.Via.AsAddress().Domain() == "origin" {
-					inbound := session.InboundFromContext(ctx)
-					ob.Gateway = net.ParseAddress(strings.Split(inbound.Conn.LocalAddr().String(), ":")[0])
+					if inbound := session.InboundFromContext(ctx); inbound != nil {
+						origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
+						if err == nil {
+							ob.Gateway = net.ParseAddress(origin)
+						}
+					}
 				} else {
 					ob.Gateway = h.senderSettings.Via.AsAddress()
 				}
