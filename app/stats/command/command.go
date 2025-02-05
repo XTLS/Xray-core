@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // statsServer is an implementation of StatsService.
@@ -57,6 +58,24 @@ func (s *statsServer) GetStatsOnline(ctx context.Context, request *GetStatsReque
 			Name:  request.Name,
 			Value: value,
 		},
+	}, nil
+}
+
+func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStatsRequest) (*GetStatsOnlineIpListResponse, error) {
+	c := s.stats.GetOnlineMap(request.Name)
+
+	if c == nil {
+		return nil, errors.New(request.Name, " not found.")
+	}
+
+	ips := make(map[string]*timestamppb.Timestamp)
+	for ip, t := range c.IpTimeMap() {
+		ips[ip] = timestamppb.New(t)
+	}
+
+	return &GetStatsOnlineIpListResponse{
+		Name: request.Name,
+		Ips:  ips,
 	}, nil
 }
 
