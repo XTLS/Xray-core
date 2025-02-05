@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -277,10 +278,33 @@ func (c *Config) parseServerName() string {
 	return c.ServerName
 }
 
-func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	if c.PinnedPeerCertificateChainSha256 != nil {
+func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if len(r.VerifyPeerCertInNames) > 0 {
+		certs := make([]*x509.Certificate, len(rawCerts))
+		for i, asn1Data := range rawCerts {
+			certs[i], _ = x509.ParseCertificate(asn1Data)
+		}
+		opts := x509.VerifyOptions{
+			Roots:         r.RootCAs,
+			CurrentTime:   time.Now(),
+			Intermediates: x509.NewCertPool(),
+		}
+		for _, cert := range certs[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		for _, opts.DNSName = range r.VerifyPeerCertInNames {
+			if _, err := certs[0].Verify(opts); err == nil {
+				return nil
+			}
+		}
+		if r.PinnedPeerCertificateChainSha256 == nil && r.PinnedPeerCertificatePublicKeySha256 == nil {
+			errors.New("peer cert is invalid.")
+		}
+	}
+
+	if r.PinnedPeerCertificateChainSha256 != nil {
 		hashValue := GenerateCertChainHash(rawCerts)
-		for _, v := range c.PinnedPeerCertificateChainSha256 {
+		for _, v := range r.PinnedPeerCertificateChainSha256 {
 			if hmac.Equal(hashValue, v) {
 				return nil
 			}
@@ -288,11 +312,11 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
 	}
 
-	if c.PinnedPeerCertificatePublicKeySha256 != nil {
+	if r.PinnedPeerCertificatePublicKeySha256 != nil {
 		for _, v := range verifiedChains {
 			for _, cert := range v {
 				publicHash := GenerateCertPublicKeyHash(cert)
-				for _, c := range c.PinnedPeerCertificatePublicKeySha256 {
+				for _, c := range r.PinnedPeerCertificatePublicKeySha256 {
 					if hmac.Equal(publicHash, c) {
 						return nil
 					}
@@ -305,7 +329,10 @@ func (c *Config) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Cert
 }
 
 type RandCarrier struct {
-	ServerNameToVerify string
+	RootCAs                              *x509.CertPool
+	VerifyPeerCertInNames                []string
+	PinnedPeerCertificateChainSha256     [][]byte
+	PinnedPeerCertificatePublicKeySha256 [][]byte
 }
 
 func (r *RandCarrier) Read(p []byte) (n int, err error) {
@@ -329,16 +356,23 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
+	randCarrier := &RandCarrier{
+		RootCAs:                              root,
+		VerifyPeerCertInNames:                slices.Clone(c.VerifyPeerCertInNames),
+		PinnedPeerCertificateChainSha256:     c.PinnedPeerCertificateChainSha256,
+		PinnedPeerCertificatePublicKeySha256: c.PinnedPeerCertificatePublicKeySha256,
+	}
 	config := &tls.Config{
-		Rand: &RandCarrier{
-			ServerNameToVerify: c.ServerNameToVerify,
-		},
+		Rand:                   randCarrier,
 		ClientSessionCache:     globalSessionCache,
 		RootCAs:                root,
 		InsecureSkipVerify:     c.AllowInsecure,
-		NextProtos:             c.NextProtocol,
+		NextProtos:             slices.Clone(c.NextProtocol),
 		SessionTicketsDisabled: !c.EnableSessionResumption,
-		VerifyPeerCertificate:  c.verifyPeerCert,
+		VerifyPeerCertificate:  randCarrier.verifyPeerCert,
+	}
+	if len(c.VerifyPeerCertInNames) > 0 {
+		config.InsecureSkipVerify = true
 	}
 
 	for _, opt := range opts {

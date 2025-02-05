@@ -88,5 +88,5 @@ message Config {
   // Lists of string as CurvePreferences values.
   repeated string curve_preferences = 16;
 
-  string server_name_to_verify = 17;
+  repeated string verify_peer_cert_in_names = 17;
 }
