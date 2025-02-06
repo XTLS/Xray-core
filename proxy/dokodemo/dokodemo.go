@@ -64,10 +64,6 @@ func (d *DokodemoDoor) policy() policy.Session {
 	return p
 }
 
-type hasHandshakeAddressContext interface {
-	HandshakeAddressContext(ctx context.Context) net.Address
-}
-
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
@@ -87,14 +83,14 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				destinationOverridden = true
 			}
 		}
-		if handshake, ok := conn.(hasHandshakeAddressContext); ok && !destinationOverridden {
-			addr := handshake.HandshakeAddressContext(ctx)
-			if addr != nil {
-				dest.Address = addr
-				if conn.(*tls.Conn).ConnectionState().NegotiatedProtocol == "http/1.1" {
-					ctx = session.ContextWithMitmAlpn11(ctx, true)
-				}
+		if tlsConn, ok := conn.(tls.Interface); ok && !destinationOverridden {
+			if serverName := tlsConn.HandshakeContextServerName(ctx); serverName != "" {
+				dest.Address = net.DomainAddress(serverName)
 				destinationOverridden = true
+				ctx = session.ContextWithMitmServerName(ctx, serverName)
+			}
+			if tlsConn.NegotiatedProtocol() == "http/1.1" {
+				ctx = session.ContextWithMitmAlpn11(ctx, true)
 			}
 		}
 	}

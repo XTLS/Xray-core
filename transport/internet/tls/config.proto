@@ -69,16 +69,14 @@ message Config {
 
   bool reject_unknown_sni = 12;
   
-  /* @Document A pinned certificate chain sha256 hash.
-     @Document If the server's hash does not match this value, the connection will be aborted.
-     @Document This value replace allow_insecure.
+  /* @Document Some certificate chain sha256 hashes.
+     @Document After normal validation or allow_insecure, if the server's cert chain hash does not match any of these values, the connection will be aborted.
      @Critical
   */
   repeated bytes pinned_peer_certificate_chain_sha256 = 13;
 
-  /* @Document A pinned certificate public key sha256 hash.
-     @Document If the server's public key hash does not match this value, the connection will be aborted.
-     @Document This value replace allow_insecure.
+  /* @Document Some certificate public key sha256 hashes.
+     @Document After normal validation (required), if the verified cert's public key hash does not match any of these values, the connection will be aborted.
      @Critical
   */
   repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
@@ -88,5 +86,9 @@ message Config {
   // Lists of string as CurvePreferences values.
   repeated string curve_preferences = 16;
 
-  string server_name_to_verify = 17;
+  /* @Document Replaces server_name to verify the peer cert.
+     @Document After allow_insecure (automatically), if the server's cert can't be verified by any of these names, pinned_peer_certificate_chain_sha256 will be tried.
+     @Critical
+  */
+  repeated string verify_peer_cert_in_names = 17;
 }

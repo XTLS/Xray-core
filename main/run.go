@@ -45,6 +45,7 @@ The -dump flag tells Xray to print the merged config.
 
 func init() {
 	cmdRun.Run = executeRun // break init loop
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 }
 
 var (

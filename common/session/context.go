@@ -24,6 +24,7 @@ const (
 	allowedNetworkKey         ctx.SessionKey = 9
 	handlerSessionKey         ctx.SessionKey = 10
 	mitmAlpn11Key             ctx.SessionKey = 11
+	mitmServerNameKey         ctx.SessionKey = 12
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -173,4 +174,15 @@ func MitmAlpn11FromContext(ctx context.Context) bool {
 		return val
 	}
 	return false
+}
+
+func ContextWithMitmServerName(ctx context.Context, serverName string) context.Context {
+	return context.WithValue(ctx, mitmServerNameKey, serverName)
+}
+
+func MitmServerNameFromContext(ctx context.Context) string {
+	if val, ok := ctx.Value(mitmServerNameKey).(string); ok {
+		return val
+	}
+	return ""
 }
