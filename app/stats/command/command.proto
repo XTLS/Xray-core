@@ -6,8 +6,6 @@ option go_package = "github.com/xtls/xray-core/app/stats/command";
 option java_package = "com.xray.app.stats.command";
 option java_multiple_files = true;
 
-import "google/protobuf/timestamp.proto";
-
 message GetStatsRequest {
   // Name of the stat counter.
   string name = 1;
@@ -50,7 +48,7 @@ message SysStatsResponse {
 
 message GetStatsOnlineIpListResponse {
   string name = 1;
-  map<string, google.protobuf.Timestamp> ips = 2;
+  map<string, uint64> ips = 2;
 }
 
 service StatsService {
