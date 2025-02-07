@@ -48,7 +48,7 @@ message SysStatsResponse {
 
 message GetStatsOnlineIpListResponse {
   string name = 1;
-  map<string, uint64> ips = 2;
+  map<string, int64> ips = 2;
 }
 
 service StatsService {

@@ -67,9 +67,9 @@ func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStat
 		return nil, errors.New(request.Name, " not found.")
 	}
 
-	ips := make(map[string]uint64)
+	ips := make(map[string]int64)
 	for ip, t := range c.IpTimeMap() {
-		ips[ip] = uint64(t.Unix())
+		ips[ip] = t.Unix()
 	}
 
 	return &GetStatsOnlineIpListResponse{
