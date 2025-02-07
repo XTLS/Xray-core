@@ -23,7 +23,7 @@ type DynamicInboundHandler struct {
 	receiverConfig *proxyman.ReceiverConfig
 	streamSettings *internet.MemoryStreamConfig
 	portMutex      sync.Mutex
-	portsInUse     map[net.Port]bool
+	portsInUse     map[net.Port]struct{}
 	workerMutex    sync.RWMutex
 	worker         []worker
 	lastRefresh    time.Time
@@ -39,7 +39,7 @@ func NewDynamicInboundHandler(ctx context.Context, tag string, receiverConfig *p
 		tag:            tag,
 		proxyConfig:    proxyConfig,
 		receiverConfig: receiverConfig,
-		portsInUse:     make(map[net.Port]bool),
+		portsInUse:     make(map[net.Port]struct{}),
 		mux:            mux.NewServer(ctx),
 		v:              v,
 		ctx:            ctx,
@@ -84,7 +84,7 @@ func (h *DynamicInboundHandler) allocatePort() net.Port {
 		port := net.Port(allPorts[r])
 		_, used := h.portsInUse[port]
 		if !used {
-			h.portsInUse[port] = true
+			h.portsInUse[port] = struct{}{}
 			return port
 		}
 	}
