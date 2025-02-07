@@ -89,7 +89,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				destinationOverridden = true
 				ctx = session.ContextWithMitmServerName(ctx, serverName)
 			}
-			if tlsConn.NegotiatedProtocol() == "http/1.1" {
+			if tlsConn.NegotiatedProtocol() != "h2" {
 				ctx = session.ContextWithMitmAlpn11(ctx, true)
 			}
 		}
