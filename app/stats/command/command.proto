@@ -46,11 +46,17 @@ message SysStatsResponse {
   uint32 Uptime = 10;
 }
 
+message GetStatsOnlineIpListResponse {
+  string name = 1;
+  map<string, int64> ips = 2;
+}
+
 service StatsService {
   rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {}
   rpc GetStatsOnline(GetStatsRequest) returns (GetStatsResponse) {}
   rpc QueryStats(QueryStatsRequest) returns (QueryStatsResponse) {}
   rpc GetSysStats(SysStatsRequest) returns (SysStatsResponse) {}
+  rpc GetStatsOnlineIpList(GetStatsRequest) returns (GetStatsOnlineIpListResponse) {}
 }
 
 message Config {}
