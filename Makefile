@@ -1,7 +1,3 @@
-NAME = xray
-
-VERSION=$(shell git describe --always --dirty)
-
 # NOTE: This MAKEFILE can be used to build Xray-core locally and in Automatic workflows. It is \
 	provided for convenience in automatic building and functions as a part of it.
 # NOTE: If you need to modify this file, please be aware that:\
@@ -13,12 +9,20 @@ VERSION=$(shell git describe --always --dirty)
 		.github/workflows/release.yml \
 	Otherwise it is recommended to contact the project maintainers.
 
+# Define the version using the latest git commit description
+VERSION=$(shell git describe --always --dirty)
+
+# Linker flags and build parameters
 LDFLAGS = -X github.com/xtls/xray-core/core.build=$(VERSION) -s -w -buildid=
 PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
+
+# Main package to build
 MAIN = ./main
 
-# Use environment variables from workflow
+# Set the output binary name based on the environment variables
 PREFIX ?= $(shell go env GOPATH)
+
+# Determine the output file name based on the OS
 ifeq ($(GOOS),windows)
 OUTPUT = $(NAME).exe
 ADDITION = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
@@ -26,16 +30,20 @@ else
 OUTPUT = $(NAME)
 endif
 
+# Handle MIPS architecture separately
 ifeq ($(GOARCH),mips)
 GOMIPS = softfloat
 endif
 
+# Phony targets to avoid conflicts with files named 'clean' or 'build'
 .PHONY: clean build
 
+# Build target to compile the binary
 build:
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
 	$(ADDITION)
 
+# Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
 	rm -f xray xray.exe wxray.exe xray_softfloat
