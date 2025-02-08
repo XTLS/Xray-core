@@ -13,11 +13,11 @@ on:
   push:
     # Prevent triggering update request storm
     paths:
-      - ".github/workflows/scheduled-prepare.yml"
+      - ".github/workflows/scheduled-assets-update.yml"
   pull_request:
     # Prevent triggering update request storm
     paths:
-      - ".github/workflows/scheduled-prepare.yml"
+      - ".github/workflows/scheduled-assets-update.yml"
 
 jobs:
   geodat:
