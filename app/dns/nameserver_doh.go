@@ -54,7 +54,12 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, queryStrategy
 		if err != nil {
 			return nil, err
 		}
-		link, err := s.dispatcher.Dispatch(toDnsContext(ctx, s.dohURL), dest)
+		dnsCtx := toDnsContext(ctx, s.dohURL)
+		if h2c {
+			dnsCtx = session.ContextWithMitmAlpn11(dnsCtx, false) // for insurance
+			dnsCtx = session.ContextWithMitmServerName(dnsCtx, url.Hostname())
+		}
+		link, err := s.dispatcher.Dispatch(dnsCtx, dest)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
