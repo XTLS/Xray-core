@@ -42,18 +42,30 @@ GOMIPS =
 OUTPUT = $(NAME)
 endif
 
-# Phony targets to avoid conflicts with files named 'clean' or 'build'
-.PHONY: clean build
+# Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
+.PHONY: clean build test deps
+
+# Install dependencies
+deps:
+	go mod tidy
+	go mod download
 
 # Build target to compile the binary
-build:
+build: deps
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
 	# Additional build for wxray.exe on Windows
 ifneq ($(WXOUTPUT),)
 	go build -o $(WXOUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 endif
 
+# Run tests
+test:
+	go test ./...
+
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
 	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat
+
+# Default target
+default: build
