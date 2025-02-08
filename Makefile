@@ -13,7 +13,7 @@
 NAME = xray
 
 # Define the version using the latest git commit description
-VERSION=$(shell git describe --always --dirty)
+VERSION = $(shell git describe --always --dirty)
 
 # Linker flags and build parameters
 LDFLAGS = -X github.com/xtls/xray-core/core.build=$(VERSION) -s -w -buildid=
@@ -22,24 +22,17 @@ PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 # Main package to build
 MAIN = ./main
 
-# Set the output binary name based on the environment variables
-PREFIX ?= $(shell go env GOPATH)
-
 # Determine the output file name based on the OS
 ifeq ($(GOOS),windows)
-OUTPUT = $(NAME).exe
-WXOUTPUT = w$(NAME).exe
+	OUTPUT = $(NAME).exe
+	WXOUTPUT = w$(NAME).exe
 else
-OUTPUT = $(NAME)
+	OUTPUT = $(NAME)
 endif
 
 # Handle MIPS architectures separately
 ifeq ($(GOARCH),mips)
-GOMIPS = softfloat
-OUTPUT = $(NAME)_softfloat
-else ifeq ($(GOARCH),mipsle)
-GOMIPS =
-OUTPUT = $(NAME)
+	OUTPUT = $(NAME)_softfloat
 endif
 
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
