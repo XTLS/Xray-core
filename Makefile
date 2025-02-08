@@ -49,4 +49,4 @@ build:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f xray xray.exe wxray.exe xray_softfloat
+	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat $(NAME)_windows.exe $(NAME)_linux $(NAME)_darwin
