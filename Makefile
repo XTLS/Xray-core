@@ -9,6 +9,9 @@
 		.github/workflows/release.yml \
 	Otherwise it is recommended to contact the project maintainers.
 
+# Define the name of the output binary
+NAME = xray
+
 # Define the version using the latest git commit description
 VERSION=$(shell git describe --always --dirty)
 
