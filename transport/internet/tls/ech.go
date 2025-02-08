@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,13 +20,28 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	var ECHConfig []byte
 	var err error
 
+	nameToQuery := c.ServerName
+	var DOHServer string
+
+	parts := strings.Split(c.Ech_DOHserver, "+")
+	if len(parts) == 2 {
+		// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
+		nameToQuery = parts[0]
+		DOHServer = parts[1]
+	} else if len(parts) == 1 {
+		// normal format
+		DOHServer = parts[0]
+	} else {
+		return errors.New("Invalid ECH DOH server format: ", c.Ech_DOHserver)
+	}
+
 	if len(c.EchConfig) > 0 {
 		ECHConfig = c.EchConfig
 	} else { // ECH config > DOH lookup
-		if config.ServerName == "" {
-			return errors.New("Using DOH for ECH needs serverName")
+		if nameToQuery == "" {
+			return errors.New("Using DOH for ECH needs serverName or use dohServer format example.com+https://1.1.1.1/dns-query")
 		}
-		ECHConfig, err = QueryRecord(c.ServerName, c.Ech_DOHserver)
+		ECHConfig, err = QueryRecord(nameToQuery, DOHServer)
 		if err != nil {
 			return err
 		}
@@ -41,13 +57,12 @@ type record struct {
 }
 
 var (
-	dnsCache     = make(map[string]record)
+	dnsCache = make(map[string]record)
 	// global Lock? I'm not sure if I need finer grained locks.
 	// If we do this, we will need to nest another layer of struct
 	dnsCacheLock sync.RWMutex
 	updating     sync.Mutex
 )
-
 
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DOH server and update the cache.
@@ -94,7 +109,6 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	dnsCache[domain] = newRecored
 	return echConfig, nil
 }
-
 
 // dohQuery is the real func for sending type65 query for given domain to given DOH server.
 // return ECH config, TTL and error
