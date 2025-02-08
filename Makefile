@@ -28,13 +28,18 @@ PREFIX ?= $(shell go env GOPATH)
 # Determine the output file name based on the OS
 ifeq ($(GOOS),windows)
 OUTPUT = $(NAME).exe
+WXOUTPUT = w$(NAME).exe
 else
 OUTPUT = $(NAME)
 endif
 
-# Handle MIPS architecture separately
+# Handle MIPS architectures separately
 ifeq ($(GOARCH),mips)
 GOMIPS = softfloat
+OUTPUT = $(NAME)_softfloat
+else ifeq ($(GOARCH),mipsle)
+GOMIPS =
+OUTPUT = $(NAME)
 endif
 
 # Phony targets to avoid conflicts with files named 'clean' or 'build'
@@ -43,9 +48,10 @@ endif
 # Build target to compile the binary
 build:
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
-	# If additional builds are needed, they can be added here
-	# Example: ADDITIONAL = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
-	# $(ADDITIONAL)
+	# Additional build for wxray.exe on Windows
+ifneq ($(WXOUTPUT),)
+	go build -o $(WXOUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+endif
 
 # Clean target to remove generated files
 clean:
