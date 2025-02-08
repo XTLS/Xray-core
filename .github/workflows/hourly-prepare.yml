@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
   schedule:
     # Update assets on every hour (xx:30)
-    - cron: '30 * * * *'
-    # Update GeoData on every day (22:35 UTC)
-    - cron: '35 22 * * *'
+    # - cron: '30 * * * *'
+    # Update GeoData on every day (22:30 UTC)
+    - cron: '30 22 * * *'
   push:
     # Prevent triggering update request storm
     paths:
