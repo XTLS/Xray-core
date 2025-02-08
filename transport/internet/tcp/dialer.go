@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -33,17 +34,24 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if IsFromMitm(tlsConfig.ServerName) {
 			tlsConfig.ServerName = mitmServerName
 		}
-		r, ok := tlsConfig.Rand.(*tls.RandCarrier)
-		isFromMitmVerify := ok && len(r.VerifyPeerCertInNames) > 0 && IsFromMitm(r.VerifyPeerCertInNames[0])
-		if isFromMitmVerify {
-			r.VerifyPeerCertInNames = r.VerifyPeerCertInNames[1:]
-			after := mitmServerName
-			for {
-				if len(after) > 0 {
-					r.VerifyPeerCertInNames = append(r.VerifyPeerCertInNames, after)
-				}
-				_, after, _ = strings.Cut(after, ".")
-				if !strings.Contains(after, ".") {
+		isFromMitmVerify := false
+		if r, ok := tlsConfig.Rand.(*tls.RandCarrier); ok && len(r.VerifyPeerCertInNames) > 0 {
+			for i, name := range r.VerifyPeerCertInNames {
+				if IsFromMitm(name) {
+					isFromMitmVerify = true
+					r.VerifyPeerCertInNames[0], r.VerifyPeerCertInNames[i] = r.VerifyPeerCertInNames[i], r.VerifyPeerCertInNames[0]
+					r.VerifyPeerCertInNames = r.VerifyPeerCertInNames[1:]
+					after := mitmServerName
+					for {
+						if len(after) > 0 {
+							r.VerifyPeerCertInNames = append(r.VerifyPeerCertInNames, after)
+						}
+						_, after, _ = strings.Cut(after, ".")
+						if !strings.Contains(after, ".") {
+							break
+						}
+					}
+					slices.Reverse(r.VerifyPeerCertInNames)
 					break
 				}
 			}

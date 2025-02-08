@@ -300,7 +300,7 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 			}
 		}
 		if r.PinnedPeerCertificateChainSha256 == nil {
-			errors.New("peer cert is invalid.")
+			return errors.New("peer cert is invalid.")
 		}
 	}
 
