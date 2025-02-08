@@ -28,7 +28,6 @@ PREFIX ?= $(shell go env GOPATH)
 # Determine the output file name based on the OS
 ifeq ($(GOOS),windows)
 OUTPUT = $(NAME).exe
-ADDITION = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 else
 OUTPUT = $(NAME)
 endif
@@ -44,9 +43,11 @@ endif
 # Build target to compile the binary
 build:
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
-	$(ADDITION)
+	# If additional builds are needed, they can be added here
+	# Example: ADDITIONAL = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	# $(ADDITIONAL)
 
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat $(NAME)_windows.exe $(NAME)_linux $(NAME)_darwin
+	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat
