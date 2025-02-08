@@ -34,7 +34,8 @@ endif
 
 build:
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
+	$(ADDITION)
 
 clean:
 	go clean -v -i $(PWD)
-	rm -f xray xray.exe wxray.exe xray_softfloat xray_*_*_*
+	rm -f xray xray.exe wxray.exe xray_softfloat
