@@ -18,9 +18,12 @@ PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
 
 # Use environment variables from workflow
-OUTPUT = $(NAME)_$(GOOS)_$(GOARCH)$(GOARM)
+PREFIX ?= $(shell go env GOPATH)
 ifeq ($(GOOS),windows)
-OUTPUT := $(OUTPUT).exe
+OUTPUT = $(NAME).exe
+ADDITION = go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+else
+OUTPUT = $(NAME)
 endif
 
 ifeq ($(GOARCH),mips)
