@@ -21,7 +21,7 @@ on:
 
 jobs:
   geodat:
-    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push'|| github.event_name == 'pull_request'
+    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push'|| github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
