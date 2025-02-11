@@ -82,7 +82,6 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
 - iOS & macOS arm64
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
