@@ -30,9 +30,6 @@ else
 endif
 
 # Handle MIPS architectures separately
-ifeq ($(GOARCH),mips)
-	OUTPUT = $(NAME)_softfloat
-endif
 ifeq ($(GOARCH),mipsle)
 	OUTPUT = $(NAME)_softfloat
 endif
