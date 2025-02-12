@@ -38,12 +38,12 @@ deps:
 
 # Build target to compile the binary
 build: deps
-	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
+	CGO_ENABLED=0 go build -o $(OUTPUT) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
-	go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	CGO_ENABLED=0 go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 endif
 ifeq ($(word 1, $(GOARCH)),mips)
-	GOMIPS=softfloat go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
+	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
 endif
 
 # Run tests
