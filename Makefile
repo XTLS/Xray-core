@@ -40,15 +40,16 @@ endif
 
 # Install dependencies
 deps:
-	go mod tidy
 	go mod download
 
 # Build target to compile the binary
 build: deps
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
-	# Additional build for wxray.exe on Windows
 ifneq ($(WXOUTPUT),)
-	go build -o $(WXOUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	go build -o $(WXOUTPUT) $(PARAMS) $(MAIN)
+endif
+ifeq ($(GOARCH),mips)
+	go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
 # Run tests
