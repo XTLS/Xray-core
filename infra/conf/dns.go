@@ -12,13 +12,13 @@ import (
 )
 
 type NameServerConfig struct {
-	Address       *Address
-	ClientIP      *Address
-	Port          uint16
-	SkipFallback  bool
-	Domains       []string
-	ExpectIPs     StringList
-	QueryStrategy string
+	Address       *Address   `json:"address"`
+	ClientIP      *Address   `json:"clientIp"`
+	Port          uint16     `json:"port"`
+	SkipFallback  bool       `json:"skipFallback"`
+	Domains       []string   `json:"domains"`
+	ExpectIPs     StringList `json:"expectIps"`
+	QueryStrategy string     `json:"queryStrategy"`
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
