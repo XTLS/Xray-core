@@ -29,11 +29,6 @@ else
 	OUTPUT = $(NAME)
 endif
 
-# Handle MIPS architectures separately
-ifeq ($(GOARCH),mipsle)
-	OUTPUT = $(NAME)_softfloat
-endif
-
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
 .PHONY: clean build test deps
 
