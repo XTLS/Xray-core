@@ -49,7 +49,7 @@ ifneq ($(WXOUTPUT),)
 	go build -o $(WXOUTPUT) $(PARAMS) $(MAIN)
 endif
 ifeq ($(GOARCH),mips)
-	go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
+	GOMIPS=softfloat go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
 # Run tests
