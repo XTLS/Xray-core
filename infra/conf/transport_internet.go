@@ -231,6 +231,7 @@ type SplitHTTPConfig struct {
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
 	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
+	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -280,6 +281,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.XPaddingBytes != (Int32Range{}) && (c.XPaddingBytes.From <= 0 || c.XPaddingBytes.To <= 0) {
+		return nil, errors.New("xPaddingBytes cannot be disabled")
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -303,6 +308,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
 		ScMinPostsIntervalMs: newRangeConfig(c.ScMinPostsIntervalMs),
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
+		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
@@ -404,6 +410,8 @@ type TLSConfig struct {
 	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
 	CurvePreferences                     *StringList      `json:"curvePreferences"`
 	MasterKeyLog                         string           `json:"masterKeyLog"`
+	ServerNameToVerify                   string           `json:"serverNameToVerify"`
+	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
 }
 
 // Build implements Buildable.
@@ -425,6 +433,13 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
+	if len(config.NextProtocol) > 1 {
+		for _, p := range config.NextProtocol {
+			if tcp.IsFromMitm(p) {
+				return nil, errors.New(`only one element is allowed in "alpn" when using "fromMitm" in it`)
+			}
+		}
+	}
 	if c.CurvePreferences != nil && len(*c.CurvePreferences) > 0 {
 		config.CurvePreferences = []string(*c.CurvePreferences)
 	}
@@ -435,7 +450,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.CipherSuites = c.CipherSuites
 	config.Fingerprint = strings.ToLower(c.Fingerprint)
 	if config.Fingerprint != "unsafe" && tls.GetFingerprint(config.Fingerprint) == nil {
-		return nil, errors.New(`unknown fingerprint: `, config.Fingerprint)
+		return nil, errors.New(`unknown "fingerprint": `, config.Fingerprint)
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
@@ -462,6 +477,11 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 
 	config.MasterKeyLog = c.MasterKeyLog
+
+	if c.ServerNameToVerify != "" {
+		return nil, errors.PrintRemovedFeatureError(`"serverNameToVerify"`, `"verifyPeerCertInNames"`)
+	}
+	config.VerifyPeerCertInNames = c.VerifyPeerCertInNames
 
 	return config, nil
 }

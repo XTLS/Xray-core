@@ -180,12 +180,12 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			prefix := []byte("https://" + uConn.ServerName)
 			maps.Lock()
 			if maps.maps == nil {
-				maps.maps = make(map[string]map[string]bool)
+				maps.maps = make(map[string]map[string]struct{})
 			}
 			paths := maps.maps[uConn.ServerName]
 			if paths == nil {
-				paths = make(map[string]bool)
-				paths[config.SpiderX] = true
+				paths = make(map[string]struct{})
+				paths[config.SpiderX] = struct{}{}
 				maps.maps[uConn.ServerName] = paths
 			}
 			firstURL := string(prefix) + getPathLocked(paths)
@@ -232,7 +232,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					for _, m := range href.FindAllSubmatch(body, -1) {
 						m[1] = bytes.TrimPrefix(m[1], prefix)
 						if !bytes.Contains(m[1], dot) {
-							paths[string(m[1])] = true
+							paths[string(m[1])] = struct{}{}
 						}
 					}
 					req.URL.Path = getPathLocked(paths)
@@ -267,10 +267,10 @@ var (
 
 var maps struct {
 	sync.Mutex
-	maps map[string]map[string]bool
+	maps map[string]map[string]struct{}
 }
 
-func getPathLocked(paths map[string]bool) string {
+func getPathLocked(paths map[string]struct{}) string {
 	stopAt := int(randBetween(0, int64(len(paths)-1)))
 	i := 0
 	for s := range paths {

@@ -58,7 +58,9 @@ func marshalSlice(v reflect.Value, ignoreNullValue bool, insertTypeInfo bool) in
 }
 
 func isNullValue(f reflect.StructField, rv reflect.Value) bool {
-	if rv.Kind() == reflect.String && rv.Len() == 0 {
+	if rv.Kind() == reflect.Struct {
+		return false
+	} else if rv.Kind() == reflect.String && rv.Len() == 0 {
 		return true
 	} else if !isValueKind(rv.Kind()) && rv.IsNil() {
 		return true
@@ -184,6 +186,12 @@ func marshalKnownType(v interface{}, ignoreNullValue bool, insertTypeInfo bool) 
 	case *conf.PortList:
 		cpl := v.(*conf.PortList)
 		return serializePortList(cpl.Build())
+	case conf.Int32Range:
+		i32rng := v.(conf.Int32Range)
+		if i32rng.Left == i32rng.Right {
+			return i32rng.Left, true
+		}
+		return i32rng.String(), true
 	case cnet.Address:
 		if addr := v.(cnet.Address); addr != nil {
 			return addr.String(), true

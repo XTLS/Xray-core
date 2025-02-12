@@ -116,98 +116,129 @@ func TestMarshalConfigJson(t *testing.T) {
 		"system",
 		"inboundDownlink",
 		"outboundUplink",
+		"XHTTP_IN",
+		"\"host\": \"bing.com\"",
+		"scMaxEachPostBytes",
+		"\"from\": 100",
+		"\"to\": 1000",
+		"\"from\": 1000000",
+		"\"to\": 1000000",
 	}
 	for _, kw := range keywords {
 		if !strings.Contains(tc, kw) {
-			t.Error("marshaled config error")
+			t.Log("config.json:", tc)
+			t.Error("keyword not found:", kw)
+			break
 		}
 	}
 }
 
 func getConfig() string {
 	return `{
-		"log": {
-		  "loglevel": "debug"
-		},
-		"stats": {},
-		"policy": {
-		  "levels": {
-			"0": {
-			  "statsUserUplink": true,
-			  "statsUserDownlink": true
-			}
-		  },
-		  "system": {
-			"statsInboundUplink": true,
-			"statsInboundDownlink": true,
-			"statsOutboundUplink": true,
-			"statsOutboundDownlink": true
-		  }
-		},
-		"inbounds": [
-		  {
-			"tag": "agentin",
-			"protocol": "http",
-			"port": 8080,
-			"listen": "127.0.0.1",
-			"settings": {}
-		  },
-		  {
-			"listen": "127.0.0.1",
-			"port": 10085,
-			"protocol": "dokodemo-door",
-			"settings": {
-			  "address": "127.0.0.1"
-			},
-			"tag": "api-in"
-		  }
-		],
-		"api": {
-		  "tag": "api",
-		  "services": [
-			"HandlerService",
-			"StatsService"
-		  ]
-		},
-		"routing": {
-		  "rules": [
-			{
-			  "inboundTag": [
-				"api-in"
-			  ],
-			  "outboundTag": "api",
-			  "type": "field"
-			}
-		  ],
-		  "domainStrategy": "AsIs"
-		},
-		"outbounds": [
-		  {
-			"protocol": "vless",
-			"settings": {
-			  "vnext": [
-				{
-				  "address": "1.2.3.4",
-				  "port": 1234,
-				  "users": [
-					{
-					  "id": "4784f9b8-a879-4fec-9718-ebddefa47750",
-					  "encryption": "none"
-					}
-				  ]
-				}
-			  ]
-			},
-			"tag": "agentout",
-			"streamSettings": {
-			  "network": "ws",
-			  "security": "none",
-			  "wsSettings": {
-				"path": "/?ed=2048",
-				"host": "bing.com"
-			  }
-			}
-		  }
-		]
-	  }`
+  "log": {
+    "loglevel": "debug"
+  },
+  "stats": {},
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserUplink": true,
+        "statsUserDownlink": true
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
+  "inbounds": [
+    {
+      "tag": "agentin",
+      "protocol": "http",
+      "port": 18080,
+      "listen": "127.0.0.1",
+      "settings": {}
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api-in"
+    }
+  ],
+  "api": {
+    "tag": "api",
+    "services": [
+      "HandlerService",
+      "StatsService"
+    ]
+  },
+  "routing": {
+    "rules": [
+      {
+        "inboundTag": [
+          "api-in"
+        ],
+        "outboundTag": "api",
+        "type": "field"
+      }
+    ],
+    "domainStrategy": "AsIs"
+  },
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "1.2.3.4",
+            "port": 1234,
+            "users": [
+              {
+                "id": "4784f9b8-a879-4fec-9718-ebddefa47750",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "tag": "XHTTP_IN",
+      "streamSettings": {
+        "network": "xhttp",
+        "xhttpSettings": {
+          "host": "bing.com",
+          "path": "/xhttp_client_upload",
+          "mode": "auto",
+          "extra": {
+            "noSSEHeader": false,
+            "scMaxEachPostBytes": 1000000,
+            "scMaxBufferedPosts": 30,
+            "xPaddingBytes": "100-1000"
+          }
+        },
+        "sockopt": {
+          "tcpFastOpen": true,
+          "acceptProxyProtocol": false,
+          "tcpcongestion": "bbr",
+          "tcpMptcp": true
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "metadataOnly": false,
+        "routeOnly": true
+      }
+    }
+  ]
+}`
 }

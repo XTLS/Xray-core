@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/quic-go"
-	"github.com/xtls/quic-go/http3"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -53,8 +53,8 @@ var (
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
-	if browser_dialer.HasBrowserDialer() && realityConfig != nil {
-		return &BrowserDialerClient{}, nil
+	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
+		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
 	}
 
 	globalDialerAccess.Lock()
@@ -367,19 +367,22 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
+	var err error
 	if mode == "stream-one" {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}
-		conn.reader, conn.remoteAddr, conn.localAddr, _ = httpClient.OpenStream(context.WithoutCancel(ctx), requestURL.String(), reader, false)
+		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient.OpenStream(ctx, requestURL.String(), reader, false)
+		if err != nil { // browser dialer only
+			return nil, err
+		}
 		return stat.Connection(&conn), nil
 	} else { // stream-down
-		var err error
 		if xmuxClient2 != nil {
 			xmuxClient2.LeftRequests.Add(-1)
 		}
-		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(context.WithoutCancel(ctx), requestURL2.String(), nil, false)
+		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), nil, false)
 		if err != nil { // browser dialer only
 			return nil, err
 		}
@@ -388,7 +391,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}
-		httpClient.OpenStream(ctx, requestURL.String(), reader, true)
+		_, _, _, err = httpClient.OpenStream(ctx, requestURL.String(), reader, true)
+		if err != nil { // browser dialer only
+			return nil, err
+		}
 		return stat.Connection(&conn), nil
 	}
 
@@ -428,8 +434,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			// can reassign Path (potentially concurrently)
 			url := requestURL
 			url.Path += "/" + strconv.FormatInt(seq, 10)
-			// reassign query to get different padding
-			url.RawQuery = transportConfiguration.GetNormalizedQuery()
 
 			seq += 1
 
@@ -454,7 +458,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 			go func() {
 				err := httpClient.PostPacket(
-					context.WithoutCancel(ctx),
+					ctx,
 					url.String(),
 					&buf.MultiBufferContainer{MultiBuffer: chunk},
 					int64(chunk.Len()),

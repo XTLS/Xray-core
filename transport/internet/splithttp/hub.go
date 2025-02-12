@@ -1,18 +1,20 @@
 package splithttp
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
 	gonet "net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/xtls/quic-go"
-	"github.com/xtls/quic-go/http3"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -102,10 +104,29 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.WriteResponseHeader(writer)
 
+	/*
+		clientVer := []int{0, 0, 0}
+		x_version := strings.Split(request.URL.Query().Get("x_version"), ".")
+		for j := 0; j < 3 && len(x_version) > j; j++ {
+			clientVer[j], _ = strconv.Atoi(x_version[j])
+		}
+	*/
+
 	validRange := h.config.GetNormalizedXPaddingBytes()
-	x_padding := int32(len(request.URL.Query().Get("x_padding")))
-	if validRange.To > 0 && (x_padding < validRange.From || x_padding > validRange.To) {
-		errors.LogInfo(context.Background(), "invalid x_padding length:", x_padding)
+	paddingLength := 0
+
+	referrer := request.Header.Get("Referer")
+	if referrer != "" {
+		if referrerURL, err := url.Parse(referrer); err == nil {
+			// Browser dialer cannot control the host part of referrer header, so only check the query
+			paddingLength = len(referrerURL.Query().Get("x_padding"))
+		}
+	} else {
+		paddingLength = len(request.URL.Query().Get("x_padding"))
+	}
+
+	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
+		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -140,7 +161,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
-	if request.Method == "POST" && sessionId != "" {
+	if request.Method == "POST" && sessionId != "" { // stream-up, packet-up
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
@@ -152,16 +173,42 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			uploadDone := done.New()
 			err = currentSession.uploadQueue.Push(Packet{
-				Reader: request.Body,
+				Reader: &httpRequestBodyReader{
+					requestReader: request.Body,
+					uploadDone:    uploadDone,
+				},
 			})
 			if err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
+				writer.Header().Set("X-Accel-Buffering", "no")
+				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
-				<-request.Context().Done()
+				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
+				if referrer != "" && scStreamUpServerSecs.To > 0 {
+					go func() {
+						defer func() {
+							recover()
+						}()
+						for {
+							_, err := writer.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
+							if err != nil {
+								break
+							}
+							writer.(http.Flusher).Flush()
+							time.Sleep(time.Duration(scStreamUpServerSecs.rand()) * time.Second)
+						}
+					}()
+				}
+				select {
+				case <-request.Context().Done():
+				case <-uploadDone.Wait():
+				}
 			}
+			uploadDone.Close()
 			return
 		}
 
@@ -171,10 +218,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		payload, err := io.ReadAll(request.Body)
+		payload, err := io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
 
 		if len(payload) > scMaxEachPostBytes {
-			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request had size ", len(payload), ". Adjust scMaxEachPostBytes on the server to be at least as large as client.")
+			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")
 			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -204,7 +251,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		writer.WriteHeader(http.StatusOK)
-	} else if request.Method == "GET" || sessionId == "" {
+	} else if request.Method == "GET" || sessionId == "" { // stream-down, stream-one
 		responseFlusher, ok := writer.(http.Flusher)
 		if !ok {
 			panic("expected http.ResponseWriter to be an http.Flusher")
@@ -244,7 +291,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			reader:     request.Body,
 			remoteAddr: remoteAddr,
 		}
-		if sessionId != "" {
+		if sessionId != "" { // if not stream-one
 			conn.reader = currentSession.uploadQueue
 		}
 
@@ -261,6 +308,20 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		errors.LogInfo(context.Background(), "unsupported method: ", request.Method)
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+type httpRequestBodyReader struct {
+	requestReader io.ReadCloser
+	uploadDone    *done.Instance
+}
+
+func (c *httpRequestBodyReader) Read(b []byte) (int, error) {
+	return c.requestReader.Read(b)
+}
+
+func (c *httpRequestBodyReader) Close() error {
+	defer c.uploadDone.Close()
+	return c.requestReader.Close()
 }
 
 type httpResponseBodyWriter struct {

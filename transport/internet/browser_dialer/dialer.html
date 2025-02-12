@@ -14,10 +14,28 @@
 		let upstreamGetCount = 0;
 		let upstreamWsCount = 0;
 		let upstreamPostCount = 0;
+
+		function prepareRequestInit(extra) {
+			const requestInit = {};
+			if (extra.referrer) {
+				// note: we have to strip the protocol and host part.
+				// Browsers disallow that, and will reset the value to current page if attempted.
+				const referrer = URL.parse(extra.referrer);
+				requestInit.referrer = referrer.pathname + referrer.search + referrer.hash;
+				requestInit.referrerPolicy = "unsafe-url";
+			}
+
+			if (extra.headers) {
+				requestInit.headers = extra.headers;
+			}
+
+			return requestInit;
+		}
+
 		let check = function () {
 			if (clientIdleCount > 0) {
 				return;
-			};
+			}
 			clientIdleCount += 1;
 			console.log("Prepare", url);
 			let ws = new WebSocket(url);
@@ -29,12 +47,12 @@
 			// double-checking that this continues to work
 			ws.onmessage = function (event) {
 				clientIdleCount -= 1;
-				let [method, url, protocol] = event.data.split(" ");
-				switch (method) {
+				let task = JSON.parse(event.data);
+				switch (task.method) {
 					case "WS": {
 						upstreamWsCount += 1;
-						console.log("Dial WS", url, protocol);
-						const wss = new WebSocket(url, protocol);
+						console.log("Dial WS", task.url, task.extra.protocol);
+						const wss = new WebSocket(task.url, task.extra.protocol);
 						wss.binaryType = "arraybuffer";
 						let opened = false;
 						ws.onmessage = function (event) {
@@ -60,10 +78,12 @@
 							wss.close()
 						};
 						break;
-					};
+					}
 					case "GET": {
 						(async () => {
-							console.log("Dial GET", url);
+							const requestInit = prepareRequestInit(task.extra);
+
+							console.log("Dial GET", task.url);
 							ws.send("ok");
 							const controller = new AbortController();
 
@@ -83,58 +103,62 @@
 							ws.onclose = (event) => {
 								try {
 									reader && reader.cancel();
-								} catch(e) {};
+								} catch(e) {}
 
 								try {
 									controller.abort();
-								} catch(e) {};
+								} catch(e) {}
 							};
 
 							try {
 								upstreamGetCount += 1;
-								const response = await fetch(url, {signal: controller.signal});
+
+								requestInit.signal = controller.signal;
+								const response = await fetch(task.url, requestInit);
 
 								const body = await response.body;
 								reader = body.getReader();
 
 								while (true) {
 									const { done, value } = await reader.read();
-									ws.send(value);
+									if (value) ws.send(value);  // don't send back "undefined" string when received nothing
 									if (done) break;
-								};
+								}
 							} finally {
 								upstreamGetCount -= 1;
 								console.log("Dial GET DONE, remaining: ", upstreamGetCount);
 								ws.close();
-							};
+							}
 						})();
 						break;
-					};
+					}
 					case "POST": {
 						upstreamPostCount += 1;
-						console.log("Dial POST", url);
+
+						const requestInit = prepareRequestInit(task.extra);
+						requestInit.method = "POST";
+
+						console.log("Dial POST", task.url);
 						ws.send("ok");
 						ws.onmessage = async (event) => {
 							try {
-								const response = await fetch(
-									url,
-									{method: "POST", body: event.data}
-								);
+								requestInit.body = event.data;
+								const response = await fetch(task.url, requestInit);
 								if (response.ok) {
 									ws.send("ok");
 								} else {
 									console.error("bad status code");
 									ws.send("fail");
-								};
+								}
 							} finally {
 								upstreamPostCount -= 1;
 								console.log("Dial POST DONE, remaining: ", upstreamPostCount);
 								ws.close();
-							};
+							}
 						};
 						break;
-					};
-				};
+					}
+				}
 
 				check();
 			};
