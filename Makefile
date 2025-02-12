@@ -42,7 +42,7 @@ build: deps
 ifeq ($(GOOS),windows)
 	go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 endif
-ifeq ($(GOARCH:0:4),mips)
+ifeq ($(word 1, $(GOARCH)),mips)
 	GOMIPS=softfloat go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
 endif
 
