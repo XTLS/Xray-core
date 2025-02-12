@@ -25,13 +25,15 @@ MAIN = ./main
 # Determine the output file name based on the OS
 ifeq ($(GOOS),windows)
 	OUTPUT = $(NAME).exe
-	WXOUTPUT = w$(NAME).exe
 else
 	OUTPUT = $(NAME)
 endif
 
 # Handle MIPS architectures separately
 ifeq ($(GOARCH),mips)
+	OUTPUT = $(NAME)_softfloat
+endif
+ifeq ($(GOARCH),mipsle)
 	OUTPUT = $(NAME)_softfloat
 endif
 
@@ -45,10 +47,13 @@ deps:
 # Build target to compile the binary
 build: deps
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
-ifneq ($(WXOUTPUT),)
-	go build -o $(WXOUTPUT) $(PARAMS) $(MAIN)
+ifeq ($(GOOS),windows)
+	go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 endif
 ifeq ($(GOARCH),mips)
+	GOMIPS=softfloat go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
+endif
+ifeq ($(GOARCH),mipsle)
 	GOMIPS=softfloat go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
