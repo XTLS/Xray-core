@@ -203,6 +203,24 @@ func (list *PortList) Build() *net.PortList {
 	return portList
 }
 
+func (v PortList) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+func (v PortList) String() string {
+	ports := []string{}
+	for _, port := range v.Range {
+		if port.From == port.To {
+			p := strconv.Itoa(int(port.From))
+			ports = append(ports, p)
+		} else {
+			p := fmt.Sprintf("%d-%d", port.From, port.To)
+			ports = append(ports, p)
+		}
+	}
+	return strings.Join(ports, ",")
+}
+
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (list *PortList) UnmarshalJSON(data []byte) error {
 	var listStr string
