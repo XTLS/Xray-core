@@ -40,10 +40,10 @@ deps:
 build: deps
 	go build -o $(OUTPUT) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
-	go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 endif
 ifeq ($(GOARCH:0:4),mips)
-	GOMIPS=softfloat go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
+	GOMIPS=softfloat go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
 endif
 
 # Run tests
@@ -53,7 +53,7 @@ test:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat
+	rm -f $(NAME) $(NAME).exe w$(OUTPUT) $(OUTPUT)_softfloat
 
 # Default target
 default: build
