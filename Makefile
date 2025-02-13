@@ -26,7 +26,7 @@ MAIN = ./main
 PREFIX ?= /usr/local
 
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
-.PHONY: clean build test deps
+.PHONY: clean build test deps install default
 
 # Install dependencies
 deps:
