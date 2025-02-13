@@ -21,19 +21,6 @@ type DefaultListener struct {
 	controllers []control.Func
 }
 
-type combinedListener struct {
-	net.Listener
-	locker *FileLocker // for unix domain socket
-}
-
-func (cl *combinedListener) Close() error {
-	if cl.locker != nil {
-		cl.locker.Release()
-		cl.locker = nil
-	}
-	return cl.Listener.Close()
-}
-
 func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []control.Func) func(network, address string, c syscall.RawConn) error {
 	return func(network, address string, c syscall.RawConn) error {
 		return c.Control(func(fd uintptr) {
@@ -59,6 +46,23 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 // If other issues encountered, we should able to fix it here.
 type listenUDSWrapper struct {
 	net.Listener
+	locker *FileLocker
+}
+
+func (l *listenUDSWrapper) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &listenUDSWrapperConn{Conn: conn}, nil
+}
+
+func (l *listenUDSWrapper) Close() error {
+	if l.locker != nil {
+		l.locker.Release()
+		l.locker = nil
+	}
+	return l.Listener.Close()
 }
 
 type listenUDSWrapperConn struct {
@@ -71,14 +75,6 @@ func (conn *listenUDSWrapperConn) RemoteAddr() net.Addr {
 	}
 }
 
-func (l *listenUDSWrapper) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-	return &listenUDSWrapperConn{Conn: conn}, nil
-}
-
 func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (l net.Listener, err error) {
 	var lc net.ListenConfig
 	var network, address string
@@ -87,7 +83,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		return l, err
 	}
 
-	isUDS := false
 	switch addr := addr.(type) {
 	case *net.TCPAddr:
 		network = addr.Network()
@@ -102,7 +97,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 			}
 		}
 	case *net.UnixAddr:
-		isUDS = true
 		lc.Control = nil
 		network = addr.Network()
 		address = addr.Name
@@ -142,7 +136,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 					locker.Release()
 					return l, err
 				}
-				l = &combinedListener{Listener: l, locker: locker}
+				l = &listenUDSWrapper{Listener: l, locker: locker}
 				if filePerm == nil {
 					return l, nil
 				}
@@ -158,9 +152,6 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 
 	l, err = lc.Listen(ctx, network, address)
 	l, err = callback(l, err)
-	if err == nil && isUDS {
-		l = &listenUDSWrapper{Listener: l}
-	}
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
