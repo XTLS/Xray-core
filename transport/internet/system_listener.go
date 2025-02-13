@@ -134,7 +134,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 			callback = func(l net.Listener, err error) (net.Listener, error) {
 				if err != nil {
 					locker.Release()
-					return l, err
+					return nil, err
 				}
 				l = &listenUDSWrapper{Listener: l, locker: locker}
 				if filePerm == nil {
@@ -150,9 +150,8 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		}
 	}
 
-	l, err = lc.Listen(ctx, network, address)
-	l, err = callback(l, err)
-	if sockopt != nil && sockopt.AcceptProxyProtocol {
+	l, err = callback(lc.Listen(ctx, network, address))
+	if err == nil && sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
 	}
