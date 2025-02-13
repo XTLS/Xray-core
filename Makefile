@@ -47,7 +47,7 @@ build: deps
 		exit 1; \
 	fi
 	@echo "Binary built successfully"
-ifneq ($(GOOS),windows)
+ifeq ($(shell go env GOOS), windows)
 	mv $(NAME) $(NAME).exe
 	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vbs
 else ifeq ($(GOARCH),mips)
