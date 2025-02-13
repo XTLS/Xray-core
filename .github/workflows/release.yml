@@ -106,23 +106,24 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
+      PREFIX: /usr/local
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v4
-      
+
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
           [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
           echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           check-latest: true
-      
+
       - name: Get project dependencies
         run: |
           go mod download
@@ -133,13 +134,13 @@ jobs:
           mkdir -p build_assets
           make
           find . -maxdepth 1 -type f -regex './\(wxray\|xray\|xray_softfloat\)\(\|.exe\)' -exec mv {} ./build_assets/ \;
-      
+
       - name: Restore Geodat Cache
         uses: actions/cache/restore@v4
         with:
           path: resources
           key: xray-geodat-
-      
+
       - name: Copy README.md & LICENSE
         run: |
           mv -f resources/* build_assets
@@ -148,7 +149,7 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             cp ${GITHUB_WORKSPACE}/xray_no_window.vbs ./build_assets/xray_no_window.vbs || echo "xray_no_window.vbs not found, skipping."
           fi
-      
+
       - name: Create ZIP archive
         if: github.event_name == 'release'
         shell: bash
@@ -163,18 +164,18 @@ jobs:
           do
             openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
-      
+
       - name: Change the name
         run: |
           mv build_assets Xray-${{ env.ASSET_NAME }}
-      
+
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Xray-${{ env.ASSET_NAME }}
           path: |
             ./Xray-${{ env.ASSET_NAME }}/*
-      
+
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
