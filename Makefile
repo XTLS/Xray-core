@@ -22,13 +22,6 @@ PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 # Main package to build
 MAIN = ./main
 
-# Determine the output file name based on the OS
-ifeq ($(GOOS),windows)
-	OUTPUT = $(NAME).exe
-else
-	OUTPUT = $(NAME)
-endif
-
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
 .PHONY: clean build test deps
 
@@ -38,11 +31,12 @@ deps:
 
 # Build target to compile the binary
 build: deps
-	CGO_ENABLED=0 go build -o $(OUTPUT) $(PARAMS) $(MAIN)
+	CGO_ENABLED=0 go build -o $(NAME) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
-	CGO_ENABLED=0 go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	mv $(NAME) $(NAME).exe
+	CGO_ENABLED=0 go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
 else ifeq ($(GOARCH:0:4),mips)
-	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
+	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
 # Run tests
@@ -52,7 +46,7 @@ test:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f $(NAME) $(NAME).exe w$(OUTPUT) $(OUTPUT)_softfloat
+	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat
 
 # Default target
 default: build
