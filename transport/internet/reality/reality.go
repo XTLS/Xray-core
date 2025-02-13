@@ -18,12 +18,11 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
+	_ "unsafe"
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/reality"
@@ -78,8 +77,10 @@ func (c *UConn) HandshakeAddress() net.Address {
 }
 
 func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	p, _ := reflect.TypeOf(c.Conn).Elem().FieldByName("peerCertificates")
-	certs := *(*([]*x509.Certificate))(unsafe.Pointer(uintptr(unsafe.Pointer(c.Conn)) + p.Offset))
+	certs := make([]*x509.Certificate, len(rawCerts))
+	for i, rawCert := range rawCerts {
+		certs[i], _ = x509.ParseCertificate(rawCert)
+	}
 	if pub, ok := certs[0].PublicKey.(ed25519.PublicKey); ok {
 		h := hmac.New(sha512.New, c.AuthKey)
 		h.Write(pub)
