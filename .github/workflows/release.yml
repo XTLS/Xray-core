@@ -145,7 +145,7 @@ jobs:
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
           if [ "$GOOS" = "windows" ]; then
-            cp ${GITHUB_WORKSPACE}/xray_no_window.vbs ./build_assets/xray_no_window.vbs
+            cp ${GITHUB_WORKSPACE}/xray_no_window.vbs ./build_assets/xray_no_window.vbs || echo "xray_no_window.vbs not found, skipping."
           fi
 
       - name: Create ZIP archive
