@@ -74,7 +74,7 @@ func (conn *listenUDSWrapperConn) RemoteAddr() net.Addr {
 func (l *listenUDSWrapper) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
-		return conn, err
+		return nil, err
 	}
 	return &listenUDSWrapperConn{Conn: conn}, nil
 }
@@ -158,12 +158,12 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 
 	l, err = lc.Listen(ctx, network, address)
 	l, err = callback(l, err)
+	if err == nil && isUDS {
+		l = &listenUDSWrapper{Listener: l}
+	}
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
-	}
-	if isUDS && err == nil {
-		l = &listenUDSWrapper{Listener: l}
 	}
 	return l, err
 }
