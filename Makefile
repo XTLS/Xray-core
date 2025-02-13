@@ -34,7 +34,7 @@ build: deps
 	CGO_ENABLED=0 go build -o $(NAME) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
 	mv $(NAME) $(NAME).exe
-	CGO_ENABLED=0 go build -o w$(NAME).exe -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
+	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vps
 else ifeq ($(GOARCH:0:4),mips)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
@@ -46,7 +46,7 @@ test:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f $(NAME) $(NAME).exe w$(NAME).exe $(NAME)_softfloat
+	rm -f $(NAME) $(NAME).exe $(NAME)_no_window.vps $(NAME)_softfloat
 
 # Default target
 default: build
