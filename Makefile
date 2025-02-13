@@ -9,6 +9,17 @@
 		.github/workflows/release.yml \
 	Otherwise it is recommended to contact the project maintainers.
 
+# NOTE: This MAKEFILE can be used to build Xray-core locally and in Automatic workflows. It is \
+	provided for convenience in automatic building and functions as a part of it.
+# NOTE: If you need to modify this file, please be aware that:\
+	- This file is not the main Makefile; it only accepts environment variables and builds the \
+	binary.\
+	- Automatic building expects the correct binaries to be built by this Makefile. If you \
+	intend to propose a change to this Makefile, carefully review the file below and ensure \
+	that the change will not accidentally break the automatic building:\
+		.github/workflows/release.yml \
+	Otherwise it is recommended to contact the project maintainers.
+
 # Define the name of the output binary
 NAME = xray
 
@@ -35,7 +46,7 @@ build: deps
 ifeq ($(GOOS),windows)
 	mv $(NAME) $(NAME).exe
 	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vps
-else ifeq ($(GOARCH:0:4),mips)
+else ifeq ($(word 1, $(GOARCH)),mips)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
