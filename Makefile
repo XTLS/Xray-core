@@ -29,7 +29,7 @@ PREFIX ?= /usr/local
 JOBS ?= $(shell nproc)
 
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
-.PHONY: clean build test deps install default
+.PHONY: clean build test deps default
 
 # Install dependencies
 deps:
@@ -58,10 +58,3 @@ clean:
 
 # Default target
 default: build
-
-# Install target
-install: build
-	install -Dm755 $(NAME) $(PREFIX)/bin/$(NAME)
-ifneq ($(GOOS),windows)
-	install -Dm755 $(NAME)_no_window.vbs $(PREFIX)/bin/$(NAME)_no_window.vbs
-endif
