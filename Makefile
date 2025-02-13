@@ -22,6 +22,9 @@ PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 # Main package to build
 MAIN = ./main
 
+# Prefix for installation
+PREFIX ?= /usr/local
+
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
 .PHONY: clean build test deps
 
@@ -34,8 +37,10 @@ build: deps
 	CGO_ENABLED=0 go build -o $(NAME) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
 	mv $(NAME) $(NAME).exe
-	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vps
-else ifeq ($(word 1, $(GOARCH)),mips)
+	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vbs
+else ifeq ($(GOARCH),mips)
+	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
+else ifeq ($(GOARCH),mipsle)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
@@ -46,7 +51,14 @@ test:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
-	rm -f $(NAME) $(NAME).exe $(NAME)_no_window.vps $(NAME)_softfloat
+	rm -f $(NAME) $(NAME).exe $(NAME)_no_window.vbs $(NAME)_softfloat
 
 # Default target
 default: build
+
+# Install target
+install: build
+	install -Dm755 $(NAME) $(PREFIX)/bin/$(NAME)
+ifeq ($(GOOS),windows)
+	install -Dm755 $(NAME)_no_window.vbs $(PREFIX)/bin/$(NAME)_no_window.vbs
+endif
