@@ -25,6 +25,9 @@ MAIN = ./main
 # Prefix for installation
 PREFIX ?= /usr/local
 
+# Number of parallel jobs
+JOBS ?= $(shell nproc)
+
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
 .PHONY: clean build test deps install default
 
