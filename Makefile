@@ -38,7 +38,7 @@ build: deps
 ifeq ($(GOOS),windows)
     mv $(NAME) $(NAME).exe
     echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vbs
-else ifeq ($(GOARCH:0:4),mips)
+else ifeq ($(strip $(GOARCH:0:4)),mips)
     GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 endif
 
