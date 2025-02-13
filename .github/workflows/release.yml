@@ -125,7 +125,7 @@ jobs:
           check-latest: true
 
       - name: Get project dependencies
-        run: 
+        run: |
           go mod download
           go mod tidy
       
