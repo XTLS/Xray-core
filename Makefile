@@ -35,7 +35,7 @@ deps:
 # Build target to compile the binary
 build: deps
 	CGO_ENABLED=0 go build -o $(NAME) $(PARAMS) $(MAIN)
-ifeq ($(GOOS),windows)
+ifneq ($(GOOS),windows)
 	mv $(NAME) $(NAME).exe
 	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vbs
 else ifeq ($(GOARCH),mips)
@@ -59,6 +59,6 @@ default: build
 # Install target
 install: build
 	install -Dm755 $(NAME) $(PREFIX)/bin/$(NAME)
-ifeq ($(GOOS),windows)
+ifneq ($(GOOS),windows)
 	install -Dm755 $(NAME)_no_window.vbs $(PREFIX)/bin/$(NAME)_no_window.vbs
 endif
