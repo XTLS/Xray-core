@@ -41,8 +41,7 @@ build: deps
 	CGO_ENABLED=0 go build -o $(OUTPUT) $(PARAMS) $(MAIN)
 ifeq ($(GOOS),windows)
 	CGO_ENABLED=0 go build -o w$(OUTPUT) -trimpath -ldflags "-H windowsgui $(LDFLAGS)" -v $(MAIN)
-endif
-ifeq ($(strip $(GOARCH:0:4)),mips)
+else ifeq ($(GOARCH:0:4),mips)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(OUTPUT)_softfloat $(PARAMS) $(MAIN)
 endif
 
