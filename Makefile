@@ -23,21 +23,30 @@ PARAMS = -trimpath -ldflags "$(LDFLAGS)" -v
 MAIN = ./main
 
 # Prefix for installation
-PREFIX ?= /usr/local
-
-# Number of parallel jobs
-JOBS ?= $(shell nproc)
+PREFIX ?= $(shell go env GOPATH)
 
 # Phony targets to avoid conflicts with files named 'clean', 'build', 'test', or 'deps'
 .PHONY: clean build test deps default
 
 # Install dependencies
 deps:
+	@echo "Downloading dependencies..."
 	go mod download
+	@if [ $$? -ne 0 ]; then \
+		echo "Error downloading dependencies"; \
+		exit 1; \
+	fi
+	@echo "Dependencies downloaded successfully"
 
 # Build target to compile the binary
 build: deps
+	@echo "Building the binary..."
 	CGO_ENABLED=0 go build -o $(NAME) $(PARAMS) $(MAIN)
+	@if [ $$? -ne 0 ]; then \
+		echo "Error building the binary"; \
+		exit 1; \
+	fi
+	@echo "Binary built successfully"
 ifneq ($(GOOS),windows)
 	mv $(NAME) $(NAME).exe
 	echo 'CreateObject("Wscript.Shell").Run "$(NAME).exe",0' > $(NAME)_no_window.vbs
@@ -45,6 +54,8 @@ else ifeq ($(GOARCH),mips)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
 else ifeq ($(GOARCH),mipsle)
 	GOMIPS=softfloat CGO_ENABLED=0 go build -o $(NAME)_softfloat $(PARAMS) $(MAIN)
+else
+	@echo "No special build steps for this architecture."
 endif
 
 # Run tests
