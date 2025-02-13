@@ -54,6 +54,31 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 	}
 }
 
+// For some reason, other component of ray will assume the listener is a TCP listener and have valid remote address.
+// But in fact it doesn't. So we need to wrap the listener to make it return 0.0.0.0(unspecified) as remote address.
+// If other issues encountered, we should able to fix it here.
+type listenUDSWrapper struct {
+	net.Listener
+}
+
+type listenUDSWrapperConn struct {
+	net.Conn
+}
+
+func (conn *listenUDSWrapperConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{
+		IP: []byte{0, 0, 0, 0},
+	}
+}
+
+func (l *listenUDSWrapper) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return conn, err
+	}
+	return &listenUDSWrapperConn{Conn: conn}, nil
+}
+
 func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (l net.Listener, err error) {
 	var lc net.ListenConfig
 	var network, address string
@@ -62,6 +87,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		return l, err
 	}
 
+	isUDS := false
 	switch addr := addr.(type) {
 	case *net.TCPAddr:
 		network = addr.Network()
@@ -76,6 +102,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 			}
 		}
 	case *net.UnixAddr:
+		isUDS = true
 		lc.Control = nil
 		network = addr.Network()
 		address = addr.Name
@@ -134,6 +161,9 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	if sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
+	}
+	if isUDS && err == nil {
+		l = &listenUDSWrapper{Listener: l}
 	}
 	return l, err
 }
