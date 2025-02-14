@@ -65,6 +65,7 @@ test:
 # Clean target to remove generated files
 clean:
 	go clean -v -i $(PWD)
+	go clean -modcache
 	rm -f $(NAME) $(NAME).exe $(NAME)_no_window.vbs $(NAME)_softfloat
 
 # Default target
