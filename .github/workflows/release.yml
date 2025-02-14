@@ -183,3 +183,8 @@ jobs:
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
+
+      - name: Clean up
+        run: |
+          go clean -v -i $(PWD)
+          go clean -modcache
