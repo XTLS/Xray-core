@@ -127,7 +127,7 @@ jobs:
           if [[ ${GOOS} == 'windows' ]]; then
             go build -buildvcs=false -o build_assets/xray.exe -trimpath -ldflags "-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
             echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
-            echo 'Start-Process -FilePath "./xray.exe" -ArgumentList "-config ./config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
+            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
             # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
             # go build -buildvcs=false -o build_assets/wxray.exe -trimpath -ldflags "-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           else
