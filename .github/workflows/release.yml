@@ -106,7 +106,6 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
-      PREFIX: /usr/local
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v4
