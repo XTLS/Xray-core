@@ -536,9 +536,10 @@ WaitRace:
 			return resp, nil
 		} else if !goerrors.Is(err, http3.ErrNoCachedConn) {
 			return nil, err
-		} else if raceResult == raceH3 {
-			return nil, errors.New("Race Dialer: h3 just succeeded, but no cached conn")
 		}
+		// Another dial just succeeded, but no cached conn available.
+		// This can happen if that request failed after dialing.
+		// In this case we need to initiate another race.
 	}
 
 	if raceResult == raceH2 || raceResult == raceInactive {
@@ -548,8 +549,6 @@ WaitRace:
 			return resp, nil
 		} else if !goerrors.Is(err, http2.ErrNoCachedConn) {
 			return nil, err
-		} else if raceResult == raceH2 {
-			return nil, errors.New("Race Dialer: h2 just succeeded, but no cached conn")
 		}
 	}
 
