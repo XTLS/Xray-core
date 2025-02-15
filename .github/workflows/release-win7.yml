@@ -60,6 +60,7 @@ jobs:
         run: |
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
+          echo 'Build Xray for Windows 7...'
           go build -buildvcs=false -o build_assets/xray.exe -trimpath -ldflags "-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
           echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
