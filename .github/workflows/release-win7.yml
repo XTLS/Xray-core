@@ -31,6 +31,9 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       CGO_ENABLED: 0
     steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v4
+
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.assetname }}
@@ -40,18 +43,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
           check-latest: true
 
       - name: Setup patched builder
         run: |
           GOSDK=$(go env GOROOT)
-          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
           rm -r $GOSDK/*
+          cd $GOSDK
+          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
           unzip ./go-for-win7-linux-amd64.zip -d $GOSDK
-
-      - name: Checkout codebase
-        uses: actions/checkout@v4
+          rm ./go-for-win7-linux-amd64.zip
 
       - name: Get project dependencies
         run: go mod download
