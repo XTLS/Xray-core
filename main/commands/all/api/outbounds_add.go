@@ -15,13 +15,18 @@ var cmdAddOutbounds = &base.Command{
 	Short:       "Add outbounds",
 	Long: `
 Add outbounds to Xray.
+
 Arguments:
-	-s, -server 
+
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
 Example:
-    {{.Exec}} {{.LongName}} --server=127.0.0.1:8080 c1.json c2.json
+
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 c1.json c2.json
 `,
 	Run: executeAddOutbounds,
 }

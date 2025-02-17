@@ -7,21 +7,25 @@ import (
 
 var cmdOnlineStatsIpList = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api statsonlineiplist [--server=127.0.0.1:8080] [-name '']",
-	Short:       "Get online user ips list and access times",
+	UsageLine:   "{{.Exec}} api statsonlineiplist [--server=127.0.0.1:8080] [-email '']",
+	Short:       "Retrieve a user's online IP addresses and access times",
 	Long: `
-Get statistics from Xray.
+Retrieve the online IP addresses and corresponding access timestamps for a user from Xray.
+
 Arguments:
-	-s, -server 
+
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
 	-email
-		email of the user.
-	-reset
-		Reset the counter to fetching its value (not used).
+		The user's email address.
+
 Example:
-	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -email "user1@test.com"
+
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -email "xray@love.com"
 `,
 	Run: executeOnlineStatsIpList,
 }

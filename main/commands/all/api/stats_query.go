@@ -11,16 +11,23 @@ var cmdQueryStats = &base.Command{
 	Short:       "Query statistics",
 	Long: `
 Query statistics from Xray.
+
 Arguments:
-	-s, -server 
+
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
 	-pattern
-		Pattern of the query.
+		Filter pattern for the statistics query.
+
 	-reset
-		Reset the counter to fetching its value.
+		Reset the counter after fetching their values. Default false
+
 Example:
+
 	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -pattern "counter_"
 `,
 	Run: executeQueryStats,
