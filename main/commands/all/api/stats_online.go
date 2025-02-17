@@ -7,21 +7,25 @@ import (
 
 var cmdOnlineStats = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api statsonline [--server=127.0.0.1:8080] [-name '']",
-	Short:       "Get online user",
+	UsageLine:   "{{.Exec}} api statsonline [--server=127.0.0.1:8080] [-email '']",
+	Short:       "Retrieve the online session count for a user",
 	Long: `
-Get statistics from Xray.
+Retrieve the current number of active sessions for a user from Xray.
+
 Arguments:
-	-s, -server 
+
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
 	-email
-		email of the user.
-	-reset
-		Reset the counter to fetching its value.
+		The user's email address.
+
 Example:
-	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -email "user1@test.com"
+
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -email "xray@love.com"
 `,
 	Run: executeOnlineStats,
 }

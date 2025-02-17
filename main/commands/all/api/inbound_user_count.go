@@ -8,18 +8,24 @@ import (
 var cmdInboundUserCount = &base.Command{
 	CustomFlags: true,
 	UsageLine:   "{{.Exec}} api inboundusercount [--server=127.0.0.1:8080] -tag=tag",
-	Short:       "Get Inbound User Count",
+	Short:       "Retrieve inbound user count",
 	Long: `
-Get User count from an inbound.
+Retrieve the user count for a specified inbound tag.
+
 Arguments:
-	-s, -server 
+
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
 	-tag
-	    Inbound tag
+		Inbound tag
+
 Example:
-    {{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -tag="tag name"
+
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -tag="tag name"
 `,
 	Run: executeInboundUserCount,
 }
