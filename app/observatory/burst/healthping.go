@@ -66,10 +66,10 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		settings.Timeout = time.Duration(5) * time.Second
 	}
 	return &HealthPing{
-		ctx:      ctx,
+		ctx:        ctx,
 		dispatcher: dispatcher,
-		Settings: settings,
-		Results:  nil,
+		Settings:   settings,
+		Results:    nil,
 	}
 }
 

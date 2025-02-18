@@ -32,7 +32,7 @@ type Observer struct {
 
 	finished *done.Instance
 
-	ohm outbound.Manager
+	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
 }
 
@@ -226,9 +226,9 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 		return nil, errors.New("Cannot get depended features").Base(err)
 	}
 	return &Observer{
-		config: config,
-		ctx:    ctx,
-		ohm:    outboundManager,
+		config:     config,
+		ctx:        ctx,
+		ohm:        outboundManager,
 		dispatcher: dispatcher,
 	}, nil
 }

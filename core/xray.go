@@ -359,7 +359,7 @@ func (s *Instance) AddFeature(feature features.Feature) error {
 	}
 	s.pendingOptionalResolutions = pendingOptional
 	s.resolveLock.Unlock()
-	
+
 	var err error
 	for _, r := range availableResolution {
 		err = r.callbackResolution(s.features) // only return the last error for now
