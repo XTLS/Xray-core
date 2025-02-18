@@ -76,8 +76,9 @@ type (
 )
 
 var (
-	ResolveUnixAddr = net.ResolveUnixAddr
+	ResolveTCPAddr  = net.ResolveTCPAddr
 	ResolveUDPAddr  = net.ResolveUDPAddr
+	ResolveUnixAddr = net.ResolveUnixAddr
 )
 
 type Resolver = net.Resolver

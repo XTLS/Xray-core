@@ -54,7 +54,7 @@ func (l *listenUDSWrapper) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &listenUDSWrapperConn{Conn: conn}, nil
+	return &UDSWrapperConn{Conn: conn}, nil
 }
 
 func (l *listenUDSWrapper) Close() error {
@@ -65,11 +65,11 @@ func (l *listenUDSWrapper) Close() error {
 	return l.Listener.Close()
 }
 
-type listenUDSWrapperConn struct {
+type UDSWrapperConn struct {
 	net.Conn
 }
 
-func (conn *listenUDSWrapperConn) RemoteAddr() net.Addr {
+func (conn *UDSWrapperConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{
 		IP: []byte{0, 0, 0, 0},
 	}

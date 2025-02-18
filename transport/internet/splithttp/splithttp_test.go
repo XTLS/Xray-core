@@ -26,9 +26,9 @@ import (
 	"golang.org/x/net/http2"
 )
 
-func Test_listenSHAndDial(t *testing.T) {
+func Test_ListenXHAndDial(t *testing.T) {
 	listenPort := tcp.PickPort()
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "/sh",
@@ -85,7 +85,7 @@ func Test_listenSHAndDial(t *testing.T) {
 
 func TestDialWithRemoteAddr(t *testing.T) {
 	listenPort := tcp.PickPort()
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "sh",
@@ -125,7 +125,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 	common.Must(listen.Close())
 }
 
-func Test_listenSHAndDial_TLS(t *testing.T) {
+func Test_ListenXHAndDial_TLS(t *testing.T) {
 	if runtime.GOARCH == "arm64" {
 		return
 	}
@@ -145,7 +145,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
 		},
 	}
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
 
@@ -180,7 +180,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	}
 }
 
-func Test_listenSHAndDial_H2C(t *testing.T) {
+func Test_ListenXHAndDial_H2C(t *testing.T) {
 	if runtime.GOARCH == "arm64" {
 		return
 	}
@@ -193,7 +193,7 @@ func Test_listenSHAndDial_H2C(t *testing.T) {
 			Path: "shs",
 		},
 	}
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			_ = conn.Close()
 		}()
@@ -227,7 +227,7 @@ func Test_listenSHAndDial_H2C(t *testing.T) {
 	}
 }
 
-func Test_listenSHAndDial_QUIC(t *testing.T) {
+func Test_ListenXHAndDial_QUIC(t *testing.T) {
 	if runtime.GOARCH == "arm64" {
 		return
 	}
@@ -250,7 +250,7 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	}
 
 	serverClosed := false
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
 
@@ -309,11 +309,11 @@ func Test_listenSHAndDial_QUIC(t *testing.T) {
 	}
 }
 
-func Test_listenSHAndDial_Unix(t *testing.T) {
+func Test_ListenXHAndDial_Unix(t *testing.T) {
 	tempDir := t.TempDir()
 	tempSocket := tempDir + "/server.sock"
 
-	listen, err := ListenSH(context.Background(), net.DomainAddress(tempSocket), 0, &internet.MemoryStreamConfig{
+	listen, err := ListenXH(context.Background(), net.DomainAddress(tempSocket), 0, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			Path: "/sh",
@@ -373,7 +373,7 @@ func Test_listenSHAndDial_Unix(t *testing.T) {
 
 func Test_queryString(t *testing.T) {
 	listenPort := tcp.PickPort()
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
 			// this querystring does not have any effect, but sometimes people blindly copy it from websocket config. make sure the outbound doesn't break
@@ -431,7 +431,7 @@ func Test_maxUpload(t *testing.T) {
 	}
 
 	var uploadSize int
-	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func(c stat.Connection) {
 			defer c.Close()
 			var b [10240]byte

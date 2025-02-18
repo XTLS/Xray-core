@@ -113,12 +113,12 @@ type TrafficState struct {
 
 type InboundState struct {
 	// reader link state
-	WithinPaddingBuffers     bool
-	UplinkReaderDirectCopy   bool
-	RemainingCommand         int32
-	RemainingContent         int32
-	RemainingPadding         int32
-	CurrentCommand           int
+	WithinPaddingBuffers   bool
+	UplinkReaderDirectCopy bool
+	RemainingCommand       int32
+	RemainingContent       int32
+	RemainingPadding       int32
+	CurrentCommand         int
 	// write link state
 	IsPadding                bool
 	DownlinkWriterDirectCopy bool
@@ -133,19 +133,19 @@ type OutboundState struct {
 	RemainingPadding         int32
 	CurrentCommand           int
 	// write link state
-	IsPadding                bool
-	UplinkWriterDirectCopy   bool
+	IsPadding              bool
+	UplinkWriterDirectCopy bool
 }
 
 func NewTrafficState(userUUID []byte) *TrafficState {
 	return &TrafficState{
-		UserUUID:                 userUUID,
-		NumberOfPacketToFilter:   8,
-		EnableXtls:               false,
-		IsTLS12orAbove:           false,
-		IsTLS:                    false,
-		Cipher:                   0,
-		RemainingServerHello:     -1,
+		UserUUID:               userUUID,
+		NumberOfPacketToFilter: 8,
+		EnableXtls:             false,
+		IsTLS12orAbove:         false,
+		IsTLS:                  false,
+		Cipher:                 0,
+		RemainingServerHello:   -1,
 		Inbound: InboundState{
 			WithinPaddingBuffers:     true,
 			UplinkReaderDirectCopy:   false,
@@ -524,7 +524,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 	}
 }
 
-// UnwrapRawConn support unwrap stats, tls, utls, reality and proxyproto conn and get raw tcp conn from it
+// UnwrapRawConn support unwrap stats, tls, utls, reality, proxyproto, uds-wrapper conn and get raw tcp/uds conn from it
 func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 	var readCounter, writerCounter stats.Counter
 	if conn != nil {
@@ -546,6 +546,9 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 		if pc, ok := conn.(*proxyproto.Conn); ok {
 			conn = pc.Raw()
 			// 8192 > 4096, there is no need to process pc's bufReader
+		}
+		if uc, ok := conn.(*internet.UDSWrapperConn); ok {
+			conn = uc.Conn
 		}
 	}
 	return conn, readCounter, writerCounter

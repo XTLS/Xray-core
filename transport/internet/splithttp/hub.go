@@ -3,9 +3,8 @@ package splithttp
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
+	gotls "crypto/tls"
 	"io"
-	gonet "net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,7 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	v2tls "github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -36,7 +35,7 @@ type requestHandler struct {
 	ln        *Listener
 	sessionMu *sync.Mutex
 	sessions  sync.Map
-	localAddr gonet.TCPAddr
+	localAddr net.Addr
 }
 
 type httpSession struct {
@@ -144,14 +143,25 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	forwardedAddrs := http_proto.ParseXForwardedFor(request.Header)
-	remoteAddr, err := gonet.ResolveTCPAddr("tcp", request.RemoteAddr)
+	var remoteAddr net.Addr
+	var err error
+	remoteAddr, err = net.ResolveTCPAddr("tcp", request.RemoteAddr)
 	if err != nil {
-		remoteAddr = &gonet.TCPAddr{}
+		remoteAddr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: 0,
+		}
+	}
+	if request.ProtoMajor == 3 {
+		remoteAddr = &net.UDPAddr{
+			IP:   remoteAddr.(*net.TCPAddr).IP,
+			Port: remoteAddr.(*net.TCPAddr).Port,
+		}
 	}
 	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
 			IP:   forwardedAddrs[0].IP(),
-			Port: int(0),
+			Port: 0,
 		}
 	}
 
@@ -289,6 +299,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				responseFlusher: responseFlusher,
 			},
 			reader:     request.Body,
+			localAddr:  h.localAddr,
 			remoteAddr: remoteAddr,
 		}
 		if sessionId != "" { // if not stream-one
@@ -362,34 +373,30 @@ type Listener struct {
 	isH3       bool
 }
 
-func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
+func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
 	l := &Listener{
 		addConn: addConn,
 	}
-	shSettings := streamSettings.ProtocolSettings.(*Config)
-	l.config = shSettings
+	l.config = streamSettings.ProtocolSettings.(*Config)
 	if l.config != nil {
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
 		}
 	}
-	var listener net.Listener
-	var err error
-	var localAddr = gonet.TCPAddr{}
 	handler := &requestHandler{
-		config:    shSettings,
-		host:      shSettings.Host,
-		path:      shSettings.GetNormalizedPath(),
+		config:    l.config,
+		host:      l.config.Host,
+		path:      l.config.GetNormalizedPath(),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
 		sessions:  sync.Map{},
-		localAddr: localAddr,
 	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
+	var err error
 	if port == net.Port(0) { // unix
-		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
+		l.listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
 			Net:  "unix",
 		}, streamSettings.SocketSettings)
@@ -405,12 +412,13 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
-		h3listener, err := quic.ListenEarly(Conn, tlsConfig, nil)
+		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
-		l.h3listener = h3listener
 		errors.LogInfo(ctx, "listening QUIC for XHTTP/3 on ", address, ":", port)
+
+		handler.localAddr = l.h3listener.Addr()
 
 		l.h3server = &http3.Server{
 			Handler: handler,
@@ -421,11 +429,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 			}
 		}()
 	} else { // tcp
-		localAddr = gonet.TCPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		}
-		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
+		l.listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
 			IP:   address.IP(),
 			Port: int(port),
 		}, streamSettings.SocketSettings)
@@ -436,26 +440,24 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 
 	// tcp/unix (h1/h2)
-	if listener != nil {
-		if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
+	if l.listener != nil {
+		if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 			if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
-				listener = tls.NewListener(listener, tlsConfig)
+				l.listener = gotls.NewListener(l.listener, tlsConfig)
 			}
 		}
-
 		if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
-			listener = goreality.NewListener(listener, config.GetREALITYConfig())
+			l.listener = goreality.NewListener(l.listener, config.GetREALITYConfig())
 		}
 
+		handler.localAddr = l.listener.Addr()
+
 		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
-		h2cHandler := h2c.NewHandler(handler, &http2.Server{})
-		l.listener = listener
 		l.server = http.Server{
-			Handler:           h2cHandler,
+			Handler:           h2c.NewHandler(handler, &http2.Server{}),
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    8192,
 		}
-
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
 				errors.LogWarningInner(ctx, err, "failed to serve HTTP for XHTTP")
@@ -488,13 +490,13 @@ func (ln *Listener) Close() error {
 	}
 	return errors.New("listener does not have an HTTP/3 server or a net.listener")
 }
-func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *tls.Config {
-	config := v2tls.ConfigFromStreamSettings(streamSettings)
+func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *gotls.Config {
+	config := tls.ConfigFromStreamSettings(streamSettings)
 	if config == nil {
-		return &tls.Config{}
+		return &gotls.Config{}
 	}
 	return config.GetTLSConfig()
 }
 func init() {
-	common.Must(internet.RegisterTransportListener(protocolName, ListenSH))
+	common.Must(internet.RegisterTransportListener(protocolName, ListenXH))
 }
