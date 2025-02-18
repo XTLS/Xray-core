@@ -199,6 +199,7 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 	}
 
 	responseDone := func() error {
+		inbound.CanSpliceCopy = 1
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		v2writer := buf.NewWriter(writer)
@@ -256,6 +257,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	if inbound != nil && inbound.Source.IsValid() {
 		errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
 	}
+	inbound.CanSpliceCopy = 1
 
 	var dest *net.Destination
 

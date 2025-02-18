@@ -207,6 +207,7 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *buf
 	}
 
 	responseDone := func() error {
+		inbound.CanSpliceCopy = 1
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		v2writer := buf.NewWriter(conn)
