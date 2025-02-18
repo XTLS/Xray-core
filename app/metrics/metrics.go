@@ -24,12 +24,15 @@ type MetricsHandler struct {
 	statsManager feature_stats.Manager
 	observatory  extension.Observatory
 	tag          string
+	listen       string
+	tcpListener  net.Listener
 }
 
 // NewMetricsHandler creates a new MetricsHandler based on the given config.
 func NewMetricsHandler(ctx context.Context, config *Config) (*MetricsHandler, error) {
 	c := &MetricsHandler{
-		tag: config.Tag,
+		tag:    config.Tag,
+		listen: config.Listen,
 	}
 	common.Must(core.RequireFeatures(ctx, func(om outbound.Manager, sm feature_stats.Manager) {
 		c.statsManager = sm
@@ -87,6 +90,23 @@ func (p *MetricsHandler) Type() interface{} {
 }
 
 func (p *MetricsHandler) Start() error {
+
+	// direct listen a port if listen is set
+	if p.listen != "" {
+		TCPlistener, err := net.Listen("tcp", p.listen)
+		if err != nil {
+			return err
+		}
+		p.tcpListener = TCPlistener
+		errors.LogDebug(context.Background(), "Metrics server listening on ", p.listen)
+
+		go func() {
+			if err := http.Serve(TCPlistener, http.DefaultServeMux); err != nil {
+				errors.LogErrorInner(context.Background(), err, "failed to start metrics server")
+			}
+		}()
+	}
+
 	listener := &OutboundListener{
 		buffer: make(chan net.Conn, 4),
 		done:   done.New(),
