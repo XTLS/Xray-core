@@ -34,13 +34,12 @@ func (c *Config) GetNormalizedQuery() string {
 		query = pathAndQuery[1]
 	}
 
-	if query != "" {
-		query += "&"
-	}
-
-	// query += "x_version=" + core.Version()
-
-	query += "x_padding=" + strings.Repeat("X", int(c.GetNormalizedXPaddingBytes().From))
+	/*
+		if query != "" {
+			query += "&"
+		}
+		query += "x_version=" + core.Version()
+	*/
 
 	return query
 }
