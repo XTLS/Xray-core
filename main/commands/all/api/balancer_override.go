@@ -7,31 +7,27 @@ import (
 
 var cmdBalancerOverride = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api bo [--server=127.0.0.1:8080] <-b balancer> outboundTag",
-	Short:       "balancer override",
+	UsageLine:   "{{.Exec}} api bo [--server=127.0.0.1:8080] <-b balancer> outboundTag <-r>",
+	Short:       "Override balancer",
 	Long: `
-Override a balancer's selection.
+Override the selection target of a balancer.
 
-> Make sure you have "RoutingService" set in "config.api.services" 
-of server config.
+> Ensure that the "RoutingService" is properly configured under "config.api.services" in the server configuration.
 
-Once a balancer's selecting is overridden:
+Once the balancer's selection is overridden:
 
 - The balancer's selection result will always be outboundTag
 
 Arguments:
 
-	-r, -remove
-		Remove the overridden
-
-	-r, -remove
-		Remove the override
-
-	-s, -server 
+	-s, -server <server:port>
 		The API server address. Default 127.0.0.1:8080
 
-	-t, -timeout
-		Timeout seconds to call API. Default 3
+	-t, -timeout <seconds>
+		Timeout in seconds for calling API. Default 3
+
+	-r, -remove
+		Remove the existing override.
 
 Example:
 
