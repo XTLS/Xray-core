@@ -98,7 +98,7 @@ func (p *MetricsHandler) Start() error {
 			return err
 		}
 		p.tcpListener = TCPlistener
-		errors.LogDebug(context.Background(), "Metrics server listening on ", p.listen)
+		errors.LogInfo(context.Background(), "Metrics server listening on ", p.listen)
 
 		go func() {
 			if err := http.Serve(TCPlistener, http.DefaultServeMux); err != nil {
