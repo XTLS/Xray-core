@@ -2,6 +2,7 @@ package internet
 
 import (
 	"context"
+	gonet "net"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
@@ -140,6 +141,29 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	return nil
 }
 
+func checkTxtRedirect(ctx context.Context, dest net.Destination) (net.Address, net.Port, error) {
+	if dest.Address.Family().IsDomain() && dest.Address.String()[0:6] != "_txt_." {
+		return nil, 0, nil
+	}
+	addr := dest.Address.String()[6:]
+	txtRecords, err := gonet.DefaultResolver.LookupTXT(ctx, addr)
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, txtRecord := range txtRecords {
+		errors.LogDebug(ctx, "get txt record: "+txtRecord)
+
+		addr_s, port_s, _ := net.SplitHostPort(string(txtRecord))
+		addr := net.ParseAddress(addr_s)
+		port, err := net.PortFromString(port_s)
+		if err != nil {
+			continue
+		}
+		return addr, port, nil
+	}
+	return nil, 0, nil
+}
+
 // DialSystem calls system dialer to create a network connection.
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	var src net.Address
@@ -148,6 +172,13 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		ob := outbounds[len(outbounds)-1]
 		src = ob.Gateway
 	}
+
+	if addr, port, err := checkTxtRedirect(ctx, dest); err == nil && addr != nil {
+		dest.Address = addr
+		dest.Port = port
+		errors.LogInfo(ctx, "replace destination with "+dest.String())
+	}
+
 	if sockopt == nil {
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
 	}
