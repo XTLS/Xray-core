@@ -44,32 +44,32 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 // For some reason, other component of ray will assume the listener is a TCP listener and have valid remote address.
 // But in fact it doesn't. So we need to wrap the listener to make it return 0.0.0.0(unspecified) as remote address.
 // If other issues encountered, we should able to fix it here.
-type listenUDSWrapper struct {
-	net.Listener
+type UnixListenerWrapper struct {
+	*net.UnixListener
 	locker *FileLocker
 }
 
-func (l *listenUDSWrapper) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
+func (l *UnixListenerWrapper) Accept() (net.Conn, error) {
+	conn, err := l.UnixListener.Accept()
 	if err != nil {
 		return nil, err
 	}
-	return &UDSWrapperConn{UnixConn: conn.(*net.UnixConn)}, nil
+	return &UnixConnWrapper{UnixConn: conn.(*net.UnixConn)}, nil
 }
 
-func (l *listenUDSWrapper) Close() error {
+func (l *UnixListenerWrapper) Close() error {
 	if l.locker != nil {
 		l.locker.Release()
 		l.locker = nil
 	}
-	return l.Listener.Close()
+	return l.UnixListener.Close()
 }
 
-type UDSWrapperConn struct {
+type UnixConnWrapper struct {
 	*net.UnixConn
 }
 
-func (conn *UDSWrapperConn) RemoteAddr() net.Addr {
+func (conn *UnixConnWrapper) RemoteAddr() net.Addr {
 	return &net.TCPAddr{
 		IP: []byte{0, 0, 0, 0},
 	}
@@ -136,7 +136,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 					locker.Release()
 					return nil, err
 				}
-				l = &listenUDSWrapper{Listener: l, locker: locker}
+				l = &UnixListenerWrapper{UnixListener: l.(*net.UnixListener), locker: locker}
 				if filePerm == nil {
 					return l, nil
 				}

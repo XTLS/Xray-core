@@ -547,7 +547,7 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			conn = pc.Raw()
 			// 8192 > 4096, there is no need to process pc's bufReader
 		}
-		if uc, ok := conn.(*internet.UDSWrapperConn); ok {
+		if uc, ok := conn.(*internet.UnixConnWrapper); ok {
 			conn = uc.UnixConn
 		}
 	}
