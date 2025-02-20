@@ -2,6 +2,9 @@ package internet
 
 import (
 	"context"
+	"fmt"
+	gonet "net"
+	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
@@ -140,6 +143,74 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	return nil
 }
 
+func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
+	if !dest.Address.Family().IsDomain() || sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
+		return nil, nil
+	}
+
+	if sockopt.DestinationStrategy == DestinationStrategy_SrvPortOnly ||
+		sockopt.DestinationStrategy == DestinationStrategy_SrvAddressOnly ||
+		sockopt.DestinationStrategy == DestinationStrategy_SrvPortAndAddress {
+
+		errors.LogDebug(ctx, "query SRV record for "+dest.Address.String())
+		parts := strings.SplitN(dest.Address.String(), ".", 3)
+		if len(parts) != 3 {
+			errors.LogError(ctx, "invalid address format: "+dest.Address.String())
+			return nil, errors.New("invalid address format")
+		}
+		_, srvRecords, err := gonet.DefaultResolver.LookupSRV(context.Background(), parts[0][1:], parts[1][1:], parts[2])
+		if err != nil {
+			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
+			return nil, err
+		}
+		for _, srvRecord := range srvRecords {
+			errors.LogDebug(ctx, "SRV record: "+fmt.Sprintf("addr=%s, port=%d, priority=%d, weight=%d", srvRecord.Target, srvRecord.Port, srvRecord.Priority, srvRecord.Weight))
+			newDest := dest
+			if sockopt.DestinationStrategy == DestinationStrategy_SrvPortOnly {
+				newDest.Port = net.Port(srvRecord.Port)
+			} else if sockopt.DestinationStrategy == DestinationStrategy_SrvAddressOnly {
+				newDest.Address = net.ParseAddress(srvRecord.Target)
+			} else if sockopt.DestinationStrategy == DestinationStrategy_SrvPortAndAddress {
+				newDest.Address = net.ParseAddress(srvRecord.Target)
+				newDest.Port = net.Port(srvRecord.Port)
+			}
+
+			return &newDest, nil
+		}
+	} else if sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly ||
+		sockopt.DestinationStrategy == DestinationStrategy_TxtAddressOnly ||
+		sockopt.DestinationStrategy == DestinationStrategy_TxtPortAndAddress {
+
+		errors.LogDebug(ctx, "query TXT record for "+dest.Address.String())
+		txtRecords, err := gonet.DefaultResolver.LookupTXT(ctx, dest.Address.String())
+		if err != nil {
+			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
+			return nil, err
+		}
+		for _, txtRecord := range txtRecords {
+			errors.LogDebug(ctx, "TXT record: "+txtRecord)
+			addr_s, port_s, _ := net.SplitHostPort(string(txtRecord))
+			addr := net.ParseAddress(addr_s)
+			port, err := net.PortFromString(port_s)
+			if err != nil {
+				continue
+			}
+
+			newDest := dest
+			if sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
+				newDest.Port = port
+			} else if sockopt.DestinationStrategy == DestinationStrategy_TxtAddressOnly {
+				newDest.Address = addr
+			} else if sockopt.DestinationStrategy == DestinationStrategy_TxtPortAndAddress {
+				newDest.Address = addr
+				newDest.Port = port
+			}
+			return &newDest, nil
+		}
+	}
+	return nil, nil
+}
+
 // DialSystem calls system dialer to create a network connection.
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	var src net.Address
@@ -150,6 +221,11 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	}
 	if sockopt == nil {
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
+	}
+
+	if newDest, err := checkDestinationStrategy(ctx, dest, sockopt); err == nil && newDest != nil {
+		errors.LogInfo(ctx, "replace destination with "+newDest.String())
+		dest = *newDest
 	}
 
 	if canLookupIP(ctx, dest, sockopt) {

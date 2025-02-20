@@ -13,8 +13,6 @@ type ValidationStrategy interface {
 	Invalidate()
 }
 
-type RedirectStrategy = ServerEndpoint_RedirectStrategy
-
 type alwaysValidStrategy struct{}
 
 func AlwaysValid() ValidationStrategy {
@@ -47,18 +45,16 @@ func (s *timeoutValidStrategy) Invalidate() {
 
 type ServerSpec struct {
 	sync.RWMutex
-	dest     net.Destination
-	users    []*MemoryUser
-	valid    ValidationStrategy
-	redirect RedirectStrategy
+	dest  net.Destination
+	users []*MemoryUser
+	valid ValidationStrategy
 }
 
-func NewServerSpec(dest net.Destination, valid ValidationStrategy, redirect RedirectStrategy, users ...*MemoryUser) *ServerSpec {
+func NewServerSpec(dest net.Destination, valid ValidationStrategy, users ...*MemoryUser) *ServerSpec {
 	return &ServerSpec{
-		dest:     dest,
-		users:    users,
-		valid:    valid,
-		redirect: redirect,
+		dest:  dest,
+		users: users,
+		valid: valid,
 	}
 }
 
@@ -72,7 +68,7 @@ func NewServerSpecFromPB(spec *ServerEndpoint) (*ServerSpec, error) {
 		}
 		mUsers[idx] = mUser
 	}
-	return NewServerSpec(dest, AlwaysValid(), spec.RedirectStrategy, mUsers...), nil
+	return NewServerSpec(dest, AlwaysValid(), mUsers...), nil
 }
 
 func (s *ServerSpec) Destination() net.Destination {
@@ -123,8 +119,4 @@ func (s *ServerSpec) IsValid() bool {
 
 func (s *ServerSpec) Invalidate() {
 	s.valid.Invalidate()
-}
-
-func (s *ServerSpec) RedirectStrategy() RedirectStrategy {
-	return s.redirect
 }

@@ -23,6 +23,16 @@ enum DomainStrategy {
   FORCE_IP64 = 10;
 }
 
+enum DestinationStrategy {
+  None = 0;
+  SrvPortOnly = 1;
+  SrvAddressOnly = 2;
+  SrvPortAndAddress = 3;
+  TxtPortOnly = 4;
+  TxtAddressOnly = 5;
+  TxtPortAndAddress = 6;
+}
+
 message TransportConfig {
   // Transport protocol name.
   string protocol_name = 3;
@@ -116,4 +126,6 @@ message SocketConfig {
   bool tcp_mptcp = 19;
 
   repeated CustomSockopt customSockopt = 20;
+
+  DestinationStrategy destination_strategy = 21;
 }

@@ -130,30 +130,13 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VLessOutboundVnext struct {
-	Address          *Address          `json:"address"`
-	Port             uint16            `json:"port"`
-	Users            []json.RawMessage `json:"users"`
-	RedirectStrategy *string           `json:"redirectStrategy"`
+	Address *Address          `json:"address"`
+	Port    uint16            `json:"port"`
+	Users   []json.RawMessage `json:"users"`
 }
 
 type VLessOutboundConfig struct {
 	Vnext []*VLessOutboundVnext `json:"vnext"`
-}
-
-func (c *VLessOutboundVnext) getRedirectStrategy() protocol.ServerEndpoint_RedirectStrategy {
-	rs := ""
-	if c.RedirectStrategy != nil {
-		rs = *c.RedirectStrategy
-	}
-
-	switch strings.ToLower(rs) {
-	case "none":
-		return protocol.ServerEndpoint_None
-	case "bysrvrecord":
-		return protocol.ServerEndpoint_BySrvRecord
-	default:
-		return protocol.ServerEndpoint_None
-	}
 }
 
 // Build implements Buildable
@@ -172,10 +155,9 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS vnext: "users" is empty`)
 		}
 		spec := &protocol.ServerEndpoint{
-			Address:          rec.Address.Build(),
-			Port:             uint32(rec.Port),
-			User:             make([]*protocol.User, len(rec.Users)),
-			RedirectStrategy: rec.getRedirectStrategy(),
+			Address: rec.Address.Build(),
+			Port:    uint32(rec.Port),
+			User:    make([]*protocol.User, len(rec.Users)),
 		}
 		for idx, rawUser := range rec.Users {
 			user := new(protocol.User)

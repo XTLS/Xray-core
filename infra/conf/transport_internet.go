@@ -711,6 +711,7 @@ type SocketConfig struct {
 	Interface            string                 `json:"interface"`
 	TcpMptcp             bool                   `json:"tcpMptcp"`
 	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
+	DestinationStrategy  string                 `json:"destinationStrategy"`
 }
 
 // Build implements Buildable.
@@ -780,6 +781,26 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		customSockopts = append(customSockopts, customSockopt)
 	}
 
+	destStrategy := internet.DestinationStrategy_None
+	switch strings.ToLower(c.DestinationStrategy) {
+	case "None", "":
+		destStrategy = internet.DestinationStrategy_None
+	case "srvportonly":
+		destStrategy = internet.DestinationStrategy_SrvPortOnly
+	case "srvaddressonly":
+		destStrategy = internet.DestinationStrategy_SrvAddressOnly
+	case "srvportandaddress":
+		destStrategy = internet.DestinationStrategy_SrvPortAndAddress
+	case "txtportonly":
+		destStrategy = internet.DestinationStrategy_TxtPortOnly
+	case "txtaddressonly":
+		destStrategy = internet.DestinationStrategy_TxtAddressOnly
+	case "txtportandaddress":
+		destStrategy = internet.DestinationStrategy_TxtPortAndAddress
+	default:
+		return nil, errors.New("unsupported destination strategy: ", c.DestinationStrategy)
+	}
+
 	return &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
@@ -798,6 +819,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
+		DestinationStrategy:  destStrategy,
 	}, nil
 }
 

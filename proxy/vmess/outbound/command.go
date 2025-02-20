@@ -26,7 +26,7 @@ func (h *Handler) handleSwitchAccount(cmd *protocol.CommandSwitchAccount) {
 	}
 	dest := net.TCPDestination(cmd.Host, cmd.Port)
 	until := time.Now().Add(time.Duration(cmd.ValidMin) * time.Minute)
-	h.serverList.AddServer(protocol.NewServerSpec(dest, protocol.BeforeTime(until), protocol.ServerEndpoint_None, user))
+	h.serverList.AddServer(protocol.NewServerSpec(dest, protocol.BeforeTime(until), user))
 }
 
 func (h *Handler) handleCommand(dest net.Destination, cmd protocol.ResponseCommand) {

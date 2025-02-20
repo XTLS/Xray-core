@@ -10,16 +10,7 @@ import "common/net/address.proto";
 import "common/protocol/user.proto";
 
 message ServerEndpoint {
-  enum RedirectStrategy {
-    // No redirection.
-    None = 0;
-
-    // Redirect based on SRV record.
-    BySrvRecord = 1;
-  }
-
   xray.common.net.IPOrDomain address = 1;
   uint32 port = 2;
   repeated xray.common.protocol.User user = 3;
-  RedirectStrategy redirectStrategy = 4;
 }
