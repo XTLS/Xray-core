@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"fmt"
+	gonet "net"
 	"reflect"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -67,6 +70,39 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	return handler, nil
 }
 
+func checkRedirectStrategy(ctx context.Context, rec *protocol.ServerSpec) (*net.Destination, error) {
+	if rec.RedirectStrategy() == protocol.ServerEndpoint_None {
+		return nil, nil
+	}
+	if rec.RedirectStrategy() == protocol.ServerEndpoint_BySrvRecord {
+		rawDest := rec.Destination()
+		if !rawDest.Address.Family().IsDomain() {
+			return nil, nil
+		}
+
+		errors.LogDebug(ctx, "get srv record for "+rawDest.Address.String())
+		parts := strings.SplitN(rawDest.Address.String(), ".", 3)
+		if len(parts) != 3 {
+			errors.LogError(ctx, "invalid address format:"+rawDest.Address.String())
+			return nil, errors.New("invalid address format")
+		}
+		_, srvRecords, err := gonet.DefaultResolver.LookupSRV(context.Background(), parts[0][1:], parts[1][1:], parts[2])
+		if err != nil {
+			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
+			return nil, err
+		}
+		for _, srvRecord := range srvRecords {
+			errors.LogDebug(ctx, "get srv record: "+fmt.Sprintf("addr=%s, port=%d, priority=%d, weight=%d", srvRecord.Target, srvRecord.Port, srvRecord.Priority, srvRecord.Weight))
+			newDest := rawDest
+			newDest.Address = net.ParseAddress(srvRecord.Target)
+			newDest.Port = net.Port(srvRecord.Port)
+
+			return &newDest, nil
+		}
+	}
+	return nil, nil
+}
+
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
@@ -78,10 +114,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var rec *protocol.ServerSpec
 	var conn stat.Connection
+	var tureDest net.Destination
 	if err := retry.ExponentialBackoff(5, 200).On(func() error {
 		rec = h.serverPicker.PickServer()
+
+		tureDest = rec.Destination()
+		if newDest, err := checkRedirectStrategy(ctx, rec); err == nil && newDest != nil {
+			errors.LogInfo(ctx, "replace destination with "+newDest.String())
+			tureDest = *newDest
+		}
+
 		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination())
+		conn, err = dialer.Dial(ctx, tureDest)
 		if err != nil {
 			return err
 		}
@@ -96,7 +140,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		iConn = statConn.Connection
 	}
 	target := ob.Target
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", tureDest.NetAddr())
 
 	command := protocol.RequestCommandTCP
 	if target.Network == net.Network_UDP {
