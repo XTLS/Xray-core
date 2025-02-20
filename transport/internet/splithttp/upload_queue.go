@@ -20,6 +20,7 @@ type Packet struct {
 
 type uploadQueue struct {
 	reader          io.ReadCloser
+	nomore          bool
 	pushedPackets   chan Packet
 	writeCloseMutex sync.Mutex
 	heap            uploadHeap
@@ -42,19 +43,15 @@ func (h *uploadQueue) Push(p Packet) error {
 	h.writeCloseMutex.Lock()
 	defer h.writeCloseMutex.Unlock()
 
-	runtime.Gosched()
-	if h.reader != nil && p.Reader != nil {
-		p.Reader.Close()
-		return errors.New("h.reader already exists")
-	}
-
 	if h.closed {
-		if p.Reader != nil {
-			p.Reader.Close()
-		}
 		return errors.New("packet queue closed")
 	}
-
+	if h.nomore {
+		return errors.New("h.reader already exists")
+	}
+	if p.Reader != nil {
+		h.nomore = true
+	}
 	h.pushedPackets <- p
 	return nil
 }
@@ -65,9 +62,20 @@ func (h *uploadQueue) Close() error {
 
 	if !h.closed {
 		h.closed = true
+		runtime.Gosched() // hope Read() gets the packet
+	f:
+		for {
+			select {
+			case p := <-h.pushedPackets:
+				if p.Reader != nil {
+					h.reader = p.Reader
+				}
+			default:
+				break f
+			}
+		}
 		close(h.pushedPackets)
 	}
-	runtime.Gosched()
 	if h.reader != nil {
 		return h.reader.Close()
 	}
