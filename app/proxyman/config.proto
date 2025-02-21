@@ -55,6 +55,8 @@ message SniffingConfig {
   bool metadata_only = 4;
 
   bool route_only = 5;
+
+  int64 timeout = 6;
 }
 
 message ReceiverConfig {

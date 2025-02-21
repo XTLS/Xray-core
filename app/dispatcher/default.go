@@ -31,10 +31,18 @@ type cachedReader struct {
 	sync.Mutex
 	reader *pipe.Reader
 	cache  buf.MultiBuffer
+
+	ReadBufferTimeout time.Duration
 }
 
 func (r *cachedReader) Cache(b *buf.Buffer) {
-	mb, _ := r.reader.ReadMultiBufferTimeout(time.Millisecond * 100)
+	var timeout time.Duration
+	if r.ReadBufferTimeout == 0 {
+		timeout = time.Millisecond * 100
+	} else {
+		timeout = r.ReadBufferTimeout
+	}
+	mb, _ := r.reader.ReadMultiBufferTimeout(timeout)
 	r.Lock()
 	if !mb.IsEmpty() {
 		r.cache, _ = buf.MergeMulti(r.cache, mb)
@@ -359,6 +367,8 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	defer payload.Release()
 
 	sniffer := NewSniffer(ctx)
+
+	cReader.ReadBufferTimeout = sniffer.Timeout
 
 	metaresult, metadataErr := sniffer.SniffMetadata(ctx)
 

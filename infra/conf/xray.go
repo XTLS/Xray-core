@@ -55,6 +55,7 @@ type SniffingConfig struct {
 	DomainsExcluded *StringList `json:"domainsExcluded"`
 	MetadataOnly    bool        `json:"metadataOnly"`
 	RouteOnly       bool        `json:"routeOnly"`
+	Timeout         int64       `json:"timeout"`
 }
 
 // Build implements Buildable.
@@ -92,6 +93,7 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		DomainsExcluded:     d,
 		MetadataOnly:        c.MetadataOnly,
 		RouteOnly:           c.RouteOnly,
+		Timeout:             c.Timeout,
 	}, nil
 }
 

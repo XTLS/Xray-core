@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -10,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/protocol/quic"
 	"github.com/xtls/xray-core/common/protocol/tls"
+	"github.com/xtls/xray-core/common/session"
 )
 
 type SniffResult interface {
@@ -30,9 +32,11 @@ type protocolSnifferWithMetadata struct {
 
 type Sniffer struct {
 	sniffer []protocolSnifferWithMetadata
+	Timeout time.Duration
 }
 
 func NewSniffer(ctx context.Context) *Sniffer {
+	content := session.ContentFromContext(ctx)
 	ret := &Sniffer{
 		sniffer: []protocolSnifferWithMetadata{
 			{func(c context.Context, b []byte) (SniffResult, error) { return http.SniffHTTP(b, c) }, false, net.Network_TCP},
@@ -41,6 +45,7 @@ func NewSniffer(ctx context.Context) *Sniffer {
 			{func(c context.Context, b []byte) (SniffResult, error) { return quic.SniffQUIC(b) }, false, net.Network_UDP},
 			{func(c context.Context, b []byte) (SniffResult, error) { return bittorrent.SniffUTP(b) }, false, net.Network_UDP},
 		},
+		Timeout: content.SniffingRequest.Timeout,
 	}
 	if sniffer, err := newFakeDNSSniffer(ctx); err == nil {
 		others := ret.sniffer

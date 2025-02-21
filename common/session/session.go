@@ -5,6 +5,7 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"time"
 
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -80,6 +81,7 @@ type SniffingRequest struct {
 	Enabled                        bool
 	MetadataOnly                   bool
 	RouteOnly                      bool
+	Timeout                        time.Duration
 }
 
 // Content is the metadata of the connection content.
