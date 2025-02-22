@@ -192,7 +192,7 @@ type SniffingConfig struct {
 	// message.
 	MetadataOnly bool `protobuf:"varint,4,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
 	RouteOnly    bool `protobuf:"varint,5,opt,name=route_only,json=routeOnly,proto3" json:"route_only,omitempty"`
-	IgnoreClientIp    bool `protobuf:"varint,6,opt,name=ignore_client_ip,json=ignoreClientIp,proto3" json:"ignoreClientIp,omitempty"`
+	IgnoreClientIp    bool `protobuf:"varint,6,opt,name=ignore_client_ip,json=ignoreClientIp,proto3" json:"ignore_client_ip,omitempty"`
 }
 
 func (x *SniffingConfig) Reset() {
