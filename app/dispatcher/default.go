@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -290,6 +291,19 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				}
 				if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 					ob.RouteTarget = destination
+					if sniffingRequest.IgnoreClientIp {
+						ips, err := d.dns.LookupIP(domain, dns.IPOption{
+							IPv4Enable: ob.OriginalTarget.Address.Family().IsIPv4(),
+							IPv6Enable: !ob.OriginalTarget.Address.Family().IsIPv4(),
+							FakeEnable: false,
+						})
+						if len(ips) == 0 || err != nil {
+							errors.LogWarning(ctx, "failed to resolve domain:", domain, ", Falling back to client-requested IP:", destination.Address.String())
+						} else {
+							destination.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+							ob.Target = destination
+						}
+					}
 				} else {
 					ob.Target = destination
 				}
@@ -344,6 +358,19 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			}
 			if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
 				ob.RouteTarget = destination
+				if sniffingRequest.IgnoreClientIp {
+					ips, err := d.dns.LookupIP(domain, dns.IPOption{
+						IPv4Enable: ob.OriginalTarget.Address.Family().IsIPv4(),
+						IPv6Enable: !ob.OriginalTarget.Address.Family().IsIPv4(),
+						FakeEnable: false,
+					})
+					if len(ips) == 0 || err != nil {
+						errors.LogWarning(ctx, "failed to resolve domain:", domain, ", Falling back to client-requested IP:", destination.Address.String())
+					} else {
+						destination.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+						ob.Target = destination
+					}
+				}
 			} else {
 				ob.Target = destination
 			}
