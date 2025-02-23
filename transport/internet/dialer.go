@@ -143,49 +143,79 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	return nil
 }
 
+// SrvPortOnly = 1;
+// SrvAddressOnly = 2;
+// SrvPortAndAddress = 3;
+// TxtPortOnly = 4;
+// TxtAddressOnly = 5;
+// TxtPortAndAddress = 6;
 func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
-	if !dest.Address.Family().IsDomain() || sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
+	if sockopt.DestinationStrategy == DestinationStrategy_None {
+		return nil, nil
+	}
+	newDest := dest
+	var OverridePort, OverrideAddress bool
+	var OverrideBy string
+	switch sockopt.DestinationStrategy {
+	case DestinationStrategy_SrvPortOnly:
+		OverridePort = true
+		OverrideAddress = false
+		OverrideBy = "srv"
+	case DestinationStrategy_SrvAddressOnly:
+		OverridePort = false
+		OverrideAddress = true
+		OverrideBy = "srv"
+	case DestinationStrategy_SrvPortAndAddress:
+		OverridePort = true
+		OverrideAddress = true
+		OverrideBy = "srv"
+	case DestinationStrategy_TxtPortOnly:
+		OverridePort = true
+		OverrideAddress = false
+		OverrideBy = "txt"
+	case DestinationStrategy_TxtAddressOnly:
+		OverridePort = false
+		OverrideAddress = true
+		OverrideBy = "txt"
+	case DestinationStrategy_TxtPortAndAddress:
+		OverridePort = true
+		OverrideAddress = true
+		OverrideBy = "txt"
+	default:
+		return nil, errors.New("unknown DestinationStrategy")
+	}
+	// sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly and skip this ????
+	//	if !dest.Address.Family().IsDomain() || sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
+
+	if !dest.Address.Family().IsDomain() {
 		return nil, nil
 	}
 
-	if sockopt.DestinationStrategy == DestinationStrategy_SrvPortOnly ||
-		sockopt.DestinationStrategy == DestinationStrategy_SrvAddressOnly ||
-		sockopt.DestinationStrategy == DestinationStrategy_SrvPortAndAddress {
-
+	if OverrideBy == "srv" {
 		errors.LogDebug(ctx, "query SRV record for "+dest.Address.String())
 		parts := strings.SplitN(dest.Address.String(), ".", 3)
 		if len(parts) != 3 {
-			errors.LogError(ctx, "invalid address format: "+dest.Address.String())
-			return nil, errors.New("invalid address format")
+			return nil, errors.New("invalid address format", dest.Address.String())
 		}
 		_, srvRecords, err := gonet.DefaultResolver.LookupSRV(context.Background(), parts[0][1:], parts[1][1:], parts[2])
 		if err != nil {
-			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
-			return nil, err
+			return nil, errors.New("failed to lookup SRV record").Base(err)
 		}
-		for _, srvRecord := range srvRecords {
-			errors.LogDebug(ctx, "SRV record: "+fmt.Sprintf("addr=%s, port=%d, priority=%d, weight=%d", srvRecord.Target, srvRecord.Port, srvRecord.Priority, srvRecord.Weight))
-			newDest := dest
-			if sockopt.DestinationStrategy == DestinationStrategy_SrvPortOnly {
-				newDest.Port = net.Port(srvRecord.Port)
-			} else if sockopt.DestinationStrategy == DestinationStrategy_SrvAddressOnly {
-				newDest.Address = net.ParseAddress(srvRecord.Target)
-			} else if sockopt.DestinationStrategy == DestinationStrategy_SrvPortAndAddress {
-				newDest.Address = net.ParseAddress(srvRecord.Target)
-				newDest.Port = net.Port(srvRecord.Port)
-			}
-
-			return &newDest, nil
+		errors.LogDebug(ctx, "SRV record: "+fmt.Sprintf("addr=%s, port=%d, priority=%d, weight=%d", srvRecords[0].Target, srvRecords[0].Port, srvRecords[0].Priority, srvRecords[0].Weight))
+		if OverridePort {
+			newDest.Port = net.Port(srvRecords[0].Port)
 		}
-	} else if sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly ||
-		sockopt.DestinationStrategy == DestinationStrategy_TxtAddressOnly ||
-		sockopt.DestinationStrategy == DestinationStrategy_TxtPortAndAddress {
-
+		if OverrideAddress {
+			newDest.Address = net.ParseAddress(srvRecords[0].Target)
+		}
+		return &newDest, nil
+	}
+	if OverrideBy == "txt" {
 		errors.LogDebug(ctx, "query TXT record for "+dest.Address.String())
 		txtRecords, err := gonet.DefaultResolver.LookupTXT(ctx, dest.Address.String())
 		if err != nil {
 			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
-			return nil, err
+			return nil, errors.New("failed to lookup SRV record").Base(err)
 		}
 		for _, txtRecord := range txtRecords {
 			errors.LogDebug(ctx, "TXT record: "+txtRecord)
@@ -197,13 +227,11 @@ func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt
 			}
 
 			newDest := dest
-			if sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
+			if OverridePort {
 				newDest.Port = port
-			} else if sockopt.DestinationStrategy == DestinationStrategy_TxtAddressOnly {
+			}
+			if OverrideAddress {
 				newDest.Address = addr
-			} else if sockopt.DestinationStrategy == DestinationStrategy_TxtPortAndAddress {
-				newDest.Address = addr
-				newDest.Port = port
 			}
 			return &newDest, nil
 		}
