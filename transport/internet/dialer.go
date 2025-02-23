@@ -143,12 +143,6 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	return nil
 }
 
-// SrvPortOnly = 1;
-// SrvAddressOnly = 2;
-// SrvPortAndAddress = 3;
-// TxtPortOnly = 4;
-// TxtAddressOnly = 5;
-// TxtPortAndAddress = 6;
 func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
 	if sockopt.DestinationStrategy == DestinationStrategy_None {
 		return nil, nil
@@ -226,7 +220,6 @@ func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt
 				continue
 			}
 
-			newDest := dest
 			if OverridePort {
 				newDest.Port = port
 			}
