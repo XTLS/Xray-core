@@ -1,7 +1,6 @@
 module github.com/xtls/xray-core
 
 go 1.23
-
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 	github.com/cloudflare/circl v1.6.0
@@ -22,7 +21,7 @@ require (
 	github.com/vishvananda/netlink v1.3.0
 	github.com/xtls/reality v0.0.0-20240712055506-48f0b2d5ed6d
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.34.0
 	golang.org/x/net v0.35.0
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.30.0
