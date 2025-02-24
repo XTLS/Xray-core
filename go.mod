@@ -1,6 +1,7 @@
 module github.com/xtls/xray-core
 
 go 1.23
+
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
 	github.com/cloudflare/circl v1.6.0
