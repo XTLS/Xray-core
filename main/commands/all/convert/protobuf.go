@@ -53,12 +53,12 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 	}
 
 	if len(unnamedArgs) < 1 {
-		base.Fatalf("empty config list")
+		base.Fatalf("invalid config list length: %d", len(unnamedArgs))
 	}
 
 	pbConfig, err := core.LoadConfig("auto", unnamedArgs)
 	if err != nil {
-		base.Fatalf(err.Error())
+		base.Fatalf("failed to load config: %s", err)
 	}
 
 	if optDump {

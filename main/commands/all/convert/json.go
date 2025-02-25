@@ -50,17 +50,17 @@ func executeTypedMessageToJson(cmd *base.Command, args []string) {
 
 	reader, err := confloader.LoadConfig(cmd.Flag.Arg(0))
 	if err != nil {
-		base.Fatalf(err.Error())
+		base.Fatalf("failed to load config: %s", err)
 	}
 
 	b, err := io.ReadAll(reader)
 	if err != nil {
-		base.Fatalf(err.Error())
+		base.Fatalf("failed to read config: %s", err)
 	}
 
 	tm := cserial.TypedMessage{}
 	if err = json.Unmarshal(b, &tm); err != nil {
-		base.Fatalf(err.Error())
+		base.Fatalf("failed to unmarshal config: %s", err)
 	}
 
 	if j, ok := creflect.MarshalToJson(&tm, injectTypeInfo); ok {
