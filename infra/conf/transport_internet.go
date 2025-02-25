@@ -711,6 +711,7 @@ type SocketConfig struct {
 	Interface            string                 `json:"interface"`
 	TcpMptcp             bool                   `json:"tcpMptcp"`
 	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
+	AddressPortStrategy  string                 `json:"addressPortStrategy"`
 }
 
 // Build implements Buildable.
@@ -780,6 +781,26 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		customSockopts = append(customSockopts, customSockopt)
 	}
 
+	addressPortStrategy := internet.AddressPortStrategy_None
+	switch strings.ToLower(c.AddressPortStrategy) {
+	case "none", "":
+		addressPortStrategy = internet.AddressPortStrategy_None
+	case "srvportonly":
+		addressPortStrategy = internet.AddressPortStrategy_SrvPortOnly
+	case "srvaddressonly":
+		addressPortStrategy = internet.AddressPortStrategy_SrvAddressOnly
+	case "srvportandaddress":
+		addressPortStrategy = internet.AddressPortStrategy_SrvPortAndAddress
+	case "txtportonly":
+		addressPortStrategy = internet.AddressPortStrategy_TxtPortOnly
+	case "txtaddressonly":
+		addressPortStrategy = internet.AddressPortStrategy_TxtAddressOnly
+	case "txtportandaddress":
+		addressPortStrategy = internet.AddressPortStrategy_TxtPortAndAddress
+	default:
+		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
+	}
+
 	return &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
@@ -798,6 +819,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
+		AddressPortStrategy:  addressPortStrategy,
 	}, nil
 }
 
