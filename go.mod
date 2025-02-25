@@ -3,7 +3,7 @@ module github.com/xtls/xray-core
 go 1.24
 
 require (
-	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0
+	github.com/OmarTariq612/goech v0.0.1
 	github.com/cloudflare/circl v1.6.0
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
