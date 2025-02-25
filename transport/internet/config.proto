@@ -23,7 +23,7 @@ enum DomainStrategy {
   FORCE_IP64 = 10;
 }
 
-enum DestinationStrategy {
+enum AddressPortStrategy {
   None = 0;
   SrvPortOnly = 1;
   SrvAddressOnly = 2;
@@ -127,5 +127,5 @@ message SocketConfig {
 
   repeated CustomSockopt customSockopt = 20;
 
-  DestinationStrategy destination_strategy = 21;
+  AddressPortStrategy address_port_strategy = 21;
 }

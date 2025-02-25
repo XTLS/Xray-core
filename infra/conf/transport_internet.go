@@ -711,7 +711,7 @@ type SocketConfig struct {
 	Interface            string                 `json:"interface"`
 	TcpMptcp             bool                   `json:"tcpMptcp"`
 	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
-	DestinationStrategy  string                 `json:"destinationStrategy"`
+	AddressPortStrategy  string                 `json:"addressPortStrategy"`
 }
 
 // Build implements Buildable.
@@ -781,24 +781,24 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		customSockopts = append(customSockopts, customSockopt)
 	}
 
-	destStrategy := internet.DestinationStrategy_None
-	switch strings.ToLower(c.DestinationStrategy) {
-	case "None", "":
-		destStrategy = internet.DestinationStrategy_None
+	addressPortStrategy := internet.AddressPortStrategy_None
+	switch strings.ToLower(c.AddressPortStrategy) {
+	case "none", "":
+		addressPortStrategy = internet.AddressPortStrategy_None
 	case "srvportonly":
-		destStrategy = internet.DestinationStrategy_SrvPortOnly
+		addressPortStrategy = internet.AddressPortStrategy_SrvPortOnly
 	case "srvaddressonly":
-		destStrategy = internet.DestinationStrategy_SrvAddressOnly
+		addressPortStrategy = internet.AddressPortStrategy_SrvAddressOnly
 	case "srvportandaddress":
-		destStrategy = internet.DestinationStrategy_SrvPortAndAddress
+		addressPortStrategy = internet.AddressPortStrategy_SrvPortAndAddress
 	case "txtportonly":
-		destStrategy = internet.DestinationStrategy_TxtPortOnly
+		addressPortStrategy = internet.AddressPortStrategy_TxtPortOnly
 	case "txtaddressonly":
-		destStrategy = internet.DestinationStrategy_TxtAddressOnly
+		addressPortStrategy = internet.AddressPortStrategy_TxtAddressOnly
 	case "txtportandaddress":
-		destStrategy = internet.DestinationStrategy_TxtPortAndAddress
+		addressPortStrategy = internet.AddressPortStrategy_TxtPortAndAddress
 	default:
-		return nil, errors.New("unsupported destination strategy: ", c.DestinationStrategy)
+		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
 	return &internet.SocketConfig{
@@ -819,7 +819,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		Interface:            c.Interface,
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
-		DestinationStrategy:  destStrategy,
+		AddressPortStrategy:  addressPortStrategy,
 	}, nil
 }
 

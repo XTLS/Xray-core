@@ -143,43 +143,41 @@ func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
 	return nil
 }
 
-func checkDestinationStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
-	if sockopt.DestinationStrategy == DestinationStrategy_None {
+func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
+	if sockopt.AddressPortStrategy == AddressPortStrategy_None {
 		return nil, nil
 	}
 	newDest := dest
 	var OverridePort, OverrideAddress bool
 	var OverrideBy string
-	switch sockopt.DestinationStrategy {
-	case DestinationStrategy_SrvPortOnly:
+	switch sockopt.AddressPortStrategy {
+	case AddressPortStrategy_SrvPortOnly:
 		OverridePort = true
 		OverrideAddress = false
 		OverrideBy = "srv"
-	case DestinationStrategy_SrvAddressOnly:
+	case AddressPortStrategy_SrvAddressOnly:
 		OverridePort = false
 		OverrideAddress = true
 		OverrideBy = "srv"
-	case DestinationStrategy_SrvPortAndAddress:
+	case AddressPortStrategy_SrvPortAndAddress:
 		OverridePort = true
 		OverrideAddress = true
 		OverrideBy = "srv"
-	case DestinationStrategy_TxtPortOnly:
+	case AddressPortStrategy_TxtPortOnly:
 		OverridePort = true
 		OverrideAddress = false
 		OverrideBy = "txt"
-	case DestinationStrategy_TxtAddressOnly:
+	case AddressPortStrategy_TxtAddressOnly:
 		OverridePort = false
 		OverrideAddress = true
 		OverrideBy = "txt"
-	case DestinationStrategy_TxtPortAndAddress:
+	case AddressPortStrategy_TxtPortAndAddress:
 		OverridePort = true
 		OverrideAddress = true
 		OverrideBy = "txt"
 	default:
-		return nil, errors.New("unknown DestinationStrategy")
+		return nil, errors.New("unknown AddressPortStrategy")
 	}
-	// sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly and skip this ????
-	//	if !dest.Address.Family().IsDomain() || sockopt.DestinationStrategy == DestinationStrategy_TxtPortOnly {
 
 	if !dest.Address.Family().IsDomain() {
 		return nil, nil
@@ -244,7 +242,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
 	}
 
-	if newDest, err := checkDestinationStrategy(ctx, dest, sockopt); err == nil && newDest != nil {
+	if newDest, err := checkAddressPortStrategy(ctx, dest, sockopt); err == nil && newDest != nil {
 		errors.LogInfo(ctx, "replace destination with "+newDest.String())
 		dest = *newDest
 	}
