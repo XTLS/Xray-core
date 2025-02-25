@@ -90,10 +90,10 @@ func whichProtoc(suffix, targetedVersion string) (string, error) {
 	path, err := exec.LookPath(protoc)
 	if err != nil {
 		return "", fmt.Errorf(`
-			Command "%s" not found.
-			Make sure that %s is in your system path or current path.
-			Download %s v%s or later from https://github.com/protocolbuffers/protobuf/releases
-			`, protoc, protoc, protoc, targetedVersion)
+Command "%s" not found.
+Make sure that %s is in your system path or current path.
+Download %s v%s or later from https://github.com/protocolbuffers/protobuf/releases
+`, protoc, protoc, protoc, targetedVersion)
 	}
 	return path, nil
 }
