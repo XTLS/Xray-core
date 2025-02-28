@@ -55,7 +55,7 @@ var (
 	test         = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
 	format       = cmdRun.Flag.String("format", "auto", "Format of input file.")
 	restoreStats = cmdRun.Flag.Bool("restore-stats", false, "Restore stats from previous session.")
-	statsFile    = cmdRun.Flag.String("statsfile", "xray_stats.json", "Path to the JSON file the stats will be restored from.")
+	statsFile    = cmdRun.Flag.String("statsfile", FileFromExeDir("xray_stats.json"), "Path to the JSON file the stats will be restored from.")
 
 	/* We have to do this here because Golang's Test will also need to parse flag, before
 	 * main func in this file is run.
@@ -140,6 +140,19 @@ func dirExists(file string) bool {
 	}
 	info, err := os.Stat(file)
 	return err == nil && info.IsDir()
+}
+
+// FileFromExeDir returns the absolute path of a file located in the Executable directory.
+func FileFromExeDir(fileName string) string {
+	exePath, err := os.Executable()
+	if err != nil {
+		msg := fmt.Sprintf("error getting executable path: %v", err)
+		fmt.Println(msg)
+
+		return fileName
+	}
+	exeDir := filepath.Dir(exePath)
+	return filepath.Join(exeDir, fileName)
 }
 
 func getRegepxByFormat() string {
