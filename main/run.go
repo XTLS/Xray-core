@@ -49,11 +49,13 @@ func init() {
 }
 
 var (
-	configFiles cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
-	configDir   string
-	dump        = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
-	test        = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
-	format      = cmdRun.Flag.String("format", "auto", "Format of input file.")
+	configFiles  cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
+	configDir    string
+	dump         = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
+	test         = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
+	format       = cmdRun.Flag.String("format", "auto", "Format of input file.")
+	restoreStats = cmdRun.Flag.Bool("restore-stats", false, "Restore stats from previous session.")
+	statsFile    = cmdRun.Flag.String("statsfile", "xray_stats.json", "Path to the JSON file the stats will be restored from.")
 
 	/* We have to do this here because Golang's Test will also need to parse flag, before
 	 * main func in this file is run.
@@ -85,6 +87,11 @@ func executeRun(cmd *base.Command, args []string) {
 	if *test {
 		fmt.Println("Configuration OK.")
 		os.Exit(0)
+	}
+
+	if *restoreStats {
+		fmt.Println("Restoring stats from previous session.")
+		RestoreStatistics(server, *statsFile)
 	}
 
 	if err := server.Start(); err != nil {
