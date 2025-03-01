@@ -3,10 +3,8 @@ package splithttp_test
 import (
 	"context"
 	"crypto/rand"
-	gotls "crypto/tls"
 	"fmt"
 	"io"
-	gonet "net"
 	"net/http"
 	"runtime"
 	"testing"
@@ -23,7 +21,6 @@ import (
 	. "github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"golang.org/x/net/http2"
 )
 
 func Test_ListenXHAndDial(t *testing.T) {
@@ -201,17 +198,11 @@ func Test_ListenXHAndDial_H2C(t *testing.T) {
 	common.Must(err)
 	defer listen.Close()
 
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
 	client := http.Client{
-		Transport: &http2.Transport{
-			// So http2.Transport doesn't complain the URL scheme isn't 'https'
-			AllowHTTP: true,
-			// even with AllowHTTP, http2.Transport will attempt to establish
-			// the connection using DialTLSContext. Disable TLS with custom
-			// dial context.
-			DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (gonet.Conn, error) {
-				var d gonet.Dialer
-				return d.DialContext(ctx, network, addr)
-			},
+		Transport: &http.Transport{
+			Protocols: protocols,
 		},
 	}
 
