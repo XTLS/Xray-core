@@ -24,8 +24,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 type requestHandler struct {
@@ -426,11 +424,15 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		handler.localAddr = l.listener.Addr()
 
-		// h2cHandler can handle both plaintext HTTP/1.1 and h2c
+		// server can handle both plaintext HTTP/1.1 and h2c
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		protocols.SetUnencryptedHTTP2(true)
 		l.server = http.Server{
-			Handler:           h2c.NewHandler(handler, &http2.Server{}),
+			Handler:           handler,
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    8192,
+			Protocols:         protocols,
 		}
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
