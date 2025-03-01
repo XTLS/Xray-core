@@ -1,10 +1,8 @@
 package tls
 
 import (
-	"encoding/json"
 	"encoding/pem"
 	"os"
-	"strings"
 
 	"github.com/OmarTariq612/goech"
 	"github.com/cloudflare/circl/hpke"
@@ -13,13 +11,13 @@ import (
 )
 
 var cmdECH = &base.Command{
-	UsageLine: `{{.Exec}} tls ech [--serverName (string)] [--json]`,
+	UsageLine: `{{.Exec}} tls ech [--serverName (string)] [--pem]`,
 	Short:     `Generate TLS-ECH certificates`,
 	Long: `
 Generate TLS-ECH certificates.
 
 Set serverName to your custom string: {{.Exec}} tls ech --serverName (string)
-Generate into json format: {{.Exec}} tls ech --json
+Generate into pem format: {{.Exec}} tls ech --pem
 `, // Enable PQ signature schemes: {{.Exec}} tls ech --pq-signature-schemes-enabled
 }
 
@@ -29,7 +27,7 @@ func init() {
 
 var input_pqSignatureSchemesEnabled = cmdECH.Flag.Bool("pqSignatureSchemesEnabled", false, "")
 var input_serverName = cmdECH.Flag.String("serverName", "cloudflare-ech.com", "")
-var input_json = cmdECH.Flag.Bool("json", false, "True == turn on json output")
+var input_pem = cmdECH.Flag.Bool("pem", false, "True == turn on pem output")
 
 func executeECH(cmd *base.Command, args []string) {
 	var kem hpke.KEM
@@ -50,25 +48,16 @@ func executeECH(cmd *base.Command, args []string) {
 	ECHKeySetList[0] = echKeySet
 	configBuffer, _ := ECHConfigList.MarshalBinary()
 	keyBuffer, _ := ECHKeySetList.MarshalBinary()
+	configStr, _ := ECHConfigList.ToBase64()
+	keySetStr, _ := ECHKeySetList.ToBase64()
 
 	configPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH CONFIGS", Bytes: configBuffer}))
 	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH KEYS", Bytes: keyBuffer}))
-	if *input_json {
-		jECHConfigs := map[string]interface{}{
-			"configs": strings.Split(strings.TrimSpace(string(configPEM)), "\n"),
-		}
-		jECHKey := map[string]interface{}{
-			"key": strings.Split(strings.TrimSpace(string(keyPEM)), "\n"),
-		}
-
-		for _, i := range []map[string]interface{}{jECHConfigs, jECHKey} {
-			content, err := json.MarshalIndent(i, "", "  ")
-			common.Must(err)
-			os.Stdout.Write(content)
-			os.Stdout.WriteString("\n")
-		}
-	} else {
+	if *input_pem {
 		os.Stdout.WriteString(configPEM)
 		os.Stdout.WriteString(keyPEM)
+	} else {
+		os.Stdout.WriteString("ECH config list: \n" + configStr + "\n")
+		os.Stdout.WriteString("ECH Key sets: \n" + keySetStr + "\n")
 	}
 }
