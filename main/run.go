@@ -40,6 +40,11 @@ The -test flag tells Xray to test config files only,
 without launching the server.
 
 The -dump flag tells Xray to print the merged config.
+
+The -restore-stats flag tells Xray to restore statistics from a JSON stats file.
+
+The -statsfile=file flag sets the path to the JSON file the stats will be restored from.
+Default is "xray_stats.json" located in the same dir as the xray executable.
 	`,
 }
 
@@ -54,7 +59,7 @@ var (
 	dump         = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
 	test         = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
 	format       = cmdRun.Flag.String("format", "auto", "Format of input file.")
-	restoreStats = cmdRun.Flag.Bool("restore-stats", false, "Restore stats from previous session.")
+	restoreStats = cmdRun.Flag.Bool("restore-stats", false, "Restore stats from json stats file.")
 	statsFile    = cmdRun.Flag.String("statsfile", FileFromExeDir("xray_stats.json"), "Path to the JSON file the stats will be restored from.")
 
 	/* We have to do this here because Golang's Test will also need to parse flag, before
