@@ -43,8 +43,13 @@ func executeECH(cmd *base.Command, args []string) {
 	echKeySet, err := goech.GenerateECHKeySet(0, *input_serverName, kem, nil)
 	common.Must(err)
 
-	configBuffer, _ := echKeySet.ECHConfig.MarshalBinary()
-	keyBuffer, _ := echKeySet.MarshalBinary()
+	// Make single key set to a list with only one element
+	ECHConfigList := make(goech.ECHConfigList, 1)
+	ECHConfigList[0] = echKeySet.ECHConfig
+	ECHKeySetList := make(goech.ECHKeySetList, 1)
+	ECHKeySetList[0] = echKeySet
+	configBuffer, _ := ECHConfigList.MarshalBinary()
+	keyBuffer, _ := ECHKeySetList.MarshalBinary()
 
 	configPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH CONFIGS", Bytes: configBuffer}))
 	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH KEYS", Bytes: keyBuffer}))

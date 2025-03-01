@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/OmarTariq612/goech"
 	"github.com/miekg/dns"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -23,31 +25,53 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	nameToQuery := c.ServerName
 	var DOHServer string
 
-	parts := strings.Split(c.Ech_DOHserver, "+")
-	if len(parts) == 2 {
-		// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
-		nameToQuery = parts[0]
-		DOHServer = parts[1]
-	} else if len(parts) == 1 {
-		// normal format
-		DOHServer = parts[0]
-	} else {
-		return errors.New("Invalid ECH DOH server format: ", c.Ech_DOHserver)
+	if len(c.EchConfig) != 0 {
+		parts := strings.Split(c.Ech_DOHserver, "+")
+		if len(parts) == 2 {
+			// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
+			nameToQuery = parts[0]
+			DOHServer = parts[1]
+		} else if len(parts) == 1 {
+			// normal format
+			DOHServer = parts[0]
+		} else {
+			return errors.New("Invalid ECH DOH server format: ", c.Ech_DOHserver)
+		}
+
+		if len(c.EchConfig) > 0 {
+			ECHConfig = c.EchConfig
+		} else { // ECH config > DOH lookup
+			if nameToQuery == "" {
+				return errors.New("Using DOH for ECH needs serverName or use dohServer format example.com+https://1.1.1.1/dns-query")
+			}
+			ECHConfig, err = QueryRecord(nameToQuery, DOHServer)
+			if err != nil {
+				return err
+			}
+		}
+
+		config.EncryptedClientHelloConfigList = ECHConfig
 	}
 
-	if len(c.EchConfig) > 0 {
-		ECHConfig = c.EchConfig
-	} else { // ECH config > DOH lookup
-		if nameToQuery == "" {
-			return errors.New("Using DOH for ECH needs serverName or use dohServer format example.com+https://1.1.1.1/dns-query")
-		}
-		ECHConfig, err = QueryRecord(nameToQuery, DOHServer)
+	if len(c.EchKeySets) != 0 {
+		var keys []tls.EncryptedClientHelloKey
+		KeySets, err := goech.UnmarshalECHKeySetList(c.EchKeySets)
 		if err != nil {
-			return err
+			return errors.New("Failed to unmarshal ECHKeySetList: ", err)
 		}
+		for idx, keySet := range KeySets {
+			ECHConfig, err := keySet.ECHConfig.MarshalBinary()
+			ECHPrivateKey, err := keySet.PrivateKey.MarshalBinary()
+			if err != nil {
+				return errors.New("Failed to marshal ECHKey in index: ", idx, "with err: ", err)
+			}
+			keys = append(keys, tls.EncryptedClientHelloKey{
+				Config:     ECHConfig,
+				PrivateKey: ECHPrivateKey})
+		}
+		config.EncryptedClientHelloKeys = keys
+		fmt.Println(config.EncryptedClientHelloKeys)
 	}
-
-	config.EncryptedClientHelloConfigList = ECHConfig
 	return nil
 }
 

@@ -92,9 +92,9 @@ message Config {
   */
   repeated string verify_peer_cert_in_names = 17;
 
+  bytes ech_config = 18;
 
+  string ech_DOHserver = 19;
 
-  bytes ech_config = 20;
-
-  string ech_DOHserver = 21;
+  bytes ech_key_sets = 20;
 }
