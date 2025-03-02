@@ -25,7 +25,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	nameToQuery := c.ServerName
 	var DOHServer string
 
-	if len(c.EchConfig) != 0 {
+	if len(c.EchConfig) != 0 || len(c.Ech_DOHserver) != 0 {
 		parts := strings.Split(c.Ech_DOHserver, "+")
 		if len(parts) == 2 {
 			// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
