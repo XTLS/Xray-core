@@ -18,7 +18,15 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-func TestQuicConnection(t *testing.T) {
+func TestShortQuicConnection(t *testing.T) {
+	testQuicConnection(t, 1024)
+}
+
+func TestLongQuicConnection(t *testing.T) {
+	testQuicConnection(t, 1500)
+}
+
+func testQuicConnection(t *testing.T, dataLen int32) {
 	port := udp.PickPort()
 
 	listener, err := quic.Listen(context.Background(), net.LocalHostIP, port, &internet.MemoryStreamConfig{
@@ -69,15 +77,14 @@ func TestQuicConnection(t *testing.T) {
 	common.Must(err)
 	defer conn.Close()
 
-	const N = 1024
-	b1 := make([]byte, N)
+	b1 := make([]byte, dataLen)
 	common.Must2(rand.Read(b1))
 	b2 := buf.New()
 
 	common.Must2(conn.Write(b1))
 
 	b2.Clear()
-	common.Must2(b2.ReadFullFrom(conn, N))
+	common.Must2(b2.ReadFullFrom(conn, dataLen))
 	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
 		t.Error(r)
 	}
@@ -85,7 +92,7 @@ func TestQuicConnection(t *testing.T) {
 	common.Must2(conn.Write(b1))
 
 	b2.Clear()
-	common.Must2(b2.ReadFullFrom(conn, N))
+	common.Must2(b2.ReadFullFrom(conn, dataLen))
 	if r := cmp.Diff(b2.Bytes(), b1); r != "" {
 		t.Error(r)
 	}

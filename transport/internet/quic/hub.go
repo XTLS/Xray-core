@@ -33,12 +33,7 @@ func (l *Listener) keepAccepting(ctx context.Context) {
 			time.Sleep(time.Second)
 			continue
 		}
-		l.addConn(&interConn{
-			ctx: ctx,
-			quicConn: conn,
-			local:  conn.LocalAddr(),
-			remote: conn.RemoteAddr(),
-		})
+		l.addConn(NewConnInitReader(ctx, conn, l.done, conn.RemoteAddr()))
 	}
 }
 
@@ -81,7 +76,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		KeepAlivePeriod:       0,
 		HandshakeIdleTimeout:  time.Second * 8,
 		MaxIdleTimeout:        time.Second * 300,
-		MaxIncomingStreams:    32,
+		MaxIncomingStreams:    2,
 		MaxIncomingUniStreams: -1,
 		EnableDatagrams:       true,
 	}
