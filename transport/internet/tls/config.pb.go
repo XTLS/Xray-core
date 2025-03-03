@@ -207,7 +207,7 @@ type Config struct {
 	// @Critical
 	PinnedPeerCertificateChainSha256 [][]byte `protobuf:"bytes,13,rep,name=pinned_peer_certificate_chain_sha256,json=pinnedPeerCertificateChainSha256,proto3" json:"pinned_peer_certificate_chain_sha256,omitempty"`
 	// @Document Some certificate public key sha256 hashes.
-	// @Document After normal validation (required), if the verified cert's public key hash does not match any of these values, the connection will be aborted.
+	// @Document After normal validation (required), if one of certs in verified chain matches one of these values, the connection will be eventually accepted.
 	// @Critical
 	PinnedPeerCertificatePublicKeySha256 [][]byte `protobuf:"bytes,14,rep,name=pinned_peer_certificate_public_key_sha256,json=pinnedPeerCertificatePublicKeySha256,proto3" json:"pinned_peer_certificate_public_key_sha256,omitempty"`
 	MasterKeyLog                         string   `protobuf:"bytes,15,opt,name=master_key_log,json=masterKeyLog,proto3" json:"master_key_log,omitempty"`

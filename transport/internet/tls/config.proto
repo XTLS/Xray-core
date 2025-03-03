@@ -76,7 +76,7 @@ message Config {
   repeated bytes pinned_peer_certificate_chain_sha256 = 13;
 
   /* @Document Some certificate public key sha256 hashes.
-     @Document After normal validation (required), if the verified cert's public key hash does not match any of these values, the connection will be aborted.
+     @Document After normal validation (required), if one of certs in verified chain matches one of these values, the connection will be eventually accepted.
      @Critical
   */
   repeated bytes pinned_peer_certificate_public_key_sha256 = 14;

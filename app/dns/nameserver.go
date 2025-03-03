@@ -45,11 +45,13 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		case strings.EqualFold(u.String(), "localhost"):
 			return NewLocalNameServer(queryStrategy), nil
 		case strings.EqualFold(u.Scheme, "https"): // DNS-over-HTTPS Remote mode
-			return NewDoHNameServer(u, dispatcher, queryStrategy, false)
+			return NewDoHNameServer(u, queryStrategy, dispatcher, false), nil
 		case strings.EqualFold(u.Scheme, "h2c"): // DNS-over-HTTPS h2c Remote mode
-			return NewDoHNameServer(u, dispatcher, queryStrategy, true)
+			return NewDoHNameServer(u, queryStrategy, dispatcher, true), nil
 		case strings.EqualFold(u.Scheme, "https+local"): // DNS-over-HTTPS Local mode
-			return NewDoHLocalNameServer(u, queryStrategy), nil
+			return NewDoHNameServer(u, queryStrategy, nil, false), nil
+		case strings.EqualFold(u.Scheme, "h2c+local"): // DNS-over-HTTPS h2c Local mode
+			return NewDoHNameServer(u, queryStrategy, nil, true), nil
 		case strings.EqualFold(u.Scheme, "quic+local"): // DNS-over-QUIC Local mode
 			return NewQUICNameServer(u, queryStrategy)
 		case strings.EqualFold(u.Scheme, "tcp"): // DNS-over-TCP Remote mode

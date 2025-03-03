@@ -1,13 +1,12 @@
 package splithttp
 
 import (
-	"crypto/rand"
-	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -184,9 +183,5 @@ func init() {
 }
 
 func (c RangeConfig) rand() int32 {
-	if c.From == c.To {
-		return c.From
-	}
-	bigInt, _ := rand.Int(rand.Reader, big.NewInt(int64(c.To-c.From)))
-	return c.From + int32(bigInt.Int64())
+	return int32(crypto.RandBetween(int64(c.From), int64(c.To)))
 }

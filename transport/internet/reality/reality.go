@@ -8,7 +8,6 @@ import (
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
 	gotls "crypto/tls"
@@ -16,7 +15,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -27,6 +25,7 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/reality"
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
@@ -213,13 +212,13 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 				}
 				times := 1
 				if !first {
-					times = int(randBetween(config.SpiderY[4], config.SpiderY[5]))
+					times = int(crypto.RandBetween(config.SpiderY[4], config.SpiderY[5]))
 				}
 				for j := 0; j < times; j++ {
 					if !first && j == 0 {
 						req.Header.Set("Referer", firstURL)
 					}
-					req.AddCookie(&http.Cookie{Name: "padding", Value: strings.Repeat("0", int(randBetween(config.SpiderY[0], config.SpiderY[1])))})
+					req.AddCookie(&http.Cookie{Name: "padding", Value: strings.Repeat("0", int(crypto.RandBetween(config.SpiderY[0], config.SpiderY[1])))})
 					if resp, err = client.Do(req); err != nil {
 						break
 					}
@@ -243,18 +242,18 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					}
 					maps.Unlock()
 					if !first {
-						time.Sleep(time.Duration(randBetween(config.SpiderY[6], config.SpiderY[7])) * time.Millisecond) // interval
+						time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[6], config.SpiderY[7])) * time.Millisecond) // interval
 					}
 				}
 			}
 			get(true)
-			concurrency := int(randBetween(config.SpiderY[2], config.SpiderY[3]))
+			concurrency := int(crypto.RandBetween(config.SpiderY[2], config.SpiderY[3]))
 			for i := 0; i < concurrency; i++ {
 				go get(false)
 			}
 			// Do not close the connection
 		}()
-		time.Sleep(time.Duration(randBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
+		time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
 		return nil, errors.New("REALITY: processed invalid connection").AtWarning()
 	}
 	return uConn, nil
@@ -271,7 +270,7 @@ var maps struct {
 }
 
 func getPathLocked(paths map[string]struct{}) string {
-	stopAt := int(randBetween(0, int64(len(paths)-1)))
+	stopAt := int(crypto.RandBetween(0, int64(len(paths)-1)))
 	i := 0
 	for s := range paths {
 		if i == stopAt {
@@ -280,12 +279,4 @@ func getPathLocked(paths map[string]struct{}) string {
 		i++
 	}
 	return "/"
-}
-
-func randBetween(left int64, right int64) int64 {
-	if left == right {
-		return left
-	}
-	bigInt, _ := rand.Int(rand.Reader, big.NewInt(right-left))
-	return left + bigInt.Int64()
 }
