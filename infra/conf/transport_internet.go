@@ -502,6 +502,7 @@ type REALITYConfig struct {
 
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
+	Password    string `json:"password"`
 	PublicKey   string `json:"publicKey"`
 	ShortId     string `json:"shortId"`
 	SpiderX     string `json:"spiderX"`
@@ -610,11 +611,14 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		if len(c.ServerNames) != 0 {
 			return nil, errors.New(`non-empty "serverNames", please use "serverName" instead`)
 		}
+		if c.Password != "" {
+			c.PublicKey = c.Password
+		}
 		if c.PublicKey == "" {
-			return nil, errors.New(`empty "publicKey"`)
+			return nil, errors.New(`empty "password"`)
 		}
 		if config.PublicKey, err = base64.RawURLEncoding.DecodeString(c.PublicKey); err != nil || len(config.PublicKey) != 32 {
-			return nil, errors.New(`invalid "publicKey": `, c.PublicKey)
+			return nil, errors.New(`invalid "password": `, c.PublicKey)
 		}
 		if len(c.ShortIds) != 0 {
 			return nil, errors.New(`non-empty "shortIds", please use "shortId" instead`)
