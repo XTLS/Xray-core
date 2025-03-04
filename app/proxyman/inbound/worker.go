@@ -324,6 +324,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 			if w.sniffingConfig != nil {
 				content.SniffingRequest.Enabled = w.sniffingConfig.Enabled
 				content.SniffingRequest.OverrideDestinationForProtocol = w.sniffingConfig.DestinationOverride
+				content.SniffingRequest.ExcludeForDomain = w.sniffingConfig.DomainsExcluded
 				content.SniffingRequest.MetadataOnly = w.sniffingConfig.MetadataOnly
 				content.SniffingRequest.RouteOnly = w.sniffingConfig.RouteOnly
 			}
