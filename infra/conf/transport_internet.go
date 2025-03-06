@@ -716,6 +716,7 @@ type SocketConfig struct {
 	TcpMptcp             bool                   `json:"tcpMptcp"`
 	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
 	AddressPortStrategy  string                 `json:"addressPortStrategy"`
+	DialTimeout          int32                  `json:"dialTimeout"`
 }
 
 // Build implements Buildable.
@@ -824,6 +825,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
 		AddressPortStrategy:  addressPortStrategy,
+		DialTimeout:          c.DialTimeout,
 	}, nil
 }
 

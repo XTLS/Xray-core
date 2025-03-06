@@ -128,4 +128,6 @@ message SocketConfig {
   repeated CustomSockopt customSockopt = 20;
 
   AddressPortStrategy address_port_strategy = 21;
+
+  int32 dial_timeout = 22;
 }
