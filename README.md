@@ -85,6 +85,7 @@
   - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
 - iOS & macOS arm64
+  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
 - macOS arm64 & x64
