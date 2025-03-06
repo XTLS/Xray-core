@@ -86,9 +86,9 @@
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [Happ - Proxy Utility](https://play.google.com/store/apps/details?id=com.happproxy)
 - iOS & macOS arm64
+  - [Happ - Proxy Utility](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215)
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
-  - [Happ - Proxy Utility](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215)
 - macOS arm64 & x64
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
