@@ -138,6 +138,22 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 // dnsQuery is the real func for sending type65 query for given domain to given DNS server.
 // return ECH config, TTL and error
 func dnsQuery(server string, domain string) ([]byte, uint32, error) {
+	if server == "xray" {
+		HTTPSRecord, err := internet.LookupHTTPS(domain)
+		if err !=nil {
+			return []byte{}, 0, errors.New("failed to lookup HTTPS record with xray internal DNS: ", err)
+		}
+		ECH := HTTPSRecord["ech"]
+		if ECH == "" {
+			return []byte{}, 0, errors.New("no ech record found")
+		}
+		Base64echConfigList, err := goech.ECHConfigListFromBase64(ECH)
+		if err != nil {
+			return []byte{}, 0, errors.New("failed to unmarshal ECHConfigList: ", err)
+		}
+		echConfigList, _ := Base64echConfigList.MarshalBinary()
+		return echConfigList, 600, nil
+	}
 	m := new(dns.Msg)
 	var dnsResolve []byte
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)

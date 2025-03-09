@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	mdns "github.com/miekg/dns"
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
@@ -42,6 +43,8 @@ type DoHNameServer struct {
 	dohURL        string
 	name          string
 	queryStrategy QueryStrategy
+
+	HTTPSCache map[string]*HTTPSRecord
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
@@ -58,6 +61,7 @@ func NewDoHNameServer(url *url.URL, queryStrategy QueryStrategy, dispatcher rout
 		name:          mode + "//" + url.Host,
 		dohURL:        url.String(),
 		queryStrategy: queryStrategy,
+		HTTPSCache:    make(map[string]*HTTPSRecord),
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -207,6 +211,21 @@ func (s *DoHNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	common.Must(s.cleanup.Start())
 }
 
+func (s *DoHNameServer) updateHTTPS(domain string, HTTPSRec *HTTPSRecord) {
+	s.Lock()
+	rec, found := s.HTTPSCache[domain]
+	if !found {
+		s.HTTPSCache[domain] = HTTPSRec
+	}
+	if found && rec.Expire.Before(time.Now()) {
+		s.HTTPSCache[domain] = HTTPSRec
+	}
+	errors.LogInfo(context.Background(), s.name, " got answer: ", domain, " ", "HTTPS", " -> ", HTTPSRec.keypair)
+
+	s.pub.Publish(domain+"HTTPS", nil)
+	s.Unlock()
+}
+
 func (s *DoHNameServer) newReqID() uint16 {
 	return 0
 }
@@ -269,6 +288,59 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 			s.updateIP(r, rec)
 		}(req)
 	}
+}
+
+func (s *DoHNameServer) sendHTTPSQuery(ctx context.Context, domain string) {
+	errors.LogInfo(ctx, s.name, " querying HTTPS record for: ", domain)
+	var deadline time.Time
+	if d, ok := ctx.Deadline(); ok {
+		deadline = d
+	} else {
+		deadline = time.Now().Add(time.Second * 5)
+	}
+	dnsCtx := ctx
+	// reserve internal dns server requested Inbound
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		dnsCtx = session.ContextWithInbound(dnsCtx, inbound)
+	}
+	dnsCtx = session.ContextWithContent(dnsCtx, &session.Content{
+		Protocol:       "https",
+		SkipDNSResolve: true,
+	})
+	var cancel context.CancelFunc
+	dnsCtx, cancel = context.WithDeadline(dnsCtx, deadline)
+	defer cancel()
+
+	m := new(mdns.Msg)
+	m.SetQuestion(mdns.Fqdn(domain), mdns.TypeHTTPS)
+	m.Id = 0
+	msg, _ := m.Pack()
+	response, err := s.dohHTTPSContext(dnsCtx, msg)
+	if err != nil {
+		errors.LogError(ctx, err, "failed to retrieve HTTPS query response for ", domain)
+		return
+	}
+	respMsg := new(mdns.Msg)
+	err = respMsg.Unpack(response)
+	if err != nil {
+		errors.LogError(ctx, err, "failed to parse HTTPS query response for ", domain)
+		return
+	}
+	var Record = HTTPSRecord{
+		keypair: map[string]string{},
+	}
+	if len(respMsg.Answer) > 0 {
+		for _, answer := range respMsg.Answer {
+			if https, ok := answer.(*mdns.HTTPS); ok && https.Hdr.Name == mdns.Fqdn(domain) {
+				for _, value := range https.Value {
+					Record.keypair[value.Key().String()] = value.String()
+				}
+			}
+		}
+	}
+	Record.Expire = time.Now().Add(time.Duration(respMsg.Answer[0].Header().Ttl) * time.Second)
+
+	s.updateHTTPS(domain, &Record)
 }
 
 func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, error) {
@@ -341,6 +413,27 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 	return nil, errRecordNotFound
 }
 
+func (s *DoHNameServer) findRecordsForDomain(domain string, Querytype string) (any, error) {
+	switch Querytype {
+	case "HTTPS":
+		s.RLock()
+		record, found := s.HTTPSCache[domain]
+		s.RUnlock()
+		if !found {
+			return nil, errRecordNotFound
+		}
+		if len(record.keypair) == 0 {
+			return nil, dns_feature.ErrEmptyResponse
+		}
+		if record.Expire.Before(time.Now()) {
+			return nil, errRecordNotFound
+		}
+		return record, nil
+	default:
+		return nil, errors.New("unsupported query type: " + Querytype)
+	}
+}
+
 // QueryIP implements Server.
 func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, error) { // nolint: dupl
 	fqdn := Fqdn(domain)
@@ -394,6 +487,47 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 		if err != errRecordNotFound {
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 			return ips, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-done:
+		}
+	}
+}
+
+// QueryHTTPS implements EnhancedServer.
+func (s *DoHNameServer) QueryHTTPS(ctx context.Context, domain string, disableCache bool) (map[string]string, error) { // nolint: dupl
+	fqdn := Fqdn(domain)
+
+	if disableCache {
+		errors.LogDebug(ctx, "DNS cache is disabled. Querying HTTPS for ", domain, " at ", s.name)
+	} else {
+		Record, err := s.findRecordsForDomain(fqdn, "HTTPS")
+		if err == nil || err == dns_feature.ErrEmptyResponse {
+			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", Record.(HTTPSRecord).keypair)
+			return Record.(HTTPSRecord).keypair, err
+		}
+	}
+	sub := s.pub.Subscribe(fqdn + "HTTPS")
+	defer sub.Close()
+	done := make(chan interface{})
+	go func() {
+		if sub != nil {
+			select {
+			case <-sub.Wait():
+			case <-ctx.Done():
+			}
+		}
+		close(done)
+	}()
+	s.sendHTTPSQuery(ctx, fqdn)
+
+	for {
+		Record, err := s.findRecordsForDomain(fqdn, "HTTPS")
+		if err != errRecordNotFound {
+			return Record.(*HTTPSRecord).keypair, err
 		}
 
 		select {

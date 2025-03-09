@@ -23,6 +23,13 @@ type Server interface {
 	QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns.IPOption, disableCache bool) ([]net.IP, error)
 }
 
+// Server is the interface for Enhanced Name Server.
+type EnhancedServer interface {
+	Server
+	// QueryHTTPS sends HTTPS queries to its configured server.
+	QueryHTTPS(ctx context.Context, domain string, disableCache bool) (map[string]string, error)
+}
+
 // Client is the interface for DNS client.
 type Client struct {
 	server       Server

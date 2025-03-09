@@ -29,6 +29,12 @@ type record struct {
 	AAAA *IPRecord
 }
 
+type HTTPSRecord struct {
+	keypair map[string]string
+	Expire time.Time
+	RCode  dnsmessage.RCode
+}
+
 // IPRecord is a cacheable item for a resolved domain
 type IPRecord struct {
 	ReqID  uint16

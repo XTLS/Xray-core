@@ -106,6 +106,14 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 	return ips, err
 }
 
+func LookupHTTPS(domain string) (map[string]string, error) {
+	if dnsClient == nil {
+		return nil, nil
+	}
+	HTTPSRecord, err := dnsClient.(dns.EnhancedClient).LookupHTTPS(domain)
+	return HTTPSRecord, err
+}
+
 func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
 	if dst.Address.Family().IsIP() || dnsClient == nil {
 		return false

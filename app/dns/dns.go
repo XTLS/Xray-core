@@ -210,6 +210,34 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	return nil, errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
+func (s *DNS) LookupHTTPS(domain string) (map[string]string, error) {
+	errs := []error{}
+	ctx := session.ContextWithInbound(s.ctx, &session.Inbound{Tag: s.tag})
+	for _, client := range s.sortClients(domain) {
+		if strings.EqualFold(client.Name(), "FakeDNS") {
+			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+			continue
+		}
+		EnhancedServer, ok := client.server.(EnhancedServer)
+		if !ok {
+			continue
+		}
+		HTTPSRecord, err := EnhancedServer.QueryHTTPS(ctx, domain, s.disableCache)
+		if len(HTTPSRecord) > 0 {
+			return HTTPSRecord, nil
+		}
+		if err != nil {
+			errors.LogInfoInner(s.ctx, err, "failed to lookup HTTPS for domain ", domain, " at server ", client.Name())
+			errs = append(errs, err)
+		}
+		// 5 for RcodeRefused in miekg/dns, hardcode to reduce binary size
+		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch && err != dns.ErrEmptyResponse && dns.RCodeFromError(err) != 5 {
+			return nil, err
+		}
+	}
+	return nil, errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
+}
+
 // LookupHosts implements dns.HostsLookup.
 func (s *DNS) LookupHosts(domain string) *net.Address {
 	domain = strings.TrimSuffix(domain, ".")

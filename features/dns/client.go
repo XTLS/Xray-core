@@ -24,6 +24,13 @@ type Client interface {
 	LookupIP(domain string, option IPOption) ([]net.IP, error)
 }
 
+type EnhancedClient interface {
+	Client
+
+	// LookupHTTPS returns HTTPS records for the given domain.
+	LookupHTTPS(domain string) (map[string]string, error)
+}
+
 type HostsLookup interface {
 	LookupHosts(domain string) *net.Address
 }
