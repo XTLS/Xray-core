@@ -412,8 +412,7 @@ type TLSConfig struct {
 	MasterKeyLog                         string           `json:"masterKeyLog"`
 	ServerNameToVerify                   string           `json:"serverNameToVerify"`
 	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
-	ECHConfig                            string           `json:"echConfig"`
-	ECHDNSServer                         string           `json:"echDnsServer"`
+	ECHConfigList                        string           `json:"echConfigList"`
 	EchKeySets                           string           `json:"echKeySets"`
 }
 
@@ -486,13 +485,8 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	config.VerifyPeerCertInNames = c.VerifyPeerCertInNames
 
-	if c.ECHConfig != "" {
-		ECHConfig, err := base64.StdEncoding.DecodeString(c.ECHConfig)
-		if err != nil {
-			return nil, errors.New("invalid ECH Config", c.ECHConfig)
-		}
-		config.EchConfig = ECHConfig
-	}
+	config.EchConfigList = c.ECHConfigList
+
 	if c.EchKeySets != "" {
 		EchPrivateKey, err := base64.StdEncoding.DecodeString(c.EchKeySets)
 		if err != nil {
@@ -500,7 +494,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchKeySets = EchPrivateKey
 	}
-	config.Ech_DNSserver = c.ECHDNSServer
 
 	return config, nil
 }
