@@ -25,8 +25,8 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	nameToQuery := c.ServerName
 	var DOHServer string
 
-	if len(c.EchConfig) != 0 || len(c.Ech_DOHserver) != 0 {
-		parts := strings.Split(c.Ech_DOHserver, "+")
+	if len(c.EchConfig) != 0 || len(c.Ech_DNSserver) != 0 {
+		parts := strings.Split(c.Ech_DNSserver, "+")
 		if len(parts) == 2 {
 			// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
 			nameToQuery = parts[0]
@@ -35,7 +35,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 			// normal format
 			DOHServer = parts[0]
 		} else {
-			return errors.New("Invalid ECH DOH server format: ", c.Ech_DOHserver)
+			return errors.New("Invalid ECH DOH server format: ", c.Ech_DNSserver)
 		}
 
 		if len(c.EchConfig) > 0 {
@@ -133,55 +133,89 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 // return ECH config, TTL and error
 func dohQuery(server string, domain string) ([]byte, uint32, error) {
 	m := new(dns.Msg)
+	var dnsResolve []byte
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)
-	// always 0 in DOH
-	m.Id = 0
-	msg, err := m.Pack()
-	if err != nil {
-		return []byte{}, 0, err
-	}
-	// All traffic sent by core should via xray's internet.DialSystem
-	// This involves the behavior of some Android VPN GUI clients
-	tr := &http.Transport{
-		IdleConnTimeout:   90 * time.Second,
-		ForceAttemptHTTP2: true,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			dest, err := net.ParseDestination(network + ":" + addr)
-			if err != nil {
-				return nil, err
-			}
-			conn, err := internet.DialSystem(ctx, dest, nil)
-			if err != nil {
-				return nil, err
-			}
-			return conn, nil
-		},
-	}
-	client := &http.Client{
-		Timeout:   5 * time.Second,
-		Transport: tr,
-	}
-	req, err := http.NewRequest("POST", server, bytes.NewReader(msg))
-	if err != nil {
-		return []byte{}, 0, err
-	}
-	req.Header.Set("Content-Type", "application/dns-message")
-	resp, err := client.Do(req)
-	if err != nil {
-		return []byte{}, 0, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return []byte{}, 0, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return []byte{}, 0, errors.New("query failed with response code:", resp.StatusCode)
+	// for DOH server
+	if strings.HasPrefix(server, "https://") {
+		// always 0 in DOH
+		m.Id = 0
+		msg, err := m.Pack()
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		// All traffic sent by core should via xray's internet.DialSystem
+		// This involves the behavior of some Android VPN GUI clients
+		tr := &http.Transport{
+			IdleConnTimeout:   90 * time.Second,
+			ForceAttemptHTTP2: true,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dest, err := net.ParseDestination(network + ":" + addr)
+				if err != nil {
+					return nil, err
+				}
+				conn, err := internet.DialSystem(ctx, dest, nil)
+				if err != nil {
+					return nil, err
+				}
+				return conn, nil
+			},
+		}
+		client := &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: tr,
+		}
+		req, err := http.NewRequest("POST", server, bytes.NewReader(msg))
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		req.Header.Set("Content-Type", "application/dns-message")
+		resp, err := client.Do(req)
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return []byte{}, 0, errors.New("query failed with response code:", resp.StatusCode)
+		}
+		dnsResolve = respBody
+	} else if strings.HasPrefix(server, "udp://") { // for classic udp dns server
+		udpServerAddr := server[len("udp://"):]
+		// default port 53 if not specified
+		if !strings.Contains(udpServerAddr, ":") {
+			udpServerAddr = udpServerAddr + ":53"
+		}
+		dest, err := net.ParseDestination("udp" + ":" + udpServerAddr)
+		if err != nil {
+			return nil, 0, errors.New("failed to parse udp dns server ", udpServerAddr, " for ECH: ", err)
+		}
+		dnsTimeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		// use xray's internet.DialSystem as mentioned above
+		conn, err := internet.DialSystem(dnsTimeoutCtx, dest, nil)
+		defer conn.Close()
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		msg, err := m.Pack()
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		conn.Write(msg)
+		udpResponse := make([]byte, 512)
+		_, err = conn.Read(udpResponse)
+		if err != nil {
+			return []byte{}, 0, err
+		}
+		dnsResolve = udpResponse
 	}
 	respMsg := new(dns.Msg)
-	err = respMsg.Unpack(respBody)
+	err := respMsg.Unpack(dnsResolve)
 	if err != nil {
-		return []byte{}, 0, err
+		return []byte{}, 0, errors.New("failed to unpack dns response for ECH: ", err)
 	}
 	if len(respMsg.Answer) > 0 {
 		for _, answer := range respMsg.Answer {
