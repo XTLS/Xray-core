@@ -94,7 +94,7 @@ message Config {
 
   bytes ech_config = 18;
 
-  string ech_DOHserver = 19;
+  string ech_DNSserver = 19;
 
   bytes ech_key_sets = 20;
 }

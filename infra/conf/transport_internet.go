@@ -413,7 +413,7 @@ type TLSConfig struct {
 	ServerNameToVerify                   string           `json:"serverNameToVerify"`
 	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
 	ECHConfig                            string           `json:"echConfig"`
-	ECHDOHServer                         string           `json:"echDohServer"`
+	ECHDNSServer                         string           `json:"echDnsServer"`
 	EchKeySets                           string           `json:"echKeySets"`
 }
 
@@ -500,7 +500,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchKeySets = EchPrivateKey
 	}
-	config.Ech_DOHserver = c.ECHDOHServer
+	config.Ech_DNSserver = c.ECHDNSServer
 
 	return config, nil
 }
