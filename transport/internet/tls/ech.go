@@ -22,7 +22,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	var err error
 
 	nameToQuery := c.ServerName
-	var DOHServer string
+	var DNSServer string
 
 	// for client
 	if len(c.EchConfigList) != 0 {
@@ -37,19 +37,19 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		} else { // query config from dns
 			parts := strings.Split(c.EchConfigList, "+")
 			if len(parts) == 2 {
-				// parse ECH DOH server in format of "example.com+https://1.1.1.1/dns-query"
+				// parse ECH DNS server in format of "example.com+https://1.1.1.1/dns-query"
 				nameToQuery = parts[0]
-				DOHServer = parts[1]
+				DNSServer = parts[1]
 			} else if len(parts) == 1 {
 				// normal format
-				DOHServer = parts[0]
+				DNSServer = parts[0]
 			} else {
 				return errors.New("Invalid ECH DNS server format: ", c.EchConfigList)
 			}
 			if nameToQuery == "" {
-				return errors.New("Using DOH for ECH needs serverName or use dohServer format example.com+https://1.1.1.1/dns-query")
+				return errors.New("Using DNS for ECH Config needs serverName or use Server format example.com+https://1.1.1.1/dns-query")
 			}
-			ECHConfig, err = QueryRecord(nameToQuery, DOHServer)
+			ECHConfig, err = QueryRecord(nameToQuery, DNSServer)
 			if err != nil {
 				return err
 			}
@@ -94,7 +94,7 @@ var (
 )
 
 // QueryRecord returns the ECH config for given domain.
-// If the record is not in cache or expired, it will query the DOH server and update the cache.
+// If the record is not in cache or expired, it will query the DNS server and update the cache.
 func QueryRecord(domain string, server string) ([]byte, error) {
 	val, found := dnsCache.Load(domain)
 	rec, _ := val.(record)
@@ -114,9 +114,9 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 		return rec.echConfig, nil
 	}
 
-	// Query ECH config from DOH server
+	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
-	echConfig, ttl, err := dohQuery(server, domain)
+	echConfig, ttl, err := dnsQuery(server, domain)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -135,9 +135,9 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	return echConfig, nil
 }
 
-// dohQuery is the real func for sending type65 query for given domain to given DOH server.
+// dnsQuery is the real func for sending type65 query for given domain to given DNS server.
 // return ECH config, TTL and error
-func dohQuery(server string, domain string) ([]byte, uint32, error) {
+func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 	m := new(dns.Msg)
 	var dnsResolve []byte
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)
