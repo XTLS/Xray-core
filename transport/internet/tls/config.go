@@ -444,7 +444,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 			config.KeyLogWriter = writer
 		}
 	}
-	if len(c.EchConfig) > 0 || len(c.Ech_DNSserver) > 0 || len(c.EchKeySets) > 0 {
+	if len(c.EchConfigList) > 0 || len(c.EchKeySets) > 0 {
 		err := ApplyECH(c, config)
 		if err != nil {
 			errors.LogError(context.Background(), err)
