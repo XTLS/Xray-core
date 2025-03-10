@@ -41,6 +41,7 @@ func NewConnInitReader(ctx context.Context, quicConn quic.Connection, done *done
 	go func() {
 		for {
 			received, e := c.quicConn.ReceiveDatagram(c.ctx)
+			errors.LogInfo(c.ctx, "Read ReceiveDatagram ", len(received))
 			c.readChannel <- readResult{buffer: received, err: e}
 		}
 	}()
@@ -51,6 +52,7 @@ func NewConnInitReader(ctx context.Context, quicConn quic.Connection, done *done
 func (c *interConn) acceptStreams() {
 	for {
 		stream, err := c.quicConn.AcceptStream(context.Background())
+		errors.LogInfo(c.ctx, "Read AcceptStream ", err)
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to accept stream")
 			select {
@@ -70,6 +72,7 @@ func (c *interConn) acceptStreams() {
 			for {
 				received := make([]byte, buf.Size)
 				i, e := stream.Read(received)
+				errors.LogInfo(c.ctx, "Read stream ", i)
 				c.readChannel <- readResult{buffer: received[:i], err: e}
 			}
 		}()
@@ -83,6 +86,7 @@ func (c *interConn) Read(b []byte) (int, error) {
 		return 0, received.err
 	}
 	nBytes := copy(b, received.buffer[:])
+	errors.LogInfo(c.ctx, "Read copy ", nBytes)
 	return nBytes, nil
 }
 
@@ -95,9 +99,11 @@ func (c *interConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 func (c *interConn) Write(b []byte) (int, error) {
 	var err = c.quicConn.SendDatagram(b)
+	errors.LogInfo(c.ctx, "Write SendDatagram ", len(b), err)
 	if _, ok := err.(*quic.DatagramTooLargeError); ok {
 		if len(c.streams) < MaxIncomingStreams {
 			stream, err := c.quicConn.OpenStream()
+			errors.LogInfo(c.ctx, "Write OpenStream ", err)
 			if err == nil {
 				c.streams = append(c.streams, stream)
 			} else {
@@ -108,6 +114,7 @@ func (c *interConn) Write(b []byte) (int, error) {
 		if currentStream > len(c.streams) - 1 {
 			currentStream = 0;
 		}
+		errors.LogInfo(c.ctx, "Write stream ", len(b), currentStream, len(c.streams))
 		return c.streams[currentStream].Write(b)
 	}
 	if err != nil {

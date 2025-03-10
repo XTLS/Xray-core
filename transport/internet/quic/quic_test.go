@@ -89,6 +89,8 @@ func testQuicConnection(t *testing.T, dataLen int32) {
 		t.Error(r)
 	}
 
+	time.Sleep(1000 * time.Millisecond)
+
 	common.Must2(conn.Write(b1))
 
 	b2.Clear()
