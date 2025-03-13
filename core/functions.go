@@ -14,9 +14,11 @@ import (
 
 // CreateObject creates a new object based on the given Xray instance and config. The Xray instance may be nil.
 func CreateObject(v *Instance, config interface{}) (interface{}, error) {
-	ctx := v.ctx
+	var ctx context.Context
 	if v != nil {
 		ctx = toContext(v.ctx, v)
+	} else {
+		ctx = context.Background()
 	}
 	return common.CreateObject(ctx, config)
 }
