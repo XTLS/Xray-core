@@ -167,6 +167,7 @@ func NewClient(
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
 		client.expectIPs = matchers
+		client.ignoreExpectIPsWhenNoMatch = ns.IgnoreExpectIPsWhenNoMatch
 		return nil
 	})
 	return client, err
