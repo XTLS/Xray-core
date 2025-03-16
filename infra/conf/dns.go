@@ -12,14 +12,14 @@ import (
 )
 
 type NameServerConfig struct {
-	Address                     *Address   `json:"address"`
-	ClientIP                    *Address   `json:"clientIp"`
-	Port                        uint16     `json:"port"`
-	SkipFallback                bool       `json:"skipFallback"`
-	Domains                     []string   `json:"domains"`
-	ExpectIPs                   StringList `json:"expectIps"`
-	QueryStrategy               string     `json:"queryStrategy"`
-	IgnoreExpectIPsWhenNonMatch bool       `json:"ignoreExpectIpsWhenNonMatch"`
+	Address            *Address   `json:"address"`
+	ClientIP           *Address   `json:"clientIp"`
+	Port               uint16     `json:"port"`
+	SkipFallback       bool       `json:"skipFallback"`
+	Domains            []string   `json:"domains"`
+	ExpectIPs          StringList `json:"expectIps"`
+	QueryStrategy      string     `json:"queryStrategy"`
+	AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
@@ -30,14 +30,14 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address                     *Address   `json:"address"`
-		ClientIP                    *Address   `json:"clientIp"`
-		Port                        uint16     `json:"port"`
-		SkipFallback                bool       `json:"skipFallback"`
-		Domains                     []string   `json:"domains"`
-		ExpectIPs                   StringList `json:"expectIps"`
-		QueryStrategy               string     `json:"queryStrategy"`
-		IgnoreExpectIPsWhenNonMatch bool       `json:"ignoreExpectIpsWhenNonMatch"`
+		Address            *Address   `json:"address"`
+		ClientIP           *Address   `json:"clientIp"`
+		Port               uint16     `json:"port"`
+		SkipFallback       bool       `json:"skipFallback"`
+		Domains            []string   `json:"domains"`
+		ExpectIPs          StringList `json:"expectIps"`
+		QueryStrategy      string     `json:"queryStrategy"`
+		AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -47,7 +47,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.Domains = advanced.Domains
 		c.ExpectIPs = advanced.ExpectIPs
 		c.QueryStrategy = advanced.QueryStrategy
-		c.IgnoreExpectIPsWhenNonMatch = advanced.IgnoreExpectIPsWhenNonMatch
+		c.AllowUnexpectedIPs = advanced.AllowUnexpectedIPs
 		return nil
 	}
 
@@ -114,13 +114,13 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 			Address: c.Address.Build(),
 			Port:    uint32(c.Port),
 		},
-		ClientIp:                    myClientIP,
-		SkipFallback:                c.SkipFallback,
-		PrioritizedDomain:           domains,
-		Geoip:                       geoipList,
-		OriginalRules:               originalRules,
-		QueryStrategy:               resolveQueryStrategy(c.QueryStrategy),
-		IgnoreExpectIPsWhenNonMatch: c.IgnoreExpectIPsWhenNonMatch,
+		ClientIp:           myClientIP,
+		SkipFallback:       c.SkipFallback,
+		PrioritizedDomain:  domains,
+		Geoip:              geoipList,
+		OriginalRules:      originalRules,
+		QueryStrategy:      resolveQueryStrategy(c.QueryStrategy),
+		AllowUnexpectedIPs: c.AllowUnexpectedIPs,
 	}, nil
 }
 
