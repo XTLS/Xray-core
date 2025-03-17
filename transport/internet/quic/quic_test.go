@@ -22,6 +22,10 @@ func TestShortQuicConnection(t *testing.T) {
 	testQuicConnection(t, 1024)
 }
 
+func TestAroundMTUQuicConnection(t *testing.T) {
+	testQuicConnection(t, 1247)
+}
+
 func TestLongQuicConnection(t *testing.T) {
 	testQuicConnection(t, 1500)
 }
