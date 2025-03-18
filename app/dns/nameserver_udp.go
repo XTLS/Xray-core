@@ -27,12 +27,17 @@ type ClassicNameServer struct {
 	name          string
 	address       *net.Destination
 	ips           map[string]*record
-	requests      map[uint16]*dnsRequest
+	requests      map[uint16]*udpDnsRequest
 	pub           *pubsub.Service
 	udpServer     *udp.Dispatcher
 	cleanup       *task.Periodic
 	reqID         uint32
 	queryStrategy QueryStrategy
+}
+
+type udpDnsRequest struct {
+	dnsRequest
+	ctx context.Context
 }
 
 // NewClassicNameServer creates udp server object for remote resolving.
@@ -45,7 +50,7 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 	s := &ClassicNameServer{
 		address:       &address,
 		ips:           make(map[string]*record),
-		requests:      make(map[uint16]*dnsRequest),
+		requests:      make(map[uint16]*udpDnsRequest),
 		pub:           pubsub.NewService(),
 		name:          strings.ToUpper(address.String()),
 		queryStrategy: queryStrategy,
@@ -101,7 +106,7 @@ func (s *ClassicNameServer) Cleanup() error {
 	}
 
 	if len(s.requests) == 0 {
-		s.requests = make(map[uint16]*dnsRequest)
+		s.requests = make(map[uint16]*udpDnsRequest)
 	}
 
 	return nil
@@ -129,7 +134,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 	}
 
 	// if truncated, retry with EDNS0 option(udp payload size: 1350)
-	if ipRec.Truncated {
+	if ipRec.RawHeader.Truncated {
 		// if already has EDNS0 option, no need to retry
 		if ok && len(req.msg.Additionals) == 0 {
 			// copy necessary meta data from original request
@@ -199,7 +204,7 @@ func (s *ClassicNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }
 
-func (s *ClassicNameServer) addPendingRequest(req *dnsRequest) {
+func (s *ClassicNameServer) addPendingRequest(req *udpDnsRequest) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -214,8 +219,11 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, client
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
 
 	for _, req := range reqs {
-		req.ctx = ctx
-		s.addPendingRequest(req)
+		udpReq := &udpDnsRequest{
+			dnsRequest: *req,
+			ctx:        ctx,
+		}
+		s.addPendingRequest(udpReq)
 		b, _ := dns.PackMessage(req.msg)
 		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
 	}

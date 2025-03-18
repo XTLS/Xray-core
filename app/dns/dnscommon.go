@@ -31,13 +31,11 @@ type record struct {
 
 // IPRecord is a cacheable item for a resolved domain
 type IPRecord struct {
-	ReqID  uint16
-	IP     []net.Address
-	Expire time.Time
-	RCode  dnsmessage.RCode
-
-	// Truncated is for udp dns to indicates if the response is truncated and needs to be retried
-	Truncated bool
+	ReqID     uint16
+	IP        []net.Address
+	Expire    time.Time
+	RCode     dnsmessage.RCode
+	RawHeader *dnsmessage.Header
 }
 
 func (r *IPRecord) getIPs() ([]net.Address, error) {
@@ -68,7 +66,6 @@ type dnsRequest struct {
 	start   time.Time
 	expire  time.Time
 	msg     *dnsmessage.Message
-	ctx     context.Context
 }
 
 func genEDNS0Options(clientIP net.IP) *dnsmessage.Resource {
@@ -186,7 +183,7 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 		ReqID:     h.ID,
 		RCode:     h.RCode,
 		Expire:    now.Add(time.Second * 600),
-		Truncated: h.Truncated,
+		RawHeader: &h,
 	}
 
 L:
