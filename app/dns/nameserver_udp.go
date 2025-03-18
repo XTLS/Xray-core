@@ -128,6 +128,26 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 		return
 	}
 
+	// if truncated, retry with EDNS0 option(udp payload size: 1350)
+	if ipRec.Truncated {
+		// if already has EDNS0 option, no need to retry
+		if ok && len(req.msg.Additionals) == 0 {
+			// copy necessary meta data from original request
+			// and add EDNS0 option
+			opt := new(dnsmessage.Resource)
+			common.Must(opt.Header.SetEDNS0(1350, 0xfe00, true))
+			newMsg := *req.msg
+			newReq := *req
+			newMsg.Additionals = append(newMsg.Additionals, *opt)
+			newMsg.ID = s.newReqID()
+			newReq.msg = &newMsg
+			s.addPendingRequest(&newReq)
+			b, _ := dns.PackMessage(req.msg)
+			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
+			return
+		}
+	}
+
 	var rec record
 	switch req.reqType {
 	case dnsmessage.TypeA:
@@ -194,6 +214,7 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, client
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
 
 	for _, req := range reqs {
+		req.ctx = ctx
 		s.addPendingRequest(req)
 		b, _ := dns.PackMessage(req.msg)
 		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
