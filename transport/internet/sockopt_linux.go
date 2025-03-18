@@ -3,6 +3,7 @@ package internet
 import (
 	"net"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -103,30 +104,38 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 
-		if len(config.CustomSockopt) > 0 {
-			for _, custom := range config.CustomSockopt {
-				var level = 0x6 // default TCP
-				var opt int
-				if len(custom.Opt) == 0 {
-					return errors.New("No opt!")
-				} else {
-					opt, _ = strconv.Atoi(custom.Opt)
+	}
+
+	if len(config.CustomSockopt) > 0 {
+		for _, custom := range config.CustomSockopt {
+			// Skip unwanted network type
+			// network might be tcp4 or tcp6
+			// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
+			// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
+			if !strings.HasPrefix(network, custom.Network) {
+				continue
+			}
+			var level = 0x6 // default TCP
+			var opt int
+			if len(custom.Opt) == 0 {
+				return errors.New("No opt!")
+			} else {
+				opt, _ = strconv.Atoi(custom.Opt)
+			}
+			if custom.Level != "" {
+				level, _ = strconv.Atoi(custom.Level)
+			}
+			if custom.Type == "int" {
+				value, _ := strconv.Atoi(custom.Value)
+				if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+					return errors.New("failed to set CustomSockoptInt", opt, value, err)
 				}
-				if custom.Level != "" {
-					level, _ = strconv.Atoi(custom.Level)
+			} else if custom.Type == "str" {
+				if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 				}
-				if custom.Type == "int" {
-					value, _ := strconv.Atoi(custom.Value)
-					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
-						return errors.New("failed to set CustomSockoptInt", opt, value, err)
-					}
-				} else if custom.Type == "str" {
-					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
-						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
-					}
-				} else {
-					return errors.New("unknown CustomSockopt type:", custom.Type)
-				}
+			} else {
+				return errors.New("unknown CustomSockopt type:", custom.Type)
 			}
 		}
 	}

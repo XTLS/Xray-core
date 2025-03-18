@@ -33,7 +33,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err != nil {
 			return errors.New("failed to find the interface").Base(err)
 		}
-		isV4 := (network == "tcp4")
+		isV4 := (network == "tcp4" || network == "udp4")
 		if isV4 {
 			var bytes [4]byte
 			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))

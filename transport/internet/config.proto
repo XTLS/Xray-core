@@ -69,6 +69,7 @@ message CustomSockopt {
   string opt = 2;
   string value = 3;
   string type = 4;
+  string network = 5;
 }
 
 // SocketConfig is options to be applied on network sockets.
