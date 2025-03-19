@@ -4,6 +4,7 @@ package dns
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -250,7 +251,11 @@ func (s *DNS) sortClients(domain string) []*Client {
 
 	// Priority domain matching
 	hasMatch := false
-	for _, match := range s.domainMatcher.Match(domain) {
+	MatchSlice := s.domainMatcher.Match(domain)
+	sort.Slice(MatchSlice, func(i, j int) bool {
+		return MatchSlice[i] < MatchSlice[j]
+	})
+	for _, match := range MatchSlice {
 		info := s.matcherInfos[match]
 		client := s.clients[info.clientIdx]
 		domainRule := client.domains[info.domainRuleIdx]
