@@ -147,7 +147,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			newMsg.ID = s.newReqID()
 			newReq.msg = &newMsg
 			s.addPendingRequest(&newReq)
-			b, _ := dns.PackMessage(req.msg)
+			b, _ := dns.PackMessage(newReq.msg)
 			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
 			return
 		}
