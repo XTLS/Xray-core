@@ -73,7 +73,14 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 				return nil, err
 			}
 			sys.Control(func(fd uintptr) {
-				if err := applyOutboundSocketOptions("udp", dest.NetAddr(), fd, sockopt); err != nil {
+				// applyOutboundSocketOptions needs to netwotk with specified network stack(udp4/udp6)
+				var network string
+				if destAddr.IP.To4() != nil {
+					network = "udp4"
+				} else {
+					network = "udp6"
+				}
+				if err := applyOutboundSocketOptions(network, dest.NetAddr(), fd, sockopt); err != nil {
 					errors.LogInfo(ctx, err, "failed to apply socket options")
 				}
 			})
