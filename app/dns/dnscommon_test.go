@@ -85,8 +85,9 @@ func Test_parseResponse(t *testing.T) {
 			}
 
 			if got != nil {
-				// reset the time
+				// reset the time and RawHeader
 				got.Expire = time.Time{}
+				got.RawHeader = nil
 			}
 			if cmp.Diff(got, tt.want) != "" {
 				t.Error(cmp.Diff(got, tt.want))
