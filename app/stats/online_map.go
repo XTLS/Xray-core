@@ -40,11 +40,11 @@ func (c *OnlineMap) AddIP(ip string) {
 	if ip == "127.0.0.1" {
 		return
 	}
+	c.access.Lock()
 	if _, ok := list[ip]; !ok {
-		c.access.Lock()
 		list[ip] = time.Now()
-		c.access.Unlock()
 	}
+	c.access.Unlock()
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
 		list = c.RemoveExpiredIPs(list)
 		c.lastCleanup = time.Now()
