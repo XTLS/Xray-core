@@ -141,6 +141,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			// and add EDNS0 option
 			opt := new(dnsmessage.Resource)
 			common.Must(opt.Header.SetEDNS0(1350, 0xfe00, true))
+			opt.Body = &dnsmessage.OPTResource{}
 			newMsg := *req.msg
 			newReq := *req
 			newMsg.Additionals = append(newMsg.Additionals, *opt)
