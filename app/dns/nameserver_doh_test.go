@@ -19,7 +19,7 @@ func TestDOHNameServer(t *testing.T) {
 
 	s := NewDoHNameServer(url, QueryStrategy_USE_IP, nil, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)
@@ -36,7 +36,7 @@ func TestDOHNameServerWithCache(t *testing.T) {
 
 	s := NewDoHNameServer(url, QueryStrategy_USE_IP, nil, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)
@@ -47,7 +47,7 @@ func TestDOHNameServerWithCache(t *testing.T) {
 	}
 
 	ctx2, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips2, err := s.QueryIP(ctx2, "google.com", net.IP(nil), dns_feature.IPOption{
+	ips2, _, err := s.QueryIP(ctx2, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, true)
@@ -64,7 +64,7 @@ func TestDOHNameServerWithIPv4Override(t *testing.T) {
 
 	s := NewDoHNameServer(url, QueryStrategy_USE_IP4, nil, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)
@@ -87,7 +87,7 @@ func TestDOHNameServerWithIPv6Override(t *testing.T) {
 
 	s := NewDoHNameServer(url, QueryStrategy_USE_IP6, nil, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)

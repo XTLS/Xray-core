@@ -20,10 +20,10 @@ func (*Client) Start() error { return nil }
 func (*Client) Close() error { return nil }
 
 // LookupIP implements Client.
-func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, error) {
+func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
 	ips, err := net.LookupIP(host)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	parsedIPs := make([]net.IP, 0, len(ips))
 	ipv4 := make([]net.IP, 0, len(ips))
@@ -40,21 +40,22 @@ func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, error) {
 			ipv6 = append(ipv6, ip)
 		}
 	}
+	// Local DNS ttl is 600
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
 		if len(parsedIPs) > 0 {
-			return parsedIPs, nil
+			return parsedIPs, 600, nil
 		}
 	case option.IPv4Enable:
 		if len(ipv4) > 0 {
-			return ipv4, nil
+			return ipv4, 600, nil
 		}
 	case option.IPv6Enable:
 		if len(ipv6) > 0 {
-			return ipv6, nil
+			return ipv6, 600, nil
 		}
 	}
-	return nil, dns.ErrEmptyResponse
+	return nil, 0, dns.ErrEmptyResponse
 }
 
 // New create a new dns.Client that queries localhost for DNS.

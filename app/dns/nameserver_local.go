@@ -21,14 +21,14 @@ type LocalNameServer struct {
 const errEmptyResponse = "No address associated with hostname"
 
 // QueryIP implements Server.
-func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) (ips []net.IP, err error) {
+func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, _ net.IP, option dns.IPOption, _ bool) (ips []net.IP, ttl uint32, err error) {
 	option = ResolveIpOptionOverride(s.queryStrategy, option)
 	if !option.IPv4Enable && !option.IPv6Enable {
-		return nil, dns.ErrEmptyResponse
+		return nil, 0, dns.ErrEmptyResponse
 	}
 
 	start := time.Now()
-	ips, err = s.client.LookupIP(domain, option)
+	ips, ttl, err = s.client.LookupIP(domain, option)
 
 	if err != nil && strings.HasSuffix(err.Error(), errEmptyResponse) {
 		err = dns.ErrEmptyResponse
