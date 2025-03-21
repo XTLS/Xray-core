@@ -31,10 +31,11 @@ type record struct {
 
 // IPRecord is a cacheable item for a resolved domain
 type IPRecord struct {
-	ReqID  uint16
-	IP     []net.Address
-	Expire time.Time
-	RCode  dnsmessage.RCode
+	ReqID     uint16
+	IP        []net.Address
+	Expire    time.Time
+	RCode     dnsmessage.RCode
+	RawHeader *dnsmessage.Header
 }
 
 func (r *IPRecord) getIPs() ([]net.Address, error) {
@@ -179,9 +180,10 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 
 	now := time.Now()
 	ipRecord := &IPRecord{
-		ReqID:  h.ID,
-		RCode:  h.RCode,
-		Expire: now.Add(time.Second * 600),
+		ReqID:     h.ID,
+		RCode:     h.RCode,
+		Expire:    now.Add(time.Second * 600),
+		RawHeader: &h,
 	}
 
 L:
