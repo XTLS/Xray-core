@@ -156,7 +156,7 @@ func Test_genEDNS0Options(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := genEDNS0Options(tt.args.clientIP); got == nil {
+			if got := genEDNS0Options(tt.args.clientIP, 0); got == nil {
 				t.Errorf("genEDNS0Options() = %v, want %v", got, tt.want)
 			}
 		})

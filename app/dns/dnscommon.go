@@ -68,49 +68,59 @@ type dnsRequest struct {
 	msg     *dnsmessage.Message
 }
 
-func genEDNS0Options(clientIP net.IP) *dnsmessage.Resource {
-	if len(clientIP) == 0 {
+func genEDNS0Options(clientIP net.IP, padding int) *dnsmessage.Resource {
+	if len(clientIP) == 0 && padding == 0 {
 		return nil
 	}
 
-	var netmask int
-	var family uint16
-
-	if len(clientIP) == 4 {
-		family = 1
-		netmask = 24 // 24 for IPV4, 96 for IPv6
-	} else {
-		family = 2
-		netmask = 96
-	}
-
-	b := make([]byte, 4)
-	binary.BigEndian.PutUint16(b[0:], family)
-	b[2] = byte(netmask)
-	b[3] = 0
-	switch family {
-	case 1:
-		ip := clientIP.To4().Mask(net.CIDRMask(netmask, net.IPv4len*8))
-		needLength := (netmask + 8 - 1) / 8 // division rounding up
-		b = append(b, ip[:needLength]...)
-	case 2:
-		ip := clientIP.Mask(net.CIDRMask(netmask, net.IPv6len*8))
-		needLength := (netmask + 8 - 1) / 8 // division rounding up
-		b = append(b, ip[:needLength]...)
-	}
-
-	const EDNS0SUBNET = 0x08
+	const EDNS0SUBNET = 0x8
+	const EDNS0PADDING = 0xc
 
 	opt := new(dnsmessage.Resource)
 	common.Must(opt.Header.SetEDNS0(1350, 0xfe00, true))
+	body := dnsmessage.OPTResource{}
+	opt.Body = &body
 
-	opt.Body = &dnsmessage.OPTResource{
-		Options: []dnsmessage.Option{
-			{
+	if len(clientIP) != 0 {
+		var netmask int
+		var family uint16
+
+		if len(clientIP) == 4 {
+			family = 1
+			netmask = 24 // 24 for IPV4, 96 for IPv6
+		} else {
+			family = 2
+			netmask = 96
+		}
+
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint16(b[0:], family)
+		b[2] = byte(netmask)
+		b[3] = 0
+		switch family {
+		case 1:
+			ip := clientIP.To4().Mask(net.CIDRMask(netmask, net.IPv4len*8))
+			needLength := (netmask + 8 - 1) / 8 // division rounding up
+			b = append(b, ip[:needLength]...)
+		case 2:
+			ip := clientIP.Mask(net.CIDRMask(netmask, net.IPv6len*8))
+			needLength := (netmask + 8 - 1) / 8 // division rounding up
+			b = append(b, ip[:needLength]...)
+		}
+
+		body.Options = append(body.Options,
+			dnsmessage.Option{
 				Code: EDNS0SUBNET,
 				Data: b,
-			},
-		},
+			})
+	}
+
+	if padding != 0 {
+		body.Options = append(body.Options,
+			dnsmessage.Option{
+				Code: EDNS0PADDING,
+				Data: make([]byte, padding),
+			})
 	}
 
 	return opt

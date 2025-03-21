@@ -219,7 +219,9 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 		return
 	}
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
+	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
+	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, int(crypto.RandBetween(100, 300))))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
