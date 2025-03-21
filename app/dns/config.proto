@@ -29,6 +29,7 @@ message NameServer {
   repeated OriginalRule original_rules = 4;
   QueryStrategy query_strategy = 7;
   bool allowUnexpectedIPs = 8;
+  string tag = 9;
 }
 
 enum DomainMatchingType {
