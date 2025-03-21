@@ -21,6 +21,7 @@ type NameServerConfig struct {
 	QueryStrategy      string     `json:"queryStrategy"`
 	AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 	Tag                string     `json:"tag"`
+	TimeoutMs          uint64     `json:"timeoutMs"`
 }
 
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
@@ -40,6 +41,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		QueryStrategy      string     `json:"queryStrategy"`
 		AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 		Tag                string     `json:"tag"`
+		TimeoutMs          uint64     `json:"timeoutMs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -51,6 +53,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.QueryStrategy = advanced.QueryStrategy
 		c.AllowUnexpectedIPs = advanced.AllowUnexpectedIPs
 		c.Tag = advanced.Tag
+		c.TimeoutMs = advanced.TimeoutMs
 		return nil
 	}
 
@@ -125,6 +128,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		QueryStrategy:      resolveQueryStrategy(c.QueryStrategy),
 		AllowUnexpectedIPs: c.AllowUnexpectedIPs,
 		Tag:                c.Tag,
+		TimeoutMs:          c.TimeoutMs,
 	}, nil
 }
 

@@ -32,7 +32,8 @@ type Client struct {
 	domains            []string
 	expectIPs          []*router.GeoIPMatcher
 	allowUnexpectedIPs bool
-	tag        string
+	tag                string
+	timeoutMs          time.Duration
 }
 
 var errExpectedIPNonMatch = errors.New("expectIPs not match")
@@ -164,6 +165,13 @@ func NewClient(
 			}
 		}
 
+		var timeoutMs time.Duration
+		if ns.TimeoutMs > 0 {
+			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
+		} else {
+			timeoutMs = 4000 * time.Millisecond
+		}
+
 		client.server = server
 		client.clientIP = clientIP
 		client.skipFallback = ns.SkipFallback
@@ -171,6 +179,7 @@ func NewClient(
 		client.expectIPs = matchers
 		client.allowUnexpectedIPs = ns.AllowUnexpectedIPs
 		client.tag = ns.Tag
+		client.timeoutMs = timeoutMs
 		return nil
 	})
 	return client, err
@@ -183,7 +192,7 @@ func (c *Client) Name() string {
 
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption, disableCache bool) ([]net.IP, error) {
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, c.timeoutMs)
 	if len(c.tag) != 0 {
 		content := session.InboundFromContext(ctx)
 		errors.LogDebug(ctx, "DNS: client override tag from ", content.Tag, " to ", c.tag)
