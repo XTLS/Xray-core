@@ -157,16 +157,16 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 }
 
 // LookupIP implements dns.Client.
-func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
+func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	if domain == "" {
-		return nil, errors.New("empty domain name")
+		return nil, 0, errors.New("empty domain name")
 	}
 
 	option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
 	option.IPv6Enable = option.IPv6Enable && s.ipOption.IPv6Enable
 
 	if !option.IPv4Enable && !option.IPv6Enable {
-		return nil, dns.ErrEmptyResponse
+		return nil, 0, dns.ErrEmptyResponse
 	}
 
 	// Normalize the FQDN form query
@@ -177,13 +177,14 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 	case addrs == nil: // Domain not recorded in static host
 		break
 	case len(addrs) == 0: // Domain recorded, but no valid IP returned (e.g. IPv4 address with only IPv6 enabled)
-		return nil, dns.ErrEmptyResponse
+		return nil, 0, dns.ErrEmptyResponse
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Domain replacement
 		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].Domain())
 		domain = addrs[0].Domain()
 	default: // Successfully found ip records in static host
 		errors.LogInfo(s.ctx, "returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs)
-		return toNetIP(addrs)
+		ips, err := toNetIP(addrs)
+		return ips, 10, err // Hosts ttl is 10
 	}
 
 	// Name servers lookup
@@ -194,9 +195,9 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
 			continue
 		}
-		ips, err := client.QueryIP(ctx, domain, option, s.disableCache)
+		ips, ttl, err := client.QueryIP(ctx, domain, option, s.disableCache)
 		if len(ips) > 0 {
-			return ips, nil
+			return ips, ttl, nil
 		}
 		if err != nil {
 			errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name())
@@ -204,11 +205,11 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, error) {
 		}
 		// 5 for RcodeRefused in miekg/dns, hardcode to reduce binary size
 		if err != context.Canceled && err != context.DeadlineExceeded && err != errExpectedIPNonMatch && err != dns.ErrEmptyResponse && dns.RCodeFromError(err) != 5 {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 
-	return nil, errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
+	return nil, 0, errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
 }
 
 // LookupHosts implements dns.HostsLookup.

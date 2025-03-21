@@ -150,13 +150,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	// resolve dns
 	addr := destination.Address
 	if addr.Family().IsDomain() {
-		ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
+		ips, _, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
 			IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
 			IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
 		})
 		{ // Resolve fallback
 			if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
-				ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
+				ips, _, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
 					IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
 					IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
 				})
@@ -284,13 +284,13 @@ func (h *Handler) createIPCRequest() string {
 				addr = net.ParseAddress(dialerIp.String())
 				errors.LogInfo(h.bind.ctx, "createIPCRequest use dialer dest ip: ", addr)
 			} else {
-				ips, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
+				ips, _, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
 					IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
 					IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
 				})
 				{ // Resolve fallback
 					if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
-						ips, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
+						ips, _, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
 							IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
 							IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
 						})

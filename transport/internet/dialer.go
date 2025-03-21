@@ -90,13 +90,13 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 		return nil, nil
 	}
 
-	ips, err := dnsClient.LookupIP(domain, dns.IPOption{
+	ips, _, err := dnsClient.LookupIP(domain, dns.IPOption{
 		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && strategy.preferIP4(),
 		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && strategy.preferIP6(),
 	})
 	{ // Resolve fallback
 		if (len(ips) == 0 || err != nil) && strategy.hasFallback() && localAddr == nil {
-			ips, err = dnsClient.LookupIP(domain, dns.IPOption{
+			ips, _, err = dnsClient.LookupIP(domain, dns.IPOption{
 				IPv4Enable: strategy.fallbackIP4(),
 				IPv6Enable: strategy.fallbackIP6(),
 			})

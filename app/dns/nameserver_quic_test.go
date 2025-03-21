@@ -19,7 +19,7 @@ func TestQUICNameServer(t *testing.T) {
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP)
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)
@@ -30,7 +30,7 @@ func TestQUICNameServer(t *testing.T) {
 	}
 
 	ctx2, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ips2, err := s.QueryIP(ctx2, "google.com", net.IP(nil), dns.IPOption{
+	ips2, _, err := s.QueryIP(ctx2, "google.com", net.IP(nil), dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, true)
@@ -47,7 +47,7 @@ func TestQUICNameServerWithIPv4Override(t *testing.T) {
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP4)
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)
@@ -70,7 +70,7 @@ func TestQUICNameServerWithIPv6Override(t *testing.T) {
 	s, err := NewQUICNameServer(url, QueryStrategy_USE_IP6)
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	ips, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
+	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns.IPOption{
 		IPv4Enable: true,
 		IPv6Enable: true,
 	}, false)

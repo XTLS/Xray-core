@@ -236,17 +236,17 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	var ips []net.IP
 	var err error
 
-	var ttl uint32 = 600
+	var ttl uint32 = 0
 
 	switch qType {
 	case dnsmessage.TypeA:
-		ips, err = h.client.LookupIP(domain, dns.IPOption{
+		ips, ttl, err = h.client.LookupIP(domain, dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: false,
 			FakeEnable: true,
 		})
 	case dnsmessage.TypeAAAA:
-		ips, err = h.client.LookupIP(domain, dns.IPOption{
+		ips, ttl, err = h.client.LookupIP(domain, dns.IPOption{
 			IPv4Enable: false,
 			IPv6Enable: true,
 			FakeEnable: true,
@@ -259,9 +259,9 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 		return
 	}
 
-	if fkr0, ok := h.fdns.(dns.FakeDNSEngineRev0); ok && len(ips) > 0 && fkr0.IsIPInIPPool(net.IPAddress(ips[0])) {
-		ttl = 1
-	}
+	// if fkr0, ok := h.fdns.(dns.FakeDNSEngineRev0); ok && len(ips) > 0 && fkr0.IsIPInIPPool(net.IPAddress(ips[0])) {
+	// 	ttl = 1
+	// }
 
 	switch qType {
 	case dnsmessage.TypeA:

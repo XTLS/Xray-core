@@ -54,7 +54,7 @@ func (n *netBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 
 	addr := xnet.ParseAddress(ipStr)
 	if addr.Family() == xnet.AddressFamilyDomain {
-		ips, err := n.dns.LookupIP(addr.Domain(), n.dnsOption)
+		ips, _, err := n.dns.LookupIP(addr.Domain(), n.dnsOption)
 		if err != nil {
 			return nil, err
 		} else if len(ips) == 0 {

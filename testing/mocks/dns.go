@@ -50,12 +50,13 @@ func (mr *DNSClientMockRecorder) Close() *gomock.Call {
 }
 
 // LookupIP mocks base method
-func (m *DNSClient) LookupIP(arg0 string, arg1 dns.IPOption) ([]net.IP, error) {
+func (m *DNSClient) LookupIP(arg0 string, arg1 dns.IPOption) ([]net.IP, uint32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LookupIP", arg0, arg1)
 	ret0, _ := ret[0].([]net.IP)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(uint32)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // LookupIP indicates an expected call of LookupIP
