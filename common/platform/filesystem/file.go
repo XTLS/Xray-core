@@ -3,6 +3,7 @@ package filesystem
 import (
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/platform"
@@ -26,6 +27,13 @@ func ReadFile(path string) ([]byte, error) {
 
 func ReadAsset(file string) ([]byte, error) {
 	return ReadFile(platform.GetAssetLocation(file))
+}
+
+func ReadCertificate(file string) ([]byte, error) {
+	if filepath.IsAbs(file) {
+		return ReadFile(file)
+	}
+	return ReadFile(platform.GetCertificateLocation(file))
 }
 
 func CopyFile(dst string, src string) error {

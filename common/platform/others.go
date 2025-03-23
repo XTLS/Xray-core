@@ -42,3 +42,8 @@ func GetAssetLocation(file string) string {
 	// asset not found, let the caller throw out the error
 	return defPath
 }
+
+func GetCertificateLocation(file string) string {
+	certificatePath := NewEnvFlag(CertificateLocation).GetValue(getExecutableDir)
+	return filepath.Join(certificatePath, file)
+}
