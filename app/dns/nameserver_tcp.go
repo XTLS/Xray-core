@@ -192,7 +192,7 @@ func (s *TCPNameServer) newReqID() uint16 {
 func (s *TCPNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
 	errors.LogDebug(ctx, s.name, " querying DNS for: ", domain)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {

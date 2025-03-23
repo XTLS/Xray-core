@@ -217,7 +217,7 @@ func (s *ClassicNameServer) addPendingRequest(req *udpDnsRequest) {
 func (s *ClassicNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
 	errors.LogDebug(ctx, s.name, " querying DNS for: ", domain)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
 
 	for _, req := range reqs {
 		udpReq := &udpDnsRequest{
