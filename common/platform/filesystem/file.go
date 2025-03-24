@@ -33,7 +33,7 @@ func ReadCertificate(file string) ([]byte, error) {
 	if filepath.IsAbs(file) {
 		return ReadFile(file)
 	}
-	return ReadFile(platform.GetCertificateLocation(file))
+	return ReadFile(platform.GetCertLocation(file))
 }
 
 func CopyFile(dst string, src string) error {

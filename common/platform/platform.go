@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	PluginLocation      = "xray.location.plugin"
-	ConfigLocation      = "xray.location.config"
-	ConfdirLocation     = "xray.location.confdir"
-	ToolLocation        = "xray.location.tool"
-	AssetLocation       = "xray.location.asset"
-	CertificateLocation = "xray.location.certificate"
+	PluginLocation  = "xray.location.plugin"
+	ConfigLocation  = "xray.location.config"
+	ConfdirLocation = "xray.location.confdir"
+	ToolLocation    = "xray.location.tool"
+	AssetLocation   = "xray.location.asset"
+	CertLocation    = "xray.location.cert"
 
 	UseReadV         = "xray.buf.readv"
 	UseFreedomSplice = "xray.buf.splice"
