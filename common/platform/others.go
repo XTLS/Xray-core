@@ -21,7 +21,7 @@ func GetToolLocation(file string) string {
 	return filepath.Join(toolPath, file)
 }
 
-// GetAssetLocation searches for `file` in certain locations
+// GetAssetLocation searches for `file` in the env dir, the executable dir, and certain locations
 func GetAssetLocation(file string) string {
 	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
 	defPath := filepath.Join(assetPath, file)
@@ -41,4 +41,10 @@ func GetAssetLocation(file string) string {
 
 	// asset not found, let the caller throw out the error
 	return defPath
+}
+
+// GetCertLocation searches for `file` in the env dir and the executable dir
+func GetCertLocation(file string) string {
+	certPath := NewEnvFlag(CertLocation).GetValue(getExecutableDir)
+	return filepath.Join(certPath, file)
 }

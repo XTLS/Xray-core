@@ -334,7 +334,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 func readFileOrString(f string, s []string) ([]byte, error) {
 	if len(f) > 0 {
-		return filesystem.ReadFile(f)
+		return filesystem.ReadCert(f)
 	}
 	if len(s) > 0 {
 		return []byte(strings.Join(s, "\n")), nil

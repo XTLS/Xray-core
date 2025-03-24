@@ -13,6 +13,7 @@ const (
 	ConfdirLocation = "xray.location.confdir"
 	ToolLocation    = "xray.location.tool"
 	AssetLocation   = "xray.location.asset"
+	CertLocation    = "xray.location.cert"
 
 	UseReadV         = "xray.buf.readv"
 	UseFreedomSplice = "xray.buf.splice"
