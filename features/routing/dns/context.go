@@ -23,7 +23,7 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 	}
 
 	if domain := ctx.GetTargetDomain(); len(domain) != 0 {
-		ips, err := ctx.dnsClient.LookupIP(domain, dns.IPOption{
+		ips, _, err := ctx.dnsClient.LookupIP(domain, dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 			FakeEnable: false,

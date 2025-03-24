@@ -21,7 +21,7 @@ type Client interface {
 	features.Feature
 
 	// LookupIP returns IP address for the given domain. IPs may contain IPv4 and/or IPv6 addresses.
-	LookupIP(domain string, option IPOption) ([]net.IP, error)
+	LookupIP(domain string, option IPOption) ([]net.IP, uint32, error)
 }
 
 type HostsLookup interface {
