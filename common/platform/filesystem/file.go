@@ -29,7 +29,7 @@ func ReadAsset(file string) ([]byte, error) {
 	return ReadFile(platform.GetAssetLocation(file))
 }
 
-func ReadCertificate(file string) ([]byte, error) {
+func ReadCert(file string) ([]byte, error) {
 	if filepath.IsAbs(file) {
 		return ReadFile(file)
 	}

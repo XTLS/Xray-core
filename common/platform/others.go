@@ -44,6 +44,6 @@ func GetAssetLocation(file string) string {
 }
 
 func GetCertLocation(file string) string {
-	certificatePath := NewEnvFlag(CertLocation).GetValue(getExecutableDir)
-	return filepath.Join(certificatePath, file)
+	certPath := NewEnvFlag(CertLocation).GetValue(getExecutableDir)
+	return filepath.Join(certPath, file)
 }

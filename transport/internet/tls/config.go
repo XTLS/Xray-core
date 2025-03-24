@@ -109,12 +109,12 @@ func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstaplin
 		for {
 			var isReloaded bool
 			if entry.CertificatePath != "" && entry.KeyPath != "" {
-				newCert, err := filesystem.ReadCertificate(entry.CertificatePath)
+				newCert, err := filesystem.ReadCert(entry.CertificatePath)
 				if err != nil {
 					errors.LogErrorInner(context.Background(), err, "failed to parse certificate")
 					return
 				}
-				newKey, err := filesystem.ReadCertificate(entry.KeyPath)
+				newKey, err := filesystem.ReadCert(entry.KeyPath)
 				if err != nil {
 					errors.LogErrorInner(context.Background(), err, "failed to parse key")
 					return
