@@ -165,13 +165,11 @@ func NewClient(
 			}
 		}
 
-		var timeoutMs time.Duration
+		var timeoutMs = 4000 * time.Millisecond
 		if ns.TimeoutMs > 0 {
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
-		} else {
-			timeoutMs = 4000 * time.Millisecond
 		}
-
+		
 		client.server = server
 		client.clientIP = clientIP
 		client.skipFallback = ns.SkipFallback
