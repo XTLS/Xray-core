@@ -3,6 +3,8 @@ package buf
 import (
 	"io"
 
+	"github.com/juju/ratelimit"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -171,4 +173,28 @@ func (r *PacketReader) ReadMultiBuffer() (MultiBuffer, error) {
 		return nil, err
 	}
 	return MultiBuffer{b}, nil
+}
+
+// Reader returns a reader that is rate limited by
+// the given token bucket. Each token in the bucket
+// represents one byte.
+type RateLimitedReader struct {
+	Reader Reader
+	Bucket *ratelimit.Bucket
+}
+
+// ReadMultiBuffer implements Reader.
+func (r *RateLimitedReader) ReadMultiBuffer() (MultiBuffer, error) {
+	b, err := r.Reader.ReadMultiBuffer()
+	if err != nil {
+		return nil, err
+	}
+
+	var total int64
+	for _, buf := range b {
+		total += int64(buf.Len())
+	}
+	r.Bucket.Wait(total)
+
+	return b, nil
 }

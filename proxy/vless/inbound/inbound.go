@@ -11,6 +11,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/juju/ratelimit"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -405,7 +407,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						return errors.New("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
 					}
 				}
-				if err := buf.Copy(reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
+				rlReader := &buf.RateLimitedReader{
+					Reader: reader,
+					Bucket: ratelimit.NewBucketWithRate(128*1024, 512*1024),
+				}
+				if err := buf.Copy(rlReader, serverWriter, buf.UpdateActivity(timer)); err != nil {
 					return errors.New("failed to fallback request payload").Base(err).AtInfo()
 				}
 				return nil
@@ -414,8 +420,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			writer := buf.NewWriter(connection)
 
 			getResponse := func() error {
+				rlServerReader := &buf.RateLimitedReader{
+					Reader: serverReader,
+					Bucket: ratelimit.NewBucketWithRate(128*1024, 512*1024),
+				}
 				defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-				if err := buf.Copy(serverReader, writer, buf.UpdateActivity(timer)); err != nil {
+				if err := buf.Copy(rlServerReader, writer, buf.UpdateActivity(timer)); err != nil {
 					return errors.New("failed to deliver response payload").Base(err).AtInfo()
 				}
 				return nil
