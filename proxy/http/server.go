@@ -294,7 +294,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 
 	responseDone := func() error {
 		responseReader := bufio.NewReaderSize(&buf.BufferedReader{Reader: link.Reader}, buf.Size)
-		response, err := http.ReadResponse(responseReader, request)
+		response, err := readResponseAndHandle100Continue(responseReader, request, writer)
 		if err == nil {
 			http_proto.RemoveHopByHopHeaders(response.Header)
 			if response.ContentLength >= 0 {
@@ -336,6 +336,38 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 	}
 
 	return result
+}
+
+// Sometimes, server might send 1xx response to client
+// it should not be processed by http proxy handler, just forward it to client
+func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer io.Writer) (*http.Response, error) {
+	// have a little look of response
+	peekBytes, err := r.Peek(56)
+	if err == nil || err == bufio.ErrBufferFull {
+		str := string(peekBytes)
+		ResponseLine := strings.Split(str, "\r\n")[0]
+		_, status, _ := strings.Cut(ResponseLine, " ")
+		// only handle 1xx response
+		if strings.HasPrefix(status, "1") {
+			Continue100 := []byte{}
+			// read until \r\n\r\n (end of http response header)
+			for {
+				data, err := r.ReadSlice('\n')
+				if err != nil {
+					return nil, errors.New("failed to read http 1xx response").Base(err)
+				}
+				Continue100 = append(Continue100, data...)
+				if bytes.Equal(Continue100[len(Continue100)-4:], []byte{'\r', '\n', '\r', '\n'}) {
+					break
+				}
+				if len(Continue100) > 1024 {
+					return nil, errors.New("too big http 1xx response")
+				}
+			}
+			writer.Write(Continue100)
+		}
+	}
+	return http.ReadResponse(r, req)
 }
 
 func init() {
