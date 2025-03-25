@@ -349,22 +349,22 @@ func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer
 		_, status, _ := strings.Cut(ResponseLine, " ")
 		// only handle 1xx response
 		if strings.HasPrefix(status, "1") {
-			Continue100 := []byte{}
+			ResponseHeader1xx := []byte{}
 			// read until \r\n\r\n (end of http response header)
 			for {
 				data, err := r.ReadSlice('\n')
 				if err != nil {
 					return nil, errors.New("failed to read http 1xx response").Base(err)
 				}
-				Continue100 = append(Continue100, data...)
-				if bytes.Equal(Continue100[len(Continue100)-4:], []byte{'\r', '\n', '\r', '\n'}) {
+				ResponseHeader1xx = append(ResponseHeader1xx, data...)
+				if bytes.Equal(ResponseHeader1xx[len(ResponseHeader1xx)-4:], []byte{'\r', '\n', '\r', '\n'}) {
 					break
 				}
-				if len(Continue100) > 1024 {
+				if len(ResponseHeader1xx) > 1024 {
 					return nil, errors.New("too big http 1xx response")
 				}
 			}
-			writer.Write(Continue100)
+			writer.Write(ResponseHeader1xx)
 		}
 	}
 	return http.ReadResponse(r, req)
