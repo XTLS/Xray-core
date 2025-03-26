@@ -34,8 +34,10 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 
 		LimitUploadRate:    c.LimitUploadRate,
 		LimitUploadBrust:   c.LimitUploadBrust,
+		LimitUploadAfter:   c.LimitUploadAfter,
 		LimitDownloadRate:  c.LimitDownloadRate,
 		LimitDownloadBrust: c.LimitDownloadBrust,
+		LimitDownloadAfter: c.LimitDownloadAfter,
 	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {
