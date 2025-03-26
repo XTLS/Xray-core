@@ -101,12 +101,12 @@ func (r *Router) AddRule(config *serial.TypedMessage, shouldAppend bool) error {
 		return err
 	}
 	if c, ok := inst.(*Config); ok {
-		return r.ReloadRules(c, shouldAppend)
+		return r.ReloadRules(c, shouldAppend, false)
 	}
 	return errors.New("AddRule: config type error")
 }
 
-func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
+func (r *Router) ReloadRules(config *Config, shouldAppend bool, prependRules bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -147,7 +147,11 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			}
 			rr.Balancer = brule
 		}
-		r.rules = append(r.rules, rr)
+		if prependRules {
+			r.rules = append([]*Rule{rr}, r.rules...)
+		} else {
+			r.rules = append(r.rules, rr)
+		}
 	}
 
 	return nil

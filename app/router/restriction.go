@@ -39,7 +39,7 @@ func (r *Router) RestrictionRule(restriction *route.Restriction, ip net.IP) erro
 
 				rule.RoutingRule.SourceGeoip = append(rule.RoutingRule.SourceGeoip, sourceIP)
 				r.RemoveRule(restriction.Tag)
-				return r.ReloadRules(&Config{Rule: []*RoutingRule{rule.RoutingRule}}, true)
+				return r.ReloadRules(&Config{Rule: []*RoutingRule{rule.RoutingRule}}, true, restriction.CleanInterval == 0)
 			}
 		}
 	}
@@ -52,7 +52,7 @@ func (r *Router) RestrictionRule(restriction *route.Restriction, ip net.IP) erro
 	}
 
 	errors.LogWarning(r.ctx, "restrict IP -> ", ip.String(), " for route violation.")
-	return r.ReloadRules(&Config{Rule: []*RoutingRule{newRule}}, true)
+	return r.ReloadRules(&Config{Rule: []*RoutingRule{newRule}}, true, restriction.CleanInterval == 0)
 }
 
 func shouldCleanup(restriction *route.Restriction) bool {
