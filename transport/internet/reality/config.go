@@ -31,6 +31,11 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		SessionTicketsDisabled: true,
 
 		KeyLogWriter: KeyLogWriterFromConfig(c),
+
+		LimitUploadRate:    c.LimitUploadRate,
+		LimitUploadBrust:   c.LimitUploadBrust,
+		LimitDownloadRate:  c.LimitDownloadRate,
+		LimitDownloadBrust: c.LimitDownloadBrust,
 	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {
