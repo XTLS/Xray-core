@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	route "github.com/xtls/xray-core/common/route"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
@@ -21,10 +22,11 @@ type Router struct {
 	balancers      map[string]*Balancer
 	dns            dns.Client
 
-	ctx        context.Context
-	ohm        outbound.Manager
-	dispatcher routing.Dispatcher
-	mu         sync.Mutex
+	ctx              context.Context
+	ohm              outbound.Manager
+	dispatcher       routing.Dispatcher
+	mu               sync.Mutex
+	isCleanupRunning bool
 }
 
 // Route is an implementation of routing.Route.
@@ -33,6 +35,7 @@ type Route struct {
 	outboundGroupTags []string
 	outboundTag       string
 	ruleTag           string
+	restriction       *route.Restriction
 }
 
 // Init initializes the Router.
@@ -60,9 +63,8 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 			return err
 		}
 		rr := &Rule{
-			Condition: cond,
-			Tag:       rule.GetTag(),
-			RuleTag:   rule.GetRuleTag(),
+			RoutingRule: rule,
+			Condition:   cond,
 		}
 		btag := rule.GetBalancingTag()
 		if len(btag) > 0 {
@@ -84,11 +86,11 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	tag, err := rule.GetTag()
+	tag, err := rule.GetTargetTag()
 	if err != nil {
 		return nil, err
 	}
-	return &Route{Context: ctx, outboundTag: tag, ruleTag: rule.RuleTag}, nil
+	return &Route{Context: ctx, outboundTag: tag, ruleTag: rule.RuleTag, restriction: rule.Restriction}, nil
 }
 
 // AddRule implements routing.Router.
@@ -134,9 +136,8 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			return err
 		}
 		rr := &Rule{
-			Condition: cond,
-			Tag:       rule.GetTag(),
-			RuleTag:   rule.GetRuleTag(),
+			RoutingRule: rule,
+			Condition:   cond,
 		}
 		btag := rule.GetBalancingTag()
 		if len(btag) > 0 {
@@ -240,6 +241,11 @@ func (r *Route) GetOutboundTag() string {
 
 func (r *Route) GetRuleTag() string {
 	return r.ruleTag
+}
+
+// GetRestriction implements routing.Route.
+func (r *Route) GetRestriction() *route.Restriction {
+	return r.restriction
 }
 
 func init() {

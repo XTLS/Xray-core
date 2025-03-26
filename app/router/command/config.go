@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/net"
+	route "github.com/xtls/xray-core/common/route"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -30,6 +31,10 @@ func (c routingContext) GetTargetPort() net.Port {
 
 func (c routingContext) GetRuleTag() string {
 	return ""
+}
+
+func (c routingContext) GetRestriction() *route.Restriction {
+	return c.Restriction
 }
 
 // GetSkipDNSResolve is a mock implementation here to match the interface,
@@ -62,6 +67,7 @@ var fieldMap = map[string]func(*RoutingContext, routing.Route){
 	"attributes":     func(s *RoutingContext, r routing.Route) { s.Attributes = r.GetAttributes() },
 	"outbound_group": func(s *RoutingContext, r routing.Route) { s.OutboundGroupTags = r.GetOutboundGroupTags() },
 	"outbound":       func(s *RoutingContext, r routing.Route) { s.OutboundTag = r.GetOutboundTag() },
+	"restriction":    func(s *RoutingContext, r routing.Route) { s.Restriction = r.GetRestriction() },
 }
 
 // AsProtobufMessage takes selectors of fields and returns a function to convert routing.Route to protobuf RoutingContext.

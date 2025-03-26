@@ -435,6 +435,16 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 	} else if d.router != nil {
 		if route, err := d.router.PickRoute(routingLink); err == nil {
 			outTag := route.GetOutboundTag()
+			restriction := route.GetRestriction()
+			if restriction != nil {
+				sessionInbounds := session.InboundFromContext(ctx)
+				userIP := sessionInbounds.Source.Address.IP()
+				err = d.router.RestrictionRule(restriction, userIP)
+				if err != nil {
+					errors.LogError(ctx, err)
+				}
+			}
+
 			if h := d.ohm.GetHandler(outTag); h != nil {
 				isPickRoute = 2
 				if route.GetRuleTag() == "" {
