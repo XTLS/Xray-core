@@ -30,13 +30,13 @@ type Client struct {
 	clientIP           net.IP
 	skipFallback       bool
 	domains            []string
-	expectIPs          []*router.GeoIPMatcher
+	expectedIPs        []*router.GeoIPMatcher
 	allowUnexpectedIPs bool
 	tag                string
 	timeoutMs          time.Duration
 }
 
-var errExpectedIPNonMatch = errors.New("expectIPs not match")
+var errExpectedIPNonMatch = errors.New("expectedIPs not match")
 
 // NewServer creates a name server object according to the network destination url.
 func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dispatcher, queryStrategy QueryStrategy) (Server, error) {
@@ -165,18 +165,16 @@ func NewClient(
 			}
 		}
 
-		var timeoutMs time.Duration
+		var timeoutMs = 4000 * time.Millisecond
 		if ns.TimeoutMs > 0 {
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
-		} else {
-			timeoutMs = 4000 * time.Millisecond
 		}
-
+		
 		client.server = server
 		client.clientIP = clientIP
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
-		client.expectIPs = matchers
+		client.expectedIPs = matchers
 		client.allowUnexpectedIPs = ns.AllowUnexpectedIPs
 		client.tag = ns.Tag
 		client.timeoutMs = timeoutMs
@@ -212,12 +210,12 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 
 // MatchExpectedIPs matches queried domain IPs with expected IPs and returns matched ones.
 func (c *Client) MatchExpectedIPs(domain string, ips []net.IP) ([]net.IP, error) {
-	if len(c.expectIPs) == 0 {
+	if len(c.expectedIPs) == 0 {
 		return ips, nil
 	}
 	newIps := []net.IP{}
 	for _, ip := range ips {
-		for _, matcher := range c.expectIPs {
+		for _, matcher := range c.expectedIPs {
 			if matcher.Match(ip) {
 				newIps = append(newIps, ip)
 				break
@@ -230,7 +228,7 @@ func (c *Client) MatchExpectedIPs(domain string, ips []net.IP) ([]net.IP, error)
 		}
 		return nil, errExpectedIPNonMatch
 	}
-	errors.LogDebug(context.Background(), "domain ", domain, " expectIPs ", newIps, " matched at server ", c.Name())
+	errors.LogDebug(context.Background(), "domain ", domain, " expectedIPs ", newIps, " matched at server ", c.Name())
 	return newIps, nil
 }
 

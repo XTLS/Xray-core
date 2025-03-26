@@ -17,7 +17,7 @@ type NameServerConfig struct {
 	Port               uint16     `json:"port"`
 	SkipFallback       bool       `json:"skipFallback"`
 	Domains            []string   `json:"domains"`
-	ExpectIPs          StringList `json:"expectIps"`
+	ExpectedIPs        StringList `json:"expectedIPs"`
 	QueryStrategy      string     `json:"queryStrategy"`
 	AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 	Tag                string     `json:"tag"`
@@ -37,7 +37,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		Port               uint16     `json:"port"`
 		SkipFallback       bool       `json:"skipFallback"`
 		Domains            []string   `json:"domains"`
-		ExpectIPs          StringList `json:"expectIps"`
+		ExpectedIPs        StringList `json:"expectedIPs"`
 		QueryStrategy      string     `json:"queryStrategy"`
 		AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
 		Tag                string     `json:"tag"`
@@ -49,7 +49,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.Port = advanced.Port
 		c.SkipFallback = advanced.SkipFallback
 		c.Domains = advanced.Domains
-		c.ExpectIPs = advanced.ExpectIPs
+		c.ExpectedIPs = advanced.ExpectedIPs
 		c.QueryStrategy = advanced.QueryStrategy
 		c.AllowUnexpectedIPs = advanced.AllowUnexpectedIPs
 		c.Tag = advanced.Tag
@@ -101,9 +101,9 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	geoipList, err := ToCidrList(c.ExpectIPs)
+	geoipList, err := ToCidrList(c.ExpectedIPs)
 	if err != nil {
-		return nil, errors.New("invalid IP rule: ", c.ExpectIPs).Base(err)
+		return nil, errors.New("invalid IP rule: ", c.ExpectedIPs).Base(err)
 	}
 
 	var myClientIP []byte

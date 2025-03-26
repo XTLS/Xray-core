@@ -785,7 +785,7 @@ func TestLocalDomain(t *testing.T) {
 		}
 	}
 
-	{ // Will match dotless:localhost, but not expectIPs: 127.0.0.2, 127.0.0.3, then matches at dotless:
+	{ // Will match dotless:localhost, but not expectedIPs: 127.0.0.2, 127.0.0.3, then matches at dotless:
 		ips, _, err := client.LookupIP("localhost", feature_dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
@@ -800,7 +800,7 @@ func TestLocalDomain(t *testing.T) {
 		}
 	}
 
-	{ // Will match dotless:localhost, and expectIPs: 127.0.0.2, 127.0.0.3
+	{ // Will match dotless:localhost, and expectedIPs: 127.0.0.2, 127.0.0.3
 		ips, _, err := client.LookupIP("localhost-a", feature_dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
@@ -815,7 +815,7 @@ func TestLocalDomain(t *testing.T) {
 		}
 	}
 
-	{ // Will match dotless:localhost, and expectIPs: 127.0.0.2, 127.0.0.3
+	{ // Will match dotless:localhost, and expectedIPs: 127.0.0.2, 127.0.0.3
 		ips, _, err := client.LookupIP("localhost-b", feature_dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
