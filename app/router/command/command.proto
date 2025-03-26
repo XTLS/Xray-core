@@ -8,6 +8,7 @@ option java_multiple_files = true;
 
 import "common/net/network.proto";
 import "common/serial/typed_message.proto";
+import "common/route/routing.proto";
 
 // RoutingContext is the context with information relative to routing process.
 // It conforms to the structure of xray.features.routing.Context and
@@ -25,6 +26,7 @@ message RoutingContext {
   map<string, string> Attributes = 10;
   repeated string OutboundGroupTags = 11;
   string OutboundTag = 12;
+  xray.common.route.Restriction Restriction = 13;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
