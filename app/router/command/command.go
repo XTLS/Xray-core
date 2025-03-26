@@ -55,7 +55,7 @@ func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *Ove
 
 func (s *routingServer) AddRule(ctx context.Context, request *AddRuleRequest) (*AddRuleResponse, error) {
 	if bo, ok := s.router.(routing.Router); ok {
-		return &AddRuleResponse{}, bo.AddRule(request.Config, request.ShouldAppend, false)
+		return &AddRuleResponse{}, bo.AddRule(request.Config, request.ShouldAppend)
 	}
 	return nil, errors.New("unsupported router implementation")
 

@@ -16,7 +16,7 @@ type Router interface {
 
 	// PickRoute returns a route decision based on the given routing context.
 	PickRoute(ctx Context) (Route, error)
-	AddRule(config *serial.TypedMessage, shouldAppend bool, prependRules bool) error
+	AddRule(config *serial.TypedMessage, shouldAppend bool) error
 	RemoveRule(tag string) error
 	RestrictionRule(restriction *route.Restriction, ip net.IP) error
 }
@@ -62,7 +62,7 @@ func (DefaultRouter) PickRoute(ctx Context) (Route, error) {
 }
 
 // AddRule implements Router.
-func (DefaultRouter) AddRule(config *serial.TypedMessage, shouldAppend bool, prependRules bool) error {
+func (DefaultRouter) AddRule(config *serial.TypedMessage, shouldAppend bool) error {
 	return common.ErrNoClue
 }
 
