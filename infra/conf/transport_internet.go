@@ -500,6 +500,11 @@ type REALITYConfig struct {
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
 
+	LimitUploadRate    float64 `json:"limitUploadRate"`
+	LimitUploadBrust   int64   `json:"limitUploadBrust"`
+	LimitDownloadRate  float64 `json:"limitDownloadRate"`
+	LimitDownloadBrust int64   `json:"limitDownloadBrust"`
+
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
 	Password    string `json:"password"`
@@ -600,6 +605,11 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.Xver = c.Xver
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
+
+		config.LimitUploadRate = c.LimitUploadRate
+		config.LimitUploadBrust = c.LimitUploadBrust
+		config.LimitDownloadRate = c.LimitDownloadRate
+		config.LimitDownloadBrust = c.LimitDownloadBrust
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {
