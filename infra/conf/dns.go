@@ -105,7 +105,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	}
 
 	var expectedIPs = c.ExpectedIPs
-	if expectedIPs == nil {
+	if len(expectedIPs) == 0 {
 		expectedIPs = c.ExpectIPs
 	}
 	geoipList, err := ToCidrList(expectedIPs)
