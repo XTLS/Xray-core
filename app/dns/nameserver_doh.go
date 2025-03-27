@@ -357,7 +357,7 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err == nil || err == dns_feature.ErrEmptyResponse {
+		if err == nil || err == dns_feature.ErrEmptyResponse || dns_feature.RCodeFromError(err) == 3 {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
