@@ -260,7 +260,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", domain)
+				errors.LogInfoInner(ctx, err, "failed to retrieve response for ", domain)
 				return
 			}
 			rec, err := parseResponse(resp)
