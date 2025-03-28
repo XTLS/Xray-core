@@ -48,10 +48,14 @@ func hasBindAddr(sockopt *SocketConfig) bool {
 	return sockopt != nil && len(sockopt.BindAddress) > 0 && sockopt.BindPort > 0
 }
 
+func hasInterface(sockopt *SocketConfig) bool {
+	return sockopt != nil && sockopt.Interface != ""
+}
+
 func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	errors.LogDebug(ctx, "dialing to "+dest.String())
 
-	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) && sockopt.Interface == "" {
+	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) && !hasInterface(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
 		if srcAddr == nil {
 			srcAddr = &net.UDPAddr{
