@@ -14,10 +14,19 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# Temporary files and directories
 *.DS_Store
 .idea
+.vscode/
+.cache/
+tmp/
+*.log
+
+# Compressed files
 *.zip
 *.tar.gz
+
+# Build directories and files
 xray
 xray_softfloat
 mockgen
@@ -26,8 +35,11 @@ vprotogen
 errorgen
 !common/errors/errorgen/
 *.dat
-.vscode
 /build_assets
 
 # Output from dlv test
 **/debug.*
+
+# Certificate files
+*.crt
+*.key
