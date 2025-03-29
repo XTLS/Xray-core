@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/vishvananda/netlink v1.3.0
-	github.com/xtls/reality v0.0.0-20250326210428-52ea918ead1b
+	github.com/xtls/reality v0.0.0-20250329150927-d77e7560feae
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.36.0
 	golang.org/x/net v0.37.0
@@ -35,7 +35,7 @@ require (
 )
 
 // temp test
-replace github.com/xtls/reality => github.com/meo597/reality v0.0.0-20250326210428-52ea918ead1b
+replace github.com/xtls/reality => github.com/meo597/reality v0.0.0-20250329150927-d77e7560feae
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
