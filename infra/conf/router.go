@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
+	"github.com/xtls/xray-core/common/route"
 	"github.com/xtls/xray-core/common/serial"
 	"google.golang.org/protobuf/proto"
 )
@@ -531,17 +532,18 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList       `json:"domain"`
-		Domains    *StringList       `json:"domains"`
-		IP         *StringList       `json:"ip"`
-		Port       *PortList         `json:"port"`
-		Network    *NetworkList      `json:"network"`
-		SourceIP   *StringList       `json:"source"`
-		SourcePort *PortList         `json:"sourcePort"`
-		User       *StringList       `json:"user"`
-		InboundTag *StringList       `json:"inboundTag"`
-		Protocols  *StringList       `json:"protocol"`
-		Attributes map[string]string `json:"attrs"`
+		Domain      *StringList        `json:"domain"`
+		Domains     *StringList        `json:"domains"`
+		IP          *StringList        `json:"ip"`
+		Port        *PortList          `json:"port"`
+		Network     *NetworkList       `json:"network"`
+		SourceIP    *StringList        `json:"source"`
+		SourcePort  *PortList          `json:"sourcePort"`
+		User        *StringList        `json:"user"`
+		InboundTag  *StringList        `json:"inboundTag"`
+		Protocols   *StringList        `json:"protocol"`
+		Attributes  map[string]string  `json:"attrs"`
+		Restriction *route.Restriction `json:"restriction"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -636,6 +638,14 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if len(rawFieldRule.Attributes) > 0 {
 		rule.Attributes = rawFieldRule.Attributes
+	}
+
+	if rawFieldRule.Restriction != nil {
+		// set parent outbound tag
+		if rawFieldRule.Restriction.OutboundTag == "" {
+			rawFieldRule.Restriction.OutboundTag = rawFieldRule.OutboundTag
+		}
+		rule.Restriction = rawFieldRule.Restriction
 	}
 
 	return rule, nil

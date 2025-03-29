@@ -2,6 +2,8 @@ package routing
 
 import (
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/route"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
@@ -16,6 +18,7 @@ type Router interface {
 	PickRoute(ctx Context) (Route, error)
 	AddRule(config *serial.TypedMessage, shouldAppend bool) error
 	RemoveRule(tag string) error
+	RestrictionRule(restriction *route.Restriction, ip net.IP) error
 }
 
 // Route is the routing result of Router feature.
@@ -33,6 +36,9 @@ type Route interface {
 
 	// GetRuleTag returns the matching rule tag for debugging if exists
 	GetRuleTag() string
+
+	// GetRestriction.
+	GetRestriction() *route.Restriction
 }
 
 // RouterType return the type of Router interface. Can be used to implement common.HasType.
@@ -62,6 +68,11 @@ func (DefaultRouter) AddRule(config *serial.TypedMessage, shouldAppend bool) err
 
 // RemoveRule implements Router.
 func (DefaultRouter) RemoveRule(tag string) error {
+	return common.ErrNoClue
+}
+
+// RestrictionRule implements Router.
+func (DefaultRouter) RestrictionRule(restriction *route.Restriction, ip net.IP) error {
 	return common.ErrNoClue
 }
 

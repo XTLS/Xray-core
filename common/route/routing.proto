@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xray.common.route;
+option csharp_namespace = "Xray.Common.Route";
+option go_package = "github.com/xtls/xray-core/common/route";
+option java_package = "com.xray.common.route";
+option java_multiple_files = true;
+
+message Restriction {
+  string tag = 1;
+  string outboundTag = 2;
+  int64  cleanInterval = 3;
+  int64  lastCleanup = 4;
+}

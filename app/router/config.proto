@@ -9,6 +9,7 @@ option java_multiple_files = true;
 import "common/serial/typed_message.proto";
 import "common/net/port.proto";
 import "common/net/network.proto";
+import "common/route/routing.proto";
 
 // Domain for routing decision.
 message Domain {
@@ -79,7 +80,7 @@ message RoutingRule {
     // Tag of routing balancer.
     string balancing_tag = 12;
   }
-    string rule_tag = 18;
+  string rule_tag = 18;
 
   // List of domains for target domain matching.
   repeated Domain domain = 2;
@@ -110,6 +111,8 @@ message RoutingRule {
   map<string, string> attributes = 15;
 
   string domain_matcher = 17;
+  
+  xray.common.route.Restriction restriction = 19;
 }
 
 message BalancingRule {

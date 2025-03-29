@@ -11,17 +11,16 @@ import (
 )
 
 type Rule struct {
-	Tag       string
-	RuleTag   string
+	*RoutingRule
 	Balancer  *Balancer
 	Condition Condition
 }
 
-func (r *Rule) GetTag() (string, error) {
+func (r *Rule) GetTargetTag() (string, error) {
 	if r.Balancer != nil {
 		return r.Balancer.PickOutbound()
 	}
-	return r.Tag, nil
+	return r.GetTag(), nil
 }
 
 // Apply checks rule matching of current routing context.
