@@ -14,19 +14,18 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Temporary files and directories
+# macOS specific files
 *.DS_Store
-.idea
-.vscode/
-.cache/
-tmp/
-*.log
 
-# Compressed files
+# IDE specific files
+.idea/
+.vscode/
+
+# Archive files
 *.zip
 *.tar.gz
 
-# Build directories and files
+# Binaries
 xray
 xray_softfloat
 mockgen
@@ -35,11 +34,13 @@ vprotogen
 errorgen
 !common/errors/errorgen/
 *.dat
+
+# Build assets
 /build_assets
 
 # Output from dlv test
 **/debug.*
 
-# Certificate files
+# Certificates
 *.crt
 *.key
