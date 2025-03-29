@@ -40,8 +40,8 @@ github.com/klauspost/compress v1.17.8 h1:YcnTYrq7MikUT7k0Yb5eceMmALQPYBW/Xltxn0N
 github.com/klauspost/compress v1.17.8/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
 github.com/klauspost/cpuid/v2 v2.2.7 h1:ZWSB3igEs+d0qvnxR/ZBzXVmxkgt8DdzP6m9pfuVLDM=
 github.com/klauspost/cpuid/v2 v2.2.7/go.mod h1:Lcz8mBdAVJIBVzewtcLocK12l3Y+JytZYpaMropDUws=
-github.com/meo597/reality v0.0.0-20250326210428-52ea918ead1b h1:W47edE5X8Ts/pgj1MFyN9ZdbBLQxcZy0bPzJPxNN3Ww=
-github.com/meo597/reality v0.0.0-20250326210428-52ea918ead1b/go.mod h1:YbGJ8AYQ83QsGjN//QrGnD4W80SvL5b2K3RJKGLcewE=
+github.com/meo597/reality v0.0.0-20250329150927-d77e7560feae h1:MA6A5b1TxiQpCIQ2ky589OqYPy4R3fS3tkg8WezJuJg=
+github.com/meo597/reality v0.0.0-20250329150927-d77e7560feae/go.mod h1:YbGJ8AYQ83QsGjN//QrGnD4W80SvL5b2K3RJKGLcewE=
 github.com/miekg/dns v1.1.65 h1:0+tIPHzUW0GCge7IiK3guGP57VAw7hoPDfApjkMD1Fc=
 github.com/miekg/dns v1.1.65/go.mod h1:Dzw9769uoKVaLuODMDZz9M6ynFU6Em65csPuoi8G0ck=
 github.com/onsi/ginkgo/v2 v2.19.0 h1:9Cnnf7UHo57Hy3k6/m5k3dRfGTMXGvxhHFvkDTCTpvA=
