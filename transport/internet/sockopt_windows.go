@@ -13,8 +13,8 @@ const (
 	TCP_FASTOPEN    = 15
 	IP_UNICAST_IF   = 31
 	IPV6_UNICAST_IF = 31
-	IPV6_MULTICAST_IF = 9
 	IP_MULTICAST_IF = 9
+	IPV6_MULTICAST_IF = 9
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
