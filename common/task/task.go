@@ -6,7 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/semaphore"
 )
 
-// OnSuccess executes g() after f() returns nil.
+// OnSuccess executes g() after f() returns error.
 func OnSuccess(f func() error, g func() error) func() error {
 	return func() error {
 		if err := f(); err != nil {
