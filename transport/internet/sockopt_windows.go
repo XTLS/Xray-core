@@ -74,6 +74,9 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 					return errors.New("failed to set TCP_KEEPIDLE", err)
 				}
 			}
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
+				return errors.New("failed to set SO_KEEPALIVE", err)
+			}
 		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
 				return errors.New("failed to unset SO_KEEPALIVE", err)
@@ -99,6 +102,9 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_KEEPIDLE, int(config.TcpKeepAliveIdle)); err != nil {
 					return errors.New("failed to set TCP_KEEPIDLE", err)
 				}
+			}
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
+				return errors.New("failed to set SO_KEEPALIVE", err)
 			}
 		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
