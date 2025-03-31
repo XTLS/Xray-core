@@ -16,6 +16,7 @@ const (
 	IP_MULTICAST_IF = 9
 	IPV6_MULTICAST_IF = 9
 	IPV6_V6ONLY = 27
+	TCP_MAXSEG = 4
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
@@ -70,6 +71,11 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
 		}
+		if config.TcpMaxSeg > 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+				return errors.New("failed to set TCP_MAXSEG", err)
+			}
+		}
 	}
 
 	return nil
@@ -87,6 +93,11 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		} else if config.TcpKeepAliveIdle < 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
 				return errors.New("failed to unset SO_KEEPALIVE", err)
+			}
+		}
+		if config.TcpMaxSeg > 0 {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+				return errors.New("failed to set TCP_MAXSEG", err)
 			}
 		}
 	}
