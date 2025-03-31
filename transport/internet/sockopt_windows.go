@@ -16,6 +16,8 @@ const (
 	IP_MULTICAST_IF = 9
 	IPV6_MULTICAST_IF = 9
 	IPV6_V6ONLY = 27
+	TCP_KEEPIDLE = 3
+	TCP_KEEPINTVL = 17
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
@@ -61,11 +63,21 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
-		if config.TcpKeepAliveIdle > 0 {
+		if config.TcpKeepAliveInterval > 0 || config.TcpKeepAliveIdle > 0 {
+			if config.TcpKeepAliveInterval > 0 {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
+					return errors.New("failed to set TCP_KEEPINTVL", err)
+				}
+			}
+			if config.TcpKeepAliveIdle > 0 {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_KEEPIDLE, int(config.TcpKeepAliveIdle)); err != nil {
+					return errors.New("failed to set TCP_KEEPIDLE", err)
+				}
+			}
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
 				return errors.New("failed to set SO_KEEPALIVE", err)
 			}
-		} else if config.TcpKeepAliveIdle < 0 {
+		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
 				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
@@ -80,11 +92,21 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		if err := setTFO(syscall.Handle(fd), config.ParseTFOValue()); err != nil {
 			return err
 		}
-		if config.TcpKeepAliveIdle > 0 {
+		if config.TcpKeepAliveInterval > 0 || config.TcpKeepAliveIdle > 0 {
+			if config.TcpKeepAliveInterval > 0 {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_KEEPINTVL, int(config.TcpKeepAliveInterval)); err != nil {
+					return errors.New("failed to set TCP_KEEPINTVL", err)
+				}
+			}
+			if config.TcpKeepAliveIdle > 0 {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_KEEPIDLE, int(config.TcpKeepAliveIdle)); err != nil {
+					return errors.New("failed to set TCP_KEEPIDLE", err)
+				}
+			}
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1); err != nil {
 				return errors.New("failed to set SO_KEEPALIVE", err)
 			}
-		} else if config.TcpKeepAliveIdle < 0 {
+		} else if config.TcpKeepAliveInterval < 0 || config.TcpKeepAliveIdle < 0 {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
 				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
