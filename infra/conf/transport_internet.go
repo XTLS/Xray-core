@@ -412,6 +412,8 @@ type TLSConfig struct {
 	MasterKeyLog                         string           `json:"masterKeyLog"`
 	ServerNameToVerify                   string           `json:"serverNameToVerify"`
 	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
+	ECHConfigList                        string           `json:"echConfigList"`
+	EchKeySets                           string           `json:"echKeySets"`
 }
 
 // Build implements Buildable.
@@ -482,6 +484,16 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		return nil, errors.PrintRemovedFeatureError(`"serverNameToVerify"`, `"verifyPeerCertInNames"`)
 	}
 	config.VerifyPeerCertInNames = c.VerifyPeerCertInNames
+
+	config.EchConfigList = c.ECHConfigList
+
+	if c.EchKeySets != "" {
+		EchPrivateKey, err := base64.StdEncoding.DecodeString(c.EchKeySets)
+		if err != nil {
+			return nil, errors.New("invalid ECH Config", c.EchKeySets)
+		}
+		config.EchKeySets = EchPrivateKey
+	}
 
 	return config, nil
 }
