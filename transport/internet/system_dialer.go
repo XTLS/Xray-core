@@ -59,30 +59,23 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 				Port: 0,
 			}
 		}
-		packetConn, err := ListenSystemPacket(ctx, srcAddr, sockopt)
+		var lc net.ListenConfig
+		lc.Control = func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				if sockopt != nil {
+					if err := applyOutboundSocketOptions(network, "", fd, sockopt); err != nil {
+						errors.LogInfo(ctx, err, "failed to apply socket options")
+					}
+				}
+			})
+		}
+		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
 		if err != nil {
 			return nil, err
 		}
 		destAddr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
 		if err != nil {
 			return nil, err
-		}
-		if sockopt != nil {
-			sys, err := packetConn.(*net.UDPConn).SyscallConn()
-			if err != nil {
-				return nil, err
-			}
-			sys.Control(func(fd uintptr) {
-				var network string
-				if destAddr.IP.To4() != nil {
-					network = "udp4"
-				} else {
-					network = "udp6"
-				}
-				if err := applyOutboundSocketOptions(network, dest.NetAddr(), fd, sockopt); err != nil {
-					errors.LogInfo(ctx, err, "failed to apply socket options")
-				}
-			})
 		}
 		return &PacketConnWrapper{
 			Conn: packetConn,
