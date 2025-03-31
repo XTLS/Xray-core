@@ -15,6 +15,7 @@ const (
 	IPV6_UNICAST_IF = 31
 	IP_MULTICAST_IF = 9
 	IPV6_MULTICAST_IF = 9
+	IPV6_V6ONLY = 27
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
@@ -87,6 +88,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0); err != nil {
 				return errors.New("failed to unset SO_KEEPALIVE", err)
 			}
+		}
+	}
+
+	if config.V6Only {
+		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_V6ONLY, 1); err != nil {
+			return errors.New("failed to set IPV6_V6ONLY").Base(err)
 		}
 	}
 
