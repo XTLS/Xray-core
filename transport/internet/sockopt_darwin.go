@@ -182,6 +182,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		}
 	}
 
+	if config.V6Only {
+		if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_V6ONLY, 1); err != nil {
+			return errors.New("failed to set IPV6_V6ONLY").Base(err)
+		}
+	}
+
 	return nil
 }
 
