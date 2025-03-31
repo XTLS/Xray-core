@@ -72,7 +72,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			}
 		}
 		if config.TcpMaxSeg > 0 {
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
 				return errors.New("failed to set TCP_MAXSEG", err)
 			}
 		}
@@ -96,7 +96,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			}
 		}
 		if config.TcpMaxSeg > 0 {
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_TCP, TCP_MAXSEG, int(config.TcpMaxSeg)); err != nil {
 				return errors.New("failed to set TCP_MAXSEG", err)
 			}
 		}
