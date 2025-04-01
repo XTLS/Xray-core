@@ -1,7 +1,9 @@
 package internet
 
 import (
+	"context"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -110,11 +112,15 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 	if len(config.CustomSockopt) > 0 {
 		for _, custom := range config.CustomSockopt {
+			if custom.System != "" && custom.System != runtime.GOOS{
+				errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+				continue
+			}
 			// Skip unwanted network type
 			// network might be tcp4 or tcp6
 			// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
 			// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
-			if !strings.HasPrefix(network, custom.Network) {
+			if !strings.HasPrefix(network, custom.Network){
 				continue
 			}
 			var level = 0x6 // default TCP
@@ -212,6 +218,17 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 		}
 		if len(config.CustomSockopt) > 0 {
 			for _, custom := range config.CustomSockopt {
+				if custom.System != "" && custom.System != runtime.GOOS{
+					errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+					continue
+				}
+				// Skip unwanted network type
+				// network might be tcp4 or tcp6
+				// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
+				// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
+				if !strings.HasPrefix(network, custom.Network){
+					continue
+				}
 				var level = 0x6 // default TCP
 				var opt int
 				if len(custom.Opt) == 0 {
