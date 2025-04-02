@@ -3,6 +3,7 @@ package task
 import (
 	"sync"
 	"time"
+	"log"
 )
 
 // Periodic is a task that runs periodically.
@@ -24,30 +25,28 @@ func (t *Periodic) hasClosed() bool {
 	return !t.running
 }
 
-func (t *Periodic) checkedExecute() error {
+func (t *Periodic) checkedExecute() {
 	if t.hasClosed() {
-		return nil
+	    return
 	}
-
-	if err := t.Execute(); err != nil {
-		t.access.Lock()
-		t.running = false
-		t.access.Unlock()
-		return err
-	}
-
-	t.access.Lock()
-	defer t.access.Unlock()
-
-	if !t.running {
-		return nil
-	}
-
-	t.timer = time.AfterFunc(t.Interval, func() {
-		t.checkedExecute()
-	})
-
-	return nil
+	
+	go func() {
+	    defer func() {
+	        if r := recover(); r != nil {
+	            log.Printf("[ERROR] Periodic task panic: %v", r)
+	        }
+	    }()
+	
+	    if err := t.Execute(); err != nil {
+	        log.Printf("[WARN] Periodic task execution failed: %v", err)
+	    }
+	
+	    t.access.Lock()
+	    if t.running {
+	        t.timer = time.AfterFunc(t.Interval, t.checkedExecute)
+	    }
+	    t.access.Unlock()
+	}()
 }
 
 // Start implements common.Runnable.
