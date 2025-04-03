@@ -44,6 +44,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		isV4 := strings.Contains(address, ".")
 		// note: DO NOT trust the passed network variable, it can be udp6 even if the address is ipv4
 		// because operating system might(always) use ipv6 socket to process ipv4
+		host, _, err := net.SplitHostPort(address)
 		if isV4 {
 			var bytes [4]byte
 			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))
@@ -51,15 +52,19 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
 				return errors.New("failed to set IP_UNICAST_IF").Base(err)
 			}
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_MULTICAST_IF, int(idx)); err != nil {
-				return errors.New("failed to set IP_MULTICAST_IF").Base(err)
+    			if ip := net.ParseIP(host); ip != nil && ip.IsMulticast() {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_MULTICAST_IF, int(idx)); err != nil {
+					return errors.New("failed to set IP_MULTICAST_IF").Base(err)
+				}
 			}
 		} else {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
 				return errors.New("failed to set IPV6_UNICAST_IF").Base(err)
 			}
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_MULTICAST_IF, inf.Index); err != nil {
-				return errors.New("failed to set IPV6_MULTICAST_IF").Base(err)
+    			if ip := net.ParseIP(host); ip != nil && ip.IsMulticast() {
+				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_MULTICAST_IF, inf.Index); err != nil {
+					return errors.New("failed to set IPV6_MULTICAST_IF").Base(err)
+				}
 			}
 		}
 	}
