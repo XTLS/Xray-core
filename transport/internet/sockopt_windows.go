@@ -40,7 +40,10 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		if err != nil {
 			return errors.New("failed to find the interface").Base(err)
 		}
-		isV4 := (network == "tcp4" || network == "udp4")
+		// easy way to check if the address is ipv4
+		isV4 := strings.Contains(address, ".")
+		// note: DO NOT trust the passed network variable, it can be udp6 even if the address is ipv4
+		// because operating system might(always) use ipv6 socket to process ipv4
 		if isV4 {
 			var bytes [4]byte
 			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))

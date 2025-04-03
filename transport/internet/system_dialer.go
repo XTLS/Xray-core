@@ -63,7 +63,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		lc.Control = func(network, address string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
 				if sockopt != nil {
-					if err := applyOutboundSocketOptions(network, "", fd, sockopt); err != nil {
+					if err := applyOutboundSocketOptions(network, dest.NetAddr(), fd, sockopt); err != nil {
 						errors.LogInfo(ctx, err, "failed to apply socket options")
 					}
 				}
