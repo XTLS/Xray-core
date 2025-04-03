@@ -61,7 +61,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_MULTICAST_IF, inf.Index); err != nil {
 					return errors.New("failed to set IPV6_MULTICAST_IF").Base(err)
 				}
-			)
+			}
 		}
 	}
 
