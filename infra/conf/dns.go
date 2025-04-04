@@ -25,6 +25,7 @@ type NameServerConfig struct {
 	TimeoutMs          uint64     `json:"timeoutMs"`
 }
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	var address Address
 	if err := json.Unmarshal(data, &address); err == nil {
@@ -163,6 +164,18 @@ type HostAddress struct {
 	addrs []*Address
 }
 
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (h *HostAddress) MarshalJSON() ([]byte, error) {
+	if (h.addr != nil) != (h.addrs != nil) {
+		if h.addr != nil {
+			return json.Marshal(h.addr)
+		} else if h.addrs != nil {
+			return json.Marshal(h.addrs)
+		}
+	}
+	return nil, errors.New("unexpected config state")
+}
+
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (h *HostAddress) UnmarshalJSON(data []byte) error {
 	addr := new(Address)
@@ -206,6 +219,11 @@ func getHostMapping(ha *HostAddress) *dns.Config_HostMapping {
 	return &dns.Config_HostMapping{
 		Ip: ips,
 	}
+}
+
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (m *HostsWrapper) MarshalJSON() ([]byte, error) {
+	return json.Marshal(m.Hosts)
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
