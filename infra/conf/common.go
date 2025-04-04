@@ -23,6 +23,7 @@ func (v StringList) Len() int {
 	return len(v)
 }
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (v *StringList) UnmarshalJSON(data []byte) error {
 	var strarray []string
 	if err := json.Unmarshal(data, &strarray); err == nil {
@@ -43,10 +44,12 @@ type Address struct {
 	net.Address
 }
 
-func (v Address) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (v *Address) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.Address.String())
 }
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (v *Address) UnmarshalJSON(data []byte) error {
 	var rawStr string
 	if err := json.Unmarshal(data, &rawStr); err != nil {
@@ -81,6 +84,7 @@ func (v Network) Build() net.Network {
 
 type NetworkList []Network
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (v *NetworkList) UnmarshalJSON(data []byte) error {
 	var strarray []Network
 	if err := json.Unmarshal(data, &strarray); err == nil {
@@ -291,7 +295,8 @@ type Int32Range struct {
 	To    int32
 }
 
-func (v Int32Range) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (v *Int32Range) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.String())
 }
 
@@ -303,6 +308,7 @@ func (v Int32Range) String() string {
 	}
 }
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (v *Int32Range) UnmarshalJSON(data []byte) error {
 	defer v.ensureOrder()
 	var str string

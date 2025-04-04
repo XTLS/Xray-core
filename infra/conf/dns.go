@@ -25,6 +25,7 @@ type NameServerConfig struct {
 	TimeoutMs          uint64     `json:"timeoutMs"`
 }
 
+// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	var address Address
 	if err := json.Unmarshal(data, &address); err == nil {
