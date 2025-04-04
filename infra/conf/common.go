@@ -169,6 +169,19 @@ func (v *PortRange) Build() *net.PortRange {
 	}
 }
 
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (v *PortRange) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+func (port *PortRange) String() string {
+	if port.From == port.To {
+		return strconv.Itoa(int(port.From))
+	} else {
+		return fmt.Sprintf("%d-%d", port.From, port.To)
+	}
+}
+
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (v *PortRange) UnmarshalJSON(data []byte) error {
 	port, err := parseIntPort(data)
@@ -203,20 +216,21 @@ func (list *PortList) Build() *net.PortList {
 	return portList
 }
 
-func (v PortList) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (v *PortList) MarshalJSON() ([]byte, error) {
+	portStr := v.String()
+	port, err := strconv.Atoi(portStr)
+	if err == nil {
+		return json.Marshal(port)
+	} else {
+		return json.Marshal(portStr)
+	}
 }
 
 func (v PortList) String() string {
 	ports := []string{}
 	for _, port := range v.Range {
-		if port.From == port.To {
-			p := strconv.Itoa(int(port.From))
-			ports = append(ports, p)
-		} else {
-			p := fmt.Sprintf("%d-%d", port.From, port.To)
-			ports = append(ports, p)
-		}
+		ports = append(ports, port.String())
 	}
 	return strings.Join(ports, ",")
 }
