@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"context"
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -33,6 +34,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 
 	size, err := serial.ReadUint16(r.reader)
+	errors.LogInfo(context.Background(), "PacketReader read ", size, r.dest)
 	if err != nil {
 		return nil, err
 	}

@@ -1,11 +1,13 @@
 package crypto
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 // ChunkSizeDecoder is a utility class to decode size value from bytes.
@@ -117,6 +119,7 @@ func (r *ChunkStreamReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 	r.leftOverSize = size
 
+	errors.LogInfo(context.Background(), "StreamReader read ", size)
 	mb, err := r.reader.ReadAtMost(size)
 	if !mb.IsEmpty() {
 		r.leftOverSize -= mb.Len()
