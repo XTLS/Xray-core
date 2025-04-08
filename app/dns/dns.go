@@ -8,13 +8,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
-	"github.com/xtls/xray-core/features/dns"
+	"github.com/hosemorinho412/xray-core/app/router"
+	"github.com/hosemorinho412/xray-core/common"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/net"
+	"github.com/hosemorinho412/xray-core/common/session"
+	"github.com/hosemorinho412/xray-core/common/strmatcher"
+	"github.com/hosemorinho412/xray-core/features/dns"
 )
 
 // DNS is a DNS rely server.

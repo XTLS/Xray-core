@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/proxy"
-	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/hosemorinho412/xray-core/common/buf"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/protocol"
+	"github.com/hosemorinho412/xray-core/proxy"
+	"github.com/hosemorinho412/xray-core/proxy/vless"
 	"google.golang.org/protobuf/proto"
 )
 

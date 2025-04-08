@@ -8,8 +8,8 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
+	"github.com/hosemorinho412/xray-core/common/buf"
+	"github.com/hosemorinho412/xray-core/common/net"
 )
 
 type Interface interface {

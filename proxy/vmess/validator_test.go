@@ -3,10 +3,10 @@ package vmess_test
 import (
 	"testing"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
-	. "github.com/xtls/xray-core/proxy/vmess"
+	"github.com/hosemorinho412/xray-core/common"
+	"github.com/hosemorinho412/xray-core/common/protocol"
+	"github.com/hosemorinho412/xray-core/common/uuid"
+	. "github.com/hosemorinho412/xray-core/proxy/vmess"
 )
 
 func toAccount(a *Account) protocol.Account {

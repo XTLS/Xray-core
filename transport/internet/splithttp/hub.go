@@ -14,16 +14,16 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	goreality "github.com/xtls/reality"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	http_proto "github.com/xtls/xray-core/common/protocol/http"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
+	goreality "github.com/hosemorinho412/reality"
+	"github.com/hosemorinho412/xray-core/common"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/net"
+	http_proto "github.com/hosemorinho412/xray-core/common/protocol/http"
+	"github.com/hosemorinho412/xray-core/common/signal/done"
+	"github.com/hosemorinho412/xray-core/transport/internet"
+	"github.com/hosemorinho412/xray-core/transport/internet/reality"
+	"github.com/hosemorinho412/xray-core/transport/internet/stat"
+	"github.com/hosemorinho412/xray-core/transport/internet/tls"
 )
 
 type requestHandler struct {

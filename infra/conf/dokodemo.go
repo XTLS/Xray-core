@@ -1,7 +1,7 @@
 package conf
 
 import (
-	"github.com/xtls/xray-core/proxy/dokodemo"
+	"github.com/hosemorinho412/xray-core/proxy/dokodemo"
 	"google.golang.org/protobuf/proto"
 )
 

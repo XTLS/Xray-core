@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/routing"
+	"github.com/hosemorinho412/xray-core/app/router"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/net"
+	"github.com/hosemorinho412/xray-core/common/session"
+	"github.com/hosemorinho412/xray-core/common/strmatcher"
+	"github.com/hosemorinho412/xray-core/core"
+	"github.com/hosemorinho412/xray-core/features/dns"
+	"github.com/hosemorinho412/xray-core/features/routing"
 )
 
 // Server is the interface for Name Server.
@@ -101,7 +101,7 @@ func NewClient(
 		if _, isLocalDNS := server.(*LocalNameServer); isLocalDNS {
 			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
 			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)
-			// The following lines is a solution to avoid core panics（rule index out of range） when setting `localhost` DNS client in config.
+			// The following lines is a solution to avoid core panics（rule index out of range�?when setting `localhost` DNS client in config.
 			// Because the `localhost` DNS client will append len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
 			// But `matcherInfos` has no enough length to add rules, which leads to core panics (rule index out of range).
 			// To avoid this, the length of `matcherInfos` must be equal to the expected, so manually append it with Golang default zero value first for later modification.

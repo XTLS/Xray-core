@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.proxy.wireguard;
 option csharp_namespace = "Xray.Proxy.WireGuard";
-option go_package = "github.com/xtls/xray-core/proxy/wireguard";
+option go_package = "github.com/hosemorinho412/xray-core/proxy/wireguard";
 option java_package = "com.xray.proxy.wireguard";
 option java_multiple_files = true;
 

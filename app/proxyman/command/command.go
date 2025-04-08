@@ -3,13 +3,13 @@ package command
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/inbound"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/proxy"
+	"github.com/hosemorinho412/xray-core/common"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/protocol"
+	"github.com/hosemorinho412/xray-core/core"
+	"github.com/hosemorinho412/xray-core/features/inbound"
+	"github.com/hosemorinho412/xray-core/features/outbound"
+	"github.com/hosemorinho412/xray-core/proxy"
 	grpc "google.golang.org/grpc"
 )
 

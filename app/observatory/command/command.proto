@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.core.app.observatory.command;
 option csharp_namespace = "Xray.Core.App.Observatory.Command";
-option go_package = "github.com/xtls/xray-core/app/observatory/command";
+option go_package = "github.com/hosemorinho412/xray-core/app/observatory/command";
 option java_package = "com.xray.core.app.observatory.command";
 option java_multiple_files = true;
 

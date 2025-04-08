@@ -1,18 +1,18 @@
 # Project X
 
-[Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core) and [REALITY](https://github.com/XTLS/REALITY).
+[Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/hosemorinho412/Xray-core) and [REALITY](https://github.com/hosemorinho412/REALITY).
 
-[README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
+[README](https://github.com/hosemorinho412/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/hosemorinho412/Xray-core/pulls).
 
 ## Donation & NFTs
 
 - **ETH/USDT/USDC: `0xDc3Fe44F0f25D13CACb1C4896CD0D321df3146Ee`**
-- **Project X NFT: [Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633)**
-- **REALITY NFT: [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113)**
+- **Project X NFT: [Announcement of NFTs by Project X](https://github.com/hosemorinho412/Xray-core/discussions/3633)**
+- **REALITY NFT: [XHTTP: Beyond REALITY](https://github.com/hosemorinho412/Xray-core/discussions/4113)**
 
 ## License
 
-[Mozilla Public License Version 2.0](https://github.com/XTLS/Xray-core/blob/main/LICENSE)
+[Mozilla Public License Version 2.0](https://github.com/hosemorinho412/Xray-core/blob/main/LICENSE)
 
 ## Documentation
 
@@ -31,13 +31,13 @@
 ## Installation
 
 - Linux Script
-  - [XTLS/Xray-install](https://github.com/XTLS/Xray-install) (**Official**)
+  - [XTLS/Xray-install](https://github.com/hosemorinho412/Xray-install) (**Official**)
   - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`systemd`](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
   - [wulabing/xray_docker](https://github.com/wulabing/xray_docker)
-- Web Panel - **WARNING: Please DO NOT USE plain HTTP panels like 3X-UI**, as they are believed to be bribed by Iran GFW for supporting plain HTTP by default and refused to change (https://github.com/XTLS/Xray-core/pull/3884#issuecomment-2439595331), which has already put many users' data security in danger in the past few years. **If you are already using 3X-UI, please switch to the following panels, which are verified to support HTTPS and SSH port forwarding only:**
+- Web Panel - **WARNING: Please DO NOT USE plain HTTP panels like 3X-UI**, as they are believed to be bribed by Iran GFW for supporting plain HTTP by default and refused to change (https://github.com/hosemorinho412/Xray-core/pull/3884#issuecomment-2439595331), which has already put many users' data security in danger in the past few years. **If you are already using 3X-UI, please switch to the following panels, which are verified to support HTTPS and SSH port forwarding only:**
   - [Remnawave](https://github.com/remnawave/panel)
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Xray-UI](https://github.com/qist/xray-ui)
@@ -55,11 +55,11 @@
 ## Usage
 
 - Example
-  - [VLESS-XTLS-uTLS-REALITY](https://github.com/XTLS/REALITY#readme)
-  - [VLESS-TCP-XTLS-Vision](https://github.com/XTLS/Xray-examples/tree/main/VLESS-TCP-XTLS-Vision)
-  - [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx)
+  - [VLESS-XTLS-uTLS-REALITY](https://github.com/hosemorinho412/REALITY#readme)
+  - [VLESS-TCP-XTLS-Vision](https://github.com/hosemorinho412/Xray-examples/tree/main/VLESS-TCP-XTLS-Vision)
+  - [All-in-One-fallbacks-Nginx](https://github.com/hosemorinho412/Xray-examples/tree/main/All-in-One-fallbacks-Nginx)
 - Xray-examples
-  - [XTLS/Xray-examples](https://github.com/XTLS/Xray-examples)
+  - [XTLS/Xray-examples](https://github.com/hosemorinho412/Xray-examples)
   - [chika0801/Xray-examples](https://github.com/chika0801/Xray-examples)
   - [lxhao61/integrated-examples](https://github.com/lxhao61/integrated-examples)
 - Tutorial
@@ -83,7 +83,7 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [X-flutter](https://github.com/hosemorinho412/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
 - iOS & macOS arm64
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
@@ -106,7 +106,7 @@
   - [xray-knife](https://github.com/lilendian0x00/xray-knife)
   - [xray-checker](https://github.com/kutovoys/xray-checker)
 - Xray Wrapper
-  - [XTLS/libXray](https://github.com/XTLS/libXray)
+  - [XTLS/libXray](https://github.com/hosemorinho412/libXray)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
@@ -121,12 +121,12 @@
 
 ## Contributing
 
-[Code of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
+[Code of Conduct](https://github.com/hosemorinho412/Xray-core/blob/main/CODE_OF_CONDUCT.md)
 
 ## Credits
 
-- [Xray-core v1.0.0](https://github.com/XTLS/Xray-core/releases/tag/v1.0.0) was forked from [v2fly-core 9a03cc5](https://github.com/v2fly/v2ray-core/commit/9a03cc5c98d04cc28320fcee26dbc236b3291256), and we have made & accumulated a huge number of enhancements over time, check [the release notes for each version](https://github.com/XTLS/Xray-core/releases).
-- For third-party projects used in [Xray-core](https://github.com/XTLS/Xray-core), check your local or [the latest go.mod](https://github.com/XTLS/Xray-core/blob/main/go.mod).
+- [Xray-core v1.0.0](https://github.com/hosemorinho412/Xray-core/releases/tag/v1.0.0) was forked from [v2fly-core 9a03cc5](https://github.com/v2fly/v2ray-core/commit/9a03cc5c98d04cc28320fcee26dbc236b3291256), and we have made & accumulated a huge number of enhancements over time, check [the release notes for each version](https://github.com/hosemorinho412/Xray-core/releases).
+- For third-party projects used in [Xray-core](https://github.com/hosemorinho412/Xray-core), check your local or [the latest go.mod](https://github.com/hosemorinho412/Xray-core/blob/main/go.mod).
 
 ## One-line Compilation
 
@@ -148,7 +148,7 @@ CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-s -w -buildi
 Make sure that you are using the same Go version, and remember to set the git commit id (7 bytes):
 
 ```bash
-CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/hosemorinho412/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
 ## Stargazers over time

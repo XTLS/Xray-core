@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/hosemorinho412/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/net"
+	"github.com/hosemorinho412/xray-core/common/platform"
+	"github.com/hosemorinho412/xray-core/common/protocol"
 )
 
 type StringList []string
@@ -336,8 +336,8 @@ func (r *Int32Range) ensureOrder() {
 	}
 }
 
-// "-114-514"   â†’  ["-114","514"]
-// "-1919--810" â†’  ["-1919","-810"]
+// "-114-514"   â†? ["-114","514"]
+// "-1919--810" â†? ["-1919","-810"]
 func splitFromSecondDash(s string) []string {
 	parts := strings.SplitN(s, "-", 3)
 	if len(parts) < 3 {

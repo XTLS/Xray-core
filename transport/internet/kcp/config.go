@@ -3,8 +3,8 @@ package kcp
 import (
 	"crypto/cipher"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/hosemorinho412/xray-core/common"
+	"github.com/hosemorinho412/xray-core/transport/internet"
 )
 
 // GetMTUValue returns the value of MTU settings.

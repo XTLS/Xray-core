@@ -3,8 +3,8 @@ package drain
 import (
 	"io"
 
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/dice"
+	"github.com/hosemorinho412/xray-core/common/errors"
 )
 
 type BehaviorSeedLimitedDrainer struct {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
 

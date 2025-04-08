@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package xray.transport.internet.grpc.encoding;
-option go_package = "github.com/xtls/xray-core/transport/internet/grpc/encoding";
+option go_package = "github.com/hosemorinho412/xray-core/transport/internet/grpc/encoding";
 
 message Hunk {
   bytes data = 1;

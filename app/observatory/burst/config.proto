@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package xray.core.app.observatory.burst;
 option csharp_namespace = "Xray.App.Observatory.Burst";
-option go_package = "github.com/xtls/xray-core/app/observatory/burst";
+option go_package = "github.com/hosemorinho412/xray-core/app/observatory/burst";
 option java_package = "com.xray.app.observatory.burst";
 option java_multiple_files = true;
 

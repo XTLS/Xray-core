@@ -3,9 +3,9 @@ package conf_test
 import (
 	"testing"
 
-	"github.com/xtls/xray-core/common/net"
-	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/dokodemo"
+	"github.com/hosemorinho412/xray-core/common/net"
+	. "github.com/hosemorinho412/xray-core/infra/conf"
+	"github.com/hosemorinho412/xray-core/proxy/dokodemo"
 )
 
 func TestDokodemoConfig(t *testing.T) {

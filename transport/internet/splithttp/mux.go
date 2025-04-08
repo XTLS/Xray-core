@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/hosemorinho412/xray-core/common/errors"
 )
 
 type XmuxConn interface {

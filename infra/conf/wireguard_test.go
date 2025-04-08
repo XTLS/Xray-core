@@ -3,8 +3,8 @@ package conf_test
 import (
 	"testing"
 
-	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/wireguard"
+	. "github.com/hosemorinho412/xray-core/infra/conf"
+	"github.com/hosemorinho412/xray-core/proxy/wireguard"
 )
 
 func TestWireGuardConfig(t *testing.T) {
