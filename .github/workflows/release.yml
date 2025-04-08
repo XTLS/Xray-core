@@ -45,9 +45,6 @@ jobs:
           # Windows ARM
           - goos: windows
             goarch: arm64
-          - goos: windows
-            goarch: arm
-            goarm: 7
           # BEGIN Other architectures
           # BEGIN riscv64 & ARM64 & LOONG64
           - goos: linux
