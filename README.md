@@ -32,6 +32,7 @@
 
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install) (**Official**)
+  - [XTLS/alpinelinux-install-xray](https://github.com/XTLS/alpinelinux-install-xray) (**Official**; Alpine Linux only)
   - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`systemd`](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
