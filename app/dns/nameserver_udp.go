@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	go_errors "errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -269,7 +270,7 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 	if len(allIPs) > 0 {
 		return allIPs, rTTL, nil
 	}
-	if errs[0] == errs[1] {
+	if go_errors.Is(errs[0], errs[1]) {
 		return nil, rTTL, errs[0]
 	}
 	return nil, rTTL, errors.Combine(errs...)

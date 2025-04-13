@@ -3,6 +3,7 @@ package dns
 
 import (
 	"context"
+	go_errors "errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -235,7 +236,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		allErrs := errors.Combine(errs...)
 		err0 := errs[0]
 		if errors.AllEqual(err0, allErrs) {
-			if err0 == dns.ErrEmptyResponse {
+			if go_errors.Is(err0, dns.ErrEmptyResponse) {
 				return nil, 0, dns.ErrEmptyResponse
 			}
 			return nil, 0, errors.New("returning nil for domain ", domain).Base(err0)

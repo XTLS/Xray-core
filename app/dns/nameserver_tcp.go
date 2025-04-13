@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	go_errors "errors"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -328,7 +329,7 @@ func (s *TCPNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 	if len(allIPs) > 0 {
 		return allIPs, rTTL, nil
 	}
-	if errs[0] == errs[1] {
+	if go_errors.Is(errs[0], errs[1]) {
 		return nil, rTTL, errs[0]
 	}
 	return nil, rTTL, errors.Combine(errs...)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	go_errors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -344,7 +345,7 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 	if len(allIPs) > 0 {
 		return allIPs, rTTL, nil
 	}
-	if errs[0] == errs[1] {
+	if go_errors.Is(errs[0], errs[1]) {
 		return nil, rTTL, errs[0]
 	}
 	return nil, rTTL, errors.Combine(errs...)
