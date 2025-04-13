@@ -66,7 +66,7 @@ func TestDOHNameServerWithIPv4Override(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
 		IPv4Enable: true,
-		IPv6Enable: true,
+		IPv6Enable: false,
 	}, false)
 	cancel()
 	common.Must(err)
@@ -88,7 +88,7 @@ func TestDOHNameServerWithIPv6Override(t *testing.T) {
 	s := NewDoHNameServer(url, nil, false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", net.IP(nil), dns_feature.IPOption{
-		IPv4Enable: true,
+		IPv4Enable: false,
 		IPv6Enable: true,
 	}, false)
 	cancel()
