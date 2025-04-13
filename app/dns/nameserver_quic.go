@@ -33,17 +33,16 @@ const handshakeTimeout = time.Second * 8
 // QUICNameServer implemented DNS over QUIC
 type QUICNameServer struct {
 	sync.RWMutex
-	ips           map[string]*record
-	pub           *pubsub.Service
-	cleanup       *task.Periodic
-	name          string
-	destination   *net.Destination
-	connection    quic.Connection
-	queryStrategy QueryStrategy
+	ips         map[string]*record
+	pub         *pubsub.Service
+	cleanup     *task.Periodic
+	name        string
+	destination *net.Destination
+	connection  quic.Connection
 }
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
-func NewQUICNameServer(url *url.URL, queryStrategy QueryStrategy) (*QUICNameServer, error) {
+func NewQUICNameServer(url *url.URL) (*QUICNameServer, error) {
 	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
 
 	var err error
@@ -57,11 +56,10 @@ func NewQUICNameServer(url *url.URL, queryStrategy QueryStrategy) (*QUICNameServ
 	dest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &QUICNameServer{
-		ips:           make(map[string]*record),
-		pub:           pubsub.NewService(),
-		name:          url.String(),
-		destination:   &dest,
-		queryStrategy: queryStrategy,
+		ips:         make(map[string]*record),
+		pub:         pubsub.NewService(),
+		name:        url.String(),
+		destination: &dest,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -117,38 +115,31 @@ func (s *QUICNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	if !found {
 		rec = &record{}
 	}
-	updated := false
 
 	switch req.reqType {
 	case dnsmessage.TypeA:
-		if isNewer(rec.A, ipRec) {
-			rec.A = ipRec
-			updated = true
-		}
+		rec.A = ipRec
 	case dnsmessage.TypeAAAA:
-		addr := make([]net.Address, 0)
+		ips := make([]net.IP, 0, len(ipRec.IP))
 		for _, ip := range ipRec.IP {
-			if len(ip.IP()) == net.IPv6len {
-				addr = append(addr, ip)
+			if len(ip) == net.IPv6len {
+				ips = append(ips, ip)
 			}
 		}
-		ipRec.IP = addr
-		if isNewer(rec.AAAA, ipRec) {
-			rec.AAAA = ipRec
-			updated = true
-		}
+		ipRec.IP = ips
+		rec.AAAA = ipRec
 	}
-	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
 
-	if updated {
-		s.ips[req.domain] = rec
-	}
+	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
+	s.ips[req.domain] = rec
+
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		s.pub.Publish(req.domain+"4", nil)
 	case dnsmessage.TypeAAAA:
 		s.pub.Publish(req.domain+"6", nil)
 	}
+
 	s.Unlock()
 	common.Must(s.cleanup.Start())
 }
@@ -157,7 +148,7 @@ func (s *QUICNameServer) newReqID() uint16 {
 	return 0
 }
 
-func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
+func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, clientIP net.IP, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.name, " querying: ", domain)
 
 	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
@@ -192,23 +183,36 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to pack dns query")
+				noResponseErrCh <- err
 				return
 			}
 
 			dnsReqBuf := buf.New()
-			binary.Write(dnsReqBuf, binary.BigEndian, uint16(b.Len()))
-			dnsReqBuf.Write(b.Bytes())
+			err = binary.Write(dnsReqBuf, binary.BigEndian, uint16(b.Len()))
+			if err != nil {
+				errors.LogErrorInner(ctx, err, "binary write failed")
+				noResponseErrCh <- err
+				return
+			}
+			_, err = dnsReqBuf.Write(b.Bytes())
+			if err != nil {
+				errors.LogErrorInner(ctx, err, "buffer write failed")
+				noResponseErrCh <- err
+				return
+			}
 			b.Release()
 
 			conn, err := s.openStream(dnsCtx)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to open quic connection")
+				noResponseErrCh <- err
 				return
 			}
 
 			_, err = conn.Write(dnsReqBuf.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to send query")
+				noResponseErrCh <- err
 				return
 			}
 
@@ -219,24 +223,28 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, domain string, clientIP 
 			n, err := respBuf.ReadFullFrom(conn, 2)
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
+				noResponseErrCh <- err
 				return
 			}
 			var length int16
 			err = binary.Read(bytes.NewReader(respBuf.Bytes()), binary.BigEndian, &length)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to parse response length")
+				noResponseErrCh <- err
 				return
 			}
 			respBuf.Clear()
 			n, err = respBuf.ReadFullFrom(conn, int32(length))
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
+				noResponseErrCh <- err
 				return
 			}
 
 			rec, err := parseResponse(respBuf.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to handle response")
+				noResponseErrCh <- err
 				return
 			}
 			s.updateIP(r, rec)
@@ -253,54 +261,60 @@ func (s *QUICNameServer) findIPsForDomain(domain string, option dns_feature.IPOp
 		return nil, 0, errRecordNotFound
 	}
 
-	var err4 error
-	var err6 error
-	var ips []net.Address
-	var ip6 []net.Address
-	var ttl uint32
+	var errs []error
+	var allIPs []net.IP
+	var rTTL uint32 = dns_feature.DefaultTTL
+
+	mergeReq := option.IPv4Enable && option.IPv6Enable
 
 	if option.IPv4Enable {
-		ips, ttl, err4 = record.A.getIPs()
+		ips, ttl, err := record.A.getIPs()
+		if !mergeReq || err == errRecordNotFound {
+			return ips, ttl, err
+		}
+		if ttl < rTTL {
+			rTTL = ttl
+		}
+		if len(ips) > 0 {
+			allIPs = append(allIPs, ips...)
+		} else {
+			errs = append(errs, err)
+		}
 	}
 
 	if option.IPv6Enable {
-		ip6, ttl, err6 = record.AAAA.getIPs()
-		ips = append(ips, ip6...)
+		ips, ttl, err := record.AAAA.getIPs()
+		if !mergeReq || err == errRecordNotFound {
+			return ips, ttl, err
+		}
+		if ttl < rTTL {
+			rTTL = ttl
+		}
+		if len(ips) > 0 {
+			allIPs = append(allIPs, ips...)
+		} else {
+			errs = append(errs, err)
+		}
 	}
 
-	if len(ips) > 0 {
-		netips, err := toNetIP(ips)
-		return netips, ttl, err
+	if len(allIPs) > 0 {
+		return allIPs, rTTL, nil
 	}
-
-	if err4 != nil {
-		return nil, 0, err4
+	if errs[0] == errs[1] {
+		return nil, rTTL, errs[0]
 	}
-
-	if err6 != nil {
-		return nil, 0, err6
-	}
-
-	if (option.IPv4Enable && record.A != nil) || (option.IPv6Enable && record.AAAA != nil) {
-		return nil, 0, dns_feature.ErrEmptyResponse
-	}
-
-	return nil, 0, errRecordNotFound
+	return nil, rTTL, errors.Combine(errs...)
 }
 
 // QueryIP is called from dns.Server->queryIPTimeout
 func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
-	option = ResolveIpOptionOverride(s.queryStrategy, option)
-	if !option.IPv4Enable && !option.IPv6Enable {
-		return nil, 0, dns_feature.ErrEmptyResponse
-	}
 
 	if disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err == nil || err == dns_feature.ErrEmptyResponse || dns_feature.RCodeFromError(err) == 3 {
+		if err != errRecordNotFound {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
@@ -323,31 +337,31 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 			select {
 			case <-sub4.Wait():
 			case <-ctx.Done():
+				return
 			}
 		}
 		if sub6 != nil {
 			select {
 			case <-sub6.Wait():
 			case <-ctx.Done():
+				return
 			}
 		}
 		close(done)
 	}()
-	s.sendQuery(ctx, fqdn, clientIP, option)
+	noResponseErrCh := make(chan error, 2)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, clientIP, option)
 	start := time.Now()
 
-	for {
+	select {
+	case <-ctx.Done():
+		return nil, 0, ctx.Err()
+	case err := <-noResponseErrCh:
+		return nil, 0, err
+	case <-done:
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
-			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-			return ips, ttl, err
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case <-done:
-		}
+		log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
+		return ips, ttl, err
 	}
 }
 

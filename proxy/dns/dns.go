@@ -255,7 +255,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	}
 
 	rcode := dns.RCodeFromError(err)
-	if rcode == 0 && len(ips) == 0 && !errors.AllEqual(dns.ErrEmptyResponse, errors.Cause(err)) {
+	if rcode == 0 && len(ips) == 0 && err != dns.ErrEmptyResponse {
 		errors.LogInfoInner(context.Background(), err, "ip query")
 		return
 	}
