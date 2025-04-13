@@ -76,6 +76,9 @@ func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		case q.Name == "notexist.google.com." && q.Qtype == dns.TypeAAAA:
 			ans.MsgHdr.Rcode = dns.RcodeNameError
 
+		case q.Name == "notexist.google.com." && q.Qtype == dns.TypeA:
+			ans.MsgHdr.Rcode = dns.RcodeNameError
+
 		case q.Name == "hostname." && q.Qtype == dns.TypeA:
 			rr, _ := dns.NewRR("hostname. IN A 127.0.0.1")
 			ans.Answer = append(ans.Answer, rr)
