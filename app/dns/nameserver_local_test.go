@@ -12,7 +12,7 @@ import (
 )
 
 func TestLocalNameServer(t *testing.T) {
-	s := NewLocalNameServer(QueryStrategy_USE_IP)
+	s := NewLocalNameServer()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	ips, _, err := s.QueryIP(ctx, "google.com", net.IP{}, dns.IPOption{
 		IPv4Enable: true,
