@@ -39,8 +39,13 @@ func executeECH(cmd *base.Command, args []string) {
 	} else {
 		kem = hpke.KEM_X25519_HKDF_SHA256
 	}
-
-	echKeySet, err := goech.GenerateECHKeySet(0, *input_serverName, kem)
+	suites := []goech.HpkeSymmetricCipherSuite{
+		{
+			KDF:  hpke.KDF_HKDF_SHA256,
+			AEAD: hpke.AEAD_AES128GCM,
+		},
+	}
+	echKeySet, err := goech.GenerateECHKeySet(0, *input_serverName, kem, suites)
 	common.Must(err)
 
 	configBuffer, _ := echKeySet.ECHConfig.MarshalBinary()
