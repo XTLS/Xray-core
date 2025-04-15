@@ -61,6 +61,11 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		}
 		var lc net.ListenConfig
 		lc.Control = func(network, address string, c syscall.RawConn) error {
+			for _, ctl := range d.controllers {
+				if err := ctl(network, address, c); err != nil {
+					errors.LogInfoInner(ctx, err, "failed to apply external controller")
+				}
+			}
 			return c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, "", fd, sockopt); err != nil {

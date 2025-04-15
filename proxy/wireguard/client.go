@@ -77,6 +77,20 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	}, nil
 }
 
+func (h *Handler) Close() (err error) {
+	go func() {
+		h.wgLock.Lock()
+		defer h.wgLock.Unlock()
+
+		if h.net != nil {
+			_ = h.net.Close()
+			h.net = nil
+		}
+	}()
+
+	return nil
+}
+
 func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) (err error) {
 	h.wgLock.Lock()
 	defer h.wgLock.Unlock()
