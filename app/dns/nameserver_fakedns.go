@@ -20,7 +20,7 @@ func (FakeDNSServer) Name() string {
 	return "FakeDNS"
 }
 
-func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, _ net.IP, opt dns.IPOption, _ bool) ([]net.IP, uint32, error) {
+func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, opt dns.IPOption) ([]net.IP, uint32, error) {
 	if f.fakeDNSEngine == nil {
 		return nil, 0, errors.New("Unable to locate a fake DNS Engine").AtError()
 	}

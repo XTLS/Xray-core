@@ -29,21 +29,25 @@ import (
 // TCPNameServer implemented DNS over TCP (RFC7766).
 type TCPNameServer struct {
 	sync.RWMutex
-	name        string
-	destination *net.Destination
-	ips         map[string]*record
-	pub         *pubsub.Service
-	cleanup     *task.Periodic
-	reqID       uint32
-	dial        func(context.Context) (net.Conn, error)
+	name         string
+	destination  *net.Destination
+	ips          map[string]*record
+	pub          *pubsub.Service
+	cleanup      *task.Periodic
+	reqID        uint32
+	dial         func(context.Context) (net.Conn, error)
+	disableCache bool
+	clientIP     net.IP
 }
 
 // NewTCPNameServer creates DNS over TCP server object for remote resolving.
 func NewTCPNameServer(
 	url *url.URL,
 	dispatcher routing.Dispatcher,
+	disableCache bool,
+	clientIP net.IP,
 ) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCP")
+	s, err := baseTCPNameServer(url, "TCP", disableCache, clientIP)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +68,8 @@ func NewTCPNameServer(
 }
 
 // NewTCPLocalNameServer creates DNS over TCP client object for local resolving
-func NewTCPLocalNameServer(url *url.URL) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCPL")
+func NewTCPLocalNameServer(url *url.URL, disableCache bool, clientIP net.IP) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCPL", disableCache, clientIP)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +81,7 @@ func NewTCPLocalNameServer(url *url.URL) (*TCPNameServer, error) {
 	return s, nil
 }
 
-func baseTCPNameServer(url *url.URL, prefix string) (*TCPNameServer, error) {
+func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, clientIP net.IP) (*TCPNameServer, error) {
 	port := net.Port(53)
 	if url.Port() != "" {
 		var err error
@@ -88,10 +92,12 @@ func baseTCPNameServer(url *url.URL, prefix string) (*TCPNameServer, error) {
 	dest := net.TCPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &TCPNameServer{
-		destination: &dest,
-		ips:         make(map[string]*record),
-		pub:         pubsub.NewService(),
-		name:        prefix + "//" + dest.NetAddr(),
+		destination:  &dest,
+		ips:          make(map[string]*record),
+		pub:          pubsub.NewService(),
+		name:         prefix + "//" + dest.NetAddr(),
+		disableCache: disableCache,
+		clientIP:     clientIP,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -168,8 +174,20 @@ func (s *TCPNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		s.pub.Publish(req.domain+"4", nil)
+		if !s.disableCache {
+			_, _, err := rec.AAAA.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"6", nil)
+			}
+		}
 	case dnsmessage.TypeAAAA:
 		s.pub.Publish(req.domain+"6", nil)
+		if !s.disableCache {
+			_, _, err := rec.A.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"4", nil)
+			}
+		}
 	}
 
 	s.Unlock()
@@ -180,10 +198,10 @@ func (s *TCPNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }
 
-func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, clientIP net.IP, option dns_feature.IPOption) {
+func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
 	errors.LogDebug(ctx, s.name, " querying DNS for: ", domain)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -298,7 +316,7 @@ func (s *TCPNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 
 	if option.IPv4Enable {
 		ips, ttl, err := record.A.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -313,7 +331,7 @@ func (s *TCPNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 
 	if option.IPv6Enable {
 		ips, ttl, err := record.AAAA.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -336,14 +354,14 @@ func (s *TCPNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 }
 
 // QueryIP implements Server.
-func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) {
+func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
 
-	if disableCache {
+	if s.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
+		if !go_errors.Is(err, errRecordNotFound) {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
@@ -379,7 +397,7 @@ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 		close(done)
 	}()
 	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, clientIP, option)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
 	start := time.Now()
 
 	select {

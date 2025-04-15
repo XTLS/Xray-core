@@ -25,14 +25,16 @@ import (
 // ClassicNameServer implemented traditional UDP DNS.
 type ClassicNameServer struct {
 	sync.RWMutex
-	name      string
-	address   *net.Destination
-	ips       map[string]*record
-	requests  map[uint16]*udpDnsRequest
-	pub       *pubsub.Service
-	udpServer *udp.Dispatcher
-	cleanup   *task.Periodic
-	reqID     uint32
+	name         string
+	address      *net.Destination
+	ips          map[string]*record
+	requests     map[uint16]*udpDnsRequest
+	pub          *pubsub.Service
+	udpServer    *udp.Dispatcher
+	cleanup      *task.Periodic
+	reqID        uint32
+	disableCache bool
+	clientIP     net.IP
 }
 
 type udpDnsRequest struct {
@@ -41,18 +43,20 @@ type udpDnsRequest struct {
 }
 
 // NewClassicNameServer creates udp server object for remote resolving.
-func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher) *ClassicNameServer {
+func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, clientIP net.IP) *ClassicNameServer {
 	// default to 53 if unspecific
 	if address.Port == 0 {
 		address.Port = net.Port(53)
 	}
 
 	s := &ClassicNameServer{
-		address:  &address,
-		ips:      make(map[string]*record),
-		requests: make(map[uint16]*udpDnsRequest),
-		pub:      pubsub.NewService(),
-		name:     strings.ToUpper(address.String()),
+		address:      &address,
+		ips:          make(map[string]*record),
+		requests:     make(map[uint16]*udpDnsRequest),
+		pub:          pubsub.NewService(),
+		name:         strings.ToUpper(address.String()),
+		disableCache: disableCache,
+		clientIP:     clientIP,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -185,8 +189,20 @@ func (s *ClassicNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		s.pub.Publish(req.domain+"4", nil)
+		if !s.disableCache {
+			_, _, err := rec.AAAA.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"6", nil)
+			}
+		}
 	case dnsmessage.TypeAAAA:
 		s.pub.Publish(req.domain+"6", nil)
+		if !s.disableCache {
+			_, _, err := rec.A.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"4", nil)
+			}
+		}
 	}
 
 	s.Unlock()
@@ -206,10 +222,10 @@ func (s *ClassicNameServer) addPendingRequest(req *udpDnsRequest) {
 	s.requests[id] = req
 }
 
-func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domain string, clientIP net.IP, option dns_feature.IPOption) {
+func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domain string, option dns_feature.IPOption) {
 	errors.LogDebug(ctx, s.name, " querying DNS for: ", domain)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	for _, req := range reqs {
 		udpReq := &udpDnsRequest{
@@ -239,7 +255,7 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 
 	if option.IPv4Enable {
 		ips, ttl, err := record.A.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -254,7 +270,7 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 
 	if option.IPv6Enable {
 		ips, ttl, err := record.AAAA.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -277,14 +293,14 @@ func (s *ClassicNameServer) findIPsForDomain(domain string, option dns_feature.I
 }
 
 // QueryIP implements Server.
-func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) {
+func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
 
-	if disableCache {
+	if s.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
+		if !go_errors.Is(err, errRecordNotFound) {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
@@ -320,7 +336,7 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, clientIP
 		close(done)
 	}()
 	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, clientIP, option)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
 	start := time.Now()
 
 	select {

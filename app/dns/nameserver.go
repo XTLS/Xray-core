@@ -21,13 +21,12 @@ type Server interface {
 	// Name of the Client.
 	Name() string
 	// QueryIP sends IP queries to its configured server.
-	QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns.IPOption, disableCache bool) ([]net.IP, uint32, error)
+	QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error)
 }
 
 // Client is the interface for DNS client.
 type Client struct {
 	server        Server
-	clientIP      net.IP
 	skipFallback  bool
 	domains       []string
 	expectedIPs   []*router.GeoIPMatcher
@@ -36,13 +35,12 @@ type Client struct {
 	unpriorIPs    []*router.GeoIPMatcher
 	tag           string
 	timeoutMs     time.Duration
-	disableCache  bool
 	finalQuery    bool
 	ipOption      *dns.IPOption
 }
 
 // NewServer creates a name server object according to the network destination url.
-func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dispatcher) (Server, error) {
+func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dispatcher, disableCache bool, clientIP net.IP) (Server, error) {
 	if address := dest.Address; address.Family().IsDomain() {
 		u, err := url.Parse(address.Domain())
 		if err != nil {
@@ -52,19 +50,19 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		case strings.EqualFold(u.String(), "localhost"):
 			return NewLocalNameServer(), nil
 		case strings.EqualFold(u.Scheme, "https"): // DNS-over-HTTPS Remote mode
-			return NewDoHNameServer(u, dispatcher, false), nil
+			return NewDoHNameServer(u, dispatcher, false, disableCache, clientIP), nil
 		case strings.EqualFold(u.Scheme, "h2c"): // DNS-over-HTTPS h2c Remote mode
-			return NewDoHNameServer(u, dispatcher, true), nil
+			return NewDoHNameServer(u, dispatcher, true, disableCache, clientIP), nil
 		case strings.EqualFold(u.Scheme, "https+local"): // DNS-over-HTTPS Local mode
-			return NewDoHNameServer(u, nil, false), nil
+			return NewDoHNameServer(u, nil, false, disableCache, clientIP), nil
 		case strings.EqualFold(u.Scheme, "h2c+local"): // DNS-over-HTTPS h2c Local mode
-			return NewDoHNameServer(u, nil, true), nil
+			return NewDoHNameServer(u, nil, true, disableCache, clientIP), nil
 		case strings.EqualFold(u.Scheme, "quic+local"): // DNS-over-QUIC Local mode
-			return NewQUICNameServer(u)
+			return NewQUICNameServer(u, disableCache, clientIP)
 		case strings.EqualFold(u.Scheme, "tcp"): // DNS-over-TCP Remote mode
-			return NewTCPNameServer(u, dispatcher)
+			return NewTCPNameServer(u, dispatcher, disableCache, clientIP)
 		case strings.EqualFold(u.Scheme, "tcp+local"): // DNS-over-TCP Local mode
-			return NewTCPLocalNameServer(u)
+			return NewTCPLocalNameServer(u, disableCache, clientIP)
 		case strings.EqualFold(u.String(), "fakedns"):
 			var fd dns.FakeDNSEngine
 			err = core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
@@ -80,7 +78,7 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		dest.Network = net.Network_UDP
 	}
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
-		return NewClassicNameServer(dest, dispatcher), nil
+		return NewClassicNameServer(dest, dispatcher, disableCache, clientIP), nil
 	}
 	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
 }
@@ -100,7 +98,7 @@ func NewClient(
 
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
-		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher)
+		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, clientIP)
 		if err != nil {
 			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}
@@ -209,7 +207,6 @@ func NewClient(
 		}
 
 		client.server = server
-		client.clientIP = clientIP
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
 		client.expectedIPs = expectedMatchers
@@ -218,7 +215,6 @@ func NewClient(
 		client.unpriorIPs = unpriorMatchers
 		client.tag = tag
 		client.timeoutMs = timeoutMs
-		client.disableCache = disableCache
 		client.finalQuery = ns.FinalQuery
 		client.ipOption = &ipOption
 		return nil
@@ -245,7 +241,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 
 	ctx, cancel := context.WithTimeout(ctx, c.timeoutMs)
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: c.tag})
-	ips, ttl, err := c.server.QueryIP(ctx, domain, c.clientIP, option, c.disableCache)
+	ips, ttl, err := c.server.QueryIP(ctx, domain, option)
 	cancel()
 
 	if err != nil {

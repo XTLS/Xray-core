@@ -34,16 +34,18 @@ const handshakeTimeout = time.Second * 8
 // QUICNameServer implemented DNS over QUIC
 type QUICNameServer struct {
 	sync.RWMutex
-	ips         map[string]*record
-	pub         *pubsub.Service
-	cleanup     *task.Periodic
-	name        string
-	destination *net.Destination
-	connection  quic.Connection
+	ips          map[string]*record
+	pub          *pubsub.Service
+	cleanup      *task.Periodic
+	name         string
+	destination  *net.Destination
+	connection   quic.Connection
+	disableCache bool
+	clientIP     net.IP
 }
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
-func NewQUICNameServer(url *url.URL) (*QUICNameServer, error) {
+func NewQUICNameServer(url *url.URL, disableCache bool, clientIP net.IP) (*QUICNameServer, error) {
 	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
 
 	var err error
@@ -57,10 +59,12 @@ func NewQUICNameServer(url *url.URL) (*QUICNameServer, error) {
 	dest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &QUICNameServer{
-		ips:         make(map[string]*record),
-		pub:         pubsub.NewService(),
-		name:        url.String(),
-		destination: &dest,
+		ips:          make(map[string]*record),
+		pub:          pubsub.NewService(),
+		name:         url.String(),
+		destination:  &dest,
+		disableCache: disableCache,
+		clientIP:     clientIP,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -137,8 +141,20 @@ func (s *QUICNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		s.pub.Publish(req.domain+"4", nil)
+		if !s.disableCache {
+			_, _, err := rec.AAAA.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"6", nil)
+			}
+		}
 	case dnsmessage.TypeAAAA:
 		s.pub.Publish(req.domain+"6", nil)
+		if !s.disableCache {
+			_, _, err := rec.A.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"4", nil)
+			}
+		}
 	}
 
 	s.Unlock()
@@ -149,10 +165,10 @@ func (s *QUICNameServer) newReqID() uint16 {
 	return 0
 }
 
-func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, clientIP net.IP, option dns_feature.IPOption) {
+func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.name, " querying: ", domain)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, 0))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -270,7 +286,7 @@ func (s *QUICNameServer) findIPsForDomain(domain string, option dns_feature.IPOp
 
 	if option.IPv4Enable {
 		ips, ttl, err := record.A.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -285,7 +301,7 @@ func (s *QUICNameServer) findIPsForDomain(domain string, option dns_feature.IPOp
 
 	if option.IPv6Enable {
 		ips, ttl, err := record.AAAA.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -308,14 +324,14 @@ func (s *QUICNameServer) findIPsForDomain(domain string, option dns_feature.IPOp
 }
 
 // QueryIP is called from dns.Server->queryIPTimeout
-func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) {
+func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
 
-	if disableCache {
+	if s.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
+		if !go_errors.Is(err, errRecordNotFound) {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
@@ -351,7 +367,7 @@ func (s *QUICNameServer) QueryIP(ctx context.Context, domain string, clientIP ne
 		close(done)
 	}()
 	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, clientIP, option)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
 	start := time.Now()
 
 	select {

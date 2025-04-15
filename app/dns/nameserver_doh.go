@@ -36,16 +36,18 @@ import (
 // thus most of the DOH implementation is copied from udpns.go
 type DoHNameServer struct {
 	sync.RWMutex
-	ips        map[string]*record
-	pub        *pubsub.Service
-	cleanup    *task.Periodic
-	httpClient *http.Client
-	dohURL     string
-	name       string
+	ips          map[string]*record
+	pub          *pubsub.Service
+	cleanup      *task.Periodic
+	httpClient   *http.Client
+	dohURL       string
+	name         string
+	disableCache bool
+	clientIP     net.IP
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
-func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool) *DoHNameServer {
+func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, clientIP net.IP) *DoHNameServer {
 	url.Scheme = "https"
 	mode := "DOH"
 	if dispatcher == nil {
@@ -53,10 +55,12 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool) *Do
 	}
 	errors.LogInfo(context.Background(), "DNS: created ", mode, " client for ", url.String(), ", with h2c ", h2c)
 	s := &DoHNameServer{
-		ips:    make(map[string]*record),
-		pub:    pubsub.NewService(),
-		name:   mode + "//" + url.Host,
-		dohURL: url.String(),
+		ips:          make(map[string]*record),
+		pub:          pubsub.NewService(),
+		name:         mode + "//" + url.Host,
+		dohURL:       url.String(),
+		disableCache: disableCache,
+		clientIP:     clientIP,
 	}
 	s.cleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -191,8 +195,20 @@ func (s *DoHNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		s.pub.Publish(req.domain+"4", nil)
+		if !s.disableCache {
+			_, _, err := rec.AAAA.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"6", nil)
+			}
+		}
 	case dnsmessage.TypeAAAA:
 		s.pub.Publish(req.domain+"6", nil)
+		if !s.disableCache {
+			_, _, err := rec.A.getIPs()
+			if !go_errors.Is(err, errRecordNotFound) {
+				s.pub.Publish(req.domain+"4", nil)
+			}
+		}
 	}
 
 	s.Unlock()
@@ -203,7 +219,7 @@ func (s *DoHNameServer) newReqID() uint16 {
 	return 0
 }
 
-func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, clientIP net.IP, option dns_feature.IPOption) {
+func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.name, " querying: ", domain)
 
 	if s.name+"." == "DOH//"+domain {
@@ -214,7 +230,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
 	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, int(crypto.RandBetween(100, 300))))
+	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -314,7 +330,7 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 
 	if option.IPv4Enable {
 		ips, ttl, err := record.A.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -329,7 +345,7 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 
 	if option.IPv6Enable {
 		ips, ttl, err := record.AAAA.getIPs()
-		if !mergeReq || err == errRecordNotFound {
+		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
 		if ttl < rTTL {
@@ -352,14 +368,14 @@ func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOpt
 }
 
 // QueryIP implements Server.
-func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) { // nolint: dupl
+func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) { // nolint: dupl
 	fqdn := Fqdn(domain)
 
-	if disableCache {
+	if s.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
 	} else {
 		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
+		if !go_errors.Is(err, errRecordNotFound) {
 			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
 			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 			return ips, ttl, err
@@ -395,7 +411,7 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net
 		close(done)
 	}()
 	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, clientIP, option)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
 	start := time.Now()
 
 	select {
