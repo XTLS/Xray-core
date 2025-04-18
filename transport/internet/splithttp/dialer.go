@@ -281,11 +281,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	mode := transportConfiguration.Mode
 	if mode == "" || mode == "auto" {
 		mode = "packet-up"
-		if httpVersion == "2" {
-			mode = "stream-up"
-		}
-		if realityConfig != nil && transportConfiguration.DownloadSettings == nil {
+		if realityConfig != nil {
 			mode = "stream-one"
+			if transportConfiguration.DownloadSettings != nil {
+				mode = "stream-up"
+			}
 		}
 	}
 
