@@ -65,11 +65,12 @@ message ProxyConfig {
 }
 
 message CustomSockopt {
-  string network = 1;
-  string level = 2;
-  string opt = 3;
-  string value = 4;
-  string type = 5;
+  string system = 1;
+  string network = 2;
+  string level = 3;
+  string opt = 4;
+  string value = 5;
+  string type = 6;
 }
 
 // SocketConfig is options to be applied on network sockets.

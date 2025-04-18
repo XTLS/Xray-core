@@ -691,6 +691,7 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type CustomSockoptConfig struct {
+	Syetem  string `json:"system"`
 	Network string `json:"network"`
 	Level   string `json:"level"`
 	Opt     string `json:"opt"`
@@ -778,6 +779,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 
 	for _, copt := range c.CustomSockopt {
 		customSockopt := &internet.CustomSockopt{
+			System:  copt.Syetem,
 			Network: copt.Network,
 			Level:   copt.Level,
 			Opt:     copt.Opt,

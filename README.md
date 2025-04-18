@@ -102,6 +102,7 @@
 
 - iOS & macOS arm64
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
+  - [Loon](https://apps.apple.com/us/app/loon/id1373567447)
 - Xray Tools
   - [xray-knife](https://github.com/lilendian0x00/xray-knife)
   - [xray-checker](https://github.com/kutovoys/xray-checker)
@@ -114,10 +115,9 @@
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
-- [Clash.Meta](https://github.com/MetaCubeX/Clash.Meta)
-  - [clashN](https://github.com/2dust/clashN)
-  - [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
-- [sing-box](https://github.com/SagerNet/sing-box)
+- Cores
+  - [mihomo](https://github.com/MetaCubeX/mihomo)
+  - [sing-box](https://github.com/SagerNet/sing-box)
 
 ## Contributing
 
