@@ -115,10 +115,9 @@
 - [XrayR](https://github.com/XrayR-project/XrayR)
   - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
   - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
-- [Clash.Meta](https://github.com/MetaCubeX/Clash.Meta)
-  - [clashN](https://github.com/2dust/clashN)
-  - [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)
-- [sing-box](https://github.com/SagerNet/sing-box)
+- Cores
+  - [mihomo](https://github.com/MetaCubeX/mihomo)
+  - [sing-box](https://github.com/SagerNet/sing-box)
 
 ## Contributing
 
