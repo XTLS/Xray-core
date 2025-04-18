@@ -53,10 +53,10 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
-		listenHostPort := ":0"
+		listenAddress := ":0"
 		listenNetwork := "udp"
 		if srcAddr != nil {
-			listenHostPort = srcAddr.String()
+			listenAddress = srcAddr.String()
 			listenNetwork = srcAddr.Network()
 		}
 		var lc net.ListenConfig
@@ -78,7 +78,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 				}
 			})
 		}
-		packetConn, err := lc.ListenPacket(ctx, listenNetwork, listenHostPort)
+		packetConn, err := lc.ListenPacket(ctx, listenNetwork, listenAddress)
 		if err != nil {
 			return nil, err
 		}
