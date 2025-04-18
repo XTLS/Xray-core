@@ -14,12 +14,9 @@ import (
 )
 
 const (
-	TCP_FASTOPEN      = 15
-	IP_UNICAST_IF     = 31
-	IPV6_UNICAST_IF   = 31
-	IP_MULTICAST_IF   = 9
-	IPV6_MULTICAST_IF = 9
-	IPV6_V6ONLY       = 27
+	TCP_FASTOPEN    = 15
+	IP_UNICAST_IF   = 31
+	IPV6_UNICAST_IF = 31
 )
 
 func setTFO(fd syscall.Handle, tfo int) error {
@@ -51,14 +48,14 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
 				return errors.New("failed to set IP_UNICAST_IF").Base(err)
 			}
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_MULTICAST_IF, int(idx)); err != nil {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, syscall.IP_MULTICAST_IF, int(idx)); err != nil {
 				return errors.New("failed to set IP_MULTICAST_IF").Base(err)
 			}
 		} else {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
 				return errors.New("failed to set IPV6_UNICAST_IF").Base(err)
 			}
-			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_MULTICAST_IF, inf.Index); err != nil {
+			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, syscall.IPV6_MULTICAST_IF, inf.Index); err != nil {
 				return errors.New("failed to set IPV6_MULTICAST_IF").Base(err)
 			}
 		}
@@ -135,7 +132,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	}
 
 	if config.V6Only {
-		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_V6ONLY, 1); err != nil {
+		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, 1); err != nil {
 			return errors.New("failed to set IPV6_V6ONLY").Base(err)
 		}
 	}
