@@ -53,11 +53,11 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 
 	if dest.Network == net.Network_UDP && !hasBindAddr(sockopt) {
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
-		if srcAddr == nil {
-			srcAddr = &net.UDPAddr{
-				IP:   []byte{0, 0, 0, 0},
-				Port: 0,
-			}
+		listenHostPort := ":0"
+		listenNetwork := "udp"
+		if srcAddr != nil {
+			listenHostPort = srcAddr.String()
+			listenNetwork = srcAddr.Network()
 		}
 		var lc net.ListenConfig
 		destAddr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
@@ -78,7 +78,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 				}
 			})
 		}
-		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
+		packetConn, err := lc.ListenPacket(ctx, listenNetwork, listenHostPort)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		goStdKeepAlive = time.Duration(-1)
 	}
 	dialer := &net.Dialer{
-		Timeout:   time.Second * 16,
+		Timeout:   time.Second * 21, // chrome tcp connect timeout is 21 seconds
 		LocalAddr: resolveSrcAddr(dest.Network, src),
 		KeepAlive: goStdKeepAlive,
 	}
