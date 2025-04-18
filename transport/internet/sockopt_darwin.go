@@ -1,8 +1,12 @@
 package internet
 
 import (
+	"context"
 	gonet "net"
 	"os"
+	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -147,6 +151,44 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 		}
 	}
 
+	if len(config.CustomSockopt) > 0 {
+		for _, custom := range config.CustomSockopt {
+			if custom.System != "" && custom.System != runtime.GOOS {
+				errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+				continue
+			}
+			// Skip unwanted network type
+			// network might be tcp4 or tcp6
+			// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
+			// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
+			if !strings.HasPrefix(network, custom.Network) {
+				continue
+			}
+			var level = 0x6 // default TCP
+			var opt int
+			if len(custom.Opt) == 0 {
+				return errors.New("No opt!")
+			} else {
+				opt, _ = strconv.Atoi(custom.Opt)
+			}
+			if custom.Level != "" {
+				level, _ = strconv.Atoi(custom.Level)
+			}
+			if custom.Type == "int" {
+				value, _ := strconv.Atoi(custom.Value)
+				if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+					return errors.New("failed to set CustomSockoptInt", opt, value, err)
+				}
+			} else if custom.Type == "str" {
+				if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+				}
+			} else {
+				return errors.New("unknown CustomSockopt type:", custom.Type)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -203,6 +245,44 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	if config.V6Only {
 		if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_V6ONLY, 1); err != nil {
 			return errors.New("failed to set IPV6_V6ONLY").Base(err)
+		}
+	}
+
+	if len(config.CustomSockopt) > 0 {
+		for _, custom := range config.CustomSockopt {
+			if custom.System != "" && custom.System != runtime.GOOS {
+				errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+				continue
+			}
+			// Skip unwanted network type
+			// network might be tcp4 or tcp6
+			// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
+			// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
+			if !strings.HasPrefix(network, custom.Network) {
+				continue
+			}
+			var level = 0x6 // default TCP
+			var opt int
+			if len(custom.Opt) == 0 {
+				return errors.New("No opt!")
+			} else {
+				opt, _ = strconv.Atoi(custom.Opt)
+			}
+			if custom.Level != "" {
+				level, _ = strconv.Atoi(custom.Level)
+			}
+			if custom.Type == "int" {
+				value, _ := strconv.Atoi(custom.Value)
+				if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+					return errors.New("failed to set CustomSockoptInt", opt, value, err)
+				}
+			} else if custom.Type == "str" {
+				if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+				}
+			} else {
+				return errors.New("unknown CustomSockopt type:", custom.Type)
+			}
 		}
 	}
 
