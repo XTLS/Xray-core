@@ -38,6 +38,8 @@ func ClientType() interface{} {
 // ErrEmptyResponse indicates that DNS query succeeded but no answer was returned.
 var ErrEmptyResponse = errors.New("empty response")
 
+const DefaultTTL = 300
+
 type RCodeError uint16
 
 func (e RCodeError) Error() string {

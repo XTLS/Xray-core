@@ -119,7 +119,7 @@ type MultiGeoIPMatcher struct {
 func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
 	var matchers []*GeoIPMatcher
 	for _, geoip := range geoips {
-		matcher, err := globalGeoIPContainer.Add(geoip)
+		matcher, err := GlobalGeoIPContainer.Add(geoip)
 		if err != nil {
 			return nil, err
 		}

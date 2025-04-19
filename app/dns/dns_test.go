@@ -76,6 +76,9 @@ func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		case q.Name == "notexist.google.com." && q.Qtype == dns.TypeAAAA:
 			ans.MsgHdr.Rcode = dns.RcodeNameError
 
+		case q.Name == "notexist.google.com." && q.Qtype == dns.TypeA:
+			ans.MsgHdr.Rcode = dns.RcodeNameError
+
 		case q.Name == "hostname." && q.Qtype == dns.TypeA:
 			rr, _ := dns.NewRR("hostname. IN A 127.0.0.1")
 			ans.Answer = append(ans.Answer, rr)
@@ -537,7 +540,7 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{
 								CountryCode: "local",
 								Cidr: []*router.CIDR{
@@ -561,7 +564,7 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{
 								CountryCode: "test",
 								Cidr: []*router.CIDR{
@@ -665,7 +668,7 @@ func TestLocalDomain(t *testing.T) {
 							// Equivalent of dotless:localhost
 							{Type: DomainMatchingType_Regex, Domain: "^[^.]*localhost[^.]*$"},
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{ // Will match localhost, localhost-a and localhost-b,
 								CountryCode: "local",
 								Cidr: []*router.CIDR{
@@ -895,7 +898,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 								Domain: "google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{ // Will only match 8.8.8.8 and 8.8.4.4
 								Cidr: []*router.CIDR{
 									{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
@@ -920,7 +923,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 								Domain: "google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{ // Will match 8.8.8.8 and 8.8.8.7, etc
 								Cidr: []*router.CIDR{
 									{Ip: []byte{8, 8, 8, 7}, Prefix: 24},
@@ -944,7 +947,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 								Domain: "api.google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{ // Will only match 8.8.7.7 (api.google.com)
 								Cidr: []*router.CIDR{
 									{Ip: []byte{8, 8, 7, 7}, Prefix: 32},
@@ -968,7 +971,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 								Domain: "v2.api.google.com",
 							},
 						},
-						Geoip: []*router.GeoIP{
+						ExpectedGeoip: []*router.GeoIP{
 							{ // Will only match 8.8.7.8 (v2.api.google.com)
 								Cidr: []*router.CIDR{
 									{Ip: []byte{8, 8, 7, 8}, Prefix: 32},
