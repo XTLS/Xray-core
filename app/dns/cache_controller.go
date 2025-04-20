@@ -84,13 +84,6 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	case dnsmessage.TypeA:
 		rec.A = ipRec
 	case dnsmessage.TypeAAAA:
-		ips := make([]net.IP, 0, len(ipRec.IP))
-		for _, ip := range ipRec.IP {
-			if len(ip) == net.IPv6len {
-				ips = append(ips, ip)
-			}
-		}
-		ipRec.IP = ips
 		rec.AAAA = ipRec
 	}
 

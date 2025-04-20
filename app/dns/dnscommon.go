@@ -229,7 +229,10 @@ L:
 				errors.LogInfoInner(context.Background(), err, "failed to parse AAAA record for domain: ", ah.Name)
 				break L
 			}
-			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.AAAA[:]).IP())
+			newIP := net.IPAddress(ans.AAAA[:]).IP()
+			if len(newIP) == net.IPv6len {
+				ipRecord.IP = append(ipRecord.IP, newIP)
+			}
 		default:
 			if err := parser.SkipAnswer(); err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to skip answer")
