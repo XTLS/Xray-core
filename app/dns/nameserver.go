@@ -253,28 +253,28 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if len(c.expectedIPs) > 0 {
-		ips, _ = router.MatchIPs(c.expectedIPs, ips, false)
+		ips = router.MatchIPs(c.expectedIPs, ips, false)
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
 		}
 	}
 
 	if len(c.unexpectedIPs) > 0 {
-		ips, _ = router.MatchIPs(c.unexpectedIPs, ips, true)
+		ips = router.MatchIPs(c.unexpectedIPs, ips, true)
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
 		}
 	}
 
 	if len(c.priorIPs) > 0 {
-		ipsNew, _ := router.MatchIPs(c.priorIPs, ips, false)
+		ipsNew := router.MatchIPs(c.priorIPs, ips, false)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 		}
 	}
 
 	if len(c.unpriorIPs) > 0 {
-		ipsNew, _ := router.MatchIPs(c.unpriorIPs, ips, true)
+		ipsNew := router.MatchIPs(c.unpriorIPs, ips, true)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 		}

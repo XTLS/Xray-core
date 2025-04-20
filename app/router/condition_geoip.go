@@ -1,7 +1,6 @@
 package router
 
 import (
-	"github.com/xtls/xray-core/common/errors"
 	"net/netip"
 	"strconv"
 
@@ -118,9 +117,9 @@ func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 
 var GlobalGeoIPContainer GeoIPMatcherContainer
 
-func MatchIPs(matchers []*GeoIPMatcher, ips []net.IP, reverse bool) ([]net.IP, error) {
+func MatchIPs(matchers []*GeoIPMatcher, ips []net.IP, reverse bool) []net.IP {
 	if len(matchers) == 0 {
-		return nil, errors.New("GeoIP matchers should not be empty to avoid ambiguity")
+		panic("GeoIP matchers should not be empty to avoid ambiguity")
 	}
 	newIPs := make([]net.IP, 0, len(ips))
 	var isFound bool
@@ -141,5 +140,5 @@ func MatchIPs(matchers []*GeoIPMatcher, ips []net.IP, reverse bool) ([]net.IP, e
 			continue
 		}
 	}
-	return newIPs, nil
+	return newIPs
 }
