@@ -13,7 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 )
 
-var MaxIncomingStreams = 2
+var MaxIncomingStreams = 16
 var currentStream = 0
 
 type interConn struct {

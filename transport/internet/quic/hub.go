@@ -76,7 +76,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		KeepAlivePeriod:       0,
 		HandshakeIdleTimeout:  time.Second * 8,
 		MaxIdleTimeout:        time.Second * 300,
-		MaxIncomingStreams:    2,
+		MaxIncomingStreams:    16,
 		MaxIncomingUniStreams: -1,
 		EnableDatagrams:       true,
 	}
