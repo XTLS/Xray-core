@@ -26,6 +26,7 @@ func TestSocketConfig(t *testing.T) {
 		Tfo:            256,
 		DomainStrategy: internet.DomainStrategy_USE_IP,
 		DialerProxy:    "tag",
+		HappyEyeballs:  &internet.HappyEyeballsConfig{Enabled: false, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
 	}
 	runMultiTestCase(t, []TestCase{
 		{
