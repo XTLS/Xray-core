@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/protocol"
 	ptls "github.com/xtls/xray-core/common/protocol/tls"
 	"golang.org/x/crypto/hkdf"
 )
@@ -48,6 +49,9 @@ var (
 )
 
 func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
+	if len(b) == 0 {
+		return nil, common.ErrNoClue
+	}
 	// In extremely rare cases, this sniffer may cause slice error
 	// and we set recover() here to prevent crash.
 	// TODO: Thoroughly fix this panic
@@ -157,16 +161,23 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			b[hdrLen+i] ^= mask[i+1]
 		}
 		packetNumberLength := b[0]&0x3 + 1
-		if packetNumberLength != 1 {
+		if packetNumberLength > 4 {
 			return nil, errNotQuicInitial
 		}
 		var packetNumber uint32
-		{
+		if packetNumberLength == 1 {
 			n, err := buffer.ReadByte()
 			if err != nil {
 				return nil, err
 			}
 			packetNumber = uint32(n)
+		} else {
+			packetNumberBytes := make([]byte, 4)
+			_, err := buffer.Read(packetNumberBytes[4-packetNumberLength:])
+			if err != nil {
+				return nil, err
+			}
+			packetNumber = binary.BigEndian.Uint32(packetNumberBytes)
 		}
 
 		extHdrLen := hdrLen + int(packetNumberLength)
@@ -183,11 +194,8 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			return nil, err
 		}
 		buffer = buf.FromBytes(decrypted)
-		for i := 0; !buffer.IsEmpty(); i++ {
-			frameType := byte(0x0) // Default to PADDING frame
-			for frameType == 0x0 && !buffer.IsEmpty() {
-				frameType, _ = buffer.ReadByte()
-			}
+		for !buffer.IsEmpty() {
+			frameType, _ := buffer.ReadByte()
 			switch frameType {
 			case 0x00: // PADDING frame
 			case 0x01: // PING frame
@@ -242,7 +250,9 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 						cryptoData = newCryptoData
 					}
 				}
-				if _, err := buffer.Read(cryptoData[offset : offset+length]); err != nil { // Field: Crypto Data
+				// Field: Crypto Data
+				_, err = buffer.Read(cryptoData[offset : offset+length])
+				if err != nil {
 					return nil, io.ErrUnexpectedEOF
 				}
 			case 0x1c: // CONNECTION_CLOSE frame, only 0x1c is permitted in initial packet
@@ -276,7 +286,8 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 		}
 		return &SniffHeader{domain: tlsHdr.Domain()}, nil
 	}
-	return nil, common.ErrNoClue
+	// All payload is parsed as valid QUIC packets, but we need more packets for crypto data to read client hello.
+	return nil, protocol.ErrProtoNeedMoreData
 }
 
 func hkdfExpandLabel(hash crypto.Hash, secret, context []byte, label string, length int) []byte {
