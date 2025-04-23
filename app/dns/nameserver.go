@@ -161,7 +161,7 @@ func NewClient(
 			case *net.IPOrDomain_Domain:
 				errors.LogInfo(ctx, "DNS: client ", ns.Address.Address.GetDomain(), " uses clientIP ", clientIP.String())
 			case *net.IPOrDomain_Ip:
-				errors.LogInfo(ctx, "DNS: client ", ns.Address.Address.GetIp(), " uses clientIP ", clientIP.String())
+				errors.LogInfo(ctx, "DNS: client ", net.IP(ns.Address.Address.GetIp()), " uses clientIP ", clientIP.String())
 			}
 		}
 
