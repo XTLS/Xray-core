@@ -59,9 +59,6 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 	}
 	data = data[1+compressionMethodsLen:]
 
-	if len(data) == 0 {
-		return errNotClientHello
-	}
 	if len(data) < 2 {
 		return errNotClientHello
 	}
