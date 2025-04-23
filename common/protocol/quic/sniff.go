@@ -137,9 +137,6 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			continue
 		}
 
-		origPNBytes := make([]byte, 4)
-		copy(origPNBytes, b[hdrLen:hdrLen+4])
-
 		var salt []byte
 		if versionNumber == version1 {
 			salt = quicSalt
@@ -158,38 +155,23 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 		mask := cache.Extend(int32(block.BlockSize()))
 		block.Encrypt(mask, b[hdrLen+4:hdrLen+4+16])
 		b[0] ^= mask[0] & 0xf
-		for i := range b[hdrLen : hdrLen+4] {
+		packetNumberLength := int(b[0]&0x3 + 1)
+		for i := range packetNumberLength {
 			b[hdrLen+i] ^= mask[i+1]
 		}
-		packetNumberLength := b[0]&0x3 + 1
-		if packetNumberLength > 4 {
-			return nil, errNotQuicInitial
-		}
-		var packetNumber uint32
-		if packetNumberLength == 1 {
-			n, err := buffer.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			packetNumber = uint32(n)
-		} else {
-			packetNumberBytes := make([]byte, 4)
-			_, err := buffer.Read(packetNumberBytes[4-packetNumberLength:])
-			if err != nil {
-				return nil, err
-			}
-			packetNumber = binary.BigEndian.Uint32(packetNumberBytes)
-		}
-
-		extHdrLen := hdrLen + int(packetNumberLength)
-		copy(b[extHdrLen:hdrLen+4], origPNBytes[packetNumberLength:])
-		data := b[extHdrLen : int(packetLen)+hdrLen]
 
 		key := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
 		iv := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
 		cipher := AEADAESGCMTLS13(key, iv)
+
 		nonce := cache.Extend(int32(cipher.NonceSize()))
-		binary.BigEndian.PutUint64(nonce[len(nonce)-8:], uint64(packetNumber))
+		_, err = buffer.Read(nonce[len(nonce)-packetNumberLength:])
+		if err != nil {
+			return nil, err
+		}
+
+		extHdrLen := hdrLen + packetNumberLength
+		data := b[extHdrLen : int(packetLen)+hdrLen]
 		decrypted, err := cipher.Open(b[extHdrLen:extHdrLen], nonce, data, b[:extHdrLen])
 		if err != nil {
 			return nil, err
@@ -197,6 +179,9 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 		buffer = buf.FromBytes(decrypted)
 		for !buffer.IsEmpty() {
 			frameType, _ := buffer.ReadByte()
+			for frameType == 0x0 && !buffer.IsEmpty() {
+				frameType, _ = buffer.ReadByte()
+			}
 			switch frameType {
 			case 0x00: // PADDING frame
 			case 0x01: // PING frame
