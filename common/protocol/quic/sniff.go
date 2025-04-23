@@ -11,7 +11,6 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	ptls "github.com/xtls/xray-core/common/protocol/tls"
@@ -65,8 +64,10 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 
 	// Crypto data separated across packets
 	cryptoLen := 0
-	cryptoData := bytespool.Alloc(int32(len(b)))
-	defer bytespool.Free(cryptoData)
+	cryptoDataBuf := buf.NewWithSize(32767)
+	defer cryptoDataBuf.Release()
+	cache := buf.New()
+	defer cache.Release()
 
 	// Parse QUIC packets
 	for len(b) > 0 {
@@ -109,13 +110,15 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			return nil, errNotQuic
 		}
 
-		tokenLen, err := quicvarint.Read(buffer)
-		if err != nil || tokenLen > uint64(len(b)) {
-			return nil, errNotQuic
-		}
+		if isQuicInitial { // Only initial packets have token, see https://datatracker.ietf.org/doc/html/rfc9000#section-17.2.2
+			tokenLen, err := quicvarint.Read(buffer)
+			if err != nil || tokenLen > uint64(len(b)) {
+				return nil, errNotQuic
+			}
 
-		if _, err = buffer.ReadBytes(int32(tokenLen)); err != nil {
-			return nil, errNotQuic
+			if _, err = buffer.ReadBytes(int32(tokenLen)); err != nil {
+				return nil, errNotQuic
+			}
 		}
 
 		packetLen, err := quicvarint.Read(buffer)
@@ -151,9 +154,7 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			return nil, err
 		}
 
-		cache := buf.New()
-		defer cache.Release()
-
+		cache.Clear()
 		mask := cache.Extend(int32(block.BlockSize()))
 		block.Encrypt(mask, b[hdrLen+4:hdrLen+4+16])
 		b[0] ^= mask[0] & 0xf
@@ -243,16 +244,14 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 				}
 				if cryptoLen < int(offset+length) {
 					cryptoLen = int(offset + length)
-					if len(cryptoData) < cryptoLen {
-						newCryptoData := bytespool.Alloc(int32(cryptoLen))
-						copy(newCryptoData, cryptoData)
-						bytespool.Free(cryptoData)
-						cryptoData = newCryptoData
+					if cryptoDataBuf.Cap() < int32(cryptoLen) {
+						return nil, io.ErrShortBuffer
+					}
+					if cryptoDataBuf.Len() != int32(cryptoLen) {
+						cryptoDataBuf.Extend(int32(cryptoLen) - cryptoDataBuf.Len())
 					}
 				}
-				// Field: Crypto Data
-				_, err = buffer.Read(cryptoData[offset : offset+length])
-				if err != nil {
+				if _, err := buffer.Read(cryptoDataBuf.BytesRange(int32(offset), int32(offset+length))); err != nil { // Field: Crypto Data
 					return nil, io.ErrUnexpectedEOF
 				}
 			case 0x1c: // CONNECTION_CLOSE frame, only 0x1c is permitted in initial packet
@@ -277,7 +276,7 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 		}
 
 		tlsHdr := &ptls.SniffHeader{}
-		err = ptls.ReadClientHello(cryptoData[:cryptoLen], tlsHdr)
+		err = ptls.ReadClientHello(cryptoDataBuf.BytesRange(0, int32(cryptoLen)), tlsHdr)
 		if err != nil {
 			// The crypto data may have not been fully recovered in current packets,
 			// So we continue to sniff rest packets.

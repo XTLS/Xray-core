@@ -102,6 +102,7 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 				}
 				if nameType == 0 {
 					// QUIC separated across packets
+					// May cause the serverName to be incomplete
 					b := byte(0)
 					for _, b = range d[:nameLen] {
 						if b <= ' ' {
