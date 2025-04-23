@@ -65,6 +65,7 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 	// Crypto data separated across packets
 	cryptoLen := 0
 	cryptoDataBuf := buf.NewWithSize(32767)
+	cryptoDataBuf.Wipe()
 	defer cryptoDataBuf.Release()
 	cache := buf.New()
 	defer cache.Release()
