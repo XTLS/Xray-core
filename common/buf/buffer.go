@@ -116,16 +116,6 @@ func (b *Buffer) Clear() {
 	b.end = 0
 }
 
-// Wipe sets all underlying bytes of the buffer to 0x0, results an empty buffer with
-// Len() = 0
-func (b *Buffer) Wipe() {
-	for i := range cap(b.v) {
-		b.v[i] = 0x0
-	}
-	b.start = 0
-	b.end = 0
-}
-
 // Byte returns the bytes at index.
 func (b *Buffer) Byte(index int32) byte {
 	return b.v[b.start+index]
