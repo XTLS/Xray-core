@@ -120,7 +120,6 @@ func TestUDPServerSubnet(t *testing.T) {
 		Handler: &staticHandler{},
 		UDPSize: 1200,
 	}
-
 	go dnsServer.ListenAndServe()
 	time.Sleep(time.Second)
 
