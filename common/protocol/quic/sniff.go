@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/tls"
@@ -51,16 +50,6 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 	if len(b) == 0 {
 		return nil, common.ErrNoClue
 	}
-	// In extremely rare cases, this sniffer may cause slice error
-	// and we set recover() here to prevent crash.
-	// TODO: Thoroughly fix this panic
-	defer func() {
-		if r := recover(); r != nil {
-			errors.LogError(context.Background(), "Failed to sniff QUIC: ", r)
-			resultReturn = nil
-			errorReturn = common.ErrNoClue
-		}
-	}()
 
 	// Crypto data separated across packets
 	cryptoLen := 0
