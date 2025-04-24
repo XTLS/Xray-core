@@ -56,7 +56,7 @@ func NewSniffer(ctx context.Context) *Sniffer {
 var errUnknownContent = errors.New("unknown content")
 
 func (s *Sniffer) Sniff(c context.Context, payload []byte, network net.Network) (SniffResult, error) {
-	var pendingSniffer []protocolSnifferWithMetadata
+	allNoClue := true
 	for _, si := range s.sniffer {
 		s := si.protocolSniffer
 		if si.metadataSniffer || si.network != network {
@@ -64,47 +64,42 @@ func (s *Sniffer) Sniff(c context.Context, payload []byte, network net.Network) 
 		}
 		result, err := s(c, payload)
 		if err == common.ErrNoClue {
-			pendingSniffer = append(pendingSniffer, si)
 			continue
 		}
 
 		if err == nil && result != nil {
 			return result, nil
 		}
+		allNoClue = false
 	}
 
-	if len(pendingSniffer) > 0 {
-		s.sniffer = pendingSniffer
+	if allNoClue {
 		return nil, common.ErrNoClue
 	}
-
 	return nil, errUnknownContent
 }
 
 func (s *Sniffer) SniffMetadata(c context.Context) (SniffResult, error) {
-	var pendingSniffer []protocolSnifferWithMetadata
+	allNoClue := true
 	for _, si := range s.sniffer {
 		s := si.protocolSniffer
 		if !si.metadataSniffer {
-			pendingSniffer = append(pendingSniffer, si)
 			continue
 		}
 		result, err := s(c, nil)
 		if err == common.ErrNoClue {
-			pendingSniffer = append(pendingSniffer, si)
 			continue
 		}
 
 		if err == nil && result != nil {
 			return result, nil
 		}
+		allNoClue = false
 	}
 
-	if len(pendingSniffer) > 0 {
-		s.sniffer = pendingSniffer
+	if allNoClue {
 		return nil, common.ErrNoClue
 	}
-
 	return nil, errUnknownContent
 }
 
