@@ -169,7 +169,7 @@ func NewClient(
 		if ns.TimeoutMs > 0 {
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
 		}
-		
+
 		client.server = server
 		client.clientIP = clientIP
 		client.skipFallback = ns.SkipFallback
