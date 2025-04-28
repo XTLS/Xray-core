@@ -25,16 +25,12 @@ message NameServer {
   }
 
   repeated PriorityDomain prioritized_domain = 2;
-  repeated xray.app.router.GeoIP expected_geoip = 3;
+  repeated xray.app.router.GeoIP geoip = 3;
   repeated OriginalRule original_rules = 4;
   QueryStrategy query_strategy = 7;
-  repeated xray.app.router.GeoIP prior_geoip = 8;
+  bool allowUnexpectedIPs = 8;
   string tag = 9;
   uint64 timeoutMs = 10;
-  bool disableCache = 11;
-  bool finalQuery = 12;
-  repeated xray.app.router.GeoIP unexpected_geoip = 13;
-  repeated xray.app.router.GeoIP unprior_geoip = 14;
 }
 
 enum DomainMatchingType {

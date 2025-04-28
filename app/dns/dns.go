@@ -108,7 +108,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			myClientIP = net.IP(ns.ClientIp)
 		}
 
-		disableCache := config.DisableCache || ns.DisableCache
+		disableCache := config.DisableCache
 
 		var tag = defaultTag
 		if len(ns.Tag) > 0 {
@@ -227,9 +227,6 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		}
 		errs = append(errs, err)
 
-		if client.IsFinalQuery() {
-			break
-		}
 	}
 
 	if len(errs) > 0 {
