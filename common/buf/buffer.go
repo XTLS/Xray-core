@@ -110,9 +110,11 @@ func (b *Buffer) Release() {
 
 	switch b.ownership {
 	case managed:
-		pool.Put(p) // nolint: staticcheck
+		if cap(p) == Size {
+			pool.Put(p)
+		}
 	case bytespools:
-		bytespool.Free(p) // nolint: staticcheck
+		bytespool.Free(p)
 	}
 	b.UDP = nil
 }
