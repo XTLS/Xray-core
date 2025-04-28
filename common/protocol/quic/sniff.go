@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/tls"
@@ -13,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/protocol"
 	ptls "github.com/xtls/xray-core/common/protocol/tls"
 	"golang.org/x/crypto/hkdf"
 )
@@ -47,22 +47,17 @@ var (
 	errNotQuicInitial = errors.New("not initial packet")
 )
 
-func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
-	// In extremely rare cases, this sniffer may cause slice error
-	// and we set recover() here to prevent crash.
-	// TODO: Thoroughly fix this panic
-	defer func() {
-		if r := recover(); r != nil {
-			errors.LogError(context.Background(), "Failed to sniff QUIC: ", r)
-			resultReturn = nil
-			errorReturn = common.ErrNoClue
-		}
-	}()
+func SniffQUIC(b []byte) (*SniffHeader, error) {
+	if len(b) == 0 {
+		return nil, common.ErrNoClue
+	}
 
 	// Crypto data separated across packets
 	cryptoLen := 0
-	cryptoData := bytespool.Alloc(int32(len(b)))
+	cryptoData := bytespool.Alloc(32767)
 	defer bytespool.Free(cryptoData)
+	cache := buf.New()
+	defer cache.Release()
 
 	// Parse QUIC packets
 	for len(b) > 0 {
@@ -105,13 +100,15 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			return nil, errNotQuic
 		}
 
-		tokenLen, err := quicvarint.Read(buffer)
-		if err != nil || tokenLen > uint64(len(b)) {
-			return nil, errNotQuic
-		}
+		if isQuicInitial { // Only initial packets have token, see https://datatracker.ietf.org/doc/html/rfc9000#section-17.2.2
+			tokenLen, err := quicvarint.Read(buffer)
+			if err != nil || tokenLen > uint64(len(b)) {
+				return nil, errNotQuic
+			}
 
-		if _, err = buffer.ReadBytes(int32(tokenLen)); err != nil {
-			return nil, errNotQuic
+			if _, err = buffer.ReadBytes(int32(tokenLen)); err != nil {
+				return nil, errNotQuic
+			}
 		}
 
 		packetLen, err := quicvarint.Read(buffer)
@@ -130,9 +127,6 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			continue
 		}
 
-		origPNBytes := make([]byte, 4)
-		copy(origPNBytes, b[hdrLen:hdrLen+4])
-
 		var salt []byte
 		if versionNumber == version1 {
 			salt = quicSalt
@@ -147,44 +141,34 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 			return nil, err
 		}
 
-		cache := buf.New()
-		defer cache.Release()
-
+		cache.Clear()
 		mask := cache.Extend(int32(block.BlockSize()))
 		block.Encrypt(mask, b[hdrLen+4:hdrLen+4+16])
 		b[0] ^= mask[0] & 0xf
-		for i := range b[hdrLen : hdrLen+4] {
+		packetNumberLength := int(b[0]&0x3 + 1)
+		for i := range packetNumberLength {
 			b[hdrLen+i] ^= mask[i+1]
 		}
-		packetNumberLength := b[0]&0x3 + 1
-		if packetNumberLength != 1 {
-			return nil, errNotQuicInitial
-		}
-		var packetNumber uint32
-		{
-			n, err := buffer.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			packetNumber = uint32(n)
-		}
-
-		extHdrLen := hdrLen + int(packetNumberLength)
-		copy(b[extHdrLen:hdrLen+4], origPNBytes[packetNumberLength:])
-		data := b[extHdrLen : int(packetLen)+hdrLen]
 
 		key := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
 		iv := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
 		cipher := AEADAESGCMTLS13(key, iv)
+
 		nonce := cache.Extend(int32(cipher.NonceSize()))
-		binary.BigEndian.PutUint64(nonce[len(nonce)-8:], uint64(packetNumber))
+		_, err = buffer.Read(nonce[len(nonce)-packetNumberLength:])
+		if err != nil {
+			return nil, err
+		}
+
+		extHdrLen := hdrLen + packetNumberLength
+		data := b[extHdrLen : int(packetLen)+hdrLen]
 		decrypted, err := cipher.Open(b[extHdrLen:extHdrLen], nonce, data, b[:extHdrLen])
 		if err != nil {
 			return nil, err
 		}
 		buffer = buf.FromBytes(decrypted)
-		for i := 0; !buffer.IsEmpty(); i++ {
-			frameType := byte(0x0) // Default to PADDING frame
+		for !buffer.IsEmpty() {
+			frameType, _ := buffer.ReadByte()
 			for frameType == 0x0 && !buffer.IsEmpty() {
 				frameType, _ = buffer.ReadByte()
 			}
@@ -234,13 +218,12 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 					return nil, io.ErrUnexpectedEOF
 				}
 				if cryptoLen < int(offset+length) {
-					cryptoLen = int(offset + length)
-					if len(cryptoData) < cryptoLen {
-						newCryptoData := bytespool.Alloc(int32(cryptoLen))
-						copy(newCryptoData, cryptoData)
-						bytespool.Free(cryptoData)
-						cryptoData = newCryptoData
+					newCryptoLen := int(offset + length)
+					if len(cryptoData) < newCryptoLen {
+						return nil, io.ErrShortBuffer
 					}
+					wipeBytes(cryptoData[cryptoLen:newCryptoLen])
+					cryptoLen = newCryptoLen
 				}
 				if _, err := buffer.Read(cryptoData[offset : offset+length]); err != nil { // Field: Crypto Data
 					return nil, io.ErrUnexpectedEOF
@@ -276,7 +259,14 @@ func SniffQUIC(b []byte) (resultReturn *SniffHeader, errorReturn error) {
 		}
 		return &SniffHeader{domain: tlsHdr.Domain()}, nil
 	}
-	return nil, common.ErrNoClue
+	// All payload is parsed as valid QUIC packets, but we need more packets for crypto data to read client hello.
+	return nil, protocol.ErrProtoNeedMoreData
+}
+
+func wipeBytes(b []byte) {
+	for i := range len(b) {
+		b[i] = 0x0
+	}
 }
 
 func hkdfExpandLabel(hash crypto.Hash, secret, context []byte, label string, length int) []byte {
