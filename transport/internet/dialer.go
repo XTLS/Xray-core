@@ -87,7 +87,7 @@ var (
 
 func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
 	if dnsClient == nil {
-		return nil, nil
+		return nil, errors.New("DNS client not initialized").AtError()
 	}
 
 	ips, _, err := dnsClient.LookupIP(domain, dns.IPOption{
@@ -103,44 +103,45 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 		}
 	}
 
+	if err == nil && len(ips) == 0 {
+		err = dns.ErrEmptyResponse
+	}
 	return ips, err
 }
 
-func canLookupIP(ctx context.Context, dst net.Destination, sockopt *SocketConfig) bool {
+func canLookupIP(dst net.Destination, sockopt *SocketConfig) bool {
 	if dst.Address.Family().IsIP() || dnsClient == nil {
 		return false
 	}
 	return sockopt.DomainStrategy.hasStrategy()
 }
 
-func redirect(ctx context.Context, dst net.Destination, obt string) net.Conn {
+func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.Handler) net.Conn {
 	errors.LogInfo(ctx, "redirecting request "+dst.String()+" to "+obt)
-	h := obm.GetHandler(obt)
 	outbounds := session.OutboundsFromContext(ctx)
 	ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
 		Target:  dst,
 		Gateway: nil,
 		Tag:     obt,
 	})) // add another outbound in session ctx
-	if h != nil {
-		ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
-		dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
 
-		go h.Dispatch(context.WithoutCancel(ctx), &transport.Link{Reader: ur, Writer: dw})
-		var readerOpt cnc.ConnectionOption
-		if dst.Network == net.Network_TCP {
-			readerOpt = cnc.ConnectionOutputMulti(dr)
-		} else {
-			readerOpt = cnc.ConnectionOutputMultiUDP(dr)
-		}
-		nc := cnc.NewConnection(
-			cnc.ConnectionInputMulti(uw),
-			readerOpt,
-			cnc.ConnectionOnClose(common.ChainedClosable{uw, dw}),
-		)
-		return nc
+	ur, uw := pipe.New(pipe.OptionsFromContext(ctx)...)
+	dr, dw := pipe.New(pipe.OptionsFromContext(ctx)...)
+
+	go h.Dispatch(context.WithoutCancel(ctx), &transport.Link{Reader: ur, Writer: dw})
+	var readerOpt cnc.ConnectionOption
+	if dst.Network == net.Network_TCP {
+		readerOpt = cnc.ConnectionOutputMulti(dr)
+	} else {
+		readerOpt = cnc.ConnectionOutputMultiUDP(dr)
 	}
-	return nil
+	nc := cnc.NewConnection(
+		cnc.ConnectionInputMulti(uw),
+		readerOpt,
+		cnc.ConnectionOnClose(common.ChainedClosable{uw, dw}),
+	)
+	return nc
+
 }
 
 func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
@@ -247,21 +248,28 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		dest = *newDest
 	}
 
-	if canLookupIP(ctx, dest, sockopt) {
+	if canLookupIP(dest, sockopt) {
 		ips, err := lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
-		if err == nil && len(ips) > 0 {
+		if err != nil {
+			errors.LogErrorInner(ctx, err, "failed to resolve ip")
+			if sockopt.DomainStrategy.forceIP() {
+				return nil, err
+			}
+		} else {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
-		} else if err != nil {
-			errors.LogWarningInner(ctx, err, "failed to resolve ip")
 		}
 	}
 
-	if obm != nil && len(sockopt.DialerProxy) > 0 {
-		nc := redirect(ctx, dest, sockopt.DialerProxy)
-		if nc != nil {
-			return nc, nil
+	if len(sockopt.DialerProxy) > 0 {
+		if obm == nil {
+			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()
 		}
+		h := obm.GetHandler(sockopt.DialerProxy)
+		if h == nil {
+			return nil, errors.New("there is no outbound handler for dialerProxy").AtError()
+		}
+		return redirect(ctx, dest, sockopt.DialerProxy, h), nil
 	}
 
 	return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
