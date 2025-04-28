@@ -35,7 +35,7 @@ type Buffer struct {
 	UDP       *net.Destination
 }
 
-// New creates a Buffer with 0 length and 8K capacity.
+// New creates a Buffer with 0 length and 8K capacity, managed.
 func New() *Buffer {
 	buf := pool.Get().([]byte)
 	if cap(buf) >= Size {
@@ -49,7 +49,7 @@ func New() *Buffer {
 	}
 }
 
-// NewExisted creates a managed, standard size Buffer with an existed bytearray
+// NewExisted creates a standard size Buffer with an existed bytearray, managed.
 func NewExisted(b []byte) *Buffer {
 	if cap(b) < Size {
 		panic("Invalid buffer")
@@ -66,7 +66,7 @@ func NewExisted(b []byte) *Buffer {
 	}
 }
 
-// FromBytes creates a Buffer with an existed bytearray
+// FromBytes creates a Buffer with an existed bytearray, unmanaged.
 func FromBytes(b []byte) *Buffer {
 	return &Buffer{
 		v:         b,
@@ -75,7 +75,7 @@ func FromBytes(b []byte) *Buffer {
 	}
 }
 
-// StackNew creates a new Buffer object on stack.
+// StackNew creates a new Buffer object on stack, managed.
 // This method is for buffers that is released in the same function.
 func StackNew() Buffer {
 	buf := pool.Get().([]byte)
@@ -87,6 +87,14 @@ func StackNew() Buffer {
 
 	return Buffer{
 		v: buf,
+	}
+}
+
+// NewWithSize creates a Buffer with 0 length and capacity with at least the given size, bytespool's.
+func NewWithSize(size int32) *Buffer {
+	return &Buffer{
+		v:         bytespool.Alloc(size),
+		ownership: bytespools,
 	}
 }
 
@@ -225,14 +233,6 @@ func (b *Buffer) Cap() int32 {
 		return 0
 	}
 	return int32(len(b.v))
-}
-
-// NewWithSize creates a Buffer with 0 length and capacity with at least the given size.
-func NewWithSize(size int32) *Buffer {
-	return &Buffer{
-		v:         bytespool.Alloc(size),
-		ownership: bytespools,
-	}
 }
 
 // IsEmpty returns true if the buffer is empty.
