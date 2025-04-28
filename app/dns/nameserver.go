@@ -26,17 +26,14 @@ type Server interface {
 
 // Client is the interface for DNS client.
 type Client struct {
-	server        Server
-	skipFallback  bool
-	domains       []string
-	expectedIPs   []*router.GeoIPMatcher
-	unexpectedIPs []*router.GeoIPMatcher
-	priorIPs      []*router.GeoIPMatcher
-	unpriorIPs    []*router.GeoIPMatcher
-	tag           string
-	timeoutMs     time.Duration
-	finalQuery    bool
-	ipOption      *dns.IPOption
+	server             Server
+	skipFallback       bool
+	domains            []string
+	expectedIPs        []*router.GeoIPMatcher
+	allowUnexpectedIPs bool
+	tag                string
+	timeoutMs          time.Duration
+	ipOption           *dns.IPOption
 }
 
 // NewServer creates a name server object according to the network destination url.
@@ -153,43 +150,13 @@ func NewClient(
 		}
 
 		// Establish expected IPs
-		var expectedMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.ExpectedGeoip {
+		var matchers []*router.GeoIPMatcher
+		for _, geoip := range ns.Geoip {
 			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
 			if err != nil {
-				return errors.New("failed to create expected ip matcher").Base(err).AtWarning()
+				return errors.New("failed to create ip matcher").Base(err).AtWarning()
 			}
-			expectedMatchers = append(expectedMatchers, matcher)
-		}
-
-		// Establish unexpected IPs
-		var unexpectedMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.UnexpectedGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
-			if err != nil {
-				return errors.New("failed to create unexpected ip matcher").Base(err).AtWarning()
-			}
-			unexpectedMatchers = append(unexpectedMatchers, matcher)
-		}
-
-		// Establish prior IPs
-		var priorMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.PriorGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
-			if err != nil {
-				return errors.New("failed to create prior ip matcher").Base(err).AtWarning()
-			}
-			priorMatchers = append(priorMatchers, matcher)
-		}
-
-		// Establish unprior IPs
-		var unpriorMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.UnpriorGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
-			if err != nil {
-				return errors.New("failed to create unprior ip matcher").Base(err).AtWarning()
-			}
-			unpriorMatchers = append(unpriorMatchers, matcher)
+			matchers = append(matchers, matcher)
 		}
 
 		if len(clientIP) > 0 {
@@ -209,13 +176,10 @@ func NewClient(
 		client.server = server
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
-		client.expectedIPs = expectedMatchers
-		client.unexpectedIPs = unexpectedMatchers
-		client.priorIPs = priorMatchers
-		client.unpriorIPs = unpriorMatchers
+		client.expectedIPs = matchers
+		client.allowUnexpectedIPs = ns.AllowUnexpectedIPs
 		client.tag = tag
 		client.timeoutMs = timeoutMs
-		client.finalQuery = ns.FinalQuery
 		client.ipOption = &ipOption
 		return nil
 	})
@@ -225,10 +189,6 @@ func NewClient(
 // Name returns the server name the client manages.
 func (c *Client) Name() string {
 	return c.server.Name()
-}
-
-func (c *Client) IsFinalQuery() bool {
-	return c.finalQuery
 }
 
 // QueryIP sends DNS query to the name server with the client's IP.
@@ -253,34 +213,32 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if len(c.expectedIPs) > 0 {
-		ips = router.MatchIPs(c.expectedIPs, ips, false)
-		if len(ips) == 0 {
-			return nil, 0, dns.ErrEmptyResponse
-		}
-	}
-
-	if len(c.unexpectedIPs) > 0 {
-		ips = router.MatchIPs(c.unexpectedIPs, ips, true)
-		if len(ips) == 0 {
-			return nil, 0, dns.ErrEmptyResponse
-		}
-	}
-
-	if len(c.priorIPs) > 0 {
-		ipsNew := router.MatchIPs(c.priorIPs, ips, false)
-		if len(ipsNew) > 0 {
-			ips = ipsNew
-		}
-	}
-
-	if len(c.unpriorIPs) > 0 {
-		ipsNew := router.MatchIPs(c.unpriorIPs, ips, true)
-		if len(ipsNew) > 0 {
-			ips = ipsNew
+		newIps := c.MatchExpectedIPs(domain, ips)
+		if len(newIps) == 0 {
+			if !c.allowUnexpectedIPs {
+				return nil, 0, dns.ErrEmptyResponse
+			}
+		} else {
+			ips = newIps
 		}
 	}
 
 	return ips, ttl, nil
+}
+
+// MatchExpectedIPs matches queried domain IPs with expected IPs and returns matched ones.
+func (c *Client) MatchExpectedIPs(domain string, ips []net.IP) []net.IP {
+	var newIps []net.IP
+	for _, ip := range ips {
+		for _, matcher := range c.expectedIPs {
+			if matcher.Match(ip) {
+				newIps = append(newIps, ip)
+				break
+			}
+		}
+	}
+	errors.LogDebug(context.Background(), "domain ", domain, " expectedIPs ", newIps, " matched at server ", c.Name())
+	return newIps
 }
 
 func ResolveIpOptionOverride(queryStrategy QueryStrategy, ipOption dns.IPOption) dns.IPOption {
