@@ -51,7 +51,7 @@ func Test_parseResponse(t *testing.T) {
 	}{
 		{
 			"empty",
-			&IPRecord{0, []net.Address(nil), time.Time{}, dnsmessage.RCodeSuccess, nil},
+			&IPRecord{0, []net.IP(nil), time.Time{}, dnsmessage.RCodeSuccess, nil},
 			false,
 		},
 		{
@@ -63,7 +63,7 @@ func Test_parseResponse(t *testing.T) {
 			"a record",
 			&IPRecord{
 				1,
-				[]net.Address{net.ParseAddress("8.8.8.8"), net.ParseAddress("8.8.4.4")},
+				[]net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")},
 				time.Time{},
 				dnsmessage.RCodeSuccess,
 				nil,
@@ -72,7 +72,7 @@ func Test_parseResponse(t *testing.T) {
 		},
 		{
 			"aaaa record",
-			&IPRecord{2, []net.Address{net.ParseAddress("2001::123:8888"), net.ParseAddress("2001::123:8844")}, time.Time{}, dnsmessage.RCodeSuccess, nil},
+			&IPRecord{2, []net.IP{net.ParseIP("2001::123:8888"), net.ParseIP("2001::123:8844")}, time.Time{}, dnsmessage.RCodeSuccess, nil},
 			false,
 		},
 	}

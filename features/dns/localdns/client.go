@@ -30,29 +30,31 @@ func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, err
 	ipv6 := make([]net.IP, 0, len(ips))
 	for _, ip := range ips {
 		parsed := net.IPAddress(ip)
-		if parsed != nil {
-			parsedIPs = append(parsedIPs, parsed.IP())
+		if parsed == nil {
+			continue
 		}
-		if len(ip) == net.IPv4len {
-			ipv4 = append(ipv4, ip)
-		}
-		if len(ip) == net.IPv6len {
-			ipv6 = append(ipv6, ip)
+		parsedIP := parsed.IP()
+		parsedIPs = append(parsedIPs, parsedIP)
+
+		if len(parsedIP) == net.IPv4len {
+			ipv4 = append(ipv4, parsedIP)
+		} else {
+			ipv6 = append(ipv6, parsedIP)
 		}
 	}
-	// Local DNS ttl is 600
+
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
 		if len(parsedIPs) > 0 {
-			return parsedIPs, 600, nil
+			return parsedIPs, dns.DefaultTTL, nil
 		}
 	case option.IPv4Enable:
 		if len(ipv4) > 0 {
-			return ipv4, 600, nil
+			return ipv4, dns.DefaultTTL, nil
 		}
 	case option.IPv6Enable:
 		if len(ipv6) > 0 {
-			return ipv6, 600, nil
+			return ipv6, dns.DefaultTTL, nil
 		}
 	}
 	return nil, 0, dns.ErrEmptyResponse
