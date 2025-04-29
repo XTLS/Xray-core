@@ -818,7 +818,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Enabled: false, Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
+	var happyEyeballs = &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
 	if c.HappyEyeballsSettings != nil {
 		happyEyeballs.Enabled = c.HappyEyeballsSettings.Enabled
 		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
