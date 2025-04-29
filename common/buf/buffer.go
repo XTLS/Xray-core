@@ -14,6 +14,8 @@ const (
 )
 var zero = [Size * 10]byte{0}
 
+var zero = [Size * 10]byte{0}
+
 var pool = bytespool.GetPool(Size)
 
 // ownership represents the data owner of the buffer.
