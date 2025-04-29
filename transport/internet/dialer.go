@@ -104,13 +104,13 @@ func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]
 	}
 
 	if err == nil && len(ips) == 0 {
-		err = dns.ErrEmptyResponse
+		return nil, dns.ErrEmptyResponse
 	}
 	return ips, err
 }
 
 func canLookupIP(dst net.Destination, sockopt *SocketConfig) bool {
-	if dst.Address.Family().IsIP() || dnsClient == nil {
+	if dst.Address.Family().IsIP() {
 		return false
 	}
 	return sockopt.DomainStrategy.hasStrategy()
