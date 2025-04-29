@@ -42,6 +42,10 @@ jobs:
           - goos: android
             goarch: arm64
           # END Android ARM 8
+          # BEGIN Android AMD64
+          - goos: android
+            goarch: amd64
+          # END Android AMD64
           # Windows ARM
           - goos: windows
             goarch: arm64
@@ -113,8 +117,6 @@ jobs:
           declare -A arches=(
             ["amd64"]="x86_64-linux-android24-clang"
             ["arm64"]="aarch64-linux-android24-clang"
-            ["386"]="i686-linux-android24-clang"
-            ["arm7"]="armv7a-linux-androideabi24-clang"
           )
           echo CC="$(realpath android-ndk-*/toolchains/llvm/prebuilt/linux-x86_64/bin)/${arches[${{ matrix.goarch }}]}" >> $GITHUB_ENV
           echo CGO_ENABLED=1 >> $GITHUB_ENV
