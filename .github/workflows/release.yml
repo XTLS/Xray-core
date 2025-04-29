@@ -104,6 +104,21 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v4
 
+      - name: Set up NDK
+        if: matrix.goos == 'android'
+        run: |
+          wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28b-linux.zip
+          unzip android-ndk.zip
+          rm android-ndk.zip
+          declare -A arches=(
+            ["amd64"]="x86_64-linux-android24-clang"
+            ["arm64"]="aarch64-linux-android24-clang"
+            ["386"]="i686-linux-android24-clang"
+            ["arm7"]="armv7a-linux-androideabi24-clang"
+          )
+          echo CC="$(realpath android-ndk-*/toolchains/llvm/prebuilt/linux-x86_64/bin)/${arches[${{ matrix.goarch }}]}" >> $GITHUB_ENV
+          echo CGO_ENABLED=1 >> $GITHUB_ENV
+
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
@@ -119,7 +134,7 @@ jobs:
 
       - name: Get project dependencies
         run: go mod download
-      
+
       - name: Build Xray
         run: |
           mkdir -p build_assets
