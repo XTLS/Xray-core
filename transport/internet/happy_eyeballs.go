@@ -22,7 +22,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 	var resultCh = make(chan *result, len(ips))
 	nextTryIndex := 0
 	activeNum := uint32(0)
-	waitTime := time.Duration(0)
+	timer := time.NewTimer(0)
 	var winConn net.Conn
 	for {
 		select {
@@ -31,7 +31,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 			select {
 			case <-ctx.Done():
 				cancel()
-				waitTime = 100 * time.Hour
+				timer.Stop()
 				if winConn != nil {
 					winConn.Close()
 				}
@@ -45,7 +45,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 			default:
 				if r.conn != nil {
 					cancel()
-					waitTime = 100 * time.Hour
+					timer.Stop()
 					if winConn == nil {
 						winConn = r.conn
 					} else {
@@ -59,17 +59,17 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 					continue
 				}
 				if nextTryIndex < len(ips) {
-					waitTime = time.Duration(0)
+					timer.Reset(0)
 					continue
 				}
 				if activeNum == 0 {
 					return nil, r.err
 				}
-				waitTime = 100 * time.Hour
+				timer.Stop()
 				continue
 			}
 
-		case <-time.After(waitTime):
+		case <-timer.C:
 			if nextTryIndex == len(ips) || activeNum == sockopt.HappyEyeballs.MaxConcurrentTry {
 				panic("impossible situation")
 			}
@@ -77,9 +77,9 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 			activeNum++
 			nextTryIndex++
 			if nextTryIndex == len(ips) || activeNum == sockopt.HappyEyeballs.MaxConcurrentTry {
-				waitTime = 100 * time.Hour
+				timer.Stop()
 			} else {
-				waitTime = time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond
+				timer.Reset(time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond)
 			}
 			continue
 		}
