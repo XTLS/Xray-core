@@ -42,6 +42,11 @@ jobs:
           - goos: android
             goarch: arm64
           # END Android ARM 8
+          # BEGIN Android AMD64
+          - goos: android
+            goarch: amd64
+            patch-assetname: android-amd64
+          # END Android AMD64
           # Windows ARM
           - goos: windows
             goarch: arm64
@@ -104,6 +109,19 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v4
 
+      - name: Set up NDK
+        if: matrix.goos == 'android'
+        run: |
+          wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28b-linux.zip
+          unzip android-ndk.zip
+          rm android-ndk.zip
+          declare -A arches=(
+            ["amd64"]="x86_64-linux-android24-clang"
+            ["arm64"]="aarch64-linux-android24-clang"
+          )
+          echo CC="$(realpath android-ndk-*/toolchains/llvm/prebuilt/linux-x86_64/bin)/${arches[${{ matrix.goarch }}]}" >> $GITHUB_ENV
+          echo CGO_ENABLED=1 >> $GITHUB_ENV
+
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
@@ -119,7 +137,7 @@ jobs:
 
       - name: Get project dependencies
         run: go mod download
-      
+
       - name: Build Xray
         run: |
           mkdir -p build_assets
