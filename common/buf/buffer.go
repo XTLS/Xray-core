@@ -12,6 +12,7 @@ const (
 	// Size of a regular buffer.
 	Size = 8192
 )
+var zero = [Size * 10]byte{0}
 
 var pool = bytespool.GetPool(Size)
 
@@ -150,6 +151,7 @@ func (b *Buffer) Extend(n int32) []byte {
 	}
 	ext := b.v[b.end:end]
 	b.end = end
+	copy(ext, zero[:])
 	return ext
 }
 
@@ -198,6 +200,7 @@ func (b *Buffer) Check() {
 
 // Resize cuts the buffer at the given position.
 func (b *Buffer) Resize(from, to int32) {
+	oldEnd := b.end
 	if from < 0 {
 		from += b.Len()
 	}
@@ -210,6 +213,9 @@ func (b *Buffer) Resize(from, to int32) {
 	b.end = b.start + to
 	b.start += from
 	b.Check()
+	if b.end > oldEnd {
+		copy(b.v[oldEnd:b.end], zero[:])
+	}
 }
 
 // Advance cuts the buffer at the given position.
