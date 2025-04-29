@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	"sort"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -41,8 +42,6 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 				}
 				ips = append(ips, addr)
 			}
-		default:
-			return nil, errors.New("neither IP address nor proxied domain specified for domain: ", mapping.Domain).AtWarning()
 		}
 
 		sh.ips[id] = ips
@@ -62,17 +61,20 @@ func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 }
 
 func (h *StaticHosts) lookupInternal(domain string) []net.Address {
-	var ips []net.Address
-	for _, id := range h.matchers.Match(domain) {
-		ips = append(ips, h.ips[id]...)
+	MatchSlice := h.matchers.Match(domain)
+	sort.Slice(MatchSlice, func(i, j int) bool {
+		return MatchSlice[i] < MatchSlice[j]
+	})
+	if len(MatchSlice) == 0 {
+		return nil
 	}
-	return ips
+	return h.ips[MatchSlice[0]]
 }
 
 func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) []net.Address {
 	switch addrs := h.lookupInternal(domain); {
 	case len(addrs) == 0: // Not recorded in static hosts, return nil
-		return nil
+		return addrs
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Try to unwrap domain
 		errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", addrs[0].Domain(), ". Try to unwrap it")
 		if maxDepth > 0 {
