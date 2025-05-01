@@ -20,13 +20,11 @@ type NameServerConfig struct {
 	ExpectedIPs   StringList `json:"expectedIPs"`
 	ExpectIPs     StringList `json:"expectIPs"`
 	QueryStrategy string     `json:"queryStrategy"`
-	PriorIPs      StringList `json:"priorIPs"`
 	Tag           string     `json:"tag"`
 	TimeoutMs     uint64     `json:"timeoutMs"`
 	DisableCache  bool       `json:"disableCache"`
 	FinalQuery    bool       `json:"finalQuery"`
 	UnexpectedIPs StringList `json:"unexpectedIPs"`
-	UnpriorIPs    StringList `json:"unpriorIPs"`
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
@@ -46,13 +44,11 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		ExpectedIPs   StringList `json:"expectedIPs"`
 		ExpectIPs     StringList `json:"expectIPs"`
 		QueryStrategy string     `json:"queryStrategy"`
-		PriorIPs      StringList `json:"priorIPs"`
 		Tag           string     `json:"tag"`
 		TimeoutMs     uint64     `json:"timeoutMs"`
 		DisableCache  bool       `json:"disableCache"`
 		FinalQuery    bool       `json:"finalQuery"`
 		UnexpectedIPs StringList `json:"unexpectedIPs"`
-		UnpriorIPs    StringList `json:"unpriorIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -63,13 +59,11 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.ExpectedIPs = advanced.ExpectedIPs
 		c.ExpectIPs = advanced.ExpectIPs
 		c.QueryStrategy = advanced.QueryStrategy
-		c.PriorIPs = advanced.PriorIPs
 		c.Tag = advanced.Tag
 		c.TimeoutMs = advanced.TimeoutMs
 		c.DisableCache = advanced.DisableCache
 		c.FinalQuery = advanced.FinalQuery
 		c.UnexpectedIPs = advanced.UnexpectedIPs
-		c.UnpriorIPs = advanced.UnpriorIPs
 		return nil
 	}
 
@@ -117,25 +111,38 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	var expectedIPs = c.ExpectedIPs
-	if len(expectedIPs) == 0 {
-		expectedIPs = c.ExpectIPs
+	if len(c.ExpectedIPs) == 0 {
+		c.ExpectedIPs = c.ExpectIPs
 	}
-	expectedGeoipList, err := ToCidrList(expectedIPs)
+
+	actPrior := false
+	var newExpectedIPs StringList
+	for _, s := range c.ExpectedIPs {
+		if s == "*" {
+			actPrior = true
+		} else {
+			newExpectedIPs = append(newExpectedIPs, s)
+		}
+	}
+
+	actUnprior := false
+	var newUnexpectedIPs StringList
+	for _, s := range c.UnexpectedIPs {
+		if s == "*" {
+			actUnprior = true
+		} else {
+			newUnexpectedIPs = append(newUnexpectedIPs, s)
+		}
+	}
+
+	expectedGeoipList, err := ToCidrList(newExpectedIPs)
 	if err != nil {
-		return nil, errors.New("invalid expected IP rule: ", expectedIPs).Base(err)
+		return nil, errors.New("invalid expected IP rule: ", c.ExpectedIPs).Base(err)
 	}
-	priorGeoipList, err := ToCidrList(c.PriorIPs)
-	if err != nil {
-		return nil, errors.New("invalid prior IP rule: ", c.PriorIPs).Base(err)
-	}
-	unexpectedGeoipList, err := ToCidrList(c.UnexpectedIPs)
+
+	unexpectedGeoipList, err := ToCidrList(newUnexpectedIPs)
 	if err != nil {
 		return nil, errors.New("invalid unexpected IP rule: ", c.UnexpectedIPs).Base(err)
-	}
-	unpriorGeoipList, err := ToCidrList(c.UnpriorIPs)
-	if err != nil {
-		return nil, errors.New("invalid unprior IP rule: ", c.UnpriorIPs).Base(err)
 	}
 
 	var myClientIP []byte
@@ -158,13 +165,13 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		ExpectedGeoip:     expectedGeoipList,
 		OriginalRules:     originalRules,
 		QueryStrategy:     resolveQueryStrategy(c.QueryStrategy),
-		PriorGeoip:        priorGeoipList,
+		ActPrior:          actPrior,
 		Tag:               c.Tag,
 		TimeoutMs:         c.TimeoutMs,
 		DisableCache:      c.DisableCache,
 		FinalQuery:        c.FinalQuery,
 		UnexpectedGeoip:   unexpectedGeoipList,
-		UnpriorGeoip:      unpriorGeoipList,
+		ActUnprior:        actUnprior,
 	}, nil
 }
 

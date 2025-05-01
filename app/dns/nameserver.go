@@ -31,8 +31,8 @@ type Client struct {
 	domains       []string
 	expectedIPs   []*router.GeoIPMatcher
 	unexpectedIPs []*router.GeoIPMatcher
-	priorIPs      []*router.GeoIPMatcher
-	unpriorIPs    []*router.GeoIPMatcher
+	actPrior      bool
+	actUnprior    bool
 	tag           string
 	timeoutMs     time.Duration
 	finalQuery    bool
@@ -172,26 +172,6 @@ func NewClient(
 			unexpectedMatchers = append(unexpectedMatchers, matcher)
 		}
 
-		// Establish prior IPs
-		var priorMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.PriorGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
-			if err != nil {
-				return errors.New("failed to create prior ip matcher").Base(err).AtWarning()
-			}
-			priorMatchers = append(priorMatchers, matcher)
-		}
-
-		// Establish unprior IPs
-		var unpriorMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.UnpriorGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
-			if err != nil {
-				return errors.New("failed to create unprior ip matcher").Base(err).AtWarning()
-			}
-			unpriorMatchers = append(unpriorMatchers, matcher)
-		}
-
 		if len(clientIP) > 0 {
 			switch ns.Address.Address.GetAddress().(type) {
 			case *net.IPOrDomain_Domain:
@@ -211,8 +191,8 @@ func NewClient(
 		client.domains = rules
 		client.expectedIPs = expectedMatchers
 		client.unexpectedIPs = unexpectedMatchers
-		client.priorIPs = priorMatchers
-		client.unpriorIPs = unpriorMatchers
+		client.actPrior = ns.ActPrior
+		client.actUnprior = ns.ActUnprior
 		client.tag = tag
 		client.timeoutMs = timeoutMs
 		client.finalQuery = ns.FinalQuery
@@ -252,7 +232,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		return nil, 0, dns.ErrEmptyResponse
 	}
 
-	if len(c.expectedIPs) > 0 {
+	if len(c.expectedIPs) > 0 && !c.actPrior {
 		ips = router.MatchIPs(c.expectedIPs, ips, false)
 		errors.LogDebug(context.Background(), "domain ", domain, " expectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
@@ -260,7 +240,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		}
 	}
 
-	if len(c.unexpectedIPs) > 0 {
+	if len(c.unexpectedIPs) > 0 && !c.actUnprior {
 		ips = router.MatchIPs(c.unexpectedIPs, ips, true)
 		errors.LogDebug(context.Background(), "domain ", domain, " unexpectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
@@ -268,16 +248,16 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		}
 	}
 
-	if len(c.priorIPs) > 0 {
-		ipsNew := router.MatchIPs(c.priorIPs, ips, false)
+	if len(c.expectedIPs) > 0 && c.actPrior {
+		ipsNew := router.MatchIPs(c.expectedIPs, ips, false)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " priorIPs ", ips, " matched at server ", c.Name())
 		}
 	}
 
-	if len(c.unpriorIPs) > 0 {
-		ipsNew := router.MatchIPs(c.unpriorIPs, ips, true)
+	if len(c.unexpectedIPs) > 0 && c.actUnprior {
+		ipsNew := router.MatchIPs(c.unexpectedIPs, ips, true)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " unpriorIPs ", ips, " matched at server ", c.Name())
