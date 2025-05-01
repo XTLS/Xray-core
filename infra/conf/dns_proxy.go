@@ -14,6 +14,7 @@ type DNSOutboundConfig struct {
 	UserLevel  uint32   `json:"userLevel"`
 	NonIPQuery string   `json:"nonIPQuery"`
 	BlockTypes []int32  `json:"blockTypes"`
+	SkipRCodes []uint32 `json:"skipRCodes"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
@@ -36,5 +37,6 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	}
 	config.Non_IPQuery = c.NonIPQuery
 	config.BlockTypes = c.BlockTypes
+	config.Skip_RCodes = c.SkipRCodes
 	return config, nil
 }

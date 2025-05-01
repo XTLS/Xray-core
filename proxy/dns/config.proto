@@ -15,4 +15,5 @@ message Config {
   uint32 user_level = 2;
   string non_IP_query = 3;
   repeated int32 block_types = 4;
+  repeated uint32 skip_R_codes = 5;
 }

@@ -51,6 +51,7 @@ type Handler struct {
 	timeout         time.Duration
 	nonIPQuery      string
 	blockTypes      []int32
+	skipRCodes      []uint32
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -66,6 +67,7 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 	}
 	h.nonIPQuery = config.Non_IPQuery
 	h.blockTypes = config.BlockTypes
+	h.skipRCodes = config.Skip_RCodes
 	return nil
 }
 
@@ -193,9 +195,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 					}
 				}
 				if isIPQuery {
-					go h.handleIPQuery(id, qType, domain, writer)
+					go h.handleIPQuery(id, qType, domain, writer, connWriter, b)
+					continue
 				}
-				if isIPQuery || h.nonIPQuery == "drop" {
+				if h.nonIPQuery == "drop" {
 					b.Release()
 					continue
 				}
@@ -233,7 +236,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	return nil
 }
 
-func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
+func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer, conWriter dns_proto.MessageWriter, msg *buf.Buffer) {
 	var ips []net.IP
 	var err error
 
@@ -256,6 +259,16 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	}
 
 	rcode := dns.RCodeFromError(err)
+	if rcode > 0 && len(h.skipRCodes) > 0 {
+		for _, skip := range h.skipRCodes {
+			if uint16(skip) == rcode {
+				conWriter.WriteMessage(msg)
+				errors.LogInfo(context.Background(), "skipped IP query with rcode ", rcode, " for domain ", domain)
+				return
+			}
+		}
+	}
+	msg.Release()
 	if rcode == 0 && len(ips) == 0 && !go_errors.Is(err, dns.ErrEmptyResponse) {
 		errors.LogInfoInner(context.Background(), err, "ip query")
 		return
