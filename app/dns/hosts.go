@@ -87,6 +87,9 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) (
 		return addrs, nil
 	case len(addrs) == 1:
 		if err, ok := addrs[0].(dns.RCodeError); ok {
+			if uint16(err) == 0 {
+				return nil, dns.ErrEmptyResponse
+			}
 			return nil, err
 		}
 		if addrs[0].Family().IsDomain() { // Try to unwrap domain
