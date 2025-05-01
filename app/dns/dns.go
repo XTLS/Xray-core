@@ -187,7 +187,9 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 	}
 
 	// Static host lookup
-	switch addrs := s.hosts.Lookup(domain, option); {
+	switch addrs, err := s.hosts.Lookup(domain, option); {
+	case err != nil:
+		return nil, 0, err
 	case addrs == nil: // Domain not recorded in static host
 		break
 	case len(addrs) == 0: // Domain recorded, but no valid IP returned (e.g. IPv4 address with only IPv6 enabled)
@@ -250,13 +252,12 @@ func (s *DNS) LookupHosts(domain string) *net.Address {
 		return nil
 	}
 	// Normalize the FQDN form query
-	addrs := s.hosts.Lookup(domain, *s.ipOption)
-	if len(addrs) > 0 {
-		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].String())
-		return &addrs[0]
+	addrs, err := s.hosts.Lookup(domain, *s.ipOption)
+	if err != nil || len(addrs) == 0 {
+		return nil
 	}
-
-	return nil
+	errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].String())
+	return &addrs[0]
 }
 
 func (s *DNS) sortClients(domain string) []*Client {
