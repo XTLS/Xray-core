@@ -37,6 +37,7 @@ type Client struct {
 	timeoutMs     time.Duration
 	finalQuery    bool
 	ipOption      *dns.IPOption
+	useSystem     bool
 }
 
 // NewServer creates a name server object according to the network destination url.
@@ -186,6 +187,8 @@ func NewClient(
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
 		}
 
+		useSystem := ns.QueryStrategy == QueryStrategy_USE_SYS
+
 		client.server = server
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
@@ -197,6 +200,7 @@ func NewClient(
 		client.timeoutMs = timeoutMs
 		client.finalQuery = ns.FinalQuery
 		client.ipOption = &ipOption
+		client.useSystem = useSystem
 		return nil
 	})
 	return client, err
@@ -213,8 +217,15 @@ func (c *Client) IsFinalQuery() bool {
 
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	option.IPv4Enable = option.IPv4Enable && c.ipOption.IPv4Enable
-	option.IPv6Enable = option.IPv6Enable && c.ipOption.IPv6Enable
+	if c.useSystem {
+		supportIPv4, supportIPv6 := checkSystemNetwork()
+		option.IPv4Enable = option.IPv4Enable && supportIPv4
+		option.IPv6Enable = option.IPv6Enable && supportIPv6
+	} else {
+		option.IPv4Enable = option.IPv4Enable && c.ipOption.IPv4Enable
+		option.IPv6Enable = option.IPv6Enable && c.ipOption.IPv6Enable
+	}
+
 	if !option.IPv4Enable && !option.IPv6Enable {
 		return nil, 0, dns.ErrEmptyResponse
 	}
@@ -270,6 +281,8 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 func ResolveIpOptionOverride(queryStrategy QueryStrategy, ipOption dns.IPOption) dns.IPOption {
 	switch queryStrategy {
 	case QueryStrategy_USE_IP:
+		return ipOption
+	case QueryStrategy_USE_SYS:
 		return ipOption
 	case QueryStrategy_USE_IP4:
 		return dns.IPOption{

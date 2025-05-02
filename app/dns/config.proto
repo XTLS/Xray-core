@@ -48,6 +48,7 @@ enum QueryStrategy {
   USE_IP = 0;
   USE_IP4 = 1;
   USE_IP6 = 2;
+  USE_SYS = 3;
 }
 
 message Config {

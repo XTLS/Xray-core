@@ -425,6 +425,8 @@ func resolveQueryStrategy(queryStrategy string) dns.QueryStrategy {
 		return dns.QueryStrategy_USE_IP4
 	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
 		return dns.QueryStrategy_USE_IP6
+	case "usesys", "usesystem", "use_sys", "use_system", "use-sys", "use-system":
+		return dns.QueryStrategy_USE_SYS
 	default:
 		return dns.QueryStrategy_USE_IP
 	}
