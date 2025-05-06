@@ -51,7 +51,7 @@ jobs:
           GOSDK=$(go env GOROOT)
           rm -r $GOSDK/*
           cd $GOSDK
-          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
+          curl -O -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
           unzip ./go-for-win7-linux-amd64.zip -d $GOSDK
           rm ./go-for-win7-linux-amd64.zip
 
