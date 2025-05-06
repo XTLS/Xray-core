@@ -2,8 +2,6 @@ package dns
 
 import (
 	"context"
-	"sort"
-
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
@@ -61,14 +59,16 @@ func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 }
 
 func (h *StaticHosts) lookupInternal(domain string) []net.Address {
-	MatchSlice := h.matchers.Match(domain)
-	sort.Slice(MatchSlice, func(i, j int) bool {
-		return MatchSlice[i] < MatchSlice[j]
-	})
-	if len(MatchSlice) == 0 {
+	ips := make([]net.Address, 0)
+	found := false
+	for _, id := range h.matchers.Match(domain) {
+		ips = append(ips, h.ips[id]...)
+		found = true
+	}
+	if !found {
 		return nil
 	}
-	return h.ips[MatchSlice[0]]
+	return ips
 }
 
 func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) []net.Address {
