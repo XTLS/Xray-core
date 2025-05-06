@@ -45,12 +45,12 @@ jobs:
               INFO=($(echo $i | awk 'BEGIN{FS=" ";OFS=" "} {print $1,$2,$3,$4}'))
               FILE_NAME="${INFO[3]}.dat"
               echo -e "Verifying HASH key..."
-              HASH="$(curl -sL "https://raw.githubusercontent.com/${INFO[0]}/${INFO[1]}/release/${INFO[2]}.dat.sha256sum" | awk -F ' ' '{print $1}')"
+              HASH="$(curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://raw.githubusercontent.com/${INFO[0]}/${INFO[1]}/release/${INFO[2]}.dat.sha256sum" | awk -F ' ' '{print $1}')"
               if [ -s "./resources/${FILE_NAME}" ] && [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ]; then
                   continue
               else
                   echo -e "Downloading https://raw.githubusercontent.com/${INFO[0]}/${INFO[1]}/release/${INFO[2]}.dat..."
-                  curl -L "https://raw.githubusercontent.com/${INFO[0]}/${INFO[1]}/release/${INFO[2]}.dat" -o ./resources/${FILE_NAME}
+                  curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://raw.githubusercontent.com/${INFO[0]}/${INFO[1]}/release/${INFO[2]}.dat" -o ./resources/${FILE_NAME}
                   echo -e "Verifying HASH key..."
                   [ "$(sha256sum "./resources/${FILE_NAME}" | awk -F ' ' '{print $1}')" == "${HASH}" ] || { echo -e "The HASH key of ${FILE_NAME} does not match cloud one."; exit 1; }
                   echo "unhit=true" >> $GITHUB_OUTPUT
