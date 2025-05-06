@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/miekg/dns v1.1.65
 	github.com/pelletier/go-toml v1.9.5
-	github.com/pires/go-proxyproto v0.8.0
+	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.51.0
 	github.com/refraction-networking/utls v1.7.1
 	github.com/sagernet/sing v0.5.1
