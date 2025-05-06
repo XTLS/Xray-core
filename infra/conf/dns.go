@@ -2,7 +2,6 @@ package conf
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
@@ -241,13 +240,7 @@ func (m *HostsWrapper) UnmarshalJSON(data []byte) error {
 func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 	mappings := make([]*dns.Config_HostMapping, 0, 20)
 
-	domains := make([]string, 0, len(m.Hosts))
 	for domain := range m.Hosts {
-		domains = append(domains, domain)
-	}
-	sort.Strings(domains)
-
-	for _, domain := range domains {
 		switch {
 		case strings.HasPrefix(domain, "domain:"):
 			domainName := domain[7:]
