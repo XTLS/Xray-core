@@ -28,7 +28,7 @@ type DNS struct {
 	ctx                    context.Context
 	domainMatcher          strmatcher.IndexMatcher
 	matcherInfos           []*DomainMatcherInfo
-	useSystem              bool
+	checkSystem            bool
 }
 
 // DomainMatcherInfo contains information attached to index returned by Server.domainMatcher
@@ -48,7 +48,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	}
 
 	var ipOption dns.IPOption
-	useSystem := false
+	checkSystem := false
 	switch config.QueryStrategy {
 	case QueryStrategy_USE_IP:
 		ipOption = dns.IPOption{
@@ -62,7 +62,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			IPv6Enable: true,
 			FakeEnable: false,
 		}
-		useSystem = true
+		checkSystem = true
 	case QueryStrategy_USE_IP4:
 		ipOption = dns.IPOption{
 			IPv4Enable: true,
@@ -149,7 +149,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		matcherInfos:           matcherInfos,
 		disableFallback:        config.DisableFallback,
 		disableFallbackIfMatch: config.DisableFallbackIfMatch,
-		useSystem:              useSystem,
+		checkSystem:            checkSystem,
 	}, nil
 }
 
@@ -190,7 +190,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		return nil, 0, errors.New("empty domain name")
 	}
 
-	if s.useSystem {
+	if s.checkSystem {
 		supportIPv4, supportIPv6 := checkSystemNetwork()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
 		option.IPv6Enable = option.IPv6Enable && supportIPv6
