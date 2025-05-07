@@ -6,6 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/dns"
+	"sort"
 )
 
 // StaticHosts represents static domain-ip mapping in DNS server.
@@ -59,16 +60,14 @@ func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 }
 
 func (h *StaticHosts) lookupInternal(domain string) []net.Address {
-	ips := make([]net.Address, 0)
-	found := false
-	for _, id := range h.matchers.Match(domain) {
-		ips = append(ips, h.ips[id]...)
-		found = true
-	}
-	if !found {
+	MatchSlice := h.matchers.Match(domain)
+	sort.Slice(MatchSlice, func(i, j int) bool {
+		return MatchSlice[i] < MatchSlice[j]
+	})
+	if len(MatchSlice) == 0 {
 		return nil
 	}
-	return ips
+	return h.ips[MatchSlice[0]]
 }
 
 func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) []net.Address {
