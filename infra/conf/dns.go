@@ -1,13 +1,8 @@
 package conf
 
 import (
-  "bufio"
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dns"
@@ -17,19 +12,17 @@ import (
 )
 
 type NameServerConfig struct {
-	Address       *Address   `json:"address"`
-	ClientIP      *Address   `json:"clientIp"`
-	Port          uint16     `json:"port"`
-	SkipFallback  bool       `json:"skipFallback"`
-	Domains       []string   `json:"domains"`
-	ExpectedIPs   StringList `json:"expectedIPs"`
-	ExpectIPs     StringList `json:"expectIPs"`
-	QueryStrategy string     `json:"queryStrategy"`
-	Tag           string     `json:"tag"`
-	TimeoutMs     uint64     `json:"timeoutMs"`
-	DisableCache  bool       `json:"disableCache"`
-	FinalQuery    bool       `json:"finalQuery"`
-	UnexpectedIPs StringList `json:"unexpectedIPs"`
+	Address            *Address   `json:"address"`
+	ClientIP           *Address   `json:"clientIp"`
+	Port               uint16     `json:"port"`
+	SkipFallback       bool       `json:"skipFallback"`
+	Domains            []string   `json:"domains"`
+	ExpectedIPs        StringList `json:"expectedIPs"`
+	ExpectIPs          StringList `json:"expectIPs"`
+	QueryStrategy      string     `json:"queryStrategy"`
+	AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
+	Tag                string     `json:"tag"`
+	TimeoutMs          uint64     `json:"timeoutMs"`
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
@@ -41,19 +34,17 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address       *Address   `json:"address"`
-		ClientIP      *Address   `json:"clientIp"`
-		Port          uint16     `json:"port"`
-		SkipFallback  bool       `json:"skipFallback"`
-		Domains       []string   `json:"domains"`
-		ExpectedIPs   StringList `json:"expectedIPs"`
-		ExpectIPs     StringList `json:"expectIPs"`
-		QueryStrategy string     `json:"queryStrategy"`
-		Tag           string     `json:"tag"`
-		TimeoutMs     uint64     `json:"timeoutMs"`
-		DisableCache  bool       `json:"disableCache"`
-		FinalQuery    bool       `json:"finalQuery"`
-		UnexpectedIPs StringList `json:"unexpectedIPs"`
+		Address            *Address   `json:"address"`
+		ClientIP           *Address   `json:"clientIp"`
+		Port               uint16     `json:"port"`
+		SkipFallback       bool       `json:"skipFallback"`
+		Domains            []string   `json:"domains"`
+		ExpectedIPs        StringList `json:"expectedIPs"`
+		ExpectIPs          StringList `json:"expectIPs"`
+		QueryStrategy      string     `json:"queryStrategy"`
+		AllowUnexpectedIPs bool       `json:"allowUnexpectedIps"`
+		Tag                string     `json:"tag"`
+		TimeoutMs          uint64     `json:"timeoutMs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -64,11 +55,9 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.ExpectedIPs = advanced.ExpectedIPs
 		c.ExpectIPs = advanced.ExpectIPs
 		c.QueryStrategy = advanced.QueryStrategy
+		c.AllowUnexpectedIPs = advanced.AllowUnexpectedIPs
 		c.Tag = advanced.Tag
 		c.TimeoutMs = advanced.TimeoutMs
-		c.DisableCache = advanced.DisableCache
-		c.FinalQuery = advanced.FinalQuery
-		c.UnexpectedIPs = advanced.UnexpectedIPs
 		return nil
 	}
 
@@ -116,38 +105,13 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		})
 	}
 
-	if len(c.ExpectedIPs) == 0 {
-		c.ExpectedIPs = c.ExpectIPs
+	var expectedIPs = c.ExpectedIPs
+	if len(expectedIPs) == 0 {
+		expectedIPs = c.ExpectIPs
 	}
-
-	actPrior := false
-	var newExpectedIPs StringList
-	for _, s := range c.ExpectedIPs {
-		if s == "*" {
-			actPrior = true
-		} else {
-			newExpectedIPs = append(newExpectedIPs, s)
-		}
-	}
-
-	actUnprior := false
-	var newUnexpectedIPs StringList
-	for _, s := range c.UnexpectedIPs {
-		if s == "*" {
-			actUnprior = true
-		} else {
-			newUnexpectedIPs = append(newUnexpectedIPs, s)
-		}
-	}
-
-	expectedGeoipList, err := ToCidrList(newExpectedIPs)
+	geoipList, err := ToCidrList(expectedIPs)
 	if err != nil {
-		return nil, errors.New("invalid expected IP rule: ", c.ExpectedIPs).Base(err)
-	}
-
-	unexpectedGeoipList, err := ToCidrList(newUnexpectedIPs)
-	if err != nil {
-		return nil, errors.New("invalid unexpected IP rule: ", c.UnexpectedIPs).Base(err)
+		return nil, errors.New("invalid IP rule: ", expectedIPs).Base(err)
 	}
 
 	var myClientIP []byte
@@ -164,19 +128,15 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 			Address: c.Address.Build(),
 			Port:    uint32(c.Port),
 		},
-		ClientIp:          myClientIP,
-		SkipFallback:      c.SkipFallback,
-		PrioritizedDomain: domains,
-		ExpectedGeoip:     expectedGeoipList,
-		OriginalRules:     originalRules,
-		QueryStrategy:     resolveQueryStrategy(c.QueryStrategy),
-		ActPrior:          actPrior,
-		Tag:               c.Tag,
-		TimeoutMs:         c.TimeoutMs,
-		DisableCache:      c.DisableCache,
-		FinalQuery:        c.FinalQuery,
-		UnexpectedGeoip:   unexpectedGeoipList,
-		ActUnprior:        actUnprior,
+		ClientIp:           myClientIP,
+		SkipFallback:       c.SkipFallback,
+		PrioritizedDomain:  domains,
+		Geoip:              geoipList,
+		OriginalRules:      originalRules,
+		QueryStrategy:      resolveQueryStrategy(c.QueryStrategy),
+		AllowUnexpectedIPs: c.AllowUnexpectedIPs,
+		Tag:                c.Tag,
+		TimeoutMs:          c.TimeoutMs,
 	}, nil
 }
 
@@ -197,7 +157,6 @@ type DNSConfig struct {
 	DisableCache           bool                `json:"disableCache"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
-	UseSystemHosts         bool                `json:"useSystemHosts"`
 }
 
 type HostAddress struct {
@@ -459,15 +418,6 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		}
 		config.StaticHosts = append(config.StaticHosts, staticHosts...)
 	}
-	if c.UseSystemHosts {
-		systemHosts, err := readSystemHosts()
-		if err != nil {
-			return nil, errors.New("failed to read system hosts").Base(err)
-		}
-		for domain, ips := range systemHosts {
-			config.StaticHosts = append(config.StaticHosts, &dns.Config_HostMapping{Ip: ips, Domain: domain, Type: dns.DomainMatchingType_Full})
-		}
-	}
 
 	return config, nil
 }
@@ -480,91 +430,7 @@ func resolveQueryStrategy(queryStrategy string) dns.QueryStrategy {
 		return dns.QueryStrategy_USE_IP4
 	case "useip6", "useipv6", "use_ip6", "use_ipv6", "use_ip_v6", "use-ip6", "use-ipv6", "use-ip-v6":
 		return dns.QueryStrategy_USE_IP6
-	case "usesys", "usesystem", "use_sys", "use_system", "use-sys", "use-system":
-		return dns.QueryStrategy_USE_SYS
 	default:
 		return dns.QueryStrategy_USE_IP
 	}
-}
-
-func readSystemHosts() (map[string][][]byte, error) {
-	var hostsPath string
-	switch runtime.GOOS {
-	case "windows":
-		hostsPath = filepath.Join(os.Getenv("SystemRoot"), "System32", "drivers", "etc", "hosts")
-	default:
-		hostsPath = "/etc/hosts"
-	}
-
-	file, err := os.Open(hostsPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	hostsMap := make(map[string][][]byte)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			// Discard comments.
-			line = line[0:i]
-		}
-		f := getFields(line)
-		if len(f) < 2 {
-			continue
-		}
-		addr := net.ParseAddress(f[0])
-		if addr.Family().IsDomain() {
-			continue
-		}
-		ip := addr.IP()
-		for i := 1; i < len(f); i++ {
-			domain := strings.TrimSuffix(f[i], ".")
-			domain = strings.ToLower(domain)
-			if v, ok := hostsMap[domain]; ok {
-				hostsMap[domain] = append(v, ip)
-			} else {
-				hostsMap[domain] = [][]byte{ip}
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return hostsMap, nil
-}
-
-func getFields(s string) []string { return splitAtBytes(s, " \r\t\n") }
-
-// Count occurrences in s of any bytes in t.
-func countAnyByte(s string, t string) int {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		if strings.IndexByte(t, s[i]) >= 0 {
-			n++
-		}
-	}
-	return n
-}
-
-// Split s at any bytes in t.
-func splitAtBytes(s string, t string) []string {
-	a := make([]string, 1+countAnyByte(s, t))
-	n := 0
-	last := 0
-	for i := 0; i < len(s); i++ {
-		if strings.IndexByte(t, s[i]) >= 0 {
-			if last < i {
-				a[n] = s[last:i]
-				n++
-			}
-			last = i + 1
-		}
-	}
-	if last < len(s) {
-		a[n] = s[last:]
-		n++
-	}
-	return a[0:n]
 }

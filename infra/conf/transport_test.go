@@ -26,7 +26,6 @@ func TestSocketConfig(t *testing.T) {
 		Tfo:            256,
 		DomainStrategy: internet.DomainStrategy_USE_IP,
 		DialerProxy:    "tag",
-		HappyEyeballs:  &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -46,9 +45,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test "tcpFastOpen": false, disabled TFO is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           -1,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  -1,
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -65,9 +63,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test "tcpFastOpen": 65535, queue length 65535 is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           65535,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  65535,
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -84,9 +81,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test "tcpFastOpen": -65535, disable TFO is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           -65535,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  -65535,
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -103,9 +99,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test "tcpFastOpen": 0, no operation is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           0,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  0,
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -122,9 +117,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test omit "tcpFastOpen", no operation is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           0,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  0,
 	}
 	runMultiTestCase(t, []TestCase{
 		{
@@ -139,9 +133,8 @@ func TestSocketConfig(t *testing.T) {
 
 	// test "tcpFastOpen": null, no operation is expected
 	expectedOutput = &internet.SocketConfig{
-		Mark:          0,
-		Tfo:           0,
-		HappyEyeballs: &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, TryDelayMs: 250, PrioritizeIpv6: false, MaxConcurrentTry: 4},
+		Mark: 0,
+		Tfo:  0,
 	}
 	runMultiTestCase(t, []TestCase{
 		{

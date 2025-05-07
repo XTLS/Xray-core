@@ -255,11 +255,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 			if sockopt.DomainStrategy.forceIP() {
 				return nil, err
 			}
-		} else if !sockopt.HappyEyeballs.Enabled || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
+		} else {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
-		} else {
-			return TcpRaceDial(ctx, src, ips, dest.Port, sockopt)
 		}
 	}
 

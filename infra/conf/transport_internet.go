@@ -699,34 +699,25 @@ type CustomSockoptConfig struct {
 	Type    string `json:"type"`
 }
 
-type HappyEyeballsConfig struct {
-	Enabled          bool   `json:"enabled"`
-	PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
-	TryDelayMs       uint64 `json:"tryDelayMs"`
-	Interleave       uint32 `json:"interleave"`
-	MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
-}
-
 type SocketConfig struct {
-	Mark                  int32                  `json:"mark"`
-	TFO                   interface{}            `json:"tcpFastOpen"`
-	TProxy                string                 `json:"tproxy"`
-	AcceptProxyProtocol   bool                   `json:"acceptProxyProtocol"`
-	DomainStrategy        string                 `json:"domainStrategy"`
-	DialerProxy           string                 `json:"dialerProxy"`
-	TCPKeepAliveInterval  int32                  `json:"tcpKeepAliveInterval"`
-	TCPKeepAliveIdle      int32                  `json:"tcpKeepAliveIdle"`
-	TCPCongestion         string                 `json:"tcpCongestion"`
-	TCPWindowClamp        int32                  `json:"tcpWindowClamp"`
-	TCPMaxSeg             int32                  `json:"tcpMaxSeg"`
-	Penetrate             bool                   `json:"penetrate"`
-	TCPUserTimeout        int32                  `json:"tcpUserTimeout"`
-	V6only                bool                   `json:"v6only"`
-	Interface             string                 `json:"interface"`
-	TcpMptcp              bool                   `json:"tcpMptcp"`
-	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
-	AddressPortStrategy   string                 `json:"addressPortStrategy"`
-	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
+	Mark                 int32                  `json:"mark"`
+	TFO                  interface{}            `json:"tcpFastOpen"`
+	TProxy               string                 `json:"tproxy"`
+	AcceptProxyProtocol  bool                   `json:"acceptProxyProtocol"`
+	DomainStrategy       string                 `json:"domainStrategy"`
+	DialerProxy          string                 `json:"dialerProxy"`
+	TCPKeepAliveInterval int32                  `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle     int32                  `json:"tcpKeepAliveIdle"`
+	TCPCongestion        string                 `json:"tcpCongestion"`
+	TCPWindowClamp       int32                  `json:"tcpWindowClamp"`
+	TCPMaxSeg            int32                  `json:"tcpMaxSeg"`
+	Penetrate            bool                   `json:"penetrate"`
+	TCPUserTimeout       int32                  `json:"tcpUserTimeout"`
+	V6only               bool                   `json:"v6only"`
+	Interface            string                 `json:"interface"`
+	TcpMptcp             bool                   `json:"tcpMptcp"`
+	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
+	AddressPortStrategy  string                 `json:"addressPortStrategy"`
 }
 
 // Build implements Buildable.
@@ -818,21 +809,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
-	if c.HappyEyeballsSettings != nil {
-		happyEyeballs.Enabled = c.HappyEyeballsSettings.Enabled
-		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
-		if c.HappyEyeballsSettings.Interleave > 0 {
-			happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
-		}
-		if c.HappyEyeballsSettings.TryDelayMs > 0 {
-			happyEyeballs.TryDelayMs = c.HappyEyeballsSettings.TryDelayMs
-		}
-		if c.HappyEyeballsSettings.MaxConcurrentTry > 0 {
-			happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
-		}
-	}
-
 	return &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
@@ -852,7 +828,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
 		AddressPortStrategy:  addressPortStrategy,
-		HappyEyeballs:        happyEyeballs,
 	}, nil
 }
 
