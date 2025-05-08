@@ -1,6 +1,6 @@
 name: Scheduled assets update
 
-# NOTE: This Github Actions is required by other actions, for preparing other packaging assets in a 
+# NOTE: This Github Actions is required by other actions, for preparing other packaging assets in a
 #       routine manner, for example: GeoIP/GeoSite.
 #       Currently updating:
 #       - Geodat (GeoIP/Geosite)
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   schedule:
     # Update GeoData on every day (22:30 UTC)
-    - cron: '30 22 * * *'
+    - cron: "30 22 * * *"
   push:
     # Prevent triggering update request storm
     paths:
