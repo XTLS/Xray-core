@@ -9,7 +9,38 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
+  check-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore Geodat Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Check Assets Existence
+        id: check-assets
+        run: |
+          [ -d 'resources' ] || mkdir resources
+          LIST=('geoip.dat' 'geosite.dat')
+          for FILE_NAME in "${LIST[@]}"
+          do
+            echo -e "Checking ${FILE_NAME}..."
+            if [ -s "./resources/${FILE_NAME}" ]; then
+              echo -e "${FILE_NAME} exists."
+            else
+              echo -e "${FILE_NAME} does not exist."
+              echo "missing=true" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
+
+      - name: Sleep for 90 seconds if Assets Missing
+        if: steps.check-assets.outputs.missing == 'true'
+        run: sleep 90
+
   build:
+    needs: check-assets
     permissions:
       contents: write
     strategy:
@@ -51,7 +82,7 @@ jobs:
           GOSDK=$(go env GOROOT)
           rm -r $GOSDK/*
           cd $GOSDK
-          curl -O -L https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
+          curl -O -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://github.com/XTLS/go-win7/releases/latest/download/go-for-win7-linux-amd64.zip
           unzip ./go-for-win7-linux-amd64.zip -d $GOSDK
           rm ./go-for-win7-linux-amd64.zip
 
