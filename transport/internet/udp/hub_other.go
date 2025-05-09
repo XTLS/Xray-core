@@ -1,5 +1,5 @@
-//go:build !linux && !freebsd && !darwin
-// +build !linux,!freebsd,!darwin
+//go:build !linux && !freebsd && !darwin && !windows
+// +build !linux,!freebsd,!darwin,!windows
 
 package udp
 

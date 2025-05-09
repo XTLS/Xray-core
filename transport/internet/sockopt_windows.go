@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -139,6 +140,15 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	if config.V6Only {
 		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, 1); err != nil {
 			return errors.New("failed to set IPV6_V6ONLY").Base(err)
+		}
+	}
+
+	if config.ReceiveOriginalDestAddress && isUDPSocket(network) {
+		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, windows.IP_PKTINFO, 1); err != nil {
+			return errors.New("failed to set IP_PKTINFO").Base(err)
+		}
+		if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, windows.IPV6_PKTINFO, 1); err != nil {
+			return errors.New("failed to set IPV6_PKTINFO").Base(err)
 		}
 	}
 
