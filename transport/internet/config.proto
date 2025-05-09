@@ -135,9 +135,8 @@ message SocketConfig {
 }
 
 message HappyEyeballsConfig {
-  bool enabled = 1;
-  bool prioritize_ipv6 = 2;
-  uint32 interleave = 3;
-  uint64 try_delayMs = 4;
-  uint32 max_concurrent_try = 5;
+  bool prioritize_ipv6 = 1;
+  uint32 interleave = 2;
+  uint64 try_delayMs = 3;
+  uint32 max_concurrent_try = 4;
 }

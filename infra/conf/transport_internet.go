@@ -700,11 +700,27 @@ type CustomSockoptConfig struct {
 }
 
 type HappyEyeballsConfig struct {
-	Enabled          bool   `json:"enabled"`
 	PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
 	TryDelayMs       uint64 `json:"tryDelayMs"`
 	Interleave       uint32 `json:"interleave"`
 	MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+}
+
+func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
+	var innerHappyEyeballsConfig = struct {
+		PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
+		TryDelayMs       uint64 `json:"tryDelayMs"`
+		Interleave       uint32 `json:"interleave"`
+		MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+	}{PrioritizeIPv6: false, Interleave: 1, TryDelayMs: 250, MaxConcurrentTry: 4}
+	if err := json.Unmarshal(data, &innerHappyEyeballsConfig); err != nil {
+		return err
+	}
+	h.PrioritizeIPv6 = innerHappyEyeballsConfig.PrioritizeIPv6
+	h.TryDelayMs = innerHappyEyeballsConfig.TryDelayMs
+	h.Interleave = innerHappyEyeballsConfig.Interleave
+	h.MaxConcurrentTry = innerHappyEyeballsConfig.MaxConcurrentTry
+	return nil
 }
 
 type SocketConfig struct {
@@ -818,19 +834,12 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Enabled: true, Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
+	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
 	if c.HappyEyeballsSettings != nil {
-		happyEyeballs.Enabled = c.HappyEyeballsSettings.Enabled
 		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
-		if c.HappyEyeballsSettings.Interleave > 0 {
-			happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
-		}
-		if c.HappyEyeballsSettings.TryDelayMs > 0 {
-			happyEyeballs.TryDelayMs = c.HappyEyeballsSettings.TryDelayMs
-		}
-		if c.HappyEyeballsSettings.MaxConcurrentTry > 0 {
-			happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
-		}
+		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
+		happyEyeballs.TryDelayMs = c.HappyEyeballsSettings.TryDelayMs
+		happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
 	}
 
 	return &internet.SocketConfig{

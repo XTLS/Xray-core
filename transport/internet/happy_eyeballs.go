@@ -16,7 +16,19 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 	if len(ips) < 2 {
 		panic("at least 2 ips is required to race dial")
 	}
-	ips = sortIPs(ips, sockopt.HappyEyeballs.PrioritizeIpv6, sockopt.HappyEyeballs.Interleave)
+
+	prioritizeIPv6 := false
+	interleave := uint32(1)
+	tryDelayMs := 250 * time.Millisecond
+	maxConcurrentTry := uint32(4)
+	if sockopt.HappyEyeballs != nil {
+		prioritizeIPv6 = sockopt.HappyEyeballs.PrioritizeIpv6
+		interleave = sockopt.HappyEyeballs.Interleave
+		tryDelayMs = time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond
+		maxConcurrentTry = sockopt.HappyEyeballs.MaxConcurrentTry
+	}
+
+	ips = sortIPs(ips, prioritizeIPv6, interleave)
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var resultCh = make(chan *result, len(ips))
@@ -70,16 +82,16 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 			}
 
 		case <-timer.C:
-			if nextTryIndex == len(ips) || activeNum == sockopt.HappyEyeballs.MaxConcurrentTry {
+			if nextTryIndex == len(ips) || activeNum == maxConcurrentTry {
 				panic("impossible situation")
 			}
 			go tcpTryDial(newCtx, src, sockopt, ips[nextTryIndex], port, nextTryIndex, resultCh)
 			activeNum++
 			nextTryIndex++
-			if nextTryIndex == len(ips) || activeNum == sockopt.HappyEyeballs.MaxConcurrentTry {
+			if nextTryIndex == len(ips) || activeNum == maxConcurrentTry {
 				timer.Stop()
 			} else {
-				timer.Reset(time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond)
+				timer.Reset(tryDelayMs)
 			}
 			continue
 		}
@@ -87,7 +99,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 }
 
 // sortIPs sort IPs according to rfc 8305.
-func sortIPs(ips []net.IP, priorIPv6 bool, interleave uint32) []net.IP {
+func sortIPs(ips []net.IP, prioritizeIPv6 bool, interleave uint32) []net.IP {
 	if len(ips) == 0 {
 		return ips
 	}
@@ -111,7 +123,7 @@ func sortIPs(ips []net.IP, priorIPv6 bool, interleave uint32) []net.IP {
 	consumeIP6 := 0
 	consumeTurn := uint32(0)
 	ip4turn := true
-	if priorIPv6 {
+	if prioritizeIPv6 {
 		ip4turn = false
 	}
 	for {
