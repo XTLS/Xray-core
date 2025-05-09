@@ -68,44 +68,45 @@ func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 	return filtered
 }
 
-func (h *StaticHosts) lookupInternal(domain string) []net.Address {
+func (h *StaticHosts) lookupInternal(domain string) ([]net.Address, error) {
 	ips := make([]net.Address, 0)
 	found := false
 	for _, id := range h.matchers.Match(domain) {
+		for _, v := range h.ips[id] {
+			if err, ok := v.(dns.RCodeError); ok {
+				if uint16(err) == 0 {
+					return nil, dns.ErrEmptyResponse
+				}
+				return nil, err
+			}
+		}
 		ips = append(ips, h.ips[id]...)
 		found = true
 	}
 	if !found {
-		return nil
+		return nil, nil
 	}
-	return ips
+	return ips, nil
 }
 
 func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) ([]net.Address, error) {
-	switch addrs := h.lookupInternal(domain); {
+	switch addrs, err := h.lookupInternal(domain); {
+	case err != nil:
+		return nil, err
 	case len(addrs) == 0: // Not recorded in static hosts, return nil
 		return addrs, nil
-	case len(addrs) == 1:
-		if err, ok := addrs[0].(dns.RCodeError); ok {
-			if uint16(err) == 0 {
-				return nil, dns.ErrEmptyResponse
+	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Try to unwrap domain
+		errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", addrs[0].Domain(), ". Try to unwrap it")
+		if maxDepth > 0 {
+			unwrapped, err := h.lookup(addrs[0].Domain(), option, maxDepth-1)
+			if err != nil {
+				return nil, err
 			}
-			return nil, err
-		}
-		if addrs[0].Family().IsDomain() { // Try to unwrap domain
-			errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", addrs[0].Domain(), ". Try to unwrap it")
-			if maxDepth > 0 {
-				unwrapped, err := h.lookup(addrs[0].Domain(), option, maxDepth-1)
-				if err != nil {
-					return nil, err
-				}
-				if unwrapped != nil {
-					return unwrapped, nil
-				}
+			if unwrapped != nil {
+				return unwrapped, nil
 			}
-			return addrs, nil
 		}
-		fallthrough
+		return addrs, nil
 	default: // IP record found, return a non-nil IP array
 		return filterIP(addrs, option), nil
 	}
