@@ -27,14 +27,8 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	// for client
 	if len(c.EchConfigList) != 0 {
 		// direct base64 config
-		if strings.HasPrefix(c.EchConfigList, "base64") {
-			Base64ECHConfigList := c.EchConfigList[len("base64://"):]
-			ECHConfigList, err := goech.ECHConfigListFromBase64(Base64ECHConfigList)
-			if err != nil {
-				return errors.New("Failed to unmarshal ECHConfigList: ", err)
-			}
-			ECHConfig, _ = ECHConfigList.MarshalBinary()
-		} else { // query config from dns
+		if strings.Contains(c.EchConfigList, "://") {
+			 // query config from dns
 			parts := strings.Split(c.EchConfigList, "+")
 			if len(parts) == 2 {
 				// parse ECH DNS server in format of "example.com+https://1.1.1.1/dns-query"
@@ -53,6 +47,12 @@ func ApplyECH(c *Config, config *tls.Config) error {
 			if err != nil {
 				return err
 			}
+		} else {
+			ECHConfigList, err := goech.ECHConfigListFromBase64(c.EchConfigList)
+			if err != nil {
+				return errors.New("Failed to unmarshal ECHConfigList: ", err)
+			}
+			ECHConfig, _ = ECHConfigList.MarshalBinary()
 		}
 
 		config.EncryptedClientHelloConfigList = ECHConfig
