@@ -25,7 +25,6 @@ const (
 	HandlerService_ListInbounds_FullMethodName         = "/xray.app.proxyman.command.HandlerService/ListInbounds"
 	HandlerService_GetInboundUsers_FullMethodName      = "/xray.app.proxyman.command.HandlerService/GetInboundUsers"
 	HandlerService_GetInboundUsersCount_FullMethodName = "/xray.app.proxyman.command.HandlerService/GetInboundUsersCount"
-	HandlerService_ListInboundUsers_FullMethodName     = "/xray.app.proxyman.command.HandlerService/ListInboundUsers"
 	HandlerService_AddOutbound_FullMethodName          = "/xray.app.proxyman.command.HandlerService/AddOutbound"
 	HandlerService_RemoveOutbound_FullMethodName       = "/xray.app.proxyman.command.HandlerService/RemoveOutbound"
 	HandlerService_AlterOutbound_FullMethodName        = "/xray.app.proxyman.command.HandlerService/AlterOutbound"
@@ -42,7 +41,6 @@ type HandlerServiceClient interface {
 	ListInbounds(ctx context.Context, in *ListInboundsRequest, opts ...grpc.CallOption) (*ListInboundsResponse, error)
 	GetInboundUsers(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUsersCountResponse, error)
-	ListInboundUsers(ctx context.Context, in *ListInboundUserRequest, opts ...grpc.CallOption) (*ListInboundUserResponse, error)
 	AddOutbound(ctx context.Context, in *AddOutboundRequest, opts ...grpc.CallOption) (*AddOutboundResponse, error)
 	RemoveOutbound(ctx context.Context, in *RemoveOutboundRequest, opts ...grpc.CallOption) (*RemoveOutboundResponse, error)
 	AlterOutbound(ctx context.Context, in *AlterOutboundRequest, opts ...grpc.CallOption) (*AlterOutboundResponse, error)
@@ -117,16 +115,6 @@ func (c *handlerServiceClient) GetInboundUsersCount(ctx context.Context, in *Get
 	return out, nil
 }
 
-func (c *handlerServiceClient) ListInboundUsers(ctx context.Context, in *ListInboundUserRequest, opts ...grpc.CallOption) (*ListInboundUserResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListInboundUserResponse)
-	err := c.cc.Invoke(ctx, HandlerService_ListInboundUsers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *handlerServiceClient) AddOutbound(ctx context.Context, in *AddOutboundRequest, opts ...grpc.CallOption) (*AddOutboundResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddOutboundResponse)
@@ -177,7 +165,6 @@ type HandlerServiceServer interface {
 	ListInbounds(context.Context, *ListInboundsRequest) (*ListInboundsResponse, error)
 	GetInboundUsers(context.Context, *GetInboundUserRequest) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(context.Context, *GetInboundUserRequest) (*GetInboundUsersCountResponse, error)
-	ListInboundUsers(context.Context, *ListInboundUserRequest) (*ListInboundUserResponse, error)
 	AddOutbound(context.Context, *AddOutboundRequest) (*AddOutboundResponse, error)
 	RemoveOutbound(context.Context, *RemoveOutboundRequest) (*RemoveOutboundResponse, error)
 	AlterOutbound(context.Context, *AlterOutboundRequest) (*AlterOutboundResponse, error)
@@ -209,9 +196,6 @@ func (UnimplementedHandlerServiceServer) GetInboundUsers(context.Context, *GetIn
 }
 func (UnimplementedHandlerServiceServer) GetInboundUsersCount(context.Context, *GetInboundUserRequest) (*GetInboundUsersCountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInboundUsersCount not implemented")
-}
-func (UnimplementedHandlerServiceServer) ListInboundUsers(context.Context, *ListInboundUserRequest) (*ListInboundUserResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListInboundUsers not implemented")
 }
 func (UnimplementedHandlerServiceServer) AddOutbound(context.Context, *AddOutboundRequest) (*AddOutboundResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddOutbound not implemented")
@@ -354,24 +338,6 @@ func _HandlerService_GetInboundUsersCount_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HandlerService_ListInboundUsers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListInboundUserRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HandlerServiceServer).ListInboundUsers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HandlerService_ListInboundUsers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HandlerServiceServer).ListInboundUsers(ctx, req.(*ListInboundUserRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _HandlerService_AddOutbound_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddOutboundRequest)
 	if err := dec(in); err != nil {
@@ -474,10 +440,6 @@ var HandlerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInboundUsersCount",
 			Handler:    _HandlerService_GetInboundUsersCount_Handler,
-		},
-		{
-			MethodName: "ListInboundUsers",
-			Handler:    _HandlerService_ListInboundUsers_Handler,
 		},
 		{
 			MethodName: "AddOutbound",

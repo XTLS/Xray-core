@@ -580,86 +580,6 @@ func (x *GetInboundUsersCountResponse) GetCount() int64 {
 	return 0
 }
 
-type ListInboundUserRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListInboundUserRequest) Reset() {
-	*x = ListInboundUserRequest{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListInboundUserRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListInboundUserRequest) ProtoMessage() {}
-
-func (x *ListInboundUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListInboundUserRequest.ProtoReflect.Descriptor instead.
-func (*ListInboundUserRequest) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{13}
-}
-
-type ListInboundUserResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListInboundUserResponse) Reset() {
-	*x = ListInboundUserResponse{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListInboundUserResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListInboundUserResponse) ProtoMessage() {}
-
-func (x *ListInboundUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListInboundUserResponse.ProtoReflect.Descriptor instead.
-func (*ListInboundUserResponse) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *ListInboundUserResponse) GetUsers() []*protocol.User {
-	if x != nil {
-		return x.Users
-	}
-	return nil
-}
-
 type AddOutboundRequest struct {
 	state         protoimpl.MessageState      `protogen:"open.v1"`
 	Outbound      *core.OutboundHandlerConfig `protobuf:"bytes,1,opt,name=outbound,proto3" json:"outbound,omitempty"`
@@ -669,7 +589,7 @@ type AddOutboundRequest struct {
 
 func (x *AddOutboundRequest) Reset() {
 	*x = AddOutboundRequest{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[15]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -681,7 +601,7 @@ func (x *AddOutboundRequest) String() string {
 func (*AddOutboundRequest) ProtoMessage() {}
 
 func (x *AddOutboundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[15]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -694,7 +614,7 @@ func (x *AddOutboundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddOutboundRequest.ProtoReflect.Descriptor instead.
 func (*AddOutboundRequest) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{15}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AddOutboundRequest) GetOutbound() *core.OutboundHandlerConfig {
@@ -712,7 +632,7 @@ type AddOutboundResponse struct {
 
 func (x *AddOutboundResponse) Reset() {
 	*x = AddOutboundResponse{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[16]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +644,7 @@ func (x *AddOutboundResponse) String() string {
 func (*AddOutboundResponse) ProtoMessage() {}
 
 func (x *AddOutboundResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[16]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +657,7 @@ func (x *AddOutboundResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddOutboundResponse.ProtoReflect.Descriptor instead.
 func (*AddOutboundResponse) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{16}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{14}
 }
 
 type RemoveOutboundRequest struct {
@@ -749,7 +669,7 @@ type RemoveOutboundRequest struct {
 
 func (x *RemoveOutboundRequest) Reset() {
 	*x = RemoveOutboundRequest{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[17]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -761,7 +681,7 @@ func (x *RemoveOutboundRequest) String() string {
 func (*RemoveOutboundRequest) ProtoMessage() {}
 
 func (x *RemoveOutboundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[17]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -774,7 +694,7 @@ func (x *RemoveOutboundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveOutboundRequest.ProtoReflect.Descriptor instead.
 func (*RemoveOutboundRequest) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{17}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RemoveOutboundRequest) GetTag() string {
@@ -792,7 +712,7 @@ type RemoveOutboundResponse struct {
 
 func (x *RemoveOutboundResponse) Reset() {
 	*x = RemoveOutboundResponse{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[18]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +724,7 @@ func (x *RemoveOutboundResponse) String() string {
 func (*RemoveOutboundResponse) ProtoMessage() {}
 
 func (x *RemoveOutboundResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[18]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +737,7 @@ func (x *RemoveOutboundResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveOutboundResponse.ProtoReflect.Descriptor instead.
 func (*RemoveOutboundResponse) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{18}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{16}
 }
 
 type AlterOutboundRequest struct {
@@ -830,7 +750,7 @@ type AlterOutboundRequest struct {
 
 func (x *AlterOutboundRequest) Reset() {
 	*x = AlterOutboundRequest{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[19]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +762,7 @@ func (x *AlterOutboundRequest) String() string {
 func (*AlterOutboundRequest) ProtoMessage() {}
 
 func (x *AlterOutboundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[19]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +775,7 @@ func (x *AlterOutboundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlterOutboundRequest.ProtoReflect.Descriptor instead.
 func (*AlterOutboundRequest) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{19}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AlterOutboundRequest) GetTag() string {
@@ -880,7 +800,7 @@ type AlterOutboundResponse struct {
 
 func (x *AlterOutboundResponse) Reset() {
 	*x = AlterOutboundResponse{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[20]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +812,7 @@ func (x *AlterOutboundResponse) String() string {
 func (*AlterOutboundResponse) ProtoMessage() {}
 
 func (x *AlterOutboundResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[20]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +825,7 @@ func (x *AlterOutboundResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlterOutboundResponse.ProtoReflect.Descriptor instead.
 func (*AlterOutboundResponse) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{20}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{18}
 }
 
 type ListOutboundsRequest struct {
@@ -916,7 +836,7 @@ type ListOutboundsRequest struct {
 
 func (x *ListOutboundsRequest) Reset() {
 	*x = ListOutboundsRequest{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[21]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -928,7 +848,7 @@ func (x *ListOutboundsRequest) String() string {
 func (*ListOutboundsRequest) ProtoMessage() {}
 
 func (x *ListOutboundsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[21]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -941,7 +861,7 @@ func (x *ListOutboundsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOutboundsRequest.ProtoReflect.Descriptor instead.
 func (*ListOutboundsRequest) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{21}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{19}
 }
 
 type ListOutboundsResponse struct {
@@ -953,7 +873,7 @@ type ListOutboundsResponse struct {
 
 func (x *ListOutboundsResponse) Reset() {
 	*x = ListOutboundsResponse{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[22]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -965,7 +885,7 @@ func (x *ListOutboundsResponse) String() string {
 func (*ListOutboundsResponse) ProtoMessage() {}
 
 func (x *ListOutboundsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[22]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -978,7 +898,7 @@ func (x *ListOutboundsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOutboundsResponse.ProtoReflect.Descriptor instead.
 func (*ListOutboundsResponse) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{22}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListOutboundsResponse) GetOutbounds() []*core.OutboundHandlerConfig {
@@ -996,7 +916,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_app_proxyman_command_command_proto_msgTypes[23]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1008,7 +928,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_command_command_proto_msgTypes[23]
+	mi := &file_app_proxyman_command_command_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1021,7 +941,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{23}
+	return file_app_proxyman_command_command_proto_rawDescGZIP(), []int{21}
 }
 
 var File_app_proxyman_command_command_proto protoreflect.FileDescriptor
@@ -1052,10 +972,7 @@ const file_app_proxyman_command_command_proto_rawDesc = "" +
 	"\x16GetInboundUserResponse\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\"4\n" +
 	"\x1cGetInboundUsersCountResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"\x18\n" +
-	"\x16ListInboundUserRequest\"K\n" +
-	"\x17ListInboundUserResponse\x120\n" +
-	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\"R\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count\"R\n" +
 	"\x12AddOutboundRequest\x12<\n" +
 	"\boutbound\x18\x01 \x01(\v2 .xray.core.OutboundHandlerConfigR\boutbound\"\x15\n" +
 	"\x13AddOutboundResponse\")\n" +
@@ -1069,8 +986,7 @@ const file_app_proxyman_command_command_proto_rawDesc = "" +
 	"\x14ListOutboundsRequest\"W\n" +
 	"\x15ListOutboundsResponse\x12>\n" +
 	"\toutbounds\x18\x01 \x03(\v2 .xray.core.OutboundHandlerConfigR\toutbounds\"\b\n" +
-	"\x06Config2\xab\n" +
-	"\n" +
+	"\x06Config2\xae\t\n" +
 	"\x0eHandlerService\x12k\n" +
 	"\n" +
 	"AddInbound\x12,.xray.app.proxyman.command.AddInboundRequest\x1a-.xray.app.proxyman.command.AddInboundResponse\"\x00\x12t\n" +
@@ -1078,8 +994,7 @@ const file_app_proxyman_command_command_proto_rawDesc = "" +
 	"\fAlterInbound\x12..xray.app.proxyman.command.AlterInboundRequest\x1a/.xray.app.proxyman.command.AlterInboundResponse\"\x00\x12q\n" +
 	"\fListInbounds\x12..xray.app.proxyman.command.ListInboundsRequest\x1a/.xray.app.proxyman.command.ListInboundsResponse\"\x00\x12x\n" +
 	"\x0fGetInboundUsers\x120.xray.app.proxyman.command.GetInboundUserRequest\x1a1.xray.app.proxyman.command.GetInboundUserResponse\"\x00\x12\x83\x01\n" +
-	"\x14GetInboundUsersCount\x120.xray.app.proxyman.command.GetInboundUserRequest\x1a7.xray.app.proxyman.command.GetInboundUsersCountResponse\"\x00\x12{\n" +
-	"\x10ListInboundUsers\x121.xray.app.proxyman.command.ListInboundUserRequest\x1a2.xray.app.proxyman.command.ListInboundUserResponse\"\x00\x12n\n" +
+	"\x14GetInboundUsersCount\x120.xray.app.proxyman.command.GetInboundUserRequest\x1a7.xray.app.proxyman.command.GetInboundUsersCountResponse\"\x00\x12n\n" +
 	"\vAddOutbound\x12-.xray.app.proxyman.command.AddOutboundRequest\x1a..xray.app.proxyman.command.AddOutboundResponse\"\x00\x12w\n" +
 	"\x0eRemoveOutbound\x120.xray.app.proxyman.command.RemoveOutboundRequest\x1a1.xray.app.proxyman.command.RemoveOutboundResponse\"\x00\x12t\n" +
 	"\rAlterOutbound\x12/.xray.app.proxyman.command.AlterOutboundRequest\x1a0.xray.app.proxyman.command.AlterOutboundResponse\"\x00\x12t\n" +
@@ -1098,7 +1013,7 @@ func file_app_proxyman_command_command_proto_rawDescGZIP() []byte {
 	return file_app_proxyman_command_command_proto_rawDescData
 }
 
-var file_app_proxyman_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_app_proxyman_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_app_proxyman_command_command_proto_goTypes = []any{
 	(*AddUserOperation)(nil),             // 0: xray.app.proxyman.command.AddUserOperation
 	(*RemoveUserOperation)(nil),          // 1: xray.app.proxyman.command.RemoveUserOperation
@@ -1113,59 +1028,54 @@ var file_app_proxyman_command_command_proto_goTypes = []any{
 	(*GetInboundUserRequest)(nil),        // 10: xray.app.proxyman.command.GetInboundUserRequest
 	(*GetInboundUserResponse)(nil),       // 11: xray.app.proxyman.command.GetInboundUserResponse
 	(*GetInboundUsersCountResponse)(nil), // 12: xray.app.proxyman.command.GetInboundUsersCountResponse
-	(*ListInboundUserRequest)(nil),       // 13: xray.app.proxyman.command.ListInboundUserRequest
-	(*ListInboundUserResponse)(nil),      // 14: xray.app.proxyman.command.ListInboundUserResponse
-	(*AddOutboundRequest)(nil),           // 15: xray.app.proxyman.command.AddOutboundRequest
-	(*AddOutboundResponse)(nil),          // 16: xray.app.proxyman.command.AddOutboundResponse
-	(*RemoveOutboundRequest)(nil),        // 17: xray.app.proxyman.command.RemoveOutboundRequest
-	(*RemoveOutboundResponse)(nil),       // 18: xray.app.proxyman.command.RemoveOutboundResponse
-	(*AlterOutboundRequest)(nil),         // 19: xray.app.proxyman.command.AlterOutboundRequest
-	(*AlterOutboundResponse)(nil),        // 20: xray.app.proxyman.command.AlterOutboundResponse
-	(*ListOutboundsRequest)(nil),         // 21: xray.app.proxyman.command.ListOutboundsRequest
-	(*ListOutboundsResponse)(nil),        // 22: xray.app.proxyman.command.ListOutboundsResponse
-	(*Config)(nil),                       // 23: xray.app.proxyman.command.Config
-	(*protocol.User)(nil),                // 24: xray.common.protocol.User
-	(*core.InboundHandlerConfig)(nil),    // 25: xray.core.InboundHandlerConfig
-	(*serial.TypedMessage)(nil),          // 26: xray.common.serial.TypedMessage
-	(*core.OutboundHandlerConfig)(nil),   // 27: xray.core.OutboundHandlerConfig
+	(*AddOutboundRequest)(nil),           // 13: xray.app.proxyman.command.AddOutboundRequest
+	(*AddOutboundResponse)(nil),          // 14: xray.app.proxyman.command.AddOutboundResponse
+	(*RemoveOutboundRequest)(nil),        // 15: xray.app.proxyman.command.RemoveOutboundRequest
+	(*RemoveOutboundResponse)(nil),       // 16: xray.app.proxyman.command.RemoveOutboundResponse
+	(*AlterOutboundRequest)(nil),         // 17: xray.app.proxyman.command.AlterOutboundRequest
+	(*AlterOutboundResponse)(nil),        // 18: xray.app.proxyman.command.AlterOutboundResponse
+	(*ListOutboundsRequest)(nil),         // 19: xray.app.proxyman.command.ListOutboundsRequest
+	(*ListOutboundsResponse)(nil),        // 20: xray.app.proxyman.command.ListOutboundsResponse
+	(*Config)(nil),                       // 21: xray.app.proxyman.command.Config
+	(*protocol.User)(nil),                // 22: xray.common.protocol.User
+	(*core.InboundHandlerConfig)(nil),    // 23: xray.core.InboundHandlerConfig
+	(*serial.TypedMessage)(nil),          // 24: xray.common.serial.TypedMessage
+	(*core.OutboundHandlerConfig)(nil),   // 25: xray.core.OutboundHandlerConfig
 }
 var file_app_proxyman_command_command_proto_depIdxs = []int32{
-	24, // 0: xray.app.proxyman.command.AddUserOperation.user:type_name -> xray.common.protocol.User
-	25, // 1: xray.app.proxyman.command.AddInboundRequest.inbound:type_name -> xray.core.InboundHandlerConfig
-	26, // 2: xray.app.proxyman.command.AlterInboundRequest.operation:type_name -> xray.common.serial.TypedMessage
-	25, // 3: xray.app.proxyman.command.ListInboundsResponse.inbounds:type_name -> xray.core.InboundHandlerConfig
-	24, // 4: xray.app.proxyman.command.GetInboundUserResponse.users:type_name -> xray.common.protocol.User
-	24, // 5: xray.app.proxyman.command.ListInboundUserResponse.users:type_name -> xray.common.protocol.User
-	27, // 6: xray.app.proxyman.command.AddOutboundRequest.outbound:type_name -> xray.core.OutboundHandlerConfig
-	26, // 7: xray.app.proxyman.command.AlterOutboundRequest.operation:type_name -> xray.common.serial.TypedMessage
-	27, // 8: xray.app.proxyman.command.ListOutboundsResponse.outbounds:type_name -> xray.core.OutboundHandlerConfig
-	2,  // 9: xray.app.proxyman.command.HandlerService.AddInbound:input_type -> xray.app.proxyman.command.AddInboundRequest
-	4,  // 10: xray.app.proxyman.command.HandlerService.RemoveInbound:input_type -> xray.app.proxyman.command.RemoveInboundRequest
-	6,  // 11: xray.app.proxyman.command.HandlerService.AlterInbound:input_type -> xray.app.proxyman.command.AlterInboundRequest
-	8,  // 12: xray.app.proxyman.command.HandlerService.ListInbounds:input_type -> xray.app.proxyman.command.ListInboundsRequest
-	10, // 13: xray.app.proxyman.command.HandlerService.GetInboundUsers:input_type -> xray.app.proxyman.command.GetInboundUserRequest
-	10, // 14: xray.app.proxyman.command.HandlerService.GetInboundUsersCount:input_type -> xray.app.proxyman.command.GetInboundUserRequest
-	13, // 15: xray.app.proxyman.command.HandlerService.ListInboundUsers:input_type -> xray.app.proxyman.command.ListInboundUserRequest
-	15, // 16: xray.app.proxyman.command.HandlerService.AddOutbound:input_type -> xray.app.proxyman.command.AddOutboundRequest
-	17, // 17: xray.app.proxyman.command.HandlerService.RemoveOutbound:input_type -> xray.app.proxyman.command.RemoveOutboundRequest
-	19, // 18: xray.app.proxyman.command.HandlerService.AlterOutbound:input_type -> xray.app.proxyman.command.AlterOutboundRequest
-	21, // 19: xray.app.proxyman.command.HandlerService.ListOutbounds:input_type -> xray.app.proxyman.command.ListOutboundsRequest
-	3,  // 20: xray.app.proxyman.command.HandlerService.AddInbound:output_type -> xray.app.proxyman.command.AddInboundResponse
-	5,  // 21: xray.app.proxyman.command.HandlerService.RemoveInbound:output_type -> xray.app.proxyman.command.RemoveInboundResponse
-	7,  // 22: xray.app.proxyman.command.HandlerService.AlterInbound:output_type -> xray.app.proxyman.command.AlterInboundResponse
-	9,  // 23: xray.app.proxyman.command.HandlerService.ListInbounds:output_type -> xray.app.proxyman.command.ListInboundsResponse
-	11, // 24: xray.app.proxyman.command.HandlerService.GetInboundUsers:output_type -> xray.app.proxyman.command.GetInboundUserResponse
-	12, // 25: xray.app.proxyman.command.HandlerService.GetInboundUsersCount:output_type -> xray.app.proxyman.command.GetInboundUsersCountResponse
-	14, // 26: xray.app.proxyman.command.HandlerService.ListInboundUsers:output_type -> xray.app.proxyman.command.ListInboundUserResponse
-	16, // 27: xray.app.proxyman.command.HandlerService.AddOutbound:output_type -> xray.app.proxyman.command.AddOutboundResponse
-	18, // 28: xray.app.proxyman.command.HandlerService.RemoveOutbound:output_type -> xray.app.proxyman.command.RemoveOutboundResponse
-	20, // 29: xray.app.proxyman.command.HandlerService.AlterOutbound:output_type -> xray.app.proxyman.command.AlterOutboundResponse
-	22, // 30: xray.app.proxyman.command.HandlerService.ListOutbounds:output_type -> xray.app.proxyman.command.ListOutboundsResponse
-	20, // [20:31] is the sub-list for method output_type
-	9,  // [9:20] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	22, // 0: xray.app.proxyman.command.AddUserOperation.user:type_name -> xray.common.protocol.User
+	23, // 1: xray.app.proxyman.command.AddInboundRequest.inbound:type_name -> xray.core.InboundHandlerConfig
+	24, // 2: xray.app.proxyman.command.AlterInboundRequest.operation:type_name -> xray.common.serial.TypedMessage
+	23, // 3: xray.app.proxyman.command.ListInboundsResponse.inbounds:type_name -> xray.core.InboundHandlerConfig
+	22, // 4: xray.app.proxyman.command.GetInboundUserResponse.users:type_name -> xray.common.protocol.User
+	25, // 5: xray.app.proxyman.command.AddOutboundRequest.outbound:type_name -> xray.core.OutboundHandlerConfig
+	24, // 6: xray.app.proxyman.command.AlterOutboundRequest.operation:type_name -> xray.common.serial.TypedMessage
+	25, // 7: xray.app.proxyman.command.ListOutboundsResponse.outbounds:type_name -> xray.core.OutboundHandlerConfig
+	2,  // 8: xray.app.proxyman.command.HandlerService.AddInbound:input_type -> xray.app.proxyman.command.AddInboundRequest
+	4,  // 9: xray.app.proxyman.command.HandlerService.RemoveInbound:input_type -> xray.app.proxyman.command.RemoveInboundRequest
+	6,  // 10: xray.app.proxyman.command.HandlerService.AlterInbound:input_type -> xray.app.proxyman.command.AlterInboundRequest
+	8,  // 11: xray.app.proxyman.command.HandlerService.ListInbounds:input_type -> xray.app.proxyman.command.ListInboundsRequest
+	10, // 12: xray.app.proxyman.command.HandlerService.GetInboundUsers:input_type -> xray.app.proxyman.command.GetInboundUserRequest
+	10, // 13: xray.app.proxyman.command.HandlerService.GetInboundUsersCount:input_type -> xray.app.proxyman.command.GetInboundUserRequest
+	13, // 14: xray.app.proxyman.command.HandlerService.AddOutbound:input_type -> xray.app.proxyman.command.AddOutboundRequest
+	15, // 15: xray.app.proxyman.command.HandlerService.RemoveOutbound:input_type -> xray.app.proxyman.command.RemoveOutboundRequest
+	17, // 16: xray.app.proxyman.command.HandlerService.AlterOutbound:input_type -> xray.app.proxyman.command.AlterOutboundRequest
+	19, // 17: xray.app.proxyman.command.HandlerService.ListOutbounds:input_type -> xray.app.proxyman.command.ListOutboundsRequest
+	3,  // 18: xray.app.proxyman.command.HandlerService.AddInbound:output_type -> xray.app.proxyman.command.AddInboundResponse
+	5,  // 19: xray.app.proxyman.command.HandlerService.RemoveInbound:output_type -> xray.app.proxyman.command.RemoveInboundResponse
+	7,  // 20: xray.app.proxyman.command.HandlerService.AlterInbound:output_type -> xray.app.proxyman.command.AlterInboundResponse
+	9,  // 21: xray.app.proxyman.command.HandlerService.ListInbounds:output_type -> xray.app.proxyman.command.ListInboundsResponse
+	11, // 22: xray.app.proxyman.command.HandlerService.GetInboundUsers:output_type -> xray.app.proxyman.command.GetInboundUserResponse
+	12, // 23: xray.app.proxyman.command.HandlerService.GetInboundUsersCount:output_type -> xray.app.proxyman.command.GetInboundUsersCountResponse
+	14, // 24: xray.app.proxyman.command.HandlerService.AddOutbound:output_type -> xray.app.proxyman.command.AddOutboundResponse
+	16, // 25: xray.app.proxyman.command.HandlerService.RemoveOutbound:output_type -> xray.app.proxyman.command.RemoveOutboundResponse
+	18, // 26: xray.app.proxyman.command.HandlerService.AlterOutbound:output_type -> xray.app.proxyman.command.AlterOutboundResponse
+	20, // 27: xray.app.proxyman.command.HandlerService.ListOutbounds:output_type -> xray.app.proxyman.command.ListOutboundsResponse
+	18, // [18:28] is the sub-list for method output_type
+	8,  // [8:18] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_command_command_proto_init() }
@@ -1179,7 +1089,7 @@ func file_app_proxyman_command_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_proxyman_command_command_proto_rawDesc), len(file_app_proxyman_command_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
