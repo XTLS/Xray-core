@@ -35,6 +35,9 @@ type Manager interface {
 
 	// RemoveHandler removes a handler from outbound.Manager.
 	RemoveHandler(ctx context.Context, tag string) error
+
+	// ListHandlers returns a list of outbound.Handler.
+	ListHandlers(ctx context.Context) []Handler
 }
 
 // ManagerType returns the type of Manager interface. Can be used to implement common.HasType.

@@ -145,6 +145,21 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	return nil
 }
 
+// ListHandlers implements outbound.Manager.
+func (m *Manager) ListHandlers(ctx context.Context) []outbound.Handler {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	var response []outbound.Handler
+	copy(m.untaggedHandlers, response)
+
+	for _, v := range m.taggedHandler {
+		response = append(response, v)
+	}
+
+	return response
+}
+
 // Select implements outbound.HandlerSelector.
 func (m *Manager) Select(selectors []string) []string {
 

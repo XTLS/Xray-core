@@ -89,6 +89,21 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	return common.ErrNoClue
 }
 
+// ListHandlers implements inbound.Manager.
+func (m *Manager) ListHandlers(ctx context.Context) []inbound.Handler {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	var response []inbound.Handler
+	copy(m.untaggedHandler, response)
+
+	for _, v := range m.taggedHandlers {
+		response = append(response, v)
+	}
+
+	return response
+}
+
 // Start implements common.Runnable.
 func (m *Manager) Start() error {
 	m.access.Lock()

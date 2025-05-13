@@ -99,6 +99,17 @@ func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundR
 	return &AlterInboundResponse{}, operation.ApplyInbound(ctx, handler)
 }
 
+func (s *handlerServer) ListInbounds(ctx context.Context, request *ListInboundsRequest) (*ListInboundsResponse, error) {
+	handlers := s.ihm.ListHandlers(ctx)
+	response := &ListInboundsResponse{}
+	for _, handler := range handlers {
+		response.Inbounds = append(response.Inbounds, &core.InboundHandlerConfig{
+			Tag: handler.Tag(),
+		})
+	}
+	return response, nil
+}
+
 func (s *handlerServer) GetInboundUsers(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUserResponse, error) {
 	handler, err := s.ihm.GetHandler(ctx, request.Tag)
 	if err != nil {
@@ -139,6 +150,27 @@ func (s *handlerServer) GetInboundUsersCount(ctx context.Context, request *GetIn
 	return &GetInboundUsersCountResponse{Count: um.GetUsersCount(ctx)}, nil
 }
 
+func (s *handlerServer) ListInboundUsers(ctx context.Context, request *ListInboundUserRequest) (*ListInboundUserResponse, error) {
+	handlers := s.ihm.ListHandlers(ctx)
+	var result = make([]*protocol.User, 0, 100)
+	for _, handler := range handlers {
+		p, err := getInbound(handler)
+		if err != nil {
+			return nil, err
+		}
+		um, ok := p.(proxy.UserManager)
+		if !ok {
+			return nil, errors.New("proxy is not a UserManager")
+		}
+
+		users := um.GetUsers(ctx)
+		for _, u := range users {
+			result = append(result, protocol.ToProtoUser(u))
+		}
+	}
+	return &ListInboundUserResponse{Users: result}, nil
+}
+
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
 	if err := core.AddOutboundHandler(s.s, request.Outbound); err != nil {
 		return nil, err
@@ -162,6 +194,17 @@ func (s *handlerServer) AlterOutbound(ctx context.Context, request *AlterOutboun
 
 	handler := s.ohm.GetHandler(request.Tag)
 	return &AlterOutboundResponse{}, operation.ApplyOutbound(ctx, handler)
+}
+
+func (s *handlerServer) ListOutbounds(ctx context.Context, request *ListOutboundsRequest) (*ListOutboundsResponse, error) {
+	handlers := s.ohm.ListHandlers(ctx)
+	response := &ListOutboundsResponse{}
+	for _, handler := range handlers {
+		response.Outbounds = append(response.Outbounds, &core.OutboundHandlerConfig{
+			Tag: handler.Tag(),
+		})
+	}
+	return response, nil
 }
 
 func (s *handlerServer) mustEmbedUnimplementedHandlerServiceServer() {}
