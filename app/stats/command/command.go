@@ -85,28 +85,40 @@ func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest
 	}
 
 	response := &QueryStatsResponse{}
-
 	manager, ok := s.stats.(*stats.Manager)
 	if !ok {
-		return nil, errors.New("QueryStats only works its own stats.Manager.")
+		return nil, errors.New("QueryStats only works with its own stats.Manager.")
 	}
+
+	var toReset []string
+	var collectedStats []*Stat
 
 	manager.VisitCounters(func(name string, c feature_stats.Counter) bool {
 		if matcher.Match(name) {
-			var value int64
-			if request.Reset_ {
-				value = c.Set(0)
-			} else {
-				value = c.Value()
-			}
-			response.Stat = append(response.Stat, &Stat{
+			value := c.Value()
+			collectedStats = append(collectedStats, &Stat{
 				Name:  name,
 				Value: value,
 			})
+
+			isUser := len(name) >= 4 && name[:4] == "user"
+			if request.Reset_ && isUser {
+				c.Set(0)
+				toReset = append(toReset, name)
+			}
 		}
 		return true
 	})
 
+	if request.Reset_ {
+		for _, name := range toReset {
+			if err := manager.UnregisterCounter(name); err != nil {
+				return nil, errors.New("QueryStats UnregisterCounter error.")
+			}
+		}
+	}
+
+	response.Stat = collectedStats
 	return response, nil
 }
 
