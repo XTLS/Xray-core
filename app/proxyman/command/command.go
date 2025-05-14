@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 
+	"github.com/xtls/xray-core/app/commander"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
@@ -181,6 +182,10 @@ func (s *handlerServer) ListOutbounds(ctx context.Context, request *ListOutbound
 	handlers := s.ohm.ListHandlers(ctx)
 	response := &ListOutboundsResponse{}
 	for _, handler := range handlers {
+		// Ignore gRPC outbound
+		if _, ok := handler.(*commander.Outbound); ok {
+			continue
+		}
 		response.Outbounds = append(response.Outbounds, &core.OutboundHandlerConfig{
 			Tag:            handler.Tag(),
 			SenderSettings: handler.SenderSettings(),
