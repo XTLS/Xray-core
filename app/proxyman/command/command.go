@@ -104,7 +104,9 @@ func (s *handlerServer) ListInbounds(ctx context.Context, request *ListInboundsR
 	response := &ListInboundsResponse{}
 	for _, handler := range handlers {
 		response.Inbounds = append(response.Inbounds, &core.InboundHandlerConfig{
-			Tag: handler.Tag(),
+			Tag:              handler.Tag(),
+			ReceiverSettings: handler.ReceiverSettings(),
+			ProxySettings:    handler.ProxySettings(),
 		})
 	}
 	return response, nil
@@ -180,7 +182,9 @@ func (s *handlerServer) ListOutbounds(ctx context.Context, request *ListOutbound
 	response := &ListOutboundsResponse{}
 	for _, handler := range handlers {
 		response.Outbounds = append(response.Outbounds, &core.OutboundHandlerConfig{
-			Tag: handler.Tag(),
+			Tag:            handler.Tag(),
+			SenderSettings: handler.SenderSettings(),
+			ProxySettings:  handler.ProxySettings(),
 		})
 	}
 	return response, nil

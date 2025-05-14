@@ -5,6 +5,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
 
@@ -15,6 +16,10 @@ type Handler interface {
 	common.Runnable
 	// The tag of this handler.
 	Tag() string
+	// Returns the active receiver settings.
+	ReceiverSettings() *serial.TypedMessage
+	// Returns the active proxy settings.
+	ProxySettings() *serial.TypedMessage
 
 	// Deprecated: Do not use in new code.
 	GetRandomInboundProxy() (interface{}, net.Port, int)
