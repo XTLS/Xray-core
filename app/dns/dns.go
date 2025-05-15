@@ -243,22 +243,6 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 	return nil, 0, dns.ErrEmptyResponse
 }
 
-// LookupHosts implements dns.HostsLookup.
-func (s *DNS) LookupHosts(domain string) *net.Address {
-	domain = strings.TrimSuffix(domain, ".")
-	if domain == "" {
-		return nil
-	}
-	// Normalize the FQDN form query
-	addrs := s.hosts.Lookup(domain, *s.ipOption)
-	if len(addrs) > 0 {
-		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].String())
-		return &addrs[0]
-	}
-
-	return nil
-}
-
 func (s *DNS) sortClients(domain string) []*Client {
 	clients := make([]*Client, 0, len(s.clients))
 	clientUsed := make([]bool, len(s.clients))
