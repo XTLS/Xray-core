@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"context"
-	"io"
 	"regexp"
 	"strings"
 	"sync"
@@ -374,14 +373,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 				return nil, ctx.Err()
 			default:
 				cachingStartingTimeStamp := time.Now()
-				payloadLen := payload.Len()
 				cacheErr := cReader.Cache(payload, cacheDeadline)
-				if cacheErr != nil {
-					return nil, cacheErr
-				}
-				if payload.Len() == payloadLen {
-					return nil, io.EOF
-				}
 				cachingTimeElapsed := time.Since(cachingStartingTimeStamp)
 				cacheDeadline -= cachingTimeElapsed
 
@@ -391,12 +383,14 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 					case common.ErrNoClue: // No Clue: protocol not matches, and sniffer cannot determine whether there will be a match or not
 						totalAttempt++
 					case protocol.ErrProtoNeedMoreData: // Protocol Need More Data: protocol matches, but need more data to complete sniffing
-						break
+						if cacheErr != nil { // Cache error (e.g. timeout) counts for failed attempt
+							totalAttempt++
+						}
 					default:
 						return result, err
 					}
 				} else {
-					return nil, io.EOF
+					totalAttempt++
 				}
 				if totalAttempt >= 2 || cacheDeadline <= 0 {
 					return nil, errSniffingTimeout
