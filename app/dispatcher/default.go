@@ -373,7 +373,10 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 				return nil, ctx.Err()
 			default:
 				cachingStartingTimeStamp := time.Now()
-				cacheErr := cReader.Cache(payload, cacheDeadline)
+				err := cReader.Cache(payload, cacheDeadline)
+				if err != nil {
+					return nil, err
+				}
 				cachingTimeElapsed := time.Since(cachingStartingTimeStamp)
 				cacheDeadline -= cachingTimeElapsed
 
@@ -383,9 +386,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 					case common.ErrNoClue: // No Clue: protocol not matches, and sniffer cannot determine whether there will be a match or not
 						totalAttempt++
 					case protocol.ErrProtoNeedMoreData: // Protocol Need More Data: protocol matches, but need more data to complete sniffing
-						if cacheErr != nil { // Cache error (e.g. timeout) counts for failed attempt
-							totalAttempt++
-						}
+						// in this case, do not add totalAttempt(allow to read until timeout)
 					default:
 						return result, err
 					}
