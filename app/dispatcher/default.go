@@ -224,7 +224,7 @@ func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResu
 		if strings.HasPrefix(protocolString, p) || strings.HasPrefix(p, protocolString) {
 			return true
 		}
-		if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns" &&
+		if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && protocolString != "bittorrent" && p == "fakedns+others" &&
 			fkr0.IsIPInIPPool(destination.Address) {
 			errors.LogInfo(ctx, "Using sniffer ", protocolString, " since the fake DNS missed")
 			return true
