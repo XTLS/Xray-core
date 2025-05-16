@@ -13,6 +13,11 @@ import (
 func TestStaticHosts(t *testing.T) {
 	pb := []*Config_HostMapping{
 		{
+			Type:          DomainMatchingType_Subdomain,
+			Domain:        "lan",
+			ProxiedDomain: "#3",
+		},
+		{
 			Type:   DomainMatchingType_Full,
 			Domain: "example.com",
 			Ip: [][]byte{
@@ -54,7 +59,14 @@ func TestStaticHosts(t *testing.T) {
 	common.Must(err)
 
 	{
-		ips := hosts.Lookup("example.com", dns.IPOption{
+		_, err := hosts.Lookup("example.com.lan", dns.IPOption{})
+		if dns.RCodeFromError(err) != 3 {
+			t.Error(err)
+		}
+	}
+
+	{
+		ips, _ := hosts.Lookup("example.com", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -67,7 +79,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		domain := hosts.Lookup("proxy.xray.com", dns.IPOption{
+		domain, _ := hosts.Lookup("proxy.xray.com", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: false,
 		})
@@ -80,7 +92,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		domain := hosts.Lookup("proxy2.xray.com", dns.IPOption{
+		domain, _ := hosts.Lookup("proxy2.xray.com", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: false,
 		})
@@ -93,7 +105,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.Lookup("www.example.cn", dns.IPOption{
+		ips, _ := hosts.Lookup("www.example.cn", dns.IPOption{
 			IPv4Enable: true,
 			IPv6Enable: true,
 		})
@@ -106,7 +118,7 @@ func TestStaticHosts(t *testing.T) {
 	}
 
 	{
-		ips := hosts.Lookup("baidu.com", dns.IPOption{
+		ips, _ := hosts.Lookup("baidu.com", dns.IPOption{
 			IPv4Enable: false,
 			IPv6Enable: true,
 		})
