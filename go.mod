@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/vishvananda/netlink v1.3.1
-	github.com/xtls/reality v0.0.0-20250329150927-d77e7560feae
+	github.com/xtls/reality v0.0.0-20250516212427-4c13194ac575
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.38.0
 	golang.org/x/net v0.40.0
@@ -34,8 +34,8 @@ require (
 	lukechampine.com/blake3 v1.4.1
 )
 
-// temp test
-replace github.com/xtls/reality => github.com/meo597/reality v0.0.0-20250329150927-d77e7560feae
+// [TODO] Temp: use forked reality until upstream merges #12
+replace github.com/xtls/reality => github.com/meo597/reality v0.0.0-20250516212427-4c13194ac575
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
@@ -47,6 +47,7 @@ require (
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/onsi/ginkgo/v2 v2.19.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
