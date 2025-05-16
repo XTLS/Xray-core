@@ -24,10 +24,6 @@ type Client interface {
 	LookupIP(domain string, option IPOption) ([]net.IP, uint32, error)
 }
 
-type HostsLookup interface {
-	LookupHosts(domain string) *net.Address
-}
-
 // ClientType returns the type of Client interface. Can be used for implementing common.HasType.
 //
 // xray:api:beta
