@@ -70,3 +70,22 @@ jobs:
           file: .github/docker/Dockerfile.usa
           push: true
           tags: ${{ steps.metausa.outputs.tags }}
+
+      - name: Merge Multi-Arch Manifests
+        run: |
+          echo "Starting to merge multi-architecture manifests..."
+
+          # Convert newlines to spaces and split into array
+          TAGS=($(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '))
+
+          echo "Total tags to process: ${#TAGS[@]}"
+          for tag in "${TAGS[@]}"; do
+            echo "Merging tag: $tag with unsupported architectures ($tag-usa)"
+            docker buildx imagetools create --append --tag "$tag" "$tag-usa"
+            if [ $? -ne 0 ]; then
+              echo "Error: Failed to merge $tag-usa into $tag"
+              exit 1
+            fi
+          done
+
+          echo "Multi-architecture manifest merge completed successfully."
