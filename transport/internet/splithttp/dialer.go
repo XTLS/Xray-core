@@ -209,8 +209,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
-			IdleConnTimeout: net.ConnIdleTimeout,
-			ReadIdleTimeout: keepAlivePeriod,
+			IdleConnTimeout:  net.ConnIdleTimeout,
+			ReadIdleTimeout:  keepAlivePeriod,
+			MaxReadFrameSize: 1024 * 1024,
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
