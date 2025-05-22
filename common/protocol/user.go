@@ -1,8 +1,11 @@
 package protocol
 
 import (
+	"time"
+
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (u *User) GetTypedAccount() (Account, error) {
@@ -29,9 +32,10 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 		return nil, err
 	}
 	return &MemoryUser{
-		Account: account,
-		Email:   u.Email,
-		Level:   u.Level,
+		Account:       account,
+		Email:         u.Email,
+		Level:         u.Level,
+		LastHandshake: u.LastHandshake.AsTime(),
 	}, nil
 }
 
@@ -40,16 +44,19 @@ func ToProtoUser(mu *MemoryUser) *User {
 		return nil
 	}
 	return &User{
-		Account: serial.ToTypedMessage(mu.Account.ToProto()),
-		Email:   mu.Email,
-		Level:   mu.Level,
+		Account:       serial.ToTypedMessage(mu.Account.ToProto()),
+		Email:         mu.Email,
+		Level:         mu.Level,
+		LastHandshake: timestamppb.New(mu.LastHandshake),
 	}
 }
 
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.
 type MemoryUser struct {
 	// Account is the parsed account of the protocol.
-	Account Account
-	Email   string
-	Level   uint32
+	Account       Account
+	Email         string
+	Level         uint32
+	LastHandshake time.Time
 }
+
