@@ -452,7 +452,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	inbound.Name = "vless"
 	inbound.User = request.User
-
+	tmpUser := inbound.User
+	tmpUser.LastHandshake = time.Now()
+	inbound.User = tmpUser
 	account := request.User.Account.(*vless.MemoryAccount)
 
 	responseAddons := &encoding.Addons{
