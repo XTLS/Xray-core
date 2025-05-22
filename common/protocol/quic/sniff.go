@@ -114,6 +114,10 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		if err != nil {
 			return nil, errNotQuic
 		}
+		// packetLen is impossible to be shorter than this
+		if packetLen < 4 {
+			return nil, errNotQuic
+		}
 
 		hdrLen := len(b) - int(buffer.Len())
 		if len(b) < hdrLen+int(packetLen) {
