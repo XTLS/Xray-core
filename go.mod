@@ -14,8 +14,8 @@ require (
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.52.0
 	github.com/refraction-networking/utls v1.7.3
-	github.com/sagernet/sing v0.5.1
-	github.com/sagernet/sing-shadowsocks v0.2.7
+	github.com/sagernet/sing v0.6.10
+	github.com/sagernet/sing-shadowsocks v0.2.8
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771
 	github.com/stretchr/testify v1.10.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
