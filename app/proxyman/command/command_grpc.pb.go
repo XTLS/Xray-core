@@ -22,11 +22,13 @@ const (
 	HandlerService_AddInbound_FullMethodName           = "/xray.app.proxyman.command.HandlerService/AddInbound"
 	HandlerService_RemoveInbound_FullMethodName        = "/xray.app.proxyman.command.HandlerService/RemoveInbound"
 	HandlerService_AlterInbound_FullMethodName         = "/xray.app.proxyman.command.HandlerService/AlterInbound"
+	HandlerService_ListInbounds_FullMethodName         = "/xray.app.proxyman.command.HandlerService/ListInbounds"
 	HandlerService_GetInboundUsers_FullMethodName      = "/xray.app.proxyman.command.HandlerService/GetInboundUsers"
 	HandlerService_GetInboundUsersCount_FullMethodName = "/xray.app.proxyman.command.HandlerService/GetInboundUsersCount"
 	HandlerService_AddOutbound_FullMethodName          = "/xray.app.proxyman.command.HandlerService/AddOutbound"
 	HandlerService_RemoveOutbound_FullMethodName       = "/xray.app.proxyman.command.HandlerService/RemoveOutbound"
 	HandlerService_AlterOutbound_FullMethodName        = "/xray.app.proxyman.command.HandlerService/AlterOutbound"
+	HandlerService_ListOutbounds_FullMethodName        = "/xray.app.proxyman.command.HandlerService/ListOutbounds"
 )
 
 // HandlerServiceClient is the client API for HandlerService service.
@@ -36,11 +38,13 @@ type HandlerServiceClient interface {
 	AddInbound(ctx context.Context, in *AddInboundRequest, opts ...grpc.CallOption) (*AddInboundResponse, error)
 	RemoveInbound(ctx context.Context, in *RemoveInboundRequest, opts ...grpc.CallOption) (*RemoveInboundResponse, error)
 	AlterInbound(ctx context.Context, in *AlterInboundRequest, opts ...grpc.CallOption) (*AlterInboundResponse, error)
+	ListInbounds(ctx context.Context, in *ListInboundsRequest, opts ...grpc.CallOption) (*ListInboundsResponse, error)
 	GetInboundUsers(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUsersCountResponse, error)
 	AddOutbound(ctx context.Context, in *AddOutboundRequest, opts ...grpc.CallOption) (*AddOutboundResponse, error)
 	RemoveOutbound(ctx context.Context, in *RemoveOutboundRequest, opts ...grpc.CallOption) (*RemoveOutboundResponse, error)
 	AlterOutbound(ctx context.Context, in *AlterOutboundRequest, opts ...grpc.CallOption) (*AlterOutboundResponse, error)
+	ListOutbounds(ctx context.Context, in *ListOutboundsRequest, opts ...grpc.CallOption) (*ListOutboundsResponse, error)
 }
 
 type handlerServiceClient struct {
@@ -75,6 +79,16 @@ func (c *handlerServiceClient) AlterInbound(ctx context.Context, in *AlterInboun
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AlterInboundResponse)
 	err := c.cc.Invoke(ctx, HandlerService_AlterInbound_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *handlerServiceClient) ListInbounds(ctx context.Context, in *ListInboundsRequest, opts ...grpc.CallOption) (*ListInboundsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInboundsResponse)
+	err := c.cc.Invoke(ctx, HandlerService_ListInbounds_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +145,16 @@ func (c *handlerServiceClient) AlterOutbound(ctx context.Context, in *AlterOutbo
 	return out, nil
 }
 
+func (c *handlerServiceClient) ListOutbounds(ctx context.Context, in *ListOutboundsRequest, opts ...grpc.CallOption) (*ListOutboundsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOutboundsResponse)
+	err := c.cc.Invoke(ctx, HandlerService_ListOutbounds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HandlerServiceServer is the server API for HandlerService service.
 // All implementations must embed UnimplementedHandlerServiceServer
 // for forward compatibility.
@@ -138,11 +162,13 @@ type HandlerServiceServer interface {
 	AddInbound(context.Context, *AddInboundRequest) (*AddInboundResponse, error)
 	RemoveInbound(context.Context, *RemoveInboundRequest) (*RemoveInboundResponse, error)
 	AlterInbound(context.Context, *AlterInboundRequest) (*AlterInboundResponse, error)
+	ListInbounds(context.Context, *ListInboundsRequest) (*ListInboundsResponse, error)
 	GetInboundUsers(context.Context, *GetInboundUserRequest) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(context.Context, *GetInboundUserRequest) (*GetInboundUsersCountResponse, error)
 	AddOutbound(context.Context, *AddOutboundRequest) (*AddOutboundResponse, error)
 	RemoveOutbound(context.Context, *RemoveOutboundRequest) (*RemoveOutboundResponse, error)
 	AlterOutbound(context.Context, *AlterOutboundRequest) (*AlterOutboundResponse, error)
+	ListOutbounds(context.Context, *ListOutboundsRequest) (*ListOutboundsResponse, error)
 	mustEmbedUnimplementedHandlerServiceServer()
 }
 
@@ -162,6 +188,9 @@ func (UnimplementedHandlerServiceServer) RemoveInbound(context.Context, *RemoveI
 func (UnimplementedHandlerServiceServer) AlterInbound(context.Context, *AlterInboundRequest) (*AlterInboundResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AlterInbound not implemented")
 }
+func (UnimplementedHandlerServiceServer) ListInbounds(context.Context, *ListInboundsRequest) (*ListInboundsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListInbounds not implemented")
+}
 func (UnimplementedHandlerServiceServer) GetInboundUsers(context.Context, *GetInboundUserRequest) (*GetInboundUserResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInboundUsers not implemented")
 }
@@ -176,6 +205,9 @@ func (UnimplementedHandlerServiceServer) RemoveOutbound(context.Context, *Remove
 }
 func (UnimplementedHandlerServiceServer) AlterOutbound(context.Context, *AlterOutboundRequest) (*AlterOutboundResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AlterOutbound not implemented")
+}
+func (UnimplementedHandlerServiceServer) ListOutbounds(context.Context, *ListOutboundsRequest) (*ListOutboundsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListOutbounds not implemented")
 }
 func (UnimplementedHandlerServiceServer) mustEmbedUnimplementedHandlerServiceServer() {}
 func (UnimplementedHandlerServiceServer) testEmbeddedByValue()                        {}
@@ -248,6 +280,24 @@ func _HandlerService_AlterInbound_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HandlerServiceServer).AlterInbound(ctx, req.(*AlterInboundRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HandlerService_ListInbounds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInboundsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HandlerServiceServer).ListInbounds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HandlerService_ListInbounds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HandlerServiceServer).ListInbounds(ctx, req.(*ListInboundsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -342,6 +392,24 @@ func _HandlerService_AlterOutbound_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HandlerService_ListOutbounds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOutboundsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HandlerServiceServer).ListOutbounds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HandlerService_ListOutbounds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HandlerServiceServer).ListOutbounds(ctx, req.(*ListOutboundsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HandlerService_ServiceDesc is the grpc.ServiceDesc for HandlerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -362,6 +430,10 @@ var HandlerService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HandlerService_AlterInbound_Handler,
 		},
 		{
+			MethodName: "ListInbounds",
+			Handler:    _HandlerService_ListInbounds_Handler,
+		},
+		{
 			MethodName: "GetInboundUsers",
 			Handler:    _HandlerService_GetInboundUsers_Handler,
 		},
@@ -380,6 +452,10 @@ var HandlerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AlterOutbound",
 			Handler:    _HandlerService_AlterOutbound_Handler,
+		},
+		{
+			MethodName: "ListOutbounds",
+			Handler:    _HandlerService_ListOutbounds_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -31,6 +31,7 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestCommanderListenConfigurationItem(t *testing.T) {
@@ -199,6 +200,104 @@ func TestCommanderRemoveHandler(t *testing.T) {
 		if err == nil {
 			t.Error("unexpected nil error")
 		}
+	}
+}
+
+func TestCommanderListHandlers(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	clientPort := tcp.PickPort()
+	cmdPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&commander.Config{
+				Tag: "api",
+				Service: []*serial.TypedMessage{
+					serial.ToTypedMessage(&command.Config{}),
+				},
+			}),
+			serial.ToTypedMessage(&router.Config{
+				Rule: []*router.RoutingRule{
+					{
+						InboundTag: []string{"api"},
+						TargetTag: &router.RoutingRule_Tag{
+							Tag: "api",
+						},
+					},
+				},
+			}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				Tag: "d",
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
+					Networks: []net.Network{net.Network_TCP},
+				}),
+			},
+			{
+				Tag: "api",
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(cmdPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
+					Networks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				Tag:            "default-outbound",
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{}),
+				ProxySettings:  serial.ToTypedMessage(&freedom.Config{}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	if err := testTCPConn(clientPort, 1024, time.Second*5)(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmdConn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", cmdPort), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	common.Must(err)
+	defer cmdConn.Close()
+
+	hsClient := command.NewHandlerServiceClient(cmdConn)
+	inboundResp, err := hsClient.ListInbounds(context.Background(), &command.ListInboundsRequest{})
+	common.Must(err)
+	if inboundResp == nil {
+		t.Error("unexpected nil response")
+	}
+
+	if !cmp.Equal(inboundResp.Inbounds, clientConfig.Inbound, protocmp.Transform()) {
+		t.Fatal("inbound response doesn't match config")
+	}
+
+	outboundResp, err := hsClient.ListOutbounds(context.Background(), &command.ListOutboundsRequest{})
+	common.Must(err)
+	if outboundResp == nil {
+		t.Error("unexpected nil response")
+	}
+
+	if !cmp.Equal(outboundResp.Outbounds, clientConfig.Outbound, protocmp.Transform()) {
+		t.Fatal("outbound response doesn't match config")
 	}
 }
 

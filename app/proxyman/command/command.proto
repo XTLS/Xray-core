@@ -37,6 +37,12 @@ message AlterInboundRequest {
 
 message AlterInboundResponse {}
 
+message ListInboundsRequest {}
+
+message ListInboundsResponse {
+  repeated core.InboundHandlerConfig inbounds = 1;
+}
+
 message GetInboundUserRequest {
   string tag = 1;
   string email = 2;
@@ -69,12 +75,20 @@ message AlterOutboundRequest {
 
 message AlterOutboundResponse {}
 
+message ListOutboundsRequest {}
+
+message ListOutboundsResponse {
+  repeated core.OutboundHandlerConfig outbounds = 1;
+}
+
 service HandlerService {
   rpc AddInbound(AddInboundRequest) returns (AddInboundResponse) {}
 
   rpc RemoveInbound(RemoveInboundRequest) returns (RemoveInboundResponse) {}
 
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
+
+  rpc ListInbounds(ListInboundsRequest) returns (ListInboundsResponse) {}
 
   rpc GetInboundUsers(GetInboundUserRequest) returns (GetInboundUserResponse) {}
 
@@ -85,6 +99,8 @@ service HandlerService {
   rpc RemoveOutbound(RemoveOutboundRequest) returns (RemoveOutboundResponse) {}
 
   rpc AlterOutbound(AlterOutboundRequest) returns (AlterOutboundResponse) {}
+
+  rpc ListOutbounds(ListOutboundsRequest) returns (ListOutboundsResponse) {}
 }
 
 message Config {}
