@@ -90,6 +90,11 @@ type Instance struct {
 	ctx context.Context
 }
 
+// Instance state
+func (server *Instance) IsRunning() bool {
+	return server.running
+}
+
 func AddInboundHandler(server *Instance, config *InboundHandlerConfig) error {
 	inboundManager := server.GetFeature(inbound.ManagerType()).(inbound.Manager)
 	rawHandler, err := CreateObject(server, config)
