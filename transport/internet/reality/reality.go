@@ -245,6 +245,14 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			// Do not close the connection
 		}()
 		time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
+
+		// temporary fallback for server core that not upgrade to X25519MLKEM768 yet
+		if config.Fingerprint == "chrome" {
+			config.Fingerprint = "chromeNormal"
+			if config.Show {
+				errors.LogInfo(ctx, fmt.Sprintf("REALITY Fingerprint: set to: %v\n", config.Fingerprint))
+			}
+		}
 		return nil, errors.New("REALITY: processed invalid connection").AtWarning()
 	}
 	return uConn, nil
