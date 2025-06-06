@@ -42,7 +42,16 @@ RUN mkdir -p /tmp/var/log/xray && touch \
   /tmp/var/log/xray/error.log
 
 # Build finally image
-FROM gcr.io/distroless/static:nonroot
+# Note on Distroless Base Image and Architecture Support:
+# - The official 'gcr.io/distroless/static' image provided by Google only supports a limited set of architectures for Linux:
+#   - linux/amd64
+#   - linux/arm/v7
+#   - linux/arm64/v8
+#   - linux/ppc64le
+#   - linux/s390x
+# - Upon inspection, the blob contents of the Distroless images across these architectures are nearly identical, with only minor differences in metadata (e.g., 'Architecture' field in the manifest).
+# - Due to this similarity in content, it is feasible to forcibly specify a single platform (e.g., '--platform=linux/amd64') for unsupported architectures, as the core image content remains compatible with statically compiled binaries like Go applications.
+FROM --platform=linux/amd64 gcr.io/distroless/static:nonroot
 
 COPY --from=build --chown=0:0 --chmod=755 /src/xray /usr/local/bin/xray
 COPY --from=build --chown=0:0 --chmod=644 /tmp/geodat/*.dat /usr/local/share/xray/

@@ -3,9 +3,6 @@ name: Build docker image
 on:
   release:
     types: [published]
-  push:
-    branches:
-      - main
 
 jobs:
   build-image:
@@ -14,6 +11,7 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -21,56 +19,73 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/xray-core
           flavor: latest=auto
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
-      - name: Docker metadata Loyalsoldier flavor
-        id: loyalsoldier
+
+      - name: Docker metadata (unsupported architectures)
+        id: metausa
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/xray-core
           flavor: |
             latest=auto
-            suffix=-ls,onlatest=true
+            suffix=-usa,onlatest=true
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: |
             linux/amd64
-            linux/arm64
-            linux/loong64
-            linux/riscv64
+            linux/arm/v7
+            linux/arm64/v8
+            linux/ppc64le
+            linux/s390x
           provenance: false
           file: .github/docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-      - name: Build and push Loyalsoldier flavor
+
+      - name: Build and push (unsupported architectures)
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: |
-            linux/amd64
-            linux/arm64
-            linux/loong64
+            linux/386
+            linux/arm/v6
             linux/riscv64
+            linux/loong64
           provenance: false
-          file: .github/docker/Dockerfile
-          build-args: flavor=loyalsoldier
+          file: .github/docker/Dockerfile.usa
           push: true
-          tags: |
-            ${{ steps.loyalsoldier.outputs.tags }}
+          tags: ${{ steps.metausa.outputs.tags }}
+
+      - name: Merge Multi-Arch Manifests
+        run: |
+          echo "Starting to merge multi-architecture manifests..."
+
+          # Convert newlines to spaces and split into array
+          TAGS=($(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '))
+
+          echo "Total tags to process: ${#TAGS[@]}"
+          for tag in "${TAGS[@]}"; do
+            echo "Merging tag: $tag with unsupported architectures ($tag-usa)"
+            docker buildx imagetools create --append --tag "$tag" "$tag-usa"
+            if [ $? -ne 0 ]; then
+              echo "Error: Failed to merge $tag-usa into $tag"
+              exit 1
+            fi
+          done
+
+          echo "Multi-architecture manifest merge completed successfully."
