@@ -279,11 +279,9 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 
 			outbounds := session.OutboundsFromContext(ctx)
 			ob := outbounds[len(outbounds)-1]
-			addr := h.senderSettings.Via.AsAddress()
 			var domain string
-			if addr.Family().IsDomain() {
-				domain = addr.Domain()
-			}
+			addr := h.senderSettings.Via.AsAddress()
+			domain = h.senderSettings.Via.GetDomain()
 			switch {
 			case h.senderSettings.ViaCidr != "":
 				ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
@@ -291,18 +289,24 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			case domain == "origin":
 
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
-					if err == nil {
-						ob.Gateway = net.ParseAddress(origin)
+					if inbound.Conn != nil {
+						origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
+						if err == nil {
+							ob.Gateway = net.ParseAddress(origin)
+							errors.LogDebug(ctx, "use receive package ip as snedthrough: ", origin)
+						}
 					}
-
 				}
 			case domain == "srcip":
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					srcip, _, err := net.SplitHostPort(inbound.Conn.RemoteAddr().String())
-					if err == nil {
-						ob.Gateway = net.ParseAddress(srcip)
+					if inbound.Conn != nil {
+						clientaddr, _, err := net.SplitHostPort(inbound.Conn.RemoteAddr().String())
+						if err == nil {
+							ob.Gateway = net.ParseAddress(clientaddr)
+							errors.LogDebug(ctx, "use client src ip as snedthrough: ", clientaddr)
+						}
 					}
+
 				}
 			//case addr.Family().IsDomain():
 			default:
