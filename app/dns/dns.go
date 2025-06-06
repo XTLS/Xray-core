@@ -28,6 +28,7 @@ type DNS struct {
 	ctx                    context.Context
 	domainMatcher          strmatcher.IndexMatcher
 	matcherInfos           []*DomainMatcherInfo
+	checkSystem            bool
 }
 
 // DomainMatcherInfo contains information attached to index returned by Server.domainMatcher
@@ -47,6 +48,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	}
 
 	var ipOption dns.IPOption
+	checkSystem := false
 	switch config.QueryStrategy {
 	case QueryStrategy_USE_IP:
 		ipOption = dns.IPOption{
@@ -54,6 +56,13 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			IPv6Enable: true,
 			FakeEnable: false,
 		}
+	case QueryStrategy_USE_SYS:
+		ipOption = dns.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: true,
+			FakeEnable: false,
+		}
+		checkSystem = true
 	case QueryStrategy_USE_IP4:
 		ipOption = dns.IPOption{
 			IPv4Enable: true,
@@ -108,7 +117,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			myClientIP = net.IP(ns.ClientIp)
 		}
 
-		disableCache := config.DisableCache
+		disableCache := config.DisableCache || ns.DisableCache
 
 		var tag = defaultTag
 		if len(ns.Tag) > 0 {
@@ -118,6 +127,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		if !clientIPOption.IPv4Enable && !clientIPOption.IPv6Enable {
 			return nil, errors.New("no QueryStrategy available for ", ns.Address)
 		}
+
 		client, err := NewClient(ctx, ns, myClientIP, disableCache, tag, clientIPOption, &matcherInfos, updateDomain)
 		if err != nil {
 			return nil, errors.New("failed to create client").Base(err)
@@ -139,6 +149,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		matcherInfos:           matcherInfos,
 		disableFallback:        config.DisableFallback,
 		disableFallbackIfMatch: config.DisableFallbackIfMatch,
+		checkSystem:            checkSystem,
 	}, nil
 }
 
@@ -179,8 +190,14 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		return nil, 0, errors.New("empty domain name")
 	}
 
-	option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
-	option.IPv6Enable = option.IPv6Enable && s.ipOption.IPv6Enable
+	if s.checkSystem {
+		supportIPv4, supportIPv6 := checkSystemNetwork()
+		option.IPv4Enable = option.IPv4Enable && supportIPv4
+		option.IPv6Enable = option.IPv6Enable && supportIPv6
+	} else {
+		option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
+		option.IPv6Enable = option.IPv6Enable && s.ipOption.IPv6Enable
+	}
 
 	if !option.IPv4Enable && !option.IPv6Enable {
 		return nil, 0, dns.ErrEmptyResponse
@@ -227,6 +244,9 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		}
 		errs = append(errs, err)
 
+		if client.IsFinalQuery() {
+			break
+		}
 	}
 
 	if len(errs) > 0 {
@@ -301,4 +321,23 @@ func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*Config))
 	}))
+}
+
+func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
+	conn4, err4 := net.Dial("udp4", "8.8.8.8:53")
+	if err4 != nil {
+		supportIPv4 = false
+	} else {
+		supportIPv4 = true
+		conn4.Close()
+	}
+
+	conn6, err6 := net.Dial("udp6", "[2001:4860:4860::8888]:53")
+	if err6 != nil {
+		supportIPv6 = false
+	} else {
+		supportIPv6 = true
+		conn6.Close()
+	}
+	return
 }
