@@ -289,7 +289,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 						origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
 						if err == nil {
 							ob.Gateway = net.ParseAddress(origin)
-							errors.LogInfo(ctx, "use receive package ip as snedthrough: ", origin)
+							errors.LogDebug(ctx, "use receive package ip as snedthrough: ", origin)
 						}
 					}
 				}
@@ -299,7 +299,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 						clientaddr, _, err := net.SplitHostPort(inbound.Conn.RemoteAddr().String())
 						if err == nil {
 							ob.Gateway = net.ParseAddress(clientaddr)
-							errors.LogInfo(ctx, "use client src ip as snedthrough: ", clientaddr)
+							errors.LogDebug(ctx, "use client src ip as snedthrough: ", clientaddr)
 						}
 					}
 
