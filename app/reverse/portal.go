@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/outbound"
@@ -108,6 +109,16 @@ func (o *Outbound) Start() error {
 }
 
 func (o *Outbound) Close() error {
+	return nil
+}
+
+// SenderSettings implements outbound.Handler.
+func (o *Outbound) SenderSettings() *serial.TypedMessage {
+	return nil
+}
+
+// ProxySettings implements outbound.Handler.
+func (o *Outbound) ProxySettings() *serial.TypedMessage {
 	return nil
 }
 

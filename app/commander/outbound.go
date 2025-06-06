@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport"
 )
@@ -107,4 +108,14 @@ func (co *Outbound) Close() error {
 
 	co.closed = true
 	return co.listener.Close()
+}
+
+// SenderSettings implements outbound.Handler.
+func (co *Outbound) SenderSettings() *serial.TypedMessage {
+	return nil
+}
+
+// ProxySettings implements outbound.Handler.
+func (co *Outbound) ProxySettings() *serial.TypedMessage {
+	return nil
 }

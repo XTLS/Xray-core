@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
@@ -27,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
+	"google.golang.org/protobuf/proto"
 )
 
 func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter) {
@@ -59,6 +61,7 @@ type Handler struct {
 	tag             string
 	senderSettings  *proxyman.SenderConfig
 	streamSettings  *internet.MemoryStreamConfig
+	proxyConfig     proto.Message
 	proxy           proxy.Outbound
 	outboundManager outbound.Manager
 	mux             *mux.ClientManager
@@ -101,6 +104,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	if err != nil {
 		return nil, err
 	}
+	h.proxyConfig = proxyConfig
 
 	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
 	if err != nil {
@@ -347,6 +351,16 @@ func (h *Handler) Close() error {
 	common.Close(h.mux)
 	common.Close(h.proxy)
 	return nil
+}
+
+// SenderSettings implements outbound.Handler.
+func (h *Handler) SenderSettings() *serial.TypedMessage {
+	return serial.ToTypedMessage(h.senderSettings)
+}
+
+// ProxySettings implements outbound.Handler.
+func (h *Handler) ProxySettings() *serial.TypedMessage {
+	return serial.ToTypedMessage(h.proxyConfig)
 }
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
