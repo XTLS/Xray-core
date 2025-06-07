@@ -85,6 +85,7 @@
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
+  - [SimpleXray](https://github.com/lhear/SimpleXray)
 - iOS & macOS arm64
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
