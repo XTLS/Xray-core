@@ -76,8 +76,8 @@ github.com/vishvananda/netlink v1.3.1 h1:3AEMt62VKqz90r0tmNhog0r/PpWKmrEShJU0wJW
 github.com/vishvananda/netlink v1.3.1/go.mod h1:ARtKouGSTGchR8aMwmkzC0qiNPrrWO5JS/XMVl45+b4=
 github.com/vishvananda/netns v0.0.5 h1:DfiHV+j8bA32MFM7bfEunvT8IAqQ/NzSJHtcmW5zdEY=
 github.com/vishvananda/netns v0.0.5/go.mod h1:SpkAiCQRtJ6TvvxPnOSyH3BMl6unz3xZlaprSwhNNJM=
-github.com/xtls/reality v0.0.0-20250607082147-88910695ec9a h1:CiFWUVXNkcO9IR7Jv1lld7DM1+02a7N5U0SiH5pRH2c=
-github.com/xtls/reality v0.0.0-20250607082147-88910695ec9a/go.mod h1:Rkdcxe9Yd8SWQRRP+LSvX6wxk1m4lmNkyUZEHzbPDZw=
+github.com/xtls/reality v0.0.0-20250607105625-90e738a94c8c h1:GiY3/SynO0ujSH3rQDEIrE4MTTZM9KHufR3zx3JLD3c=
+github.com/xtls/reality v0.0.0-20250607105625-90e738a94c8c/go.mod h1:Rkdcxe9Yd8SWQRRP+LSvX6wxk1m4lmNkyUZEHzbPDZw=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
