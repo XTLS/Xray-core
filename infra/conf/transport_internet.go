@@ -712,7 +712,7 @@ func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 		TryDelayMs       uint64 `json:"tryDelayMs"`
 		Interleave       uint32 `json:"interleave"`
 		MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
-	}{PrioritizeIPv6: false, Interleave: 1, TryDelayMs: 250, MaxConcurrentTry: 4}
+	}{PrioritizeIPv6: false, Interleave: 1, TryDelayMs: 0, MaxConcurrentTry: 4}
 	if err := json.Unmarshal(data, &innerHappyEyeballsConfig); err != nil {
 		return err
 	}
@@ -834,7 +834,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 250, MaxConcurrentTry: 4}
+	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
 	if c.HappyEyeballsSettings != nil {
 		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
 		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave

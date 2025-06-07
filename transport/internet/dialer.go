@@ -255,7 +255,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 			if sockopt.DomainStrategy.forceIP() {
 				return nil, err
 			}
-		} else if (sockopt.HappyEyeballs != nil && (sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0)) || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
+		} else if sockopt.HappyEyeballs == nil || sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0 || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
 		} else {

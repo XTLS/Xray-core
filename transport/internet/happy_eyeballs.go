@@ -17,16 +17,10 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 		panic("at least 2 ips is required to race dial")
 	}
 
-	prioritizeIPv6 := false
-	interleave := uint32(1)
-	tryDelayMs := 250 * time.Millisecond
-	maxConcurrentTry := uint32(4)
-	if sockopt.HappyEyeballs != nil {
-		prioritizeIPv6 = sockopt.HappyEyeballs.PrioritizeIpv6
-		interleave = sockopt.HappyEyeballs.Interleave
-		tryDelayMs = time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond
-		maxConcurrentTry = sockopt.HappyEyeballs.MaxConcurrentTry
-	}
+	prioritizeIPv6 := sockopt.HappyEyeballs.PrioritizeIpv6
+	interleave := sockopt.HappyEyeballs.Interleave
+	tryDelayMs := time.Duration(sockopt.HappyEyeballs.TryDelayMs) * time.Millisecond
+	maxConcurrentTry := sockopt.HappyEyeballs.MaxConcurrentTry
 
 	ips = sortIPs(ips, prioritizeIPv6, interleave)
 	newCtx, cancel := context.WithCancel(ctx)
