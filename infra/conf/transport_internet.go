@@ -699,25 +699,50 @@ type CustomSockoptConfig struct {
 	Type    string `json:"type"`
 }
 
+type HappyEyeballsConfig struct {
+	PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
+	TryDelayMs       uint64 `json:"tryDelayMs"`
+	Interleave       uint32 `json:"interleave"`
+	MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+}
+
+func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
+	var innerHappyEyeballsConfig = struct {
+		PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
+		TryDelayMs       uint64 `json:"tryDelayMs"`
+		Interleave       uint32 `json:"interleave"`
+		MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+	}{PrioritizeIPv6: false, Interleave: 1, TryDelayMs: 0, MaxConcurrentTry: 4}
+	if err := json.Unmarshal(data, &innerHappyEyeballsConfig); err != nil {
+		return err
+	}
+	h.PrioritizeIPv6 = innerHappyEyeballsConfig.PrioritizeIPv6
+	h.TryDelayMs = innerHappyEyeballsConfig.TryDelayMs
+	h.Interleave = innerHappyEyeballsConfig.Interleave
+	h.MaxConcurrentTry = innerHappyEyeballsConfig.MaxConcurrentTry
+	return nil
+}
+
 type SocketConfig struct {
-	Mark                 int32                  `json:"mark"`
-	TFO                  interface{}            `json:"tcpFastOpen"`
-	TProxy               string                 `json:"tproxy"`
-	AcceptProxyProtocol  bool                   `json:"acceptProxyProtocol"`
-	DomainStrategy       string                 `json:"domainStrategy"`
-	DialerProxy          string                 `json:"dialerProxy"`
-	TCPKeepAliveInterval int32                  `json:"tcpKeepAliveInterval"`
-	TCPKeepAliveIdle     int32                  `json:"tcpKeepAliveIdle"`
-	TCPCongestion        string                 `json:"tcpCongestion"`
-	TCPWindowClamp       int32                  `json:"tcpWindowClamp"`
-	TCPMaxSeg            int32                  `json:"tcpMaxSeg"`
-	Penetrate            bool                   `json:"penetrate"`
-	TCPUserTimeout       int32                  `json:"tcpUserTimeout"`
-	V6only               bool                   `json:"v6only"`
-	Interface            string                 `json:"interface"`
-	TcpMptcp             bool                   `json:"tcpMptcp"`
-	CustomSockopt        []*CustomSockoptConfig `json:"customSockopt"`
-	AddressPortStrategy  string                 `json:"addressPortStrategy"`
+	Mark                  int32                  `json:"mark"`
+	TFO                   interface{}            `json:"tcpFastOpen"`
+	TProxy                string                 `json:"tproxy"`
+	AcceptProxyProtocol   bool                   `json:"acceptProxyProtocol"`
+	DomainStrategy        string                 `json:"domainStrategy"`
+	DialerProxy           string                 `json:"dialerProxy"`
+	TCPKeepAliveInterval  int32                  `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle      int32                  `json:"tcpKeepAliveIdle"`
+	TCPCongestion         string                 `json:"tcpCongestion"`
+	TCPWindowClamp        int32                  `json:"tcpWindowClamp"`
+	TCPMaxSeg             int32                  `json:"tcpMaxSeg"`
+	Penetrate             bool                   `json:"penetrate"`
+	TCPUserTimeout        int32                  `json:"tcpUserTimeout"`
+	V6only                bool                   `json:"v6only"`
+	Interface             string                 `json:"interface"`
+	TcpMptcp              bool                   `json:"tcpMptcp"`
+	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
+	AddressPortStrategy   string                 `json:"addressPortStrategy"`
+	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
 }
 
 // Build implements Buildable.
@@ -809,6 +834,14 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
+	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
+	if c.HappyEyeballsSettings != nil {
+		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
+		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
+		happyEyeballs.TryDelayMs = c.HappyEyeballsSettings.TryDelayMs
+		happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
+	}
+
 	return &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
@@ -828,6 +861,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		TcpMptcp:             c.TcpMptcp,
 		CustomSockopt:        customSockopts,
 		AddressPortStrategy:  addressPortStrategy,
+		HappyEyeballs:        happyEyeballs,
 	}, nil
 }
 

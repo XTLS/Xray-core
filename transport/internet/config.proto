@@ -130,4 +130,13 @@ message SocketConfig {
   repeated CustomSockopt customSockopt = 20;
 
   AddressPortStrategy address_port_strategy = 21;
+
+  HappyEyeballsConfig happy_eyeballs = 22;
+}
+
+message HappyEyeballsConfig {
+  bool prioritize_ipv6 = 1;
+  uint32 interleave = 2;
+  uint64 try_delayMs = 3;
+  uint32 max_concurrent_try = 4;
 }
