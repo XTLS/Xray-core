@@ -98,6 +98,7 @@
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
+  - [GorzRay](https://github.com/ketetefid/GorzRay)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
