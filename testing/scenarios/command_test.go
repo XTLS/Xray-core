@@ -286,8 +286,8 @@ func TestCommanderListHandlers(t *testing.T) {
 		t.Error("unexpected nil response")
 	}
 
-	if !cmp.Equal(inboundResp.Inbounds, clientConfig.Inbound, protocmp.Transform()) {
-		t.Fatal("inbound response doesn't match config")
+	if diff := cmp.Diff(inboundResp.Inbounds, clientConfig.Inbound, protocmp.Transform()); diff != "" {
+		t.Fatalf("inbound response doesn't match config (-want +got):\n%s", diff)
 	}
 
 	outboundResp, err := hsClient.ListOutbounds(context.Background(), &command.ListOutboundsRequest{})
@@ -296,8 +296,8 @@ func TestCommanderListHandlers(t *testing.T) {
 		t.Error("unexpected nil response")
 	}
 
-	if !cmp.Equal(outboundResp.Outbounds, clientConfig.Outbound, protocmp.Transform()) {
-		t.Fatal("outbound response doesn't match config")
+	if diff := cmp.Diff(outboundResp.Outbounds, clientConfig.Outbound, protocmp.Transform()); diff != "" {
+		t.Fatalf("outbound response doesn't match config (-want +got):\n%s", diff)
 	}
 }
 
