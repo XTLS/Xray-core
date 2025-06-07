@@ -45,6 +45,7 @@ RUN mkdir -p /tmp/var/log/xray && touch \
 FROM gcr.io/distroless/static:nonroot
 
 COPY --from=build --chown=0:0 --chmod=755 /src/xray /usr/local/bin/xray
+COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/share/xray
 COPY --from=build --chown=0:0 --chmod=644 /tmp/geodat/*.dat /usr/local/share/xray/
 COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/etc/xray
 COPY --from=build --chown=0:0 --chmod=644 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
