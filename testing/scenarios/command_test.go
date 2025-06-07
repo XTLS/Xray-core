@@ -286,7 +286,13 @@ func TestCommanderListHandlers(t *testing.T) {
 		t.Error("unexpected nil response")
 	}
 
-	if diff := cmp.Diff(inboundResp.Inbounds, clientConfig.Inbound, protocmp.Transform()); diff != "" {
+	if diff := cmp.Diff(
+		inboundResp.Inbounds,
+		clientConfig.Inbound,
+		protocmp.Transform(),
+		cmpopts.SortSlices(func(a, b *core.InboundHandlerConfig) bool {
+			return a.Tag < b.Tag
+		})); diff != "" {
 		t.Fatalf("inbound response doesn't match config (-want +got):\n%s", diff)
 	}
 
@@ -296,7 +302,13 @@ func TestCommanderListHandlers(t *testing.T) {
 		t.Error("unexpected nil response")
 	}
 
-	if diff := cmp.Diff(outboundResp.Outbounds, clientConfig.Outbound, protocmp.Transform()); diff != "" {
+	if diff := cmp.Diff(
+		outboundResp.Outbounds,
+		clientConfig.Outbound,
+		protocmp.Transform(),
+		cmpopts.SortSlices(func(a, b *core.InboundHandlerConfig) bool {
+			return a.Tag < b.Tag
+		})); diff != "" {
 		t.Fatalf("outbound response doesn't match config (-want +got):\n%s", diff)
 	}
 }
