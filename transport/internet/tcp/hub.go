@@ -72,6 +72,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	}
 	if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
 		l.realityConfig = config.GetREALITYConfig()
+		go goreality.DetectPostHandshakeRecordsLens(l.realityConfig)
 	}
 
 	if tcpSettings.HeaderSettings != nil {
