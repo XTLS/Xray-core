@@ -93,12 +93,14 @@ func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, 
 		return
 	}
 	outputStream := conn.link.Writer
+	timer := conn.timer
 	if outputStream != nil {
 		if err := outputStream.WriteMultiBuffer(buf.MultiBuffer{payload}); err != nil {
-			errors.LogInfoInner(ctx, err, "failed to write first UDP payload")
+			errors.LogInfoInner(ctx, err, "failed to write UDP payload")
 			conn.cancel()
 			return
 		}
+		timer.Update()
 	}
 }
 
