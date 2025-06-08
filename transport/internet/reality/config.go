@@ -32,12 +32,12 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 
 		KeyLogWriter: KeyLogWriterFromConfig(c),
 
-		LimitUploadRate:    c.LimitUploadRate,
-		LimitUploadBurst:   c.LimitUploadBurst,
-		LimitUploadAfter:   c.LimitUploadAfter,
-		LimitDownloadRate:  c.LimitDownloadRate,
-		LimitDownloadBurst: c.LimitDownloadBurst,
-		LimitDownloadAfter: c.LimitDownloadAfter,
+		LimitFbUploadRate:    c.LimitFallbackUpload.BytesPerSec,
+		LimitFbUploadBurst:   c.LimitFallbackUpload.BurstBytesPerSec,
+		LimitFbUploadAfter:   c.LimitFallbackUpload.AfterBytes,
+		LimitFbDownloadRate:  c.LimitFallbackDownload.BytesPerSec,
+		LimitFbDownloadBurst: c.LimitFallbackDownload.BurstBytesPerSec,
+		LimitFbDownloadAfter: c.LimitFallbackDownload.AfterBytes,
 	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {

@@ -26,10 +26,12 @@ message Config {
   repeated int64 spider_y = 26;
   string master_key_log = 27;
 
-  double limit_upload_rate = 28;
-  sint64 limit_upload_burst = 29;
-  sint64 limit_upload_after = 30;
-  double limit_download_rate = 31;
-  sint64 limit_download_burst = 32;
-  sint64 limit_download_after = 33;
+  LimitFallback limit_fallback_upload = 28;
+  LimitFallback limit_fallback_download = 29;
+}
+
+message LimitFallback {
+  double bytes_per_sec = 1;
+  sint64 burst_bytes_per_sec = 2;
+  sint64 after_bytes = 3;
 }

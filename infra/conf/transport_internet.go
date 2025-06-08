@@ -500,12 +500,12 @@ type REALITYConfig struct {
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
 
-	LimitUploadRate    float64 `json:"limitUploadRate"`
-	LimitUploadBurst   int64   `json:"limitUploadBurst"`
-	LimitUploadAfter   int64   `json:"limitUploadAfter"`
-	LimitDownloadRate  float64 `json:"limitDownloadRate"`
-	LimitDownloadBurst int64   `json:"limitDownloadBurst"`
-	LimitDownloadAfter int64   `json:"limitDownloadAfter"`
+	LimitFbUploadRate    float64 `json:"limitFbUploadRate"`
+	LimitFbUploadBurst   int64   `json:"limitFbUploadBurst"`
+	LimitFbUploadAfter   int64   `json:"limitFbUploadAfter"`
+	LimitFbDownloadRate  float64 `json:"limitFbDownloadRate"`
+	LimitFbDownloadBurst int64   `json:"limitFbDownloadBurst"`
+	LimitFbDownloadAfter int64   `json:"limitFbDownloadAfter"`
 
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
@@ -608,12 +608,12 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
 
-		config.LimitUploadRate = c.LimitUploadRate
-		config.LimitUploadBurst = c.LimitUploadBurst
-		config.LimitUploadAfter = c.LimitUploadAfter
-		config.LimitDownloadRate = c.LimitDownloadRate
-		config.LimitDownloadBurst = c.LimitDownloadBurst
-		config.LimitDownloadAfter = c.LimitDownloadAfter
+		config.LimitFallbackUpload.BytesPerSec = c.LimitFbUploadRate
+		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFbUploadBurst
+		config.LimitFallbackUpload.AfterBytes = c.LimitFbUploadAfter
+		config.LimitFallbackDownload.BytesPerSec = c.LimitFbDownloadRate
+		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFbDownloadBurst
+		config.LimitFallbackDownload.AfterBytes = c.LimitFbDownloadAfter
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {
