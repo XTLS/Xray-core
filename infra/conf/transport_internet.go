@@ -486,6 +486,12 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type LimitFallback struct {
+	AfterBytes       uint64
+	BytesPerSec      uint64
+	BurstBytesPerSec uint64
+}
+
 type REALITYConfig struct {
 	MasterKeyLog string          `json:"masterKeyLog"`
 	Show         bool            `json:"show"`
@@ -500,12 +506,8 @@ type REALITYConfig struct {
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
 
-	LimitFbUploadRate    float64 `json:"limitFbUploadRate"`
-	LimitFbUploadBurst   int64   `json:"limitFbUploadBurst"`
-	LimitFbUploadAfter   int64   `json:"limitFbUploadAfter"`
-	LimitFbDownloadRate  float64 `json:"limitFbDownloadRate"`
-	LimitFbDownloadBurst int64   `json:"limitFbDownloadBurst"`
-	LimitFbDownloadAfter int64   `json:"limitFbDownloadAfter"`
+	LimitFallbackUpload   LimitFallback `json:"LimitFallbackUpload"`
+	LimitFallbackDownload LimitFallback `json:"LimitFallbackDownload"`
 
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
@@ -609,13 +611,13 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 
 		config.LimitFallbackUpload = new(reality.LimitFallback)
-		config.LimitFallbackUpload.BytesPerSec = c.LimitFbUploadRate
-		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFbUploadBurst
-		config.LimitFallbackUpload.AfterBytes = c.LimitFbUploadAfter
+		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
+		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFallbackUpload.BurstBytesPerSec
+		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 		config.LimitFallbackDownload = new(reality.LimitFallback)
-		config.LimitFallbackDownload.BytesPerSec = c.LimitFbDownloadRate
-		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFbDownloadBurst
-		config.LimitFallbackDownload.AfterBytes = c.LimitFbDownloadAfter
+		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
+		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
+		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {

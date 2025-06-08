@@ -33,14 +33,14 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		KeyLogWriter: KeyLogWriterFromConfig(c),
 	}
 	if c.LimitFallbackUpload != nil {
-		config.LimitFbUploadRate = c.LimitFallbackUpload.BytesPerSec
-		config.LimitFbUploadBurst = c.LimitFallbackUpload.BurstBytesPerSec
-		config.LimitFbUploadAfter = c.LimitFallbackUpload.AfterBytes
+		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
+		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFallbackUpload.BurstBytesPerSec
+		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 	}
 	if c.LimitFallbackDownload != nil {
-		config.LimitFbDownloadRate = c.LimitFallbackDownload.BytesPerSec
-		config.LimitFbDownloadBurst = c.LimitFallbackDownload.BurstBytesPerSec
-		config.LimitFbDownloadAfter = c.LimitFallbackDownload.AfterBytes
+		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
+		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
+		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
 	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {
