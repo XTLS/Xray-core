@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/vishvananda/netlink v1.3.1
-	github.com/xtls/reality v0.0.0-20250608122607-d4826882fcab
+	github.com/xtls/reality v0.0.0-20250608131145-4fd34dd4eb04
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.41.0
@@ -33,9 +33,6 @@ require (
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.4.1
 )
-
-// [TODO] Temp: use forked reality until upstream merges #12
-replace github.com/xtls/reality => github.com/meo597/reality v0.0.0-20250608122607-d4826882fcab
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
