@@ -506,8 +506,8 @@ type REALITYConfig struct {
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
 
-	LimitFallbackUpload   LimitFallback `json:"LimitFallbackUpload"`
-	LimitFallbackDownload LimitFallback `json:"LimitFallbackDownload"`
+	LimitFallbackUpload   LimitFallback `json:"limitFallbackUpload"`
+	LimitFallbackDownload LimitFallback `json:"limitFallbackDownload"`
 
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
@@ -611,13 +611,13 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 
 		config.LimitFallbackUpload = new(reality.LimitFallback)
+		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
 		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFallbackUpload.BurstBytesPerSec
-		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 		config.LimitFallbackDownload = new(reality.LimitFallback)
+		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
 		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
 		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
-		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {

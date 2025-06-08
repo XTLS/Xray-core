@@ -31,7 +31,7 @@ message Config {
 }
 
 message LimitFallback {
-  uint64 bytes_per_sec = 1;
-  uint64 burst_bytes_per_sec = 2;
-  uint64 after_bytes = 3;
+  uint64 after_bytes = 1;
+  uint64 bytes_per_sec = 2;
+  uint64 burst_bytes_per_sec = 3;
 }
