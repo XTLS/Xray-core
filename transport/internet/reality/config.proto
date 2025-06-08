@@ -25,4 +25,13 @@ message Config {
   string spider_x = 25;
   repeated int64 spider_y = 26;
   string master_key_log = 27;
+
+  LimitFallback limit_fallback_upload = 28;
+  LimitFallback limit_fallback_download = 29;
+}
+
+message LimitFallback {
+  uint64 after_bytes = 1;
+  uint64 bytes_per_sec = 2;
+  uint64 burst_bytes_per_sec = 3;
 }

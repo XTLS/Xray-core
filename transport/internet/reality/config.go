@@ -32,6 +32,16 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 
 		KeyLogWriter: KeyLogWriterFromConfig(c),
 	}
+	if c.LimitFallbackUpload != nil {
+		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
+		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
+		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFallbackUpload.BurstBytesPerSec
+	}
+	if c.LimitFallbackDownload != nil {
+		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
+		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
+		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
+	}
 	config.ServerNames = make(map[string]bool)
 	for _, serverName := range c.ServerNames {
 		config.ServerNames[serverName] = true

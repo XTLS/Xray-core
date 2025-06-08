@@ -486,6 +486,12 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type LimitFallback struct {
+	AfterBytes       uint64
+	BytesPerSec      uint64
+	BurstBytesPerSec uint64
+}
+
 type REALITYConfig struct {
 	MasterKeyLog string          `json:"masterKeyLog"`
 	Show         bool            `json:"show"`
@@ -499,6 +505,9 @@ type REALITYConfig struct {
 	MaxClientVer string          `json:"maxClientVer"`
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
+
+	LimitFallbackUpload   LimitFallback `json:"limitFallbackUpload"`
+	LimitFallbackDownload LimitFallback `json:"limitFallbackDownload"`
 
 	Fingerprint string `json:"fingerprint"`
 	ServerName  string `json:"serverName"`
@@ -600,6 +609,15 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.Xver = c.Xver
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
+
+		config.LimitFallbackUpload = new(reality.LimitFallback)
+		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
+		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
+		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFallbackUpload.BurstBytesPerSec
+		config.LimitFallbackDownload = new(reality.LimitFallback)
+		config.LimitFallbackDownload.AfterBytes = c.LimitFallbackDownload.AfterBytes
+		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
+		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {
