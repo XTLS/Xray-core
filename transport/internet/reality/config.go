@@ -33,10 +33,10 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		KeyLogWriter: KeyLogWriterFromConfig(c),
 
 		LimitUploadRate:    c.LimitUploadRate,
-		LimitUploadBrust:   c.LimitUploadBrust,
+		LimitUploadBurst:   c.LimitUploadBurst,
 		LimitUploadAfter:   c.LimitUploadAfter,
 		LimitDownloadRate:  c.LimitDownloadRate,
-		LimitDownloadBrust: c.LimitDownloadBrust,
+		LimitDownloadBurst: c.LimitDownloadBurst,
 		LimitDownloadAfter: c.LimitDownloadAfter,
 	}
 	config.ServerNames = make(map[string]bool)

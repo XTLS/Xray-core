@@ -501,10 +501,10 @@ type REALITYConfig struct {
 	ShortIds     []string        `json:"shortIds"`
 
 	LimitUploadRate    float64 `json:"limitUploadRate"`
-	LimitUploadBrust   int64   `json:"limitUploadBrust"`
+	LimitUploadBurst   int64   `json:"limitUploadBurst"`
 	LimitUploadAfter   int64   `json:"limitUploadAfter"`
 	LimitDownloadRate  float64 `json:"limitDownloadRate"`
-	LimitDownloadBrust int64   `json:"limitDownloadBrust"`
+	LimitDownloadBurst int64   `json:"limitDownloadBurst"`
 	LimitDownloadAfter int64   `json:"limitDownloadAfter"`
 
 	Fingerprint string `json:"fingerprint"`
@@ -609,10 +609,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 
 		config.LimitUploadRate = c.LimitUploadRate
-		config.LimitUploadBrust = c.LimitUploadBrust
+		config.LimitUploadBurst = c.LimitUploadBurst
 		config.LimitUploadAfter = c.LimitUploadAfter
 		config.LimitDownloadRate = c.LimitDownloadRate
-		config.LimitDownloadBrust = c.LimitDownloadBrust
+		config.LimitDownloadBurst = c.LimitDownloadBurst
 		config.LimitDownloadAfter = c.LimitDownloadAfter
 	} else {
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
