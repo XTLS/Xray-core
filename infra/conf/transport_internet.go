@@ -608,9 +608,11 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
 
+		config.LimitFallbackUpload = new(reality.LimitFallback)
 		config.LimitFallbackUpload.BytesPerSec = c.LimitFbUploadRate
 		config.LimitFallbackUpload.BurstBytesPerSec = c.LimitFbUploadBurst
 		config.LimitFallbackUpload.AfterBytes = c.LimitFbUploadAfter
+		config.LimitFallbackDownload = new(reality.LimitFallback)
 		config.LimitFallbackDownload.BytesPerSec = c.LimitFbDownloadRate
 		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFbDownloadBurst
 		config.LimitFallbackDownload.AfterBytes = c.LimitFbDownloadAfter
