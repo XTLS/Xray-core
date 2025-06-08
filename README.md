@@ -109,6 +109,7 @@
   - [xray-checker](https://github.com/kutovoys/xray-checker)
 - Xray Wrapper
   - [XTLS/libXray](https://github.com/XTLS/libXray)
+  - [xtls-sdk](https://github.com/remnawave/xtls-sdk)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
