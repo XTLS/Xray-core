@@ -1,3 +1,12 @@
+<!-- Keep these links. Translations will automatically update with the README. -->
+[Deutsch](https://www.readme-i18n.com/XTLS/Xray-core?lang=de) | 
+[Español](https://www.readme-i18n.com/XTLS/Xray-core?lang=es) | 
+[français](https://www.readme-i18n.com/XTLS/Xray-core?lang=fr) | 
+[한국어](https://www.readme-i18n.com/XTLS/Xray-core?lang=ko) | 
+[Português](https://www.readme-i18n.com/XTLS/Xray-core?lang=pt) | 
+[Русский](https://www.readme-i18n.com/XTLS/Xray-core?lang=ru) | 
+[中文](https://www.readme-i18n.com/XTLS/Xray-core?lang=zh)
+
 # Project X
 
 [Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core) and [REALITY](https://github.com/XTLS/REALITY).
