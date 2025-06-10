@@ -334,6 +334,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
+			resolvedUDPAddr:   make(map[string]net.Address),
 		}
 
 	}
