@@ -328,13 +328,22 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		counter = statConn.WriteCounter
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+		// If target is a domain, it will be resolved in dialer
+		// check this behavior and add it to map
+		outbounds := session.OutboundsFromContext(ctx)
+		targetAddr := outbounds[len(outbounds)-1].Target.Address
+		resolvedUDPAddr := make(map[string]net.Address)
+		if targetAddr.Family().IsDomain() {
+			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			resolvedUDPAddr[targetAddr.String()] = net.ParseAddress(RemoteAddress)
+		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   make(map[string]net.Address),
+			resolvedUDPAddr:   resolvedUDPAddr,
 		}
 
 	}
