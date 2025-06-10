@@ -374,12 +374,12 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
 				if ip := w.resolvedUDPAddr[b.UDP.Address.Domain()]; ip != nil {
 					b.UDP.Address = ip
-				}
-			} else {
-				ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
-				if ip != nil {
-					b.UDP.Address = ip
-					w.resolvedUDPAddr[b.UDP.Address.Domain()] = ip
+				} else {
+					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
+					if ip != nil {
+						b.UDP.Address = ip
+						w.resolvedUDPAddr[b.UDP.Address.Domain()] = ip
+					}
 				}
 			}
 			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
