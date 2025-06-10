@@ -130,6 +130,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	output := link.Writer
 
 	var conn stat.Connection
+	initAddr := destination.Address
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
 		if h.config.hasStrategy() && dialDest.Address.Family().IsDomain() {
@@ -140,6 +141,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					Address: ip,
 					Port:    dialDest.Port,
 				}
+				initAddr = ip
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			} else if h.config.forceIP() {
 				return dns.ErrEmptyResponse
@@ -202,7 +204,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
+			resolvedUDPAddr := make(map[string]net.Address)
+			if destination.Address.Family().IsDomain() && initAddr.Family().IsIP() {
+				resolvedUDPAddr[destination.Address.Domain()] = initAddr
+			}
+			writer = NewPacketWriter(conn, h, ctx, UDPOverride, resolvedUDPAddr)
+
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -317,7 +324,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, resolvedUDPAddr map[string]net.Address) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -334,7 +341,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   make(map[string]net.Address),
+			resolvedUDPAddr:   resolvedUDPAddr,
 		}
 
 	}
@@ -377,8 +384,8 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				} else {
 					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
 					if ip != nil {
-						b.UDP.Address = ip
 						w.resolvedUDPAddr[b.UDP.Address.Domain()] = ip
+						b.UDP.Address = ip
 					}
 				}
 			}
