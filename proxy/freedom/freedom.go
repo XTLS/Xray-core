@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 var useSplice bool
@@ -343,7 +344,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   resolvedUDPAddr,
+			resolvedUDPAddr:   util.NewTypedSyncMap[string, net.Address](),
 		}
 
 	}
@@ -361,7 +362,7 @@ type PacketWriter struct {
 	// But resolver will return a random one if the domain has many IPs
 	// Resulting in these packets being sent to many different IPs randomly
 	// So, cache and keep the resolve result
-	resolvedUDPAddr map[string]net.Address
+	resolvedUDPAddr *util.TypedSyncMap[string, net.Address]
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -381,13 +382,13 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.UDP.Port = w.UDPOverride.Port
 			}
 			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
-				if ip := w.resolvedUDPAddr[b.UDP.Address.Domain()]; ip != nil {
+				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
 					b.UDP.Address = ip
 				} else {
 					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
 					if ip != nil {
 						b.UDP.Address = ip
-						w.resolvedUDPAddr[b.UDP.Address.Domain()] = ip
+						w.resolvedUDPAddr.Store(b.UDP.Address.Domain(), ip)
 					}
 				}
 			}
