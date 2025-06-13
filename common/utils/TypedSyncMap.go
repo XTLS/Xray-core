@@ -1,4 +1,4 @@
-package util
+package utils
 
 import (
 	"sync"
@@ -6,6 +6,7 @@ import (
 
 // TypedSyncMap is a wrapper of sync.Map that provides type-safe for keys and values.
 // No need to use type assertions every time, so you can have more time to enjoy other things like GochiUsa
+// If sync.Map returned nil, it will return the zero value of the type V.
 type TypedSyncMap[K, V any] struct {
 	syncMap *sync.Map
 }
@@ -34,26 +35,43 @@ func (m *TypedSyncMap[K, V]) Delete(key K) {
 
 func (m *TypedSyncMap[K, V]) Load(key K) (value V, ok bool) {
 	anyValue, ok := m.syncMap.Load(key)
-	return anyValue.(V), ok
+	// anyValue might be nil
+	if anyValue != nil {
+		value = anyValue.(V)
+	}
+	return value, ok
 }
 
 func (m *TypedSyncMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
 	anyValue, loaded := m.syncMap.LoadAndDelete(key)
-	return anyValue.(V), loaded
+	if anyValue != nil {
+		value = anyValue.(V)
+	}
+	return value, loaded
 }
+
 func (m *TypedSyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
 	anyActual, loaded := m.syncMap.LoadOrStore(key, value)
-	return anyActual.(V), loaded
+	if anyActual != nil {
+		actual = anyActual.(V)
+	}
+	return actual, loaded
 }
+
 func (m *TypedSyncMap[K, V]) Range(f func(key K, value V) bool) {
 	m.syncMap.Range(func(key, value any) bool {
 		return f(key.(K), value.(V))
 	})
 }
+
 func (m *TypedSyncMap[K, V]) Store(key K, value V) {
 	m.syncMap.Store(key, value)
 }
+
 func (m *TypedSyncMap[K, V]) Swap(key K, value V) (previous V, loaded bool) {
 	anyPrevious, loaded := m.syncMap.Swap(key, value)
-	return anyPrevious.(V), loaded
+	if anyPrevious != nil {
+		previous = anyPrevious.(V)
+	}
+	return previous, loaded
 }

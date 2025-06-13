@@ -344,7 +344,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   util.NewTypedSyncMap[string, net.Address](),
+			resolvedUDPAddr:   utils.NewTypedSyncMap[string, net.Address](),
 		}
 
 	}
@@ -362,7 +362,7 @@ type PacketWriter struct {
 	// But resolver will return a random one if the domain has many IPs
 	// Resulting in these packets being sent to many different IPs randomly
 	// So, cache and keep the resolve result
-	resolvedUDPAddr *util.TypedSyncMap[string, net.Address]
+	resolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
