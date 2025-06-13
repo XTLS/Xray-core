@@ -24,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 type requestHandler struct {
@@ -32,7 +33,7 @@ type requestHandler struct {
 	path      string
 	ln        *Listener
 	sessionMu *sync.Mutex
-	sessions  sync.Map
+	sessions  *utils.TypedSyncMap[string, *httpSession]
 	localAddr net.Addr
 }
 
@@ -47,18 +48,18 @@ type httpSession struct {
 
 func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	// fast path
-	currentSessionAny, ok := h.sessions.Load(sessionId)
+	currentSession, ok := h.sessions.Load(sessionId)
 	if ok {
-		return currentSessionAny.(*httpSession)
+		return currentSession
 	}
 
 	// slow path
 	h.sessionMu.Lock()
 	defer h.sessionMu.Unlock()
 
-	currentSessionAny, ok = h.sessions.Load(sessionId)
+	currentSession, ok = h.sessions.Load(sessionId)
 	if ok {
-		return currentSessionAny.(*httpSession)
+		return currentSession
 	}
 
 	s := &httpSession{
@@ -361,7 +362,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		path:      l.config.GetNormalizedPath(),
 		ln:        l,
 		sessionMu: &sync.Mutex{},
-		sessions:  sync.Map{},
+		sessions:  utils.NewTypedSyncMap[string, *httpSession](),
 	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
