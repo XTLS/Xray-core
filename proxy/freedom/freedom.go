@@ -387,8 +387,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				} else {
 					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
 					if ip != nil {
-						b.UDP.Address = ip
-						w.resolvedUDPAddr.Store(b.UDP.Address.Domain(), ip)
+						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
 				}
 			}
