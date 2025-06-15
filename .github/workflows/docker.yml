@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Docker image version (e.g., v1.2.3):"
+        description: "Docker image tag:"
         required: true
-      add_latest_tag:
+      latest:
         description: "Set to latest"
         type: boolean
         default: false
@@ -31,7 +31,7 @@ jobs:
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >>${GITHUB_ENV}
           echo "FULL_IMAGE_NAME=ghcr.io/${IMAGE_NAME,,}" >>${GITHUB_ENV}
 
-      - name: Validate and extract version tag
+      - name: Validate and extract tag
         run: |
           SOURCE_TAG="${{ github.event.inputs.tag }}"
           if [[ -z "$SOURCE_TAG" ]]; then
@@ -43,26 +43,21 @@ jobs:
             exit 1
           fi
 
-          if [[ "$SOURCE_TAG" != v* ]]; then
-            echo "Error: Tag '$SOURCE_TAG' must start with 'v'. Aborting."
-            exit 1
+          if [[ "$SOURCE_TAG" =~ ^v[0-9]+\.[0-9] ]]; then
+            IMAGE_TAG="${SOURCE_TAG#v}"
+          else
+            IMAGE_TAG="$SOURCE_TAG"
           fi
 
-          APP_VERSION=${SOURCE_TAG#v}
-          if [[ -z "$APP_VERSION" ]]; then
-            echo "Error: Tag '$SOURCE_TAG' starts with 'v' but has no version number following it."
-            exit 1
-          fi
-
-          echo "Application version: $APP_VERSION"
-          echo "APP_VERSION=$APP_VERSION" >>${GITHUB_ENV}
+          echo "Docker image tag: '$IMAGE_TAG'."
+          echo "IMAGE_TAG=$IMAGE_TAG" >>${GITHUB_ENV}
 
           LATEST=false
-          if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "false" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.add_latest_tag }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "false" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.latest }}" == "true" ]]; then
             LATEST=true
           fi
 
-          echo "Latest: $LATEST"
+          echo "Latest: '$LATEST'."
           echo "LATEST=$LATEST" >>${GITHUB_ENV}
 
       - name: Checkout code
@@ -112,22 +107,22 @@ jobs:
 
       - name: Create manifest list and push
         run: |
-          echo "Creating multi-arch manifest with version tag: ${{ env.FULL_IMAGE_NAME }}:${{ env.APP_VERSION }}"
+          echo "Creating multi-arch manifest with tag: '${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}'."
           docker buildx imagetools create \
-            --tag ${{ env.FULL_IMAGE_NAME }}:${{ env.APP_VERSION }} \
+            --tag ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             ${{ env.FULL_IMAGE_NAME }}@${{ steps.build_main_arches.outputs.digest }} \
             ${{ env.FULL_IMAGE_NAME }}@${{ steps.build_additional_arches.outputs.digest }}
 
           if [[ "${{ env.LATEST }}" == "true" ]]; then
-            echo "Adding 'latest' tag to manifest: ${{ env.FULL_IMAGE_NAME }}:latest"
+            echo "Adding 'latest' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:latest'."
             docker buildx imagetools create \
             --tag ${{ env.FULL_IMAGE_NAME }}:latest \
-            ${{ env.FULL_IMAGE_NAME }}:${{ env.APP_VERSION }}
+            ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.APP_VERSION }}
+          docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
           if [[ "${{ env.LATEST }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:latest
