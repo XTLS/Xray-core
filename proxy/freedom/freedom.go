@@ -238,7 +238,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn, UDPOverride)
+			reader = NewPacketReader(ctx, conn, UDPOverride)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
@@ -273,7 +273,7 @@ func isTLSConn(conn stat.Connection) bool {
 	return false
 }
 
-func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
+func NewPacketReader(ctx context.Context, conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -283,10 +283,17 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok && UDPOverride.Address == nil && UDPOverride.Port == 0 {
+	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+		isAddrChanged := false
+		outbounds := session.OutboundsFromContext(ctx)
+		targetAddr := outbounds[len(outbounds)-1].Target.Address
+		if UDPOverride.Address != nil || UDPOverride.Port != 0 || targetAddr.Family().IsDomain() {
+			isAddrChanged = true
+		}
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
+			IsAddrChanged:     isAddrChanged,
 		}
 	}
 	return &buf.PacketReader{Reader: conn}
@@ -295,6 +302,7 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
 type PacketReader struct {
 	*internet.PacketConnWrapper
 	stats.Counter
+	IsAddrChanged bool
 }
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -306,10 +314,12 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return nil, err
 	}
 	b.Resize(0, int32(n))
-	b.UDP = &net.Destination{
-		Address: net.IPAddress(d.(*net.UDPAddr).IP),
-		Port:    net.Port(d.(*net.UDPAddr).Port),
-		Network: net.Network_UDP,
+	if !r.IsAddrChanged {
+		b.UDP = &net.Destination{
+			Address: net.IPAddress(d.(*net.UDPAddr).IP),
+			Port:    net.Port(d.(*net.UDPAddr).Port),
+			Network: net.Network_UDP,
+		}
 	}
 	if r.Counter != nil {
 		r.Counter.Add(int64(n))
