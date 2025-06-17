@@ -187,6 +187,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				if len(h.blockTypes) > 0 {
 					for _, blocktype := range h.blockTypes {
 						if blocktype == int32(qType) {
+							if h.nonIPQuery == "reject" {
+								go h.rejectNonIPQuery(id, qType, domain, writer)
+							}
 							errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
 							return nil
 						}
@@ -196,6 +199,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 					go h.handleIPQuery(id, qType, domain, writer)
 				}
 				if isIPQuery || h.nonIPQuery == "drop" {
+					b.Release()
+					continue
+				}
+				if h.nonIPQuery == "reject" {
+					go h.rejectNonIPQuery(id, qType, domain, writer)
 					b.Release()
 					continue
 				}
@@ -314,6 +322,38 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 
 	if err := writer.WriteMessage(b); err != nil {
 		errors.LogInfoInner(context.Background(), err, "write IP answer")
+	}
+}
+
+func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
+	b := buf.New()
+	rawBytes := b.Extend(buf.Size)
+	builder := dnsmessage.NewBuilder(rawBytes[:0], dnsmessage.Header{
+		ID:                 id,
+		RCode:              dnsmessage.RCodeRefused,
+		RecursionAvailable: true,
+		RecursionDesired:   true,
+		Response:           true,
+		Authoritative:      true,
+	})
+	builder.EnableCompression()
+	common.Must(builder.StartQuestions())
+	common.Must(builder.Question(dnsmessage.Question{
+		Name:  dnsmessage.MustNewName(domain),
+		Class: dnsmessage.ClassINET,
+		Type:  qType,
+	}))
+
+	msgBytes, err := builder.Finish()
+	if err != nil {
+		errors.LogInfoInner(context.Background(), err, "pack reject message")
+		b.Release()
+		return
+	}
+	b.Resize(0, int32(len(msgBytes)))
+
+	if err := writer.WriteMessage(b); err != nil {
+		errors.LogInfoInner(context.Background(), err, "write reject answer")
 	}
 }
 
