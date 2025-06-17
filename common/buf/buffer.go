@@ -331,6 +331,17 @@ func (b *Buffer) ReadFullFrom(reader io.Reader, size int32) (int64, error) {
 	return int64(n), err
 }
 
+// Clone creates a new Buffer with a copy of the current buffer's contents.
+func (b *Buffer) Clone() *Buffer {
+	if b == nil {
+		return nil
+	}
+	newBuf := NewWithSize(b.Len())
+	copy(newBuf.v, b.Bytes())
+	newBuf.end = int32(len(b.Bytes()))
+	return newBuf
+}
+
 // String returns the string form of this Buffer.
 func (b *Buffer) String() string {
 	return string(b.Bytes())
