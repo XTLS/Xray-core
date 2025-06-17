@@ -30,7 +30,7 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	switch c.NonIPQuery {
 	case "":
 		c.NonIPQuery = "drop"
-	case "drop", "skip":
+	case "drop", "skip", "reject":
 	default:
 		return nil, errors.New(`unknown "nonIPQuery": `, c.NonIPQuery)
 	}
