@@ -24,7 +24,7 @@ RUN mkdir -p /var/log/xray && \
 USER root
 WORKDIR /root
 VOLUME /etc/xray
-ARG TZ=Asia/Shanghai
+ARG TZ=Europe/Samara
 ENV TZ=$TZ
 
 RUN apk add --no-cache tzdata
