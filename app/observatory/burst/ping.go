@@ -2,6 +2,7 @@ package burst
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"time"
 
@@ -51,20 +52,28 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 }
 
 // MeasureDelay returns the delay time of the request to dest
-func (s *pingClient) MeasureDelay() (time.Duration, error) {
+func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if s.httpClient == nil {
 		panic("pingClient not initialized")
 	}
-	req, err := http.NewRequest(http.MethodHead, s.destination, nil)
+
+	req, err := http.NewRequest(httpMethod, s.destination, nil)
 	if err != nil {
 		return rttFailed, err
 	}
+
 	start := time.Now()
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return rttFailed, err
 	}
-	// don't wait for body
+	if httpMethod == http.MethodGet {
+		_, err = io.Copy(io.Discard, resp.Body)
+		if err != nil {
+			return rttFailed, err
+		}
+	}
 	resp.Body.Close()
+
 	return time.Since(start), nil
 }
