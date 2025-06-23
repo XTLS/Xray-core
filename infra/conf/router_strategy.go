@@ -2,6 +2,7 @@ package conf
 
 import (
 	"google.golang.org/protobuf/proto"
+	"strings"
 
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/app/router"
@@ -51,15 +52,23 @@ type healthCheckSettings struct {
 	Interval      duration.Duration `json:"interval"`
 	SamplingCount int               `json:"sampling"`
 	Timeout       duration.Duration `json:"timeout"`
+	HttpMethod    string            `json:"httpMethod"`
 }
 
 func (h healthCheckSettings) Build() (proto.Message, error) {
+	var httpMethod string
+	if h.HttpMethod == "" {
+		httpMethod = "HEAD"
+	} else {
+		httpMethod = strings.TrimSpace(h.HttpMethod)
+	}
 	return &burst.HealthPingConfig{
 		Destination:   h.Destination,
 		Connectivity:  h.Connectivity,
 		Interval:      int64(h.Interval),
 		Timeout:       int64(h.Timeout),
 		SamplingCount: int32(h.SamplingCount),
+		HttpMethod:    httpMethod,
 	}, nil
 }
 
