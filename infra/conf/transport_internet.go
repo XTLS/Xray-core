@@ -544,7 +544,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 				}
 			default:
 				if _, err = strconv.Atoi(s); err == nil {
-					s = "127.0.0.1:" + s
+					s = "localhost:" + s
 				}
 				if _, _, err = net.SplitHostPort(s); err == nil {
 					c.Type = "tcp"
