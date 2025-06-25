@@ -1,36 +1,74 @@
-name: Build docker image
+name: Build and Push Docker Image
 
 on:
   release:
-    types: [published]
+    types:
+      - published
+      - released
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag:"
+        required: true
+      latest:
+        description: "Set to latest"
+        type: boolean
+        default: false
 
 jobs:
-  build-image:
+  build-and-push:
+    if: (github.event.action != 'published') || (github.event.action == 'published' && github.event.release.prerelease == true)
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Set repository and image name to lowercase
+        env:
+          IMAGE_NAME: "${{ github.repository }}"
+        run: |
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >>${GITHUB_ENV}
+          echo "FULL_IMAGE_NAME=ghcr.io/${IMAGE_NAME,,}" >>${GITHUB_ENV}
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/xray-core
-          flavor: latest=auto
-          tags: |
-            type=semver,pattern={{version}}
+      - name: Validate and extract tag
+        run: |
+          SOURCE_TAG="${{ github.event.inputs.tag }}"
+          if [[ -z "$SOURCE_TAG" ]]; then
+            SOURCE_TAG="${{ github.ref_name }}"
+          fi
 
-      - name: Docker metadata (unsupported architectures)
-        id: metausa
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/xray-core
-          flavor: |
-            latest=auto
-            suffix=-usa,onlatest=true
-          tags: |
-            type=semver,pattern={{version}}
+          if [[ -z "$SOURCE_TAG" ]]; then
+            echo "Error: Could not determine a valid tag source. Input tag and context tag (github.ref_name) are both empty."
+            exit 1
+          fi
+
+          if [[ "$SOURCE_TAG" =~ ^v[0-9]+\.[0-9] ]]; then
+            IMAGE_TAG="${SOURCE_TAG#v}"
+          else
+            IMAGE_TAG="$SOURCE_TAG"
+          fi
+
+          echo "Docker image tag: '$IMAGE_TAG'."
+          echo "IMAGE_TAG=$IMAGE_TAG" >>${GITHUB_ENV}
+
+          LATEST=false
+          if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "false" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.latest }}" == "true" ]]; then
+            LATEST=true
+          fi
+
+          echo "Latest: '$LATEST'."
+          echo "LATEST=$LATEST" >>${GITHUB_ENV}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -39,13 +77,12 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
+      - name: Build Docker image (main architectures)
+        id: build_main_arches
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: .github/docker/Dockerfile
           platforms: |
             linux/amd64
             linux/arm/v7
@@ -53,39 +90,41 @@ jobs:
             linux/ppc64le
             linux/s390x
           provenance: false
-          file: .github/docker/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
-      - name: Build and push (unsupported architectures)
+      - name: Build Docker image (additional architectures)
+        id: build_additional_arches
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: .github/docker/Dockerfile.usa
           platforms: |
             linux/386
             linux/arm/v6
             linux/riscv64
             linux/loong64
           provenance: false
-          file: .github/docker/Dockerfile.usa
-          push: true
-          tags: ${{ steps.metausa.outputs.tags }}
+          outputs: type=image,name=${{ env.FULL_IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
-      - name: Merge Multi-Arch Manifests
+      - name: Create manifest list and push
         run: |
-          echo "Starting to merge multi-architecture manifests..."
+          echo "Creating multi-arch manifest with tag: '${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}'."
+          docker buildx imagetools create \
+            --tag ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            ${{ env.FULL_IMAGE_NAME }}@${{ steps.build_main_arches.outputs.digest }} \
+            ${{ env.FULL_IMAGE_NAME }}@${{ steps.build_additional_arches.outputs.digest }}
 
-          # Convert newlines to spaces and split into array
-          TAGS=($(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '))
+          if [[ "${{ env.LATEST }}" == "true" ]]; then
+            echo "Adding 'latest' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:latest'."
+            docker buildx imagetools create \
+            --tag ${{ env.FULL_IMAGE_NAME }}:latest \
+            ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          fi
 
-          echo "Total tags to process: ${#TAGS[@]}"
-          for tag in "${TAGS[@]}"; do
-            echo "Merging tag: $tag with unsupported architectures ($tag-usa)"
-            docker buildx imagetools create --append --tag "$tag" "$tag-usa"
-            if [ $? -ne 0 ]; then
-              echo "Error: Failed to merge $tag-usa into $tag"
-              exit 1
-            fi
-          done
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-          echo "Multi-architecture manifest merge completed successfully."
+          if [[ "${{ env.LATEST }}" == "true" ]]; then
+            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:latest
+          fi
