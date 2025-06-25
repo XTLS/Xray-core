@@ -18,6 +18,7 @@ on:
 
 jobs:
   build-and-push:
+    if: (github.event.action != 'published') || (github.event.action == 'published' && github.event.release.prerelease == true)
     runs-on: ubuntu-latest
     permissions:
       contents: read
