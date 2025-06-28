@@ -398,8 +398,10 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						}
 					}
 					if ShouldUseSystemResolver {
-						udpAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
-						ip = net.IPAddress(udpAddr.IP)
+						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+						if err == nil {
+							ip = net.IPAddress(udpAddr.IP)
+						}
 					}
 					if ip != nil {
 						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
