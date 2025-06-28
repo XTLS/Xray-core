@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
@@ -27,7 +28,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/common/utils"
 )
 
 var useSplice bool
@@ -381,11 +381,26 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.UDPOverride.Port != 0 {
 				b.UDP.Port = w.UDPOverride.Port
 			}
-			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
+			if b.UDP.Address.Family().IsDomain() {
 				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
 					b.UDP.Address = ip
 				} else {
-					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
+					ShouldUseSystemResolver := true
+					if w.Handler.config.hasStrategy() {
+						ip = w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
+						if ip != nil {
+							ShouldUseSystemResolver = false
+						}
+						// drop packet if resolve failed when forceIP
+						if ip == nil && w.Handler.config.forceIP() {
+							b.Release()
+							continue
+						}
+					}
+					if ShouldUseSystemResolver {
+						udpAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+						ip = net.IPAddress(udpAddr.IP)
+					}
 					if ip != nil {
 						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
