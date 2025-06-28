@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
@@ -27,7 +28,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/common/utils"
 )
 
 var useSplice bool
@@ -336,7 +336,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		resolvedUDPAddr := make(map[string]net.Address)
 		if targetAddr.Family().IsDomain() {
 			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			resolvedUDPAddr[targetAddr.String()] = net.ParseAddress(RemoteAddress)
+			resolvedUDPAddr[targetAddr.Domain()] = net.ParseAddress(RemoteAddress)
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
@@ -365,6 +365,46 @@ type PacketWriter struct {
 	resolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
 }
 
+func (w *PacketWriter) getDestAddr(dest *net.Destination) net.Addr {
+	if w.UDPOverride.Address != nil {
+		dest.Address = w.UDPOverride.Address
+	}
+	if w.UDPOverride.Port != 0 {
+		dest.Port = w.UDPOverride.Port
+	}
+	if dest.Address.Family().IsDomain() {
+		if ip, ok := w.resolvedUDPAddr.Load(dest.Address.Domain()); ok {
+			dest.Address = ip
+			return dest.RawNetAddr()
+		}
+		if w.Handler.config.hasStrategy() {
+			ip := w.Handler.resolveIP(w.Context, dest.Address.Domain(), nil)
+			if ip != nil {
+				dest.Address, _ = w.resolvedUDPAddr.LoadOrStore(dest.Address.Domain(), ip)
+				return dest.RawNetAddr()
+			}
+			if ip, ok := w.resolvedUDPAddr.Load(dest.Address.Domain()); ok {
+				dest.Address = ip
+				return dest.RawNetAddr()
+			}
+			if w.Handler.config.forceIP() {
+				return nil
+			}
+		}
+		destAddr, _ := net.ResolveUDPAddr("udp", dest.NetAddr())
+		if destAddr != nil {
+			dest.Address, _ = w.resolvedUDPAddr.LoadOrStore(dest.Address.Domain(), net.IPAddress(destAddr.IP))
+			return dest.RawNetAddr()
+		}
+		if ip, ok := w.resolvedUDPAddr.Load(dest.Address.Domain()); ok {
+			dest.Address = ip
+			return dest.RawNetAddr()
+		}
+		return nil
+	}
+	return dest.RawNetAddr()
+}
+
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for {
 		mb2, b := buf.SplitFirst(mb)
@@ -375,23 +415,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		var n int
 		var err error
 		if b.UDP != nil {
-			if w.UDPOverride.Address != nil {
-				b.UDP.Address = w.UDPOverride.Address
-			}
-			if w.UDPOverride.Port != 0 {
-				b.UDP.Port = w.UDPOverride.Port
-			}
-			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
-				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
-					b.UDP.Address = ip
-				} else {
-					ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
-					if ip != nil {
-						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
-					}
-				}
-			}
-			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+			destAddr := w.getDestAddr(b.UDP)
 			if destAddr == nil {
 				b.Release()
 				continue
