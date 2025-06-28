@@ -399,7 +399,10 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					}
 					if ShouldUseSystemResolver {
 						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
-						if err == nil {
+						if err != nil {
+							b.Release()
+							continue
+						} else {
 							ip = net.IPAddress(udpAddr.IP)
 						}
 					}
