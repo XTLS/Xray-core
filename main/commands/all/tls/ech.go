@@ -1,13 +1,15 @@
 package tls
 
 import (
+	"encoding/base64"
 	"encoding/pem"
 	"os"
 
-	"github.com/OmarTariq612/goech"
-	"github.com/cloudflare/circl/hpke"
+	"github.com/xtls/reality/hpke"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/main/commands/base"
+	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/crypto/cryptobyte"
 )
 
 var cmdECH = &base.Command{
@@ -30,34 +32,37 @@ var input_serverName = cmdECH.Flag.String("serverName", "cloudflare-ech.com", ""
 var input_pem = cmdECH.Flag.Bool("pem", false, "True == turn on pem output")
 
 func executeECH(cmd *base.Command, args []string) {
-	var kem hpke.KEM
+	var kem uint16
 
-	if *input_pqSignatureSchemesEnabled {
-		kem = hpke.KEM_X25519_KYBER768_DRAFT00
-	} else {
-		kem = hpke.KEM_X25519_HKDF_SHA256
-	}
+	// if *input_pqSignatureSchemesEnabled {
+	// 	kem = 0x30 // hpke.KEM_X25519_KYBER768_DRAFT00
+	// } else {
+		kem = hpke.DHKEM_X25519_HKDF_SHA256
+	// }
 
-	echKeySet, err := goech.GenerateECHKeySet(0, *input_serverName, kem, nil)
+	echKeySet, priv, err := tls.GenerateECHKeySet(0, *input_serverName, kem)
 	common.Must(err)
 
-	// Make single key set to a list with only one element
-	ECHConfigList := make(goech.ECHConfigList, 1)
-	ECHConfigList[0] = echKeySet.ECHConfig
-	ECHKeySetList := make(goech.ECHKeySetList, 1)
-	ECHKeySetList[0] = echKeySet
-	configBuffer, _ := ECHConfigList.MarshalBinary()
-	keyBuffer, _ := ECHKeySetList.MarshalBinary()
-	configStr, _ := ECHConfigList.ToBase64()
-	keySetStr, _ := ECHKeySetList.ToBase64()
+	configBytes, _ := tls.MarshalBinary(echKeySet)
+	var b cryptobyte.Builder
+	b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
+		child.AddBytes(configBytes)
+	})
+	configBuffer, _ := b.Bytes()
+	var b2 cryptobyte.Builder
+	b2.AddUint16(uint16(len(priv)))
+	b2.AddBytes(priv)
+	b2.AddUint16(uint16(len(configBytes)))
+	b2.AddBytes(configBytes)
+	keyBuffer, _ := b2.Bytes()
 
-	configPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH CONFIGS", Bytes: configBuffer}))
-	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH KEYS", Bytes: keyBuffer}))
 	if *input_pem {
+		configPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH CONFIGS", Bytes: configBuffer}))
+		keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "ECH KEYS", Bytes: keyBuffer}))
 		os.Stdout.WriteString(configPEM)
 		os.Stdout.WriteString(keyPEM)
 	} else {
-		os.Stdout.WriteString("ECH config list: \n" + configStr + "\n")
-		os.Stdout.WriteString("ECH Key sets: \n" + keySetStr + "\n")
+		os.Stdout.WriteString("ECH config list: \n" + base64.StdEncoding.EncodeToString(configBuffer) + "\n")
+		os.Stdout.WriteString("ECH Key sets: \n" + base64.StdEncoding.EncodeToString(keyBuffer) + "\n")
 	}
 }
