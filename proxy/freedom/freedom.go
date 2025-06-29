@@ -333,10 +333,10 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		// check this behavior and add it to map
 		outbounds := session.OutboundsFromContext(ctx)
 		targetAddr := outbounds[len(outbounds)-1].Target.Address
-		resolvedUDPAddr := make(map[string]net.Address)
+		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
 		if targetAddr.Family().IsDomain() {
 			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			resolvedUDPAddr[targetAddr.String()] = net.ParseAddress(RemoteAddress)
+			resolvedUDPAddr.Store(targetAddr.String(), net.ParseAddress(RemoteAddress))
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
@@ -344,7 +344,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   utils.NewTypedSyncMap[string, net.Address](),
+			resolvedUDPAddr:   resolvedUDPAddr,
 		}
 
 	}
