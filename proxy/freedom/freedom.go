@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
@@ -328,12 +329,22 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		counter = statConn.WriteCounter
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+		// If target is a domain, it will be resolved in dialer
+		// check this behavior and add it to map
+		outbounds := session.OutboundsFromContext(ctx)
+		targetAddr := outbounds[len(outbounds)-1].Target.Address
+		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
+		if targetAddr.Family().IsDomain() {
+			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			resolvedUDPAddr.Store(targetAddr.String(), net.ParseAddress(RemoteAddress))
+		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
 			Context:           ctx,
 			UDPOverride:       UDPOverride,
+			resolvedUDPAddr:   resolvedUDPAddr,
 		}
 
 	}
@@ -346,6 +357,12 @@ type PacketWriter struct {
 	*Handler
 	context.Context
 	UDPOverride net.Destination
+
+	// Dest of udp packets might be a domain, we will resolve them to IP
+	// But resolver will return a random one if the domain has many IPs
+	// Resulting in these packets being sent to many different IPs randomly
+	// So, cache and keep the resolve result
+	resolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -364,10 +381,34 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.UDPOverride.Port != 0 {
 				b.UDP.Port = w.UDPOverride.Port
 			}
-			if w.Handler.config.hasStrategy() && b.UDP.Address.Family().IsDomain() {
-				ip := w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
-				if ip != nil {
+			if b.UDP.Address.Family().IsDomain() {
+				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
 					b.UDP.Address = ip
+				} else {
+					ShouldUseSystemResolver := true
+					if w.Handler.config.hasStrategy() {
+						ip = w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
+						if ip != nil {
+							ShouldUseSystemResolver = false
+						}
+						// drop packet if resolve failed when forceIP
+						if ip == nil && w.Handler.config.forceIP() {
+							b.Release()
+							continue
+						}
+					}
+					if ShouldUseSystemResolver {
+						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+						if err != nil {
+							b.Release()
+							continue
+						} else {
+							ip = net.IPAddress(udpAddr.IP)
+						}
+					}
+					if ip != nil {
+						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
+					}
 				}
 			}
 			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
