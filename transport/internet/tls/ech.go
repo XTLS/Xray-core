@@ -133,7 +133,10 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	if echConfigCache.expire == nil {
 		return echConfigCache.update(domain, server)
 	} else {
-		go echConfigCache.update(domain, server)
+		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
+		if echConfigCache.updateLock.TryLock() {
+			go echConfigCache.update(domain, server)
+		}
 		return *echConfigCache.echConfig.Load(), nil
 	}
 }
