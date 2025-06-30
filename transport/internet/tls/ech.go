@@ -77,8 +77,9 @@ func ApplyECH(c *Config, config *tls.Config) error {
 }
 
 type ECHConfigCache struct {
-	echConfig  atomic.Pointer[[]byte]
-	expire     *time.Time
+	echConfig atomic.Pointer[[]byte]
+	expire    atomic.Pointer[time.Time]
+	// updateLock is not for preventing concurrent read/write, but for preventing concurrent update
 	updateLock sync.Mutex
 }
 
@@ -86,7 +87,7 @@ func (c *ECHConfigCache) update(domain string, server string) ([]byte, error) {
 	c.updateLock.Lock()
 	defer c.updateLock.Unlock()
 	// Double check cache after acquiring lock
-	if c.expire.After(time.Now()) {
+	if c.expire.Load().After(time.Now()) {
 		errors.LogDebug(context.Background(), "Cache hit for domain after double check: ", domain)
 		return *c.echConfig.Load(), nil
 	}
@@ -98,7 +99,7 @@ func (c *ECHConfigCache) update(domain string, server string) ([]byte, error) {
 	}
 	c.echConfig.Store(&echConfig)
 	expire := time.Now().Add(time.Duration(ttl) * time.Second)
-	c.expire = &expire
+	c.expire.Store(&expire)
 	return *c.echConfig.Load(), nil
 }
 
@@ -117,20 +118,21 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	}
 
 	echConfigCache := GlobalECHConfigCache[domain]
-	if echConfigCache != nil && echConfigCache.expire.After(time.Now()) {
+	if echConfigCache == nil {
+		echConfigCache = &ECHConfigCache{}
+		echConfigCache.expire.Store(&time.Time{}) // zero value means initial state
+		GlobalECHConfigCache[domain] = echConfigCache
+	}
+	if echConfigCache != nil && echConfigCache.expire.Load().After(time.Now()) {
 		errors.LogDebug(context.Background(), "Cache hit for domain: ", domain)
 		GlobalECHConfigCacheAccess.Unlock()
 		return *echConfigCache.echConfig.Load(), nil
 	}
-	if echConfigCache == nil {
-		echConfigCache = &ECHConfigCache{}
-		GlobalECHConfigCache[domain] = echConfigCache
-	}
 	GlobalECHConfigCacheAccess.Unlock()
 
-	// If expire is nil, it means we are in initial state, wait for the query to finish
+	// If expire is zero value, it means we are in initial state, wait for the query to finish
 	// otherwise return old value immediately and update in a goroutine
-	if echConfigCache.expire == nil {
+	if *echConfigCache.expire.Load() == (time.Time{}) {
 		return echConfigCache.update(domain, server)
 	} else {
 		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
