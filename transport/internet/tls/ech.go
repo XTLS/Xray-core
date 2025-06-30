@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -76,9 +77,29 @@ func ApplyECH(c *Config, config *tls.Config) error {
 }
 
 type ECHConfigCache struct {
-	echConfig  []byte
-	expire     time.Time
+	echConfig  atomic.Pointer[[]byte]
+	expire     *time.Time
 	updateLock sync.Mutex
+}
+
+func (c *ECHConfigCache) update(domain string, server string) ([]byte, error) {
+	c.updateLock.Lock()
+	defer c.updateLock.Unlock()
+	// Double check cache after acquiring lock
+	if c.expire.After(time.Now()) {
+		errors.LogDebug(context.Background(), "Cache hit for domain after double check: ", domain)
+		return *c.echConfig.Load(), nil
+	}
+	// Query ECH config from DNS server
+	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
+	echConfig, ttl, err := dnsQuery(server, domain)
+	if err != nil {
+		return nil, err
+	}
+	c.echConfig.Store(&echConfig)
+	expire := time.Now().Add(time.Duration(ttl) * time.Second)
+	c.expire = &expire
+	return *c.echConfig.Load(), nil
 }
 
 var (
@@ -99,7 +120,7 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	if echConfigCache != nil && echConfigCache.expire.After(time.Now()) {
 		errors.LogDebug(context.Background(), "Cache hit for domain: ", domain)
 		GlobalECHConfigCacheAccess.Unlock()
-		return echConfigCache.echConfig, nil
+		return *echConfigCache.echConfig.Load(), nil
 	}
 	if echConfigCache == nil {
 		echConfigCache = &ECHConfigCache{}
@@ -107,26 +128,14 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	}
 	GlobalECHConfigCacheAccess.Unlock()
 
-	echConfigCache.updateLock.Lock()
-	defer echConfigCache.updateLock.Unlock()
-	// Double check cache after acquiring lock
-	if echConfigCache.expire.After(time.Now()) {
-		errors.LogDebug(context.Background(), "Cache hit for domain after double check: ", domain)
-		return echConfigCache.echConfig, nil
+	// If expire is nil, it means we are in initial state, wait for the query to finish
+	// otherwise return old value immediately and update in a goroutine
+	if echConfigCache.expire == nil {
+		return echConfigCache.update(domain, server)
+	} else {
+		go echConfigCache.update(domain, server)
+		return *echConfigCache.echConfig.Load(), nil
 	}
-	// Query ECH config from DNS server
-	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
-	echConfig, ttl, err := dnsQuery(server, domain)
-	if err != nil {
-		return nil, err
-	}
-	// Set minimum TTL to 600 seconds
-	if ttl < 600 {
-		ttl = 600
-	}
-	echConfigCache.echConfig = echConfig
-	echConfigCache.expire = time.Now().Add(time.Second * time.Duration(ttl))
-	return echConfigCache.echConfig, nil
 }
 
 // dnsQuery is the real func for sending type65 query for given domain to given DNS server.
