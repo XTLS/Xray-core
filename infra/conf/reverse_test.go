@@ -23,7 +23,7 @@ func TestReverseConfig(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &reverse.Config{
 				BridgeConfig: []*reverse.BridgeConfig{
-					{Tag: "test", Domain: "test.example.com"},
+					{Tag: "test", Domain: "test.example.com", MaxConcurrency: 16},
 				},
 			},
 		},
