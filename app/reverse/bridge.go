@@ -17,11 +17,13 @@ import (
 
 // Bridge is a component in reverse proxy, that relays connections from Portal to local address.
 type Bridge struct {
-	dispatcher  routing.Dispatcher
-	tag         string
-	domain      string
-	workers     []*BridgeWorker
-	monitorTask *task.Periodic
+	dispatcher     routing.Dispatcher
+	tag            string
+	domain         string
+	workers        []*BridgeWorker
+	monitorTask    *task.Periodic
+	maxConcurrency uint32
+	maxConnections uint32
 }
 
 // NewBridge creates a new Bridge instance.
@@ -34,9 +36,11 @@ func NewBridge(config *BridgeConfig, dispatcher routing.Dispatcher) (*Bridge, er
 	}
 
 	b := &Bridge{
-		dispatcher: dispatcher,
-		tag:        config.Tag,
-		domain:     config.Domain,
+		dispatcher:     dispatcher,
+		tag:            config.Tag,
+		domain:         config.Domain,
+		maxConcurrency: config.MaxConcurrency,
+		maxConnections: config.MaxConnections,
 	}
 	b.monitorTask = &task.Periodic{
 		Execute:  b.monitor,
@@ -72,7 +76,7 @@ func (b *Bridge) monitor() error {
 		}
 	}
 
-	if numWorker == 0 || numConnections/numWorker > 16 {
+	if numWorker == 0 || numWorker < b.maxConnections || (b.maxConcurrency > 0 && numConnections/numWorker > b.maxConcurrency) {
 		worker, err := NewBridgeWorker(b.domain, b.tag, b.dispatcher)
 		if err != nil {
 			errors.LogWarningInner(context.Background(), err, "failed to create bridge worker")

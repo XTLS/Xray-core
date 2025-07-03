@@ -19,6 +19,8 @@ message Control {
 message BridgeConfig {
   string tag = 1;
   string domain = 2;
+  uint32 maxConcurrency = 3;
+  uint32 maxConnections = 4;
 }
 
 message PortalConfig {

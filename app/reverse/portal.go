@@ -211,6 +211,7 @@ type PortalWorker struct {
 	writer   buf.Writer
 	reader   buf.Reader
 	draining bool
+	counter  uint32
 }
 
 func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
@@ -266,10 +267,14 @@ func (w *PortalWorker) heartbeat() error {
 		}()
 	}
 
-	b, err := proto.Marshal(msg)
-	common.Must(err)
-	mb := buf.MergeBytes(nil, b)
-	return w.writer.WriteMultiBuffer(mb)
+	w.counter = (w.counter + 1) % 5
+	if w.draining || w.counter == 1 {
+		b, err := proto.Marshal(msg)
+		common.Must(err)
+		mb := buf.MergeBytes(nil, b)
+		return w.writer.WriteMultiBuffer(mb)
+	}
+	return nil
 }
 
 func (w *PortalWorker) IsFull() bool {

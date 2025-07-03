@@ -2,18 +2,29 @@ package conf
 
 import (
 	"github.com/xtls/xray-core/app/reverse"
+	"github.com/xtls/xray-core/common/errors"
 	"google.golang.org/protobuf/proto"
 )
 
 type BridgeConfig struct {
-	Tag    string `json:"tag"`
-	Domain string `json:"domain"`
+	Tag            string `json:"tag"`
+	Domain         string `json:"domain"`
+	MaxConcurrency uint32 `json:"maxConcurrency"`
+	MaxConnections uint32 `json:"maxConnections"`
 }
 
 func (c *BridgeConfig) Build() (*reverse.BridgeConfig, error) {
+	if c.MaxConnections > 0 && c.MaxConcurrency > 0 {
+		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
+	}
+	if c.MaxConnections == 0 && c.MaxConcurrency == 0 {
+		c.MaxConcurrency = 16
+	}
 	return &reverse.BridgeConfig{
-		Tag:    c.Tag,
-		Domain: c.Domain,
+		Tag:            c.Tag,
+		Domain:         c.Domain,
+		MaxConcurrency: c.MaxConcurrency,
+		MaxConnections: c.MaxConnections,
 	}, nil
 }
 
