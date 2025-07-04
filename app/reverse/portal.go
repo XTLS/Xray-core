@@ -259,6 +259,7 @@ func (w *PortalWorker) heartbeat() error {
 	if w.client.TotalConnections() > 256 {
 		w.draining = true
 		msg.State = Control_DRAIN
+		errors.LogError(context.Background(), "more than 256 connection in a worker, worker is closed")
 
 		defer func() {
 			common.Close(w.writer)
