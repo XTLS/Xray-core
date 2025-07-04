@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"reflect"
+	"unsafe"
 
 	"github.com/xtls/xray-core/main/commands/base"
 	. "github.com/xtls/xray-core/transport/internet/tls"
@@ -65,7 +67,7 @@ func executePing(cmd *base.Command, args []string) {
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"http/1.1"},
-			MaxVersion:         gotls.VersionTLS12,
+			MaxVersion:         gotls.VersionTLS13,
 			MinVersion:         gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
 			// VerifyPeerCertificate: showCert(),
@@ -75,6 +77,7 @@ func executePing(cmd *base.Command, args []string) {
 			fmt.Println("Handshake failure: ", err)
 		} else {
 			fmt.Println("Handshake succeeded")
+			printTLSConnDetail(tlsConn)
 			printCertificates(tlsConn.ConnectionState().PeerCertificates)
 		}
 		tlsConn.Close()
@@ -90,7 +93,7 @@ func executePing(cmd *base.Command, args []string) {
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			ServerName: domain,
 			NextProtos: []string{"http/1.1"},
-			MaxVersion: gotls.VersionTLS12,
+			MaxVersion: gotls.VersionTLS13,
 			MinVersion: gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
 			// VerifyPeerCertificate: showCert(),
@@ -100,6 +103,7 @@ func executePing(cmd *base.Command, args []string) {
 			fmt.Println("handshake failure: ", err)
 		} else {
 			fmt.Println("handshake succeeded")
+			printTLSConnDetail(tlsConn)
 			printCertificates(tlsConn.ConnectionState().PeerCertificates)
 		}
 		tlsConn.Close()
@@ -114,6 +118,24 @@ func printCertificates(certs []*x509.Certificate) {
 			continue
 		}
 		fmt.Println("Allowed domains: ", cert.DNSNames)
+	}
+}
+
+func printTLSConnDetail(tlsConn *gotls.Conn) {
+	var tlsVersion string
+	if tlsConn.ConnectionState().Version == gotls.VersionTLS13 {
+		tlsVersion = "TLS 1.3"
+	} else if tlsConn.ConnectionState().Version == gotls.VersionTLS12 {
+		tlsVersion = "TLS 1.2"
+	}
+	fmt.Println("TLS Version:", tlsVersion)
+	p, _ := reflect.TypeOf(tlsConn).Elem().FieldByName("curveID")
+	curveID := (*gotls.CurveID)(unsafe.Pointer(uintptr(unsafe.Pointer(tlsConn)) + p.Offset))
+	if curveID != nil {
+		PostQuantum := (*curveID == gotls.X25519MLKEM768)
+		fmt.Println("Post-Quantum key exchange:", PostQuantum, "("+curveID.String()+")")
+	} else {
+		fmt.Println("Post-Quantum key exchange: false (RSA Exchange)")
 	}
 }
 
