@@ -174,6 +174,7 @@ type ClientWorker struct {
 	link           transport.Link
 	done           *done.Instance
 	strategy       ClientStrategy
+	access         sync.Mutex
 }
 
 var (
@@ -289,7 +290,9 @@ func (m *ClientWorker) IsFull() bool {
 }
 
 func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool {
-	if m.IsFull() || m.Closed() {
+	m.access.Lock()
+	defer m.access.Unlock()
+	if m.IsFull() {
 		return false
 	}
 
