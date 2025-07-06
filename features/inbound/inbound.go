@@ -40,6 +40,9 @@ type Manager interface {
 
 	// ListHandlers returns a list of inbound.Handler.
 	ListHandlers(ctx context.Context) []Handler
+
+	// ListTags returns a list of inbound from Manager.
+	ListTags(ctx context.Context) []string
 }
 
 // ManagerType returns the type of Manager interface. Can be used for implementing common.HasType.

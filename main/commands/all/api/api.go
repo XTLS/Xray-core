@@ -19,6 +19,7 @@ var CmdAPI = &base.Command{
 		cmdBalancerOverride,
 		cmdAddInbounds,
 		cmdAddOutbounds,
+		cmdListTags,
 		cmdRemoveInbounds,
 		cmdRemoveOutbounds,
 		cmdListInbounds,
