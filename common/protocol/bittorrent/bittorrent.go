@@ -1,6 +1,7 @@
 package bittorrent
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"math"
@@ -22,12 +23,14 @@ func (h *SniffHeader) Domain() string {
 
 var errNotBittorrent = errors.New("not bittorrent header")
 
+var btPrefix = []byte("BitTorrent protocol")
+
 func SniffBittorrent(b []byte) (*SniffHeader, error) {
-	if len(b) < 20 {
+	if len(b) < 1+len(btPrefix) {
 		return nil, common.ErrNoClue
 	}
 
-	if b[0] == 19 && string(b[1:20]) == "BitTorrent protocol" {
+	if b[0] == byte(len(btPrefix)) && bytes.HasPrefix(b[1:], btPrefix) {
 		return &SniffHeader{}, nil
 	}
 
