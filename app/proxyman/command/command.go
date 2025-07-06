@@ -115,11 +115,7 @@ func (s *handlerServer) ListInbounds(ctx context.Context, request *ListInboundsR
 
 func (s *handlerServer) ListTags(ctx context.Context, request *ListTagsRequest) (*ListTagsResponse, error) {
 	inbounds := s.ihm.ListTags(ctx)
-	response := &ListTagsResponse{}
-	for _, tag := range inbounds {
-		response.Tags = append(response.Tags, tag)
-	}
-	return response, nil
+	return &ListTagsResponse{Tags: inbounds}, nil
 }
 
 func (s *handlerServer) GetInboundUsers(ctx context.Context, request *GetInboundUserRequest) (*GetInboundUserResponse, error) {
