@@ -2,7 +2,6 @@ package inbound
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,7 +61,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer func() {
 		if err := conn.Close(); err != nil {
-			slog.Error("conn.Close() failed: %v", err)
+			errors.LogError(ctx, "conn.Close() failed: %v", err)
 		}
 	}()
 	defer cancel()
