@@ -104,19 +104,6 @@ func (m *Manager) ListHandlers(ctx context.Context) []inbound.Handler {
 	return response
 }
 
-// ListTags returns a list of inbound from Manager.
-func (m *Manager) ListTags(ctx context.Context) []string {
-	m.access.RLock()
-	defer m.access.RUnlock()
-
-	var response []string
-	for _, v := range m.taggedHandlers {
-		response = append(response, v.Tag())
-	}
-
-	return response
-}
-
 // Start implements common.Runnable.
 func (m *Manager) Start() error {
 	m.access.Lock()

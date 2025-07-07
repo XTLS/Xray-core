@@ -37,16 +37,12 @@ message AlterInboundRequest {
 
 message AlterInboundResponse {}
 
-message ListInboundsRequest {}
+message ListInboundsRequest {
+  bool isOnlyTags = 1;
+}
 
 message ListInboundsResponse {
   repeated core.InboundHandlerConfig inbounds = 1;
-}
-
-message ListTagsRequest {}
-
-message ListTagsResponse {
-  repeated string tags = 1;
 }
 
 message GetInboundUserRequest {
@@ -95,8 +91,6 @@ service HandlerService {
   rpc AlterInbound(AlterInboundRequest) returns (AlterInboundResponse) {}
 
   rpc ListInbounds(ListInboundsRequest) returns (ListInboundsResponse) {}
-
-  rpc ListTags(ListTagsRequest) returns (ListTagsResponse) {}
 
   rpc GetInboundUsers(GetInboundUserRequest) returns (GetInboundUserResponse) {}
 

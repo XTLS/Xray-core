@@ -23,7 +23,6 @@ const (
 	HandlerService_RemoveInbound_FullMethodName        = "/xray.app.proxyman.command.HandlerService/RemoveInbound"
 	HandlerService_AlterInbound_FullMethodName         = "/xray.app.proxyman.command.HandlerService/AlterInbound"
 	HandlerService_ListInbounds_FullMethodName         = "/xray.app.proxyman.command.HandlerService/ListInbounds"
-	HandlerService_ListTags_FullMethodName             = "/xray.app.proxyman.command.HandlerService/ListTags"
 	HandlerService_GetInboundUsers_FullMethodName      = "/xray.app.proxyman.command.HandlerService/GetInboundUsers"
 	HandlerService_GetInboundUsersCount_FullMethodName = "/xray.app.proxyman.command.HandlerService/GetInboundUsersCount"
 	HandlerService_AddOutbound_FullMethodName          = "/xray.app.proxyman.command.HandlerService/AddOutbound"
@@ -40,7 +39,6 @@ type HandlerServiceClient interface {
 	RemoveInbound(ctx context.Context, in *RemoveInboundRequest, opts ...grpc.CallOption) (*RemoveInboundResponse, error)
 	AlterInbound(ctx context.Context, in *AlterInboundRequest, opts ...grpc.CallOption) (*AlterInboundResponse, error)
 	ListInbounds(ctx context.Context, in *ListInboundsRequest, opts ...grpc.CallOption) (*ListInboundsResponse, error)
-	ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error)
 	GetInboundUsers(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(ctx context.Context, in *GetInboundUserRequest, opts ...grpc.CallOption) (*GetInboundUsersCountResponse, error)
 	AddOutbound(ctx context.Context, in *AddOutboundRequest, opts ...grpc.CallOption) (*AddOutboundResponse, error)
@@ -91,16 +89,6 @@ func (c *handlerServiceClient) ListInbounds(ctx context.Context, in *ListInbound
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListInboundsResponse)
 	err := c.cc.Invoke(ctx, HandlerService_ListInbounds_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *handlerServiceClient) ListTags(ctx context.Context, in *ListTagsRequest, opts ...grpc.CallOption) (*ListTagsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListTagsResponse)
-	err := c.cc.Invoke(ctx, HandlerService_ListTags_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +163,6 @@ type HandlerServiceServer interface {
 	RemoveInbound(context.Context, *RemoveInboundRequest) (*RemoveInboundResponse, error)
 	AlterInbound(context.Context, *AlterInboundRequest) (*AlterInboundResponse, error)
 	ListInbounds(context.Context, *ListInboundsRequest) (*ListInboundsResponse, error)
-	ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error)
 	GetInboundUsers(context.Context, *GetInboundUserRequest) (*GetInboundUserResponse, error)
 	GetInboundUsersCount(context.Context, *GetInboundUserRequest) (*GetInboundUsersCountResponse, error)
 	AddOutbound(context.Context, *AddOutboundRequest) (*AddOutboundResponse, error)
@@ -203,9 +190,6 @@ func (UnimplementedHandlerServiceServer) AlterInbound(context.Context, *AlterInb
 }
 func (UnimplementedHandlerServiceServer) ListInbounds(context.Context, *ListInboundsRequest) (*ListInboundsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInbounds not implemented")
-}
-func (UnimplementedHandlerServiceServer) ListTags(context.Context, *ListTagsRequest) (*ListTagsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListTags not implemented")
 }
 func (UnimplementedHandlerServiceServer) GetInboundUsers(context.Context, *GetInboundUserRequest) (*GetInboundUserResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInboundUsers not implemented")
@@ -314,24 +298,6 @@ func _HandlerService_ListInbounds_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HandlerServiceServer).ListInbounds(ctx, req.(*ListInboundsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _HandlerService_ListTags_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListTagsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HandlerServiceServer).ListTags(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HandlerService_ListTags_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HandlerServiceServer).ListTags(ctx, req.(*ListTagsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -466,10 +432,6 @@ var HandlerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListInbounds",
 			Handler:    _HandlerService_ListInbounds_Handler,
-		},
-		{
-			MethodName: "ListTags",
-			Handler:    _HandlerService_ListTags_Handler,
 		},
 		{
 			MethodName: "GetInboundUsers",
