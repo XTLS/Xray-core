@@ -2,6 +2,7 @@ package inbound
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,6 +60,13 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 
 func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("conn.Close() failed: %v", err)
+		}
+	}()
+	defer cancel()
+
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
 
@@ -109,8 +117,6 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	if err := w.proxy.Process(ctx, net.Network_TCP, conn, w.dispatcher); err != nil {
 		errors.LogInfoInner(ctx, err, "connection ends")
 	}
-	cancel()
-	conn.Close()
 }
 
 func (w *tcpWorker) Proxy() proxy.Inbound {
