@@ -76,7 +76,7 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 			return errors.New("failed to create mux client worker").Base(err).AtWarning()
 		}
 
-		worker, err := NewPortalWorker(muxClient, p.picker)
+		worker, err := NewPortalWorker(muxClient)
 		if err != nil {
 			return errors.New("failed to create portal worker").Base(err)
 		}
@@ -206,16 +206,15 @@ func (p *StaticMuxPicker) AddWorker(worker *PortalWorker) {
 }
 
 type PortalWorker struct {
-	client       *mux.ClientWorker
-	control      *task.Periodic
-	writer       buf.Writer
-	reader       buf.Reader
-	draining     bool
-	counter      uint32
-	parentPicker *StaticMuxPicker
+	client   *mux.ClientWorker
+	control  *task.Periodic
+	writer   buf.Writer
+	reader   buf.Reader
+	draining bool
+	counter  uint32
 }
 
-func NewPortalWorker(client *mux.ClientWorker, picker *StaticMuxPicker) (*PortalWorker, error) {
+func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
 	uplinkReader, uplinkWriter := pipe.New(opt...)
 	downlinkReader, downlinkWriter := pipe.New(opt...)
@@ -233,10 +232,9 @@ func NewPortalWorker(client *mux.ClientWorker, picker *StaticMuxPicker) (*Portal
 		return nil, errors.New("unable to dispatch control connection")
 	}
 	w := &PortalWorker{
-		client:       client,
-		reader:       downlinkReader,
-		writer:       uplinkWriter,
-		parentPicker: picker,
+		client: client,
+		reader: downlinkReader,
+		writer: uplinkWriter,
 	}
 	w.control = &task.Periodic{
 		Execute:  w.heartbeat,
@@ -251,18 +249,23 @@ func (w *PortalWorker) heartbeat() error {
 		return errors.New("client worker stopped")
 	}
 
-	if w.writer == nil {
+	if w.draining || w.writer == nil {
 		return errors.New("already disposed")
 	}
 
 	msg := &Control{}
 	msg.FillInRandom()
 
-	if w.draining || w.client.TotalConnections() > 256 {
+	if w.client.TotalConnections() > 256 {
 		w.draining = true
 		msg.State = Control_DRAIN
 
-		defer w.tryCloseHeartbeat()
+		defer func() {
+			w.client.GetTimer().Reset(time.Second * 16)
+			common.Close(w.writer)
+			common.Interrupt(w.reader)
+			w.writer = nil
+		}()
 	}
 
 	w.counter = (w.counter + 1) % 5
@@ -281,21 +284,4 @@ func (w *PortalWorker) IsFull() bool {
 
 func (w *PortalWorker) Closed() bool {
 	return w.client.Closed()
-}
-
-func (w *PortalWorker) tryCloseHeartbeat() {
-	w.parentPicker.access.Lock()
-	closeable := false
-	for _, wo := range w.parentPicker.workers {
-		if wo != w && !wo.IsFull() && !wo.draining && wo.writer != nil {
-			closeable = true
-			break
-		}
-	}
-	w.parentPicker.access.Unlock()
-	if closeable {
-		common.Close(w.writer)
-		common.Interrupt(w.reader)
-		w.writer = nil
-	}
 }
