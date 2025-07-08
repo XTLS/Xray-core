@@ -296,7 +296,7 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	}
 
 	sm := m.sessionManager
-	s := sm.Allocate(int(m.strategy.MaxConcurrency))
+	s := sm.Allocate(m.strategy)
 	if s == nil {
 		return false
 	}
