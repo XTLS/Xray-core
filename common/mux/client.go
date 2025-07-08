@@ -334,9 +334,13 @@ func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 
 	rr := s.NewReader(reader, &meta.Target)
 	err := buf.Copy(rr, s.output)
+	if err != nil {
+		s.Close(false)
+	}
 	if err != nil && buf.IsWriteError(err) {
 		errors.LogInfoInner(context.Background(), err, "failed to write to downstream. closing session ", s.ID)
-		s.Close(false)
+		closingWriter := NewResponseWriter(s.ID, m.link.Writer, protocol.TransferTypeStream)
+		closingWriter.Close()
 		return buf.Copy(rr, buf.Discard)
 	}
 
