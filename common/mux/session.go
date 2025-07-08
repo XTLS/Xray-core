@@ -50,11 +50,11 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate() *Session {
+func (m *SessionManager) Allocate(MaxConcurrency int) *Session {
 	m.Lock()
 	defer m.Unlock()
 
-	if m.closed {
+	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) {
 		return nil
 	}
 
