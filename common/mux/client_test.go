@@ -1,116 +1,51 @@
 package mux_test
 
 import (
-	"context"
 	"testing"
-	"time"
 
-	"github.com/golang/mock/gomock"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/testing/mocks"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/pipe"
+	. "github.com/xtls/xray-core/common/mux"
 )
 
-func TestIncrementalPickerFailure(t *testing.T) {
-	mockCtl := gomock.NewController(t)
-	defer mockCtl.Finish()
+func TestSessionManagerAdd(t *testing.T) {
+	m := NewSessionManager()
 
-	mockWorkerFactory := mocks.NewMuxClientWorkerFactory(mockCtl)
-	mockWorkerFactory.EXPECT().Create().Return(nil, errors.New("test"))
-
-	picker := mux.IncrementalWorkerPicker{
-		Factory: mockWorkerFactory,
+	s := m.Allocate(0)
+	if s.ID != 1 {
+		t.Error("id: ", s.ID)
+	}
+	if m.Size() != 1 {
+		t.Error("size: ", m.Size())
 	}
 
-	_, err := picker.PickAvailable()
-	if err == nil {
-		t.Error("expected error, but nil")
+	s = m.Allocate(0)
+	if s.ID != 2 {
+		t.Error("id: ", s.ID)
+	}
+	if m.Size() != 2 {
+		t.Error("size: ", m.Size())
+	}
+
+	s = &Session{
+		ID: 4,
+	}
+	m.Add(s)
+	if s.ID != 4 {
+		t.Error("id: ", s.ID)
+	}
+	if m.Size() != 3 {
+		t.Error("size: ", m.Size())
 	}
 }
 
-func TestClientWorkerEOF(t *testing.T) {
-	reader, writer := pipe.New(pipe.WithoutSizeLimit())
-	common.Must(writer.Close())
+func TestSessionManagerClose(t *testing.T) {
+	m := NewSessionManager()
+	s := m.Allocate(0)
 
-	worker, err := mux.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, mux.ClientStrategy{})
-	common.Must(err)
-
-	time.Sleep(time.Millisecond * 500)
-
-	f := worker.Dispatch(context.Background(), nil)
-	if f {
-		t.Error("expected failed dispatching, but actually not")
+	if m.CloseIfNoSession() {
+		t.Error("able to close")
 	}
-}
-
-func TestClientWorkerClose(t *testing.T) {
-	mockCtl := gomock.NewController(t)
-	defer mockCtl.Finish()
-
-	r1, w1 := pipe.New(pipe.WithoutSizeLimit())
-	worker1, err := mux.NewClientWorker(transport.Link{
-		Reader: r1,
-		Writer: w1,
-	}, mux.ClientStrategy{
-		MaxConcurrency: 4,
-		MaxConnection:  4,
-	})
-	common.Must(err)
-
-	r2, w2 := pipe.New(pipe.WithoutSizeLimit())
-	worker2, err := mux.NewClientWorker(transport.Link{
-		Reader: r2,
-		Writer: w2,
-	}, mux.ClientStrategy{
-		MaxConcurrency: 4,
-		MaxConnection:  4,
-	})
-	common.Must(err)
-
-	factory := mocks.NewMuxClientWorkerFactory(mockCtl)
-	gomock.InOrder(
-		factory.EXPECT().Create().Return(worker1, nil),
-		factory.EXPECT().Create().Return(worker2, nil),
-	)
-
-	picker := &mux.IncrementalWorkerPicker{
-		Factory: factory,
+	m.Remove(false, s.ID)
+	if !m.CloseIfNoSession() {
+		t.Error("not able to close")
 	}
-	manager := &mux.ClientManager{
-		Picker: picker,
-	}
-
-	tr1, tw1 := pipe.New(pipe.WithoutSizeLimit())
-	ctx1 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	}})
-	common.Must(manager.Dispatch(ctx1, &transport.Link{
-		Reader: tr1,
-		Writer: tw1,
-	}))
-	defer tw1.Close()
-
-	common.Must(w1.Close())
-
-	time.Sleep(time.Millisecond * 500)
-	if !worker1.Closed() {
-		t.Error("worker1 is not finished")
-	}
-
-	tr2, tw2 := pipe.New(pipe.WithoutSizeLimit())
-	ctx2 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	}})
-	common.Must(manager.Dispatch(ctx2, &transport.Link{
-		Reader: tr2,
-		Writer: tw2,
-	}))
-	defer tw2.Close()
-
-	common.Must(w2.Close())
 }
