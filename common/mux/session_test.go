@@ -9,7 +9,7 @@ import (
 func TestSessionManagerAdd(t *testing.T) {
 	m := NewSessionManager()
 
-	s := m.Allocate(0)
+	s := m.Allocate(ClientStrategy{})
 	if s.ID != 1 {
 		t.Error("id: ", s.ID)
 	}
@@ -17,7 +17,7 @@ func TestSessionManagerAdd(t *testing.T) {
 		t.Error("size: ", m.Size())
 	}
 
-	s = m.Allocate(0)
+	s = m.Allocate(ClientStrategy{})
 	if s.ID != 2 {
 		t.Error("id: ", s.ID)
 	}
@@ -39,7 +39,7 @@ func TestSessionManagerAdd(t *testing.T) {
 
 func TestSessionManagerClose(t *testing.T) {
 	m := NewSessionManager()
-	s := m.Allocate(0)
+	s := m.Allocate(ClientStrategy{})
 
 	if m.CloseIfNoSession() {
 		t.Error("able to close")
