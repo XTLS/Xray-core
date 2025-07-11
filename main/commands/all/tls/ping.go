@@ -129,10 +129,9 @@ func printTLSConnDetail(tlsConn *gotls.Conn) {
 		tlsVersion = "TLS 1.2"
 	}
 	fmt.Println("TLS Version:", tlsVersion)
-	p, _ := reflect.TypeOf(tlsConn).Elem().FieldByName("curveID")
-	curveID := (*gotls.CurveID)(unsafe.Pointer(uintptr(unsafe.Pointer(tlsConn)) + p.Offset))
-	if curveID != nil {
-		PostQuantum := (*curveID == gotls.X25519MLKEM768)
+	curveID := *(*gotls.CurveID)(unsafe.Pointer(reflect.ValueOf(tlsConn).Elem().FieldByName("curveID").UnsafeAddr()))
+	if curveID != 0 {
+		PostQuantum := (curveID == gotls.X25519MLKEM768)
 		fmt.Println("Post-Quantum key exchange:", PostQuantum, "("+curveID.String()+")")
 	} else {
 		fmt.Println("Post-Quantum key exchange: false (RSA Exchange)")
