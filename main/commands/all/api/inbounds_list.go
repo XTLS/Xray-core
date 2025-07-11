@@ -7,7 +7,7 @@ import (
 
 var cmdListInbounds = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api lsi [--server=127.0.0.1:8080]",
+	UsageLine:   "{{.Exec}} api lsi [--server=127.0.0.1:8080] [--isOnlyTags=true]",
 	Short:       "List inbounds",
 	Long: `
 List inbounds in Xray.
@@ -29,14 +29,17 @@ Example:
 
 func executeListInbounds(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
+	var isOnlyTagsStr string
+	cmd.Flag.StringVar(&isOnlyTagsStr, "isOnlyTags", "", "")
 	cmd.Flag.Parse(args)
+	isOnlyTags := isOnlyTagsStr == "true"
 
 	conn, ctx, close := dialAPIServer()
 	defer close()
 
 	client := handlerService.NewHandlerServiceClient(conn)
 
-	resp, err := client.ListInbounds(ctx, &handlerService.ListInboundsRequest{})
+	resp, err := client.ListInbounds(ctx, &handlerService.ListInboundsRequest{IsOnlyTags: isOnlyTags})
 	if err != nil {
 		base.Fatalf("failed to list inbounds: %s", err)
 	}

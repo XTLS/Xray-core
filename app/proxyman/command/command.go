@@ -103,13 +103,22 @@ func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundR
 func (s *handlerServer) ListInbounds(ctx context.Context, request *ListInboundsRequest) (*ListInboundsResponse, error) {
 	handlers := s.ihm.ListHandlers(ctx)
 	response := &ListInboundsResponse{}
-	for _, handler := range handlers {
-		response.Inbounds = append(response.Inbounds, &core.InboundHandlerConfig{
-			Tag:              handler.Tag(),
-			ReceiverSettings: handler.ReceiverSettings(),
-			ProxySettings:    handler.ProxySettings(),
-		})
+	if request.GetIsOnlyTags() {
+		for _, handler := range handlers {
+			response.Inbounds = append(response.Inbounds, &core.InboundHandlerConfig{
+				Tag: handler.Tag(),
+			})
+		}
+	} else {
+		for _, handler := range handlers {
+			response.Inbounds = append(response.Inbounds, &core.InboundHandlerConfig{
+				Tag:              handler.Tag(),
+				ReceiverSettings: handler.ReceiverSettings(),
+				ProxySettings:    handler.ProxySettings(),
+			})
+		}
 	}
+
 	return response, nil
 }
 
