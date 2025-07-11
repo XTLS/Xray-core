@@ -3,6 +3,7 @@ module github.com/xtls/xray-core
 go 1.24
 
 require (
+	github.com/cloudflare/circl v1.6.1
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.7.0
@@ -18,14 +19,14 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/vishvananda/netlink v1.3.1
-	github.com/xtls/reality v0.0.0-20250527000105-e679ef7bb130
+	github.com/xtls/reality v0.0.0-20250725142056-5b52a03d4fb7
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.40.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.34.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
-	google.golang.org/grpc v1.72.1
+	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.6
 	gvisor.dev/gvisor v0.0.0-20250428193742-2d800c3129d5
 	h12.io/socks v1.0.3
@@ -33,8 +34,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
 	github.com/google/btree v1.1.2 // indirect
