@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strconv"
 	"unsafe"
 
 	"github.com/xtls/xray-core/main/commands/base"
@@ -38,8 +39,13 @@ func executePing(cmd *base.Command, args []string) {
 		base.Fatalf("domain not specified")
 	}
 
-	domain := cmdPing.Flag.Arg(0)
-	fmt.Println("Tls ping: ", domain)
+	domainWithPort := cmdPing.Flag.Arg(0)
+	fmt.Println("Tls ping: ", domainWithPort)
+	TargetPort := 443
+	domain, port, err := net.SplitHostPort(domainWithPort)
+	if err == nil {
+		TargetPort, _ = strconv.Atoi(port)
+	}
 
 	var ip net.IP
 	if len(*pingIPStr) > 0 {
@@ -60,7 +66,7 @@ func executePing(cmd *base.Command, args []string) {
 	fmt.Println("-------------------")
 	fmt.Println("Pinging without SNI")
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: 443})
+		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
