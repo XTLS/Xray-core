@@ -1,0 +1,26 @@
+# Binaries and build artifacts
+*.exe
+*.out
+*.test
+*.tmp
+
+# Go build/cache directories
+/bin
+/pkg
+/vendor
+*.log
+*.cache
+coverage.*
+
+# VCS and config noise
+.git
+.gitignore
+.dockerignore
+*.swp
+*.swo
+*.DS_Store
+.idea/
+.vscode/
+
+# Docker artifacts
+Dockerfile*
