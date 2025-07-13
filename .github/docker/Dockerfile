@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:latest
 FROM --platform=$BUILDPLATFORM golang:latest AS build
 
-
 LABEL org.opencontainers.image.source="https://github.com/XTLS/Xray-core" \
       org.opencontainers.image.licenses="MPL-2.0" \
       org.opencontainers.image.title="xray-core"
