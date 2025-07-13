@@ -1,12 +1,21 @@
 # syntax=docker/dockerfile:latest
 FROM --platform=$BUILDPLATFORM golang:latest AS build
 
+
+LABEL org.opencontainers.image.source="https://github.com/XTLS/Xray-core" \
+      org.opencontainers.image.licenses="MPL-2.0" \
+      org.opencontainers.image.title="xray-core"
+
 # Build xray-core
 WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 
 # Download geodat into a staging directory
 ADD https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geoip.dat /tmp/geodat/geoip.dat
