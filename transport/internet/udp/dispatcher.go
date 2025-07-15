@@ -85,6 +85,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		link:   link,
 		cancel: cancel,
 	}
+	entry.cancel()
 	//entryClose := func() {
 	//	entry.Close()
 	//}
@@ -108,7 +109,7 @@ func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, 
 	if outputStream != nil {
 		if err := outputStream.WriteMultiBuffer(buf.MultiBuffer{payload}); err != nil {
 			errors.LogInfoInner(ctx, err, "failed to write first UDP payload")
-			conn.Close()
+			// conn.Close()
 			return
 		}
 	}
@@ -116,7 +117,7 @@ func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, 
 
 func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, callback ResponseCallback, callClose func() error) {
 	defer func() {
-		conn.Close()
+		// conn.Close()
 		if callClose != nil {
 			callClose()
 		}
