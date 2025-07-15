@@ -24,7 +24,6 @@ type connEntry struct {
 	link   *transport.Link
 	timer  signal.ActivityUpdater
 	cancel context.CancelFunc
-	closed bool
 }
 
 type Dispatcher struct {
