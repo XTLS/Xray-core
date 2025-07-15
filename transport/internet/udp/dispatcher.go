@@ -62,9 +62,14 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	errors.LogInfo(ctx, "establishing new connection for ", dest)
 
 	ctx, cancel := context.WithCancel(ctx)
+	entry := &connEntry{}
 	removeRay := func() {
-		cancel()
-		v.RemoveRay()
+		if entry == v.conn {
+			cancel()
+			v.RemoveRay()
+		} else {
+			errors.LogError(ctx, "removeRay trying to remove a conn that not belongs to it, canceling.")
+		}
 	}
 	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Minute)
 
@@ -73,7 +78,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		return nil, errors.New("failed to dispatch request to ", dest).Base(err)
 	}
 
-	entry := &connEntry{
+	*entry = connEntry{
 		link:   link,
 		timer:  timer,
 		cancel: removeRay,
