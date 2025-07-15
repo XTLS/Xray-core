@@ -44,6 +44,10 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
+	v.removeRay()
+}
+
+func (v *Dispatcher) removeRay() {
 	if v.conn != nil {
 		common.Interrupt(v.conn.link.Reader)
 		common.Close(v.conn.link.Writer)
@@ -64,9 +68,11 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	ctx, cancel := context.WithCancel(ctx)
 	entry := &connEntry{}
 	removeRay := func() {
+		v.Lock()
+		defer v.Unlock()
 		if entry == v.conn {
 			cancel()
-			v.RemoveRay()
+			v.removeRay()
 		} else {
 			errors.LogError(ctx, "removeRay trying to remove a conn that not belongs to it, canceling.")
 		}
