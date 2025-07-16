@@ -203,7 +203,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, ctx, UDPOverride)
+			writer = NewPacketWriter(conn, h, ctx, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -318,7 +318,8 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination) buf.Writer {
+// DialDest means the dial target used in the dialer when creating conn
+func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -329,14 +330,12 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		counter = statConn.WriteCounter
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		// If target is a domain, it will be resolved in dialer
+		// If DialDest is a domain, it will be resolved in dialer
 		// check this behavior and add it to map
-		outbounds := session.OutboundsFromContext(ctx)
-		targetAddr := outbounds[len(outbounds)-1].Target.Address
 		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
-		if targetAddr.Family().IsDomain() {
+		if DialDest.Address.Family().IsDomain() {
 			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			resolvedUDPAddr.Store(targetAddr.String(), net.ParseAddress(RemoteAddress))
+			resolvedUDPAddr.Store(DialDest.Address.String(), net.ParseAddress(RemoteAddress))
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
