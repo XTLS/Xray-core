@@ -175,6 +175,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
 		newCtx, newCancel = context.WithCancel(context.Background())
+		newCtx = session.ContextWithOutbounds(newCtx, session.OutboundsFromContext(ctx))
 	}
 
 	plcy := h.policy()
