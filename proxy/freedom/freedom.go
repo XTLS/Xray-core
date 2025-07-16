@@ -175,7 +175,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
 		newCtx, newCancel = context.WithCancel(context.Background())
-		newCtx = session.ContextWithOutbounds(newCtx, session.OutboundsFromContext(ctx))
 	}
 
 	plcy := h.policy()
@@ -239,7 +238,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(ctx, conn, UDPOverride)
+			reader = NewPacketReader(conn, UDPOverride, destination)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
@@ -274,7 +273,7 @@ func isTLSConn(conn stat.Connection) bool {
 	return false
 }
 
-func NewPacketReader(ctx context.Context, conn net.Conn, UDPOverride net.Destination) buf.Reader {
+func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -286,9 +285,7 @@ func NewPacketReader(ctx context.Context, conn net.Conn, UDPOverride net.Destina
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
 		isAddrChanged := false
-		outbounds := session.OutboundsFromContext(ctx)
-		targetAddr := outbounds[len(outbounds)-1].Target.Address
-		if UDPOverride.Address != nil || UDPOverride.Port != 0 || targetAddr.Family().IsDomain() {
+		if UDPOverride.Address != nil || UDPOverride.Port != 0 || DialDest.Address.Family().IsDomain() {
 			isAddrChanged = true
 		}
 		return &PacketReader{
