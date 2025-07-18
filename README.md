@@ -108,6 +108,7 @@
 - Xray Tools
   - [xray-knife](https://github.com/lilendian0x00/xray-knife)
   - [xray-checker](https://github.com/kutovoys/xray-checker)
+  - [xray-exporter](https://github.com/compassvpn/xray-exporter)
 - Xray Wrapper
   - [XTLS/libXray](https://github.com/XTLS/libXray)
   - [xtls-sdk](https://github.com/remnawave/xtls-sdk)
