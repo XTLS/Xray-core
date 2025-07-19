@@ -338,11 +338,16 @@ func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain stri
 	})
 	builder.EnableCompression()
 	common.Must(builder.StartQuestions())
-	common.Must(builder.Question(dnsmessage.Question{
+	err := builder.Question(dnsmessage.Question{
 		Name:  dnsmessage.MustNewName(domain),
 		Class: dnsmessage.ClassINET,
 		Type:  qType,
-	}))
+	})
+	if err != nil {
+		errors.LogInfo(context.Background(), "unexpected domain ", domain, " when building reject message: ", err)
+		b.Release()
+		return
+	}
 
 	msgBytes, err := builder.Finish()
 	if err != nil {
