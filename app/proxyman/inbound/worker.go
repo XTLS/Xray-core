@@ -161,6 +161,7 @@ type udpConn struct {
 	uplink           stats.Counter
 	downlink         stats.Counter
 	inactive         bool
+	cancel           context.CancelFunc
 }
 
 func (c *udpConn) setInactive() {
@@ -203,6 +204,9 @@ func (c *udpConn) Write(buf []byte) (int, error) {
 }
 
 func (c *udpConn) Close() error {
+	if c.cancel != nil {
+		c.cancel()
+	}
 	common.Must(c.done.Close())
 	common.Must(common.Close(c.writer))
 	return nil
@@ -306,7 +310,8 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		common.Must(w.checker.Start())
 
 		go func() {
-			ctx := w.ctx
+			ctx, cancel := context.WithCancel(w.ctx)
+			conn.cancel = cancel
 			sid := session.NewID()
 			ctx = c.ContextWithID(ctx, sid)
 
