@@ -259,6 +259,7 @@ func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 	defer w.Unlock()
 
 	if conn, found := w.activeConn[id]; found && !conn.done.Done() {
+		conn.updateActivity()
 		return conn, true
 	}
 
