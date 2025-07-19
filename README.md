@@ -81,11 +81,13 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
+  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
+  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - iOS & macOS arm64
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -95,10 +97,12 @@
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [OneXray](https://github.com/OneXray/OneXray)
+  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
+  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
