@@ -67,9 +67,9 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 		t.checkTask.Close()
 	}
 	t.checkTask = checkTask
-	t.Unlock()
 	t.Update()
 	common.Must(checkTask.Start())
+	t.Unlock()
 }
 
 func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {

@@ -37,7 +37,9 @@ message AlterInboundRequest {
 
 message AlterInboundResponse {}
 
-message ListInboundsRequest {}
+message ListInboundsRequest {
+  bool isOnlyTags = 1;
+}
 
 message ListInboundsResponse {
   repeated core.InboundHandlerConfig inbounds = 1;
