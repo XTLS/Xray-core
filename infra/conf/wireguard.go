@@ -49,8 +49,6 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 }
 
 type WireGuardConfig struct {
-	IsClient bool `json:""`
-
 	NoKernelTun    bool                   `json:"noKernelTun"`
 	SecretKey      string                 `json:"secretKey"`
 	Address        []string               `json:"address"`
@@ -117,7 +115,6 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
 	}
 
-	config.IsClient = c.IsClient
 	config.NoKernelTun = c.NoKernelTun
 
 	return config, nil

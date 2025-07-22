@@ -273,11 +273,6 @@ func (h *Handler) createIPCRequest() string {
 
 	request.WriteString(fmt.Sprintf("private_key=%s\n", h.conf.SecretKey))
 
-	if !h.conf.IsClient {
-		// placeholder, we'll handle actual port listening on Xray
-		request.WriteString("listen_port=1337\n")
-	}
-
 	for _, peer := range h.conf.Peers {
 		if peer.PublicKey != "" {
 			request.WriteString(fmt.Sprintf("public_key=%s\n", peer.PublicKey))

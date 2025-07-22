@@ -13,10 +13,8 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/dokodemo"
-	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"github.com/xtls/xray-core/testing/servers/tcp"
-	"github.com/xtls/xray-core/testing/servers/udp"
 	//"golang.org/x/sync/errgroup"
 )
 
@@ -28,44 +26,8 @@ func TestWireguard(t *testing.T) {
 	common.Must(err)
 	defer tcpServer.Close()
 
-	serverPrivate, _ := conf.ParseWireGuardKey("EGs4lTSJPmgELx6YiJAmPR2meWi6bY+e9rTdCipSj10=")
-	serverPublic, _ := conf.ParseWireGuardKey("osAMIyil18HeZXGGBDC9KpZoM+L2iGyXWVSYivuM9B0=")
 	clientPrivate, _ := conf.ParseWireGuardKey("CPQSpgxgdQRZa5SUbT3HLv+mmDVHLW5YR/rQlzum/2I=")
 	clientPublic, _ := conf.ParseWireGuardKey("MmLJ5iHFVVBp7VsB0hxfpQ0wEzAbT2KQnpQpj0+RtBw=")
-
-	serverPort := udp.PickPort()
-	serverConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&wireguard.DeviceConfig{
-					IsClient:    false,
-					NoKernelTun: false,
-					Endpoint:    []string{"10.0.0.1"},
-					Mtu:         1420,
-					SecretKey:   serverPrivate,
-					Peers: []*wireguard.PeerConfig{{
-						PublicKey:  serverPublic,
-						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
-					}},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
-			},
-		},
-	}
 
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
@@ -91,13 +53,12 @@ func TestWireguard(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&wireguard.DeviceConfig{
-					IsClient:    true,
 					NoKernelTun: false,
 					Endpoint:    []string{"10.0.0.2"},
 					Mtu:         1420,
 					SecretKey:   clientPrivate,
 					Peers: []*wireguard.PeerConfig{{
-						Endpoint:   "127.0.0.1:" + serverPort.String(),
+						Endpoint:   "127.0.0.1:12777",
 						PublicKey:  clientPublic,
 						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
 					}},
@@ -106,7 +67,7 @@ func TestWireguard(t *testing.T) {
 		},
 	}
 
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	servers, err := InitializeServerConfigs(clientConfig)
 	common.Must(err)
 	defer CloseAllServers(servers)
 
