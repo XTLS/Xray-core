@@ -245,13 +245,15 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
 		payload.Release()
 
-		defer udpMessage.Release()
 		if err != nil {
 			errors.LogWarningInner(ctx, err, "failed to write UDP response")
+			return
 		}
+		defer udpMessage.Release()
 
 		conn.Write(udpMessage.Bytes())
 	})
+	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil && inbound.Source.IsValid() {
