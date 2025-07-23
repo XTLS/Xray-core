@@ -358,7 +358,7 @@ func ParseRangeString(str string) (int, int, error) {
 		return 0, 0, nil
 	}
 	// for range value, like "114-514"
-	var pair []string 
+	var pair []string
 	// Process sth like "-114-514" "-1919--810"
 	if strings.HasPrefix(str, "-") {
 		pair = splitFromSecondDash(str)
