@@ -194,11 +194,9 @@ func (tun *netTun) MTU() (int, error) {
 }
 
 func convertToFullAddr(endpoint netip.AddrPort) (tcpip.FullAddress, tcpip.NetworkProtocolNumber) {
-	var protoNumber tcpip.NetworkProtocolNumber
+	var protoNumber tcpip.NetworkProtocolNumber = ipv6.ProtocolNumber
 	if endpoint.Addr().Is4() {
 		protoNumber = ipv4.ProtocolNumber
-	} else {
-		protoNumber = ipv6.ProtocolNumber
 	}
 	return tcpip.FullAddress{
 		NIC:  1,
