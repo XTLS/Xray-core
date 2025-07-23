@@ -230,11 +230,9 @@ func (e netEndpoint) SrcIP() netip.Addr {
 }
 
 func (e netEndpoint) DstToBytes() []byte {
-	var dat []byte
+	var dat []byte = e.dst.Address.IP().To16()[:]
 	if e.dst.Address.Family().IsIPv4() {
 		dat = e.dst.Address.IP().To4()[:]
-	} else {
-		dat = e.dst.Address.IP().To16()[:]
 	}
 	dat = append(dat, byte(e.dst.Port), byte(e.dst.Port>>8))
 	return dat
