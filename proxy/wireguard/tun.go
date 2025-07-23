@@ -92,12 +92,11 @@ func (t *tunnel) Close() (err error) {
 }
 
 func CalculateInterfaceName(name string) (tunName string) {
+	tunName = "tun"
 	if runtime.GOOS == "darwin" {
 		tunName = "utun"
 	} else if name != "" {
 		tunName = name
-	} else {
-		tunName = "tun"
 	}
 	interfaces, err := net.Interfaces()
 	if err != nil {
