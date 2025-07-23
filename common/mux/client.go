@@ -276,6 +276,8 @@ func (m *ClientWorker) IsClosing() bool {
 	return false
 }
 
+// IsFull returns true if this ClientWorker is unable to accept more connections.
+// it might be because it is closing, or the number of connections has reached the limit.
 func (m *ClientWorker) IsFull() bool {
 	if m.IsClosing() || m.Closed() {
 		return true
@@ -289,12 +291,12 @@ func (m *ClientWorker) IsFull() bool {
 }
 
 func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool {
-	if m.IsFull() || m.Closed() {
+	if m.IsFull() {
 		return false
 	}
 
 	sm := m.sessionManager
-	s := sm.Allocate()
+	s := sm.Allocate(&m.strategy)
 	if s == nil {
 		return false
 	}
