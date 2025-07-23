@@ -108,16 +108,13 @@ func LoadConfig(formatName string, input interface{}) (*Config, error) {
 		files := make([]*ConfigSource, len(v))
 		hasProtobuf := false
 		for i, file := range v {
-			var f string
+			var f string = formatName
 
 			if formatName == "auto" {
+				f = "json"
 				if file != "stdin:" {
 					f = getFormat(file)
-				} else {
-					f = "json"
 				}
-			} else {
-				f = formatName
 			}
 
 			if f == "" {
