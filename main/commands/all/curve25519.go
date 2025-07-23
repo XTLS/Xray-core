@@ -12,11 +12,9 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 	var output string
 	var err error
 	var privateKey, publicKey []byte
-	var encoding *base64.Encoding
+	var encoding *base64.Encoding = base64.RawURLEncoding
 	if *input_stdEncoding || StdEncoding {
 		encoding = base64.StdEncoding
-	} else {
-		encoding = base64.RawURLEncoding
 	}
 
 	if len(input_base64) > 0 {
