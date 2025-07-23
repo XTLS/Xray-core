@@ -130,11 +130,9 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			continue
 		}
 
-		var salt []byte
+		var salt []byte = quicSaltOld
 		if versionNumber == version1 {
 			salt = quicSalt
-		} else {
-			salt = quicSaltOld
 		}
 		initialSecret := hkdf.Extract(crypto.SHA256.New, destConnID, salt)
 		secret := hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
