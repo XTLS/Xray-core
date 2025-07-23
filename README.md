@@ -103,7 +103,7 @@
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
-  - [AnyPortal](https://github.com/AnyPortal/AnyPortal) 
+  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
