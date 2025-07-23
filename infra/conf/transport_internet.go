@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -505,16 +506,18 @@ type REALITYConfig struct {
 	MaxClientVer string          `json:"maxClientVer"`
 	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
 	ShortIds     []string        `json:"shortIds"`
+	Mldsa65Seed  string          `json:"mldsa65Seed"`
 
 	LimitFallbackUpload   LimitFallback `json:"limitFallbackUpload"`
 	LimitFallbackDownload LimitFallback `json:"limitFallbackDownload"`
 
-	Fingerprint string `json:"fingerprint"`
-	ServerName  string `json:"serverName"`
-	Password    string `json:"password"`
-	PublicKey   string `json:"publicKey"`
-	ShortId     string `json:"shortId"`
-	SpiderX     string `json:"spiderX"`
+	Fingerprint   string `json:"fingerprint"`
+	ServerName    string `json:"serverName"`
+	Password      string `json:"password"`
+	PublicKey     string `json:"publicKey"`
+	ShortId       string `json:"shortId"`
+	Mldsa65Verify string `json:"mldsa65Verify"`
+	SpiderX       string `json:"spiderX"`
 }
 
 func (c *REALITYConfig) Build() (proto.Message, error) {
@@ -610,6 +613,13 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
 
+		if mldsa65Seed, err := base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(mldsa65Seed) != 32 {
+			return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
+		} else {
+			_, key := mldsa65.NewKeyFromSeed((*[32]byte)(mldsa65Seed))
+			config.Mldsa65Key = key.Bytes()
+		}
+
 		config.LimitFallbackUpload = new(reality.LimitFallback)
 		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
@@ -644,6 +654,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ShortId = make([]byte, 8)
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
 			return nil, errors.New(`invalid "shortId": `, c.ShortId)
+		}
+		if config.Mldsa65Verify, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Verify); err != nil || len(config.Mldsa65Verify) != 1952 {
+			return nil, errors.New(`invalid "mldsa65Verify": `, c.Mldsa65Verify)
 		}
 		if c.SpiderX == "" {
 			c.SpiderX = "/"

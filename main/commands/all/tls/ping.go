@@ -40,10 +40,12 @@ func executePing(cmd *base.Command, args []string) {
 	}
 
 	domainWithPort := cmdPing.Flag.Arg(0)
-	fmt.Println("Tls ping: ", domainWithPort)
+	fmt.Println("TLS ping: ", domainWithPort)
 	TargetPort := 443
 	domain, port, err := net.SplitHostPort(domainWithPort)
-	if err == nil {
+	if err != nil {
+		domain = domainWithPort
+	} else {
 		TargetPort, _ = strconv.Atoi(port)
 	}
 
@@ -61,7 +63,7 @@ func executePing(cmd *base.Command, args []string) {
 		}
 		ip = v.IP
 	}
-	fmt.Println("Using IP: ", ip.String())
+	fmt.Println("Using IP: ", ip.String()+":"+strconv.Itoa(TargetPort))
 
 	fmt.Println("-------------------")
 	fmt.Println("Pinging without SNI")
@@ -72,7 +74,7 @@ func executePing(cmd *base.Command, args []string) {
 		}
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
+			NextProtos:         []string{"h2", "http/1.1"},
 			MaxVersion:         gotls.VersionTLS13,
 			MinVersion:         gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
@@ -98,7 +100,7 @@ func executePing(cmd *base.Command, args []string) {
 		}
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			ServerName: domain,
-			NextProtos: []string{"http/1.1"},
+			NextProtos: []string{"h2", "http/1.1"},
 			MaxVersion: gotls.VersionTLS13,
 			MinVersion: gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
@@ -106,16 +108,17 @@ func executePing(cmd *base.Command, args []string) {
 		})
 		err = tlsConn.Handshake()
 		if err != nil {
-			fmt.Println("handshake failure: ", err)
+			fmt.Println("Handshake failure: ", err)
 		} else {
-			fmt.Println("handshake succeeded")
+			fmt.Println("Handshake succeeded")
 			printTLSConnDetail(tlsConn)
 			printCertificates(tlsConn.ConnectionState().PeerCertificates)
 		}
 		tlsConn.Close()
 	}
 
-	fmt.Println("Tls ping finished")
+	fmt.Println("-------------------")
+	fmt.Println("TLS ping finished")
 }
 
 func printCertificates(certs []*x509.Certificate) {
@@ -123,7 +126,9 @@ func printCertificates(certs []*x509.Certificate) {
 		if len(cert.DNSNames) == 0 {
 			continue
 		}
-		fmt.Println("Allowed domains: ", cert.DNSNames)
+		fmt.Println("Cert's signature algorithm: ", cert.SignatureAlgorithm.String())
+		fmt.Println("Cert's publicKey algorithm: ", cert.PublicKeyAlgorithm.String())
+		fmt.Println("Cert's allowed domains: ", cert.DNSNames)
 	}
 }
 
@@ -134,13 +139,13 @@ func printTLSConnDetail(tlsConn *gotls.Conn) {
 	} else if tlsConn.ConnectionState().Version == gotls.VersionTLS12 {
 		tlsVersion = "TLS 1.2"
 	}
-	fmt.Println("TLS Version:", tlsVersion)
+	fmt.Println("TLS Version: ", tlsVersion)
 	curveID := *(*gotls.CurveID)(unsafe.Pointer(reflect.ValueOf(tlsConn).Elem().FieldByName("curveID").UnsafeAddr()))
 	if curveID != 0 {
 		PostQuantum := (curveID == gotls.X25519MLKEM768)
-		fmt.Println("Post-Quantum key exchange:", PostQuantum, "("+curveID.String()+")")
+		fmt.Println("TLS Post-Quantum key exchange: ", PostQuantum, "("+curveID.String()+")")
 	} else {
-		fmt.Println("Post-Quantum key exchange: false (RSA Exchange)")
+		fmt.Println("TLS Post-Quantum key exchange:  false (RSA Exchange)")
 	}
 }
 
