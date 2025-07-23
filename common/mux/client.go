@@ -173,6 +173,7 @@ type ClientWorker struct {
 	sessionManager *SessionManager
 	link           transport.Link
 	done           *done.Instance
+	timer          *time.Ticker
 	strategy       ClientStrategy
 }
 
@@ -187,6 +188,7 @@ func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, er
 		sessionManager: NewSessionManager(),
 		link:           stream,
 		done:           done.New(),
+		timer:          time.NewTicker(time.Second * 16),
 		strategy:       s,
 	}
 
@@ -209,9 +211,12 @@ func (m *ClientWorker) Closed() bool {
 	return m.done.Done()
 }
 
+func (m *ClientWorker) GetTimer() *time.Ticker {
+	return m.timer
+}
+
 func (m *ClientWorker) monitor() {
-	timer := time.NewTicker(time.Second * 16)
-	defer timer.Stop()
+	defer m.timer.Stop()
 
 	for {
 		select {
@@ -220,7 +225,7 @@ func (m *ClientWorker) monitor() {
 			common.Close(m.link.Writer)
 			common.Interrupt(m.link.Reader)
 			return
-		case <-timer.C:
+		case <-m.timer.C:
 			size := m.sessionManager.Size()
 			if size == 0 && m.sessionManager.CloseIfNoSession() {
 				common.Must(m.done.Close())
