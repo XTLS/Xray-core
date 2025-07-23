@@ -44,6 +44,10 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
+	v.removeRay()
+}
+
+func (v *Dispatcher) removeRay() {
 	if v.conn != nil {
 		common.Interrupt(v.conn.link.Reader)
 		common.Close(v.conn.link.Writer)
@@ -62,9 +66,16 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	errors.LogInfo(ctx, "establishing new connection for ", dest)
 
 	ctx, cancel := context.WithCancel(ctx)
+	entry := &connEntry{}
 	removeRay := func() {
-		cancel()
-		v.RemoveRay()
+		v.Lock()
+		defer v.Unlock()
+		if entry == v.conn {
+			cancel()
+			v.removeRay()
+		} else {
+			errors.LogError(ctx, "removeRay trying to remove a conn that not belongs to it, canceling.")
+		}
 	}
 	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Minute)
 
@@ -73,7 +84,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		return nil, errors.New("failed to dispatch request to ", dest).Base(err)
 	}
 
-	entry := &connEntry{
+	*entry = connEntry{
 		link:   link,
 		timer:  timer,
 		cancel: removeRay,
