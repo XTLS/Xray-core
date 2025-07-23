@@ -39,10 +39,9 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 	config.Endpoint = c.Endpoint
 	// default 0
 	config.KeepAlive = c.KeepAlive
+	config.AllowedIps = c.AllowedIPs
 	if c.AllowedIPs == nil {
 		config.AllowedIps = []string{"0.0.0.0/0", "::0/0"}
-	} else {
-		config.AllowedIps = c.AllowedIPs
 	}
 
 	return config, nil
@@ -70,11 +69,10 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		return nil, errors.New("invalid WireGuard secret key: %w", err)
 	}
 
+	config.Endpoint = c.Address
 	if c.Address == nil {
 		// bogon ips
 		config.Endpoint = []string{"10.0.0.1", "fd59:7153:2388:b5fd:0000:0000:0000:0001"}
-	} else {
-		config.Endpoint = c.Address
 	}
 
 	if c.Peers != nil {
@@ -88,10 +86,9 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	config.Mtu = c.MTU
 	if c.MTU == 0 {
 		config.Mtu = 1420
-	} else {
-		config.Mtu = c.MTU
 	}
 	// these a fallback code exists in wireguard-go code,
 	// we don't need to process fallback manually
