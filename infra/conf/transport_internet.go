@@ -613,11 +613,13 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.ServerNames = c.ServerNames
 		config.MaxTimeDiff = c.MaxTimeDiff
 
-		if mldsa65Seed, err := base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(mldsa65Seed) != 32 {
-			return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
-		} else {
-			_, key := mldsa65.NewKeyFromSeed((*[32]byte)(mldsa65Seed))
-			config.Mldsa65Key = key.Bytes()
+		if c.Mldsa65Seed != "" {
+			if mldsa65Seed, err := base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(mldsa65Seed) != 32 {
+				return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
+			} else {
+				_, key := mldsa65.NewKeyFromSeed((*[32]byte)(mldsa65Seed))
+				config.Mldsa65Key = key.Bytes()
+			}
 		}
 
 		config.LimitFallbackUpload = new(reality.LimitFallback)
@@ -655,8 +657,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
 			return nil, errors.New(`invalid "shortId": `, c.ShortId)
 		}
-		if config.Mldsa65Verify, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Verify); err != nil || len(config.Mldsa65Verify) != 1952 {
-			return nil, errors.New(`invalid "mldsa65Verify": `, c.Mldsa65Verify)
+		if c.Mldsa65Verify != "" {
+			if config.Mldsa65Verify, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Verify); err != nil || len(config.Mldsa65Verify) != 1952 {
+				return nil, errors.New(`invalid "mldsa65Verify": `, c.Mldsa65Verify)
+			}
 		}
 		if c.SpiderX == "" {
 			c.SpiderX = "/"
