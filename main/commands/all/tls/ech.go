@@ -32,12 +32,10 @@ var input_serverName = cmdECH.Flag.String("serverName", "cloudflare-ech.com", ""
 var input_json = cmdECH.Flag.Bool("json", false, "True == turn on json output")
 
 func executeECH(cmd *base.Command, args []string) {
-	var kem hpke.KEM
+	var kem hpke.KEM = hpke.KEM_X25519_HKDF_SHA256
 
 	if *input_pqSignatureSchemesEnabled {
 		kem = hpke.KEM_X25519_KYBER768_DRAFT00
-	} else {
-		kem = hpke.KEM_X25519_HKDF_SHA256
 	}
 
 	echKeySet, err := goech.GenerateECHKeySet(0, *input_serverName, kem)
