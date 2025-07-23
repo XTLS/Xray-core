@@ -92,7 +92,6 @@
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
-  - [GoXRay](https://github.com/goxray/desktop)
 - macOS arm64 & x64
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
