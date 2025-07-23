@@ -83,6 +83,7 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - Android
+  - [Happ](https://play.google.com/store/apps/details?id=com.happproxy)
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
@@ -93,6 +94,7 @@
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
 - macOS arm64 & x64
+  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Furious](https://github.com/LorenEteval/Furious)
@@ -103,6 +105,11 @@
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
+- TV(Apple)
+  - [Happ](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
+- TV(Android)
+  - [Happ](https://play.google.com/store/apps/details?id=com.happproxy)  
+  
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
