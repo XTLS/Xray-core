@@ -89,7 +89,7 @@
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - iOS & macOS arm64 & tvOS
-  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
+  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) ([tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274))
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
 - macOS arm64 & x64
