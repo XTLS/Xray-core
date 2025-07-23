@@ -37,11 +37,9 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 		} else {
 			buffer.Write(bb.Bytes())
 			w.cached = mb
-			var destination net.Destination
+			var destination net.Destination = w.Dest
 			if bb.UDP != nil {
 				destination = *bb.UDP
-			} else {
-				destination = w.Dest
 			}
 			bb.Release()
 			return ToSocksaddr(destination), nil
@@ -57,11 +55,9 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 	} else {
 		buffer.Write(bb.Bytes())
 		w.cached = nb
-		var destination net.Destination
+		var destination net.Destination = w.Dest
 		if bb.UDP != nil {
 			destination = *bb.UDP
-		} else {
-			destination = w.Dest
 		}
 		bb.Release()
 		return ToSocksaddr(destination), nil
