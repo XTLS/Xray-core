@@ -190,13 +190,12 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 		return nil, 0, errors.New("empty domain name")
 	}
 
+	option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
+	option.IPv6Enable = option.IPv6Enable && s.ipOption.IPv6Enable
 	if s.checkSystem {
 		supportIPv4, supportIPv6 := checkSystemNetwork()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
 		option.IPv6Enable = option.IPv6Enable && supportIPv6
-	} else {
-		option.IPv4Enable = option.IPv4Enable && s.ipOption.IPv4Enable
-		option.IPv6Enable = option.IPv6Enable && s.ipOption.IPv6Enable
 	}
 
 	if !option.IPv4Enable && !option.IPv6Enable {
@@ -330,17 +329,15 @@ func init() {
 
 func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
 	conn4, err4 := net.Dial("udp4", "8.8.8.8:53")
-	if err4 != nil {
-		supportIPv4 = false
-	} else {
+	supportIPv4 = false
+	if err4 == nil {
 		supportIPv4 = true
 		conn4.Close()
 	}
 
 	conn6, err6 := net.Dial("udp6", "[2001:4860:4860::8888]:53")
-	if err6 != nil {
-		supportIPv6 = false
-	} else {
+	supportIPv6 = false
+	if err6 == nil {
 		supportIPv6 = true
 		conn6.Close()
 	}
