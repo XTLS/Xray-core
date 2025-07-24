@@ -3,6 +3,7 @@ package internet
 import (
 	"context"
 	"math/rand"
+	gonet "net"
 	"syscall"
 	"time"
 
@@ -87,10 +88,17 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			Dest: destAddr,
 		}, nil
 	}
+	// Chrome defaults
+	keepAliveConfig := gonet.KeepAliveConfig{
+		Enable:   true,
+		Idle:     45 * time.Second,
+		Interval: 45 * time.Second,
+		Count:    -1,
+	}
 	dialer := &net.Dialer{
-		Timeout:   time.Second * 16,
-		LocalAddr: resolveSrcAddr(dest.Network, src),
-		KeepAlive: time.Duration(-1),
+		Timeout:         time.Second * 16,
+		LocalAddr:       resolveSrcAddr(dest.Network, src),
+		KeepAliveConfig: keepAliveConfig,
 	}
 
 	if sockopt != nil || len(d.controllers) > 0 {
