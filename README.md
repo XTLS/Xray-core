@@ -11,8 +11,9 @@
 ## Donation & NFTs
 
 - **ETH/USDT/USDC: `0xDc3Fe44F0f25D13CACb1C4896CD0D321df3146Ee`**
-- **Project X NFT: [Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633)**
-- **REALITY NFT: [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113)**
+- **Project X NFT: https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1**
+- **REALITY NFT: https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/2**
+- **Related links: https://opensea.io/collection/xtls, [Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633), [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113)**
 
 ## License
 
