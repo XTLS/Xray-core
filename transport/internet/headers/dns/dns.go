@@ -66,11 +66,9 @@ func packDomainName(s string, msg []byte) (off1 int, err error) {
 		bs    []byte
 	)
 	for i := 0; i < ls; i++ {
-		var c byte
+		var c byte = bs[i]
 		if bs == nil {
 			c = s[i]
-		} else {
-			c = bs[i]
 		}
 
 		switch c {
