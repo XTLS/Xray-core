@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -614,11 +613,8 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 
 		if c.Mldsa65Seed != "" {
-			if mldsa65Seed, err := base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(mldsa65Seed) != 32 {
+			if config.Mldsa65Seed, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(config.Mldsa65Seed) != 32 {
 				return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
-			} else {
-				_, key := mldsa65.NewKeyFromSeed((*[32]byte)(mldsa65Seed))
-				config.Mldsa65Key = key.Bytes()
 			}
 		}
 

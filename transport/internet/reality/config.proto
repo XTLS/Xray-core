@@ -18,7 +18,7 @@ message Config {
   uint64 max_time_diff = 9;
   repeated bytes short_ids = 10;
 
-  bytes mldsa65_key = 11;
+  bytes mldsa65_seed = 11;
   LimitFallback limit_fallback_upload = 12;
   LimitFallback limit_fallback_download = 13;
 
