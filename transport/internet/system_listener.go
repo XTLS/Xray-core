@@ -2,7 +2,6 @@ package internet
 
 import (
 	"context"
-	gonet "net"
 	"os"
 	"runtime"
 	"strconv"
@@ -88,13 +87,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		network = addr.Network()
 		address = addr.String()
 		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
-		lc.KeepAliveConfig = gonet.KeepAliveConfig{
-			// Set Enable to true but all other fields to -1 to use system defaults (see https://pkg.go.dev/net#KeepAliveConfig)
-			Enable:   true,
-			Idle:     -1,
-			Interval: -1,
-			Count:    -1,
-		}
+		lc.KeepAlive = -1
 		if sockopt != nil {
 			if sockopt.TcpMptcp {
 				lc.SetMultipathTCP(true)
