@@ -2,6 +2,7 @@ package internet
 
 import (
 	"context"
+	gonet "net"
 	"os"
 	"runtime"
 	"strconv"
@@ -88,9 +89,25 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		network = addr.Network()
 		address = addr.String()
 		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
+		// default disable keepalive
+		lc.KeepAlive = -1
 		if sockopt != nil {
-			if sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0 {
-				lc.KeepAlive = time.Duration(-1)
+			if sockopt.TcpKeepAliveIdle*sockopt.TcpKeepAliveInterval < 0 {
+				return nil, errors.New("invalid TcpKeepAliveIdle or TcpKeepAliveInterval value: ", sockopt.TcpKeepAliveIdle, " ", sockopt.TcpKeepAliveInterval)
+			}
+			lc.KeepAliveConfig = gonet.KeepAliveConfig{
+				Enable:   false,
+				Idle:     -1,
+				Interval: -1,
+				Count:    -1,
+			}
+			if sockopt.TcpKeepAliveIdle > 0 {
+				lc.KeepAliveConfig.Enable = true
+				lc.KeepAliveConfig.Idle = time.Duration(sockopt.TcpKeepAliveIdle) * time.Second
+			}
+			if sockopt.TcpKeepAliveInterval > 0 {
+				lc.KeepAliveConfig.Enable = true
+				lc.KeepAliveConfig.Interval = time.Duration(sockopt.TcpKeepAliveInterval) * time.Second
 			}
 			if sockopt.TcpMptcp {
 				lc.SetMultipathTCP(true)
