@@ -77,7 +77,8 @@ func (c *UConn) HandshakeAddress() net.Address {
 func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	if c.Config.Show {
 		localAddr := c.LocalAddr().String()
-		fmt.Printf("REALITY localAddr: %v\tis using X25519MLKEM768 for TLS' communication: %v\n", localAddr, c.HandshakeState.ServerHello.SelectedGroup == utls.X25519MLKEM768)
+		curveID := *(*utls.CurveID)(unsafe.Pointer(reflect.ValueOf(c).Elem().FieldByName("curveID").UnsafeAddr()))
+		fmt.Printf("REALITY localAddr: %v\tis using X25519MLKEM768 for TLS' communication: %v\n", localAddr, curveID == utls.X25519MLKEM768)
 		fmt.Printf("REALITY localAddr: %v\tis using ML-DSA-65 for cert's extra verification: %v\n", localAddr, len(c.Config.Mldsa65Verify) > 0)
 	}
 	p, _ := reflect.TypeOf(c.Conn).Elem().FieldByName("peerCertificates")
