@@ -130,11 +130,7 @@ func printCertificates(certs []*x509.Certificate) {
 			leaf = cert
 		}
 	}
-	if len(certs) > 1 {
-		fmt.Println("Certificate chain length: ", length)
-	} else {
-		fmt.Println("Certificate chain length: ", length, "(only one certificate found)")
-	}
+	fmt.Println("Certificate chain length: ", length, "(cert count:", strconv.Itoa(len(certs))+")")
 	if leaf != nil {
 		fmt.Println("Cert's signature algorithm: ", leaf.SignatureAlgorithm.String())
 		fmt.Println("Cert's publicKey algorithm: ", leaf.PublicKeyAlgorithm.String())
