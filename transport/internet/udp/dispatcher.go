@@ -70,11 +70,10 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	removeRay := func() {
 		v.Lock()
 		defer v.Unlock()
+		// sometimes the entry is already removed by others, don't close again
 		if entry == v.conn {
 			cancel()
 			v.removeRay()
-		} else {
-			errors.LogError(ctx, "removeRay trying to remove a conn that not belongs to it, canceling.")
 		}
 	}
 	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Minute)
