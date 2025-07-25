@@ -122,13 +122,23 @@ func executePing(cmd *base.Command, args []string) {
 }
 
 func printCertificates(certs []*x509.Certificate) {
+	var leaf *x509.Certificate
+	var length int
 	for _, cert := range certs {
-		if len(cert.DNSNames) == 0 {
-			continue
+		length += len(cert.Raw)
+		if len(cert.DNSNames) != 0 {
+			leaf = cert
 		}
-		fmt.Println("Cert's signature algorithm: ", cert.SignatureAlgorithm.String())
-		fmt.Println("Cert's publicKey algorithm: ", cert.PublicKeyAlgorithm.String())
-		fmt.Println("Cert's allowed domains: ", cert.DNSNames)
+	}
+	if len(certs) > 1 {
+		fmt.Println("Certificate chain length: ", length)
+	} else {
+		fmt.Println("Certificate chain length: ", length, "(only one certificate found)")
+	}
+	if leaf != nil {
+		fmt.Println("Cert's signature algorithm: ", leaf.SignatureAlgorithm.String())
+		fmt.Println("Cert's publicKey algorithm: ", leaf.PublicKeyAlgorithm.String())
+		fmt.Println("Cert's allowed domains: ", leaf.DNSNames)
 	}
 }
 
