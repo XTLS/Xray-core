@@ -95,7 +95,9 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		Count:    -1,
 	}
 	if sockopt != nil && (sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0) {
-		TCPKeepAliveConfig.Enable = false
+		TCPKeepAliveConfig = gonet.KeepAliveConfig {
+			Enable:   false
+		}
 	}
 	dialer := &net.Dialer{
 		Timeout:   time.Second * 16,
