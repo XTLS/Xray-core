@@ -3,6 +3,7 @@ package internet
 import (
 	"context"
 	"math/rand"
+	gonet "net"
 	"syscall"
 	"time"
 
