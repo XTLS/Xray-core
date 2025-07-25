@@ -38,6 +38,9 @@ jobs:
           if [[ -z "$SOURCE_TAG" ]]; then
             SOURCE_TAG="${{ github.ref_name }}"
           fi
+          if [[ -z "$SOURCE_TAG" ]]; then
+            SOURCE_TAG="${{ github.event.release.tag_name }}"
+          fi
 
           if [[ -z "$SOURCE_TAG" ]]; then
             echo "Error: Could not determine a valid tag source. Input tag and context tag (github.ref_name) are both empty."
