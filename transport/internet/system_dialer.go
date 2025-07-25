@@ -87,14 +87,19 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			Dest: destAddr,
 		}, nil
 	}
-	goStdKeepAlive := time.Duration(0)
+	TCPKeepAliveConfig := gonet.KeepAliveConfig {
+		Enable:   true,
+		Idle:     45 * time.Second,
+		Interval: 45 * time.Second,
+		Count:    -1,
+	}
 	if sockopt != nil && (sockopt.TcpKeepAliveInterval != 0 || sockopt.TcpKeepAliveIdle != 0) {
-		goStdKeepAlive = time.Duration(-1)
+		TCPKeepAliveConfig.Enable = false
 	}
 	dialer := &net.Dialer{
 		Timeout:   time.Second * 16,
 		LocalAddr: resolveSrcAddr(dest.Network, src),
-		KeepAlive: goStdKeepAlive,
+		KeepAliveConfig: TCPKeepAliveConfig,
 	}
 
 	if sockopt != nil || len(d.controllers) > 0 {
