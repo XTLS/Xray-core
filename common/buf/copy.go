@@ -11,8 +11,8 @@ import (
 
 type dataHandler func(MultiBuffer)
 
-type copyHandler struct {
-	onData []dataHandler
+type CopyHandler struct {
+	OnData []dataHandler
 }
 
 // SizeCounter is for counting bytes copied by Copy().
@@ -21,12 +21,12 @@ type SizeCounter struct {
 }
 
 // CopyOption is an option for copying data.
-type CopyOption func(*copyHandler)
+type CopyOption func(*CopyHandler)
 
 // UpdateActivity is a CopyOption to update activity on each data copy operation.
 func UpdateActivity(timer signal.ActivityUpdater) CopyOption {
-	return func(handler *copyHandler) {
-		handler.onData = append(handler.onData, func(MultiBuffer) {
+	return func(handler *CopyHandler) {
+		handler.OnData = append(handler.OnData, func(MultiBuffer) {
 			timer.Update()
 		})
 	}
@@ -34,8 +34,8 @@ func UpdateActivity(timer signal.ActivityUpdater) CopyOption {
 
 // CountSize is a CopyOption that sums the total size of data copied into the given SizeCounter.
 func CountSize(sc *SizeCounter) CopyOption {
-	return func(handler *copyHandler) {
-		handler.onData = append(handler.onData, func(b MultiBuffer) {
+	return func(handler *CopyHandler) {
+		handler.OnData = append(handler.OnData, func(b MultiBuffer) {
 			sc.Size += int64(b.Len())
 		})
 	}
@@ -43,8 +43,8 @@ func CountSize(sc *SizeCounter) CopyOption {
 
 // AddToStatCounter a CopyOption add to stat counter
 func AddToStatCounter(sc stats.Counter) CopyOption {
-	return func(handler *copyHandler) {
-		handler.onData = append(handler.onData, func(b MultiBuffer) {
+	return func(handler *CopyHandler) {
+		handler.OnData = append(handler.OnData, func(b MultiBuffer) {
 			if sc != nil {
 				sc.Add(int64(b.Len()))
 			}
@@ -88,17 +88,16 @@ func IsWriteError(err error) bool {
 	return ok
 }
 
-func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
+func copyInternal(reader Reader, writer Writer, handler *CopyHandler) error {
 	for {
 		buffer, err := reader.ReadMultiBuffer()
 		if !buffer.IsEmpty() {
-			for _, handler := range handler.onData {
-				handler(buffer)
-			}
-
 			if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 				return writeError{werr}
 			}
+		}
+		for _, handler := range handler.OnData {
+			handler(buffer)
 		}
 
 		if err != nil {
@@ -109,7 +108,7 @@ func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
 
 // Copy dumps all payload from reader to writer or stops when an error occurs. It returns nil when EOF.
 func Copy(reader Reader, writer Writer, options ...CopyOption) error {
-	var handler copyHandler
+	var handler CopyHandler
 	for _, option := range options {
 		option(&handler)
 	}
