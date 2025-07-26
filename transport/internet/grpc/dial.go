@@ -43,7 +43,7 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]*grpc.ClientConn
+	globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
 	globalDialerAccess sync.Mutex
 )
 
@@ -77,9 +77,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
-	}
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings

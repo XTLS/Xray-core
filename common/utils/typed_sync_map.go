@@ -15,8 +15,8 @@ type TypedSyncMap[K, V any] struct {
 // K is key type, V is value type
 // It is recommended to use pointer types for V because sync.Map might return nil
 // If sync.Map methods really returned nil, it will return the zero value of the type V
-func NewTypedSyncMap[K any, V any]() *TypedSyncMap[K, V] {
-	return &TypedSyncMap[K, V]{
+func NewTypedSyncMap[K any, V any]() TypedSyncMap[K, V] {
+	return TypedSyncMap[K, V]{
 		syncMap: &sync.Map{},
 	}
 }

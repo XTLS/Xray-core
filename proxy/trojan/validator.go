@@ -2,17 +2,17 @@ package trojan
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 // Validator stores valid trojan users.
 type Validator struct {
 	// Considering email's usage here, map + sync.Mutex/RWMutex may have better performance.
-	email sync.Map
-	users sync.Map
+	email utils.TypedSyncMap[string, *protocol.MemoryUser]
+	users utils.TypedSyncMap[string, *protocol.MemoryUser]
 }
 
 // Add a trojan user, Email must be empty or unique.
@@ -38,7 +38,7 @@ func (v *Validator) Del(e string) error {
 		return errors.New("User ", e, " not found.")
 	}
 	v.email.Delete(le)
-	v.users.Delete(hexString(u.(*protocol.MemoryUser).Account.(*MemoryAccount).Key))
+	v.users.Delete(hexString(u.Account.(*MemoryAccount).Key))
 	return nil
 }
 
@@ -46,7 +46,7 @@ func (v *Validator) Del(e string) error {
 func (v *Validator) Get(hash string) *protocol.MemoryUser {
 	u, _ := v.users.Load(hash)
 	if u != nil {
-		return u.(*protocol.MemoryUser)
+		return u
 	}
 	return nil
 }
@@ -56,7 +56,7 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 	email = strings.ToLower(email)
 	u, _ := v.email.Load(email)
 	if u != nil {
-		return u.(*protocol.MemoryUser)
+		return u
 	}
 	return nil
 }
@@ -64,8 +64,8 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 // Get all users
 func (v *Validator) GetAll() []*protocol.MemoryUser {
 	var u = make([]*protocol.MemoryUser, 0, 100)
-	v.email.Range(func(key, value interface{}) bool {
-		u = append(u, value.(*protocol.MemoryUser))
+	v.email.Range(func(key string, value *protocol.MemoryUser) bool {
+		u = append(u, value)
 		return true
 	})
 	return u
@@ -74,7 +74,7 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 // Get users count
 func (v *Validator) GetCount() int64 {
 	var c int64 = 0
-	v.email.Range(func(key, value interface{}) bool {
+	v.email.Range(func(key string, value *protocol.MemoryUser) bool {
 		c++
 		return true
 	})
