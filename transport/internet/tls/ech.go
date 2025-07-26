@@ -65,8 +65,8 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	}
 
 	// for server
-	if len(c.EchKeySets) != 0 {
-		KeySets, err := ConvertToGoECHKeys(c.EchKeySets)
+	if len(c.EchSeverKeys) != 0 {
+		KeySets, err := ConvertToGoECHKeys(c.EchSeverKeys)
 		if err != nil {
 			return errors.New("Failed to unmarshal ECHKeySetList: ", err)
 		}
