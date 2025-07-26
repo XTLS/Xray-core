@@ -34,6 +34,13 @@ func ApplyECH(c *Config, config *tls.Config) error {
 
 	// for client
 	if len(c.EchConfigList) != 0 {
+		defer func() {
+			// if failed to get ECHConfig, use an invalid one to make connection fail
+			if err != nil {
+				ECHConfig = []byte{1, 1, 4, 5, 1, 4}
+			}
+			config.EncryptedClientHelloConfigList = ECHConfig
+		}()
 		// direct base64 config
 		if strings.Contains(c.EchConfigList, "://") {
 			// query config from dns
@@ -61,8 +68,6 @@ func ApplyECH(c *Config, config *tls.Config) error {
 				return errors.New("Failed to unmarshal ECHConfigList: ", err)
 			}
 		}
-
-		config.EncryptedClientHelloConfigList = ECHConfig
 	}
 
 	// for server
@@ -239,6 +244,7 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 		}
 		conn.Write(msg)
 		udpResponse := make([]byte, 512)
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		_, err = conn.Read(udpResponse)
 		if err != nil {
 			return []byte{}, 0, err
