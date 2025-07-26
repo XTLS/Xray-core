@@ -13,14 +13,14 @@ import (
 )
 
 var cmdECH = &base.Command{
-	UsageLine: `{{.Exec}} tls ech [--serverName (string)] [--pem] [-i "ECHSeverKeys (base64.StdEncoding)"]`,
+	UsageLine: `{{.Exec}} tls ech [--serverName (string)] [--pem] [-i "ECHServerKeys (base64.StdEncoding)"]`,
 	Short:     `Generate TLS-ECH certificates`,
 	Long: `
 Generate TLS-ECH certificates.
 
 Set serverName to your custom string: {{.Exec}} tls ech --serverName (string)
 Generate into pem format: {{.Exec}} tls ech --pem
-Restore ECHConfigs from ECHSeverKeys: {{.Exec}} tls ech -i "ECHSeverKeys (base64.StdEncoding)"
+Restore ECHConfigs from ECHServerKeys: {{.Exec}} tls ech -i "ECHServerKeys (base64.StdEncoding)"
 `, // Enable PQ signature schemes: {{.Exec}} tls ech --pq-signature-schemes-enabled
 }
 
@@ -28,7 +28,7 @@ func init() {
 	cmdECH.Run = executeECH
 }
 
-var input_echSeverKeys = cmdECH.Flag.String("i", "", "ECHSeverKeys (base64.StdEncoding)")
+var input_echServerKeys = cmdECH.Flag.String("i", "", "ECHServerKeys (base64.StdEncoding)")
 
 // var input_pqSignatureSchemesEnabled = cmdECH.Flag.Bool("pqSignatureSchemesEnabled", false, "")
 var input_serverName = cmdECH.Flag.String("serverName", "cloudflare-ech.com", "")
@@ -47,7 +47,7 @@ func executeECH(cmd *base.Command, args []string) {
 	common.Must(err)
 
 	var configBuffer, keyBuffer []byte
-	if *input_echSeverKeys == "" {
+	if *input_echServerKeys == "" {
 		configBytes, _ := tls.MarshalBinary(echConfig)
 		var b cryptobyte.Builder
 		b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
@@ -61,15 +61,15 @@ func executeECH(cmd *base.Command, args []string) {
 		b2.AddBytes(configBytes)
 		keyBuffer, _ = b2.Bytes()
 	} else {
-		keySetsByte, err := base64.StdEncoding.DecodeString(*input_echSeverKeys)
+		keySetsByte, err := base64.StdEncoding.DecodeString(*input_echServerKeys)
 		if err != nil {
-			os.Stdout.WriteString("Failed to decode ECHSeverKeys: " + err.Error() + "\n")
+			os.Stdout.WriteString("Failed to decode ECHServerKeys: " + err.Error() + "\n")
 			return
 		}
 		keyBuffer = keySetsByte
 		KeySets, err := tls.ConvertToGoECHKeys(keySetsByte)
 		if err != nil {
-			os.Stdout.WriteString("Failed to decode ECHSeverKeys: " + err.Error() + "\n")
+			os.Stdout.WriteString("Failed to decode ECHServerKeys: " + err.Error() + "\n")
 			return
 		}
 		var b cryptobyte.Builder

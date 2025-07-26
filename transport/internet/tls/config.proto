@@ -94,5 +94,5 @@ message Config {
 
   string ech_config_list = 18;
 
-  bytes ech_sever_keys = 19;
+  bytes ech_server_keys = 19;
 }
