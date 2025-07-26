@@ -88,6 +88,6 @@ func executeECH(cmd *base.Command, args []string) {
 		os.Stdout.WriteString(keyPEM)
 	} else {
 		os.Stdout.WriteString("ECH config list: \n" + base64.StdEncoding.EncodeToString(configBuffer) + "\n")
-		os.Stdout.WriteString("ECH Key sets: \n" + base64.StdEncoding.EncodeToString(keyBuffer) + "\n")
+		os.Stdout.WriteString("ECH server keys: \n" + base64.StdEncoding.EncodeToString(keyBuffer) + "\n")
 	}
 }
