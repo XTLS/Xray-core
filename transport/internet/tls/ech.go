@@ -88,7 +88,10 @@ type echConfigRecord struct {
 	expire time.Time
 }
 
-var GlobalECHConfigCache = utils.NewTypedSyncMap[string, *ECHConfigCache]()
+var (
+	GlobalECHConfigCache = utils.NewTypedSyncMap[string, *ECHConfigCache]()
+	clientForECHDOH      = utils.NewTypedSyncMap[string, *http.Client]()
+)
 
 // Update updates the ECH config for given domain and server.
 // this method is concurrent safe, only one update request will be sent, others get the cache.
@@ -164,26 +167,30 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 		if err != nil {
 			return []byte{}, 0, err
 		}
-		// All traffic sent by core should via xray's internet.DialSystem
-		// This involves the behavior of some Android VPN GUI clients
-		tr := &http.Transport{
-			IdleConnTimeout:   90 * time.Second,
-			ForceAttemptHTTP2: true,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dest, err := net.ParseDestination(network + ":" + addr)
-				if err != nil {
-					return nil, err
-				}
-				conn, err := internet.DialSystem(ctx, dest, nil)
-				if err != nil {
-					return nil, err
-				}
-				return conn, nil
-			},
-		}
-		client := &http.Client{
-			Timeout:   5 * time.Second,
-			Transport: tr,
+		var client *http.Client
+		if client, _ = clientForECHDOH.Load(server); client == nil {
+			// All traffic sent by core should via xray's internet.DialSystem
+			// This involves the behavior of some Android VPN GUI clients
+			tr := &http.Transport{
+				IdleConnTimeout:   90 * time.Second,
+				ForceAttemptHTTP2: true,
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					dest, err := net.ParseDestination(network + ":" + addr)
+					if err != nil {
+						return nil, err
+					}
+					conn, err := internet.DialSystem(ctx, dest, nil)
+					if err != nil {
+						return nil, err
+					}
+					return conn, nil
+				},
+			}
+			c := &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: tr,
+			}
+			client, _ = clientForECHDOH.LoadOrStore(server, c)
 		}
 		req, err := http.NewRequest("POST", server, bytes.NewReader(msg))
 		if err != nil {
