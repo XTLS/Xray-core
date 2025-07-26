@@ -67,11 +67,11 @@ func addInboundUserAction(ctx context.Context, client handlerService.HandlerServ
 	return err
 }
 
-func extractInboundUsers(i *core.InboundHandlerConfig) []*protocol.User {
-	if i == nil {
+func extractInboundUsers(inb *core.InboundHandlerConfig) []*protocol.User {
+	if inb == nil {
 		return nil
 	}
-	inst, err := i.ProxySettings.GetInstance()
+	inst, err := inb.ProxySettings.GetInstance()
 	if err != nil || inst == nil {
 		fmt.Println("failed to get inbound instance:", err)
 		return nil
@@ -109,7 +109,6 @@ func extractInboundsConfig(unnamedArgs []string) []conf.InboundDetourConfig {
 	return ins
 }
 
-// inbound_user_remove.go require this function too
 func executeInboundUserAction(ctx context.Context, client handlerService.HandlerServiceClient, inb conf.InboundDetourConfig, action func(ctx context.Context, client handlerService.HandlerServiceClient, tag string, user *protocol.User) error) int {
 	success := 0
 
