@@ -413,7 +413,7 @@ type TLSConfig struct {
 	ServerNameToVerify                   string           `json:"serverNameToVerify"`
 	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
 	ECHConfigList                        string           `json:"echConfigList"`
-	ECHServerKeys                         string           `json:"echServerKeys"`
+	ECHServerKeys                        string           `json:"echServerKeys"`
 }
 
 // Build implements Buildable.
