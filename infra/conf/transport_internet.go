@@ -613,6 +613,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.MaxTimeDiff = c.MaxTimeDiff
 
 		if c.Mldsa65Seed != "" {
+			if c.Mldsa65Seed == c.PrivateKey {
+				return nil, errors.New(`"mldsa65Seed" and "privateKey" can not be the same value: `, c.Mldsa65Seed)
+			}
 			if config.Mldsa65Seed, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(config.Mldsa65Seed) != 32 {
 				return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
 			}
