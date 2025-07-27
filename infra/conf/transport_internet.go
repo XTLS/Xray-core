@@ -438,7 +438,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	if len(config.NextProtocol) > 1 {
 		for _, p := range config.NextProtocol {
-			if tcp.IsFromMitm(p) {
+			if tls.IsFromMitm(p) {
 				return nil, errors.New(`only one element is allowed in "alpn" when using "fromMitm" in it`)
 			}
 		}
@@ -503,7 +503,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchSocketSettings = ss
 	}
-
 
 	return config, nil
 }

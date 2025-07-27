@@ -275,6 +275,9 @@ func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) f
 }
 
 func (c *Config) parseServerName() string {
+	if IsFromMitm(c.ServerName) {
+		return ""
+	}
 	return c.ServerName
 }
 
@@ -469,6 +472,12 @@ func WithDestination(dest net.Destination) Option {
 	}
 }
 
+func WithOverrideName(serverName string) Option {
+	return func(config *tls.Config) {
+		config.ServerName = serverName
+	}
+}
+
 // WithNextProto sets the ALPN values in TLS config.
 func WithNextProto(protocol ...string) Option {
 	return func(config *tls.Config) {
@@ -508,4 +517,8 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 		}
 	}
 	return curveIDs
+}
+
+func IsFromMitm(str string) bool {
+	return strings.ToLower(str) == "frommitm"
 }

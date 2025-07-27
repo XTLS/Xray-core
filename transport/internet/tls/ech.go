@@ -32,7 +32,10 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	var ECHConfig []byte
 	var err error
 
-	nameToQuery := c.ServerName
+	var nameToQuery string
+	if net.ParseAddress(config.ServerName).Family().IsDomain() {
+		nameToQuery = config.ServerName
+	}
 	var DNSServer string
 
 	// for client
