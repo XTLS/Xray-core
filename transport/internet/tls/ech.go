@@ -8,8 +8,11 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/http2"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -51,7 +54,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 			if nameToQuery == "" {
 				return errors.New("Using DNS for ECH Config needs serverName or use Server format example.com+https://1.1.1.1/dns-query")
 			}
-			ECHConfig, err = QueryRecord(nameToQuery, DNSServer)
+			ECHConfig, err = QueryRecord(c.EchSocketSettings, nameToQuery, DNSServer)
 			if err != nil {
 				return err
 			}
@@ -96,7 +99,7 @@ var (
 // Update updates the ECH config for given domain and server.
 // this method is concurrent safe, only one update request will be sent, others get the cache.
 // if isLockedUpdate is true, it will not try to acquire the lock.
-func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool) ([]byte, error) {
+func (c *ECHConfigCache) Update(sockopt *internet.SocketConfig, domain string, server string, isLockedUpdate bool) ([]byte, error) {
 	if !isLockedUpdate {
 		c.UpdateLock.Lock()
 		defer c.UpdateLock.Unlock()
@@ -109,7 +112,7 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 	}
 	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
-	echConfig, ttl, err := dnsQuery(server, domain)
+	echConfig, ttl, err := dnsQuery(sockopt, server, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +126,7 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DNS server and update the cache.
-func QueryRecord(domain string, server string) ([]byte, error) {
+func QueryRecord(sockopt *internet.SocketConfig, domain string, server string) ([]byte, error) {
 	echConfigCache, ok := GlobalECHConfigCache.Load(domain)
 	if !ok {
 		echConfigCache = &ECHConfigCache{}
@@ -140,13 +143,13 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 	// otherwise return old value immediately and update in a goroutine
 	// but if the cache is too old, wait for update
 	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*6).Before(time.Now()) {
-		return echConfigCache.Update(domain, server, false)
+		return echConfigCache.Update(sockopt, domain, server, false)
 	} else {
 		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
 		if echConfigCache.UpdateLock.TryLock() {
 			go func() {
 				defer echConfigCache.UpdateLock.Unlock()
-				echConfigCache.Update(domain, server, true)
+				echConfigCache.Update(sockopt, domain, server, true)
 			}()
 		}
 		return configRecord.config, nil
@@ -155,13 +158,14 @@ func QueryRecord(domain string, server string) ([]byte, error) {
 
 // dnsQuery is the real func for sending type65 query for given domain to given DNS server.
 // return ECH config, TTL and error
-func dnsQuery(server string, domain string) ([]byte, uint32, error) {
+func dnsQuery(sockopt *internet.SocketConfig, server string, domain string) ([]byte, uint32, error) {
 	m := new(dns.Msg)
 	var dnsResolve []byte
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)
 	// for DOH server
-	if strings.HasPrefix(server, "https://") {
+	if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "h2c://") {
 		// always 0 in DOH
+		h2c := strings.HasPrefix(server, "h2c://")
 		m.Id = 0
 		msg, err := m.Pack()
 		if err != nil {
@@ -171,17 +175,30 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 		if client, _ = clientForECHDOH.Load(server); client == nil {
 			// All traffic sent by core should via xray's internet.DialSystem
 			// This involves the behavior of some Android VPN GUI clients
-			tr := &http.Transport{
-				IdleConnTimeout:   90 * time.Second,
-				ForceAttemptHTTP2: true,
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			tr := &http2.Transport{
+				IdleConnTimeout: net.ConnIdleTimeout,
+				ReadIdleTimeout: net.ChromeH2KeepAlivePeriod,
+				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 					dest, err := net.ParseDestination(network + ":" + addr)
 					if err != nil {
 						return nil, err
 					}
-					conn, err := internet.DialSystem(ctx, dest, nil)
+					var conn net.Conn
+
+					conn, err = internet.DialSystem(ctx, dest, sockopt)
 					if err != nil {
 						return nil, err
+					}
+
+					if !h2c {
+						u, err := url.Parse(server)
+						if err != nil {
+							return nil, err
+						}
+						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname()}, utls.HelloChrome_Auto)
+						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+							return nil, err
+						}
 					}
 					return conn, nil
 				},
