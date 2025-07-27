@@ -240,7 +240,7 @@ func dnsQuery(sockopt *internet.SocketConfig, server string, domain string) ([]b
 		dnsTimeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		// use xray's internet.DialSystem as mentioned above
-		conn, err := internet.DialSystem(dnsTimeoutCtx, dest, nil)
+		conn, err := internet.DialSystem(dnsTimeoutCtx, dest, sockopt)
 		defer func() {
 			err := conn.Close()
 			if err != nil {
