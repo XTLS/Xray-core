@@ -1,6 +1,7 @@
 package protocol_test
 
 import (
+	"github.com/xtls/xray-core/proxy/vless"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
-	"github.com/xtls/xray-core/proxy/vmess"
 )
 
 func TestAlwaysValidStrategy(t *testing.T) {
@@ -44,7 +44,7 @@ func TestUserInServerSpec(t *testing.T) {
 	uuid1 := uuid.New()
 	uuid2 := uuid.New()
 
-	toAccount := func(a *vmess.Account) Account {
+	toAccount := func(a *vless.Account) Account {
 		account, err := a.AsAccount()
 		common.Must(err)
 		return account
@@ -52,11 +52,11 @@ func TestUserInServerSpec(t *testing.T) {
 
 	spec := NewServerSpec(net.Destination{}, AlwaysValid(), &MemoryUser{
 		Email:   "test1@example.com",
-		Account: toAccount(&vmess.Account{Id: uuid1.String()}),
+		Account: toAccount(&vless.Account{Id: uuid1.String()}),
 	})
 	if spec.HasUser(&MemoryUser{
 		Email:   "test1@example.com",
-		Account: toAccount(&vmess.Account{Id: uuid2.String()}),
+		Account: toAccount(&vless.Account{Id: uuid2.String()}),
 	}) {
 		t.Error("has user: ", uuid2)
 	}
@@ -64,7 +64,7 @@ func TestUserInServerSpec(t *testing.T) {
 	spec.AddUser(&MemoryUser{Email: "test2@example.com"})
 	if !spec.HasUser(&MemoryUser{
 		Email:   "test1@example.com",
-		Account: toAccount(&vmess.Account{Id: uuid1.String()}),
+		Account: toAccount(&vless.Account{Id: uuid1.String()}),
 	}) {
 		t.Error("not having user: ", uuid1)
 	}

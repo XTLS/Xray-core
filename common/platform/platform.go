@@ -17,7 +17,6 @@ const (
 
 	UseReadV         = "xray.buf.readv"
 	UseFreedomSplice = "xray.buf.splice"
-	UseVmessPadding  = "xray.vmess.padding"
 	UseCone          = "xray.cone.disabled"
 
 	BufferSize           = "xray.ray.buffer.size"

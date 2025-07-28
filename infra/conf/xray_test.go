@@ -2,6 +2,8 @@ package conf_test
 
 import (
 	"encoding/json"
+	"github.com/xtls/xray-core/proxy/vless"
+	"github.com/xtls/xray-core/proxy/vless/inbound"
 	"reflect"
 	"testing"
 
@@ -17,8 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/vmess"
-	"github.com/xtls/xray-core/proxy/vmess/inbound"
+
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
@@ -56,13 +57,14 @@ func TestXrayConfig(t *testing.T) {
 						},
 						"security": "tls"
 					},
-					"protocol": "vmess",
+					"protocol": "vless",
 					"port": "443-500",
 					"allocate": {
 						"strategy": "random",
 						"concurrency": 3
 					},
 					"settings": {
+						  "decryption": "none",
 						"clients": [
 							{
 								"security": "aes-128-gcm",
@@ -149,14 +151,12 @@ func TestXrayConfig(t *testing.T) {
 							},
 						}),
 						ProxySettings: serial.ToTypedMessage(&inbound.Config{
-							User: []*protocol.User{
+							Decryption: "none",
+							Clients: []*protocol.User{
 								{
 									Level: 0,
-									Account: serial.ToTypedMessage(&vmess.Account{
+									Account: serial.ToTypedMessage(&vless.Account{
 										Id: "0cdf8a45-303d-4fed-9780-29aa7f54175e",
-										SecuritySettings: &protocol.SecurityConfig{
-											Type: protocol.SecurityType_AES128_GCM,
-										},
 									}),
 								},
 							},
@@ -249,45 +249,45 @@ func TestConfig_Override(t *testing.T) {
 		},
 		{
 			"replace/inbounds",
-			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}}},
+			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}}},
 			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos1", Protocol: "kcp"}}},
 			"",
 			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Tag: "pos1", Protocol: "kcp"}}},
 		},
 		{
 			"replace/inbounds-replaceall",
-			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}}},
+			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}}},
 			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos1", Protocol: "kcp"}, {Tag: "pos2", Protocol: "kcp"}}},
 			"",
 			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos0"}, {Tag: "pos1", Protocol: "kcp"}, {Tag: "pos2", Protocol: "kcp"}}},
 		},
 		{
 			"replace/notag-append",
-			&Config{InboundConfigs: []InboundDetourConfig{{}, {Protocol: "vmess"}}},
+			&Config{InboundConfigs: []InboundDetourConfig{{}, {Protocol: "vless"}}},
 			&Config{InboundConfigs: []InboundDetourConfig{{Tag: "pos1", Protocol: "kcp"}}},
 			"",
-			&Config{InboundConfigs: []InboundDetourConfig{{}, {Protocol: "vmess"}, {Tag: "pos1", Protocol: "kcp"}}},
+			&Config{InboundConfigs: []InboundDetourConfig{{}, {Protocol: "vless"}, {Tag: "pos1", Protocol: "kcp"}}},
 		},
 		{
 			"replace/outbounds",
-			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}}},
+			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}}},
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos1", Protocol: "kcp"}}},
 			"",
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Tag: "pos1", Protocol: "kcp"}}},
 		},
 		{
 			"replace/outbounds-prepend",
-			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}, {Tag: "pos3"}}},
+			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}, {Tag: "pos3"}}},
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos1", Protocol: "kcp"}, {Tag: "pos2", Protocol: "kcp"}, {Tag: "pos4", Protocol: "kcp"}}},
 			"config.json",
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos2", Protocol: "kcp"}, {Tag: "pos4", Protocol: "kcp"}, {Tag: "pos0"}, {Tag: "pos1", Protocol: "kcp"}, {Tag: "pos3"}}},
 		},
 		{
 			"replace/outbounds-append",
-			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}}},
+			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}}},
 			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos2", Protocol: "kcp"}}},
 			"config_tail.json",
-			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vmess", Tag: "pos1"}, {Tag: "pos2", Protocol: "kcp"}}},
+			&Config{OutboundConfigs: []OutboundDetourConfig{{Tag: "pos0"}, {Protocol: "vless", Tag: "pos1"}, {Tag: "pos2", Protocol: "kcp"}}},
 		},
 	}
 	for _, tt := range tests {
