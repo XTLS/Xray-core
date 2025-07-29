@@ -4,13 +4,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/transport"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/net/cnc"
+	"github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/common/signal/done"
+	"github.com/NamiraNet/xray-core/transport"
 )
 
 // OutboundListener is a net.Listener for listening gRPC connections.

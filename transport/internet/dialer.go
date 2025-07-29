@@ -6,17 +6,17 @@ import (
 	gonet "net"
 	"strings"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/pipe"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/dice"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/net/cnc"
+	"github.com/NamiraNet/xray-core/common/session"
+	"github.com/NamiraNet/xray-core/features/dns"
+	"github.com/NamiraNet/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/transport"
+	"github.com/NamiraNet/xray-core/transport/internet/stat"
+	"github.com/NamiraNet/xray-core/transport/pipe"
 )
 
 // Dialer is the interface for dialing outbound connections.
@@ -141,7 +141,6 @@ func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.H
 		cnc.ConnectionOnClose(common.ChainedClosable{uw, dw}),
 	)
 	return nc
-
 }
 
 func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {

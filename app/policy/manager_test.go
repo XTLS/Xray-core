@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/xtls/xray-core/app/policy"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/features/policy"
+	. "github.com/NamiraNet/xray-core/app/policy"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/features/policy"
 )
 
 func TestPolicy(t *testing.T) {

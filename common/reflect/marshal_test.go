@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xtls/xray-core/common/protocol"
-	. "github.com/xtls/xray-core/common/reflect"
-	cserial "github.com/xtls/xray-core/common/serial"
-	iserial "github.com/xtls/xray-core/infra/conf/serial"
-	"github.com/xtls/xray-core/proxy/shadowsocks"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	. "github.com/NamiraNet/xray-core/common/reflect"
+	cserial "github.com/NamiraNet/xray-core/common/serial"
+	iserial "github.com/NamiraNet/xray-core/infra/conf/serial"
+	"github.com/NamiraNet/xray-core/proxy/shadowsocks"
 )
 
 func TestMashalAccount(t *testing.T) {
@@ -27,7 +27,6 @@ func TestMashalAccount(t *testing.T) {
 
 	j, ok := MarshalToJson(user, false)
 	if !ok || strings.Contains(j, "_TypedMessage_") {
-
 		t.Error("marshal account failed")
 	}
 
@@ -85,7 +84,6 @@ func TestMashalStruct(t *testing.T) {
 }
 
 func TestMarshalConfigJson(t *testing.T) {
-
 	buf := bytes.NewBufferString(getConfig())
 	config, err := iserial.DecodeJSONConfig(buf)
 	if err != nil {

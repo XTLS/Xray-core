@@ -1,9 +1,8 @@
 package socks
 
 import (
+	"github.com/NamiraNet/xray-core/common/protocol"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/xtls/xray-core/common/protocol"
 )
 
 func (a *Account) Equals(another protocol.Account) bool {

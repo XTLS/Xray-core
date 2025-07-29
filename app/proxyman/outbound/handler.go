@@ -9,25 +9,25 @@ import (
 	gonet "net"
 	"os"
 
-	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/proxy"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/pipe"
+	"github.com/NamiraNet/xray-core/app/proxyman"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/mux"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/net/cnc"
+	"github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/common/session"
+	"github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/features/policy"
+	"github.com/NamiraNet/xray-core/features/stats"
+	"github.com/NamiraNet/xray-core/proxy"
+	"github.com/NamiraNet/xray-core/transport"
+	"github.com/NamiraNet/xray-core/transport/internet"
+	"github.com/NamiraNet/xray-core/transport/internet/stat"
+	"github.com/NamiraNet/xray-core/transport/internet/tls"
+	"github.com/NamiraNet/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -306,9 +306,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 							errors.LogDebug(ctx, "use client src ip as snedthrough: ", clientaddr)
 						}
 					}
-
 				}
-			//case addr.Family().IsDomain():
+			// case addr.Family().IsDomain():
 			default:
 				ob.Gateway = addr
 
@@ -368,7 +367,6 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 }
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
-
 	_, ipnet, _ := gonet.ParseCIDR(addr.IP().String() + "/" + prefix)
 
 	ones, bits := ipnet.Mask.Size()

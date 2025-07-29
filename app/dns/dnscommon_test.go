@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/net"
+	dns_feature "github.com/NamiraNet/xray-core/features/dns"
 	"github.com/google/go-cmp/cmp"
 	"github.com/miekg/dns"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
 )
 

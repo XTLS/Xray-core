@@ -3,10 +3,10 @@ package inbound
 import (
 	"context"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/features"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/features"
 )
 
 // Handler is the interface for handlers that process inbound connections.

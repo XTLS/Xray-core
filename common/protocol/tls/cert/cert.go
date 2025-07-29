@@ -12,8 +12,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
 )
 
 type Certificate struct {

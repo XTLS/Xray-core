@@ -4,9 +4,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	"github.com/NamiraNet/xray-core/common/uuid"
 )
 
 type Validator interface {
@@ -73,7 +73,7 @@ func (v *MemoryValidator) GetByEmail(email string) *protocol.MemoryUser {
 
 // Get all users
 func (v *MemoryValidator) GetAll() []*protocol.MemoryUser {
-	var u = make([]*protocol.MemoryUser, 0, 100)
+	u := make([]*protocol.MemoryUser, 0, 100)
 	v.email.Range(func(key, value interface{}) bool {
 		u = append(u, value.(*protocol.MemoryUser))
 		return true

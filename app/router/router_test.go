@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
+	. "github.com/NamiraNet/xray-core/app/router"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/session"
+	"github.com/NamiraNet/xray-core/features/dns"
+	"github.com/NamiraNet/xray-core/features/outbound"
+	routing_session "github.com/NamiraNet/xray-core/features/routing/session"
+	"github.com/NamiraNet/xray-core/testing/mocks"
 	"github.com/golang/mock/gomock"
-	. "github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/outbound"
-	routing_session "github.com/xtls/xray-core/features/routing/session"
-	"github.com/xtls/xray-core/testing/mocks"
 )
 
 type mockOutboundManager struct {

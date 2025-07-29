@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/app/proxyman"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/outbound"
 )
 
 // Manager is to manage all outbound handlers.
@@ -162,7 +162,6 @@ func (m *Manager) ListHandlers(ctx context.Context) []outbound.Handler {
 
 // Select implements outbound.HandlerSelector.
 func (m *Manager) Select(selectors []string) []string {
-
 	key := strings.Join(selectors, ",")
 	if cache, ok := m.tagsCache.Load(key); ok {
 		return cache.([]string)

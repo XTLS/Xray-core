@@ -3,8 +3,8 @@ package net_test
 import (
 	"testing"
 
+	. "github.com/NamiraNet/xray-core/common/net"
 	"github.com/google/go-cmp/cmp"
-	. "github.com/xtls/xray-core/common/net"
 )
 
 func TestDestinationProperty(t *testing.T) {

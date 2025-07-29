@@ -1,15 +1,13 @@
 package internet
 
 import (
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/serial"
 )
 
 type ConfigCreator func() interface{}
 
-var (
-	globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
-)
+var globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
 
 var strategy = [][]byte{
 	//              name        strategy,   prefer, fallback

@@ -3,11 +3,11 @@ package api
 import (
 	"fmt"
 
-	routerService "github.com/xtls/xray-core/app/router/command"
-	cserial "github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/infra/conf/serial"
-	"github.com/xtls/xray-core/main/commands/base"
+	routerService "github.com/NamiraNet/xray-core/app/router/command"
+	cserial "github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/infra/conf"
+	"github.com/NamiraNet/xray-core/infra/conf/serial"
+	"github.com/NamiraNet/xray-core/main/commands/base"
 )
 
 var cmdAddRules = &base.Command{
@@ -36,9 +36,7 @@ Example:
 }
 
 func executeAddRules(cmd *base.Command, args []string) {
-	var (
-		shouldAppend bool
-	)
+	var shouldAppend bool
 	setSharedFlags(cmd)
 	cmd.Flag.BoolVar(&shouldAppend, "append", false, "")
 	cmd.Flag.Parse(args)
@@ -89,5 +87,4 @@ func executeAddRules(cmd *base.Command, args []string) {
 		}
 		showJSONResponse(resp)
 	}
-
 }

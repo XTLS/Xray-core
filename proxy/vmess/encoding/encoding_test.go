@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	"github.com/NamiraNet/xray-core/common/uuid"
+	"github.com/NamiraNet/xray-core/proxy/vmess"
+	. "github.com/NamiraNet/xray-core/proxy/vmess/encoding"
 	"github.com/google/go-cmp/cmp"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
-	"github.com/xtls/xray-core/proxy/vmess"
-	. "github.com/xtls/xray-core/proxy/vmess/encoding"
 )
 
 func toAccount(a *vmess.Account) protocol.Account {

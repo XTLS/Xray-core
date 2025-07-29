@@ -6,28 +6,28 @@ import (
 	"io"
 	"time"
 
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/crypto"
+	"github.com/NamiraNet/xray-core/common/dice"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/platform"
+	"github.com/NamiraNet/xray-core/common/retry"
+	"github.com/NamiraNet/xray-core/common/session"
+	"github.com/NamiraNet/xray-core/common/signal"
+	"github.com/NamiraNet/xray-core/common/task"
+	"github.com/NamiraNet/xray-core/common/utils"
+	"github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/dns"
+	"github.com/NamiraNet/xray-core/features/policy"
+	"github.com/NamiraNet/xray-core/features/stats"
+	"github.com/NamiraNet/xray-core/proxy"
+	"github.com/NamiraNet/xray-core/transport"
+	"github.com/NamiraNet/xray-core/transport/internet"
+	"github.com/NamiraNet/xray-core/transport/internet/stat"
+	"github.com/NamiraNet/xray-core/transport/internet/tls"
 	"github.com/pires/go-proxyproto"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/dice"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/utils"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/proxy"
-	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 var useSplice bool
@@ -462,18 +462,18 @@ type NoisePacketWriter struct {
 func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.firstWrite {
 		w.firstWrite = false
-		//Do not send Noise for dns requests(just to be safe)
+		// Do not send Noise for dns requests(just to be safe)
 		if w.UDPOverride.Port == 53 {
 			return w.Writer.WriteMultiBuffer(mb)
 		}
 		var noise []byte
 		var err error
 		for _, n := range w.noises {
-			//User input string or base64 encoded string
+			// User input string or base64 encoded string
 			if n.Packet != nil {
 				noise = n.Packet
 			} else {
-				//Random noise
+				// Random noise
 				noise, err = GenerateRandomBytes(crypto.RandBetween(int64(n.LengthMin),
 					int64(n.LengthMax)))
 			}

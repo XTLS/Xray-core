@@ -2,17 +2,16 @@ package burst
 
 import (
 	"context"
-
 	"sync"
 
-	"github.com/xtls/xray-core/app/observatory"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/extension"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
+	"github.com/NamiraNet/xray-core/app/observatory"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/signal/done"
+	"github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/extension"
+	"github.com/NamiraNet/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/features/routing"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -68,7 +67,6 @@ func (o *Observer) Start() error {
 		o.hp.StartScheduler(func() ([]string, error) {
 			hs, ok := o.ohm.(outbound.HandlerSelector)
 			if !ok {
-
 				return nil, errors.New("outbound.Manager is not a HandlerSelector")
 			}
 

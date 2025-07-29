@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/app/policy"
-	"github.com/xtls/xray-core/app/proxyman"
-	. "github.com/xtls/xray-core/app/proxyman/outbound"
-	"github.com/xtls/xray-core/app/stats"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/common/session"
-	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/proxy/freedom"
-	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/NamiraNet/xray-core/app/policy"
+	"github.com/NamiraNet/xray-core/app/proxyman"
+	. "github.com/NamiraNet/xray-core/app/proxyman/outbound"
+	"github.com/NamiraNet/xray-core/app/stats"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/common/session"
+	core "github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/proxy/freedom"
+	"github.com/NamiraNet/xray-core/transport/internet/stat"
 )
 
 func TestInterfaces(t *testing.T) {
@@ -88,7 +88,6 @@ func TestOutboundWithStatCounter(t *testing.T) {
 }
 
 func TestTagsCache(t *testing.T) {
-
 	test_duration := 10 * time.Second
 	threads_num := 50
 	delay := 10 * time.Millisecond

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport/internet/tagged"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/features/routing"
+	"github.com/NamiraNet/xray-core/transport/internet/tagged"
 )
 
 type pingClient struct {

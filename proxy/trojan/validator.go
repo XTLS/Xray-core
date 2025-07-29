@@ -4,8 +4,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/protocol"
 )
 
 // Validator stores valid trojan users.
@@ -63,7 +63,7 @@ func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {
 
 // Get all users
 func (v *Validator) GetAll() []*protocol.MemoryUser {
-	var u = make([]*protocol.MemoryUser, 0, 100)
+	u := make([]*protocol.MemoryUser, 0, 100)
 	v.email.Range(func(key, value interface{}) bool {
 		u = append(u, value.(*protocol.MemoryUser))
 		return true

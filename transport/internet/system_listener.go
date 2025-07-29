@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
 	"github.com/pires/go-proxyproto"
 	"github.com/sagernet/sing/common/control"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
 )
 
 var effectiveListener = DefaultListener{}

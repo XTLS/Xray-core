@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/common/signal/semaphore"
+	"github.com/NamiraNet/xray-core/common/platform"
+	"github.com/NamiraNet/xray-core/common/signal/done"
+	"github.com/NamiraNet/xray-core/common/signal/semaphore"
 )
 
 // Writer is the interface for writing logs.
@@ -98,7 +98,6 @@ func (l *generalLogger) run() {
 }
 
 func (l *generalLogger) Handle(msg Message) {
-
 	select {
 	case l.buffer <- msg:
 	default:

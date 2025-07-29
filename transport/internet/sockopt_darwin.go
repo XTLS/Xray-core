@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
 	"golang.org/x/sys/unix"
 )
 
@@ -136,7 +136,6 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 	if config.Interface != "" {
 		iface, err := gonet.InterfaceByName(config.Interface)
-
 		if err != nil {
 			return errors.New("failed to get interface ", config.Interface).Base(err)
 		}
@@ -164,7 +163,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			if !strings.HasPrefix(network, custom.Network) {
 				continue
 			}
-			var level = 0x6 // default TCP
+			level := 0x6 // default TCP
 			var opt int
 			if len(custom.Opt) == 0 {
 				return errors.New("No opt!")
@@ -227,7 +226,6 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 
 	if config.Interface != "" {
 		iface, err := gonet.InterfaceByName(config.Interface)
-
 		if err != nil {
 			return errors.New("failed to get interface ", config.Interface).Base(err)
 		}
@@ -261,7 +259,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			if !strings.HasPrefix(network, custom.Network) {
 				continue
 			}
-			var level = 0x6 // default TCP
+			level := 0x6 // default TCP
 			var opt int
 			if len(custom.Opt) == 0 {
 				return errors.New("No opt!")

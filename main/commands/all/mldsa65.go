@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/NamiraNet/xray-core/main/commands/base"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
-	"github.com/xtls/xray-core/main/commands/base"
 )
 
 var cmdMLDSA65 = &base.Command{

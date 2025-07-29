@@ -2,22 +2,20 @@ package scenarios
 
 import (
 	"testing"
-	//"time"
 
-	"github.com/xtls/xray-core/app/log"
-	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/common"
-	clog "github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
-	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/dokodemo"
-	"github.com/xtls/xray-core/proxy/freedom"
-	"github.com/xtls/xray-core/proxy/wireguard"
-	"github.com/xtls/xray-core/testing/servers/tcp"
-	"github.com/xtls/xray-core/testing/servers/udp"
-	//"golang.org/x/sync/errgroup"
+	"github.com/NamiraNet/xray-core/app/log"
+	"github.com/NamiraNet/xray-core/app/proxyman"
+	"github.com/NamiraNet/xray-core/common"
+	clog "github.com/NamiraNet/xray-core/common/log"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/serial"
+	core "github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/infra/conf"
+	"github.com/NamiraNet/xray-core/proxy/dokodemo"
+	"github.com/NamiraNet/xray-core/proxy/freedom"
+	"github.com/NamiraNet/xray-core/proxy/wireguard"
+	"github.com/NamiraNet/xray-core/testing/servers/tcp"
+	"github.com/NamiraNet/xray-core/testing/servers/udp"
 )
 
 func TestWireguard(t *testing.T) {

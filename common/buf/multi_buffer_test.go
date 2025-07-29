@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/NamiraNet/xray-core/common"
+	. "github.com/NamiraNet/xray-core/common/buf"
 	"github.com/google/go-cmp/cmp"
-	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/buf"
 )
 
 func TestMultiBufferRead(t *testing.T) {

@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/NamiraNet/xray-core/app/log"
+	"github.com/NamiraNet/xray-core/common"
+	clog "github.com/NamiraNet/xray-core/common/log"
+	"github.com/NamiraNet/xray-core/testing/mocks"
 	"github.com/golang/mock/gomock"
-	"github.com/xtls/xray-core/app/log"
-	"github.com/xtls/xray-core/common"
-	clog "github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/testing/mocks"
 )
 
 func TestCustomLogHandler(t *testing.T) {

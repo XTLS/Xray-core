@@ -2,8 +2,9 @@ package internet
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common/net"
 	"time"
+
+	"github.com/NamiraNet/xray-core/common/net"
 )
 
 type result struct {
@@ -25,7 +26,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 	ips = sortIPs(ips, prioritizeIPv6, interleave)
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	var resultCh = make(chan *result, len(ips))
+	resultCh := make(chan *result, len(ips))
 	nextTryIndex := 0
 	activeNum := uint32(0)
 	timer := time.NewTimer(0)
@@ -97,8 +98,8 @@ func sortIPs(ips []net.IP, prioritizeIPv6 bool, interleave uint32) []net.IP {
 	if len(ips) == 0 {
 		return ips
 	}
-	var ip4 = make([]net.IP, 0, len(ips))
-	var ip6 = make([]net.IP, 0, len(ips))
+	ip4 := make([]net.IP, 0, len(ips))
+	ip6 := make([]net.IP, 0, len(ips))
 	for _, ip := range ips {
 		parsedIp := net.IPAddress(ip).IP()
 		if len(parsedIp) == net.IPv4len {
@@ -112,7 +113,7 @@ func sortIPs(ips []net.IP, prioritizeIPv6 bool, interleave uint32) []net.IP {
 		return ips
 	}
 
-	var newIPs = make([]net.IP, 0, len(ips))
+	newIPs := make([]net.IP, 0, len(ips))
 	consumeIP4 := 0
 	consumeIP6 := 0
 	consumeTurn := uint32(0)

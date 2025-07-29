@@ -3,11 +3,11 @@ package dns_test
 import (
 	"testing"
 
+	. "github.com/NamiraNet/xray-core/app/dns"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/features/dns"
 	"github.com/google/go-cmp/cmp"
-	. "github.com/xtls/xray-core/app/dns"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/features/dns"
 )
 
 func TestStaticHosts(t *testing.T) {

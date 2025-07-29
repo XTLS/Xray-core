@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	. "github.com/NamiraNet/xray-core/common/serial"
 	"github.com/google/go-cmp/cmp"
-	. "github.com/xtls/xray-core/common/serial"
 )
 
 func TestToString(t *testing.T) {

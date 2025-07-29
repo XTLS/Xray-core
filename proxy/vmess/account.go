@@ -1,12 +1,12 @@
 package vmess
 
 import (
-	"google.golang.org/protobuf/proto"
 	"strings"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	"github.com/NamiraNet/xray-core/common/uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 // MemoryAccount is an in-memory form of VMess account.
@@ -30,7 +30,7 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 }
 
 func (a *MemoryAccount) ToProto() proto.Message {
-	var test = ""
+	test := ""
 	if a.AuthenticatedLengthExperiment {
 		test = "AuthenticatedLength|"
 	}

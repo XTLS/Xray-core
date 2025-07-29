@@ -11,17 +11,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NamiraNet/xray-core/app/proxyman"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/proxy/freedom"
+	v2http "github.com/NamiraNet/xray-core/proxy/http"
+	v2httptest "github.com/NamiraNet/xray-core/testing/servers/http"
+	"github.com/NamiraNet/xray-core/testing/servers/tcp"
 	"github.com/google/go-cmp/cmp"
-	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/proxy/freedom"
-	v2http "github.com/xtls/xray-core/proxy/http"
-	v2httptest "github.com/xtls/xray-core/testing/servers/http"
-	"github.com/xtls/xray-core/testing/servers/tcp"
 )
 
 func TestHttpConformance(t *testing.T) {

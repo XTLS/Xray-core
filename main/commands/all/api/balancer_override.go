@@ -1,8 +1,8 @@
 package api
 
 import (
-	routerService "github.com/xtls/xray-core/app/router/command"
-	"github.com/xtls/xray-core/main/commands/base"
+	routerService "github.com/NamiraNet/xray-core/app/router/command"
+	"github.com/NamiraNet/xray-core/main/commands/base"
 )
 
 var cmdBalancerOverride = &base.Command{

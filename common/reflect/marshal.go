@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"strings"
 
-	cnet "github.com/xtls/xray-core/common/net"
-	cserial "github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/infra/conf"
+	cnet "github.com/NamiraNet/xray-core/common/net"
+	cserial "github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/infra/conf"
 )
 
 func MarshalToJson(v interface{}, insertTypeInfo bool) (string, bool) {
@@ -228,7 +228,6 @@ func isValueKind(kind reflect.Kind) bool {
 }
 
 func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) interface{} {
-
 	if r, ok := marshalKnownType(v, ignoreNullValue, insertTypeInfo); ok {
 		return r
 	}

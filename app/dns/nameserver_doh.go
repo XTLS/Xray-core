@@ -12,18 +12,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/crypto"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/log"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/net/cnc"
+	"github.com/NamiraNet/xray-core/common/protocol/dns"
+	"github.com/NamiraNet/xray-core/common/session"
+	dns_feature "github.com/NamiraNet/xray-core/features/dns"
+	"github.com/NamiraNet/xray-core/features/routing"
+	"github.com/NamiraNet/xray-core/transport/internet"
 	utls "github.com/refraction-networking/utls"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/protocol/dns"
-	"github.com/xtls/xray-core/common/session"
-	dns_feature "github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport/internet"
 	"golang.org/x/net/http2"
 )
 
@@ -260,5 +260,4 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 	return ips, ttl, err
-
 }

@@ -11,11 +11,10 @@ import (
 	"os"
 	"sync"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/NamiraNet/xray-core/common/errors"
 	"github.com/sagernet/sing/common/control"
 	"github.com/vishvananda/netlink"
-	"github.com/xtls/xray-core/common/errors"
+	"golang.org/x/sys/unix"
 	wgtun "golang.zx2c4.com/wireguard/tun"
 )
 

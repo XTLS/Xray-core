@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
-	creflect "github.com/xtls/xray-core/common/reflect"
-	cserial "github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/main/commands/base"
-	"github.com/xtls/xray-core/main/confloader"
+	creflect "github.com/NamiraNet/xray-core/common/reflect"
+	cserial "github.com/NamiraNet/xray-core/common/serial"
+	"github.com/NamiraNet/xray-core/main/commands/base"
+	"github.com/NamiraNet/xray-core/main/confloader"
 )
 
 var cmdJson = &base.Command{
@@ -38,7 +38,6 @@ Examples:
 }
 
 func executeTypedMessageToJson(cmd *base.Command, args []string) {
-
 	var injectTypeInfo bool
 	cmd.Flag.BoolVar(&injectTypeInfo, "t", false, "")
 	cmd.Flag.BoolVar(&injectTypeInfo, "type", false, "")

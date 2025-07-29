@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	routerService "github.com/xtls/xray-core/app/router/command"
-	"github.com/xtls/xray-core/main/commands/base"
+	routerService "github.com/NamiraNet/xray-core/app/router/command"
+	"github.com/NamiraNet/xray-core/main/commands/base"
 )
 
 // TODO: support "-json" flag for json output
@@ -59,7 +59,6 @@ func executeBalancerInfo(cmd *base.Command, args []string) {
 	}
 
 	showBalancerInfo(resp.Balancer)
-
 }
 
 func showBalancerInfo(b *routerService.BalancerMsg) {

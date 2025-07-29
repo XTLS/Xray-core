@@ -6,14 +6,14 @@ import (
 	gotls "crypto/tls"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/udp"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/transport/internet"
+	"github.com/NamiraNet/xray-core/transport/internet/stat"
+	"github.com/NamiraNet/xray-core/transport/internet/tls"
+	"github.com/NamiraNet/xray-core/transport/internet/udp"
 )
 
 type ConnectionID struct {

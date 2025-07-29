@@ -8,16 +8,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol/dns"
-	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
-	"github.com/xtls/xray-core/common/task"
-	dns_feature "github.com/xtls/xray-core/features/dns"
-	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/transport/internet/udp"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/log"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/protocol/dns"
+	udp_proto "github.com/NamiraNet/xray-core/common/protocol/udp"
+	"github.com/NamiraNet/xray-core/common/task"
+	dns_feature "github.com/NamiraNet/xray-core/features/dns"
+	"github.com/NamiraNet/xray-core/features/routing"
+	"github.com/NamiraNet/xray-core/transport/internet/udp"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -207,5 +207,4 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option d
 	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 	return ips, ttl, err
-
 }

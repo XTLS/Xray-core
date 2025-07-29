@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/transport/pipe"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	"github.com/NamiraNet/xray-core/transport/pipe"
 )
 
 type SessionManager struct {
@@ -53,7 +53,7 @@ func (m *SessionManager) Count() int {
 func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
 	m.Lock()
 	defer m.Unlock()
-	
+
 	MaxConcurrency := int(Strategy.MaxConcurrency)
 	MaxConnection := uint16(Strategy.MaxConnection)
 

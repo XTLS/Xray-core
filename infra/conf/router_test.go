@@ -9,13 +9,13 @@ import (
 	"time"
 	_ "unsafe"
 
-	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	"github.com/xtls/xray-core/common/serial"
-	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/NamiraNet/xray-core/app/router"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/platform"
+	"github.com/NamiraNet/xray-core/common/platform/filesystem"
+	"github.com/NamiraNet/xray-core/common/serial"
+	. "github.com/NamiraNet/xray-core/infra/conf"
 	"google.golang.org/protobuf/proto"
 )
 

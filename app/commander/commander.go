@@ -5,11 +5,11 @@ import (
 	"net"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/signal/done"
-	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/outbound"
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/errors"
+	"github.com/NamiraNet/xray-core/common/signal/done"
+	core "github.com/NamiraNet/xray-core/core"
+	"github.com/NamiraNet/xray-core/features/outbound"
 	"google.golang.org/grpc"
 )
 
@@ -67,7 +67,7 @@ func (c *Commander) Start() error {
 	}
 	c.Unlock()
 
-	var listen = func(listener net.Listener) {
+	listen := func(listener net.Listener) {
 		if err := c.server.Serve(listener); err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to start grpc server")
 		}

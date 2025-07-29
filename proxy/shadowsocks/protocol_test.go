@@ -3,12 +3,12 @@ package shadowsocks_test
 import (
 	"testing"
 
+	"github.com/NamiraNet/xray-core/common"
+	"github.com/NamiraNet/xray-core/common/buf"
+	"github.com/NamiraNet/xray-core/common/net"
+	"github.com/NamiraNet/xray-core/common/protocol"
+	. "github.com/NamiraNet/xray-core/proxy/shadowsocks"
 	"github.com/google/go-cmp/cmp"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	. "github.com/xtls/xray-core/proxy/shadowsocks"
 )
 
 func toAccount(a *Account) protocol.Account {
