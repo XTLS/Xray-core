@@ -216,6 +216,7 @@ func dnsQuery(sockopt *internet.SocketConfig, server string, domain string) ([]b
 		if err != nil {
 			return []byte{}, 0, err
 		}
+		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
 		resp, err := client.Do(req)
 		if err != nil {
