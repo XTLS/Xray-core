@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	utls "github.com/refraction-networking/utls"
+	"github.com/xtls/xray-core/common/crypto"
 	"golang.org/x/net/http2"
 	"io"
 	"net/http"
@@ -218,6 +219,7 @@ func dnsQuery(sockopt *internet.SocketConfig, server string, domain string) ([]b
 		}
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("X-Padding", strings.Repeat("X", int(crypto.RandBetween(100, 1000))))
 		resp, err := client.Do(req)
 		if err != nil {
 			return []byte{}, 0, err
