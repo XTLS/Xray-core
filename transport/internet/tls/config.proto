@@ -94,9 +94,11 @@ message Config {
   */
   repeated string verify_peer_cert_in_names = 17;
 
-  string ech_config_list = 18;
+  bytes ech_server_keys = 18;
 
-  bytes ech_server_keys = 19;
+  string ech_config_list = 19;
 
-  SocketConfig ech_socket_settings = 20;
+  bool ech_force_query = 20;
+
+  SocketConfig ech_socket_settings = 21;
 }
