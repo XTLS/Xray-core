@@ -1,4 +1,4 @@
-package tls_test
+package tls
 
 import (
 	"io"
@@ -8,13 +8,12 @@ import (
 	"testing"
 
 	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func TestECHDial(t *testing.T) {
 	config := &Config{
-		ServerName:    "encryptedsni.com",
-		EchConfigList: "udp://1.1.1.1",
+		ServerName:    "cloudflare.com",
+		EchConfigList: "encryptedsni.com+udp://1.1.1.1",
 	}
 	// test concurrent Dial(to test cache problem)
 	wg := sync.WaitGroup{}
@@ -28,7 +27,7 @@ func TestECHDial(t *testing.T) {
 					TLSClientConfig: TLSConfig,
 				},
 			}
-			resp, err := client.Get("https://encryptedsni.com/cdn-cgi/trace")
+			resp, err := client.Get("https://cloudflare.com/cdn-cgi/trace")
 			common.Must(err)
 			defer resp.Body.Close()
 			body, err := io.ReadAll(resp.Body)
@@ -40,4 +39,51 @@ func TestECHDial(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	// check cache
+	echConfigCache, ok := GlobalECHConfigCache.Load("encryptedsni.com|udp://1.1.1.1")
+	if !ok {
+		t.Error("ECH config cache not found")
+
+	}
+	ok = echConfigCache.UpdateLock.TryLock()
+	if !ok {
+		t.Error("ECH config cache dead lock detected")
+	}
+	echConfigCache.UpdateLock.Unlock()
+	configRecord := echConfigCache.configRecord.Load()
+	if configRecord == nil {
+		t.Error("ECH config record not found in cache")
+	}
+}
+
+func TestECHDialFail(t *testing.T) {
+	config := &Config{
+		ServerName:    "cloudflare.com",
+		EchConfigList: "udp://1.1.1.1",
+	}
+	TLSConfig := config.GetTLSConfig()
+	TLSConfig.NextProtos = []string{"http/1.1"}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: TLSConfig,
+		},
+	}
+	resp, err := client.Get("https://cloudflare.com/cdn-cgi/trace")
+	common.Must(err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	common.Must(err)
+	// check cache
+	echConfigCache, ok := GlobalECHConfigCache.Load("cloudflare.com|udp://1.1.1.1")
+	if !ok {
+		t.Error("ECH config cache not found")
+	}
+	configRecord := echConfigCache.configRecord.Load()
+	if configRecord == nil {
+		t.Error("ECH config record not found in cache")
+		return
+	}
+	if configRecord.err == nil {
+		t.Error("unexpected nil error in ECH config record")
+	}
 }
