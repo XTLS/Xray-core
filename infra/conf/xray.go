@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/xtls/xray-core/common/uuid"
 	"log"
 	"os"
 	"path/filepath"
@@ -252,6 +253,11 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		return nil, errors.New("failed to build inbound handler for protocol ", c.Protocol).Base(err)
 	}
 
+	if c.Tag == "" {
+		id := uuid.New()
+		c.Tag = "xray.inbound." + id.String()
+	}
+
 	return &core.InboundHandlerConfig{
 		Tag:              c.Tag,
 		ReceiverSettings: serial.ToTypedMessage(receiverSettings),
@@ -351,6 +357,21 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
 
+	if c.Tag == "" {
+		switch strings.ToLower(c.Protocol) {
+		case "vless", "vmess", "trojan", "shadowsocks", "wireguard":
+			c.Tag = "proxy"
+		case "freedom", "direct":
+			c.Tag = "direct"
+		case "blackhole", "block":
+			c.Tag = "block"
+		case "dns":
+			c.Tag = "dns-out"
+		default:
+			id := uuid.New()
+			c.Tag = "xray.outbound." + id.String()
+		}
+	}
 	return &core.OutboundHandlerConfig{
 		SenderSettings: serial.ToTypedMessage(senderSettings),
 		Tag:            c.Tag,
