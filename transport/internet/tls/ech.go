@@ -8,8 +8,14 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
+	utls "github.com/refraction-networking/utls"
+	"github.com/xtls/xray-core/common/crypto"
+	dns2 "github.com/xtls/xray-core/features/dns"
+	"golang.org/x/net/http2"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,7 +35,10 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	var ECHConfig []byte
 	var err error
 
-	nameToQuery := c.ServerName
+	var nameToQuery string
+	if net.ParseAddress(config.ServerName).Family().IsDomain() {
+		nameToQuery = config.ServerName
+	}
 	var DNSServer string
 
 	// for server
@@ -69,9 +78,9 @@ func ApplyECH(c *Config, config *tls.Config) error {
 			if nameToQuery == "" {
 				return errors.New("Using DNS for ECH Config needs serverName or use Server format example.com+https://1.1.1.1/dns-query")
 			}
-			ECHConfig, err = QueryRecord(nameToQuery, DNSServer, c.EchForceQuery)
+			ECHConfig, err = QueryRecord(nameToQuery, DNSServer, c.EchForceQuery, c.EchSocketSettings)
 			if err != nil {
-				return err
+				return errors.New("Failed to query ECH DNS record for domain: ", nameToQuery, " at server: ", DNSServer).Base(err)
 			}
 		} else {
 			ECHConfig, err = base64.StdEncoding.DecodeString(c.EchConfigList)
@@ -105,7 +114,7 @@ var (
 // Update updates the ECH config for given domain and server.
 // this method is concurrent safe, only one update request will be sent, others get the cache.
 // if isLockedUpdate is true, it will not try to acquire the lock.
-func (c *ECHConfigCache) Update(domain string, server string, forceQuery bool, isLockedUpdate bool) ([]byte, error) {
+func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool, forceQuery bool, sockopt *internet.SocketConfig) ([]byte, error) {
 	if !isLockedUpdate {
 		c.UpdateLock.Lock()
 		defer c.UpdateLock.Unlock()
@@ -118,32 +127,25 @@ func (c *ECHConfigCache) Update(domain string, server string, forceQuery bool, i
 	}
 	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
-	echConfig, ttl, err := dnsQuery(server, domain)
+	echConfig, ttl, err := dnsQuery(server, domain, sockopt)
 	if err != nil {
-		if forceQuery {
+		if forceQuery || ttl == 0 {
 			return nil, err
-		} else {
-			configRecord = &echConfigRecord{
-				config: nil,
-				expire: time.Now().Add(10 * time.Minute),
-				err:    err,
-			}
-			c.configRecord.Store(configRecord)
-			return echConfig, err
 		}
 	}
 	configRecord = &echConfigRecord{
 		config: echConfig,
 		expire: time.Now().Add(time.Duration(ttl) * time.Second),
+		err:    err,
 	}
 	c.configRecord.Store(configRecord)
-	return configRecord.config, nil
+	return configRecord.config, configRecord.err
 }
 
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DNS server and update the cache.
-func QueryRecord(domain string, server string, forceQuery bool) ([]byte, error) {
-	GlobalECHConfigCacheKey := domain + "|" + server
+func QueryRecord(domain string, server string, forceQuery bool, sockopt *internet.SocketConfig) ([]byte, error) {
+	GlobalECHConfigCacheKey := domain + "|" + server + "|" + fmt.Sprintf("%p", sockopt)
 	echConfigCache, ok := GlobalECHConfigCache.Load(GlobalECHConfigCacheKey)
 	if !ok {
 		echConfigCache = &ECHConfigCache{}
@@ -160,27 +162,33 @@ func QueryRecord(domain string, server string, forceQuery bool) ([]byte, error) 
 	// otherwise return old value immediately and update in a goroutine
 	// but if the cache is too old, wait for update
 	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*6).Before(time.Now()) {
-		return echConfigCache.Update(domain, server, false, forceQuery)
+		return echConfigCache.Update(domain, server, false, forceQuery, sockopt)
 	} else {
 		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
 		if echConfigCache.UpdateLock.TryLock() {
 			go func() {
 				defer echConfigCache.UpdateLock.Unlock()
-				echConfigCache.Update(domain, server, true, forceQuery)
+				echConfigCache.Update(domain, server, true, forceQuery, sockopt)
 			}()
 		}
-		return configRecord.config, nil
+		return configRecord.config, configRecord.err
 	}
 }
 
 // dnsQuery is the real func for sending type65 query for given domain to given DNS server.
 // return ECH config, TTL and error
-func dnsQuery(server string, domain string) ([]byte, uint32, error) {
+func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]byte, uint32, error) {
 	m := new(dns.Msg)
 	var dnsResolve []byte
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)
 	// for DOH server
-	if strings.HasPrefix(server, "https://") {
+	if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "h2c://") {
+		h2c := strings.HasPrefix(server, "h2c://")
+		m.SetEdns0(4096, false) // 4096 is the buffer size, false means no DNSSEC
+		padding := &dns.EDNS0_PADDING{Padding: make([]byte, int(crypto.RandBetween(100, 300)))}
+		if opt := m.IsEdns0(); opt != nil {
+			opt.Option = append(opt.Option, padding)
+		}
 		// always 0 in DOH
 		m.Id = 0
 		msg, err := m.Pack()
@@ -188,20 +196,34 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 			return nil, 0, err
 		}
 		var client *http.Client
-		if client, _ = clientForECHDOH.Load(server); client == nil {
+		serverKey := server + "|" + fmt.Sprintf("%p", sockopt)
+		if client, _ = clientForECHDOH.Load(serverKey); client == nil {
 			// All traffic sent by core should via xray's internet.DialSystem
 			// This involves the behavior of some Android VPN GUI clients
-			tr := &http.Transport{
-				IdleConnTimeout:   90 * time.Second,
-				ForceAttemptHTTP2: true,
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			tr := &http2.Transport{
+				IdleConnTimeout: net.ConnIdleTimeout,
+				ReadIdleTimeout: net.ChromeH2KeepAlivePeriod,
+				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 					dest, err := net.ParseDestination(network + ":" + addr)
 					if err != nil {
 						return nil, err
 					}
-					conn, err := internet.DialSystem(ctx, dest, nil)
+					var conn net.Conn
+
+					conn, err = internet.DialSystem(ctx, dest, sockopt)
 					if err != nil {
 						return nil, err
+					}
+
+					if !h2c {
+						u, err := url.Parse(server)
+						if err != nil {
+							return nil, err
+						}
+						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname()}, utls.HelloChrome_Auto)
+						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+							return nil, err
+						}
 					}
 					return conn, nil
 				},
@@ -210,13 +232,15 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 				Timeout:   5 * time.Second,
 				Transport: tr,
 			}
-			client, _ = clientForECHDOH.LoadOrStore(server, c)
+			client, _ = clientForECHDOH.LoadOrStore(serverKey, c)
 		}
 		req, err := http.NewRequest("POST", server, bytes.NewReader(msg))
 		if err != nil {
 			return nil, 0, err
 		}
+		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("X-Padding", strings.Repeat("X", int(crypto.RandBetween(100, 1000))))
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
@@ -243,16 +267,16 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 		dnsTimeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		// use xray's internet.DialSystem as mentioned above
-		conn, err := internet.DialSystem(dnsTimeoutCtx, dest, nil)
+		conn, err := internet.DialSystem(dnsTimeoutCtx, dest, sockopt)
+		if err != nil {
+			return nil, 0, err
+		}
 		defer func() {
 			err := conn.Close()
 			if err != nil {
 				errors.LogDebug(context.Background(), "Failed to close connection: ", err)
 			}
 		}()
-		if err != nil {
-			return nil, 0, err
-		}
 		msg, err := m.Pack()
 		if err != nil {
 			return nil, 0, err
@@ -283,7 +307,7 @@ func dnsQuery(server string, domain string) ([]byte, uint32, error) {
 			}
 		}
 	}
-	return nil, 0, errors.New("no ech record found")
+	return nil, dns2.DefaultTTL, dns2.ErrEmptyResponse
 }
 
 // reference github.com/OmarTariq612/goech
