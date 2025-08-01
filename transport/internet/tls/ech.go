@@ -36,7 +36,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 	if len(c.EchConfigList) != 0 {
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
-			if err != nil {
+			if err != nil && c.EchForceQuery {
 				ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 			}
 			config.EncryptedClientHelloConfigList = ECHConfig
