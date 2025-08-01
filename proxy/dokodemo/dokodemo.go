@@ -74,18 +74,24 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		Address: d.address,
 		Port:    d.port,
 	}
-	if !d.config.FollowRedirect && dest.Address == nil && dest.Port == 0 {
+
+	if !d.config.FollowRedirect {
 		host, port, err := net.SplitHostPort(conn.LocalAddr().String())
-		if err != nil {
-			dest.Address = net.DomainAddress("localhost")
-		} else {
-			if strings.Contains(host, ".") {
-				dest.Address = net.LocalHostIP
+		if dest.Address == nil {
+			if err != nil {
+				dest.Address = net.DomainAddress("localhost")
 			} else {
-				dest.Address = net.LocalHostIPv6
+				if strings.Contains(host, ".") {
+					dest.Address = net.LocalHostIP
+				} else {
+					dest.Address = net.LocalHostIPv6
+				}
 			}
+		}
+		if dest.Port == 0 {
 			dest.Port = net.Port(common.Must2(strconv.Atoi(port)).(int))
 		}
+
 	}
 
 	destinationOverridden := false
