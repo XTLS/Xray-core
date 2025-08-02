@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"github.com/xtls/xray-core/features/dns"
 	"os"
 	"slices"
 	"strings"
@@ -275,6 +276,9 @@ func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) f
 }
 
 func (c *Config) parseServerName() string {
+	if IsFromMitm(c.ServerName) {
+		return ""
+	}
 	return c.ServerName
 }
 
@@ -447,7 +451,11 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(c.EchConfigList) > 0 || len(c.EchServerKeys) > 0 {
 		err := ApplyECH(c, config)
 		if err != nil {
-			errors.LogError(context.Background(), err)
+			if c.EchForceQuery || errors.Cause(err) != dns.ErrEmptyResponse {
+				errors.LogError(context.Background(), err)
+			} else {
+				errors.LogInfo(context.Background(), err)
+			}
 		}
 	}
 
@@ -466,6 +474,12 @@ func WithDestination(dest net.Destination) Option {
 		if config.ServerName == "" {
 			config.ServerName = dest.Address.String()
 		}
+	}
+}
+
+func WithOverrideName(serverName string) Option {
+	return func(config *tls.Config) {
+		config.ServerName = serverName
 	}
 }
 
@@ -508,4 +522,8 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 		}
 	}
 	return curveIDs
+}
+
+func IsFromMitm(str string) bool {
+	return strings.ToLower(str) == "frommitm"
 }
