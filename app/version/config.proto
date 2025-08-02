@@ -8,7 +8,7 @@ option java_multiple_files = true;
 
 
 message Config {
-  string xray_version = 1;
+  string core_version = 1;
   string min_version = 2;
   string max_version = 3;
 }

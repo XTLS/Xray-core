@@ -7,16 +7,16 @@ import (
 )
 
 type VersionConfig struct {
-	Min string `json:"min"`
-	Max string `json:"max"`
+	MinVersion string `json:"min"`
+	MaxVersion string `json:"max"`
 }
 
 func (c *VersionConfig) Build() (*version.Config, error) {
-	xrayVersion := strconv.Itoa(int(core.Version_x)) + "." + strconv.Itoa(int(core.Version_y)) + "." + strconv.Itoa(int(core.Version_z))
+	coreVersion := strconv.Itoa(int(core.Version_x)) + "." + strconv.Itoa(int(core.Version_y)) + "." + strconv.Itoa(int(core.Version_z))
 
 	return &version.Config{
-		XrayVersion: xrayVersion,
-		MinVersion:  c.Min,
-		MaxVersion:  c.Max,
+		CoreVersion: coreVersion,
+		MinVersion:  c.MinVersion,
+		MaxVersion:  c.MaxVersion,
 	}, nil
 }

@@ -15,7 +15,7 @@ type Version struct {
 
 func New(ctx context.Context, config *Config) (*Version, error) {
 	if config.MinVersion != "" {
-		result, err := compareVersions(config.MinVersion, config.XrayVersion)
+		result, err := compareVersions(config.MinVersion, config.CoreVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -24,7 +24,7 @@ func New(ctx context.Context, config *Config) (*Version, error) {
 		}
 	}
 	if config.MaxVersion != "" {
-		result, err := compareVersions(config.MaxVersion, config.XrayVersion)
+		result, err := compareVersions(config.MaxVersion, config.CoreVersion)
 		if err != nil {
 			return nil, err
 		}
