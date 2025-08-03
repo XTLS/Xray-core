@@ -13,6 +13,8 @@ message Config {
   xray.common.net.IPOrDomain address = 1;
   uint32 port = 2;
 
+  map<string, string> port_map = 3;
+
   // List of networks that the Dokodemo accepts.
   repeated xray.common.net.Network networks = 7;
 
