@@ -494,11 +494,8 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchServerKeys = EchPrivateKey
 	}
-	if c.ECHForceQuery == "" {
-		c.ECHForceQuery = "none"
-	}
 	switch c.ECHForceQuery {
-	case "none", "half", "full":
+	case "none", "half", "full", "":
 		config.EchForceQuery = c.ECHForceQuery
 	default:
 		return nil, errors.New(`invalid "echForceQuery": `, c.ECHForceQuery)

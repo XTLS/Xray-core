@@ -53,17 +53,18 @@ func ApplyECH(c *Config, config *tls.Config) error {
 
 	// for client
 	if len(c.EchConfigList) != 0 {
-		switch c.EchForceQuery {
+		ECHForceQuery := c.EchForceQuery
+		switch ECHForceQuery {
 		case "none", "half", "full":
 		case "":
-			c.EchForceQuery = "none" // default to none
+			ECHForceQuery = "none" // default to none
 		default:
 			panic("Invalid ECHForceQuery: " + c.EchForceQuery)
 		}
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
 			if err != nil {
-				if c.EchForceQuery == "full" {
+				if ECHForceQuery == "full" {
 					ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 				}
 			}
@@ -142,11 +143,10 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
 	echConfig, ttl, err := dnsQuery(server, domain, sockopt)
-	if err != nil {
-		// only cache err if forceQuery is "none"
-		if forceQuery == "none" || forceQuery == "" {
-			return nil, err
-		}
+	// only cache err if forceQuery is "none"
+	// if not "none", directly return
+	if err != nil && forceQuery != "none" {
+		return nil, err
 	}
 	configRecord = &echConfigRecord{
 		config: echConfig,
