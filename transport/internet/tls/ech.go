@@ -55,7 +55,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
 			if err != nil {
-				if c.EchForceQuery {
+				if c.EchForceQuery || errors.Cause(err) != dns2.ErrEmptyResponse {
 					ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 				}
 			}
