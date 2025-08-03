@@ -53,6 +53,13 @@ func ApplyECH(c *Config, config *tls.Config) error {
 
 	// for client
 	if len(c.EchConfigList) != 0 {
+		switch c.EchForceQuery {
+		case "none", "half", "full":
+		case "":
+			c.EchForceQuery = "none" // default to none
+		default:
+			panic("Invalid ECHForceQuery: " + c.EchForceQuery)
+		}
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
 			if err != nil {

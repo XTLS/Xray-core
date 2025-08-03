@@ -60,6 +60,7 @@ func TestECHDialFail(t *testing.T) {
 	config := &Config{
 		ServerName:    "cloudflare.com",
 		EchConfigList: "udp://1.1.1.1",
+		EchForceQuery: "half",
 	}
 	TLSConfig := config.GetTLSConfig()
 	TLSConfig.NextProtos = []string{"http/1.1"}
