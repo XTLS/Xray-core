@@ -63,7 +63,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		}
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
-			if err != nil {
+			if err != nil || len(ECHConfig) == 0 {
 				if ECHForceQuery == "full" {
 					ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 				}
