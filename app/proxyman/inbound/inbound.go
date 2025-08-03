@@ -94,12 +94,8 @@ func (m *Manager) ListHandlers(ctx context.Context) []inbound.Handler {
 	m.access.RLock()
 	defer m.access.RUnlock()
 
-	var response []inbound.Handler
-	copy(m.untaggedHandler, response)
-
-	for _, v := range m.taggedHandlers {
-		response = append(response, v)
-	}
+	response := make([]inbound.Handler, len(m.untaggedHandler))
+	copy(response, m.untaggedHandler)
 
 	return response
 }
