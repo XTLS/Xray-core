@@ -9,10 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	utls "github.com/refraction-networking/utls"
-	"github.com/xtls/xray-core/common/crypto"
-	dns2 "github.com/xtls/xray-core/features/dns"
-	"golang.org/x/net/http2"
 	"io"
 	"net/http"
 	"net/url"
@@ -20,6 +16,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	utls "github.com/refraction-networking/utls"
+	"github.com/xtls/xray-core/common/crypto"
+	dns2 "github.com/xtls/xray-core/features/dns"
+	"golang.org/x/net/http2"
 
 	"github.com/miekg/dns"
 	"github.com/xtls/reality"
@@ -203,7 +204,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 			return nil, 0, err
 		}
 		var client *http.Client
-		serverKey := ECHCacheKey(server, domain, sockopt)
+		serverKey := ECHCacheKey(server, "", sockopt)
 		if client, _ = clientForECHDOH.Load(serverKey); client == nil {
 			// All traffic sent by core should via xray's internet.DialSystem
 			// This involves the behavior of some Android VPN GUI clients
