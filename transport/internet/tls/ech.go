@@ -136,17 +136,19 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 	}
 	// Double check cache after acquiring lock
 	configRecord := c.configRecord.Load()
-	if configRecord.expire.After(time.Now()) {
+	if configRecord.expire.After(time.Now()) && configRecord.err == nil {
 		errors.LogDebug(context.Background(), "Cache hit for domain after double check: ", domain)
 		return configRecord.config, configRecord.err
 	}
 	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
 	echConfig, ttl, err := dnsQuery(server, domain, sockopt)
-	// only cache err if forceQuery is "none"
-	// if not "none", directly return
-	if err != nil && forceQuery != "none" {
+	// if in "full", directly return
+	if err != nil && forceQuery == "full" {
 		return nil, err
+	}
+	if ttl == 0 {
+		ttl = dns2.DefaultTTL
 	}
 	configRecord = &echConfigRecord{
 		config: echConfig,
@@ -168,7 +170,7 @@ func QueryRecord(domain string, server string, forceQuery string, sockopt *inter
 		echConfigCache, _ = GlobalECHConfigCache.LoadOrStore(GlobalECHConfigCacheKey, echConfigCache)
 	}
 	configRecord := echConfigCache.configRecord.Load()
-	if configRecord.expire.After(time.Now()) {
+	if configRecord.expire.After(time.Now()) && (configRecord.err == nil || forceQuery == "none") {
 		errors.LogDebug(context.Background(), "Cache hit for domain: ", domain)
 		return configRecord.config, configRecord.err
 	}
@@ -322,7 +324,8 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 			}
 		}
 	}
-	return nil, dns2.DefaultTTL, dns2.ErrEmptyResponse
+	// empty is valid, means no ECH config found
+	return nil, dns2.DefaultTTL, nil
 }
 
 // reference github.com/OmarTariq612/goech

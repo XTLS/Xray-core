@@ -59,12 +59,12 @@ func TestECHDial(t *testing.T) {
 func TestECHDialFail(t *testing.T) {
 	config := &Config{
 		ServerName:    "cloudflare.com",
-		EchConfigList: "udp://1.1.1.1",
-		EchForceQuery: "none",
+		EchConfigList: "udp://127.0.0.1",
+		EchForceQuery: "half",
 	}
 	config.GetTLSConfig()
 	// check cache
-	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://1.1.1.1", "cloudflare.com", nil))
+	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://127.0.0.1", "cloudflare.com", nil))
 	if !ok {
 		t.Error("ECH config cache not found")
 	}
