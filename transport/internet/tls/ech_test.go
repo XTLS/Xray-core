@@ -1,7 +1,6 @@
 package tls
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -41,7 +40,7 @@ func TestECHDial(t *testing.T) {
 	}
 	wg.Wait()
 	// check cache
-	echConfigCache, ok := GlobalECHConfigCache.Load("encryptedsni.com|udp://1.1.1.1" + "|" + fmt.Sprintf("%p", config.EchSocketSettings))
+	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://1.1.1.1", "encryptedsni.com", nil))
 	if !ok {
 		t.Error("ECH config cache not found")
 
@@ -75,7 +74,7 @@ func TestECHDialFail(t *testing.T) {
 	_, err = io.ReadAll(resp.Body)
 	common.Must(err)
 	// check cache
-	echConfigCache, ok := GlobalECHConfigCache.Load("cloudflare.com|udp://1.1.1.1" + "|" + fmt.Sprintf("%p", config.EchSocketSettings))
+	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://1.1.1.1", "cloudflare.com", nil))
 	if !ok {
 		t.Error("ECH config cache not found")
 	}
