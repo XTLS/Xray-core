@@ -55,7 +55,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
 			if err != nil {
-				if c.EchForceQuery {
+				if c.EchForceQuery == "full" {
 					ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 				}
 			}
@@ -120,7 +120,7 @@ func ECHCacheKey(server, domain string, sockopt *internet.SocketConfig) string {
 // Update updates the ECH config for given domain and server.
 // this method is concurrent safe, only one update request will be sent, others get the cache.
 // if isLockedUpdate is true, it will not try to acquire the lock.
-func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool, forceQuery bool, sockopt *internet.SocketConfig) ([]byte, error) {
+func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool, forceQuery string, sockopt *internet.SocketConfig) ([]byte, error) {
 	if !isLockedUpdate {
 		c.UpdateLock.Lock()
 		defer c.UpdateLock.Unlock()
@@ -135,7 +135,8 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
 	echConfig, ttl, err := dnsQuery(server, domain, sockopt)
 	if err != nil {
-		if forceQuery {
+		// only cache err if forceQuery is "none"
+		if forceQuery == "none" || forceQuery == "" {
 			return nil, err
 		}
 	}
@@ -150,7 +151,7 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DNS server and update the cache.
-func QueryRecord(domain string, server string, forceQuery bool, sockopt *internet.SocketConfig) ([]byte, error) {
+func QueryRecord(domain string, server string, forceQuery string, sockopt *internet.SocketConfig) ([]byte, error) {
 	GlobalECHConfigCacheKey := ECHCacheKey(server, domain, sockopt)
 	echConfigCache, ok := GlobalECHConfigCache.Load(GlobalECHConfigCacheKey)
 	if !ok {

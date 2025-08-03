@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"github.com/xtls/xray-core/features/dns"
 	"os"
 	"slices"
 	"strings"
@@ -451,7 +450,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(c.EchConfigList) > 0 || len(c.EchServerKeys) > 0 {
 		err := ApplyECH(c, config)
 		if err != nil {
-			if c.EchForceQuery || errors.Cause(err) != dns.ErrEmptyResponse {
+			if c.EchForceQuery == "full" {
 				errors.LogError(context.Background(), err)
 			} else {
 				errors.LogInfo(context.Background(), err)
