@@ -98,7 +98,7 @@ message Config {
 
   string ech_config_list = 19;
 
-  bool ech_force_query = 20;
+  string ech_force_query = 20;
 
   SocketConfig ech_socket_settings = 21;
 }
