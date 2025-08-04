@@ -85,6 +85,7 @@ func (c *OnlineMap) IpTimeMap() map[string]time.Time {
 		list = c.RemoveExpiredIPs(list)
 		c.lastCleanup = time.Now()
 	}
-
+	
+	c.value = len(list)
 	return c.ipList
 }
