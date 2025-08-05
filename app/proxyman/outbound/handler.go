@@ -4,11 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	goerrors "errors"
-	"io"
-	"math/big"
-	gonet "net"
-	"os"
-
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -29,6 +24,12 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
+	"io"
+	"log"
+	"math/big"
+	gonet "net"
+	"os"
+	"strings"
 )
 
 func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter) {
@@ -283,8 +284,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			addr := h.senderSettings.Via.AsAddress()
 			domain = h.senderSettings.Via.GetDomain()
 			switch {
-			case h.senderSettings.ViaCidr != "":
-				ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
+			case len(h.senderSettings.ViaCidrs) > 0:
+				ob.Gateway = ParseRandomIP(&h.senderSettings.ViaCidrs)
 
 			case domain == "origin":
 
@@ -367,21 +368,105 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 	return serial.ToTypedMessage(h.proxyConfig)
 }
 
-func ParseRandomIP(addr net.Address, prefix string) net.Address {
+func ParseRandomIP(cidrs *[]string) net.Address {
+	if cidrs == nil || len(*cidrs) == 0 {
+		return nil
+	}
 
-	_, ipnet, _ := gonet.ParseCIDR(addr.IP().String() + "/" + prefix)
+	type cidrRange struct {
+		start *big.Int
+		count int64
+		ipNet *gonet.IPNet
+	}
 
-	ones, bits := ipnet.Mask.Size()
-	subnetSize := new(big.Int).Lsh(big.NewInt(1), uint(bits-ones))
+	ranges := make([]cidrRange, 0)
+	var totalIPs int64 = 0
 
-	rnd, _ := rand.Int(rand.Reader, subnetSize)
+	for _, entry := range *cidrs {
+		if !strings.Contains(entry, "/") {
+			ip := gonet.ParseIP(entry)
+			if ip == nil {
+				continue
+			}
+			start := big.NewInt(0).SetBytes(ip.To16())
+			ranges = append(ranges, cidrRange{
+				start: start,
+				count: 1,
+				ipNet: nil,
+			})
+			totalIPs++
+			continue
+		}
 
-	startInt := new(big.Int).SetBytes(ipnet.IP)
-	rndInt := new(big.Int).Add(startInt, rnd)
+		ip, ipnet, err := gonet.ParseCIDR(entry)
+		if err != nil {
+			log.Printf("invalid cidr %s: %v", entry, err)
+			continue
+		}
 
-	rndBytes := rndInt.Bytes()
-	padded := make([]byte, len(ipnet.IP))
-	copy(padded[len(padded)-len(rndBytes):], rndBytes)
+		ones, bits := ipnet.Mask.Size()
+		if ones == bits {
+			start := big.NewInt(0).SetBytes(ip.To16())
+			ranges = append(ranges, cidrRange{
+				start: start,
+				count: 1,
+				ipNet: ipnet,
+			})
+			totalIPs++
+			continue
+		}
 
-	return net.ParseAddress(gonet.IP(padded).String())
+		count := int64(1) << uint(bits-ones)
+		usableCount := count
+		if bits == 32 && count > 2 {
+			usableCount = count - 2
+		}
+		start := big.NewInt(0).SetBytes(ip.To16())
+		if bits == 32 && count > 2 {
+			start = start.Add(start, big.NewInt(1))
+		}
+
+		ranges = append(ranges, cidrRange{
+			start: start,
+			count: usableCount,
+			ipNet: ipnet,
+		})
+		totalIPs += usableCount
+	}
+
+	if totalIPs == 0 {
+		log.Println("no valid IPs found")
+		return nil
+	}
+
+	idxBig, err := rand.Int(rand.Reader, big.NewInt(totalIPs))
+	if err != nil {
+		log.Printf("failed to generate random index: %v", err)
+		return nil
+	}
+	idx := idxBig.Int64()
+
+	var acc int64 = 0
+	var selected cidrRange
+	for _, r := range ranges {
+		if idx < acc+r.count {
+			selected = r
+			idx = idx - acc
+			break
+		}
+		acc += r.count
+	}
+
+	resultInt := big.NewInt(0).Add(selected.start, big.NewInt(idx))
+	resultBytes := resultInt.Bytes()
+
+	final := make([]byte, 16)
+	copy(final[16-len(resultBytes):], resultBytes)
+
+	ip := gonet.IP(final)
+	if ip4 := ip.To4(); ip4 != nil {
+		ip = ip4
+	}
+
+	return net.ParseAddress(ip.String())
 }

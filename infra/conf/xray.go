@@ -15,7 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
-	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -235,7 +235,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 
 	settings := []byte("{}")
 	if c.Settings != nil {
-		settings = ([]byte)(*c.Settings)
+		settings = *c.Settings
 	}
 	rawConfig, err := inboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {
@@ -258,7 +258,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 
 type OutboundDetourConfig struct {
 	Protocol      string           `json:"protocol"`
-	SendThrough   *string          `json:"sendThrough"`
+	SendThrough   []string         `json:"sendThrough"`
 	Tag           string           `json:"tag"`
 	Settings      *json.RawMessage `json:"settings"`
 	StreamSetting *StreamConfig    `json:"streamSettings"`
@@ -283,20 +283,16 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, err
 	}
 
-	if c.SendThrough != nil {
-		address := ParseSendThough(c.SendThrough)
-		//Check if CIDR exists
-		if strings.Contains(*c.SendThrough, "/") {
-			senderSettings.ViaCidr = strings.Split(*c.SendThrough, "/")[1]
-		} else {
-			if address.Family().IsDomain() {
-				domain := address.Address.Domain()
-				if domain != "origin" && domain != "srcip" {
-					return nil, errors.New("unable to send through: " + address.String())
-				}
+	if len(c.SendThrough) > 0 {
+		address := ParseSendThough(&c.SendThrough[0])
+		if address.Family().IsDomain() {
+			domain := address.Address.Domain()
+			if domain != "origin" && domain != "srcip" {
+				return nil, errors.New("unable to send through: " + address.String())
 			}
 		}
 		senderSettings.Via = address.Build()
+		senderSettings.ViaCidrs = c.SendThrough
 	}
 
 	if c.StreamSetting != nil {
