@@ -24,6 +24,9 @@ func NewOnlineMap() *OnlineMap {
 
 // Count implements stats.OnlineMap.
 func (c *OnlineMap) Count() int {
+	c.access.RLock()
+	defer c.access.RUnlock()
+
 	return len(c.ipList)
 }
 
@@ -45,11 +48,9 @@ func (c *OnlineMap) AddIP(ip string) {
 	}
 	c.access.Unlock()
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
-		list = c.RemoveExpiredIPs(list)
+		c.RemoveExpiredIPs(list)
 		c.lastCleanup = time.Now()
 	}
-
-	c.ipList = list
 }
 
 func (c *OnlineMap) GetKeys() []string {
