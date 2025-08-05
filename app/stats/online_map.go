@@ -40,13 +40,13 @@ func (c *OnlineMap) AddIP(ip string) {
 	if ip == "127.0.0.1" {
 		return
 	}
+
 	c.access.Lock()
-	if _, ok := c.ipList[ip]; !ok {
-		c.ipList[ip] = time.Now()
-	}
+	c.ipList[ip] = time.Now()
 	c.access.Unlock()
+
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
-		c.RemoveExpiredIPs(c.ipList)
+		c.RemoveExpiredIPs()
 		c.lastCleanup = time.Now()
 	}
 }
@@ -62,23 +62,22 @@ func (c *OnlineMap) GetKeys() []string {
 	return keys
 }
 
-func (c *OnlineMap) RemoveExpiredIPs(list map[string]time.Time) map[string]time.Time {
+func (c *OnlineMap) RemoveExpiredIPs() {
 	c.access.Lock()
 	defer c.access.Unlock()
 
 	now := time.Now()
-	for k, t := range list {
+	for k, t := range c.ipList {
 		diff := now.Sub(t)
 		if diff.Seconds() > 20 {
-			delete(list, k)
+			delete(c.ipList, k)
 		}
 	}
-	return list
 }
 
 func (c *OnlineMap) IpTimeMap() map[string]time.Time {
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
-		c.RemoveExpiredIPs(c.ipList)
+		c.RemoveExpiredIPs()
 		c.lastCleanup = time.Now()
 	}
 
