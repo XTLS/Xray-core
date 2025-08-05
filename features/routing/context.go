@@ -23,6 +23,12 @@ type Context interface {
 	// GetTargetPort returns the target port of the connection.
 	GetTargetPort() net.Port
 
+	// GetLocalIPs returns the local IPs bound to the connection.
+	GetLocalIPs() []net.IP
+
+	// GetLocalPort returns the local port of the connection.
+	GetLocalPort() net.Port
+
 	// GetTargetDomain returns the target domain of the connection, if exists.
 	GetTargetDomain() string
 
