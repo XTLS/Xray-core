@@ -98,6 +98,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			return nil, err
 		}
 		conds.Add(cond)
+		errors.LogWarning(context.Background(), "localIP rule does not work correctly on UDP inbound connections that listen on all interfaces(\"\",\"0.0.0.0\", \"[::]\")")
 	}
 
 	if len(rr.Protocol) > 0 {
