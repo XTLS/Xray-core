@@ -37,18 +37,16 @@ func (c *OnlineMap) List() []string {
 
 // AddIP implements stats.OnlineMap.
 func (c *OnlineMap) AddIP(ip string) {
-	list := c.ipList
-
 	if ip == "127.0.0.1" {
 		return
 	}
 	c.access.Lock()
-	if _, ok := list[ip]; !ok {
-		list[ip] = time.Now()
+	if _, ok := c.ipList[ip]; !ok {
+		c.ipList[ip] = time.Now()
 	}
 	c.access.Unlock()
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
-		c.RemoveExpiredIPs(list)
+		c.RemoveExpiredIPs(c.ipList)
 		c.lastCleanup = time.Now()
 	}
 }
