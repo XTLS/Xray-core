@@ -607,8 +607,8 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		rule.Networks = rawFieldRule.Network.Build()
 	}
 
-	if rawFieldRule.Source != nil {
-		return nil, errors.New("please use \"sourceIP\" instead of \"source\" in routing rule")
+	if rawFieldRule.SourceIP == nil {
+		rawFieldRule.SourceIP = rawFieldRule.Source
 	}
 
 	if rawFieldRule.SourceIP != nil {
