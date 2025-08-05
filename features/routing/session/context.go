@@ -68,12 +68,12 @@ func (ctx *Context) GetTargetPort() net.Port {
 
 // GetLocalIPs implements routing.Context.
 func (ctx *Context) GetLocalIPs() []net.IP {
-	if ctx.Inbound == nil || !ctx.Inbound.Gateway.IsValid() {
+	if ctx.Inbound == nil || !ctx.Inbound.Local.IsValid() {
 		return nil
 	}
 
-	if ctx.Inbound.Gateway.Address.Family().IsIP() {
-		return []net.IP{ctx.Inbound.Gateway.Address.IP()}
+	if ctx.Inbound.Local.Address.Family().IsIP() {
+		return []net.IP{ctx.Inbound.Local.Address.IP()}
 	}
 
 	return nil
@@ -81,10 +81,10 @@ func (ctx *Context) GetLocalIPs() []net.IP {
 
 // GetLocalPort implements routing.Context.
 func (ctx *Context) GetLocalPort() net.Port {
-	if ctx.Inbound == nil || !ctx.Inbound.Gateway.IsValid() {
+	if ctx.Inbound == nil || !ctx.Inbound.Local.IsValid() {
 		return 0
 	}
-	return ctx.Inbound.Gateway.Port
+	return ctx.Inbound.Local.Port
 }
 
 // GetTargetDomain implements routing.Context.
