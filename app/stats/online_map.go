@@ -7,7 +7,6 @@ import (
 
 // OnlineMap is an implementation of stats.OnlineMap.
 type OnlineMap struct {
-	value         int
 	ipList        map[string]time.Time
 	access        sync.RWMutex
 	lastCleanup   time.Time
@@ -25,7 +24,7 @@ func NewOnlineMap() *OnlineMap {
 
 // Count implements stats.OnlineMap.
 func (c *OnlineMap) Count() int {
-	return c.value
+	return len(c.ipList)
 }
 
 // List implements stats.OnlineMap.
@@ -50,7 +49,6 @@ func (c *OnlineMap) AddIP(ip string) {
 		c.lastCleanup = time.Now()
 	}
 
-	c.value = len(list)
 	c.ipList = list
 }
 
@@ -80,12 +78,10 @@ func (c *OnlineMap) RemoveExpiredIPs(list map[string]time.Time) map[string]time.
 }
 
 func (c *OnlineMap) IpTimeMap() map[string]time.Time {
-	list := c.ipList
 	if time.Since(c.lastCleanup) > c.cleanupPeriod {
-		list = c.RemoveExpiredIPs(list)
+		c.RemoveExpiredIPs(c.ipList)
 		c.lastCleanup = time.Now()
 	}
-	
-	c.value = len(list)
+
 	return c.ipList
 }
