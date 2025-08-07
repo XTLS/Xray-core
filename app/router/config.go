@@ -61,11 +61,15 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if rr.PortList != nil {
-		conds.Add(NewPortMatcher(rr.PortList, false))
+		conds.Add(NewPortMatcher(rr.PortList, "target"))
 	}
 
 	if rr.SourcePortList != nil {
-		conds.Add(NewPortMatcher(rr.SourcePortList, true))
+		conds.Add(NewPortMatcher(rr.SourcePortList, "source"))
+	}
+
+	if rr.LocalPortList != nil {
+		conds.Add(NewPortMatcher(rr.LocalPortList, "local"))
 	}
 
 	if len(rr.Networks) > 0 {
@@ -73,7 +77,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Geoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.Geoip, false)
+		cond, err := NewMultiGeoIPMatcher(rr.Geoip, "target")
 		if err != nil {
 			return nil, err
 		}
@@ -81,11 +85,20 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.SourceGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, true)
+		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, "source")
 		if err != nil {
 			return nil, err
 		}
 		conds.Add(cond)
+	}
+
+	if len(rr.LocalGeoip) > 0 {
+		cond, err := NewMultiGeoIPMatcher(rr.LocalGeoip, "local")
+		if err != nil {
+			return nil, err
+		}
+		conds.Add(cond)
+		errors.LogWarning(context.Background(), "Due to some limitations, in UDP connections, localIP is always equal to listen interface IP, so \"localIP\" rule condition does not work properly on UDP inbound connections that listen on all interfaces")
 	}
 
 	if len(rr.Protocol) > 0 {

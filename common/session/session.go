@@ -36,6 +36,8 @@ func ExportIDToError(ctx context.Context) errors.ExportOption {
 type Inbound struct {
 	// Source address of the inbound connection.
 	Source net.Destination
+	// Local address of the inbound connection.
+	Local net.Destination
 	// Gateway address.
 	Gateway net.Destination
 	// Tag of the inbound proxy that handles the connection.

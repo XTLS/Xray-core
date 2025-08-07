@@ -495,7 +495,7 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 		})
 	}
 
-	matcher, err := NewMultiGeoIPMatcher(geoips, false)
+	matcher, err := NewMultiGeoIPMatcher(geoips, "target")
 	common.Must(err)
 
 	ctx := withOutbound(&session.Outbound{Target: net.TCPDestination(net.ParseAddress("8.8.8.8"), 80)})
