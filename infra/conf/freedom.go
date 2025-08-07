@@ -27,12 +27,14 @@ type Fragment struct {
 	Packets  string      `json:"packets"`
 	Length   *Int32Range `json:"length"`
 	Interval *Int32Range `json:"interval"`
+	MaxSplit *Int32Range `json:"maxSplit"`
 }
 
 type Noise struct {
-	Type   string      `json:"type"`
-	Packet string      `json:"packet"`
-	Delay  *Int32Range `json:"delay"`
+	Type    string      `json:"type"`
+	Packet  string      `json:"packet"`
+	Delay   *Int32Range `json:"delay"`
+	ApplyTo string      `json:"applyTo"`
 }
 
 // Build implements Buildable
@@ -107,6 +109,13 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			}
 			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
 			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
+		}
+
+		{
+			if c.Fragment.MaxSplit != nil {
+				config.Fragment.MaxSplitMin = uint64(c.Fragment.MaxSplit.From)
+				config.Fragment.MaxSplitMax = uint64(c.Fragment.MaxSplit.To)
+			}
 		}
 	}
 
@@ -192,6 +201,16 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	if noise.Delay != nil {
 		NConfig.DelayMin = uint64(noise.Delay.From)
 		NConfig.DelayMax = uint64(noise.Delay.To)
+	}
+	switch strings.ToLower(noise.ApplyTo) {
+	case "", "ip", "all":
+		NConfig.ApplyTo = "ip"
+	case "ipv4":
+		NConfig.ApplyTo = "ipv4"
+	case "ipv6":
+		NConfig.ApplyTo = "ipv6"
+	default:
+		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
 	}
 	return NConfig, nil
 }

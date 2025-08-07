@@ -194,7 +194,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			if h.config.Fragment != nil {
 				errors.LogDebug(ctx, "FRAGMENT", h.config.Fragment.PacketsFrom, h.config.Fragment.PacketsTo, h.config.Fragment.LengthMin, h.config.Fragment.LengthMax,
-					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax)
+					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax, h.config.Fragment.MaxSplitMin, h.config.Fragment.MaxSplitMax)
 				writer = buf.NewWriter(&FragmentWriter{
 					fragment: h.config.Fragment,
 					writer:   conn,
@@ -211,6 +211,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					noises:      h.config.Noises,
 					firstWrite:  true,
 					UDPOverride: UDPOverride,
+					remoteAddr:  net.DestinationFromAddr(conn.RemoteAddr()).Address,
 				}
 			}
 		}
@@ -289,14 +290,13 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 		if UDPOverride.Address != nil || UDPOverride.Port != 0 {
 			isOverridden = true
 		}
-		changedAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
 			IsOverridden:      isOverridden,
 			InitUnchangedAddr: DialDest.Address,
-			InitChangedAddr:   net.ParseAddress(changedAddress),
+			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
 		}
 	}
 	return &buf.PacketReader{Reader: conn}
@@ -354,8 +354,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		// check this behavior and add it to map
 		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
 		if DialDest.Address.Family().IsDomain() {
-			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			resolvedUDPAddr.Store(DialDest.Address.String(), net.ParseAddress(RemoteAddress))
+			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
@@ -456,6 +455,7 @@ type NoisePacketWriter struct {
 	noises      []*Noise
 	firstWrite  bool
 	UDPOverride net.Destination
+	remoteAddr  net.Address
 }
 
 // MultiBuffer writer with Noise before first packet
@@ -468,8 +468,24 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		var noise []byte
 		var err error
+		if w.remoteAddr.Family().IsDomain() {
+			panic("impossible, remoteAddr is always IP")
+		}
 		for _, n := range w.noises {
-			//User input string or base64 encoded string
+			switch n.ApplyTo {
+			case "ipv4":
+				if w.remoteAddr.Family().IsIPv6() {
+					continue
+				}
+			case "ipv6":
+				if w.remoteAddr.Family().IsIPv4() {
+					continue
+				}
+			case "ip":
+			default:
+				panic("unreachable, applyTo is ip/ipv4/ipv6")
+			}
+			//User input string or base64 encoded string or hex string
 			if n.Packet != nil {
 				noise = n.Packet
 			} else {
@@ -509,23 +525,29 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			return f.writer.Write(b)
 		}
 		data := b[5:recordLen]
-		buf := make([]byte, 1024)
+		buff := make([]byte, 2048)
 		var hello []byte
+		maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
+		var splitNum int64
 		for from := 0; ; {
 			to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-			if to > len(data) {
+			splitNum++
+			if to > len(data) || (maxSplit > 0 && splitNum >= maxSplit) {
 				to = len(data)
 			}
-			copy(buf[:3], b)
-			copy(buf[5:], data[from:to])
 			l := to - from
+			if 5+l > len(buff) {
+				buff = make([]byte, 5+l)
+			}
+			copy(buff[:3], b)
+			copy(buff[5:], data[from:to])
 			from = to
-			buf[3] = byte(l >> 8)
-			buf[4] = byte(l)
+			buff[3] = byte(l >> 8)
+			buff[4] = byte(l)
 			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
-				hello = append(hello, buf[:5+l]...)
+				hello = append(hello, buff[:5+l]...)
 			} else {
-				_, err := f.writer.Write(buf[:5+l])
+				_, err := f.writer.Write(buff[:5+l])
 				time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 				if err != nil {
 					return 0, err
@@ -552,17 +574,20 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 	if f.fragment.PacketsFrom != 0 && (f.count < f.fragment.PacketsFrom || f.count > f.fragment.PacketsTo) {
 		return f.writer.Write(b)
 	}
+	maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
+	var splitNum int64
 	for from := 0; ; {
 		to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-		if to > len(b) {
+		splitNum++
+		if to > len(b) || (maxSplit > 0 && splitNum >= maxSplit) {
 			to = len(b)
 		}
 		n, err := f.writer.Write(b[from:to])
 		from += n
-		time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 		if err != nil {
 			return from, err
 		}
+		time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 		if from >= len(b) {
 			return from, nil
 		}

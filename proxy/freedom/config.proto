@@ -19,6 +19,8 @@ message Fragment {
   uint64 length_max = 4;
   uint64 interval_min = 5;
   uint64 interval_max = 6;
+  uint64 max_split_min = 7;
+  uint64 max_split_max = 8;
 }
 message Noise {
   uint64 length_min = 1;
@@ -26,6 +28,7 @@ message Noise {
   uint64 delay_min = 3;
   uint64 delay_max = 4;
   bytes packet = 5;
+  string apply_to = 6;
 }
 
 message Config {
