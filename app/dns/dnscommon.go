@@ -49,7 +49,7 @@ func (r *IPRecord) getIPs() ([]net.IP, uint32, error) {
 
 	ttl := uint32(untilExpire) + 1
 	if ttl == 1 {
-		r.Expire = time.Now().Add(time.Second) // To ensure that two consecutive requests have the same result
+		r.Expire = time.Now().Add(time.Second) // To ensure that two consecutive requests get the same result
 	}
 	if r.RCode != dnsmessage.RCodeSuccess {
 		return nil, ttl, dns_feature.RCodeError(r.RCode)
