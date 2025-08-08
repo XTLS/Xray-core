@@ -85,20 +85,20 @@ var (
 	obm       outbound.Manager
 )
 
-func lookupIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
 	if dnsClient == nil {
 		return nil, errors.New("DNS client not initialized").AtError()
 	}
 
 	ips, _, err := dnsClient.LookupIP(domain, dns.IPOption{
-		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && strategy.preferIP4(),
-		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && strategy.preferIP6(),
+		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && strategy.PreferIP4(),
+		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && strategy.PreferIP6(),
 	})
 	{ // Resolve fallback
-		if (len(ips) == 0 || err != nil) && strategy.hasFallback() && localAddr == nil {
+		if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
 			ips, _, err = dnsClient.LookupIP(domain, dns.IPOption{
-				IPv4Enable: strategy.fallbackIP4(),
-				IPv6Enable: strategy.fallbackIP6(),
+				IPv4Enable: strategy.FallbackIP4(),
+				IPv6Enable: strategy.FallbackIP6(),
 			})
 		}
 	}
@@ -113,7 +113,7 @@ func canLookupIP(dst net.Destination, sockopt *SocketConfig) bool {
 	if dst.Address.Family().IsIP() {
 		return false
 	}
-	return sockopt.DomainStrategy.hasStrategy()
+	return sockopt.DomainStrategy.HasStrategy()
 }
 
 func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.Handler) net.Conn {
@@ -249,17 +249,17 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	}
 
 	if canLookupIP(dest, sockopt) {
-		ips, err := lookupIP(dest.Address.String(), sockopt.DomainStrategy, src)
+		ips, err := LookupForIP(dest.Address.String(), sockopt.DomainStrategy, src)
 		if err != nil {
 			errors.LogErrorInner(ctx, err, "failed to resolve ip")
-			if sockopt.DomainStrategy.forceIP() {
+			if sockopt.DomainStrategy.ForceIP() {
 				return nil, err
 			}
 		} else if sockopt.HappyEyeballs == nil || sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0 || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
 		} else {
-			return TcpRaceDial(ctx, src, ips, dest.Port, sockopt)
+			return TcpRaceDial(ctx, src, ips, dest.Port, sockopt, dest.Address.String())
 		}
 	}
 
