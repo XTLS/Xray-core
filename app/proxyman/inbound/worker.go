@@ -325,7 +325,7 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
-				Local:   net.DestinationFromAddr(w.hub.Addr()),
+				Local:   net.DestinationFromAddr(w.hub.Addr()), // Due to some limitations, in UDP connections, localIP is always equal to listen interface IP
 				Gateway: net.UDPDestination(w.address, w.port),
 				Tag:     w.tag,
 			})

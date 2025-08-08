@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	goerrors "errors"
+	"github.com/xtls/xray-core/common/dice"
 	"io"
 	"math/big"
 	gonet "net"
@@ -177,6 +178,23 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
+	content := session.ContentFromContext(ctx)
+	if h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() && (content == nil || !content.SkipDNSResolve) {
+		ips, err := internet.LookupForIP(ob.Target.Address.Domain(), h.senderSettings.TargetStrategy, nil)
+		if err != nil {
+			errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
+			if h.senderSettings.TargetStrategy.ForceIP() {
+				err := errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
+				session.SubmitOutboundErrorToOriginator(ctx, err)
+				common.Interrupt(link.Writer)
+				common.Interrupt(link.Reader)
+				return
+			}
+
+		} else {
+			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+		}
+	}
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
@@ -188,6 +206,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				session.SubmitOutboundErrorToOriginator(ctx, err)
 				errors.LogInfo(ctx, err.Error())
 				common.Interrupt(link.Writer)
+				common.Interrupt(link.Reader)
 			}
 		}
 		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
