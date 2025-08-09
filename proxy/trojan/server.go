@@ -171,6 +171,21 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		Buffer: buf.MultiBuffer{first},
 	}
 
+	content := session.ContentFromContext(ctx)
+	if tlsConn, ok := iConn.(*tls.Conn); ok {
+		cs := tlsConn.ConnectionState()
+		if cs.ServerName != "" {
+			errors.LogInfo(ctx, "extracted SNI = "+cs.ServerName)
+			content.SNI = cs.ServerName
+		}
+	} else if realityConn, ok := iConn.(*reality.Conn); ok {
+		cs := realityConn.ConnectionState()
+		if cs.ServerName != "" {
+			errors.LogInfo(ctx, "extracted SNI = "+cs.ServerName)
+			content.SNI = cs.ServerName
+		}
+	}
+
 	var user *protocol.MemoryUser
 
 	napfb := s.fallbacks

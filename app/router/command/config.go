@@ -40,6 +40,13 @@ func (c routingContext) GetRuleTag() string {
 	return ""
 }
 
+// GetIncomingSNI implements routing.Context
+func (c routingContext) GetIncomingSNI() string {
+	// For command context, we don't have access to incoming SNI
+	// This is a mock implementation for interface compliance
+	return ""
+}
+
 // GetSkipDNSResolve is a mock implementation here to match the interface,
 // SkipDNSResolve is set from dns module, no use if coming from a protobuf object?
 // TODO: please confirm @Vigilans

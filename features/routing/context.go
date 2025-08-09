@@ -46,4 +46,7 @@ type Context interface {
 
 	// GetSkipDNSResolve returns a flag switch for weather skip dns resolve during route pick.
 	GetSkipDNSResolve() bool
+
+	// GetIncomingSNI returns the SNI (Server Name Indication) from the incoming TLS connection.
+	GetIncomingSNI() string
 }
