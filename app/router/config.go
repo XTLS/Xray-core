@@ -113,6 +113,14 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(&AttributeMatcher{configuredKeys})
 	}
 
+	if len(rr.IncomingSni) > 0 {
+		matcher, err := NewIncomingSNIMatcher(rr.IncomingSni)
+		if err != nil {
+			return nil, errors.New("failed to build incoming SNI condition").Base(err)
+		}
+		conds.Add(matcher)
+	}
+
 	if conds.Len() == 0 {
 		return nil, errors.New("this rule has no effective fields").AtWarning()
 	}

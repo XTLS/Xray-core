@@ -111,6 +111,9 @@ message RoutingRule {
 
   string domain_matcher = 17;
 
+  // List of incoming SNI patterns for TLS connections
+  repeated Domain incoming_sni = 21;
+
   repeated GeoIP local_geoip = 18;
   xray.common.net.PortList local_port_list = 19;
 }

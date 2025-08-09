@@ -88,6 +88,9 @@ type Content struct {
 	// Protocol of current content.
 	Protocol string
 
+	// SNI (Server Name Indication) from the incoming TLS connection.
+	SNI string
+
 	SniffingRequest SniffingRequest
 
 	Attributes map[string]string

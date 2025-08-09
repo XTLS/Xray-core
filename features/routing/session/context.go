@@ -144,6 +144,14 @@ func (ctx *Context) GetSkipDNSResolve() bool {
 	return ctx.Content.SkipDNSResolve
 }
 
+// GetIncomingSNI implements routing.Context.
+func (ctx *Context) GetIncomingSNI() string {
+	if ctx.Content == nil {
+		return ""
+	}
+	return ctx.Content.SNI
+}
+
 // AsRoutingContext creates a context from context.context with session info.
 func AsRoutingContext(ctx context.Context) routing.Context {
 	outbounds := session.OutboundsFromContext(ctx)

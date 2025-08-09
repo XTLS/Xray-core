@@ -111,6 +111,38 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
+type IncomingSniMatcher struct {
+	matchers strmatcher.IndexMatcher
+}
+
+func NewIncomingSNIMatcher(domains []*Domain) (*IncomingSniMatcher, error) {
+	g := new(strmatcher.MatcherGroup)
+	for _, d := range domains {
+		m, err := domainToMatcher(d)
+		if err != nil {
+			return nil, err
+		}
+		g.Add(m)
+	}
+
+	return &IncomingSniMatcher{
+		matchers: g,
+	}, nil
+}
+
+func (m *IncomingSniMatcher) ApplyIncomingSNI(sni string) bool {
+	return len(m.matchers.Match(strings.ToLower(sni))) > 0
+}
+
+// Apply implements Condition.
+func (m *IncomingSniMatcher) Apply(ctx routing.Context) bool {
+	sni := ctx.GetIncomingSNI()
+	if len(sni) == 0 {
+		return false
+	}
+	return m.ApplyIncomingSNI(sni)
+}
+
 type MultiGeoIPMatcher struct {
 	matchers []*GeoIPMatcher
 	asType   string // local, source, target
