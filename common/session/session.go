@@ -48,9 +48,9 @@ type Inbound struct {
 	User *protocol.MemoryUser
 	// VlessRoute is the user-sent VLESS UUID's last byte.
 	VlessRoute net.Port
-	// Conn is actually internet.Connection. May be nil.
+	// Used by splice copy. Conn is actually internet.Connection. May be nil.
 	Conn net.Conn
-	// Timer of the inbound buf copier. May be nil.
+	// Used by splice copy. Timer of the inbound buf copier. May be nil.
 	Timer *signal.ActivityTimer
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
@@ -69,31 +69,33 @@ type Outbound struct {
 	Tag string
 	// Name of the outbound proxy that handles the connection.
 	Name string
-	// Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
+	// Unused. Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
 	Conn net.Conn
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
 	CanSpliceCopy int
 }
 
-// SniffingRequest controls the behavior of content sniffing.
+// SniffingRequest controls the behavior of content sniffing. They are from inbound config. Read-only
 type SniffingRequest struct {
-	ExcludeForDomain               []string // read-only once set
-	OverrideDestinationForProtocol []string // read-only once set
+	ExcludeForDomain               []string
+	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool
 	RouteOnly                      bool
 }
 
-// Content is the metadata of the connection content.
+// Content is the metadata of the connection content. Mainly used for routing.
 type Content struct {
 	// Protocol of current content.
 	Protocol string
 
 	SniffingRequest SniffingRequest
 
+	// HTTP traffic sniffed headers
 	Attributes map[string]string
 
+	// SkipDNSResolve is set from DNS module. the DOH remote server maybe a domain name, this prevents cycle resolving dead loop
 	SkipDNSResolve bool
 }
 
