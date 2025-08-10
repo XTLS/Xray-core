@@ -2,8 +2,6 @@ package crypto_test
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"io"
 	"testing"
