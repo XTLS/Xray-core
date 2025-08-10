@@ -58,11 +58,7 @@ func (a *MemoryAccount) CheckIV(iv []byte) error {
 }
 
 func createAesGcm(key []byte) cipher.AEAD {
-	block, err := aes.NewCipher(key)
-	common.Must(err)
-	gcm, err := cipher.NewGCM(block)
-	common.Must(err)
-	return gcm
+	return crypto.NewAesGcm(key)
 }
 
 func createChaCha20Poly1305(key []byte) cipher.AEAD {
