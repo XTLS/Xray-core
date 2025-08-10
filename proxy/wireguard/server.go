@@ -126,17 +126,19 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	ctx, cancel := context.WithCancel(context.Background())
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
+	inbound := session.Inbound{} // since promiscuousModeHandler mixed-up context, we shallow copy inbound (tag) and content (configs)
 	if s.info.inboundTag != nil {
-		ctx = session.ContextWithInbound(ctx, s.info.inboundTag)
+		inbound = *s.info.inboundTag
 	}
+	inbound.Name = "wireguard"
+	inbound.CanSpliceCopy = 3
+	inbound.Source = net.DestinationFromAddr(conn.RemoteAddr()) 
+	inbound.Gateway = net.DestinationFromAddr(conn.LocalAddr())
+	ctx = session.ContextWithInbound(ctx, &inbound)
 	if s.info.contentTag != nil {
 		ctx = session.ContextWithContent(ctx, s.info.contentTag)
 	}
-	inbound := session.InboundFromContext(ctx)
-	inbound.Name = "wireguard"
-	inbound.CanSpliceCopy = 3
-	outbounds := []*session.Outbound{{}}
-	ctx = session.ContextWithOutbounds(ctx, outbounds) // since promiscuousModeHandler mixed-up context, we need to define new Outbounds here
+	ctx = session.SubContextFromMuxInbound(ctx)
 
 	plcy := s.policyManager.ForLevel(0)
 	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
