@@ -91,7 +91,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 			}
 		}
 		if dest.Port == 0 {
-			dest.Port = net.Port(common.Must2(strconv.Atoi(port)).(int))
+			dest.Port = net.Port(common.Must2(strconv.Atoi(port)))
 		}
 		if d.portMap != nil && d.portMap[port] != "" {
 			h, p, _ := net.SplitHostPort(d.portMap[port])
@@ -99,7 +99,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				dest.Address = net.ParseAddress(h)
 			}
 			if len(p) > 0 {
-				dest.Port = net.Port(common.Must2(strconv.Atoi(p)).(int))
+				dest.Port = net.Port(common.Must2(strconv.Atoi(p)))
 			}
 		}
 	}

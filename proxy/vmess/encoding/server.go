@@ -2,8 +2,6 @@ package encoding
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/binary"
 	"hash/fnv"

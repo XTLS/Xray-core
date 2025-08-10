@@ -2,7 +2,6 @@ package shadowsocks
 
 import (
 	"bytes"
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"

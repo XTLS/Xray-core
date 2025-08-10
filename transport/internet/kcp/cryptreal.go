@@ -1,11 +1,9 @@
 package kcp
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 )
 
