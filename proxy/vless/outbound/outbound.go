@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"encoding/base64"
 	"reflect"
 	"time"
 	"unsafe"
@@ -24,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -43,6 +45,7 @@ type Handler struct {
 	serverPicker  protocol.ServerPicker
 	policyManager policy.Manager
 	cone          bool
+	encryption    *encryption.ClientInstance
 }
 
 // New creates a new VLess outbound handler.
@@ -62,6 +65,15 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+	}
+
+	a := handler.serverPicker.PickServer().PickUser().Account.(*vless.MemoryAccount)
+	e, _ := base64.RawURLEncoding.DecodeString(a.Encryption)
+	if len(e) == 1184 {
+		handler.encryption = &encryption.ClientInstance{}
+		if err := handler.encryption.Init(e, time.Duration(a.Minutes)*time.Minute); err != nil {
+			return nil, errors.New("failed to use mlkem768client").Base(err).AtError()
+		}
 	}
 
 	return handler, nil
@@ -97,6 +109,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
+
+	if h.encryption != nil {
+		var err error
+		conn, err = h.encryption.Handshake(conn)
+		if err != nil {
+			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
+		}
+	}
 
 	command := protocol.RequestCommandTCP
 	if target.Network == net.Network_UDP {

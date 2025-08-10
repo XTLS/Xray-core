@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"encoding/base64"
 	"io"
 	"reflect"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -67,6 +69,7 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             vless.Validator
 	dns                   dns.Client
+	decryption            *encryption.ServerInstance
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
@@ -79,6 +82,14 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		dns:                   dc,
 		validator:             validator,
+	}
+
+	d, _ := base64.RawURLEncoding.DecodeString(config.Decryption)
+	if len(d) == 64 {
+		handler.decryption = &encryption.ServerInstance{}
+		if err := handler.decryption.Init(d, time.Duration(config.Minutes)*time.Minute); err != nil {
+			return nil, errors.New("failed to use mlkem768seed").Base(err).AtError()
+		}
 	}
 
 	if config.Fallbacks != nil {
@@ -202,6 +213,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return errors.New("unable to set read deadline").Base(err).AtWarning()
+	}
+
+	if h.decryption != nil {
+		var err error
+		connection, err = h.decryption.Handshake(connection)
+		if err != nil {
+			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
+		}
 	}
 
 	first := buf.FromBytes(make([]byte, buf.Size))

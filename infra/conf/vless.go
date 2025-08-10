@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
 	"runtime"
@@ -55,12 +56,16 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		account.Id = u.String()
 
 		switch account.Flow {
-		case "", vless.XRV:
+		case "":
+		case vless.XRV:
+			if c.Decryption != "none" {
+				return nil, errors.New(`VLESS clients: "decryption" doesn't support "flow" yet`)
+			}
 		default:
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 
-		if account.Encryption != "" {
+		if len(account.Encryption) > 0 {
 			return nil, errors.New(`VLESS clients: "encryption" should not in inbound settings`)
 		}
 
@@ -68,10 +73,34 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		config.Clients[idx] = user
 	}
 
-	if c.Decryption != "none" {
-		return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
+	if !func() bool {
+		s := strings.Split(c.Decryption, "-mlkem768seed-")
+		if len(s) != 2 {
+			return false
+		}
+		if s[0] != "1rtt" {
+			t := strings.TrimSuffix(s[0], "min")
+			if t == s[0] {
+				return false
+			}
+			i, err := strconv.Atoi(t)
+			if err != nil {
+				return false
+			}
+			config.Minutes = uint32(i)
+		}
+		b, err := base64.RawURLEncoding.DecodeString(s[1])
+		if len(b) != 64 || err != nil {
+			return false
+		}
+		config.Decryption = s[1]
+		return true
+	}() && c.Decryption != "none" {
+		if c.Decryption == "" {
+			return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
+		}
+		return nil, errors.New(`VLESS settings: unsupported "decryption": ` + c.Decryption)
 	}
-	config.Decryption = c.Decryption
 
 	for _, fb := range c.Fallbacks {
 		var i uint16
@@ -143,16 +172,16 @@ type VLessOutboundConfig struct {
 func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	config := new(outbound.Config)
 
-	if len(c.Vnext) == 0 {
-		return nil, errors.New(`VLESS settings: "vnext" is empty`)
+	if len(c.Vnext) != 1 {
+		return nil, errors.New(`VLESS settings: "vnext" should have one and only one member`)
 	}
 	config.Vnext = make([]*protocol.ServerEndpoint, len(c.Vnext))
 	for idx, rec := range c.Vnext {
 		if rec.Address == nil {
 			return nil, errors.New(`VLESS vnext: "address" is not set`)
 		}
-		if len(rec.Users) == 0 {
-			return nil, errors.New(`VLESS vnext: "users" is empty`)
+		if len(rec.Users) != 1 {
+			return nil, errors.New(`VLESS vnext: "users" should have one and only one member`)
 		}
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
@@ -176,13 +205,42 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account.Id = u.String()
 
 			switch account.Flow {
-			case "", vless.XRV, vless.XRV + "-udp443":
+			case "":
+			case vless.XRV, vless.XRV + "-udp443":
+				if account.Encryption != "none" {
+					return nil, errors.New(`VLESS users: "encryption" doesn't support "flow" yet`)
+				}
 			default:
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}
 
-			if account.Encryption != "none" {
-				return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
+			if !func() bool {
+				s := strings.Split(account.Encryption, "-mlkem768client-")
+				if len(s) != 2 {
+					return false
+				}
+				if s[0] != "1rtt" {
+					t := strings.TrimSuffix(s[0], "min")
+					if t == s[0] {
+						return false
+					}
+					i, err := strconv.Atoi(t)
+					if err != nil {
+						return false
+					}
+					account.Minutes = uint32(i)
+				}
+				b, err := base64.RawURLEncoding.DecodeString(s[1])
+				if len(b) != 1184 || err != nil {
+					return false
+				}
+				account.Encryption = s[1]
+				return true
+			}() && account.Encryption != "none" {
+				if account.Encryption == "" {
+					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
+				}
+				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
 			}
 
 			user.Account = serial.ToTypedMessage(account)
