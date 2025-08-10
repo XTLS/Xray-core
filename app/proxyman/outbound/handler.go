@@ -192,7 +192,9 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			}
 
 		} else {
+			unchangedDomain := ob.Target.Address.Domain()
 			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
 		}
 	}
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
