@@ -34,7 +34,7 @@ type ServerConn struct {
 	net.Conn
 	cipher     byte
 	baseKey    []byte
-	reuse      []byte
+	ticket     []byte
 	peerRandom []byte
 	peerAead   cipher.AEAD
 	peerNonce  []byte
@@ -71,20 +71,20 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	}
 	c := &ServerConn{Conn: conn}
 
-	peerReuseHello := make([]byte, 21+32)
-	if _, err := io.ReadFull(c.Conn, peerReuseHello); err != nil {
+	peerTicketHello := make([]byte, 21+32)
+	if _, err := io.ReadFull(c.Conn, peerTicketHello); err != nil {
 		return nil, err
 	}
 	if i.minutes > 0 {
 		i.RLock()
-		s := i.sessions[[21]byte(peerReuseHello)]
+		s := i.sessions[[21]byte(peerTicketHello)]
 		i.RUnlock()
 		if s != nil {
-			if _, replay := s.randoms.LoadOrStore([32]byte(peerReuseHello[21:]), true); !replay {
+			if _, replay := s.randoms.LoadOrStore([32]byte(peerTicketHello[21:]), true); !replay {
 				c.cipher = s.cipher
 				c.baseKey = s.baseKey
-				c.reuse = peerReuseHello[:21]
-				c.peerRandom = peerReuseHello[21:]
+				c.ticket = peerTicketHello[:21]
+				c.peerRandom = peerTicketHello[21:]
 				return c, nil
 			}
 		}
@@ -96,11 +96,11 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	}
 	if l, _ := decodeHeader(peerHeader); l != 0 {
 		c.Conn.Write(make([]byte, crypto.RandBetween(100, 1000))) // make client do new handshake
-		return nil, errors.New("invalid reuse")
+		return nil, errors.New("invalid ticket")
 	}
 
 	peerClientHello := make([]byte, 1088+1184+1)
-	copy(peerClientHello, peerReuseHello)
+	copy(peerClientHello, peerTicketHello)
 	copy(peerClientHello[53:], peerHeader)
 	if _, err := io.ReadFull(c.Conn, peerClientHello[58:]); err != nil {
 		return nil, err
@@ -126,13 +126,13 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	authKey := make([]byte, 32)
 	hkdf.New(sha256.New, c.baseKey, encapsulatedNfsKey, eKeyPfsData).Read(authKey)
 	nonce := make([]byte, 12)
-	c.reuse = newAead(c.cipher, authKey).Seal(nil, nonce, []byte("VLESS"), encapsulatedPfsKey)
+	c.ticket = newAead(c.cipher, authKey).Seal(nil, nonce, []byte("VLESS"), encapsulatedPfsKey)
 
 	padding := crypto.RandBetween(100, 1000)
 
 	serverHello := make([]byte, 1088+21+5+padding)
 	copy(serverHello, encapsulatedPfsKey)
-	copy(serverHello[1088:], c.reuse)
+	copy(serverHello[1088:], c.ticket)
 	encodeHeader(serverHello[1109:], int(padding))
 
 	if _, err := c.Conn.Write(serverHello); err != nil {
@@ -141,7 +141,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 
 	if i.minutes > 0 {
 		i.Lock()
-		i.sessions[[21]byte(c.reuse)] = &ServerSession{
+		i.sessions[[21]byte(c.ticket)] = &ServerSession{
 			expire:  time.Now().Add(i.minutes),
 			cipher:  c.cipher,
 			baseKey: c.baseKey,
@@ -171,12 +171,12 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 					return 0, err
 				}
 			}
-			peerIndex := make([]byte, 21)
-			copy(peerIndex, peerHeader)
-			if _, err := io.ReadFull(c.Conn, peerIndex[5:]); err != nil {
+			peerTicket := make([]byte, 21)
+			copy(peerTicket, peerHeader)
+			if _, err := io.ReadFull(c.Conn, peerTicket[5:]); err != nil {
 				return 0, err
 			}
-			if !bytes.Equal(peerIndex, c.reuse) {
+			if !bytes.Equal(peerTicket, c.ticket) {
 				return 0, errors.New("naughty boy")
 			}
 			c.peerRandom = make([]byte, 32)
@@ -185,7 +185,7 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 			}
 		}
 		peerKey := make([]byte, 32)
-		hkdf.New(sha256.New, c.baseKey, c.peerRandom, c.reuse).Read(peerKey)
+		hkdf.New(sha256.New, c.baseKey, c.peerRandom, c.ticket).Read(peerKey)
 		c.peerAead = newAead(c.cipher, peerKey)
 		c.peerNonce = make([]byte, 12)
 	}

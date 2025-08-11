@@ -31,14 +31,14 @@ type ClientInstance struct {
 	minutes time.Duration
 	expire  time.Time
 	baseKey []byte
-	reuse   []byte
+	ticket  []byte
 }
 
 type ClientConn struct {
 	net.Conn
 	instance  *ClientInstance
 	baseKey   []byte
-	reuse     []byte
+	ticket    []byte
 	random    []byte
 	aead      cipher.AEAD
 	nonce     []byte
@@ -64,7 +64,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		if time.Now().Before(i.expire) {
 			c.instance = i
 			c.baseKey = i.baseKey
-			c.reuse = i.reuse
+			c.ticket = i.ticket
 			i.RUnlock()
 			return c, nil
 		}
@@ -94,7 +94,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 	encapsulatedPfsKey := peerServerHello[:1088]
-	c.reuse = peerServerHello[1088:]
+	c.ticket = peerServerHello[1088:]
 
 	pfsKey, err := dKeyPfs.Decapsulate(encapsulatedPfsKey)
 	if err != nil {
@@ -105,7 +105,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	authKey := make([]byte, 32)
 	hkdf.New(sha256.New, c.baseKey, encapsulatedNfsKey, eKeyPfs).Read(authKey)
 	nonce := make([]byte, 12)
-	VLESS, _ := newAead(ClientCipher, authKey).Open(nil, nonce, c.reuse, encapsulatedPfsKey)
+	VLESS, _ := newAead(ClientCipher, authKey).Open(nil, nonce, c.ticket, encapsulatedPfsKey)
 	if !bytes.Equal(VLESS, []byte("VLESS")) { // TODO: more message
 		return nil, errors.New("invalid server").AtError()
 	}
@@ -114,7 +114,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		i.Lock()
 		i.expire = time.Now().Add(i.minutes)
 		i.baseKey = c.baseKey
-		i.reuse = c.reuse
+		i.ticket = c.ticket
 		i.Unlock()
 	}
 
@@ -130,12 +130,12 @@ func (c *ClientConn) Write(b []byte) (int, error) {
 		c.random = make([]byte, 32)
 		rand.Read(c.random)
 		key := make([]byte, 32)
-		hkdf.New(sha256.New, c.baseKey, c.random, c.reuse).Read(key)
+		hkdf.New(sha256.New, c.baseKey, c.random, c.ticket).Read(key)
 		c.aead = newAead(ClientCipher, key)
 		c.nonce = make([]byte, 12)
 
 		data = make([]byte, 21+32+5+len(b)+16)
-		copy(data, c.reuse)
+		copy(data, c.ticket)
 		copy(data[21:], c.random)
 		encodeHeader(data[53:], len(b)+16)
 		c.aead.Seal(data[:58], c.nonce, b, data[53:58])
@@ -200,7 +200,7 @@ func (c *ClientConn) Read(b []byte) (int, error) { // after first Write()
 	if err != nil {
 		if c.instance != nil {
 			c.instance.Lock()
-			if bytes.Equal(c.reuse, c.instance.reuse) {
+			if bytes.Equal(c.ticket, c.instance.ticket) {
 				c.instance.expire = time.Now() // expired
 			}
 			c.instance.Unlock()

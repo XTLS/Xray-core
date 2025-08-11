@@ -65,7 +65,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 
-		if len(account.Encryption) > 0 {
+		if account.Encryption != "" {
 			return nil, errors.New(`VLESS clients: "encryption" should not in inbound settings`)
 		}
 
@@ -73,8 +73,9 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		config.Clients[idx] = user
 	}
 
+	config.Decryption = c.Decryption
 	if !func() bool {
-		s := strings.Split(c.Decryption, "-mlkem768seed-")
+		s := strings.Split(config.Decryption, "-mlkem768seed-")
 		if len(s) != 2 {
 			return false
 		}
@@ -95,11 +96,11 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 		config.Decryption = s[1]
 		return true
-	}() && c.Decryption != "none" {
-		if c.Decryption == "" {
+	}() && config.Decryption != "none" {
+		if config.Decryption == "" {
 			return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
 		}
-		return nil, errors.New(`VLESS settings: unsupported "decryption": ` + c.Decryption)
+		return nil, errors.New(`VLESS settings: unsupported "decryption": ` + config.Decryption)
 	}
 
 	for _, fb := range c.Fallbacks {
