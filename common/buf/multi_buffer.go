@@ -141,12 +141,22 @@ func Compact(mb MultiBuffer) MultiBuffer {
 
 	mb2 := make(MultiBuffer, 0, len(mb))
 	last := mb[0]
+	if last.start != 0 {
+		b := New()
+		common.Must2(b.ReadFrom(last))
+		last = b
+	}
 
 	for i := 1; i < len(mb); i++ {
 		curr := mb[i]
 		if last.Len()+curr.Len() > Size {
 			mb2 = append(mb2, last)
 			last = curr
+			if last.start != 0 {
+				b := New()
+				common.Must2(b.ReadFrom(last))
+				last = b
+			}
 		} else {
 			common.Must2(last.ReadFrom(curr))
 			curr.Release()

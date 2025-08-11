@@ -258,6 +258,9 @@ func (b *Buffer) IsFull() bool {
 func (b *Buffer) Write(data []byte) (int, error) {
 	nBytes := copy(b.v[b.end:], data)
 	b.end += int32(nBytes)
+	if nBytes != len(data) {
+		return nBytes, errors.New("incomplete write")
+	}
 	return nBytes, nil
 }
 
@@ -306,10 +309,11 @@ func (b *Buffer) Read(data []byte) (int, error) {
 	nBytes := copy(data, b.v[b.start:b.end])
 	if int32(nBytes) == b.Len() {
 		b.Clear()
+		return nBytes, nil
 	} else {
 		b.start += int32(nBytes)
+		return nBytes, errors.New("incomplete read")
 	}
-	return nBytes, nil
 }
 
 // ReadFrom implements io.ReaderFrom.
