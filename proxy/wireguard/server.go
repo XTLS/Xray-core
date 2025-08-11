@@ -31,6 +31,7 @@ type Server struct {
 }
 
 type routingInfo struct {
+	ctx         context.Context
 	dispatcher  routing.Dispatcher
 	inboundTag  *session.Inbound
 	contentTag  *session.Content
@@ -78,8 +79,10 @@ func (*Server) Network() []net.Network {
 // Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	s.info = routingInfo{
-		dispatcher:  dispatcher,
-		inboundTag:  session.InboundFromContext(ctx),
+		ctx:        ctx,
+		dispatcher: dispatcher,
+		inboundTag: session.InboundFromContext(ctx),
+		contentTag: session.ContentFromContext(ctx),
 	}
 
 	ep, err := s.bindServer.ParseEndpoint(conn.RemoteAddr().String())
@@ -118,12 +121,12 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	if s.info.dispatcher == nil {
-		errors.LogError(context.Background(), "unexpected: dispatcher == nil")
+		errors.LogError(s.info.ctx, "unexpected: dispatcher == nil")
 		return
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(core.ToBackgroundDetachedContext(s.info.ctx))
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
 	inbound := session.Inbound{} // since promiscuousModeHandler mixed-up context, we shallow copy inbound (tag) and content (configs)
