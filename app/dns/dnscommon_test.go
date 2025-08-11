@@ -18,31 +18,31 @@ func Test_parseResponse(t *testing.T) {
 
 	ans := new(dns.Msg)
 	ans.Id = 0
-	p = append(p, common.Must2(ans.Pack()).([]byte))
+	p = append(p, common.Must2(ans.Pack()))
 
 	p = append(p, []byte{})
 
 	ans = new(dns.Msg)
 	ans.Id = 1
 	ans.Answer = append(ans.Answer,
-		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN A 8.8.8.8")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN A 8.8.4.4")).(dns.RR),
+		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
+		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
+		common.Must2(dns.NewRR("google.com. IN A 8.8.8.8")),
+		common.Must2(dns.NewRR("google.com. IN A 8.8.4.4")),
 	)
-	p = append(p, common.Must2(ans.Pack()).([]byte))
+	p = append(p, common.Must2(ans.Pack()))
 
 	ans = new(dns.Msg)
 	ans.Id = 2
 	ans.Answer = append(ans.Answer,
-		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN CNAME test.google.com")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8888")).(dns.RR),
-		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8844")).(dns.RR),
+		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
+		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
+		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
+		common.Must2(dns.NewRR("google.com. IN CNAME test.google.com")),
+		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8888")),
+		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8844")),
 	)
-	p = append(p, common.Must2(ans.Pack()).([]byte))
+	p = append(p, common.Must2(ans.Pack()))
 
 	tests := []struct {
 		name    string
