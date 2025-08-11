@@ -104,6 +104,7 @@ func TestVLessInbound(t *testing.T) {
 						Email: "love@example.com",
 					},
 				},
+				Decryption: "none",
 				Fallbacks: []*inbound.Fallback{
 					{
 						Alpn: "",
