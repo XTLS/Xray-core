@@ -28,6 +28,7 @@ func init() {
 type ClientInstance struct {
 	sync.RWMutex
 	eKeyNfs *mlkem.EncapsulationKey768
+	xor     uint32
 	minutes time.Duration
 	expire  time.Time
 	baseKey []byte
@@ -47,8 +48,9 @@ type ClientConn struct {
 	peerCache []byte
 }
 
-func (i *ClientInstance) Init(eKeyNfsData []byte, minutes time.Duration) (err error) {
+func (i *ClientInstance) Init(eKeyNfsData []byte, xor uint32, minutes time.Duration) (err error) {
 	i.eKeyNfs, err = mlkem.NewEncapsulationKey768(eKeyNfsData)
+	i.xor = xor
 	i.minutes = minutes
 	return
 }
@@ -56,6 +58,9 @@ func (i *ClientInstance) Init(eKeyNfsData []byte, minutes time.Duration) (err er
 func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	if i.eKeyNfs == nil {
 		return nil, errors.New("uninitialized")
+	}
+	if i.xor == 1 {
+		conn = NewXorConn(conn, i.eKeyNfs.Bytes())
 	}
 	c := &ClientConn{Conn: conn}
 

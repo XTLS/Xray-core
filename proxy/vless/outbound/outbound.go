@@ -71,7 +71,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	e, _ := base64.RawURLEncoding.DecodeString(a.Encryption)
 	if len(e) == 1184 {
 		handler.encryption = &encryption.ClientInstance{}
-		if err := handler.encryption.Init(e, time.Duration(a.Minutes)*time.Minute); err != nil {
+		if err := handler.encryption.Init(e, a.Xor, time.Duration(a.Minutes)*time.Minute); err != nil {
 			return nil, errors.New("failed to use mlkem768client").Base(err).AtError()
 		}
 	}

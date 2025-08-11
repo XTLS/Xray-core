@@ -87,7 +87,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 	d, _ := base64.RawURLEncoding.DecodeString(config.Decryption)
 	if len(d) == 64 {
 		handler.decryption = &encryption.ServerInstance{}
-		if err := handler.decryption.Init(d, time.Duration(config.Minutes)*time.Minute); err != nil {
+		if err := handler.decryption.Init(d, config.Xor, time.Duration(config.Minutes)*time.Minute); err != nil {
 			return nil, errors.New("failed to use mlkem768seed").Base(err).AtError()
 		}
 	}

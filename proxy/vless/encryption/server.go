@@ -26,6 +26,7 @@ type ServerSession struct {
 type ServerInstance struct {
 	sync.RWMutex
 	dKeyNfs  *mlkem.DecapsulationKey768
+	xor      uint32
 	minutes  time.Duration
 	sessions map[[21]byte]*ServerSession
 }
@@ -43,8 +44,9 @@ type ServerConn struct {
 	nonce      []byte
 }
 
-func (i *ServerInstance) Init(dKeyNfsData []byte, minutes time.Duration) (err error) {
+func (i *ServerInstance) Init(dKeyNfsData []byte, xor uint32, minutes time.Duration) (err error) {
 	i.dKeyNfs, err = mlkem.NewDecapsulationKey768(dKeyNfsData)
+	i.xor = xor
 	if minutes > 0 {
 		i.minutes = minutes
 		i.sessions = make(map[[21]byte]*ServerSession)
@@ -68,6 +70,9 @@ func (i *ServerInstance) Init(dKeyNfsData []byte, minutes time.Duration) (err er
 func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	if i.dKeyNfs == nil {
 		return nil, errors.New("uninitialized")
+	}
+	if i.xor == 1 {
+		conn = NewXorConn(conn, i.dKeyNfs.EncapsulationKey().Bytes())
 	}
 	c := &ServerConn{Conn: conn}
 

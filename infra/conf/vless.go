@@ -75,8 +75,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 
 	config.Decryption = c.Decryption
 	if !func() bool {
-		s := strings.Split(config.Decryption, "-mlkem768seed-")
-		if len(s) != 2 {
+		s := strings.SplitN(config.Decryption, "-", 4)
+		if len(s) != 4 || s[2] != "mlkem768seed" {
 			return false
 		}
 		if s[0] != "1rtt" {
@@ -90,11 +90,18 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			}
 			config.Minutes = uint32(i)
 		}
-		b, err := base64.RawURLEncoding.DecodeString(s[1])
+		switch s[1] {
+		case "vless":
+		case "aes128xor":
+			config.Xor = 1
+		default:
+			return false
+		}
+		b, err := base64.RawURLEncoding.DecodeString(s[3])
 		if len(b) != 64 || err != nil {
 			return false
 		}
-		config.Decryption = s[1]
+		config.Decryption = s[3]
 		return true
 	}() && config.Decryption != "none" {
 		if config.Decryption == "" {
@@ -216,8 +223,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			}
 
 			if !func() bool {
-				s := strings.Split(account.Encryption, "-mlkem768client-")
-				if len(s) != 2 {
+				s := strings.SplitN(account.Encryption, "-", 4)
+				if len(s) != 4 || s[2] != "mlkem768client" {
 					return false
 				}
 				if s[0] != "1rtt" {
@@ -231,11 +238,18 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 					}
 					account.Minutes = uint32(i)
 				}
-				b, err := base64.RawURLEncoding.DecodeString(s[1])
+				switch s[1] {
+				case "vless":
+				case "aes128xor":
+					account.Xor = 1
+				default:
+					return false
+				}
+				b, err := base64.RawURLEncoding.DecodeString(s[3])
 				if len(b) != 1184 || err != nil {
 					return false
 				}
-				account.Encryption = s[1]
+				account.Encryption = s[3]
 				return true
 			}() && account.Encryption != "none" {
 				if account.Encryption == "" {

@@ -13,5 +13,6 @@ message Account {
   string flow = 2;
 
   string encryption = 3;
-  uint32 minutes = 4;
+  uint32 xor = 4;
+  uint32 minutes = 5;
 }
