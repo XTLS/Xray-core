@@ -308,26 +308,18 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
 
 			case domain == "origin":
-
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Conn != nil {
-						origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
-						if err == nil {
-							ob.Gateway = net.ParseAddress(origin)
-							errors.LogDebug(ctx, "use receive package ip as snedthrough: ", origin)
-						}
+					if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
+						ob.Gateway = inbound.Local.Address
+						errors.LogDebug(ctx, "use inbound local ip as sendthrough: ", inbound.Local.Address.String())
 					}
 				}
 			case domain == "srcip":
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Conn != nil {
-						clientaddr, _, err := net.SplitHostPort(inbound.Conn.RemoteAddr().String())
-						if err == nil {
-							ob.Gateway = net.ParseAddress(clientaddr)
-							errors.LogDebug(ctx, "use client src ip as snedthrough: ", clientaddr)
-						}
+					if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() {
+						ob.Gateway = inbound.Source.Address
+						errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
 					}
-
 				}
 			//case addr.Family().IsDomain():
 			default:
