@@ -38,7 +38,7 @@ func (c *XorConn) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	if iv != nil {
-		b = b[16:]
+		b = b[16:] // for len(b)
 	}
 	return len(b), nil
 }

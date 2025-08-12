@@ -28,18 +28,14 @@ func decodeHeader(b []byte) (int, error) {
 	return 0, errors.New("invalid record's header")
 }
 
-func newAead(c byte, k []byte) cipher.AEAD {
-	switch c {
-	case 0:
-		if block, err := aes.NewCipher(k); err == nil {
-			aead, _ := cipher.NewGCM(block)
-			return aead
-		}
-	case 1:
-		aead, _ := chacha20poly1305.New(k)
-		return aead
+func newAead(c byte, k []byte) (aead cipher.AEAD) {
+	if c&1 == 1 {
+		block, _ := aes.NewCipher(k)
+		aead, _ = cipher.NewGCM(block)
+	} else {
+		aead, _ = chacha20poly1305.New(k)
 	}
-	return nil
+	return
 }
 
 func increaseNonce(nonce []byte) {
