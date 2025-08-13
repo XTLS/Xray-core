@@ -10,16 +10,19 @@ import (
 
 type XorConn struct {
 	net.Conn
-	key     []byte
-	ctr     cipher.Stream
-	peerCtr cipher.Stream
+	key      []byte
+	ctr      cipher.Stream
+	peerCtr  cipher.Stream
+	isHeader bool
+	skipNext bool
 }
 
 func NewXorConn(conn net.Conn, key []byte) *XorConn {
 	return &XorConn{Conn: conn, key: key[:16]}
+	//chacha20.NewUnauthenticatedCipher()
 }
 
-func (c *XorConn) Write(b []byte) (int, error) {
+func (c *XorConn) Write(b []byte) (int, error) { // two records at most
 	if len(b) == 0 {
 		return 0, nil
 	}
@@ -30,7 +33,13 @@ func (c *XorConn) Write(b []byte) (int, error) {
 		rand.Read(iv)
 		c.ctr = cipher.NewCTR(block, iv)
 	}
-	c.ctr.XORKeyStream(b, b) // caller MUST discard b
+	t, l, _ := DecodeHeader(b)
+	if t != 23 {
+		l += 10 // 5+l+5
+	} else {
+		l = 5
+	}
+	c.ctr.XORKeyStream(b[:l], b[:l]) // caller MUST discard b
 	if iv != nil {
 		b = append(iv, b...)
 	}
@@ -43,7 +52,7 @@ func (c *XorConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (c *XorConn) Read(b []byte) (int, error) {
+func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 	if len(b) == 0 {
 		return 0, nil
 	}
@@ -54,10 +63,24 @@ func (c *XorConn) Read(b []byte) (int, error) {
 		}
 		block, _ := aes.NewCipher(c.key)
 		c.peerCtr = cipher.NewCTR(block, peerIv)
+		c.isHeader = true
 	}
-	n, err := c.Conn.Read(b)
-	if n > 0 {
-		c.peerCtr.XORKeyStream(b[:n], b[:n])
+	if _, err := io.ReadFull(c.Conn, b); err != nil {
+		return 0, err
 	}
-	return n, err
+	if c.skipNext {
+		c.skipNext = false
+		return len(b), nil
+	}
+	c.peerCtr.XORKeyStream(b, b)
+	if c.isHeader {
+		if t, _, _ := DecodeHeader(b); t == 23 { // always 5-bytes
+			c.skipNext = true
+		} else {
+			c.isHeader = false
+		}
+	} else {
+		c.isHeader = true
+	}
+	return len(b), nil
 }

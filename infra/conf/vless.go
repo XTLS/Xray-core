@@ -92,7 +92,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 		switch s[1] {
 		case "vless":
-		case "aes128xor":
+		case "xored":
 			config.Xor = 1
 		default:
 			return false
@@ -240,7 +240,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				}
 				switch s[1] {
 				case "vless":
-				case "aes128xor":
+				case "xored":
 					account.Xor = 1
 				default:
 					return false
