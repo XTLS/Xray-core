@@ -5,7 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"strconv"
+	"fmt"
+	"io"
+	"net"
 
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -14,23 +16,49 @@ import (
 
 var MaxNonce = bytes.Repeat([]byte{255}, 12)
 
-func EncodeHeader(b []byte, l int) {
-	b[0] = 23
-	b[1] = 3
-	b[2] = 3
-	b[3] = byte(l >> 8)
-	b[4] = byte(l)
+func EncodeHeader(h []byte, t byte, l int) {
+	switch t {
+	case 1:
+		h[0] = 1
+		h[1] = 1
+		h[2] = 1
+	case 0:
+		h[0] = 0
+		h[1] = 0
+		h[2] = 0
+	case 23:
+		h[0] = 23
+		h[1] = 3
+		h[2] = 3
+	}
+	h[3] = byte(l >> 8)
+	h[4] = byte(l)
 }
 
-func DecodeHeader(b []byte) (int, error) {
-	if b[0] == 23 && b[1] == 3 && b[2] == 3 {
-		l := int(b[3])<<8 | int(b[4])
-		if l < 17 || l > 17000 { // TODO: TLSv1.3 max length
-			return 0, errors.New("invalid length in record's header: " + strconv.Itoa(l))
-		}
-		return l, nil
+func DecodeHeader(h []byte) (t byte, l int, err error) {
+	l = int(h[3])<<8 | int(h[4])
+	if h[0] == 23 && h[1] == 3 && h[2] == 3 {
+		t = 23
+	} else if h[0] == 0 && h[1] == 0 && h[2] == 0 {
+		t = 0
+	} else if h[0] == 1 && h[1] == 1 && h[2] == 1 {
+		t = 1
+	} else {
+		h = nil
 	}
-	return 0, errors.New("invalid record's header")
+	if h == nil || l < 17 || l > 17000 { // TODO: TLSv1.3 max length
+		err = errors.New("invalid header: ", fmt.Sprintf("%v", h[:5]))
+	}
+	return
+}
+
+func ReadAndDecodeHeader(conn net.Conn) (h []byte, t byte, l int, err error) {
+	h = make([]byte, 5)
+	if _, err = io.ReadFull(conn, h); err != nil {
+		return
+	}
+	t, l, err = DecodeHeader(h)
+	return
 }
 
 func NewAead(c byte, secret, salt, info []byte) (aead cipher.AEAD) {
