@@ -93,7 +93,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	EncodeHeader(clientHello[5+1+1184+1088:], 23, int(paddingLen))
 	rand.Read(clientHello[5+1+1184+1088+5:])
 
-	if n, err := c.Conn.Write(clientHello); n != len(clientHello) || err != nil {
+	if _, err := c.Conn.Write(clientHello); err != nil {
 		return nil, err
 	}
 	// client can send more padding / NFS AEAD messages if needed
@@ -170,7 +170,7 @@ func (c *ClientConn) Write(b []byte) (int, error) {
 			}
 		}
 		IncreaseNonce(c.nonce)
-		if n, err := c.Conn.Write(data); n != len(data) || err != nil {
+		if _, err := c.Conn.Write(data); err != nil {
 			return 0, err
 		}
 	}
@@ -185,7 +185,7 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		var t byte
 		var l int
 		var err error
-		if c.instance == nil { // 1-RTT
+		if c.instance == nil { // from 1-RTT
 			for {
 				if _, t, l, err = ReadAndDecodeHeader(c.Conn); err != nil {
 					return 0, err

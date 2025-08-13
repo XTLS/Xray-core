@@ -162,7 +162,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	EncodeHeader(serverHello[5+1088+21:], 23, int(paddingLen))
 	rand.Read(serverHello[5+1088+21+5:])
 
-	if n, err := c.Conn.Write(serverHello); n != len(serverHello) || err != nil {
+	if _, err := c.Conn.Write(serverHello); err != nil {
 		return nil, err
 	}
 	// server can send more padding / PFS AEAD messages if needed
@@ -185,7 +185,7 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 	if c.peerAead == nil {
-		if c.peerRandom == nil { // 1-RTT
+		if c.peerRandom == nil { // from 1-RTT
 			var t byte
 			var l int
 			var err error
@@ -288,7 +288,7 @@ func (c *ServerConn) Write(b []byte) (int, error) {
 			}
 		}
 		IncreaseNonce(c.nonce)
-		if n, err := c.Conn.Write(data); n != len(data) || err != nil {
+		if _, err := c.Conn.Write(data); err != nil {
 			return 0, err
 		}
 	}
