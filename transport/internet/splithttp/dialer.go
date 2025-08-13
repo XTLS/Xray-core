@@ -489,15 +489,17 @@ func (w uploadWriter) Write(b []byte) (int, error) {
 		}
 	*/
 
-	buffer := buf.New()
+	buffer := buf.MultiBufferContainer{}
 	n, err := buffer.Write(b)
 	if err != nil {
 		return 0, err
 	}
 
-	err = w.WriteMultiBuffer([]*buf.Buffer{buffer})
-	if err != nil {
-		return 0, err
+	for _, buff := range buffer.MultiBuffer {
+		err := w.WriteMultiBuffer(buf.MultiBuffer{buff})
+		if err != nil {
+			return 0, err
+		}
 	}
 	return n, nil
 }
