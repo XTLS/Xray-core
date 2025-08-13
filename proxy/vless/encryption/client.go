@@ -212,19 +212,19 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 			}
 		}
 		if t != 0 {
-			return 0, errors.New("unexpected type ", t, ", expect server random")
+			return 0, errors.New("unexpected type ", t, ", expect random hello")
 		}
-		peerRandom := make([]byte, 32)
-		if l != len(peerRandom) {
-			return 0, errors.New("unexpected length ", l, " for server random")
+		peerRandomHello := make([]byte, 32)
+		if l != len(peerRandomHello) {
+			return 0, errors.New("unexpected length ", l, " for random hello")
 		}
-		if _, err := io.ReadFull(c.Conn, peerRandom); err != nil {
+		if _, err := io.ReadFull(c.Conn, peerRandomHello); err != nil {
 			return 0, err
 		}
 		if c.random == nil {
 			return 0, errors.New("empty c.random")
 		}
-		c.peerAead = NewAead(ClientCipher, c.baseKey, peerRandom, c.random)
+		c.peerAead = NewAead(ClientCipher, c.baseKey, peerRandomHello, c.random)
 		c.peerNonce = make([]byte, 12)
 	}
 	if len(c.peerCache) != 0 {

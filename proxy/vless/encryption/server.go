@@ -203,20 +203,17 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 			if t != 0 {
 				return 0, errors.New("unexpected type ", t, ", expect ticket hello")
 			}
-			peerTicket := make([]byte, 21)
-			if l != len(peerTicket) {
+			peerTicketHello := make([]byte, 21+32)
+			if l != len(peerTicketHello) {
 				return 0, errors.New("unexpected length ", l, " for ticket hello")
 			}
-			if _, err := io.ReadFull(c.Conn, peerTicket); err != nil {
+			if _, err := io.ReadFull(c.Conn, peerTicketHello); err != nil {
 				return 0, err
 			}
-			if !bytes.Equal(peerTicket, c.ticket) {
+			if !bytes.Equal(peerTicketHello[:21], c.ticket) {
 				return 0, errors.New("naughty boy")
 			}
-			c.peerRandom = make([]byte, 32)
-			if _, err := io.ReadFull(c.Conn, c.peerRandom); err != nil {
-				return 0, err
-			}
+			c.peerRandom = peerTicketHello[21:]
 		}
 		c.peerAead = NewAead(c.cipher, c.baseKey, c.peerRandom, c.ticket)
 		c.peerNonce = make([]byte, 12)
