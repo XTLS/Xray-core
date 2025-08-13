@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
+	"crypto/sha256"
 	"io"
 	"net"
 	"sync"
@@ -23,12 +24,12 @@ type ServerSession struct {
 
 type ServerInstance struct {
 	sync.RWMutex
-	nfsDKey      *mlkem.DecapsulationKey768
-	nfsEKeyBytes []byte
-	xor          uint32
-	minutes      time.Duration
-	sessions     map[[21]byte]*ServerSession
-	closed       bool
+	nfsDKey       *mlkem.DecapsulationKey768
+	nfsEKeySha256 [32]byte
+	xor           uint32
+	minutes       time.Duration
+	sessions      map[[21]byte]*ServerSession
+	closed        bool
 }
 
 type ServerConn struct {
@@ -47,7 +48,7 @@ type ServerConn struct {
 func (i *ServerInstance) Init(nfsDKeySeed []byte, xor uint32, minutes time.Duration) (err error) {
 	i.nfsDKey, err = mlkem.NewDecapsulationKey768(nfsDKeySeed)
 	if xor > 0 {
-		i.nfsEKeyBytes = i.nfsDKey.EncapsulationKey().Bytes()
+		i.nfsEKeySha256 = sha256.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
 		i.xor = xor
 	}
 	if minutes > 0 {
@@ -86,7 +87,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		return nil, errors.New("uninitialized")
 	}
 	if i.xor > 0 {
-		conn = NewXorConn(conn, i.nfsEKeyBytes)
+		conn = NewXorConn(conn, i.nfsEKeySha256[:])
 	}
 	c := &ServerConn{Conn: conn}
 
