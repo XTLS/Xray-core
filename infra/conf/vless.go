@@ -29,9 +29,10 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
+	Clients     []json.RawMessage       `json:"clients"`
+	Decryption  string                  `json:"decryption"`
+	Fallbacks   []*VLessInboundFallback `json:"fallbacks"`
+	DefaultFlow string                  `json:"defaultFlow"`
 }
 
 // Build implements Buildable
@@ -55,7 +56,9 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		account.Id = u.String()
 
 		switch account.Flow {
-		case "", vless.XRV:
+		case "":
+			account.Flow = c.DefaultFlow
+		case vless.XRV:
 		default:
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
