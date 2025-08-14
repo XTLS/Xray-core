@@ -490,10 +490,7 @@ func (w uploadWriter) Write(b []byte) (int, error) {
 	*/
 
 	buffer := buf.MultiBufferContainer{}
-	n, err := buffer.Write(b)
-	if err != nil {
-		return 0, err
-	}
+	common.Must2(buffer.Write(b))
 
 	var writed int
 	for _, buff := range buffer.MultiBuffer {
