@@ -24,12 +24,11 @@ type ServerSession struct {
 
 type ServerInstance struct {
 	sync.RWMutex
-	nfsDKey       *mlkem.DecapsulationKey768
-	nfsEKeySha256 [32]byte
-	xor           uint32
-	minutes       time.Duration
-	sessions      map[[21]byte]*ServerSession
-	closed        bool
+	nfsDKey  *mlkem.DecapsulationKey768
+	xorKey   []byte
+	minutes  time.Duration
+	sessions map[[21]byte]*ServerSession
+	closed   bool
 }
 
 type ServerConn struct {
@@ -46,10 +45,17 @@ type ServerConn struct {
 }
 
 func (i *ServerInstance) Init(nfsDKeySeed []byte, xor uint32, minutes time.Duration) (err error) {
+	if i.nfsDKey != nil {
+		err = errors.New("already initialized")
+		return
+	}
 	i.nfsDKey, err = mlkem.NewDecapsulationKey768(nfsDKeySeed)
+	if err != nil {
+		return
+	}
 	if xor > 0 {
-		i.nfsEKeySha256 = sha256.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
-		i.xor = xor
+		xorKey := sha256.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
+		i.xorKey = xorKey[:]
 	}
 	if minutes > 0 {
 		i.minutes = minutes
@@ -86,17 +92,14 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	if i.nfsDKey == nil {
 		return nil, errors.New("uninitialized")
 	}
-	if i.xor > 0 {
-		conn = NewXorConn(conn, i.nfsEKeySha256[:])
+	if i.xorKey != nil {
+		conn = NewXorConn(conn, i.xorKey)
 	}
 	c := &ServerConn{Conn: conn}
 
-	_, t, l, err := ReadAndDecodeHeader(c.Conn)
+	_, t, l, err := ReadAndDiscardPaddings(c.Conn)
 	if err != nil {
 		return nil, err
-	}
-	if t == 23 {
-		return nil, errors.New("unexpected data")
 	}
 
 	if t == 0 {
@@ -187,19 +190,9 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 	}
 	if c.peerAead == nil {
 		if c.peerRandom == nil { // from 1-RTT
-			var t byte
-			var l int
-			var err error
-			for {
-				if _, t, l, err = ReadAndDecodeHeader(c.Conn); err != nil {
-					return 0, err
-				}
-				if t != 23 {
-					break
-				}
-				if _, err := io.ReadFull(c.Conn, make([]byte, l)); err != nil {
-					return 0, err
-				}
+			_, t, l, err := ReadAndDiscardPaddings(c.Conn)
+			if err != nil {
+				return 0, err
 			}
 			if t != 0 {
 				return 0, errors.New("unexpected type ", t, ", expect ticket hello")

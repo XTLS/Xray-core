@@ -18,7 +18,7 @@ type XorConn struct {
 }
 
 func NewXorConn(conn net.Conn, key []byte) *XorConn {
-	return &XorConn{Conn: conn, key: key[:16]}
+	return &XorConn{Conn: conn, key: key}
 	//chacha20.NewUnauthenticatedCipher()
 }
 
