@@ -22,7 +22,7 @@ func NewXorConn(conn net.Conn, key []byte) *XorConn {
 	//chacha20.NewUnauthenticatedCipher()
 }
 
-func (c *XorConn) Write(b []byte) (int, error) { // two records at most
+func (c *XorConn) Write(b []byte) (int, error) { // whole one/two records
 	if len(b) == 0 {
 		return 0, nil
 	}
@@ -34,10 +34,10 @@ func (c *XorConn) Write(b []byte) (int, error) { // two records at most
 		c.ctr = cipher.NewCTR(block, iv)
 	}
 	t, l, _ := DecodeHeader(b)
-	if t != 23 {
-		l += 10 // 5+l+5
-	} else {
+	if t == 23 { // single 23
 		l = 5
+	} else { // 1/0 + 23, or noises only
+		l += 10
 	}
 	c.ctr.XORKeyStream(b[:l], b[:l]) // caller MUST discard b
 	if iv != nil {
@@ -73,8 +73,8 @@ func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 		return len(b), nil
 	}
 	c.peerCtr.XORKeyStream(b, b)
-	if c.isHeader {
-		if t, _, _ := DecodeHeader(b); t == 23 { // always 5-bytes
+	if c.isHeader { // always 5-bytes
+		if t, _, _ := DecodeHeader(b); t == 23 {
 			c.skipNext = true
 		} else {
 			c.isHeader = false

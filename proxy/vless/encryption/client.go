@@ -104,9 +104,9 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	if _, err := c.Conn.Write(clientHello); err != nil {
 		return nil, err
 	}
-	// client can send more padding / NFS AEAD messages if needed
+	// client can send more paddings / NFS AEAD messages if needed
 
-	_, t, l, err := ReadAndDiscardPaddings(c.Conn)
+	_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before server hello
 	if err != nil {
 		return nil, err
 	}
@@ -190,9 +190,9 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 	if c.peerAead == nil {
-		_, t, l, err := ReadAndDiscardPaddings(c.Conn)
+		_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before random hello
 		if err != nil {
-			if c.instance != nil && strings.HasPrefix(err.Error(), "invalid header: ") { // from 0-RTT
+			if c.instance != nil && strings.HasPrefix(err.Error(), "invalid header: ") { // 0-RTT's 0-RTT
 				c.instance.Lock()
 				if bytes.Equal(c.ticket, c.instance.ticket) {
 					c.instance.expire = time.Now() // expired

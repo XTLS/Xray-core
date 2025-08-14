@@ -97,7 +97,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	}
 	c := &ServerConn{Conn: conn}
 
-	_, t, l, err := ReadAndDiscardPaddings(c.Conn)
+	_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before client/ticket hello
 	if err != nil {
 		return nil, err
 	}
@@ -117,9 +117,13 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		s := i.sessions[[21]byte(peerTicketHello)]
 		i.RUnlock()
 		if s == nil {
-			noise := make([]byte, crypto.RandBetween(100, 1000))
-			rand.Read(noise)
-			c.Conn.Write(noise) // make client do new handshake
+			noises := make([]byte, crypto.RandBetween(100, 1000))
+			var err error
+			for err == nil {
+				rand.Read(noises)
+				_, _, err = DecodeHeader(noises)
+			}
+			c.Conn.Write(noises) // make client do new handshake
 			return nil, errors.New("expired ticket")
 		}
 		if _, replay := s.randoms.LoadOrStore([32]byte(peerTicketHello[21:]), true); replay {
@@ -169,7 +173,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	if _, err := c.Conn.Write(serverHello); err != nil {
 		return nil, err
 	}
-	// server can send more padding / PFS AEAD messages if needed
+	// server can send more paddings / PFS AEAD messages if needed
 
 	if i.minutes > 0 {
 		i.Lock()
@@ -189,8 +193,8 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 	if c.peerAead == nil {
-		if c.peerRandom == nil { // from 1-RTT
-			_, t, l, err := ReadAndDiscardPaddings(c.Conn)
+		if c.peerRandom == nil { // 1-RTT's 0-RTT
+			_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before ticket hello
 			if err != nil {
 				return 0, err
 			}
