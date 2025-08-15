@@ -40,7 +40,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
 	config.Clients = make([]*protocol.User, len(c.Clients))
 	switch c.Flow {
-	case vless.NoFLow:
+	case vless.None:
 		c.Flow = ""
 	case "", vless.XRV:
 	default:
@@ -65,7 +65,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		switch account.Flow {
 		case "":
 			account.Flow = c.Flow
-		case vless.NoFLow:
+		case vless.None:
 			account.Flow = ""
 		case vless.XRV:
 		default:
