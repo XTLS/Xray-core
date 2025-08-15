@@ -13,6 +13,8 @@ const (
 	Size = 8192
 )
 
+var ErrBufferFull = errors.New("buffer is full")
+
 var zero = [Size * 10]byte{0}
 
 var pool = bytespool.GetPool(Size)
@@ -266,13 +268,16 @@ func (b *Buffer) IsFull() bool {
 func (b *Buffer) Write(data []byte) (int, error) {
 	nBytes := copy(b.v[b.end:], data)
 	b.end += int32(nBytes)
+	if nBytes < len(data) {
+		return nBytes, ErrBufferFull
+	}
 	return nBytes, nil
 }
 
 // WriteByte writes a single byte into the buffer.
 func (b *Buffer) WriteByte(v byte) error {
 	if b.IsFull() {
-		return errors.New("buffer full")
+		return ErrBufferFull
 	}
 	b.v[b.end] = v
 	b.end++
