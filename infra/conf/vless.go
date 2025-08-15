@@ -40,7 +40,9 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
 	config.Clients = make([]*protocol.User, len(c.Clients))
 	switch c.Flow {
-	case "", vless.XRV, vless.NoFLow:
+	case vless.NoFLow:
+		c.Flow = ""
+	case "", vless.XRV:
 	default:
 		return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 	}
