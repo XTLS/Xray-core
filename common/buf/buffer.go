@@ -244,6 +244,14 @@ func (b *Buffer) Cap() int32 {
 	return int32(len(b.v))
 }
 
+// Available returns the available capacity of the buffer content.
+func (b *Buffer) Available() int32 {
+	if b == nil {
+		return 0
+	}
+	return int32(len(b.v)) - b.end
+}
+
 // IsEmpty returns true if the buffer is empty.
 func (b *Buffer) IsEmpty() bool {
 	return b.Len() == 0
