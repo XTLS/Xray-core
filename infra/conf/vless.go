@@ -58,7 +58,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		switch c.Flow {
 		case "", vless.XRV:
 		default:
-			return nil, errors.New(`VLESS clients: "settings.flow" doesn't support "` + account.Flow + `" in this version`)
+			return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 		}
 
 		switch account.Flow {
