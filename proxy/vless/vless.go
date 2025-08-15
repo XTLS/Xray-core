@@ -6,5 +6,6 @@
 package vless
 
 const (
-	XRV = "xtls-rprx-vision"
+	XRV     = "xtls-rprx-vision"
+	NO_FLOW = "no-flow"
 )
