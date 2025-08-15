@@ -2,6 +2,7 @@ package internet
 
 import (
 	"context"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"time"
 )
@@ -12,7 +13,7 @@ type result struct {
 	index int
 }
 
-func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Port, sockopt *SocketConfig) (net.Conn, error) {
+func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Port, sockopt *SocketConfig, domain string) (net.Conn, error) {
 	if len(ips) < 2 {
 		panic("at least 2 ips is required to race dial")
 	}
@@ -30,6 +31,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 	activeNum := uint32(0)
 	timer := time.NewTimer(0)
 	var winConn net.Conn
+	errors.LogDebug(ctx, "happy eyeballs racing dial for ", domain, " with IPs ", ips)
 	for {
 		select {
 		case r := <-resultCh:
@@ -54,6 +56,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 					timer.Stop()
 					if winConn == nil {
 						winConn = r.conn
+						errors.LogDebug(ctx, "happy eyeballs established connection for ", domain, " with IP ", ips[r.index])
 					} else {
 						r.conn.Close()
 					}
@@ -69,6 +72,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 					continue
 				}
 				if activeNum == 0 {
+					errors.LogDebugInner(ctx, r.err, "happy eyeballs no connection established for ", domain)
 					return nil, r.err
 				}
 				timer.Stop()
