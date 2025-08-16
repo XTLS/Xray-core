@@ -74,8 +74,6 @@ type RouterConfig struct {
 	RuleList       []json.RawMessage `json:"rules"`
 	DomainStrategy *string           `json:"domainStrategy"`
 	Balancers      []*BalancingRule  `json:"balancers"`
-
-	DomainMatcher string `json:"domainMatcher"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -111,10 +109,6 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 			return nil, err
 		}
 
-		if rule.DomainMatcher == "" {
-			rule.DomainMatcher = c.DomainMatcher
-		}
-
 		config.Rule = append(config.Rule, rule)
 	}
 	for _, rawBalancer := range c.Balancers {
@@ -129,11 +123,8 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 
 type RouterRule struct {
 	RuleTag     string `json:"ruleTag"`
-	Type        string `json:"type"`
 	OutboundTag string `json:"outboundTag"`
 	BalancerTag string `json:"balancerTag"`
-
-	DomainMatcher string `json:"domainMatcher"`
 }
 
 func ParseIP(s string) (*router.CIDR, error) {
@@ -567,10 +558,6 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		return nil, errors.New("neither outboundTag nor balancerTag is specified in routing rule")
 	}
 
-	if rawFieldRule.DomainMatcher != "" {
-		rule.DomainMatcher = rawFieldRule.DomainMatcher
-	}
-
 	if rawFieldRule.Domain != nil {
 		for _, domain := range *rawFieldRule.Domain {
 			rules, err := parseDomainRule(domain)
@@ -666,12 +653,10 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	if err != nil {
 		return nil, errors.New("invalid router rule").Base(err)
 	}
-	if rawRule.Type == "" || strings.EqualFold(rawRule.Type, "field") {
-		fieldrule, err := parseFieldRule(msg)
-		if err != nil {
-			return nil, errors.New("invalid field rule").Base(err)
-		}
-		return fieldrule, nil
+
+	fieldrule, err := parseFieldRule(msg)
+	if err != nil {
+		return nil, errors.New("invalid field rule").Base(err)
 	}
-	return nil, errors.New("unknown router rule type: ", rawRule.Type)
+	return fieldrule, nil
 }

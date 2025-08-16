@@ -184,8 +184,7 @@ func getConfig() string {
         "inboundTag": [
           "api-in"
         ],
-        "outboundTag": "api",
-        "type": "field"
+        "outboundTag": "api"
       }
     ],
     "domainStrategy": "AsIs"

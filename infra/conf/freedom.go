@@ -14,6 +14,7 @@ import (
 )
 
 type FreedomConfig struct {
+	TargetStrategy string    `json:"targetStrategy"`
 	DomainStrategy string    `json:"domainStrategy"`
 	Redirect       string    `json:"redirect"`
 	UserLevel      uint32    `json:"userLevel"`
@@ -40,7 +41,11 @@ type Noise struct {
 // Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
 	config := new(freedom.Config)
-	switch strings.ToLower(c.DomainStrategy) {
+	targetStrategy := c.TargetStrategy
+	if targetStrategy == "" {
+		targetStrategy = c.DomainStrategy
+	}
+	switch strings.ToLower(targetStrategy) {
 	case "asis", "":
 		config.DomainStrategy = freedom.Config_AS_IS
 	case "useip":
@@ -64,7 +69,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	case "forceipv6v4":
 		config.DomainStrategy = freedom.Config_FORCE_IP64
 	default:
-		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
+		return nil, errors.New("unsupported domain strategy: ", targetStrategy)
 	}
 
 	if c.Fragment != nil {
