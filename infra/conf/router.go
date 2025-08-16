@@ -123,7 +123,6 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 
 type RouterRule struct {
 	RuleTag     string `json:"ruleTag"`
-	Type        string `json:"type"`
 	OutboundTag string `json:"outboundTag"`
 	BalancerTag string `json:"balancerTag"`
 }
@@ -654,12 +653,10 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	if err != nil {
 		return nil, errors.New("invalid router rule").Base(err)
 	}
-	if rawRule.Type == "" || strings.EqualFold(rawRule.Type, "field") {
-		fieldrule, err := parseFieldRule(msg)
-		if err != nil {
-			return nil, errors.New("invalid field rule").Base(err)
-		}
-		return fieldrule, nil
+
+	fieldrule, err := parseFieldRule(msg)
+	if err != nil {
+		return nil, errors.New("invalid field rule").Base(err)
 	}
-	return nil, errors.New("unknown router rule type: ", rawRule.Type)
+	return fieldrule, nil
 }
