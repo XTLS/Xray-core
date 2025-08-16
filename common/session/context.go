@@ -16,15 +16,15 @@ const (
 	inboundSessionKey         ctx.SessionKey = 1
 	outboundSessionKey        ctx.SessionKey = 2
 	contentSessionKey         ctx.SessionKey = 3
-	muxPreferredSessionKey    ctx.SessionKey = 4
-	sockoptSessionKey         ctx.SessionKey = 5
-	trackedConnectionErrorKey ctx.SessionKey = 6
-	dispatcherKey             ctx.SessionKey = 7
-	timeoutOnlyKey            ctx.SessionKey = 8
-	allowedNetworkKey         ctx.SessionKey = 9
-	handlerSessionKey         ctx.SessionKey = 10
-	mitmAlpn11Key             ctx.SessionKey = 11
-	mitmServerNameKey         ctx.SessionKey = 12
+	muxPreferredSessionKey    ctx.SessionKey = 4 // unused
+	sockoptSessionKey         ctx.SessionKey = 5 // used by dokodemo to only receive sockopt.Mark
+	trackedConnectionErrorKey ctx.SessionKey = 6 // used by observer to get outbound error
+	dispatcherKey             ctx.SessionKey = 7 // used by ss2022 inbounds to get dispatcher
+	timeoutOnlyKey            ctx.SessionKey = 8 // mux context's child contexts to only cancel when its own traffic times out
+	allowedNetworkKey         ctx.SessionKey = 9 // muxcool server control incoming request tcp/udp
+	handlerSessionKey         ctx.SessionKey = 10 // unused
+	mitmAlpn11Key             ctx.SessionKey = 11 // used by TLS dialer
+	mitmServerNameKey         ctx.SessionKey = 12 // used by TLS dialer
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -42,18 +42,8 @@ func ContextWithOutbounds(ctx context.Context, outbounds []*Outbound) context.Co
 	return context.WithValue(ctx, outboundSessionKey, outbounds)
 }
 
-func ContextCloneOutboundsAndContent(ctx context.Context) context.Context {
-	outbounds := OutboundsFromContext(ctx)
-	newOutbounds := make([]*Outbound, len(outbounds))
-	for i, ob := range outbounds {
-		if ob == nil {
-			continue
-		}
-
-		// copy outbound by value
-		v := *ob
-		newOutbounds[i] = &v
-	}
+func SubContextFromMuxInbound(ctx context.Context) context.Context {
+	newOutbounds := []*Outbound{{}}
 
 	content := ContentFromContext(ctx)
 	newContent := Content{}
