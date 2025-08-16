@@ -91,7 +91,6 @@ func TestRouterConfig(t *testing.T) {
 				"domainStrategy": "AsIs",
 				"rules": [
 					{
-						"type": "field",
 						"domain": [
 							"baidu.com",
 							"qq.com"
@@ -99,18 +98,15 @@ func TestRouterConfig(t *testing.T) {
 						"outboundTag": "direct"
 					},
 					{
-						"type": "field",
 						"ip": [
 							"10.0.0.0/8",
 							"::1/128"
 						],
 						"outboundTag": "test"
 					},{
-						"type": "field",
 						"port": "53, 443, 1000-2000",
 						"outboundTag": "test"
 					},{
-						"type": "field",
 						"port": 123,
 						"outboundTag": "test"
 					}
@@ -249,7 +245,6 @@ func TestRouterConfig(t *testing.T) {
 				"domainStrategy": "IPIfNonMatch",
 				"rules": [
 					{
-						"type": "field",
 						"domain": [
 							"baidu.com",
 							"qq.com"
@@ -257,7 +252,6 @@ func TestRouterConfig(t *testing.T) {
 						"outboundTag": "direct"
 					},
 					{
-						"type": "field",
 						"ip": [
 							"10.0.0.0/8",
 							"::1/128"
