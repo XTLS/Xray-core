@@ -14,8 +14,8 @@ import (
 )
 
 type FreedomConfig struct {
-	DomainStrategy string    `json:"domainStrategy"`
 	TargetStrategy string    `json:"targetStrategy"`
+	DomainStrategy string    `json:"domainStrategy"`
 	Redirect       string    `json:"redirect"`
 	UserLevel      uint32    `json:"userLevel"`
 	Fragment       *Fragment `json:"fragment"`
