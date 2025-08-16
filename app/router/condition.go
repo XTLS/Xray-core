@@ -83,21 +83,6 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	}, nil
 }
 
-func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
-	g := new(strmatcher.MatcherGroup)
-	for _, d := range domains {
-		m, err := domainToMatcher(d)
-		if err != nil {
-			return nil, err
-		}
-		g.Add(m)
-	}
-
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
-}
-
 func (m *DomainMatcher) ApplyDomain(domain string) bool {
 	return len(m.matchers.Match(strings.ToLower(domain))) > 0
 }
