@@ -65,6 +65,9 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.server = config.Server.AsDestination()
 	}
 	h.nonIPQuery = config.Non_IPQuery
+	if h.nonIPQuery == "" {
+		h.nonIPQuery = "reject"
+	}
 	h.blockTypes = config.BlockTypes
 	return nil
 }
