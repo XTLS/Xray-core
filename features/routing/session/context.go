@@ -128,6 +128,14 @@ func (ctx *Context) GetUser() string {
 	return ctx.Inbound.User.Email
 }
 
+// GetVlessRoute implements routing.Context.
+func (ctx *Context) GetVlessRoute() net.Port {
+	if ctx.Inbound == nil {
+		return 0
+	}
+	return ctx.Inbound.VlessRoute
+}
+
 // GetAttributes implements routing.Context.
 func (ctx *Context) GetAttributes() map[string]string {
 	if ctx.Content == nil {

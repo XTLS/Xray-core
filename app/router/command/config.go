@@ -36,6 +36,10 @@ func (c routingContext) GetLocalPort() net.Port {
 	return net.Port(c.RoutingContext.GetLocalPort())
 }
 
+func (c routingContext) GetVlessRoute() net.Port {
+	return net.Port(c.RoutingContext.GetVlessRoute())
+}
+
 func (c routingContext) GetRuleTag() string {
 	return ""
 }

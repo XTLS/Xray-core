@@ -531,6 +531,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		Source     *StringList       `json:"source"`
 		SourcePort *PortList         `json:"sourcePort"`
 		User       *StringList       `json:"user"`
+		VlessRoute *PortList         `json:"vlessRoute"`
 		InboundTag *StringList       `json:"inboundTag"`
 		Protocols  *StringList       `json:"protocol"`
 		Attributes map[string]string `json:"attrs"`
@@ -626,6 +627,10 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		for _, s := range *rawFieldRule.User {
 			rule.UserEmail = append(rule.UserEmail, s)
 		}
+	}
+
+	if rawFieldRule.VlessRoute != nil {
+		rule.VlessRouteList = rawFieldRule.VlessRoute.Build()
 	}
 
 	if rawFieldRule.InboundTag != nil {

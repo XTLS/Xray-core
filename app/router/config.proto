@@ -111,6 +111,8 @@ message RoutingRule {
 
   repeated GeoIP local_geoip = 17;
   xray.common.net.PortList local_port_list = 18;
+
+  xray.common.net.PortList vless_route_list = 20;
 }
 
 message BalancingRule {

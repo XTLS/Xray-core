@@ -45,6 +45,10 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(NewUserMatcher(rr.UserEmail))
 	}
 
+	if rr.VlessRouteList != nil {
+		conds.Add(NewPortMatcher(rr.VlessRouteList, "vlessRoute"))
+	}
+
 	if len(rr.InboundTag) > 0 {
 		conds.Add(NewInboundTagMatcher(rr.InboundTag))
 	}

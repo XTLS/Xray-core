@@ -46,6 +46,8 @@ type Inbound struct {
 	Name string
 	// User is the user that authenticates for the inbound. May be nil if the protocol allows anonymous traffic.
 	User *protocol.MemoryUser
+	// VlessRoute is the user-sent VLESS UUID's last byte.
+	VlessRoute net.Port
 	// Conn is actually internet.Connection. May be nil.
 	Conn net.Conn
 	// Timer of the inbound buf copier. May be nil.

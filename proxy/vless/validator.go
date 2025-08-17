@@ -33,7 +33,7 @@ func (v *MemoryValidator) Add(u *protocol.MemoryUser) error {
 			return errors.New("User ", u.Email, " already exists.")
 		}
 	}
-	v.users.Store(u.Account.(*MemoryAccount).ID.UUID(), u)
+	v.users.Store([15]byte(u.Account.(*MemoryAccount).ID.Bytes()), u)
 	return nil
 }
 
@@ -48,13 +48,13 @@ func (v *MemoryValidator) Del(e string) error {
 		return errors.New("User ", e, " not found.")
 	}
 	v.email.Delete(le)
-	v.users.Delete(u.(*protocol.MemoryUser).Account.(*MemoryAccount).ID.UUID())
+	v.users.Delete([15]byte(u.(*protocol.MemoryUser).Account.(*MemoryAccount).ID.Bytes()))
 	return nil
 }
 
 // Get a VLESS user with UUID, nil if user doesn't exist.
 func (v *MemoryValidator) Get(id uuid.UUID) *protocol.MemoryUser {
-	u, _ := v.users.Load(id)
+	u, _ := v.users.Load([15]byte(id[:]))
 	if u != nil {
 		return u.(*protocol.MemoryUser)
 	}

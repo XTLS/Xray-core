@@ -217,6 +217,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		Buffer: buf.MultiBuffer{first},
 	}
 
+	var vlessRoute byte
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
 	var err error
@@ -227,7 +228,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = errors.New("fallback directly")
 	} else {
-		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		vlessRoute, request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
 	}
 
 	if err != nil {
@@ -455,6 +456,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	inbound.Name = "vless"
 	inbound.User = request.User
+	inbound.VlessRoute = net.Port(vlessRoute)
 
 	account := request.User.Account.(*vless.MemoryAccount)
 

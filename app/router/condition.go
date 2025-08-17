@@ -166,6 +166,8 @@ func (v *PortMatcher) Apply(ctx routing.Context) bool {
 		return v.port.Contains(ctx.GetSourcePort())
 	case "target":
 		return v.port.Contains(ctx.GetTargetPort())
+	case "vlessRoute":
+		return v.port.Contains(ctx.GetVlessRoute())
 	default:
 		panic("unreachable, asType should be local or source or target")
 	}
