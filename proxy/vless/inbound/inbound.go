@@ -484,6 +484,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
+	var peerCache *[]byte
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	switch requestAddons.Flow {
@@ -496,6 +497,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
+				if serverConn, ok := connection.(*encryption.ServerConn); ok {
+					peerCache = &serverConn.PeerCache
+					break
+				}
 				var t reflect.Type
 				var p uintptr
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
@@ -564,7 +569,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, true, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, peerCache, input, rawInput, trafficState, nil, true, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))

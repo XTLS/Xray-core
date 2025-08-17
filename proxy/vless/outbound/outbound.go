@@ -140,6 +140,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Flow: account.Flow,
 	}
 
+	var peerCache *[]byte
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	allowUDP443 := false
@@ -158,6 +159,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP:
+			if clientConn, ok := conn.(*encryption.ClientConn); ok {
+				peerCache = &clientConn.PeerCache
+				break
+			}
 			var t reflect.Type
 			var p uintptr
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
@@ -292,7 +297,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, trafficState, ob, false, ctx)
+			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, peerCache, input, rawInput, trafficState, ob, false, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

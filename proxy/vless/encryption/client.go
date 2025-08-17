@@ -28,6 +28,7 @@ func init() {
 type ClientInstance struct {
 	sync.RWMutex
 	nfsEKey *mlkem.EncapsulationKey768
+	hash11  [11]byte // no more capacity
 	xorKey  []byte
 	minutes time.Duration
 	expire  time.Time
@@ -45,7 +46,7 @@ type ClientConn struct {
 	nonce     []byte
 	peerAead  cipher.AEAD
 	peerNonce []byte
-	peerCache []byte
+	PeerCache []byte
 }
 
 func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Duration) (err error) {
@@ -57,6 +58,8 @@ func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Dura
 	if err != nil {
 		return
 	}
+	hash256 := sha256.Sum256(nfsEKeyBytes)
+	copy(i.hash11[:], hash256[:])
 	if xor > 0 {
 		xorKey := sha256.Sum256(nfsEKeyBytes)
 		i.xorKey = xorKey[:]
@@ -93,13 +96,14 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	nfsKey, encapsulatedNfsKey := i.nfsEKey.Encapsulate()
 	paddingLen := crypto.RandBetween(100, 1000)
 
-	clientHello := make([]byte, 5+1+1184+1088+5+paddingLen)
-	EncodeHeader(clientHello, 1, 1+1184+1088)
-	clientHello[5] = ClientCipher
-	copy(clientHello[5+1:], pfsEKeyBytes)
-	copy(clientHello[5+1+1184:], encapsulatedNfsKey)
-	EncodeHeader(clientHello[5+1+1184+1088:], 23, int(paddingLen))
-	rand.Read(clientHello[5+1+1184+1088+5:])
+	clientHello := make([]byte, 5+11+1+1184+1088+5+paddingLen)
+	EncodeHeader(clientHello, 1, 11+1+1184+1088)
+	copy(clientHello[5:], i.hash11[:])
+	clientHello[5+11] = ClientCipher
+	copy(clientHello[5+11+1:], pfsEKeyBytes)
+	copy(clientHello[5+11+1+1184:], encapsulatedNfsKey)
+	EncodeHeader(clientHello[5+11+1+1184+1088:], 23, int(paddingLen))
+	rand.Read(clientHello[5+11+1+1184+1088+5:])
 
 	if _, err := c.Conn.Write(clientHello); err != nil {
 		return nil, err
@@ -122,7 +126,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 	encapsulatedPfsKey := peerServerHello[:1088]
-	c.ticket = peerServerHello[1088:]
+	c.ticket = append(i.hash11[:], peerServerHello[1088:]...)
 
 	pfsKey, err := pfsDKey.Decapsulate(encapsulatedPfsKey)
 	if err != nil {
@@ -130,8 +134,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
 	}
 	c.baseKey = append(pfsKey, nfsKey...)
 
-	nonce := [12]byte{ClientCipher}
-	VLESS, _ := NewAead(ClientCipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Open(nil, nonce[:], c.ticket, pfsEKeyBytes)
+	VLESS, _ := NewAead(ClientCipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Open(nil, append(i.hash11[:], ClientCipher), c.ticket[11:], pfsEKeyBytes)
 	if !bytes.Equal(VLESS, []byte("VLESS")) {
 		return nil, errors.New("invalid server").AtError()
 	}
@@ -159,16 +162,16 @@ func (c *ClientConn) Write(b []byte) (int, error) {
 		}
 		n += len(b)
 		if c.aead == nil {
+			data = make([]byte, 5+32+32+5+len(b)+16)
+			EncodeHeader(data, 0, 32+32)
+			copy(data[5:], c.ticket)
 			c.random = make([]byte, 32)
 			rand.Read(c.random)
+			copy(data[5+32:], c.random)
+			EncodeHeader(data[5+32+32:], 23, len(b)+16)
 			c.aead = NewAead(ClientCipher, c.baseKey, c.random, c.ticket)
 			c.nonce = make([]byte, 12)
-			data = make([]byte, 5+21+32+5+len(b)+16)
-			EncodeHeader(data, 0, 21+32)
-			copy(data[5:], c.ticket)
-			copy(data[5+21:], c.random)
-			EncodeHeader(data[5+21+32:], 23, len(b)+16)
-			c.aead.Seal(data[:5+21+32+5], c.nonce, b, data[5+21+32:5+21+32+5])
+			c.aead.Seal(data[:5+32+32+5], c.nonce, b, data[5+32+32:5+32+32+5])
 		} else {
 			data = make([]byte, 5+len(b)+16)
 			EncodeHeader(data, 23, len(b)+16)
@@ -218,9 +221,9 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		c.peerAead = NewAead(ClientCipher, c.baseKey, peerRandomHello, c.random)
 		c.peerNonce = make([]byte, 12)
 	}
-	if len(c.peerCache) != 0 {
-		n := copy(b, c.peerCache)
-		c.peerCache = c.peerCache[n:]
+	if len(c.PeerCache) != 0 {
+		n := copy(b, c.PeerCache)
+		c.PeerCache = c.PeerCache[n:]
 		return n, nil
 	}
 	h, t, l, err := ReadAndDecodeHeader(c.Conn) // l: 17~17000
@@ -251,7 +254,7 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		return 0, err
 	}
 	if len(dst) > len(b) {
-		c.peerCache = dst[copy(b, dst):]
+		c.PeerCache = dst[copy(b, dst):]
 		dst = b // for len(dst)
 	}
 	return len(dst), nil
