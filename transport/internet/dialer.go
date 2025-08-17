@@ -24,9 +24,6 @@ type Dialer interface {
 	// Dial dials a system connection to the given destination.
 	Dial(ctx context.Context, destination net.Destination) (stat.Connection, error)
 
-	// Address returns the address used by this Dialer. Maybe nil if not known.
-	Address() net.Address
-
 	// DestIpAddress returns the ip of proxy server. It is useful in case of Android client, which prepare an IP before proxy connection is established
 	DestIpAddress() net.IP
 }
