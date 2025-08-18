@@ -290,7 +290,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				return h.getStatCouterConnection(conn), nil
 			}
 
-			errors.LogWarning(ctx, "failed to get outbound handler with tag: ", tag)
+			errors.LogError(ctx, "failed to get outbound handler with tag: ", tag)
+			return nil, errors.New("failed to get outbound handler with tag: " + tag)
 		}
 
 		if h.senderSettings.Via != nil {
