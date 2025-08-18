@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
+	"crypto/hkdf"
+	"crypto/sha3"
 	"fmt"
 	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/crypto/chacha20poly1305"
-	"golang.org/x/crypto/hkdf"
 )
 
 var MaxNonce = bytes.Repeat([]byte{255}, 12)
@@ -73,8 +73,7 @@ func ReadAndDiscardPaddings(conn net.Conn) (h []byte, t byte, l int, err error) 
 }
 
 func NewAead(c byte, secret, salt, info []byte) (aead cipher.AEAD) {
-	key := make([]byte, 32)
-	hkdf.New(sha256.New, secret, salt, info).Read(key)
+	key, _ := hkdf.Key(sha3.New256, secret, salt, string(info), 32)
 	if c&1 == 1 {
 		block, _ := aes.NewCipher(key)
 		aead, _ = cipher.NewGCM(block)

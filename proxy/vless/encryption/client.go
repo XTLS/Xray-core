@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
-	"crypto/sha256"
+	"crypto/sha3"
 	"io"
 	"net"
 	"strings"
@@ -58,10 +58,10 @@ func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Dura
 	if err != nil {
 		return
 	}
-	hash256 := sha256.Sum256(nfsEKeyBytes)
+	hash256 := sha3.Sum256(nfsEKeyBytes)
 	copy(i.hash11[:], hash256[:])
 	if xor > 0 {
-		xorKey := sha256.Sum256(nfsEKeyBytes)
+		xorKey := sha3.Sum256(nfsEKeyBytes)
 		i.xorKey = xorKey[:]
 	}
 	i.minutes = minutes

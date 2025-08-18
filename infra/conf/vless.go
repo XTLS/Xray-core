@@ -61,10 +61,6 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 
-		if strings.Contains(c.Decryption, "xored") && account.Flow == vless.XRV {
-			return nil, errors.New(`VLESS clients: "xored" doesn't support "flow" yet`)
-		}
-
 		if account.Encryption != "" {
 			return nil, errors.New(`VLESS clients: "encryption" should not in inbound settings`)
 		}
@@ -213,11 +209,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account.Id = u.String()
 
 			switch account.Flow {
-			case "":
-			case vless.XRV, vless.XRV + "-udp443":
-				if strings.Contains(account.Encryption, "xored") {
-					return nil, errors.New(`VLESS users: "xored" doesn't support "flow" yet`)
-				}
+			case "", vless.XRV, vless.XRV + "-udp443":
 			default:
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}

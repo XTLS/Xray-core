@@ -208,6 +208,14 @@ func (*Handler) Network() []net.Network {
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+	if h.decryption != nil {
+		var err error
+		connection, err = h.decryption.Handshake(connection)
+		if err != nil {
+			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
+		}
+	}
+
 	iConn := connection
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
@@ -216,14 +224,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
 		return errors.New("unable to set read deadline").Base(err).AtWarning()
-	}
-
-	if h.decryption != nil {
-		var err error
-		connection, err = h.decryption.Handshake(connection)
-		if err != nil {
-			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
-		}
 	}
 
 	first := buf.FromBytes(make([]byte, buf.Size))

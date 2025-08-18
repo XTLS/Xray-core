@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -533,6 +534,9 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			conn = statConn.Connection
 			readCounter = statConn.ReadCounter
 			writerCounter = statConn.WriteCounter
+		}
+		if _, ok := conn.(*encryption.XorConn); ok {
+			return conn, readCounter, writerCounter
 		}
 		if xc, ok := conn.(*tls.Conn); ok {
 			conn = xc.NetConn()

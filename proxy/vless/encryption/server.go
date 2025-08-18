@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/mlkem"
 	"crypto/rand"
-	"crypto/sha256"
+	"crypto/sha3"
 	"fmt"
 	"io"
 	"net"
@@ -55,10 +55,10 @@ func (i *ServerInstance) Init(nfsDKeySeed []byte, xor uint32, minutes time.Durat
 	if err != nil {
 		return
 	}
-	hash256 := sha256.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
+	hash256 := sha3.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
 	copy(i.hash11[:], hash256[:])
 	if xor > 0 {
-		xorKey := sha256.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
+		xorKey := sha3.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
 		i.xorKey = xorKey[:]
 	}
 	if minutes > 0 {
@@ -282,9 +282,9 @@ func (c *ServerConn) Write(b []byte) (int, error) {
 			data = make([]byte, 5+32+5+len(b)+16)
 			EncodeHeader(data, 0, 32)
 			rand.Read(data[5 : 5+32])
+			EncodeHeader(data[5+32:], 23, len(b)+16)
 			c.aead = NewAead(c.cipher, c.baseKey, data[5:5+32], c.peerRandom)
 			c.nonce = make([]byte, 12)
-			EncodeHeader(data[5+32:], 23, len(b)+16)
 			c.aead.Seal(data[:5+32+5], c.nonce, b, data[5+32:5+32+5])
 		} else {
 			data = make([]byte, 5+len(b)+16)
