@@ -322,10 +322,18 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				outbounds[0].Target = originalDest
 			}
 			ctx = session.ContextWithOutbounds(ctx, outbounds)
+			local := net.DestinationFromAddr(w.hub.Addr())
+			if local.Address == net.AnyIP || local.Address == net.AnyIPv6 {
+				if source.Address.Family().IsIPv4() {
+					local.Address = net.AnyIP
+				} else if source.Address.Family().IsIPv6() {
+					local.Address = net.AnyIPv6
+				}
+			}
 
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
-				Local:   net.DestinationFromAddr(w.hub.Addr()), // Due to some limitations, in UDP connections, localIP is always equal to listen interface IP
+				Local:   local, // Due to some limitations, in UDP connections, localIP is always equal to listen interface IP
 				Gateway: net.UDPDestination(w.address, w.port),
 				Tag:     w.tag,
 			})

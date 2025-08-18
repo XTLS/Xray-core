@@ -306,14 +306,14 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 
 			case domain == "origin":
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() && inbound.Local.Address != net.AnyIP && inbound.Local.Address != net.AnyIPv6 {
+					if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
 						ob.Gateway = inbound.Local.Address
 						errors.LogDebug(ctx, "use inbound local ip as sendthrough: ", inbound.Local.Address.String())
 					}
 				}
 			case domain == "srcip":
 				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() && inbound.Source.Address != net.AnyIP && inbound.Source.Address != net.AnyIPv6 {
+					if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() {
 						ob.Gateway = inbound.Source.Address
 						errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
 					}
