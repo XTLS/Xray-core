@@ -109,13 +109,6 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 	return ips, err
 }
 
-func canLookupIP(dst net.Destination, sockopt *SocketConfig) bool {
-	if dst.Address.Family().IsIP() {
-		return false
-	}
-	return sockopt.DomainStrategy.HasStrategy()
-}
-
 func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.Handler) net.Conn {
 	errors.LogInfo(ctx, "redirecting request "+dst.String()+" to "+obt)
 	outbounds := session.OutboundsFromContext(ctx)
@@ -235,9 +228,13 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	var src net.Address
 	outbounds := session.OutboundsFromContext(ctx)
+	var outboundName string
+	var origTargetAddr net.Address
 	if len(outbounds) > 0 {
 		ob := outbounds[len(outbounds)-1]
 		src = ob.Gateway
+		outboundName = ob.Name
+		origTargetAddr = ob.OriginalTarget.Address
 	}
 	if sockopt == nil {
 		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
@@ -248,8 +245,12 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		dest = *newDest
 	}
 
-	if canLookupIP(dest, sockopt) {
-		ips, err := LookupForIP(dest.Address.String(), sockopt.DomainStrategy, src)
+	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
+		finalStrategy := sockopt.DomainStrategy
+		if outboundName == "freedom" && dest.Network == net.Network_UDP && origTargetAddr != nil && src == nil {
+			finalStrategy = finalStrategy.GetDynamicStrategy(origTargetAddr.Family())
+		}
+		ips, err := LookupForIP(dest.Address.Domain(), finalStrategy, src)
 		if err != nil {
 			errors.LogErrorInner(ctx, err, "failed to resolve ip")
 			if sockopt.DomainStrategy.ForceIP() {
