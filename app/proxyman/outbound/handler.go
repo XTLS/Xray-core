@@ -315,7 +315,7 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 }
 
 func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
-	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil {
+	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil && !h.senderSettings.ProxySettings.HasTag() && (h.streamSettings.SocketSettings == nil || len(h.streamSettings.SocketSettings.DialerProxy) == 0) {
 		var domain string
 		addr := h.senderSettings.Via.AsAddress()
 		domain = h.senderSettings.Via.GetDomain()

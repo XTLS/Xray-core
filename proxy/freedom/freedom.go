@@ -89,6 +89,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
+	if origTargetAddr == nil {
+		origTargetAddr = ob.Target.Address
+	}
 	dialer.SetOutboundGateway(ctx, ob)
 	outGateway := ob.Gateway
 	UDPOverride := net.UDPDestination(nil, 0)

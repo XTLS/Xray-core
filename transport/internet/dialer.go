@@ -91,8 +91,8 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 	}
 
 	ips, _, err := dnsClient.LookupIP(domain, dns.IPOption{
-		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && strategy.PreferIP4(),
-		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && strategy.PreferIP6(),
+		IPv4Enable: (localAddr == nil && strategy.PreferIP4()) || (localAddr != nil && localAddr.Family().IsIPv4() && (strategy.PreferIP4() || strategy.FallbackIP4())),
+		IPv6Enable: (localAddr == nil && strategy.PreferIP6()) || (localAddr != nil && localAddr.Family().IsIPv6() && (strategy.PreferIP6() || strategy.FallbackIP6())),
 	})
 	{ // Resolve fallback
 		if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
@@ -232,7 +232,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	var origTargetAddr net.Address
 	if len(outbounds) > 0 {
 		ob := outbounds[len(outbounds)-1]
-		src = ob.Gateway
+		if sockopt == nil || len(sockopt.DialerProxy) == 0 {
+			src = ob.Gateway
+		}
 		outboundName = ob.Name
 		origTargetAddr = ob.OriginalTarget.Address
 	}
