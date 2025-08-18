@@ -186,7 +186,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, UDPOverride, destination, outGateway)
+			writer = NewPacketWriter(conn, h, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -322,7 +322,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination, outGateway net.Address) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -336,9 +336,8 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, Dia
 		// If DialDest is a domain, it will be resolved in dialer
 		// check this behavior and add it to map
 		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
-		remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address
 		if DialDest.Address.Family().IsDomain() {
-			resolvedUDPAddr.Store(DialDest.Address.Domain(), remoteAddr)
+			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
@@ -346,8 +345,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, Dia
 			Handler:           h,
 			UDPOverride:       UDPOverride,
 			ResolvedUDPAddr:   resolvedUDPAddr,
-			OutGateway:        outGateway,
-			RemoteAddrFamily:  remoteAddr.Family(),
+			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
 		}
 
 	}
@@ -364,9 +362,8 @@ type PacketWriter struct {
 	// But resolver will return a random one if the domain has many IPs
 	// Resulting in these packets being sent to many different IPs randomly
 	// So, cache and keep the resolve result
-	ResolvedUDPAddr  *utils.TypedSyncMap[string, net.Address]
-	OutGateway       net.Address
-	RemoteAddrFamily net.AddressFamily
+	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
+	LocalAddr       net.Address
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -391,11 +388,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				} else {
 					ShouldUseSystemResolver := true
 					if w.Handler.config.DomainStrategy.HasStrategy() {
-						strategy := w.Handler.config.DomainStrategy
-						if w.OutGateway == nil {
-							strategy = strategy.GetDynamicStrategy(w.RemoteAddrFamily)
-						}
-						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), strategy, w.OutGateway)
+						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), w.Handler.config.DomainStrategy, w.LocalAddr)
 						if err != nil {
 							// drop packet if resolve failed when forceIP
 							if w.Handler.config.DomainStrategy.ForceIP() {
