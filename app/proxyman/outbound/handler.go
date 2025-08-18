@@ -295,37 +295,11 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 		}
 
 		if h.senderSettings.Via != nil {
-
 			outbounds := session.OutboundsFromContext(ctx)
 			ob := outbounds[len(outbounds)-1]
-			var domain string
-			addr := h.senderSettings.Via.AsAddress()
-			domain = h.senderSettings.Via.GetDomain()
-			switch {
-			case h.senderSettings.ViaCidr != "":
-				ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
-
-			case domain == "origin":
-				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
-						ob.Gateway = inbound.Local.Address
-						errors.LogDebug(ctx, "use inbound local ip as sendthrough: ", inbound.Local.Address.String())
-					}
-				}
-			case domain == "srcip":
-				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() {
-						ob.Gateway = inbound.Source.Address
-						errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
-					}
-				}
-			//case addr.Family().IsDomain():
-			default:
-				ob.Gateway = addr
-
-			}
-
+			h.SetOutboundGateway(ctx, ob)
 		}
+
 	}
 
 	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
@@ -338,6 +312,38 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	ob := outbounds[len(outbounds)-1]
 	ob.Conn = conn
 	return conn, err
+}
+
+func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
+	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil {
+		var domain string
+		addr := h.senderSettings.Via.AsAddress()
+		domain = h.senderSettings.Via.GetDomain()
+		switch {
+		case h.senderSettings.ViaCidr != "":
+			ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
+
+		case domain == "origin":
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
+					ob.Gateway = inbound.Local.Address
+					errors.LogDebug(ctx, "use inbound local ip as sendthrough: ", inbound.Local.Address.String())
+				}
+			}
+		case domain == "srcip":
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() {
+					ob.Gateway = inbound.Source.Address
+					errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
+				}
+			}
+		//case addr.Family().IsDomain():
+		default:
+			ob.Gateway = addr
+
+		}
+
+	}
 }
 
 func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {

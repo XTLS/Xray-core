@@ -26,6 +26,9 @@ type Dialer interface {
 
 	// DestIpAddress returns the ip of proxy server. It is useful in case of Android client, which prepare an IP before proxy connection is established
 	DestIpAddress() net.IP
+
+	// SetOutboundGateway set outbound gateway
+	SetOutboundGateway(ctx context.Context, ob *session.Outbound)
 }
 
 // dialFunc is an interface to dial network connection to a specific destination.

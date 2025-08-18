@@ -89,6 +89,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
+	dialer.SetOutboundGateway(ctx, ob)
 	outGateway := ob.Gateway
 	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {
@@ -481,7 +482,10 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if err != nil {
 				return err
 			}
-			w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			if err != nil {
+				return err
+			}
 
 			if n.DelayMin != 0 || n.DelayMax != 0 {
 				time.Sleep(time.Duration(crypto.RandBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
