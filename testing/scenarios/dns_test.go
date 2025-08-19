@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/testing/servers/tcp"
+	"github.com/xtls/xray-core/transport/internet"
 	xproxy "golang.org/x/net/proxy"
 )
 
@@ -83,7 +84,7 @@ func TestResolveIP(t *testing.T) {
 			{
 				Tag: "direct",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					DomainStrategy: freedom.Config_USE_IP,
+					DomainStrategy: internet.DomainStrategy_USE_IP,
 				}),
 			},
 		},

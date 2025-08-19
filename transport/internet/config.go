@@ -2,6 +2,7 @@ package internet
 
 import (
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 )
 
@@ -126,4 +127,26 @@ func (s DomainStrategy) FallbackIP4() bool {
 
 func (s DomainStrategy) FallbackIP6() bool {
 	return strategy[s][2] == 6
+}
+
+func (s DomainStrategy) GetDynamicStrategy(addrFamily net.AddressFamily) DomainStrategy {
+	if  addrFamily.IsDomain(){
+		return s
+	}
+	switch s {
+	case DomainStrategy_USE_IP:
+		if addrFamily.IsIPv4() {
+			return DomainStrategy_USE_IP46
+		} else if addrFamily.IsIPv6() {
+			return DomainStrategy_USE_IP64
+		}
+	case DomainStrategy_FORCE_IP:
+		if addrFamily.IsIPv4() {
+			return DomainStrategy_FORCE_IP46
+		} else if addrFamily.IsIPv6() {
+			return DomainStrategy_FORCE_IP64
+		}
+	default:
+	}
+	return s
 }

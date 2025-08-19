@@ -20,7 +20,6 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
@@ -35,8 +34,8 @@ var useSplice bool
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
-		if err := core.RequireFeatures(ctx, func(pm policy.Manager, d dns.Client) error {
-			return h.Init(config.(*Config), pm, d)
+		if err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
+			return h.Init(config.(*Config), pm)
 		}); err != nil {
 			return nil, err
 		}
@@ -53,44 +52,19 @@ func init() {
 // Handler handles Freedom connections.
 type Handler struct {
 	policyManager policy.Manager
-	dns           dns.Client
 	config        *Config
 }
 
 // Init initializes the Handler with necessary parameters.
-func (h *Handler) Init(config *Config, pm policy.Manager, d dns.Client) error {
+func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
-	h.dns = d
-
 	return nil
 }
 
 func (h *Handler) policy() policy.Session {
 	p := h.policyManager.ForLevel(h.config.UserLevel)
 	return p
-}
-
-func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	ips, _, err := h.dns.LookupIP(domain, dns.IPOption{
-		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && h.config.preferIP4(),
-		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && h.config.preferIP6(),
-	})
-	{ // Resolve fallback
-		if (len(ips) == 0 || err != nil) && h.config.hasFallback() && localAddr == nil {
-			ips, _, err = h.dns.LookupIP(domain, dns.IPOption{
-				IPv4Enable: h.config.fallbackIP4(),
-				IPv6Enable: h.config.fallbackIP6(),
-			})
-		}
-	}
-	if err != nil {
-		errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", domain)
-	}
-	if len(ips) == 0 {
-		return nil
-	}
-	return net.IPAddress(ips[dice.Roll(len(ips))])
 }
 
 func isValidAddress(addr *net.IPOrDomain) bool {
@@ -114,6 +88,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	inbound := session.InboundFromContext(ctx)
 
 	destination := ob.Target
+	origTargetAddr := ob.OriginalTarget.Address
+	if origTargetAddr == nil {
+		origTargetAddr = ob.Target.Address
+	}
+	dialer.SetOutboundGateway(ctx, ob)
+	outGateway := ob.Gateway
 	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {
 		server := h.config.DestinationOverride.Server
@@ -133,17 +113,24 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
-		if h.config.hasStrategy() && dialDest.Address.Family().IsDomain() {
-			ip := h.resolveIP(ctx, dialDest.Address.Domain(), dialer.Address())
-			if ip != nil {
+		if h.config.DomainStrategy.HasStrategy() && dialDest.Address.Family().IsDomain() {
+			strategy := h.config.DomainStrategy
+			if destination.Network == net.Network_UDP && origTargetAddr != nil && outGateway == nil {
+				strategy = strategy.GetDynamicStrategy(origTargetAddr.Family())
+			}
+			ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
+				if h.config.DomainStrategy.ForceIP() {
+					return err
+				}
+			} else {
 				dialDest = net.Destination{
 					Network: dialDest.Network,
-					Address: ip,
+					Address: net.IPAddress(ips[dice.Roll(len(ips))]),
 					Port:    dialDest.Port,
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
-			} else if h.config.forceIP() {
-				return dns.ErrEmptyResponse
 			}
 		}
 
@@ -203,7 +190,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, ctx, UDPOverride, destination)
+			writer = NewPacketWriter(conn, h, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -339,7 +326,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -360,9 +347,9 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
-			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   resolvedUDPAddr,
+			ResolvedUDPAddr:   resolvedUDPAddr,
+			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
 		}
 
 	}
@@ -373,14 +360,14 @@ type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
 	*Handler
-	context.Context
 	UDPOverride net.Destination
 
 	// Dest of udp packets might be a domain, we will resolve them to IP
 	// But resolver will return a random one if the domain has many IPs
 	// Resulting in these packets being sent to many different IPs randomly
 	// So, cache and keep the resolve result
-	resolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
+	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
+	LocalAddr       net.Address
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -400,19 +387,21 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.UDP.Port = w.UDPOverride.Port
 			}
 			if b.UDP.Address.Family().IsDomain() {
-				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
+				if ip, ok := w.ResolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
 					b.UDP.Address = ip
 				} else {
 					ShouldUseSystemResolver := true
-					if w.Handler.config.hasStrategy() {
-						ip = w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
-						if ip != nil {
+					if w.Handler.config.DomainStrategy.HasStrategy() {
+						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), w.Handler.config.DomainStrategy, w.LocalAddr)
+						if err != nil {
+							// drop packet if resolve failed when forceIP
+							if w.Handler.config.DomainStrategy.ForceIP() {
+								b.Release()
+								continue
+							}
+						} else {
+							ip = net.IPAddress(ips[dice.Roll(len(ips))])
 							ShouldUseSystemResolver = false
-						}
-						// drop packet if resolve failed when forceIP
-						if ip == nil && w.Handler.config.forceIP() {
-							b.Release()
-							continue
 						}
 					}
 					if ShouldUseSystemResolver {
@@ -425,7 +414,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						}
 					}
 					if ip != nil {
-						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
+						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
 				}
 			}
@@ -496,7 +485,10 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if err != nil {
 				return err
 			}
-			w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			if err != nil {
+				return err
+			}
 
 			if n.DelayMin != 0 || n.DelayMax != 0 {
 				time.Sleep(time.Duration(crypto.RandBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
