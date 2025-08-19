@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pires/go-proxyproto"
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -103,6 +104,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	defer conn.Close()
 
+	iConn := conn
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
+		iConn = statConn.Connection
+	}
+	target := ob.Target
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
+
 	if h.encryption != nil {
 		var err error
 		conn, err = h.encryption.Handshake(conn)
@@ -110,13 +118,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
 	}
-
-	iConn := conn
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
-	target := ob.Target
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
 
 	command := protocol.RequestCommandTCP
 	if target.Network == net.Network_UDP {
@@ -161,6 +162,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandTCP:
 			if clientConn, ok := conn.(*encryption.ClientConn); ok {
 				peerCache = &clientConn.PeerCache
+				_, ok0 := clientConn.Conn.(*encryption.XorConn)
+				_, ok1 := iConn.(*proxyproto.Conn)
+				_, ok2 := iConn.(*net.TCPConn)
+				_, ok3 := iConn.(*internet.UnixConnWrapper)
+				if ok0 || (!ok1 && !ok2 && !ok3) {
+					ob.CanSpliceCopy = 3 // xorConn/non-RAW can not use Linux Splice
+				}
 				break
 			}
 			var t reflect.Type

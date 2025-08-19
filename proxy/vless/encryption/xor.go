@@ -49,6 +49,7 @@ func (c *XorConn) Write(b []byte) (int, error) { // whole one/two records
 			l += 10
 			if t == 0 {
 				c.out_after0 = true
+				c.out_header = make([]byte, 0, 5) // important
 			}
 		}
 		c.ctr.XORKeyStream(b[:l], b[:l]) // caller MUST discard b
@@ -77,7 +78,7 @@ func (c *XorConn) Write(b []byte) (int, error) { // whole one/two records
 			break
 		}
 		_, c.out_skip, _ = DecodeHeader(append(c.out_header, p[:need]...))
-		c.out_header = make([]byte, 0, 5) // DO NOT CHANGE
+		c.out_header = c.out_header[:0]
 		c.ctr.XORKeyStream(p[:need], p[:need])
 		p = p[need:]
 	}
@@ -116,6 +117,7 @@ func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 				c.isHeader = false
 				if t == 0 {
 					c.in_after0 = true
+					c.in_header = make([]byte, 0, 5) // important
 				}
 			}
 		} else {
@@ -139,7 +141,7 @@ func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 		}
 		c.peerCtr.XORKeyStream(p[:need], p[:need])
 		_, c.in_skip, _ = DecodeHeader(append(c.in_header, p[:need]...))
-		c.in_header = make([]byte, 0, 5) // DO NOT CHANGE
+		c.in_header = c.in_header[:0]
 		p = p[need:]
 	}
 	return n, err

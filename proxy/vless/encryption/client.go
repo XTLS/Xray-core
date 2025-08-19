@@ -58,8 +58,8 @@ func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Dura
 	if err != nil {
 		return
 	}
-	hash256 := sha3.Sum256(nfsEKeyBytes)
-	copy(i.hash11[:], hash256[:])
+	hash32 := sha3.Sum256(nfsEKeyBytes)
+	copy(i.hash11[:], hash32[:])
 	if xor > 0 {
 		xorKey := sha3.Sum256(nfsEKeyBytes)
 		i.xorKey = xorKey[:]
@@ -68,7 +68,7 @@ func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Dura
 	return
 }
 
-func (i *ClientInstance) Handshake(conn net.Conn) (net.Conn, error) {
+func (i *ClientInstance) Handshake(conn net.Conn) (*ClientConn, error) {
 	if i.nfsEKey == nil {
 		return nil, errors.New("uninitialized")
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -31,6 +32,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -208,17 +210,17 @@ func (*Handler) Network() []net.Network {
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+	iConn := connection
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
+		iConn = statConn.Connection
+	}
+
 	if h.decryption != nil {
 		var err error
 		connection, err = h.decryption.Handshake(connection)
 		if err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
-	}
-
-	iConn := connection
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -499,6 +501,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandTCP:
 				if serverConn, ok := connection.(*encryption.ServerConn); ok {
 					peerCache = &serverConn.PeerCache
+					_, ok0 := serverConn.Conn.(*encryption.XorConn)
+					_, ok1 := iConn.(*proxyproto.Conn)
+					_, ok2 := iConn.(*net.TCPConn)
+					_, ok3 := iConn.(*internet.UnixConnWrapper)
+					if ok0 || (!ok1 && !ok2 && !ok3) {
+						inbound.CanSpliceCopy = 3 // xorConn/non-RAW can not use Linux Splice
+					}
 					break
 				}
 				var t reflect.Type
