@@ -95,6 +95,9 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
+	if isTransportConn(conn) {
+		inbound.CanSpliceCopy = 3
+	}
 	var reader *bufio.Reader
 	if len(firstbyte) > 0 {
 		readerWithoutFirstbyte := bufio.NewReaderSize(readerOnly{conn}, buf.Size)
@@ -207,7 +210,9 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *buf
 	}
 
 	responseDone := func() error {
-		inbound.CanSpliceCopy = 1
+		if inbound.CanSpliceCopy == 2 {
+			inbound.CanSpliceCopy = 1
+		}
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		v2writer := buf.NewWriter(conn)
@@ -368,6 +373,20 @@ func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer
 		}
 	}
 	return http.ReadResponse(r, req)
+}
+
+// isTransportConn return false if the conn is a raw tcp conn without transport or tls, can process splice copy
+func isTransportConn(conn stat.Connection) bool {
+	if conn != nil {
+		statConn, ok := conn.(*stat.CounterConnection)
+		if ok {
+			conn = statConn.Connection
+		}
+		if _, ok := conn.(*net.TCPConn); ok {
+			return false
+		}
+	}
+	return true
 }
 
 func init() {
