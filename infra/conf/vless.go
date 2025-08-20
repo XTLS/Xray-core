@@ -71,8 +71,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 
 	config.Decryption = c.Decryption
 	if !func() bool {
-		s := strings.SplitN(config.Decryption, "-", 4)
-		if len(s) != 4 || s[2] != "mlkem768seed" {
+		s := strings.Split(config.Decryption, ".")
+		if len(s) != 5 || s[2] != "mlkem768Seed" {
 			return false
 		}
 		if s[0] != "1rtt" {
@@ -87,17 +87,21 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			config.Minutes = uint32(i)
 		}
 		switch s[1] {
-		case "vless":
-		case "xored":
-			config.Xor = 1
+		case "native":
+		case "divide":
+			config.XorMode = 1
+		case "random":
+			config.XorMode = 2
 		default:
 			return false
 		}
-		b, err := base64.RawURLEncoding.DecodeString(s[3])
-		if len(b) != 64 || err != nil {
+		if b, _ := base64.RawURLEncoding.DecodeString(s[3]); len(b) != 32 {
 			return false
 		}
-		config.Decryption = s[3]
+		if b, _ := base64.RawURLEncoding.DecodeString(s[4]); len(b) != 64 {
+			return false
+		}
+		config.Decryption = s[4] + "." + s[3]
 		return true
 	}() && config.Decryption != "none" {
 		if config.Decryption == "" {
@@ -215,8 +219,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			}
 
 			if !func() bool {
-				s := strings.SplitN(account.Encryption, "-", 4)
-				if len(s) != 4 || s[2] != "mlkem768client" {
+				s := strings.Split(account.Encryption, ".")
+				if len(s) != 5 || s[2] != "mlkem768Client" {
 					return false
 				}
 				if s[0] != "1rtt" {
@@ -231,17 +235,21 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 					account.Minutes = uint32(i)
 				}
 				switch s[1] {
-				case "vless":
-				case "xored":
-					account.Xor = 1
+				case "native":
+				case "divide":
+					account.XorMode = 1
+				case "random":
+					account.XorMode = 2
 				default:
 					return false
 				}
-				b, err := base64.RawURLEncoding.DecodeString(s[3])
-				if len(b) != 1184 || err != nil {
+				if b, _ := base64.RawURLEncoding.DecodeString(s[3]); len(b) != 32 {
 					return false
 				}
-				account.Encryption = s[3]
+				if b, _ := base64.RawURLEncoding.DecodeString(s[4]); len(b) != 1184 {
+					return false
+				}
+				account.Encryption = s[4] + "." + s[3]
 				return true
 			}() && account.Encryption != "none" {
 				if account.Encryption == "" {

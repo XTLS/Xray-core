@@ -6,10 +6,10 @@ import (
 	gotls "crypto/tls"
 	"encoding/base64"
 	"reflect"
+	"strings"
 	"time"
 	"unsafe"
 
-	"github.com/pires/go-proxyproto"
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -69,10 +69,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	a := handler.serverPicker.PickServer().PickUser().Account.(*vless.MemoryAccount)
-	e, _ := base64.RawURLEncoding.DecodeString(a.Encryption)
-	if len(e) == 1184 {
+	if s := strings.Split(a.Encryption, "."); len(s) == 2 {
+		nfsEKeyBytes, _ := base64.RawURLEncoding.DecodeString(s[0])
+		xorPKeyBytes, _ := base64.RawURLEncoding.DecodeString(s[1])
 		handler.encryption = &encryption.ClientInstance{}
-		if err := handler.encryption.Init(e, a.Xor, time.Duration(a.Minutes)*time.Minute); err != nil {
+		if err := handler.encryption.Init(nfsEKeyBytes, xorPKeyBytes, a.XorMode, a.Minutes); err != nil {
 			return nil, errors.New("failed to use mlkem768client").Base(err).AtError()
 		}
 	}
@@ -162,12 +163,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandTCP:
 			if clientConn, ok := conn.(*encryption.ClientConn); ok {
 				peerCache = &clientConn.PeerCache
-				_, ok0 := clientConn.Conn.(*encryption.XorConn)
-				_, ok1 := iConn.(*proxyproto.Conn)
-				_, ok2 := iConn.(*net.TCPConn)
-				_, ok3 := iConn.(*internet.UnixConnWrapper)
-				if ok0 || (!ok1 && !ok2 && !ok3) {
-					ob.CanSpliceCopy = 3 // xorConn/non-RAW can not use Linux Splice
+				if xorConn, ok := clientConn.Conn.(*encryption.XorConn); (ok && !xorConn.Divide) || !proxy.IsRAWTransport(iConn) {
+					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
 				}
 				break
 			}

@@ -3,6 +3,7 @@ package encryption
 import (
 	"bytes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/mlkem"
 	"crypto/rand"
 	"crypto/sha3"
@@ -29,7 +30,8 @@ type ClientInstance struct {
 	sync.RWMutex
 	nfsEKey *mlkem.EncapsulationKey768
 	hash11  [11]byte // no more capacity
-	xorKey  []byte
+	xorMode uint32
+	xorPKey *ecdh.PublicKey
 	minutes time.Duration
 	expire  time.Time
 	baseKey []byte
@@ -49,22 +51,23 @@ type ClientConn struct {
 	PeerCache []byte
 }
 
-func (i *ClientInstance) Init(nfsEKeyBytes []byte, xor uint32, minutes time.Duration) (err error) {
+func (i *ClientInstance) Init(nfsEKeyBytes, xorPKeyBytes []byte, xorMode, minutes uint32) (err error) {
 	if i.nfsEKey != nil {
 		err = errors.New("already initialized")
 		return
 	}
-	i.nfsEKey, err = mlkem.NewEncapsulationKey768(nfsEKeyBytes)
-	if err != nil {
+	if i.nfsEKey, err = mlkem.NewEncapsulationKey768(nfsEKeyBytes); err != nil {
 		return
 	}
 	hash32 := sha3.Sum256(nfsEKeyBytes)
 	copy(i.hash11[:], hash32[:])
-	if xor > 0 {
-		xorKey := sha3.Sum256(nfsEKeyBytes)
-		i.xorKey = xorKey[:]
+	if xorMode > 0 {
+		i.xorMode = xorMode
+		if i.xorPKey, err = ecdh.X25519().NewPublicKey(xorPKeyBytes); err != nil {
+			return
+		}
 	}
-	i.minutes = minutes
+	i.minutes = time.Duration(minutes) * time.Minute
 	return
 }
 
@@ -72,8 +75,8 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*ClientConn, error) {
 	if i.nfsEKey == nil {
 		return nil, errors.New("uninitialized")
 	}
-	if i.xorKey != nil {
-		conn = NewXorConn(conn, i.xorKey)
+	if i.xorMode > 0 {
+		conn, _ = NewXorConn(conn, i.xorMode, i.xorPKey, nil)
 	}
 	c := &ClientConn{Conn: conn}
 
@@ -134,7 +137,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*ClientConn, error) {
 	}
 	c.baseKey = append(pfsKey, nfsKey...)
 
-	VLESS, _ := NewAead(ClientCipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Open(nil, append(i.hash11[:], ClientCipher), c.ticket[11:], pfsEKeyBytes)
+	VLESS, _ := NewAEAD(ClientCipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Open(nil, append(i.hash11[:], ClientCipher), c.ticket[11:], pfsEKeyBytes)
 	if !bytes.Equal(VLESS, []byte("VLESS")) {
 		return nil, errors.New("invalid server").AtError()
 	}
@@ -169,7 +172,7 @@ func (c *ClientConn) Write(b []byte) (int, error) {
 			rand.Read(c.random)
 			copy(data[5+32:], c.random)
 			EncodeHeader(data[5+32+32:], 23, len(b)+16)
-			c.aead = NewAead(ClientCipher, c.baseKey, c.random, c.ticket)
+			c.aead = NewAEAD(ClientCipher, c.baseKey, c.random, c.ticket)
 			c.nonce = make([]byte, 12)
 			c.aead.Seal(data[:5+32+32+5], c.nonce, b, data[5+32+32:5+32+32+5])
 		} else {
@@ -177,7 +180,7 @@ func (c *ClientConn) Write(b []byte) (int, error) {
 			EncodeHeader(data, 23, len(b)+16)
 			c.aead.Seal(data[:5], c.nonce, b, data[:5])
 			if bytes.Equal(c.nonce, MaxNonce) {
-				c.aead = NewAead(ClientCipher, c.baseKey, data[5:], data[:5])
+				c.aead = NewAEAD(ClientCipher, c.baseKey, data[5:], data[:5])
 			}
 		}
 		IncreaseNonce(c.nonce)
@@ -218,7 +221,7 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		if c.random == nil {
 			return 0, errors.New("empty c.random")
 		}
-		c.peerAead = NewAead(ClientCipher, c.baseKey, peerRandomHello, c.random)
+		c.peerAead = NewAEAD(ClientCipher, c.baseKey, peerRandomHello, c.random)
 		c.peerNonce = make([]byte, 12)
 	}
 	if len(c.PeerCache) != 0 {
@@ -243,7 +246,7 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 	}
 	var peerAead cipher.AEAD
 	if bytes.Equal(c.peerNonce, MaxNonce) {
-		peerAead = NewAead(ClientCipher, c.baseKey, peerData, h)
+		peerAead = NewAEAD(ClientCipher, c.baseKey, peerData, h)
 	}
 	_, err = c.peerAead.Open(dst[:0], c.peerNonce, peerData, h)
 	if peerAead != nil {

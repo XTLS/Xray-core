@@ -12,7 +12,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -32,7 +31,6 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -86,10 +84,11 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		validator:             validator,
 	}
 
-	d, _ := base64.RawURLEncoding.DecodeString(config.Decryption)
-	if len(d) == 64 {
+	if s := strings.Split(config.Decryption, "."); len(s) == 2 {
+		nfsDKeySeed, _ := base64.RawURLEncoding.DecodeString(s[0])
+		xorSKeyBytes, _ := base64.RawURLEncoding.DecodeString(s[1])
 		handler.decryption = &encryption.ServerInstance{}
-		if err := handler.decryption.Init(d, config.Xor, time.Duration(config.Minutes)*time.Minute); err != nil {
+		if err := handler.decryption.Init(nfsDKeySeed, xorSKeyBytes, config.XorMode, config.Minutes); err != nil {
 			return nil, errors.New("failed to use mlkem768seed").Base(err).AtError()
 		}
 	}
@@ -501,12 +500,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandTCP:
 				if serverConn, ok := connection.(*encryption.ServerConn); ok {
 					peerCache = &serverConn.PeerCache
-					_, ok0 := serverConn.Conn.(*encryption.XorConn)
-					_, ok1 := iConn.(*proxyproto.Conn)
-					_, ok2 := iConn.(*net.TCPConn)
-					_, ok3 := iConn.(*internet.UnixConnWrapper)
-					if ok0 || (!ok1 && !ok2 && !ok3) {
-						inbound.CanSpliceCopy = 3 // xorConn/non-RAW can not use Linux Splice
+					if xorConn, ok := serverConn.Conn.(*encryption.XorConn); (ok && !xorConn.Divide) || !proxy.IsRAWTransport(iConn) {
+						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
 					}
 					break
 				}

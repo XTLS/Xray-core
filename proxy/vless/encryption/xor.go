@@ -3,13 +3,21 @@ package encryption
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha3"
 	"io"
 	"net"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type XorConn struct {
 	net.Conn
+	Divide bool
+
+	head     []byte
 	key      []byte
 	ctr      cipher.Stream
 	peerCtr  cipher.Stream
@@ -25,8 +33,55 @@ type XorConn struct {
 	in_skip   int
 }
 
-func NewXorConn(conn net.Conn, key []byte) *XorConn {
-	return &XorConn{Conn: conn, key: key}
+func NewCTR(key, iv []byte, isServer bool) cipher.Stream {
+	info := "CLIENT"
+	if isServer {
+		info = "SERVER" // avoids attackers sending traffic back to the client, though the encryption layer has its own protection
+	}
+	key, _ = hkdf.Key(sha3.New256, key, iv, info, 32) // avoids using pKey directly if attackers sent the basepoint, or whaterver they like
+	block, _ := aes.NewCipher(key)
+	return cipher.NewCTR(block, iv)
+}
+
+func NewXorConn(conn net.Conn, mode uint32, pKey *ecdh.PublicKey, sKey *ecdh.PrivateKey) (*XorConn, error) {
+	if mode == 0 || (pKey == nil && sKey == nil) || (pKey != nil && sKey != nil) {
+		return nil, errors.New("invalid parameters")
+	}
+	c := &XorConn{
+		Conn:       conn,
+		Divide:     mode == 1,
+		isHeader:   true,
+		out_header: make([]byte, 0, 5), // important
+		in_header:  make([]byte, 0, 5), // important
+	}
+	if pKey != nil {
+		c.head = make([]byte, 16+32)
+		rand.Read(c.head)
+		eSKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
+		NewCTR(pKey.Bytes(), c.head[:16], false).XORKeyStream(c.head[16:], eSKey.PublicKey().Bytes()) // make X25519 public key distinguishable from random bytes
+		c.key, _ = eSKey.ECDH(pKey)
+		c.ctr = NewCTR(c.key, c.head[:16], false)
+	}
+	if sKey != nil {
+		peerHead := make([]byte, 16+32)
+		if _, err := io.ReadFull(c.Conn, peerHead); err != nil {
+			return nil, err
+		}
+		NewCTR(sKey.PublicKey().Bytes(), peerHead[:16], false).XORKeyStream(peerHead[16:], peerHead[16:]) // we don't use buggy elligator, because we have PSK :)
+		ePKey, err := ecdh.X25519().NewPublicKey(peerHead[16:])
+		if err != nil {
+			return nil, err
+		}
+		key, err := sKey.ECDH(ePKey)
+		if err != nil {
+			return nil, err
+		}
+		c.peerCtr = NewCTR(key, peerHead[:16], false)
+		c.head = make([]byte, 16)
+		rand.Read(c.head)                 // make sure the server always replies random bytes even when received replays, though it is not important
+		c.ctr = NewCTR(key, c.head, true) // the same key links the upload & download, though the encryption layer has its own link
+	}
+	return c, nil
 	//chacha20.NewUnauthenticatedCipher()
 }
 
@@ -35,13 +90,6 @@ func (c *XorConn) Write(b []byte) (int, error) { // whole one/two records
 		return 0, nil
 	}
 	if !c.out_after0 {
-		var iv []byte
-		if c.ctr == nil {
-			block, _ := aes.NewCipher(c.key)
-			iv = make([]byte, 16)
-			rand.Read(iv)
-			c.ctr = cipher.NewCTR(block, iv)
-		}
 		t, l, _ := DecodeHeader(b)
 		if t == 23 { // single 23
 			l = 5
@@ -49,20 +97,24 @@ func (c *XorConn) Write(b []byte) (int, error) { // whole one/two records
 			l += 10
 			if t == 0 {
 				c.out_after0 = true
-				c.out_header = make([]byte, 0, 5) // important
+				if c.Divide {
+					l -= 5
+				}
 			}
 		}
 		c.ctr.XORKeyStream(b[:l], b[:l]) // caller MUST discard b
-		if iv != nil {
-			b = append(iv, b...)
+		l = len(b)
+		if c.head != nil {
+			b = append(c.head, b...)
+			c.head = nil
 		}
 		if _, err := c.Conn.Write(b); err != nil {
 			return 0, err
 		}
-		if iv != nil {
-			b = b[16:] // for len(b)
-		}
-		return len(b), nil
+		return l, nil
+	}
+	if c.Divide {
+		return c.Conn.Write(b)
 	}
 	for p := b; ; { // for XTLS
 		if len(p) <= c.out_skip {
@@ -93,14 +145,12 @@ func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 		return 0, nil
 	}
 	if !c.in_after0 || !c.isHeader {
-		if c.peerCtr == nil {
+		if c.peerCtr == nil { // for client
 			peerIv := make([]byte, 16)
 			if _, err := io.ReadFull(c.Conn, peerIv); err != nil {
 				return 0, err
 			}
-			block, _ := aes.NewCipher(c.key)
-			c.peerCtr = cipher.NewCTR(block, peerIv)
-			c.isHeader = true
+			c.peerCtr = NewCTR(c.key, peerIv, true)
 		}
 		if _, err := io.ReadFull(c.Conn, b); err != nil {
 			return 0, err
@@ -117,13 +167,15 @@ func (c *XorConn) Read(b []byte) (int, error) { // 5-bytes, data, 5-bytes...
 				c.isHeader = false
 				if t == 0 {
 					c.in_after0 = true
-					c.in_header = make([]byte, 0, 5) // important
 				}
 			}
 		} else {
 			c.isHeader = true
 		}
 		return len(b), nil
+	}
+	if c.Divide {
+		return c.Conn.Read(b)
 	}
 	n, err := c.Conn.Read(b)
 	for p := b[:n]; ; { // for XTLS

@@ -539,7 +539,10 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			isEncryption = true
 		}
 		if xorConn, ok := conn.(*encryption.XorConn); ok {
-			return xorConn, nil, nil // xorConn should not be penetrated
+			if !xorConn.Divide {
+				return xorConn, nil, nil // full-random xorConn should not be penetrated
+			}
+			conn = xorConn.Conn
 		}
 		if statConn, ok := conn.(*stat.CounterConnection); ok {
 			conn = statConn.Connection
@@ -651,4 +654,15 @@ func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer sign
 		return errors.New("failed to process response").Base(err)
 	}
 	return nil
+}
+
+func IsRAWTransport(conn stat.Connection) bool {
+	iConn := conn
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
+		iConn = statConn.Connection
+	}
+	_, ok1 := iConn.(*proxyproto.Conn)
+	_, ok2 := iConn.(*net.TCPConn)
+	_, ok3 := iConn.(*internet.UnixConnWrapper)
+	return ok1 || ok2 || ok3
 }

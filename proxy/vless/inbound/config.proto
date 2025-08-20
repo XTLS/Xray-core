@@ -22,6 +22,6 @@ message Config {
   repeated Fallback fallbacks = 2;
 
   string decryption = 3;
-  uint32 xor = 4;
+  uint32 xorMode = 4;
   uint32 minutes = 5;
 }

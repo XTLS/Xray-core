@@ -3,6 +3,7 @@ package all
 import (
 	"crypto/mlkem"
 	"crypto/rand"
+	"crypto/sha3"
 	"encoding/base64"
 	"fmt"
 
@@ -40,8 +41,10 @@ func executeMLKEM768(cmd *base.Command, args []string) {
 		rand.Read(seed[:])
 	}
 	key, _ := mlkem.NewDecapsulationKey768(seed[:])
-	pub := key.EncapsulationKey()
-	fmt.Printf("Seed: %v\nClient: %v",
+	client := key.EncapsulationKey().Bytes()
+	hash32 := sha3.Sum256(client)
+	fmt.Printf("Seed: %v\nClient: %v\nHash11: %v",
 		base64.RawURLEncoding.EncodeToString(seed[:]),
-		base64.RawURLEncoding.EncodeToString(pub.Bytes()))
+		base64.RawURLEncoding.EncodeToString(client),
+		base64.RawURLEncoding.EncodeToString(hash32[:11]))
 }

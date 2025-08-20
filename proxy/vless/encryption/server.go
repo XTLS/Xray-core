@@ -3,6 +3,7 @@ package encryption
 import (
 	"bytes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/mlkem"
 	"crypto/rand"
 	"crypto/sha3"
@@ -27,7 +28,8 @@ type ServerInstance struct {
 	sync.RWMutex
 	nfsDKey  *mlkem.DecapsulationKey768
 	hash11   [11]byte // no more capacity
-	xorKey   []byte
+	xorMode  uint32
+	xorSKey  *ecdh.PrivateKey
 	minutes  time.Duration
 	sessions map[[32]byte]*ServerSession
 	closed   bool
@@ -46,23 +48,24 @@ type ServerConn struct {
 	nonce      []byte
 }
 
-func (i *ServerInstance) Init(nfsDKeySeed []byte, xor uint32, minutes time.Duration) (err error) {
+func (i *ServerInstance) Init(nfsDKeySeed, xorSKeyBytes []byte, xorMode, minutes uint32) (err error) {
 	if i.nfsDKey != nil {
 		err = errors.New("already initialized")
 		return
 	}
-	i.nfsDKey, err = mlkem.NewDecapsulationKey768(nfsDKeySeed)
-	if err != nil {
+	if i.nfsDKey, err = mlkem.NewDecapsulationKey768(nfsDKeySeed); err != nil {
 		return
 	}
 	hash32 := sha3.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
 	copy(i.hash11[:], hash32[:])
-	if xor > 0 {
-		xorKey := sha3.Sum256(i.nfsDKey.EncapsulationKey().Bytes())
-		i.xorKey = xorKey[:]
+	if xorMode > 0 {
+		i.xorMode = xorMode
+		if i.xorSKey, err = ecdh.X25519().NewPrivateKey(xorSKeyBytes); err != nil {
+			return
+		}
 	}
 	if minutes > 0 {
-		i.minutes = minutes
+		i.minutes = time.Duration(minutes) * time.Minute
 		i.sessions = make(map[[32]byte]*ServerSession)
 		go func() {
 			for {
@@ -96,8 +99,11 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*ServerConn, error) {
 	if i.nfsDKey == nil {
 		return nil, errors.New("uninitialized")
 	}
-	if i.xorKey != nil {
-		conn = NewXorConn(conn, i.xorKey)
+	if i.xorMode > 0 {
+		var err error
+		if conn, err = NewXorConn(conn, i.xorMode, nil, i.xorSKey); err != nil {
+			return nil, err
+		}
 	}
 	c := &ServerConn{Conn: conn}
 
@@ -168,7 +174,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*ServerConn, error) {
 	pfsKey, encapsulatedPfsKey := pfsEKey.Encapsulate()
 	c.baseKey = append(pfsKey, nfsKey...)
 
-	c.ticket = append(i.hash11[:], NewAead(c.cipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Seal(nil, peerClientHello[:12], []byte("VLESS"), pfsEKeyBytes)...)
+	c.ticket = append(i.hash11[:], NewAEAD(c.cipher, c.baseKey, encapsulatedPfsKey, encapsulatedNfsKey).Seal(nil, peerClientHello[:12], []byte("VLESS"), pfsEKeyBytes)...)
 
 	paddingLen := crypto.RandBetween(100, 1000)
 
@@ -222,7 +228,7 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 			}
 			c.peerRandom = peerTicketHello[32:]
 		}
-		c.peerAead = NewAead(c.cipher, c.baseKey, c.peerRandom, c.ticket)
+		c.peerAead = NewAEAD(c.cipher, c.baseKey, c.peerRandom, c.ticket)
 		c.peerNonce = make([]byte, 12)
 	}
 	if len(c.PeerCache) != 0 {
@@ -247,7 +253,7 @@ func (c *ServerConn) Read(b []byte) (int, error) {
 	}
 	var peerAead cipher.AEAD
 	if bytes.Equal(c.peerNonce, MaxNonce) {
-		peerAead = NewAead(c.cipher, c.baseKey, peerData, h)
+		peerAead = NewAEAD(c.cipher, c.baseKey, peerData, h)
 	}
 	_, err = c.peerAead.Open(dst[:0], c.peerNonce, peerData, h)
 	if peerAead != nil {
@@ -283,7 +289,7 @@ func (c *ServerConn) Write(b []byte) (int, error) {
 			EncodeHeader(data, 0, 32)
 			rand.Read(data[5 : 5+32])
 			EncodeHeader(data[5+32:], 23, len(b)+16)
-			c.aead = NewAead(c.cipher, c.baseKey, data[5:5+32], c.peerRandom)
+			c.aead = NewAEAD(c.cipher, c.baseKey, data[5:5+32], c.peerRandom)
 			c.nonce = make([]byte, 12)
 			c.aead.Seal(data[:5+32+5], c.nonce, b, data[5+32:5+32+5])
 		} else {
@@ -291,7 +297,7 @@ func (c *ServerConn) Write(b []byte) (int, error) {
 			EncodeHeader(data, 23, len(b)+16)
 			c.aead.Seal(data[:5], c.nonce, b, data[:5])
 			if bytes.Equal(c.nonce, MaxNonce) {
-				c.aead = NewAead(c.cipher, c.baseKey, data[5:], data[:5])
+				c.aead = NewAEAD(c.cipher, c.baseKey, data[5:], data[:5])
 			}
 		}
 		IncreaseNonce(c.nonce)

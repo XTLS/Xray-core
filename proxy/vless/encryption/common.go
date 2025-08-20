@@ -72,7 +72,7 @@ func ReadAndDiscardPaddings(conn net.Conn) (h []byte, t byte, l int, err error) 
 	}
 }
 
-func NewAead(c byte, secret, salt, info []byte) (aead cipher.AEAD) {
+func NewAEAD(c byte, secret, salt, info []byte) (aead cipher.AEAD) {
 	key, _ := hkdf.Key(sha3.New256, secret, salt, string(info), 32)
 	if c&1 == 1 {
 		block, _ := aes.NewCipher(key)

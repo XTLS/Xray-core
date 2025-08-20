@@ -18,7 +18,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		ID:         protocol.NewID(id),
 		Flow:       a.Flow,       // needs parser here?
 		Encryption: a.Encryption, // needs parser here?
-		Xor:        a.Xor,
+		XorMode:    a.XorMode,
 		Minutes:    a.Minutes,
 	}, nil
 }
@@ -31,7 +31,7 @@ type MemoryAccount struct {
 	Flow string
 
 	Encryption string
-	Xor        uint32
+	XorMode    uint32
 	Minutes    uint32
 }
 
@@ -49,7 +49,7 @@ func (a *MemoryAccount) ToProto() proto.Message {
 		Id:         a.ID.String(),
 		Flow:       a.Flow,
 		Encryption: a.Encryption,
-		Xor:        a.Xor,
+		XorMode:    a.XorMode,
 		Minutes:    a.Minutes,
 	}
 }
