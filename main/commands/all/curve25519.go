@@ -29,7 +29,8 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 	}
 
 	// Modify random bytes using algorithm described at:
-	// https://cr.yp.to/ecdh.html.
+	// https://cr.yp.to/ecdh.html
+	// (Just to make sure printing the real private key)
 	privateKey[0] &= 248
 	privateKey[31] &= 127
 	privateKey[31] |= 64

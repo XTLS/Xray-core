@@ -57,7 +57,7 @@ func NewXorConn(conn net.Conn, mode uint32, pKey *ecdh.PublicKey, sKey *ecdh.Pri
 	if pKey != nil {
 		c.head = make([]byte, 16+32)
 		rand.Read(c.head)
-		eSKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
+		eSKey, _ := ecdh.X25519().NewPrivateKey(c.head[16:])
 		NewCTR(pKey.Bytes(), c.head[:16], false).XORKeyStream(c.head[16:], eSKey.PublicKey().Bytes()) // make X25519 public key distinguishable from random bytes
 		c.key, _ = eSKey.ECDH(pKey)
 		c.ctr = NewCTR(c.key, c.head[:16], false)
