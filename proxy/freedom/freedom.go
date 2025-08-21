@@ -72,7 +72,7 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	}
 
 	a := addr.AsAddress()
-	return a != net.AnyIP
+	return a != net.AnyIP && a != net.AnyIPv6
 }
 
 // Process implements proxy.Outbound.
@@ -189,7 +189,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, UDPOverride, destination)
+			writer = NewPacketWriter(conn, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -261,7 +261,7 @@ func isTLSConn(conn stat.Connection) bool {
 	return false
 }
 
-func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
+func NewPacketReader(conn net.Conn, UDPOverride net.Destination, destination net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -281,7 +281,7 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 			PacketConnWrapper: c,
 			Counter:           counter,
 			IsOverridden:      isOverridden,
-			InitUnchangedAddr: DialDest.Address,
+			InitUnchangedAddr: destination.Address,
 			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
 		}
 	}
@@ -325,7 +325,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, destination net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, UDPOverride net.Destination, destination net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -337,12 +337,11 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, des
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
 		return &PacketWriter{
-			PacketConnWrapper:    c,
-			Counter:              counter,
-			Handler:              h,
-			UDPOverride:          UDPOverride,
-			InitialUnchangedAddr: destination.Address,
-			InitialChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
+			PacketConnWrapper: c,
+			Counter:           counter,
+			UDPOverride:       UDPOverride,
+			InitUnchangedAddr: destination.Address,
+			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
 		}
 
 	}
@@ -352,11 +351,10 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, des
 type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
-	*Handler
 	UDPOverride net.Destination
 
-	InitialUnchangedAddr net.Address
-	InitialChangedAddr   net.Address
+	InitUnchangedAddr net.Address
+	InitChangedAddr   net.Address
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -375,13 +373,13 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.UDPOverride.Port != 0 {
 				b.UDP.Port = w.UDPOverride.Port
 			}
-			if b.UDP.Address == w.InitialUnchangedAddr {
-				b.UDP.Address = w.InitialChangedAddr
+			if b.UDP.Address == w.InitUnchangedAddr {
+				b.UDP.Address = w.InitChangedAddr
 			}
 			if b.UDP.Address.Family().IsDomain() {
 				b.Release()
 				buf.ReleaseMulti(mb)
-				return errors.New("multiple domains cone does not supported")
+				return errors.New("multiple domains cone is not supported")
 			}
 			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), b.UDP.RawNetAddr())
 		} else {
