@@ -18,7 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
@@ -326,7 +325,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, destination net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -337,19 +336,13 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, Dia
 		counter = statConn.WriteCounter
 	}
 	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		// If DialDest is a domain, it will be resolved in dialer
-		// check this behavior and add it to map
-		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
-		if DialDest.Address.Family().IsDomain() {
-			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
-		}
 		return &PacketWriter{
-			PacketConnWrapper: c,
-			Counter:           counter,
-			Handler:           h,
-			UDPOverride:       UDPOverride,
-			ResolvedUDPAddr:   resolvedUDPAddr,
-			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
+			PacketConnWrapper:    c,
+			Counter:              counter,
+			Handler:              h,
+			UDPOverride:          UDPOverride,
+			InitialUnchangedAddr: destination.Address,
+			InitialChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
 		}
 
 	}
@@ -362,12 +355,8 @@ type PacketWriter struct {
 	*Handler
 	UDPOverride net.Destination
 
-	// Dest of udp packets might be a domain, we will resolve them to IP
-	// But resolver will return a random one if the domain has many IPs
-	// Resulting in these packets being sent to many different IPs randomly
-	// So, cache and keep the resolve result
-	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
-	LocalAddr       net.Address
+	InitialUnchangedAddr net.Address
+	InitialChangedAddr   net.Address
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -386,44 +375,15 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if w.UDPOverride.Port != 0 {
 				b.UDP.Port = w.UDPOverride.Port
 			}
+			if b.UDP.Address == w.InitialUnchangedAddr {
+				b.UDP.Address = w.InitialChangedAddr
+			}
 			if b.UDP.Address.Family().IsDomain() {
-				if ip, ok := w.ResolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
-					b.UDP.Address = ip
-				} else {
-					ShouldUseSystemResolver := true
-					if w.Handler.config.DomainStrategy.HasStrategy() {
-						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), w.Handler.config.DomainStrategy, w.LocalAddr)
-						if err != nil {
-							// drop packet if resolve failed when forceIP
-							if w.Handler.config.DomainStrategy.ForceIP() {
-								b.Release()
-								continue
-							}
-						} else {
-							ip = net.IPAddress(ips[dice.Roll(len(ips))])
-							ShouldUseSystemResolver = false
-						}
-					}
-					if ShouldUseSystemResolver {
-						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
-						if err != nil {
-							b.Release()
-							continue
-						} else {
-							ip = net.IPAddress(udpAddr.IP)
-						}
-					}
-					if ip != nil {
-						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
-					}
-				}
-			}
-			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
-			if destAddr == nil {
 				b.Release()
-				continue
+				buf.ReleaseMulti(mb)
+				return errors.New("multiple domains cone does not supported")
 			}
-			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
+			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), b.UDP.RawNetAddr())
 		} else {
 			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}
