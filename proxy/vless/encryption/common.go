@@ -61,13 +61,20 @@ func ReadAndDecodeHeader(conn net.Conn) (h []byte, t byte, l int, err error) {
 	return
 }
 
-func ReadAndDiscardPaddings(conn net.Conn) (h []byte, t byte, l int, err error) {
+func ReadAndDiscardPaddings(conn net.Conn, aead cipher.AEAD, nonce []byte) (h []byte, t byte, l int, err error) {
 	for {
 		if h, t, l, err = ReadAndDecodeHeader(conn); err != nil || t != 23 {
 			return
 		}
-		if _, err = io.ReadFull(conn, make([]byte, l)); err != nil {
+		padding := make([]byte, l)
+		if _, err = io.ReadFull(conn, padding); err != nil {
 			return
+		}
+		if aead != nil {
+			if _, err := aead.Open(nil, nonce, padding, h); err != nil {
+				return h, t, l, err
+			}
+			IncreaseNonce(nonce)
 		}
 	}
 }

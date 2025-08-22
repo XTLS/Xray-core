@@ -59,13 +59,13 @@ func (i *ClientInstance) Init(nfsEKeyBytes, xorPKeyBytes []byte, xorMode, minute
 	if i.nfsEKey, err = mlkem.NewEncapsulationKey768(nfsEKeyBytes); err != nil {
 		return
 	}
-	hash32 := sha3.Sum256(nfsEKeyBytes)
-	copy(i.hash11[:], hash32[:])
 	if xorMode > 0 {
 		i.xorMode = xorMode
 		if i.xorPKey, err = ecdh.X25519().NewPublicKey(xorPKeyBytes); err != nil {
 			return
 		}
+		hash32 := sha3.Sum256(nfsEKeyBytes)
+		copy(i.hash11[:], hash32[:])
 	}
 	i.minutes = time.Duration(minutes) * time.Minute
 	return
@@ -115,7 +115,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*ClientConn, error) {
 	}
 	// client can send more NFS AEAD paddings / messages if needed
 
-	_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before server hello
+	_, t, l, err := ReadAndDiscardPaddings(c.Conn, nil, nil) // allow paddings before server hello
 	if err != nil {
 		return nil, err
 	}
@@ -198,9 +198,9 @@ func (c *ClientConn) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 	if c.peerAEAD == nil {
-		_, t, l, err := ReadAndDiscardPaddings(c.Conn) // allow paddings before random hello
+		_, t, l, err := ReadAndDiscardPaddings(c.Conn, nil, nil) // allow paddings before random hello
 		if err != nil {
-			if c.instance != nil && strings.HasPrefix(err.Error(), "invalid header: ") { // 0-RTT's 0-RTT
+			if c.instance != nil && strings.HasPrefix(err.Error(), "invalid header: ") { // 0-RTT
 				c.instance.Lock()
 				if bytes.Equal(c.ticket, c.instance.ticket) {
 					c.instance.expire = time.Now() // expired
