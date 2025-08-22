@@ -14,12 +14,15 @@ import (
 
 var cmdProtobuf = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} convert pb [-debug] [-type] [json file] [json file] ...",
+	UsageLine:   "{{.Exec}} convert pb [-outpbfile file] [-debug] [-type] [json file] [json file] ...",
 	Short:       "Convert multiple json configs to protobuf",
 	Long: `
 Convert multiple json configs to protobuf.
 
 Arguments:
+
+	-o file, -outpbfile file
+		Write the ProtoBuf file (eg. mix.pb) to specified location.
 
 	-d, -debug
 		Show mix.pb as json.
@@ -31,16 +34,20 @@ Arguments:
 
 Examples:
 
-    {{.Exec}} convert pb config.json c1.json c2.json c3.json > mix.pb
+    {{.Exec}} convert pb config.json c1.json c2.json c3.json
+    {{.Exec}} convert pb -outpbfile output.pb config.json c1.json c2.json c3.json
 	`,
 	Run: executeConvertConfigsToProtobuf,
 }
 
 func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 
+	var optFile string
 	var optDump bool
 	var optType bool
 
+	cmd.Flag.StringVar(&optFile, "o", "", "")
+	cmd.Flag.StringVar(&optFile, "outpbfile", "", "")
 	cmd.Flag.BoolVar(&optDump, "d", false, "")
 	cmd.Flag.BoolVar(&optDump, "debug", false, "")
 	cmd.Flag.BoolVar(&optType, "t", false, "")
@@ -75,7 +82,19 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		base.Fatalf("failed to marshal proto config: %s", err)
 	}
 
-	if _, err := os.Stdout.Write(bytesConfig); err != nil {
-		base.Fatalf("failed to write proto config: %s", err)
+	if len(optFile) > 0 {
+		f, err := os.Create(optFile)
+		if err != nil {
+			base.Fatalf("failed to create proto file: %s", err)
+		}
+		defer f.Close()
+
+		if _, err := f.Write(bytesConfig); err!= nil {
+			base.Fatalf("failed to write proto file: %s", err)
+		}
+	} else {
+		if _, err := os.Stdout.Write(bytesConfig); err != nil {
+			base.Fatalf("failed to write proto config: %s", err)
+		}
 	}
 }
