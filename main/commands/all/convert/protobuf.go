@@ -89,7 +89,7 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		}
 		defer f.Close()
 
-		if _, err := f.Write(bytesConfig); err!= nil {
+		if _, err := f.Write(bytesConfig); err != nil {
 			base.Fatalf("failed to write proto file: %s", err)
 		}
 	} else {
