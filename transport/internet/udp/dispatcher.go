@@ -22,17 +22,24 @@ type ResponseCallback func(ctx context.Context, packet *udp.Packet)
 
 type connEntry struct {
 	link   *transport.Link
-	timer  signal.ActivityUpdater
+	timer  *signal.ActivityTimer
 	cancel context.CancelFunc
 	closed bool
 }
 
 func (c *connEntry) Close() error {
+	c.timer.SetTimeout(0)
+	return nil
+}
+
+func (c *connEntry) terminate() {
+	if c.closed {
+		panic("terminate called more than once")
+	}
 	c.closed = true
 	c.cancel()
 	common.Interrupt(c.link.Reader)
 	common.Close(c.link.Writer)
-	return nil
 }
 
 type Dispatcher struct {
@@ -41,6 +48,7 @@ type Dispatcher struct {
 	dispatcher routing.Dispatcher
 	callback   ResponseCallback
 	callClose  func() error
+	closed     bool
 }
 
 func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Dispatcher {
@@ -53,6 +61,7 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
+	v.closed = true
 	if v.conn != nil {
 		v.conn.Close()
 		v.conn = nil
@@ -62,6 +71,10 @@ func (v *Dispatcher) RemoveRay() {
 func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*connEntry, error) {
 	v.Lock()
 	defer v.Unlock()
+
+	if v.closed {
+		return nil, errors.New("dispatcher is closed")
+	}
 
 	if v.conn != nil {
 		if v.conn.closed {
@@ -85,11 +98,8 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		link:   link,
 		cancel: cancel,
 	}
-	entryClose := func() {
-		entry.Close()
-	}
 
-	entry.timer = signal.CancelAfterInactivity(ctx, entryClose, time.Minute)
+	entry.timer = signal.CancelAfterInactivity(ctx, entry.terminate, 30*time.Second) // The UDP timeout is set to 30 seconds in most NAT configurations
 	v.conn = entry
 	go handleInput(ctx, entry, dest, v.callback, v.callClose)
 	return entry, nil
