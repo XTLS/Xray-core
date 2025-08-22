@@ -24,6 +24,15 @@ type connEntry struct {
 	link   *transport.Link
 	timer  signal.ActivityUpdater
 	cancel context.CancelFunc
+	closed bool
+}
+
+func (c *connEntry) Close() error {
+	c.closed = true
+	c.cancel()
+	common.Interrupt(c.link.Reader)
+	common.Close(c.link.Writer)
+	return nil
 }
 
 type Dispatcher struct {
@@ -44,13 +53,8 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
-	v.removeRay()
-}
-
-func (v *Dispatcher) removeRay() {
 	if v.conn != nil {
-		common.Interrupt(v.conn.link.Reader)
-		common.Close(v.conn.link.Writer)
+		v.conn.Close()
 		v.conn = nil
 	}
 }
@@ -60,34 +64,32 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 	defer v.Unlock()
 
 	if v.conn != nil {
-		return v.conn, nil
+		if v.conn.closed {
+			v.conn = nil
+		} else {
+			return v.conn, nil
+		}
 	}
 
 	errors.LogInfo(ctx, "establishing new connection for ", dest)
 
 	ctx, cancel := context.WithCancel(ctx)
-	entry := &connEntry{}
-	removeRay := func() {
-		v.Lock()
-		defer v.Unlock()
-		// sometimes the entry is already removed by others, don't close again
-		if entry == v.conn {
-			cancel()
-			v.removeRay()
-		}
-	}
-	timer := signal.CancelAfterInactivity(ctx, removeRay, time.Minute)
 
 	link, err := v.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		cancel()
 		return nil, errors.New("failed to dispatch request to ", dest).Base(err)
 	}
 
-	*entry = connEntry{
+	entry := &connEntry{
 		link:   link,
-		timer:  timer,
-		cancel: removeRay,
+		cancel: cancel,
 	}
+	entryClose := func() {
+		entry.Close()
+	}
+
+	entry.timer = signal.CancelAfterInactivity(ctx, entryClose, time.Minute)
 	v.conn = entry
 	go handleInput(ctx, entry, dest, v.callback, v.callClose)
 	return entry, nil
@@ -106,7 +108,7 @@ func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, 
 	if outputStream != nil {
 		if err := outputStream.WriteMultiBuffer(buf.MultiBuffer{payload}); err != nil {
 			errors.LogInfoInner(ctx, err, "failed to write first UDP payload")
-			conn.cancel()
+			conn.Close()
 			return
 		}
 	}
@@ -114,7 +116,7 @@ func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, 
 
 func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, callback ResponseCallback, callClose func() error) {
 	defer func() {
-		conn.cancel()
+		conn.Close()
 		if callClose != nil {
 			callClose()
 		}
