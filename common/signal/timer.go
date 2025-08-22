@@ -15,9 +15,10 @@ type ActivityUpdater interface {
 
 type ActivityTimer struct {
 	sync.RWMutex
-	updated   chan struct{}
-	checkTask *task.Periodic
-	onTimeout func()
+	updated    chan struct{}
+	checkTask  *task.Periodic
+	onTimeout  func()
+	overridden bool
 }
 
 func (t *ActivityTimer) Update() {
@@ -31,14 +32,16 @@ func (t *ActivityTimer) check() error {
 	select {
 	case <-t.updated:
 	default:
-		t.finish()
+		t.finish(false)
 	}
 	return nil
 }
 
-func (t *ActivityTimer) finish() {
-	t.Lock()
-	defer t.Unlock()
+func (t *ActivityTimer) finish(locked bool) {
+	if !locked {
+		t.Lock()
+		defer t.Unlock()
+	}
 
 	if t.onTimeout != nil {
 		t.onTimeout()
@@ -50,17 +53,15 @@ func (t *ActivityTimer) finish() {
 	}
 }
 
-func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
-	if timeout == 0 {
-		t.finish()
-		return
-	}
-
-	t.Lock()
-	defer t.Unlock()
+func (t *ActivityTimer) setTimeout(timeout time.Duration) {
 	if t.onTimeout == nil {
 		return
 	}
+	if timeout == 0 {
+		t.finish(true)
+		return
+	}
+
 	checkTask := &task.Periodic{
 		Interval: timeout,
 		Execute:  t.check,
@@ -68,10 +69,25 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 
 	if t.checkTask != nil {
 		t.checkTask.Close()
+		t.overridden = true
 	}
 	t.checkTask = checkTask
 	t.Update()
 	common.Must(checkTask.Start())
+}
+
+func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
+	t.Lock()
+	t.setTimeout(timeout)
+	t.Unlock()
+}
+
+func (t *ActivityTimer) SetTimeoutIfNotOverridden(timeout time.Duration) {
+	t.Lock()
+	if !t.overridden {
+		t.setTimeout(timeout)
+	}
+	t.Unlock()
 }
 
 func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {
