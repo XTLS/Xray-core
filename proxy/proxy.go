@@ -626,6 +626,9 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			}
 		}
 		if err != nil {
+			if errors.Cause(err) == io.EOF {
+				return nil
+			}
 			return err
 		}
 	}

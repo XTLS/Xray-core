@@ -311,6 +311,8 @@ func (w *ServerWorker) run(ctx context.Context) {
 	reader := &buf.BufferedReader{Reader: w.link.Reader}
 
 	defer w.sessionManager.Close()
+	defer common.Interrupt(w.link.Reader)
+	defer common.Interrupt(w.link.Writer)
 
 	for {
 		select {
@@ -321,8 +323,6 @@ func (w *ServerWorker) run(ctx context.Context) {
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					errors.LogInfoInner(ctx, err, "unexpected EOF")
-					common.Interrupt(w.link.Reader)
-					common.Interrupt(w.link.Writer)
 				}
 				return
 			}
