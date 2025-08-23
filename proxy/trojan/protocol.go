@@ -113,9 +113,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			target = b.UDP
 		}
 		if _, err := w.writePacket(b.Bytes(), *target); err != nil {
+			b.Release()
 			buf.ReleaseMulti(mb)
 			return err
 		}
+		b.Release()
 	}
 	return nil
 }

@@ -90,7 +90,9 @@ func (s *ClassicNameServer) RequestsCleanup() error {
 
 // HandleResponse handles udp response packet from remote DNS server.
 func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_proto.Packet) {
-	ipRec, err := parseResponse(packet.Payload.Bytes())
+	payload := packet.Payload
+	ipRec, err := parseResponse(payload.Bytes())
+	payload.Release()
 	if err != nil {
 		errors.LogError(ctx, s.Name(), " fail to parse responded DNS udp")
 		return
