@@ -318,8 +318,8 @@ func (w *ServerWorker) run(ctx context.Context) {
 	reader := &buf.BufferedReader{Reader: w.link.Reader}
 
 	defer w.sessionManager.Close()
-	defer common.Close(w.link.Writer)
 	defer common.Interrupt(w.link.Reader)
+	defer common.Interrupt(w.link.Writer)
 
 	for {
 		select {
