@@ -104,11 +104,11 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		request := protocol.RequestHeaderFromContext(ctx)
+		payload := packet.Payload
 		if request == nil {
+			payload.Release()
 			return
 		}
-
-		payload := packet.Payload
 
 		if payload.UDP != nil {
 			request = &protocol.RequestHeader{
@@ -124,9 +124,9 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			errors.LogWarningInner(ctx, err, "failed to encode UDP packet")
 			return
 		}
-		defer data.Release()
 
 		conn.Write(data.Bytes())
+		data.Release()
 	})
 	defer udpServer.RemoveRay()
 
