@@ -60,19 +60,19 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		unnamedArgs.Set(v)
 	}
 
-	if len(unnamedArgs) < 1 {
-		base.Fatalf("invalid config list length: %d", len(unnamedArgs))
-	}
-
 	if len(optFile) > 0 {
 		switch core.GetFormatByExtension(getFileExtension(optFile)){
 		case "protobuf", "":
-			fmt.Printf("Output ProtoBuf file is %s.", optFile)
+			fmt.Println("Output ProtoBuf file is %s.", optFile)
 		default:
 			base.Fatalf("-outpbfile followed by a possible original config.")
 		}
 	} else if !optDump {
 		base.Fatalf("-outpbfile not specified")
+	}
+
+	if len(unnamedArgs) < 1 {
+		base.Fatalf("invalid config list length: %d", len(unnamedArgs))
 	}
 
 	pbConfig, err := core.LoadConfig("auto", unnamedArgs)
