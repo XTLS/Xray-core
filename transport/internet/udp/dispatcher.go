@@ -39,7 +39,7 @@ func (c *connEntry) terminate() {
 	c.closed = true
 	c.cancel()
 	common.Interrupt(c.link.Reader)
-	common.Close(c.link.Writer)
+	common.Interrupt(c.link.Writer)
 }
 
 type Dispatcher struct {
