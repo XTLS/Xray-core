@@ -14,8 +14,8 @@ type ActivityUpdater interface {
 }
 
 type ActivityTimer struct {
-	mu       sync.RWMutex
-	updated  chan struct{}
+	mu        sync.RWMutex
+	updated   chan struct{}
 	checkTask *task.Periodic
 	onTimeout func()
 	consumed  bool
@@ -43,6 +43,9 @@ func (t *ActivityTimer) finish() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
+		if t.checkTask != nil {
+			t.checkTask.Close()
+		}
 		t.onTimeout()
 		t.checkTask.Close()
 		t.consumed = true
