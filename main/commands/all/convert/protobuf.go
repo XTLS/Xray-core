@@ -3,6 +3,7 @@ package convert
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/xtls/xray-core/common/cmdarg"
 	creflect "github.com/xtls/xray-core/common/reflect"
@@ -17,15 +18,15 @@ var cmdProtobuf = &base.Command{
 	UsageLine:   "{{.Exec}} convert pb [-outpbfile file] [-debug] [-type] [json file] [json file] ...",
 	Short:       "Convert multiple json configs to protobuf",
 	Long: `
-Convert multiple json configs to protobuf.
+Convert multiple configs to protobuf. JSON, YAML and TOML can be used.
 
 Arguments:
 
 	-o file, -outpbfile file
-		Write the ProtoBuf file (eg. mix.pb) to specified location.
+		Write the ProtoBuf output (eg. mix.pb) to specified file location.
 
 	-d, -debug
-		Show mix.pb as json.
+		Show mix.pb as JSON format.
 		FOR DEBUGGING ONLY!
 		DO NOT PASS THIS OUTPUT TO XRAY-CORE!
 
@@ -34,8 +35,8 @@ Arguments:
 
 Examples:
 
-    {{.Exec}} convert pb config.json c1.json c2.json c3.json
     {{.Exec}} convert pb -outpbfile output.pb config.json c1.json c2.json c3.json
+    {{.Exec}} convert pb -debug mix.pb
 	`,
 	Run: executeConvertConfigsToProtobuf,
 }
@@ -63,6 +64,15 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		base.Fatalf("invalid config list length: %d", len(unnamedArgs))
 	}
 
+	if len(optFile) > 0 {
+		fileFormat := core.GetFormatByExtension(getFileExtension(optFile))
+		if fileFormat != "protobuf" || fileFormat != "" {
+			base.Fatalf("-outpbfile followed by a possible original config.")
+		}
+	} else if !optDump {
+		base.Fatalf("-outpbfile not specified")
+	}
+
 	pbConfig, err := core.LoadConfig("auto", unnamedArgs)
 	if err != nil {
 		base.Fatalf("failed to load config: %s", err)
@@ -77,12 +87,12 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		}
 	}
 
-	bytesConfig, err := proto.Marshal(pbConfig)
-	if err != nil {
-		base.Fatalf("failed to marshal proto config: %s", err)
-	}
-
 	if len(optFile) > 0 {
+		bytesConfig, err := proto.Marshal(pbConfig)
+		if err != nil {
+			base.Fatalf("failed to marshal proto config: %s", err)
+		}
+
 		f, err := os.Create(optFile)
 		if err != nil {
 			base.Fatalf("failed to create proto file: %s", err)
@@ -92,9 +102,13 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 		if _, err := f.Write(bytesConfig); err != nil {
 			base.Fatalf("failed to write proto file: %s", err)
 		}
-	} else {
-		if _, err := os.Stdout.Write(bytesConfig); err != nil {
-			base.Fatalf("failed to write proto config: %s", err)
-		}
 	}
+}
+
+func getFileExtension(filename string) string {
+	idx := strings.LastIndexByte(filename, '.')
+	if idx == -1 {
+		return ""
+	}
+	return filename[idx+1:]
 }
