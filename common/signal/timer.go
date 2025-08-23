@@ -18,6 +18,8 @@ type ActivityTimer struct {
 	updated   chan struct{}
 	checkTask *task.Periodic
 	onTimeout func()
+	consumed  bool
+	once      sync.Once
 }
 
 func (t *ActivityTimer) Update() {
@@ -37,39 +39,40 @@ func (t *ActivityTimer) check() error {
 }
 
 func (t *ActivityTimer) finish() {
-	t.Lock()
-	defer t.Unlock()
+	t.once.Do(func() {
+		t.Lock()
+		defer t.Unlock()
 
-	if t.onTimeout != nil {
 		t.onTimeout()
-		t.onTimeout = nil
-	}
-	if t.checkTask != nil {
 		t.checkTask.Close()
-		t.checkTask = nil
-	}
+		t.consumed = true
+	})
 }
 
 func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
+	if t.consumed {
+		return
+	}
 	if timeout == 0 {
 		t.finish()
 		return
 	}
 
-	checkTask := &task.Periodic{
+	newCheckTask := &task.Periodic{
 		Interval: timeout,
 		Execute:  t.check,
 	}
 
 	t.Lock()
+	defer t.Unlock()
 
+	// only in initial
 	if t.checkTask != nil {
 		t.checkTask.Close()
 	}
-	t.checkTask = checkTask
+	t.checkTask = newCheckTask
 	t.Update()
-	common.Must(checkTask.Start())
-	t.Unlock()
+	common.Must(newCheckTask.Start())
 }
 
 func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {
