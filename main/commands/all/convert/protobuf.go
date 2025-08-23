@@ -18,7 +18,7 @@ var cmdProtobuf = &base.Command{
 	UsageLine:   "{{.Exec}} convert pb [-outpbfile file] [-debug] [-type] [json file] [json file] ...",
 	Short:       "Convert multiple json configs to protobuf",
 	Long: `
-Convert multiple configs to protobuf. JSON, YAML and TOML can be used.
+Convert multiple configs to ProtoBuf. JSON, YAML and TOML can be used.
 
 Arguments:
 
@@ -65,8 +65,10 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 	}
 
 	if len(optFile) > 0 {
-		fileFormat := core.GetFormatByExtension(getFileExtension(optFile))
-		if (fileFormat != "protobuf") || (fileFormat != "") {
+		switch core.GetFormatByExtension(getFileExtension(optFile)){
+		case "protobuf", "":
+			fmt.Printf("Output ProtoBuf file is %s.", optFile)
+		default:
 			base.Fatalf("-outpbfile followed by a possible original config.")
 		}
 	} else if !optDump {
