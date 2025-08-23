@@ -63,7 +63,7 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 	if len(optFile) > 0 {
 		switch core.GetFormatByExtension(getFileExtension(optFile)){
 		case "protobuf", "":
-			fmt.Println("Output ProtoBuf file is %s.", optFile)
+			fmt.Println("Output ProtoBuf file is ", optFile)
 		default:
 			base.Fatalf("-outpbfile followed by a possible original config.")
 		}
