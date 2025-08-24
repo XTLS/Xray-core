@@ -43,11 +43,8 @@ func (t *ActivityTimer) finish() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
-		if t.checkTask != nil {
-			t.checkTask.Close()
-		}
+		common.CloseIfExists(t.checkTask)
 		t.onTimeout()
-		t.checkTask.Close()
 		t.consumed = true
 	})
 }
@@ -69,10 +66,7 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// only in initial
-	if t.checkTask != nil {
-		t.checkTask.Close()
-	}
+	common.CloseIfExists(t.checkTask)
 	t.checkTask = newCheckTask
 	t.Update()
 	common.Must(newCheckTask.Start())
