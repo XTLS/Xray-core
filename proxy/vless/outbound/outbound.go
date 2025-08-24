@@ -69,7 +69,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	a := handler.serverPicker.PickServer().PickUser().Account.(*vless.MemoryAccount)
-	if a.Encryption != "none" {
+	if a.Encryption != "" && a.Encryption != "none" {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
 		for _, r := range s {

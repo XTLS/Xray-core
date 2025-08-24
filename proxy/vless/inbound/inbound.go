@@ -84,7 +84,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		validator:             validator,
 	}
 
-	if config.Decryption != "none" {
+	if config.Decryption != "" && config.Decryption != "none" {
 		s := strings.Split(config.Decryption, ".")
 		var nfsSKeysBytes [][]byte
 		for _, r := range s {

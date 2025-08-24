@@ -110,7 +110,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	}
 	iv := ivAndRelays[:16]
 	relays := ivAndRelays[16:]
-	var nfsPublicKey, nfsKey []byte
+	var nfsKey []byte
 	var lastCTR cipher.Stream
 	for j, k := range i.NfsSKeys {
 		if lastCTR != nil {
@@ -123,9 +123,8 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		if i.XorMode > 0 {
 			NewCTR(i.NfsPKeysBytes[j], iv).XORKeyStream(relays, relays[:index]) // we don't use buggy elligator, because we have PSK :)
 		}
-		nfsPublicKey = relays[:index]
 		if k, ok := k.(*ecdh.PrivateKey); ok {
-			publicKey, err := ecdh.X25519().NewPublicKey(nfsPublicKey)
+			publicKey, err := ecdh.X25519().NewPublicKey(relays[:index])
 			if err != nil {
 				return nil, err
 			}
@@ -136,7 +135,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		}
 		if k, ok := k.(*mlkem.DecapsulationKey768); ok {
 			var err error
-			nfsKey, err = k.Decapsulate(nfsPublicKey)
+			nfsKey, err = k.Decapsulate(relays[:index])
 			if err != nil {
 				return nil, err
 			}
@@ -152,7 +151,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		}
 		relays = relays[32:]
 	}
-	nfsGCM := NewGCM(nfsPublicKey, nfsKey)
+	nfsGCM := NewGCM(iv, nfsKey)
 
 	encryptedLength := make([]byte, 18)
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
@@ -188,16 +187,16 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 			conn.Write(noises) // make client do new handshake
 			return nil, errors.New("expired ticket")
 		}
-		if _, replay := s.Replays.LoadOrStore([32]byte(encryptedTicket), true); replay {
+		if _, replay := s.Replays.LoadOrStore([32]byte(nfsKey), true); replay { // prevents bad client also
 			return nil, errors.New("replay detected")
 		}
-		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same key links the upload & download
-		c.PreWrite = make([]byte, 32)             // always trust yourself, not the client
+		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same nfsKey links the upload & download
+		c.PreWrite = make([]byte, 16)             // always trust yourself, not the client
 		rand.Read(c.PreWrite)
 		c.GCM = NewGCM(c.PreWrite, c.UnitedKey)
-		c.PeerGCM = NewGCM(encryptedTicket, c.UnitedKey)
+		c.PeerGCM = NewGCM(encryptedTicket, c.UnitedKey) // unchangeable ctx, and different ctx length for upload / download
 		if i.XorMode == 2 {
-			c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, c.PreWrite[16:]), NewCTR(c.UnitedKey, iv), 32, 0)
+			c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, c.PreWrite), NewCTR(c.UnitedKey, iv), 16, 0) // it doesn't matter if the attacker sends client's iv back to the client
 		}
 		return c, nil
 	}
@@ -235,12 +234,11 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	rand.Read(ticket)
 	copy(ticket, EncodeLength(int(i.Seconds*4/5)))
 
-	pfsKeyExchangeLength := 18 + 1088 + 32 + 16
+	pfsKeyExchangeLength := 1088 + 32 + 16
 	encryptedTicketLength := 32
 	paddingLength := int(crypto.RandBetween(100, 1000))
 	serverHello := make([]byte, pfsKeyExchangeLength+encryptedTicketLength+paddingLength)
-	nfsGCM.Seal(serverHello[:0], make([]byte, 12), EncodeLength(pfsKeyExchangeLength-18), nil) // it is safe because our nonce starts from 1
-	nfsGCM.Seal(serverHello[:18], MaxNonce, pfsPublicKey, nil)
+	nfsGCM.Seal(serverHello[:0], MaxNonce, pfsPublicKey, nil)
 	c.GCM.Seal(serverHello[:pfsKeyExchangeLength], nil, ticket, nil)
 	padding := serverHello[pfsKeyExchangeLength+encryptedTicketLength:]
 	c.GCM.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
@@ -249,7 +247,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := conn.Write(serverHello); err != nil {
 		return nil, err
 	}
-	// padding can be sent in a fragmented way, to create variable traffic pattern, before VLESS flow takes control
+	// padding can be sent in a fragmented way, to create variable traffic pattern, before inner VLESS flow takes control
 
 	if i.Seconds > 0 {
 		i.RWLock.Lock()
@@ -260,6 +258,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		i.RWLock.Unlock()
 	}
 
+	// important: allows client sends padding slowly, eliminating 1-RTT's traffic pattern
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
 		return nil, err
 	}

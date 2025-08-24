@@ -76,14 +76,13 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	iv := clientHello[:16]
 	rand.Read(iv)
 	relays := clientHello[16:ivAndRealysLength]
-	var nfsPublicKey, nfsKey []byte
+	var nfsKey []byte
 	var lastCTR cipher.Stream
 	for j, k := range i.NfsPKeys {
 		var index = 32
 		if k, ok := k.(*ecdh.PublicKey); ok {
 			privateKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
-			nfsPublicKey = privateKey.PublicKey().Bytes()
-			copy(relays, nfsPublicKey)
+			copy(relays, privateKey.PublicKey().Bytes())
 			var err error
 			nfsKey, err = privateKey.ECDH(k)
 			if err != nil {
@@ -91,11 +90,12 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 			}
 		}
 		if k, ok := k.(*mlkem.EncapsulationKey768); ok {
-			nfsKey, nfsPublicKey = k.Encapsulate()
-			copy(relays, nfsPublicKey)
+			var ciphertext []byte
+			nfsKey, ciphertext = k.Encapsulate()
+			copy(relays, ciphertext)
 			index = 1088
 		}
-		if i.XorMode > 0 { // this xor can (others can't) be decrypted by client's config, revealing an X25519 public key / ML-KEM-768 ciphertext, but it is not important
+		if i.XorMode > 0 { // this xor can (others can't) be recovered by client's config, revealing an X25519 public key / ML-KEM-768 ciphertext, that's why "native" values
 			NewCTR(i.NfsPKeysBytes[j], iv).XORKeyStream(relays, relays[:index]) // make X25519 public key / ML-KEM-768 ciphertext distinguishable from random bytes
 		}
 		if lastCTR != nil {
@@ -108,20 +108,20 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		lastCTR.XORKeyStream(relays[index:], i.Hash32s[j+1][:])
 		relays = relays[index+32:]
 	}
-	nfsGCM := NewGCM(nfsPublicKey, nfsKey)
+	nfsGCM := NewGCM(iv, nfsKey)
 
 	if i.Seconds > 0 {
 		i.RWLock.RLock()
 		if time.Now().Before(i.Expire) {
 			c.Client = i
-			c.UnitedKey = append(i.PfsKey, nfsKey...)
+			c.UnitedKey = append(i.PfsKey, nfsKey...) // different unitedKey for each connection
 			nfsGCM.Seal(clientHello[:ivAndRealysLength], nil, EncodeLength(32), nil)
 			nfsGCM.Seal(clientHello[:ivAndRealysLength+18], nil, i.Ticket, nil)
 			i.RWLock.RUnlock()
 			c.PreWrite = clientHello[:ivAndRealysLength+18+32]
 			c.GCM = NewGCM(clientHello[ivAndRealysLength+18:ivAndRealysLength+18+32], c.UnitedKey)
 			if i.XorMode == 2 {
-				c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, iv), nil, len(c.PreWrite), 32)
+				c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, iv), nil, len(c.PreWrite), 16)
 			}
 			return c, nil
 		}
@@ -142,21 +142,9 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := conn.Write(clientHello); err != nil {
 		return nil, err
 	}
-	// padding can be sent in a fragmented way, to create variable traffic pattern, before VLESS flow takes control
+	// padding can be sent in a fragmented way, to create variable traffic pattern, before inner VLESS flow takes control
 
-	encryptedLength := make([]byte, 18)
-	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
-		return nil, err
-	}
-	if _, err := nfsGCM.Open(encryptedLength[:0], make([]byte, 12), encryptedLength, nil); err != nil {
-		return nil, err
-	}
-	length := DecodeLength(encryptedLength[:2])
-
-	if length < 1088+32+16 { // server may send more public keys
-		return nil, errors.New("too short length")
-	}
-	encryptedPfsPublicKey := make([]byte, length)
+	encryptedPfsPublicKey := make([]byte, 1088+32+16)
 	if _, err := io.ReadFull(conn, encryptedPfsPublicKey); err != nil {
 		return nil, err
 	}
@@ -195,22 +183,18 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		i.RWLock.Unlock()
 	}
 
+	encryptedLength := make([]byte, 18)
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
 		return nil, err
 	}
 	if _, err := c.PeerGCM.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
 		return nil, err
 	}
-	encryptedPadding := make([]byte, DecodeLength(encryptedLength[:2])) // TODO: move to Read()
-	if _, err := io.ReadFull(conn, encryptedPadding); err != nil {
-		return nil, err
-	}
-	if _, err := c.PeerGCM.Open(encryptedPadding[:0], nil, encryptedPadding, nil); err != nil {
-		return nil, err
-	}
+	length := DecodeLength(encryptedLength[:2])
+	c.PeerPadding = make([]byte, length) // important: allows server sends padding slowly, eliminating 1-RTT's traffic pattern
 
 	if i.XorMode == 2 {
-		c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, iv), NewCTR(c.UnitedKey, encryptedTicket[:16]), 0, 0)
+		c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, iv), NewCTR(c.UnitedKey, encryptedTicket[:16]), 0, length)
 	}
 	return c, nil
 }

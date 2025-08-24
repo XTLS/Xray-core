@@ -16,12 +16,13 @@ import (
 
 type CommonConn struct {
 	net.Conn
-	Client    *ClientInstance
-	UnitedKey []byte
-	PreWrite  []byte
-	GCM       *GCM
-	PeerGCM   *GCM
-	PeerCache []byte
+	Client      *ClientInstance
+	UnitedKey   []byte
+	PreWrite    []byte
+	GCM         *GCM
+	PeerGCM     *GCM
+	PeerPadding []byte
+	PeerCache   []byte
 }
 
 func (c *CommonConn) Write(b []byte) (int, error) {
@@ -37,12 +38,12 @@ func (c *CommonConn) Write(b []byte) (int, error) {
 		n += len(b)
 		data = make([]byte, 5+len(b)+16)
 		EncodeHeader(data, len(b)+16)
-		aead := c.GCM
+		max := false
 		if bytes.Equal(c.GCM.Nonce[:], MaxNonce) {
-			aead = nil
+			max = true
 		}
 		c.GCM.Seal(data[:5], nil, b, data[:5])
-		if aead == nil {
+		if max {
 			c.GCM = NewGCM(data[5:], c.UnitedKey)
 		}
 		if c.PreWrite != nil {
@@ -61,14 +62,23 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 	if c.PeerGCM == nil { // client's 0-RTT
-		serverRandom := make([]byte, 32)
+		serverRandom := make([]byte, 16)
 		if _, err := io.ReadFull(c.Conn, serverRandom); err != nil {
 			return 0, err
 		}
 		c.PeerGCM = NewGCM(serverRandom, c.UnitedKey)
 		if xorConn, ok := c.Conn.(*XorConn); ok {
-			xorConn.PeerCTR = NewCTR(c.UnitedKey, serverRandom[16:])
+			xorConn.PeerCTR = NewCTR(c.UnitedKey, serverRandom)
 		}
+	}
+	if c.PeerPadding != nil { // client's 1-RTT
+		if _, err := io.ReadFull(c.Conn, c.PeerPadding); err != nil {
+			return 0, err
+		}
+		if _, err := c.PeerGCM.Open(c.PeerPadding[:0], nil, c.PeerPadding, nil); err != nil {
+			return 0, err
+		}
+		c.PeerPadding = nil
 	}
 	if len(c.PeerCache) != 0 {
 		n := copy(b, c.PeerCache)
@@ -96,13 +106,13 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 	if len(dst) <= len(b) {
 		dst = b[:len(dst)] // avoids another copy()
 	}
-	var peerAEAD *GCM
+	var newGCM *GCM
 	if bytes.Equal(c.PeerGCM.Nonce[:], MaxNonce) {
-		peerAEAD = NewGCM(peerData, c.UnitedKey)
+		newGCM = NewGCM(peerData, c.UnitedKey)
 	}
 	_, err = c.PeerGCM.Open(dst[:0], nil, peerData, h)
-	if peerAEAD != nil {
-		c.PeerGCM = peerAEAD
+	if newGCM != nil {
+		c.PeerGCM = newGCM
 	}
 	if err != nil {
 		return 0, err
