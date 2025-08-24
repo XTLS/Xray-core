@@ -84,12 +84,16 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		validator:             validator,
 	}
 
-	if s := strings.Split(config.Decryption, "."); len(s) == 2 {
-		nfsDKeySeed, _ := base64.RawURLEncoding.DecodeString(s[0])
-		xorSKeyBytes, _ := base64.RawURLEncoding.DecodeString(s[1])
+	if config.Decryption != "none" {
+		s := strings.Split(config.Decryption, ".")
+		var nfsSKeysBytes [][]byte
+		for _, r := range s {
+			b, _ := base64.RawURLEncoding.DecodeString(r)
+			nfsSKeysBytes = append(nfsSKeysBytes, b)
+		}
 		handler.decryption = &encryption.ServerInstance{}
-		if err := handler.decryption.Init(nfsDKeySeed, xorSKeyBytes, config.XorMode, config.Minutes); err != nil {
-			return nil, errors.New("failed to use mlkem768seed").Base(err).AtError()
+		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.Seconds); err != nil {
+			return nil, errors.New("failed to use decryption").Base(err).AtError()
 		}
 	}
 
@@ -498,9 +502,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
-				if serverConn, ok := connection.(*encryption.ServerConn); ok {
+				if serverConn, ok := connection.(*encryption.CommonConn); ok {
 					peerCache = &serverConn.PeerCache
-					if xorConn, ok := serverConn.Conn.(*encryption.XorConn); (ok && !xorConn.Divide) || !proxy.IsRAWTransport(iConn) {
+					if _, ok := serverConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
 						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
 					}
 					break

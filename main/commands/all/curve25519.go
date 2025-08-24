@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+
+	"lukechampine.com/blake3"
 )
 
 func Curve25519Genkey(StdEncoding bool, input_base64 string) {
@@ -40,7 +42,10 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 		fmt.Println(err.Error())
 		return
 	}
-	fmt.Printf("PrivateKey: %v\nPassword: %v",
+	password := key.PublicKey().Bytes()
+	hash32 := blake3.Sum256(password)
+	fmt.Printf("PrivateKey: %v\nPassword: %v\nHash32: %v",
 		encoding.EncodeToString(privateKey),
-		encoding.EncodeToString(key.PublicKey().Bytes()))
+		encoding.EncodeToString(password),
+		encoding.EncodeToString(hash32[:]))
 }

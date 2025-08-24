@@ -72,36 +72,35 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config.Decryption = c.Decryption
 	if !func() bool {
 		s := strings.Split(config.Decryption, ".")
-		if len(s) != 5 || s[2] != "mlkem768Seed" {
+		if len(s) < 4 || s[0] != "mlkem768x25519plus" {
 			return false
-		}
-		if s[0] != "1rtt" {
-			t := strings.TrimSuffix(s[0], "min")
-			if t == s[0] {
-				return false
-			}
-			i, err := strconv.Atoi(t)
-			if err != nil {
-				return false
-			}
-			config.Minutes = uint32(i)
 		}
 		switch s[1] {
 		case "native":
-		case "divide":
+		case "xorpub":
 			config.XorMode = 1
 		case "random":
 			config.XorMode = 2
 		default:
 			return false
 		}
-		if b, _ := base64.RawURLEncoding.DecodeString(s[3]); len(b) != 32 {
-			return false
+		if s[2] != "1rtt" {
+			t := strings.TrimSuffix(s[2], "s")
+			if t == s[2] {
+				return false
+			}
+			i, err := strconv.Atoi(t)
+			if err != nil {
+				return false
+			}
+			config.Seconds = uint32(i)
 		}
-		if b, _ := base64.RawURLEncoding.DecodeString(s[4]); len(b) != 64 {
-			return false
+		for i := 3; i < len(s); i++ {
+			if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 64 {
+				return false
+			}
 		}
-		config.Decryption = s[4] + "." + s[3]
+		config.Decryption = config.Decryption[27+len(s[2]):]
 		return true
 	}() && config.Decryption != "none" {
 		if config.Decryption == "" {
@@ -220,36 +219,31 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 
 			if !func() bool {
 				s := strings.Split(account.Encryption, ".")
-				if len(s) != 5 || s[2] != "mlkem768Client" {
+				if len(s) < 4 || s[0] != "mlkem768x25519plus" {
 					return false
-				}
-				if s[0] != "1rtt" {
-					t := strings.TrimSuffix(s[0], "min")
-					if t == s[0] {
-						return false
-					}
-					i, err := strconv.Atoi(t)
-					if err != nil {
-						return false
-					}
-					account.Minutes = uint32(i)
 				}
 				switch s[1] {
 				case "native":
-				case "divide":
+				case "xorpub":
 					account.XorMode = 1
 				case "random":
 					account.XorMode = 2
 				default:
 					return false
 				}
-				if b, _ := base64.RawURLEncoding.DecodeString(s[3]); len(b) != 32 {
+				switch s[2] {
+				case "1rtt":
+				case "0rtt":
+					account.Seconds = 1
+				default:
 					return false
 				}
-				if b, _ := base64.RawURLEncoding.DecodeString(s[4]); len(b) != 1184 {
-					return false
+				for i := 3; i < len(s); i++ {
+					if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 1184 {
+						return false
+					}
 				}
-				account.Encryption = s[4] + "." + s[3]
+				account.Encryption = account.Encryption[27+len(s[2]):]
 				return true
 			}() && account.Encryption != "none" {
 				if account.Encryption == "" {

@@ -19,7 +19,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		Flow:       a.Flow,       // needs parser here?
 		Encryption: a.Encryption, // needs parser here?
 		XorMode:    a.XorMode,
-		Minutes:    a.Minutes,
+		Seconds:    a.Seconds,
 	}, nil
 }
 
@@ -32,7 +32,7 @@ type MemoryAccount struct {
 
 	Encryption string
 	XorMode    uint32
-	Minutes    uint32
+	Seconds    uint32
 }
 
 // Equals implements protocol.Account.Equals().
@@ -50,6 +50,6 @@ func (a *MemoryAccount) ToProto() proto.Message {
 		Flow:       a.Flow,
 		Encryption: a.Encryption,
 		XorMode:    a.XorMode,
-		Minutes:    a.Minutes,
+		Seconds:    a.Seconds,
 	}
 }

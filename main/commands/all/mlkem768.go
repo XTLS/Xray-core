@@ -3,11 +3,11 @@ package all
 import (
 	"crypto/mlkem"
 	"crypto/rand"
-	"crypto/sha3"
 	"encoding/base64"
 	"fmt"
 
 	"github.com/xtls/xray-core/main/commands/base"
+	"lukechampine.com/blake3"
 )
 
 var cmdMLKEM768 = &base.Command{
@@ -42,9 +42,9 @@ func executeMLKEM768(cmd *base.Command, args []string) {
 	}
 	key, _ := mlkem.NewDecapsulationKey768(seed[:])
 	client := key.EncapsulationKey().Bytes()
-	hash32 := sha3.Sum256(client)
-	fmt.Printf("Seed: %v\nClient: %v\nHash11: %v",
+	hash32 := blake3.Sum256(client)
+	fmt.Printf("Seed: %v\nClient: %v\nHash32: %v",
 		base64.RawURLEncoding.EncodeToString(seed[:]),
 		base64.RawURLEncoding.EncodeToString(client),
-		base64.RawURLEncoding.EncodeToString(hash32[:11]))
+		base64.RawURLEncoding.EncodeToString(hash32[:]))
 }

@@ -530,19 +530,12 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 	var readCounter, writerCounter stats.Counter
 	if conn != nil {
 		isEncryption := false
-		if clientConn, ok := conn.(*encryption.ClientConn); ok {
-			conn = clientConn.Conn
-			isEncryption = true
-		}
-		if serverConn, ok := conn.(*encryption.ServerConn); ok {
-			conn = serverConn.Conn
+		if commonConn, ok := conn.(*encryption.CommonConn); ok {
+			conn = commonConn.Conn
 			isEncryption = true
 		}
 		if xorConn, ok := conn.(*encryption.XorConn); ok {
-			if !xorConn.Divide {
-				return xorConn, nil, nil // full-random xorConn should not be penetrated
-			}
-			conn = xorConn.Conn
+			return xorConn, nil, nil // full-random xorConn should not be penetrated
 		}
 		if statConn, ok := conn.(*stat.CounterConnection); ok {
 			conn = statConn.Connection
