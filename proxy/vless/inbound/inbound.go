@@ -206,10 +206,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	first := buf.FromBytes(make([]byte, buf.Size))
 	first.Clear()
-	firstLen, errR := first.ReadFrom(connection)
-	if errR != nil {
-		return errR
-	}
+	firstLen, _ := first.ReadFrom(connection)
 	errors.LogInfo(ctx, "firstLen = ", firstLen)
 
 	reader := &buf.BufferedReader{

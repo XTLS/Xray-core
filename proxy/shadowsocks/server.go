@@ -128,7 +128,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 		conn.Write(data.Bytes())
 	})
-	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)
 	var dest *net.Destination
