@@ -39,8 +39,8 @@ func Test_parseResponse(t *testing.T) {
 		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME test.google.com")),
-		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8888")),
-		common.Must2(dns.NewRR("google.com. IN AAAA 2001::123:8844")),
+		common.Must2(dns.NewRR("google.com. IN AAAA 2001:4860:4860::8888")),
+		common.Must2(dns.NewRR("google.com. IN AAAA 2001:4860:4860::8844")),
 	)
 	p = append(p, common.Must2(ans.Pack()))
 
@@ -72,7 +72,7 @@ func Test_parseResponse(t *testing.T) {
 		},
 		{
 			"aaaa record",
-			&IPRecord{2, []net.IP{net.ParseIP("2001::123:8888"), net.ParseIP("2001::123:8844")}, time.Time{}, dnsmessage.RCodeSuccess, nil},
+			&IPRecord{2, []net.IP{net.ParseIP("2001:4860:4860::8888"), net.ParseIP("2001:4860:4860::8844")}, time.Time{}, dnsmessage.RCodeSuccess, nil},
 			false,
 		},
 	}
