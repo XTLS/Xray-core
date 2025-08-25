@@ -90,7 +90,9 @@ func (s *ClassicNameServer) RequestsCleanup() error {
 
 // HandleResponse handles udp response packet from remote DNS server.
 func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_proto.Packet) {
-	ipRec, err := parseResponse(packet.Payload.Bytes())
+	payload := packet.Payload
+	ipRec, err := parseResponse(payload.Bytes())
+	payload.Release()
 	if err != nil {
 		errors.LogError(ctx, s.Name(), " fail to parse responded DNS udp")
 		return
@@ -125,6 +127,8 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			newReq.msg = &newMsg
 			s.addPendingRequest(&newReq)
 			b, _ := dns.PackMessage(newReq.msg)
+			copyDest := net.UDPDestination(s.address.Address, s.address.Port)
+			b.UDP = &copyDest
 			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
 			return
 		}
@@ -158,6 +162,8 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domai
 		}
 		s.addPendingRequest(udpReq)
 		b, _ := dns.PackMessage(req.msg)
+		copyDest := net.UDPDestination(s.address.Address, s.address.Port)
+		b.UDP = &copyDest
 		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
 	}
 }
