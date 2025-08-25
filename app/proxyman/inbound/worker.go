@@ -382,7 +382,7 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 60 {
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
 			if !conn.inactive {
 				conn.setInactive()
 				delete(w.activeConn, addr)
@@ -409,7 +409,7 @@ func (w *udpWorker) Start() error {
 	w.cone = w.ctx.Value("cone").(bool)
 
 	w.checker = &task.Periodic{
-		Interval: 30 * time.Second,
+		Interval: time.Minute,
 		Execute:  w.clean,
 	}
 
