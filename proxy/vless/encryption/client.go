@@ -161,7 +161,9 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	pfsKey := append(mlkem768Key, x25519Key...)
+	pfsKey := make([]byte, 32+32) // no more capacity
+	copy(pfsKey, mlkem768Key)
+	copy(pfsKey[32:], x25519Key)
 	c.UnitedKey = append(pfsKey, nfsKey...)
 	c.GCM = NewGCM(pfsPublicKey, c.UnitedKey)
 	c.PeerGCM = NewGCM(encryptedPfsPublicKey[:1088+32], c.UnitedKey)

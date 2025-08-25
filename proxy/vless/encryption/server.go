@@ -20,7 +20,7 @@ import (
 type ServerSession struct {
 	Expire  time.Time
 	PfsKey  []byte
-	Replays sync.Map
+	NfsKeys sync.Map
 }
 
 type ServerInstance struct {
@@ -178,7 +178,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		s := i.Sessions[[16]byte(ticket)]
 		i.RWLock.RUnlock()
 		if s == nil {
-			noises := make([]byte, crypto.RandBetween(100, 1000))
+			noises := make([]byte, crypto.RandBetween(1268, 2268)) // matches 1-RTT's server hello length for "random", though it is not important, just for example
 			var err error
 			for err == nil {
 				rand.Read(noises)
@@ -187,21 +187,21 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 			conn.Write(noises) // make client do new handshake
 			return nil, errors.New("expired ticket")
 		}
-		if _, replay := s.Replays.LoadOrStore([32]byte(nfsKey), true); replay { // prevents bad client also
+		if _, loaded := s.NfsKeys.LoadOrStore([32]byte(nfsKey), true); loaded { // prevents bad client also
 			return nil, errors.New("replay detected")
 		}
-		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same nfsKey links the upload & download
-		c.PreWrite = make([]byte, 16)             // always trust yourself, not the client
-		rand.Read(c.PreWrite)
+		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same nfsKey links the upload & download (prevents server -> client's another request)
+		c.PreWrite = make([]byte, 16)
+		rand.Read(c.PreWrite) // always trust yourself, not the client (also prevents being parsed as TLS thus causing false interruption for "native" and "xorpub")
 		c.GCM = NewGCM(c.PreWrite, c.UnitedKey)
-		c.PeerGCM = NewGCM(encryptedTicket, c.UnitedKey) // unchangeable ctx, and different ctx length for upload / download
+		c.PeerGCM = NewGCM(encryptedTicket, c.UnitedKey) // unchangeable ctx (prevents server -> server), and different ctx length for upload / download (prevents client -> client)
 		if i.XorMode == 2 {
 			c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, c.PreWrite), NewCTR(c.UnitedKey, iv), 16, 0) // it doesn't matter if the attacker sends client's iv back to the client
 		}
 		return c, nil
 	}
 
-	if length < 1184+32+16 { // client may send more public keys
+	if length < 1184+32+16 { // client may send more public keys in the future's version
 		return nil, errors.New("too short length")
 	}
 	encryptedPfsPublicKey := make([]byte, length)
@@ -225,7 +225,9 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	pfsKey := append(mlkem768Key, x25519Key...)
+	pfsKey := make([]byte, 32+32) // no more capacity
+	copy(pfsKey, mlkem768Key)
+	copy(pfsKey[32:], x25519Key)
 	pfsPublicKey := append(encapsulatedPfsKey, x25519SKey.PublicKey().Bytes()...)
 	c.UnitedKey = append(pfsKey, nfsKey...)
 	c.GCM = NewGCM(pfsPublicKey, c.UnitedKey)

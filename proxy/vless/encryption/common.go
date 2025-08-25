@@ -89,7 +89,7 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 	if err != nil {
 		if c.Client != nil && strings.HasPrefix(err.Error(), "invalid header: ") { // client's 0-RTT
 			c.Client.RWLock.Lock()
-			if bytes.Equal(c.UnitedKey[:32], c.Client.PfsKey) {
+			if bytes.HasPrefix(c.UnitedKey, c.Client.PfsKey) {
 				c.Client.Expire = time.Now() // expired
 			}
 			c.Client.RWLock.Unlock()
