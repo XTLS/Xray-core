@@ -5,6 +5,7 @@ import (
 	go_errors "errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -371,6 +372,7 @@ type outboundConn struct {
 
 	closeOnce sync.Once
 	dialOnce  sync.Once
+	closed    atomic.Bool
 
 	conn      net.Conn
 	connReady chan struct{}
@@ -380,6 +382,9 @@ func (c *outboundConn) dial() error {
 	conn, err := c.dialer()
 	if err != nil {
 		return err
+	}
+	if c.closed.Load() {
+		return errors.New("connection closed during dial")
 	}
 	c.conn = conn
 	c.connReady <- struct{}{}
@@ -423,6 +428,7 @@ func (c *outboundConn) Read(b []byte) (int, error) {
 func (c *outboundConn) Close() error {
 	c.closeOnce.Do(func() {
 		c.access.Lock()
+		c.closed.Store(true)
 		close(c.connReady)
 		if c.conn != nil {
 			c.conn.Close()
