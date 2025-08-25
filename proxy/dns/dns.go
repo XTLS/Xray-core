@@ -171,6 +171,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	timer := signal.CancelAfterInactivity(ctx, cancel, h.timeout)
 
 	request := func() error {
+		conn.dial()
 		defer conn.Close()
 
 		for {
@@ -384,18 +385,6 @@ func (c *outboundConn) dial() error {
 }
 
 func (c *outboundConn) Write(b []byte) (int, error) {
-	c.access.Lock()
-
-	if c.conn == nil {
-		if err := c.dial(); err != nil {
-			c.access.Unlock()
-			errors.LogWarningInner(context.Background(), err, "failed to dial outbound connection")
-			return len(b), nil
-		}
-	}
-
-	c.access.Unlock()
-
 	return c.conn.Write(b)
 }
 
