@@ -171,7 +171,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	timer := signal.CancelAfterInactivity(ctx, cancel, h.timeout)
 
 	request := func() error {
-		conn.dial()
 		defer conn.Close()
 
 		for {
@@ -370,6 +369,9 @@ type outboundConn struct {
 	access sync.Mutex
 	dialer func() (stat.Connection, error)
 
+	closeOnce sync.Once
+	dialOnce  sync.Once
+
 	conn      net.Conn
 	connReady chan struct{}
 }
@@ -385,6 +387,19 @@ func (c *outboundConn) dial() error {
 }
 
 func (c *outboundConn) Write(b []byte) (int, error) {
+	c.dialOnce.Do(func() {
+		c.dial()
+	})
+	c.access.Lock()
+	conn := c.conn
+	c.access.Unlock()
+	if conn == nil {
+		_, open := <-c.connReady
+		if !open {
+			return 0, io.EOF
+		}
+		conn = c.conn
+	}
 	return c.conn.Write(b)
 }
 
@@ -406,11 +421,13 @@ func (c *outboundConn) Read(b []byte) (int, error) {
 }
 
 func (c *outboundConn) Close() error {
-	c.access.Lock()
-	close(c.connReady)
-	if c.conn != nil {
-		c.conn.Close()
-	}
-	c.access.Unlock()
+	c.closeOnce.Do(func() {
+		c.access.Lock()
+		close(c.connReady)
+		if c.conn != nil {
+			c.conn.Close()
+		}
+		c.access.Unlock()
+	})
 	return nil
 }
