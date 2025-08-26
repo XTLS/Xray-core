@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/commander"
+	lasthandshake "github.com/xtls/xray-core/app/lasthandshake/command"
 	loggerservice "github.com/xtls/xray-core/app/log/command"
 	observatoryservice "github.com/xtls/xray-core/app/observatory/command"
 	handlerservice "github.com/xtls/xray-core/app/proxyman/command"
@@ -39,6 +40,9 @@ func (c *APIConfig) Build() (*commander.Config, error) {
 			services = append(services, serial.ToTypedMessage(&observatoryservice.Config{}))
 		case "routingservice":
 			services = append(services, serial.ToTypedMessage(&routerservice.Config{}))
+		case "lasthandshakeservice":
+			services = append(services, serial.ToTypedMessage(&lasthandshake.Config{}))
+			
 		}
 	}
 
