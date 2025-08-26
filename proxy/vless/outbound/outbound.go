@@ -258,6 +258,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to decode response header").Base(err).AtInfo()
 		}
 
+		lh := lasthandshake.Global
+		lh.Record()
 		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
 		if requestAddons.Flow == vless.XRV {
