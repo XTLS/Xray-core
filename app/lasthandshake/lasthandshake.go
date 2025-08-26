@@ -2,7 +2,6 @@ package lasthandshake
 
 import (
 	context "context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -24,14 +23,12 @@ func NewManager(ctx context.Context, config *Config) *LastHandshake {
 }
 
 func (lh *LastHandshake) Record() {
-	fmt.Println("RECORDED")
 	lh.mu.Lock()
 	defer lh.mu.Unlock()
 	lh.lastTime = time.Now()
 }
 
 func (lh *LastHandshake) Get() time.Time {
-	fmt.Println("GET")
 	lh.mu.RLock()
 	defer lh.mu.RUnlock()
 	return lh.lastTime
