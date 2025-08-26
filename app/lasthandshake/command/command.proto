@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package xray.app.lasthandshake.command;
+
+option go_package = "app/lasthandshake/command";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service LasthandshakeService {
+  rpc GetLastHandshake(google.protobuf.Empty) returns (LastHandshakeResponse);
+}
+
+message LastHandshakeResponse {
+  google.protobuf.Timestamp timestamp = 1;
+}
+
+message Config {}

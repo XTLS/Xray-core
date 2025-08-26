@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package lasthandshake;
+
+option go_package = "/app/lasthandshake;lasthandshake";
+
+message LastHandshakeRequest {}
+message LastHandshakeResponse {
+    int64 timestamp = 1;
+}
+
+service Service {
+    rpc GetLastHandshake(LastHandshakeRequest) returns (LastHandshakeResponse);
+}

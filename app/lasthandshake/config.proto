@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package xray.app.lasthandshake;
+
+option csharp_namespace = "Xray.App.LastHandshake";
+option go_package = "app/lasthandshake";
+option java_package = "com.xray.app.lasthandshake";
+option java_multiple_files = true;
+
+// Core service configuration (empty for now)
+message Config {}
+
+// Optional channel/config structure for future extensions
+message ChannelConfig {
+  bool Blocking = 1;
+  int32 SubscriberLimit = 2;
+  int32 BufferSize = 3;
+}
