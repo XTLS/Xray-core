@@ -160,7 +160,6 @@ func CloseIfExists(obj any) error {
 	if obj != nil {
 		v := reflect.ValueOf(obj)
 		if !v.IsNil() {
-			fmt.Println("closing", obj)
 			return Close(obj)
 		}
 	}

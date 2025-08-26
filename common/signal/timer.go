@@ -3,6 +3,7 @@ package signal
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -18,7 +19,7 @@ type ActivityTimer struct {
 	updated   chan struct{}
 	checkTask *task.Periodic
 	onTimeout func()
-	consumed  bool
+	consumed  atomic.Bool
 	once      sync.Once
 }
 
@@ -40,17 +41,17 @@ func (t *ActivityTimer) check() error {
 
 func (t *ActivityTimer) finish() {
 	t.once.Do(func() {
+		t.consumed.Store(true)
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
 		common.CloseIfExists(t.checkTask)
 		t.onTimeout()
-		t.consumed = true
 	})
 }
 
 func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
-	if t.consumed {
+	if t.consumed.Load() {
 		return
 	}
 	if timeout == 0 {
@@ -58,14 +59,16 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 		return
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	// double check, just in case
+	if t.consumed.Load() {
+		return
+	}
 	newCheckTask := &task.Periodic{
 		Interval: timeout,
 		Execute:  t.check,
 	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	common.CloseIfExists(t.checkTask)
 	t.checkTask = newCheckTask
 	t.Update()
