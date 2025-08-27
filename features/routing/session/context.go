@@ -28,12 +28,13 @@ func (ctx *Context) GetSourceIPs() []net.IP {
 	if ctx.Inbound == nil || !ctx.Inbound.Source.IsValid() {
 		return nil
 	}
-	dest := ctx.Inbound.Source
-	if dest.Address.Family().IsDomain() {
-		return nil
+
+	if ctx.Inbound.Source.Address.Family().IsIP() {
+		return []net.IP{ctx.Inbound.Source.Address.IP()}
 	}
 
-	return []net.IP{dest.Address.IP()}
+	return nil
+
 }
 
 // GetSourcePort implements routing.Context.
@@ -63,6 +64,27 @@ func (ctx *Context) GetTargetPort() net.Port {
 		return 0
 	}
 	return ctx.Outbound.Target.Port
+}
+
+// GetLocalIPs implements routing.Context.
+func (ctx *Context) GetLocalIPs() []net.IP {
+	if ctx.Inbound == nil || !ctx.Inbound.Local.IsValid() {
+		return nil
+	}
+
+	if ctx.Inbound.Local.Address.Family().IsIP() {
+		return []net.IP{ctx.Inbound.Local.Address.IP()}
+	}
+
+	return nil
+}
+
+// GetLocalPort implements routing.Context.
+func (ctx *Context) GetLocalPort() net.Port {
+	if ctx.Inbound == nil || !ctx.Inbound.Local.IsValid() {
+		return 0
+	}
+	return ctx.Inbound.Local.Port
 }
 
 // GetTargetDomain implements routing.Context.
@@ -104,6 +126,14 @@ func (ctx *Context) GetUser() string {
 		return ""
 	}
 	return ctx.Inbound.User.Email
+}
+
+// GetVlessRoute implements routing.Context.
+func (ctx *Context) GetVlessRoute() net.Port {
+	if ctx.Inbound == nil {
+		return 0
+	}
+	return ctx.Inbound.VlessRoute
 }
 
 // GetAttributes implements routing.Context.

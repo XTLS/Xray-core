@@ -19,6 +19,7 @@ type HealthPingSettings struct {
 	Interval      time.Duration `json:"interval"`
 	SamplingCount int           `json:"sampling"`
 	Timeout       time.Duration `json:"timeout"`
+	HttpMethod    string        `json:"httpMethod"`
 }
 
 // HealthPing is the health checker for balancers
@@ -37,12 +38,21 @@ type HealthPing struct {
 func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *HealthPingConfig) *HealthPing {
 	settings := &HealthPingSettings{}
 	if config != nil {
+
+		var httpMethod string
+		if config.HttpMethod == "" {
+			httpMethod = "HEAD"
+		} else {
+			httpMethod = strings.TrimSpace(config.HttpMethod)
+		}
+
 		settings = &HealthPingSettings{
 			Connectivity:  strings.TrimSpace(config.Connectivity),
 			Destination:   strings.TrimSpace(config.Destination),
 			Interval:      time.Duration(config.Interval),
 			SamplingCount: int(config.SamplingCount),
 			Timeout:       time.Duration(config.Timeout),
+			HttpMethod:    httpMethod,
 		}
 	}
 	if settings.Destination == "" {
@@ -164,7 +174,7 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 			}
 			time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
-				delay, err := client.MeasureDelay()
+				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
@@ -251,7 +261,7 @@ func (h *HealthPing) checkConnectivity() bool {
 		h.Settings.Connectivity,
 		h.Settings.Timeout,
 	)
-	if _, err := tester.MeasureDelay(); err != nil {
+	if _, err := tester.MeasureDelay(h.Settings.HttpMethod); err != nil {
 		return false
 	}
 	return true

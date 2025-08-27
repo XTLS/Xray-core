@@ -33,27 +33,20 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	conds := NewConditionChan()
 
 	if len(rr.Domain) > 0 {
-		switch rr.DomainMatcher {
-		case "linear":
-			matcher, err := NewDomainMatcher(rr.Domain)
-			if err != nil {
-				return nil, errors.New("failed to build domain condition").Base(err)
-			}
-			conds.Add(matcher)
-		case "mph", "hybrid":
-			fallthrough
-		default:
-			matcher, err := NewMphMatcherGroup(rr.Domain)
-			if err != nil {
-				return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
-			}
-			errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
-			conds.Add(matcher)
+		matcher, err := NewMphMatcherGroup(rr.Domain)
+		if err != nil {
+			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
 		}
+		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
+		conds.Add(matcher)
 	}
 
 	if len(rr.UserEmail) > 0 {
 		conds.Add(NewUserMatcher(rr.UserEmail))
+	}
+
+	if rr.VlessRouteList != nil {
+		conds.Add(NewPortMatcher(rr.VlessRouteList, "vlessRoute"))
 	}
 
 	if len(rr.InboundTag) > 0 {
@@ -61,11 +54,15 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if rr.PortList != nil {
-		conds.Add(NewPortMatcher(rr.PortList, false))
+		conds.Add(NewPortMatcher(rr.PortList, "target"))
 	}
 
 	if rr.SourcePortList != nil {
-		conds.Add(NewPortMatcher(rr.SourcePortList, true))
+		conds.Add(NewPortMatcher(rr.SourcePortList, "source"))
+	}
+
+	if rr.LocalPortList != nil {
+		conds.Add(NewPortMatcher(rr.LocalPortList, "local"))
 	}
 
 	if len(rr.Networks) > 0 {
@@ -73,7 +70,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Geoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.Geoip, false)
+		cond, err := NewMultiGeoIPMatcher(rr.Geoip, "target")
 		if err != nil {
 			return nil, err
 		}
@@ -81,11 +78,20 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.SourceGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, true)
+		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, "source")
 		if err != nil {
 			return nil, err
 		}
 		conds.Add(cond)
+	}
+
+	if len(rr.LocalGeoip) > 0 {
+		cond, err := NewMultiGeoIPMatcher(rr.LocalGeoip, "local")
+		if err != nil {
+			return nil, err
+		}
+		conds.Add(cond)
+		errors.LogWarning(context.Background(), "Due to some limitations, in UDP connections, localIP is always equal to listen interface IP, so \"localIP\" rule condition does not work properly on UDP inbound connections that listen on all interfaces")
 	}
 
 	if len(rr.Protocol) > 0 {

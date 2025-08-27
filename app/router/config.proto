@@ -79,7 +79,7 @@ message RoutingRule {
     // Tag of routing balancer.
     string balancing_tag = 12;
   }
-    string rule_tag = 18;
+    string rule_tag = 19;
 
   // List of domains for target domain matching.
   repeated Domain domain = 2;
@@ -109,7 +109,10 @@ message RoutingRule {
 
   map<string, string> attributes = 15;
 
-  string domain_matcher = 17;
+  repeated GeoIP local_geoip = 17;
+  xray.common.net.PortList local_port_list = 18;
+
+  xray.common.net.PortList vless_route_list = 20;
 }
 
 message BalancingRule {

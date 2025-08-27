@@ -50,11 +50,14 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate() *Session {
+func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
 	m.Lock()
 	defer m.Unlock()
+	
+	MaxConcurrency := int(Strategy.MaxConcurrency)
+	MaxConnection := uint16(Strategy.MaxConnection)
 
-	if m.closed {
+	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= MaxConnection) {
 		return nil
 	}
 

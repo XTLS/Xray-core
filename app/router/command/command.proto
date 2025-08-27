@@ -25,6 +25,9 @@ message RoutingContext {
   map<string, string> Attributes = 10;
   repeated string OutboundGroupTags = 11;
   string OutboundTag = 12;
+  repeated bytes LocalIPs = 13;
+  uint32 LocalPort = 14;
+  uint32 VlessRoute = 15;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if

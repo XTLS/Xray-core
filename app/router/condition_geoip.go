@@ -116,3 +116,29 @@ func (c *GeoIPMatcherContainer) Add(geoip *GeoIP) (*GeoIPMatcher, error) {
 }
 
 var GlobalGeoIPContainer GeoIPMatcherContainer
+
+func MatchIPs(matchers []*GeoIPMatcher, ips []net.IP, reverse bool) []net.IP {
+	if len(matchers) == 0 {
+		panic("GeoIP matchers should not be empty to avoid ambiguity")
+	}
+	newIPs := make([]net.IP, 0, len(ips))
+	var isFound bool
+	for _, ip := range ips {
+		isFound = false
+		for _, matcher := range matchers {
+			if matcher.Match(ip) {
+				isFound = true
+				break
+			}
+		}
+		if isFound && !reverse {
+			newIPs = append(newIPs, ip)
+			continue
+		}
+		if !isFound && reverse {
+			newIPs = append(newIPs, ip)
+			continue
+		}
+	}
+	return newIPs
+}

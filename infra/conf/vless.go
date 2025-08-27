@@ -32,12 +32,20 @@ type VLessInboundConfig struct {
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
+	Flow       string                  `json:"flow"`
 }
 
 // Build implements Buildable
 func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
 	config.Clients = make([]*protocol.User, len(c.Clients))
+	switch c.Flow {
+	case vless.None:
+		c.Flow = ""
+	case "", vless.XRV:
+	default:
+		return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
+	}
 	for idx, rawUser := range c.Clients {
 		user := new(protocol.User)
 		if err := json.Unmarshal(rawUser, user); err != nil {
@@ -55,7 +63,11 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		account.Id = u.String()
 
 		switch account.Flow {
-		case "", vless.XRV:
+		case "":
+			account.Flow = c.Flow
+		case vless.None:
+			account.Flow = ""
+		case vless.XRV:
 		default:
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
@@ -111,7 +123,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 				}
 			} else {
 				if _, err := strconv.Atoi(fb.Dest); err == nil {
-					fb.Dest = "127.0.0.1:" + fb.Dest
+					fb.Dest = "localhost:" + fb.Dest
 				}
 				if _, _, err := net.SplitHostPort(fb.Dest); err == nil {
 					fb.Type = "tcp"

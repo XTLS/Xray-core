@@ -40,6 +40,14 @@ func ListenUDP(ctx context.Context, address net.Address, port net.Port, streamSe
 		opt(hub)
 	}
 
+	if address.Family().IsDomain() && address.Domain() == "localhost" {
+		address = net.LocalHostIP
+	}
+
+	if address.Family().IsDomain() {
+		return nil, errors.New("domain address is not allowed for listening: ", address.Domain())
+	}
+
 	var sockopt *internet.SocketConfig
 	if streamSettings != nil {
 		sockopt = streamSettings.SocketSettings

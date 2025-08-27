@@ -77,7 +77,6 @@ func TestXrayConfig(t *testing.T) {
 							"ip": [
 								"10.0.0.0/8"
 							],
-							"type": "field",
 							"outboundTag": "blocked"
 						}
 					]

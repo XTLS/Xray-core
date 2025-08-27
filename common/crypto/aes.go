@@ -32,9 +32,7 @@ func NewAesCTRStream(key []byte, iv []byte) cipher.Stream {
 
 // NewAesGcm creates a AEAD cipher based on AES-GCM.
 func NewAesGcm(key []byte) cipher.AEAD {
-	block, err := aes.NewCipher(key)
-	common.Must(err)
-	aead, err := cipher.NewGCM(block)
-	common.Must(err)
+	block := common.Must2(aes.NewCipher(key))
+	aead := common.Must2(cipher.NewGCM(block))
 	return aead
 }

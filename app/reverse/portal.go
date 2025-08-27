@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/outbound"
@@ -111,6 +112,16 @@ func (o *Outbound) Close() error {
 	return nil
 }
 
+// SenderSettings implements outbound.Handler.
+func (o *Outbound) SenderSettings() *serial.TypedMessage {
+	return nil
+}
+
+// ProxySettings implements outbound.Handler.
+func (o *Outbound) ProxySettings() *serial.TypedMessage {
+	return nil
+}
+
 type StaticMuxPicker struct {
 	access  sync.Mutex
 	workers []*PortalWorker
@@ -159,7 +170,7 @@ func (p *StaticMuxPicker) PickAvailable() (*mux.ClientWorker, error) {
 		if w.draining {
 			continue
 		}
-		if w.client.Closed() {
+		if w.IsFull() {
 			continue
 		}
 		if w.client.ActiveConnections() < minConn {
@@ -200,6 +211,7 @@ type PortalWorker struct {
 	writer   buf.Writer
 	reader   buf.Reader
 	draining bool
+	counter  uint32
 }
 
 func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
@@ -233,7 +245,7 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 }
 
 func (w *PortalWorker) heartbeat() error {
-	if w.client.Closed() {
+	if w.Closed() {
 		return errors.New("client worker stopped")
 	}
 
@@ -249,16 +261,21 @@ func (w *PortalWorker) heartbeat() error {
 		msg.State = Control_DRAIN
 
 		defer func() {
+			w.client.GetTimer().Reset(time.Second * 16)
 			common.Close(w.writer)
 			common.Interrupt(w.reader)
 			w.writer = nil
 		}()
 	}
 
-	b, err := proto.Marshal(msg)
-	common.Must(err)
-	mb := buf.MergeBytes(nil, b)
-	return w.writer.WriteMultiBuffer(mb)
+	w.counter = (w.counter + 1) % 5
+	if w.draining || w.counter == 1 {
+		b, err := proto.Marshal(msg)
+		common.Must(err)
+		mb := buf.MergeBytes(nil, b)
+		return w.writer.WriteMultiBuffer(mb)
+	}
+	return nil
 }
 
 func (w *PortalWorker) IsFull() bool {

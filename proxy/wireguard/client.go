@@ -129,7 +129,8 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 	}
 	defer func() {
 		if err != nil {
-			_ = h.bind.Close()
+			h.bind.Close()
+			h.bind = nil
 		}
 	}()
 

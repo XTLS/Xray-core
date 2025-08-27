@@ -155,7 +155,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 				}
 			} else {
 				if _, err := strconv.Atoi(fb.Dest); err == nil {
-					fb.Dest = "127.0.0.1:" + fb.Dest
+					fb.Dest = "localhost:" + fb.Dest
 				}
 				if _, _, err := net.SplitHostPort(fb.Dest); err == nil {
 					fb.Type = "tcp"

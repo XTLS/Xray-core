@@ -3,6 +3,8 @@ package dokodemo
 import (
 	"context"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
@@ -36,6 +38,7 @@ type DokodemoDoor struct {
 	config        *Config
 	address       net.Address
 	port          net.Port
+	portMap       map[string]string
 	sockopt       *session.Sockopt
 }
 
@@ -47,6 +50,7 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 	d.config = config
 	d.address = config.GetPredefinedAddress()
 	d.port = net.Port(config.Port)
+	d.portMap = config.PortMap
 	d.policyManager = pm
 	d.sockopt = sockopt
 
@@ -71,6 +75,33 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		Network: network,
 		Address: d.address,
 		Port:    d.port,
+	}
+
+	if !d.config.FollowRedirect {
+		host, port, err := net.SplitHostPort(conn.LocalAddr().String())
+		if dest.Address == nil {
+			if err != nil {
+				dest.Address = net.DomainAddress("localhost")
+			} else {
+				if strings.Contains(host, ".") {
+					dest.Address = net.LocalHostIP
+				} else {
+					dest.Address = net.LocalHostIPv6
+				}
+			}
+		}
+		if dest.Port == 0 {
+			dest.Port = net.Port(common.Must2(strconv.Atoi(port)))
+		}
+		if d.portMap != nil && d.portMap[port] != "" {
+			h, p, _ := net.SplitHostPort(d.portMap[port])
+			if len(h) > 0 {
+				dest.Address = net.ParseAddress(h)
+			}
+			if len(p) > 0 {
+				dest.Port = net.Port(common.Must2(strconv.Atoi(p)))
+			}
+		}
 	}
 
 	destinationOverridden := false

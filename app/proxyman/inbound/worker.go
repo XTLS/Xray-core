@@ -91,6 +91,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
 		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		Local:   net.DestinationFromAddr(conn.LocalAddr()),
 		Gateway: net.TCPDestination(w.address, w.port),
 		Tag:     w.tag,
 		Conn:    conn,
@@ -161,6 +162,7 @@ type udpConn struct {
 	uplink           stats.Counter
 	downlink         stats.Counter
 	inactive         bool
+	cancel           context.CancelFunc
 }
 
 func (c *udpConn) setInactive() {
@@ -203,6 +205,9 @@ func (c *udpConn) Write(buf []byte) (int, error) {
 }
 
 func (c *udpConn) Close() error {
+	if c.cancel != nil {
+		c.cancel()
+	}
 	common.Must(c.done.Close())
 	common.Must(common.Close(c.writer))
 	return nil
@@ -259,6 +264,7 @@ func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 	defer w.Unlock()
 
 	if conn, found := w.activeConn[id]; found && !conn.done.Done() {
+		conn.updateActivity()
 		return conn, true
 	}
 
@@ -306,7 +312,8 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		common.Must(w.checker.Start())
 
 		go func() {
-			ctx := w.ctx
+			ctx, cancel := context.WithCancel(w.ctx)
+			conn.cancel = cancel
 			sid := session.NewID()
 			ctx = c.ContextWithID(ctx, sid)
 
@@ -315,8 +322,18 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 				outbounds[0].Target = originalDest
 			}
 			ctx = session.ContextWithOutbounds(ctx, outbounds)
+			local := net.DestinationFromAddr(w.hub.Addr())
+			if local.Address == net.AnyIP || local.Address == net.AnyIPv6 {
+				if source.Address.Family().IsIPv4() {
+					local.Address = net.AnyIP
+				} else if source.Address.Family().IsIPv6() {
+					local.Address = net.AnyIPv6
+				}
+			}
+
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{
 				Source:  source,
+				Local:   local, // Due to some limitations, in UDP connections, localIP is always equal to listen interface IP
 				Gateway: net.UDPDestination(w.address, w.port),
 				Tag:     w.tag,
 			})
@@ -466,6 +483,7 @@ func (w *dsWorker) callback(conn stat.Connection) {
 	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{
 		Source:  net.DestinationFromAddr(conn.RemoteAddr()),
+		Local:   net.DestinationFromAddr(conn.LocalAddr()),
 		Gateway: net.UnixDestination(w.address),
 		Tag:     w.tag,
 		Conn:    conn,

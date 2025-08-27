@@ -259,6 +259,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 			errors.LogWarningInner(ctx, err, "failed to write response")
 		}
 	})
+	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)
 	user := inbound.User
