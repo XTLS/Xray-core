@@ -291,6 +291,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 				if b == nil {
 					continue
 				}
+				timer.Update()
 				destination := *b.UDP
 
 				currentPacketCtx := ctx
