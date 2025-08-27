@@ -233,7 +233,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
 	if destination.Network == net.Network_UDP { // handle udp request
-		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
+		return s.handleUDPPayload(ctx, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher, conn)
 	}
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -248,7 +248,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
 }
 
-func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
+func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher, conn stat.Connection) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		udpPayload := packet.Payload
 		if udpPayload.UDP == nil {
@@ -258,6 +258,12 @@ func (s *Server) handleUDPPayload(ctx context.Context, clientReader *PacketReade
 		if err := clientWriter.WriteMultiBuffer(buf.MultiBuffer{udpPayload}); err != nil {
 			errors.LogWarningInner(ctx, err, "failed to write response")
 		}
+	})
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	udpServer.SetCallClose(func() error {
+		cancel()
+		return conn.Close()
 	})
 	defer udpServer.RemoveRay()
 

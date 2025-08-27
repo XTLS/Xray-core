@@ -41,6 +41,10 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 	}
 }
 
+func (v *Dispatcher) SetCallClose(f func() error) {
+	v.callClose = f
+}
+
 func (v *Dispatcher) RemoveRay() {
 	v.Lock()
 	defer v.Unlock()
