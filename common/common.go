@@ -7,6 +7,7 @@ import (
 	"go/build"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -152,4 +153,15 @@ func GetModuleName(pathToProjectRoot string) (string, error) {
 		break
 	}
 	return moduleName, fmt.Errorf("no `go.mod` file in every parent directory of `%s`", pathToProjectRoot)
+}
+
+// CloseIfExists call obj.Close() if obj is not nil.
+func CloseIfExists(obj any) error {
+	if obj != nil {
+		v := reflect.ValueOf(obj)
+		if !v.IsNil() {
+			return Close(obj)
+		}
+	}
+	return nil
 }
