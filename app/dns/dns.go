@@ -329,7 +329,7 @@ func init() {
 }
 
 func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
-	conn4, err4 := net.Dial("udp4", "8.8.8.8:53")
+	conn4, err4 := net.Dial("udp4", "192.33.4.12:53")
 	if err4 != nil {
 		supportIPv4 = false
 	} else {
@@ -337,7 +337,7 @@ func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
 		conn4.Close()
 	}
 
-	conn6, err6 := net.Dial("udp6", "[2001:4860:4860::8888]:53")
+	conn6, err6 := net.Dial("udp6", "[2001:500:2::c]:53")
 	if err6 != nil {
 		supportIPv6 = false
 	} else {
