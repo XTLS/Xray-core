@@ -11,6 +11,8 @@ message Account {
   string id = 1;
   // Flow settings. May be "xtls-rprx-vision".
   string flow = 2;
-  // Encryption settings. Only applies to client side, and only accepts "none" for now.
+
   string encryption = 3;
+  uint32 xorMode = 4;
+  uint32 seconds = 5;
 }
