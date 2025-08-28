@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -74,6 +75,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
+	}
+	if !proxy.IsRAWTransport(conn) {
+		inbound.CanSpliceCopy = 3
 	}
 
 	switch network {
@@ -199,7 +203,9 @@ func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writ
 	}
 
 	responseDone := func() error {
-		inbound.CanSpliceCopy = 1
+		if inbound.CanSpliceCopy == 2 {
+			inbound.CanSpliceCopy = 1
+		}
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		v2writer := buf.NewWriter(writer)
@@ -259,7 +265,9 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	if inbound != nil && inbound.Source.IsValid() {
 		errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
 	}
-	inbound.CanSpliceCopy = 1
+	if inbound.CanSpliceCopy == 2 {
+		inbound.CanSpliceCopy = 1
+	}
 
 	var dest *net.Destination
 

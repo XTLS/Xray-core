@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -94,6 +95,9 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
+	}
+	if !proxy.IsRAWTransport(conn) {
+		inbound.CanSpliceCopy = 3
 	}
 	var reader *bufio.Reader
 	if len(firstbyte) > 0 {
@@ -207,7 +211,9 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *buf
 	}
 
 	responseDone := func() error {
-		inbound.CanSpliceCopy = 1
+		if inbound.CanSpliceCopy == 2 {
+			inbound.CanSpliceCopy = 1
+		}
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		v2writer := buf.NewWriter(conn)
