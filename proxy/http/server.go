@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -95,7 +96,7 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if isTransportConn(conn) {
+	if !proxy.IsRAWTransport(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 	var reader *bufio.Reader
@@ -373,20 +374,6 @@ func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer
 		}
 	}
 	return http.ReadResponse(r, req)
-}
-
-// isTransportConn return false if the conn is a raw tcp conn without transport or tls, can process splice copy
-func isTransportConn(conn stat.Connection) bool {
-	if conn != nil {
-		statConn, ok := conn.(*stat.CounterConnection)
-		if ok {
-			conn = statConn.Connection
-		}
-		if _, ok := conn.(*net.TCPConn); ok {
-			return false
-		}
-	}
-	return true
 }
 
 func init() {

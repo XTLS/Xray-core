@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -75,7 +76,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if isTransportConn(conn) {
+	if !proxy.IsRAWTransport(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 
@@ -313,20 +314,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			udpServer.Dispatch(currentPacketCtx, *dest, payload)
 		}
 	}
-}
-
-// isTransportConn return false if the conn is a raw tcp conn without transport or tls, can process splice copy
-func isTransportConn(conn stat.Connection) bool {
-	if conn != nil {
-		statConn, ok := conn.(*stat.CounterConnection)
-		if ok {
-			conn = statConn.Connection
-		}
-		if _, ok := conn.(*net.TCPConn); ok {
-			return false
-		}
-	}
-	return true
 }
 
 func init() {
