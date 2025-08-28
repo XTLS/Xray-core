@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
 	"runtime"
@@ -80,10 +81,45 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		config.Clients[idx] = user
 	}
 
-	if c.Decryption != "none" {
-		return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
-	}
 	config.Decryption = c.Decryption
+	if !func() bool {
+		s := strings.Split(config.Decryption, ".")
+		if len(s) < 4 || s[0] != "mlkem768x25519plus" {
+			return false
+		}
+		switch s[1] {
+		case "native":
+		case "xorpub":
+			config.XorMode = 1
+		case "random":
+			config.XorMode = 2
+		default:
+			return false
+		}
+		if s[2] != "1rtt" {
+			t := strings.TrimSuffix(s[2], "s")
+			if t == s[2] {
+				return false
+			}
+			i, err := strconv.Atoi(t)
+			if err != nil {
+				return false
+			}
+			config.Seconds = uint32(i)
+		}
+		for i := 3; i < len(s); i++ {
+			if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 64 {
+				return false
+			}
+		}
+		config.Decryption = config.Decryption[27+len(s[2]):]
+		return true
+	}() && config.Decryption != "none" {
+		if config.Decryption == "" {
+			return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
+		}
+		return nil, errors.New(`VLESS settings: unsupported "decryption": ` + config.Decryption)
+	}
 
 	for _, fb := range c.Fallbacks {
 		var i uint16
@@ -155,16 +191,16 @@ type VLessOutboundConfig struct {
 func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	config := new(outbound.Config)
 
-	if len(c.Vnext) == 0 {
-		return nil, errors.New(`VLESS settings: "vnext" is empty`)
+	if len(c.Vnext) != 1 {
+		return nil, errors.New(`VLESS settings: "vnext" should have one and only one member`)
 	}
 	config.Vnext = make([]*protocol.ServerEndpoint, len(c.Vnext))
 	for idx, rec := range c.Vnext {
 		if rec.Address == nil {
 			return nil, errors.New(`VLESS vnext: "address" is not set`)
 		}
-		if len(rec.Users) == 0 {
-			return nil, errors.New(`VLESS vnext: "users" is empty`)
+		if len(rec.Users) != 1 {
+			return nil, errors.New(`VLESS vnext: "users" should have one and only one member`)
 		}
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
@@ -193,8 +229,39 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}
 
-			if account.Encryption != "none" {
-				return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
+			if !func() bool {
+				s := strings.Split(account.Encryption, ".")
+				if len(s) < 4 || s[0] != "mlkem768x25519plus" {
+					return false
+				}
+				switch s[1] {
+				case "native":
+				case "xorpub":
+					account.XorMode = 1
+				case "random":
+					account.XorMode = 2
+				default:
+					return false
+				}
+				switch s[2] {
+				case "1rtt":
+				case "0rtt":
+					account.Seconds = 1
+				default:
+					return false
+				}
+				for i := 3; i < len(s); i++ {
+					if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 1184 {
+						return false
+					}
+				}
+				account.Encryption = account.Encryption[27+len(s[2]):]
+				return true
+			}() && account.Encryption != "none" {
+				if account.Encryption == "" {
+					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
+				}
+				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
 			}
 
 			user.Account = serial.ToTypedMessage(account)

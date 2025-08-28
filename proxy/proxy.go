@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -524,24 +525,33 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 	}
 }
 
-// UnwrapRawConn support unwrap stats, tls, utls, reality, proxyproto, uds-wrapper conn and get raw tcp/uds conn from it
+// UnwrapRawConn support unwrap encryption, stats, tls, utls, reality, proxyproto, uds-wrapper conn and get raw tcp/uds conn from it
 func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 	var readCounter, writerCounter stats.Counter
 	if conn != nil {
-		statConn, ok := conn.(*stat.CounterConnection)
-		if ok {
+		isEncryption := false
+		if commonConn, ok := conn.(*encryption.CommonConn); ok {
+			conn = commonConn.Conn
+			isEncryption = true
+		}
+		if xorConn, ok := conn.(*encryption.XorConn); ok {
+			return xorConn, nil, nil // full-random xorConn should not be penetrated
+		}
+		if statConn, ok := conn.(*stat.CounterConnection); ok {
 			conn = statConn.Connection
 			readCounter = statConn.ReadCounter
 			writerCounter = statConn.WriteCounter
 		}
-		if xc, ok := conn.(*tls.Conn); ok {
-			conn = xc.NetConn()
-		} else if utlsConn, ok := conn.(*tls.UConn); ok {
-			conn = utlsConn.NetConn()
-		} else if realityConn, ok := conn.(*reality.Conn); ok {
-			conn = realityConn.NetConn()
-		} else if realityUConn, ok := conn.(*reality.UConn); ok {
-			conn = realityUConn.NetConn()
+		if !isEncryption { // avoids double penetration
+			if xc, ok := conn.(*tls.Conn); ok {
+				conn = xc.NetConn()
+			} else if utlsConn, ok := conn.(*tls.UConn); ok {
+				conn = utlsConn.NetConn()
+			} else if realityConn, ok := conn.(*reality.Conn); ok {
+				conn = realityConn.NetConn()
+			} else if realityUConn, ok := conn.(*reality.UConn); ok {
+				conn = realityUConn.NetConn()
+			}
 		}
 		if pc, ok := conn.(*proxyproto.Conn); ok {
 			conn = pc.Raw()
@@ -632,9 +642,20 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 }
 
 func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, readCounter stats.Counter) error {
-	errors.LogInfo(ctx, "CopyRawConn readv")
+	errors.LogInfo(ctx, "CopyRawConn (maybe) readv")
 	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
 		return errors.New("failed to process response").Base(err)
 	}
 	return nil
+}
+
+func IsRAWTransport(conn stat.Connection) bool {
+	iConn := conn
+	if statConn, ok := iConn.(*stat.CounterConnection); ok {
+		iConn = statConn.Connection
+	}
+	_, ok1 := iConn.(*proxyproto.Conn)
+	_, ok2 := iConn.(*net.TCPConn)
+	_, ok3 := iConn.(*internet.UnixConnWrapper)
+	return ok1 || ok2 || ok3
 }

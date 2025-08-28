@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"encoding/base64"
 	"io"
 	"reflect"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -67,6 +69,7 @@ type Handler struct {
 	policyManager         policy.Manager
 	validator             vless.Validator
 	dns                   dns.Client
+	decryption            *encryption.ServerInstance
 	fallbacks             map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
@@ -79,6 +82,19 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		dns:                   dc,
 		validator:             validator,
+	}
+
+	if config.Decryption != "" && config.Decryption != "none" {
+		s := strings.Split(config.Decryption, ".")
+		var nfsSKeysBytes [][]byte
+		for _, r := range s {
+			b, _ := base64.RawURLEncoding.DecodeString(r)
+			nfsSKeysBytes = append(nfsSKeysBytes, b)
+		}
+		handler.decryption = &encryption.ServerInstance{}
+		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.Seconds); err != nil {
+			return nil, errors.New("failed to use decryption").Base(err).AtError()
+		}
 	}
 
 	if config.Fallbacks != nil {
@@ -159,6 +175,9 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
+	if h.decryption != nil {
+		h.decryption.Close()
+	}
 	return errors.Combine(common.Close(h.validator))
 }
 
@@ -197,6 +216,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	iConn := connection
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
+	}
+
+	if h.decryption != nil {
+		var err error
+		connection, err = h.decryption.Handshake(connection)
+		if err != nil {
+			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
+		}
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -464,6 +491,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
+	var peerCache *[]byte
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	switch requestAddons.Flow {
@@ -476,6 +504,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
+				if serverConn, ok := connection.(*encryption.CommonConn); ok {
+					peerCache = &serverConn.PeerCache
+					if _, ok := serverConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
+						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
+					}
+					break
+				}
 				var t reflect.Type
 				var p uintptr
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
@@ -544,7 +579,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, true, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, peerCache, input, rawInput, trafficState, nil, true, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
