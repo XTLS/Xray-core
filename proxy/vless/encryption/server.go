@@ -102,7 +102,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if i.NfsSKeys == nil {
 		return nil, errors.New("uninitialized")
 	}
-	c := &CommonConn{Conn: conn}
+	c := NewCommonConn(conn)
 
 	ivAndRelays := make([]byte, 16+i.RelaysLength)
 	if _, err := io.ReadFull(conn, ivAndRelays); err != nil {

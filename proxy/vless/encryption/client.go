@@ -66,7 +66,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if i.NfsPKeys == nil {
 		return nil, errors.New("uninitialized")
 	}
-	c := &CommonConn{Conn: conn}
+	c := NewCommonConn(conn)
 
 	ivAndRealysLength := 16 + i.RelaysLength
 	pfsKeyExchangeLength := 18 + 1184 + 32 + 16
