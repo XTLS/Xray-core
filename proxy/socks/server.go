@@ -14,13 +14,12 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -158,8 +157,16 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 				Reason: "",
 			})
 		}
-
-		return s.transport(ctx, reader, conn, dest, dispatcher, inbound)
+		if inbound.CanSpliceCopy == 2 {
+			inbound.CanSpliceCopy = 1
+		}
+		if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
+			Reader: &buf.TimeoutWrapperReader{Reader: reader},
+			Writer: buf.NewWriter(conn)},
+		); err != nil {
+			return errors.New("failed to dispatch request").Base(err)
+		}
+		return nil
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
@@ -176,54 +183,6 @@ func (*Server) handleUDP(c io.Reader) error {
 	// The TCP connection closes after this method returns. We need to wait until
 	// the client closes it.
 	return common.Error2(io.Copy(buf.DiscardBytes, c))
-}
-
-func (s *Server) transport(ctx context.Context, reader io.Reader, writer io.Writer, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, s.policy().Timeouts.ConnectionIdle)
-
-	if inbound != nil {
-		inbound.Timer = timer
-	}
-
-	plcy := s.policy()
-	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return err
-	}
-
-	requestDone := func() error {
-		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
-		if err := buf.Copy(buf.NewReader(reader), link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transport all TCP request").Base(err)
-		}
-
-		return nil
-	}
-
-	responseDone := func() error {
-		if inbound.CanSpliceCopy == 2 {
-			inbound.CanSpliceCopy = 1
-		}
-		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-
-		v2writer := buf.NewWriter(writer)
-		if err := buf.Copy(link.Reader, v2writer, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transport all TCP response").Base(err)
-		}
-
-		return nil
-	}
-
-	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
-		return errors.New("connection ends").Base(err)
-	}
-
-	return nil
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
@@ -264,9 +223,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	inbound := session.InboundFromContext(ctx)
 	if inbound != nil && inbound.Source.IsValid() {
 		errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
-	}
-	if inbound.CanSpliceCopy == 2 {
-		inbound.CanSpliceCopy = 1
 	}
 
 	var dest *net.Destination
