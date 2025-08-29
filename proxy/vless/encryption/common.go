@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
+	"golang.org/x/crypto/chacha20poly1305"
 	"lukechampine.com/blake3"
 )
 
@@ -23,19 +24,21 @@ var OutBytesPool = sync.Pool{
 
 type CommonConn struct {
 	net.Conn
+	UseAES      bool
 	Client      *ClientInstance
 	UnitedKey   []byte
 	PreWrite    []byte
-	GCM         *GCM
-	PeerGCM     *GCM
+	AEAD        *AEAD
+	PeerAEAD    *AEAD
 	PeerPadding []byte
 	PeerInBytes []byte
 	PeerCache   []byte
 }
 
-func NewCommonConn(conn net.Conn) *CommonConn {
+func NewCommonConn(conn net.Conn, useAES bool) *CommonConn {
 	return &CommonConn{
 		Conn:        conn,
+		UseAES:      useAES,
 		PeerInBytes: make([]byte, 5+17000), // no need to use sync.Pool, because we are always reading
 	}
 }
@@ -55,12 +58,12 @@ func (c *CommonConn) Write(b []byte) (int, error) {
 		headerAndData := outBytes[:5+len(b)+16]
 		EncodeHeader(headerAndData, len(b)+16)
 		max := false
-		if bytes.Equal(c.GCM.Nonce[:], MaxNonce) {
+		if bytes.Equal(c.AEAD.Nonce[:], MaxNonce) {
 			max = true
 		}
-		c.GCM.Seal(headerAndData[:5], nil, b, headerAndData[:5])
+		c.AEAD.Seal(headerAndData[:5], nil, b, headerAndData[:5])
 		if max {
-			c.GCM = NewGCM(headerAndData, c.UnitedKey)
+			c.AEAD = NewAEAD(headerAndData, c.UnitedKey, c.UseAES)
 		}
 		if c.PreWrite != nil {
 			headerAndData = append(c.PreWrite, headerAndData...)
@@ -77,12 +80,12 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
-	if c.PeerGCM == nil { // client's 0-RTT
+	if c.PeerAEAD == nil { // client's 0-RTT
 		serverRandom := make([]byte, 16)
 		if _, err := io.ReadFull(c.Conn, serverRandom); err != nil {
 			return 0, err
 		}
-		c.PeerGCM = NewGCM(serverRandom, c.UnitedKey)
+		c.PeerAEAD = NewAEAD(serverRandom, c.UnitedKey, c.UseAES)
 		if xorConn, ok := c.Conn.(*XorConn); ok {
 			xorConn.PeerCTR = NewCTR(c.UnitedKey, serverRandom)
 		}
@@ -91,7 +94,7 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 		if _, err := io.ReadFull(c.Conn, c.PeerPadding); err != nil {
 			return 0, err
 		}
-		if _, err := c.PeerGCM.Open(c.PeerPadding[:0], nil, c.PeerPadding, nil); err != nil {
+		if _, err := c.PeerAEAD.Open(c.PeerPadding[:0], nil, c.PeerPadding, nil); err != nil {
 			return 0, err
 		}
 		c.PeerPadding = nil
@@ -126,13 +129,13 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 	if len(dst) <= len(b) {
 		dst = b[:len(dst)] // avoids another copy()
 	}
-	var newGCM *GCM
-	if bytes.Equal(c.PeerGCM.Nonce[:], MaxNonce) {
-		newGCM = NewGCM(c.PeerInBytes[:5+l], c.UnitedKey)
+	var newAEAD *AEAD
+	if bytes.Equal(c.PeerAEAD.Nonce[:], MaxNonce) {
+		newAEAD = NewAEAD(c.PeerInBytes[:5+l], c.UnitedKey, c.UseAES)
 	}
-	_, err = c.PeerGCM.Open(dst[:0], nil, peerData, peerHeader)
-	if newGCM != nil {
-		c.PeerGCM = newGCM
+	_, err = c.PeerAEAD.Open(dst[:0], nil, peerData, peerHeader)
+	if newAEAD != nil {
+		c.PeerAEAD = newAEAD
 	}
 	if err != nil {
 		return 0, err
@@ -144,28 +147,32 @@ func (c *CommonConn) Read(b []byte) (int, error) {
 	return len(dst), nil
 }
 
-type GCM struct {
+type AEAD struct {
 	cipher.AEAD
 	Nonce [12]byte
 }
 
-func NewGCM(ctx, key []byte) *GCM {
+func NewAEAD(ctx, key []byte, useAES bool) *AEAD {
 	k := make([]byte, 32)
 	blake3.DeriveKey(k, string(ctx), key)
-	block, _ := aes.NewCipher(k)
-	aead, _ := cipher.NewGCM(block)
-	return &GCM{AEAD: aead}
-	//chacha20poly1305.New()
+	var aead cipher.AEAD
+	if useAES {
+		block, _ := aes.NewCipher(k)
+		aead, _ = cipher.NewGCM(block)
+	} else {
+		aead, _ = chacha20poly1305.New(k)
+	}
+	return &AEAD{AEAD: aead}
 }
 
-func (a *GCM) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
+func (a *AEAD) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
 	if nonce == nil {
 		nonce = IncreaseNonce(a.Nonce[:])
 	}
 	return a.AEAD.Seal(dst, nonce, plaintext, additionalData)
 }
 
-func (a *GCM) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
+func (a *AEAD) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
 	if nonce == nil {
 		nonce = IncreaseNonce(a.Nonce[:])
 	}

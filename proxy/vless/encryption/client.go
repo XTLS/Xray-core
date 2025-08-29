@@ -12,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/protocol"
 	"lukechampine.com/blake3"
 )
 
@@ -66,7 +67,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if i.NfsPKeys == nil {
 		return nil, errors.New("uninitialized")
 	}
-	c := NewCommonConn(conn)
+	c := NewCommonConn(conn, protocol.HasAESGCMHardwareSupport)
 
 	ivAndRealysLength := 16 + i.RelaysLength
 	pfsKeyExchangeLength := 18 + 1184 + 32 + 16
@@ -108,18 +109,18 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		lastCTR.XORKeyStream(relays[index:], i.Hash32s[j+1][:])
 		relays = relays[index+32:]
 	}
-	nfsGCM := NewGCM(iv, nfsKey)
+	nfsAEAD := NewAEAD(iv, nfsKey, c.UseAES)
 
 	if i.Seconds > 0 {
 		i.RWLock.RLock()
 		if time.Now().Before(i.Expire) {
 			c.Client = i
 			c.UnitedKey = append(i.PfsKey, nfsKey...) // different unitedKey for each connection
-			nfsGCM.Seal(clientHello[:ivAndRealysLength], nil, EncodeLength(32), nil)
-			nfsGCM.Seal(clientHello[:ivAndRealysLength+18], nil, i.Ticket, nil)
+			nfsAEAD.Seal(clientHello[:ivAndRealysLength], nil, EncodeLength(32), nil)
+			nfsAEAD.Seal(clientHello[:ivAndRealysLength+18], nil, i.Ticket, nil)
 			i.RWLock.RUnlock()
 			c.PreWrite = clientHello[:ivAndRealysLength+18+32]
-			c.GCM = NewGCM(clientHello[ivAndRealysLength+18:ivAndRealysLength+18+32], c.UnitedKey)
+			c.AEAD = NewAEAD(clientHello[ivAndRealysLength+18:ivAndRealysLength+18+32], c.UnitedKey, c.UseAES)
 			if i.XorMode == 2 {
 				c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, iv), nil, len(c.PreWrite), 16)
 			}
@@ -129,15 +130,15 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	}
 
 	pfsKeyExchange := clientHello[ivAndRealysLength : ivAndRealysLength+pfsKeyExchangeLength]
-	nfsGCM.Seal(pfsKeyExchange[:0], nil, EncodeLength(pfsKeyExchangeLength-18), nil)
+	nfsAEAD.Seal(pfsKeyExchange[:0], nil, EncodeLength(pfsKeyExchangeLength-18), nil)
 	mlkem768DKey, _ := mlkem.GenerateKey768()
 	x25519SKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
 	pfsPublicKey := append(mlkem768DKey.EncapsulationKey().Bytes(), x25519SKey.PublicKey().Bytes()...)
-	nfsGCM.Seal(pfsKeyExchange[:18], nil, pfsPublicKey, nil)
+	nfsAEAD.Seal(pfsKeyExchange[:18], nil, pfsPublicKey, nil)
 
 	padding := clientHello[ivAndRealysLength+pfsKeyExchangeLength:]
-	nfsGCM.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
-	nfsGCM.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
+	nfsAEAD.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
+	nfsAEAD.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
 
 	if _, err := conn.Write(clientHello); err != nil {
 		return nil, err
@@ -148,7 +149,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := io.ReadFull(conn, encryptedPfsPublicKey); err != nil {
 		return nil, err
 	}
-	nfsGCM.Open(encryptedPfsPublicKey[:0], MaxNonce, encryptedPfsPublicKey, nil)
+	nfsAEAD.Open(encryptedPfsPublicKey[:0], MaxNonce, encryptedPfsPublicKey, nil)
 	mlkem768Key, err := mlkem768DKey.Decapsulate(encryptedPfsPublicKey[:1088])
 	if err != nil {
 		return nil, err
@@ -165,14 +166,14 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	copy(pfsKey, mlkem768Key)
 	copy(pfsKey[32:], x25519Key)
 	c.UnitedKey = append(pfsKey, nfsKey...)
-	c.GCM = NewGCM(pfsPublicKey, c.UnitedKey)
-	c.PeerGCM = NewGCM(encryptedPfsPublicKey[:1088+32], c.UnitedKey)
+	c.AEAD = NewAEAD(pfsPublicKey, c.UnitedKey, c.UseAES)
+	c.PeerAEAD = NewAEAD(encryptedPfsPublicKey[:1088+32], c.UnitedKey, c.UseAES)
 
 	encryptedTicket := make([]byte, 32)
 	if _, err := io.ReadFull(conn, encryptedTicket); err != nil {
 		return nil, err
 	}
-	if _, err := c.PeerGCM.Open(encryptedTicket[:0], nil, encryptedTicket, nil); err != nil {
+	if _, err := c.PeerAEAD.Open(encryptedTicket[:0], nil, encryptedTicket, nil); err != nil {
 		return nil, err
 	}
 	seconds := DecodeLength(encryptedTicket)
@@ -189,7 +190,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
 		return nil, err
 	}
-	if _, err := c.PeerGCM.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
+	if _, err := c.PeerAEAD.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
 		return nil, err
 	}
 	length := DecodeLength(encryptedLength[:2])

@@ -102,7 +102,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if i.NfsSKeys == nil {
 		return nil, errors.New("uninitialized")
 	}
-	c := NewCommonConn(conn)
+	c := NewCommonConn(conn, true)
 
 	ivAndRelays := make([]byte, 16+i.RelaysLength)
 	if _, err := io.ReadFull(conn, ivAndRelays); err != nil {
@@ -151,16 +151,21 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		}
 		relays = relays[32:]
 	}
-	nfsGCM := NewGCM(iv, nfsKey)
+	nfsAEAD := NewAEAD(iv, nfsKey, c.UseAES)
 
 	encryptedLength := make([]byte, 18)
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
 		return nil, err
 	}
-	if _, err := nfsGCM.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
-		return nil, err
+	decryptedLength := make([]byte, 2)
+	if _, err := nfsAEAD.Open(decryptedLength[:0], nil, encryptedLength, nil); err != nil {
+		c.UseAES = !c.UseAES
+		nfsAEAD = NewAEAD(iv, nfsKey, c.UseAES)
+		if _, err := nfsAEAD.Open(decryptedLength[:0], nil, encryptedLength, nil); err != nil {
+			return nil, err
+		}
 	}
-	length := DecodeLength(encryptedLength[:2])
+	length := DecodeLength(decryptedLength)
 
 	if length == 32 {
 		if i.Seconds == 0 {
@@ -170,7 +175,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		if _, err := io.ReadFull(conn, encryptedTicket); err != nil {
 			return nil, err
 		}
-		ticket, err := nfsGCM.Open(nil, nil, encryptedTicket, nil)
+		ticket, err := nfsAEAD.Open(nil, nil, encryptedTicket, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -193,8 +198,8 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 		c.UnitedKey = append(s.PfsKey, nfsKey...) // the same nfsKey links the upload & download (prevents server -> client's another request)
 		c.PreWrite = make([]byte, 16)
 		rand.Read(c.PreWrite) // always trust yourself, not the client (also prevents being parsed as TLS thus causing false interruption for "native" and "xorpub")
-		c.GCM = NewGCM(c.PreWrite, c.UnitedKey)
-		c.PeerGCM = NewGCM(encryptedTicket, c.UnitedKey) // unchangeable ctx (prevents server -> server), and different ctx length for upload / download (prevents client -> client)
+		c.AEAD = NewAEAD(c.PreWrite, c.UnitedKey, c.UseAES)
+		c.PeerAEAD = NewAEAD(encryptedTicket, c.UnitedKey, c.UseAES) // unchangeable ctx (prevents server -> server), and different ctx length for upload / download (prevents client -> client)
 		if i.XorMode == 2 {
 			c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, c.PreWrite), NewCTR(c.UnitedKey, iv), 16, 0) // it doesn't matter if the attacker sends client's iv back to the client
 		}
@@ -208,7 +213,7 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := io.ReadFull(conn, encryptedPfsPublicKey); err != nil {
 		return nil, err
 	}
-	if _, err := nfsGCM.Open(encryptedPfsPublicKey[:0], nil, encryptedPfsPublicKey, nil); err != nil {
+	if _, err := nfsAEAD.Open(encryptedPfsPublicKey[:0], nil, encryptedPfsPublicKey, nil); err != nil {
 		return nil, err
 	}
 	mlkem768EKey, err := mlkem.NewEncapsulationKey768(encryptedPfsPublicKey[:1184])
@@ -230,8 +235,8 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	copy(pfsKey[32:], x25519Key)
 	pfsPublicKey := append(encapsulatedPfsKey, x25519SKey.PublicKey().Bytes()...)
 	c.UnitedKey = append(pfsKey, nfsKey...)
-	c.GCM = NewGCM(pfsPublicKey, c.UnitedKey)
-	c.PeerGCM = NewGCM(encryptedPfsPublicKey[:1184+32], c.UnitedKey)
+	c.AEAD = NewAEAD(pfsPublicKey, c.UnitedKey, c.UseAES)
+	c.PeerAEAD = NewAEAD(encryptedPfsPublicKey[:1184+32], c.UnitedKey, c.UseAES)
 	ticket := make([]byte, 16)
 	rand.Read(ticket)
 	copy(ticket, EncodeLength(int(i.Seconds*4/5)))
@@ -240,11 +245,11 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	encryptedTicketLength := 32
 	paddingLength := int(crypto.RandBetween(100, 1000))
 	serverHello := make([]byte, pfsKeyExchangeLength+encryptedTicketLength+paddingLength)
-	nfsGCM.Seal(serverHello[:0], MaxNonce, pfsPublicKey, nil)
-	c.GCM.Seal(serverHello[:pfsKeyExchangeLength], nil, ticket, nil)
+	nfsAEAD.Seal(serverHello[:0], MaxNonce, pfsPublicKey, nil)
+	c.AEAD.Seal(serverHello[:pfsKeyExchangeLength], nil, ticket, nil)
 	padding := serverHello[pfsKeyExchangeLength+encryptedTicketLength:]
-	c.GCM.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
-	c.GCM.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
+	c.AEAD.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
+	c.AEAD.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
 
 	if _, err := conn.Write(serverHello); err != nil {
 		return nil, err
@@ -264,14 +269,14 @@ func (i *ServerInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	if _, err := io.ReadFull(conn, encryptedLength); err != nil {
 		return nil, err
 	}
-	if _, err := nfsGCM.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
+	if _, err := nfsAEAD.Open(encryptedLength[:0], nil, encryptedLength, nil); err != nil {
 		return nil, err
 	}
 	encryptedPadding := make([]byte, DecodeLength(encryptedLength[:2]))
 	if _, err := io.ReadFull(conn, encryptedPadding); err != nil {
 		return nil, err
 	}
-	if _, err := nfsGCM.Open(encryptedPadding[:0], nil, encryptedPadding, nil); err != nil {
+	if _, err := nfsAEAD.Open(encryptedPadding[:0], nil, encryptedPadding, nil); err != nil {
 		return nil, err
 	}
 
