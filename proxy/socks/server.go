@@ -196,6 +196,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 		request := protocol.RequestHeaderFromContext(ctx)
 		if request == nil {
+			payload.Release()
 			return
 		}
 
@@ -214,9 +215,9 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			errors.LogWarningInner(ctx, err, "failed to write UDP response")
 			return
 		}
-		defer udpMessage.Release()
 
 		conn.Write(udpMessage.Bytes())
+		udpMessage.Release()
 	})
 	defer udpServer.RemoveRay()
 

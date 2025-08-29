@@ -73,7 +73,7 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	}
 
 	a := addr.AsAddress()
-	return a != net.AnyIP
+	return a != net.AnyIP && a != net.AnyIPv6
 }
 
 // Process implements proxy.Outbound.
@@ -418,7 +418,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					}
 				}
 			}
-			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
 				b.Release()
 				continue

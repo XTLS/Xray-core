@@ -239,8 +239,10 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	}
 out:
 	err := h.proxy.Process(ctx, link, h)
+	var errC error
 	if err != nil {
-		if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, context.Canceled) {
+		errC = errors.Cause(err)
+		if goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled) {
 			err = nil
 		}
 	}
@@ -251,7 +253,11 @@ out:
 		errors.LogInfo(ctx, err.Error())
 		common.Interrupt(link.Writer)
 	} else {
-		common.Close(link.Writer)
+		if errC != nil && goerrors.Is(errC, io.ErrClosedPipe) {
+			common.Interrupt(link.Writer)
+		} else {
+			common.Close(link.Writer)
+		}
 	}
 	common.Interrupt(link.Reader)
 }

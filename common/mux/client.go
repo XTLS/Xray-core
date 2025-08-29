@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	goerrors "errors"
 	"io"
 	"sync"
 	"time"
@@ -154,8 +155,11 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
 		ctx, cancel := context.WithCancel(ctx)
 
-		if err := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); err != nil {
-			errors.LogInfoInner(ctx, err, "failed to handler mux client connection")
+		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {
+			errC := errors.Cause(errP)
+			if !(goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled)) {
+				errors.LogInfoInner(ctx, errP, "failed to handler mux client connection")
+			}
 		}
 		common.Must(c.Close())
 		cancel()
@@ -222,7 +226,7 @@ func (m *ClientWorker) monitor() {
 		select {
 		case <-m.done.Wait():
 			m.sessionManager.Close()
-			common.Close(m.link.Writer)
+			common.Interrupt(m.link.Writer)
 			common.Interrupt(m.link.Reader)
 			return
 		case <-m.timer.C:
@@ -247,7 +251,7 @@ func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 	return nil
 }
 
-func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
+func fetchInput(ctx context.Context, s *Session, output buf.Writer, timer *time.Ticker) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	transferType := protocol.TransferTypeStream
@@ -258,6 +262,7 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx))
 	defer s.Close(false)
 	defer writer.Close()
+	defer timer.Reset(time.Second * 16)
 
 	errors.LogInfo(ctx, "dispatching request to ", ob.Target)
 	if err := writeFirstPayload(s.input, writer); err != nil {
@@ -308,9 +313,9 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	s.input = link.Reader
 	s.output = link.Writer
 	if _, ok := link.Reader.(*pipe.Reader); ok {
-		go fetchInput(ctx, s, m.link.Writer)
+		go fetchInput(ctx, s, m.link.Writer, m.timer)
 	} else {
-		fetchInput(ctx, s, m.link.Writer)
+		fetchInput(ctx, s, m.link.Writer, m.timer)
 	}
 	return true
 }
