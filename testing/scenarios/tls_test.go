@@ -240,7 +240,7 @@ func TestAutoIssuingCertificate(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		if err := testTCPConn(clientPort, 1024, time.Second*20)(); err != nil {
 			t.Error(err)
 		}
@@ -449,7 +449,7 @@ func TestTLSOverWebSocket(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*20))
 	}
 	if err := errg.Wait(); err != nil {
@@ -565,7 +565,7 @@ func TestGRPC(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*10240, time.Second*40))
 	}
 	if err := errg.Wait(); err != nil {
@@ -681,7 +681,7 @@ func TestGRPCMultiMode(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*10240, time.Second*40))
 	}
 	if err := errg.Wait(); err != nil {

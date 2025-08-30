@@ -182,7 +182,7 @@ func TestReverseProxy(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		errg.Go(testTCPConn(externalPort, 10240*1024, time.Second*40))
 	}
 
@@ -374,7 +374,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 
 	defer CloseAllServers(servers)
 
-	for i := 0; i < 4096; i++ {
+	for range 4096 {
 		if err := testTCPConn(externalPort, 1024, time.Second*20)(); err != nil {
 			t.Error(err)
 		}

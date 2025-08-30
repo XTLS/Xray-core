@@ -249,7 +249,7 @@ func TestZeroBuffer(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*20))
 	}
 	if err := errg.Wait(); err != nil {

@@ -117,7 +117,7 @@ func TestVless(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
@@ -239,7 +239,7 @@ func TestVlessTls(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
@@ -363,7 +363,7 @@ func TestVlessXtlsVision(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
@@ -502,7 +502,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 1; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {

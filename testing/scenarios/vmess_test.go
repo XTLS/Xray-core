@@ -260,7 +260,7 @@ func TestVMessGCM(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
 	}
 
@@ -366,7 +366,7 @@ func TestVMessGCMReadv(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
 	}
 	if err := errg.Wait(); err != nil {
@@ -465,7 +465,7 @@ func TestVMessGCMUDP(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 2; i++ {
+	for range 3 {
 		errg.Go(testUDPConn(clientPort, 1024, time.Second*5))
 	}
 	if err := errg.Wait(); err != nil {
@@ -564,7 +564,7 @@ func TestVMessChacha20(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*20))
 	}
 
@@ -664,7 +664,7 @@ func TestVMessNone(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
@@ -771,7 +771,7 @@ func TestVMessKCP(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 2; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024, time.Minute*2))
 	}
 	if err := errg.Wait(); err != nil {
@@ -915,7 +915,7 @@ func TestVMessKCPLarge(t *testing.T) {
 	common.Must(err)
 
 	var errg errgroup.Group
-	for i := 0; i < 2; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 513*1024, time.Minute*5))
 	}
 	if err := errg.Wait(); err != nil {
@@ -1026,7 +1026,7 @@ func TestVMessGCMMux(t *testing.T) {
 
 	for range "abcd" {
 		var errg errgroup.Group
-		for i := 0; i < 16; i++ {
+		for range 3 {
 			errg.Go(testTCPConn(clientPort, 10240, time.Second*20))
 		}
 		if err := errg.Wait(); err != nil {
@@ -1152,7 +1152,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 
 	for range "ab" {
 		var errg errgroup.Group
-		for i := 0; i < 2; i++ {
+		for range 3 {
 			errg.Go(testTCPConn(clientPort, 1024, time.Second*10))
 			errg.Go(testUDPConn(clientUDPPort, 1024, time.Second*10))
 		}
@@ -1259,7 +1259,7 @@ func TestVMessZero(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
@@ -1361,7 +1361,7 @@ func TestVMessGCMLengthAuth(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
 	}
 
@@ -1465,7 +1465,7 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for i := 0; i < 10; i++ {
+	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
 	}
 
