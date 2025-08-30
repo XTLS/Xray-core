@@ -253,6 +253,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 	defer cancel()
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	defer timer.SetTimeout(0)
+	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		udpPayload := packet.Payload
 		if udpPayload.UDP == nil {
