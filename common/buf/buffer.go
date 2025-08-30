@@ -15,8 +15,6 @@ const (
 
 var ErrBufferFull = errors.New("buffer is full")
 
-var zero = [Size * 10]byte{0}
-
 var pool = bytespool.GetPool(Size)
 
 // ownership represents the data owner of the buffer.
@@ -146,7 +144,7 @@ func (b *Buffer) Bytes() []byte {
 }
 
 // Extend increases the buffer size by n bytes, and returns the extended part.
-// It panics if result size is larger than buf.Size.
+// It panics if result size is larger than size of this buffer.
 func (b *Buffer) Extend(n int32) []byte {
 	end := b.end + n
 	if end > int32(len(b.v)) {
@@ -154,7 +152,7 @@ func (b *Buffer) Extend(n int32) []byte {
 	}
 	ext := b.v[b.end:end]
 	b.end = end
-	copy(ext, zero[:])
+	clear(ext)
 	return ext
 }
 
@@ -217,7 +215,7 @@ func (b *Buffer) Resize(from, to int32) {
 	b.start += from
 	b.Check()
 	if b.end > oldEnd {
-		copy(b.v[oldEnd:b.end], zero[:])
+		clear(b.v[oldEnd:b.end])
 	}
 }
 
