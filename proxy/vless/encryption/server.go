@@ -30,8 +30,8 @@ type ServerInstance struct {
 	RelaysLength  int
 	XorMode       uint32
 	Seconds       uint32
-	PaddingLens   [][2]int
-	PaddingGaps   [][2]int
+	PaddingLens   [][3]int
+	PaddingGaps   [][3]int
 
 	RWLock   sync.RWMutex
 	Sessions map[[16]byte]*ServerSession

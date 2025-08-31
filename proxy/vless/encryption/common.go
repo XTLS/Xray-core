@@ -220,50 +220,61 @@ func DecodeHeader(h []byte) (l int, err error) {
 	return
 }
 
-func ParsePadding(padding string, paddingLens, paddingGaps *[][2]int) (err error) {
+func ParsePadding(padding string, paddingLens, paddingGaps *[][3]int) (err error) {
 	if padding == "" {
 		return
 	}
 	maxLen := 0
 	for i, s := range strings.Split(padding, ".") {
-		x := strings.SplitN(s, "-", 2)
-		if len(x) != 2 || x[0] == "" || x[1] == "" {
+		x := strings.Split(s, "-")
+		if len(x) < 3 || x[0] == "" || x[1] == "" || x[2] == "" {
 			return errors.New("invalid padding lenth/gap parameter: " + s)
 		}
-		y := [2]int{}
+		y := [3]int{}
 		if y[0], err = strconv.Atoi(x[0]); err != nil {
 			return
 		}
 		if y[1], err = strconv.Atoi(x[1]); err != nil {
 			return
 		}
-		if i == 0 && (y[0] < 17 || y[1] < 17) {
-			return errors.New("first padding length must be larger than 16")
+		if y[2], err = strconv.Atoi(x[2]); err != nil {
+			return
+		}
+		if i == 0 && (y[0] < 100 || y[1] < 18+17 || y[2] < 18+17) {
+			return errors.New("first padding length must not be smaller than 35")
 		}
 		if i%2 == 0 {
 			*paddingLens = append(*paddingLens, y)
-			maxLen += max(y[0], y[1])
+			maxLen += max(y[1], y[2])
 		} else {
 			*paddingGaps = append(*paddingGaps, y)
 		}
 	}
-	if maxLen > 65535 {
-		return errors.New("total padding length must be smaller than 65536")
+	if maxLen > 18+65535 {
+		return errors.New("total padding length must not be larger than 65553")
 	}
 	return
 }
 
-func CreatPadding(paddingLens, paddingGaps [][2]int) (length int, lens []int, gaps []time.Duration) {
+func CreatPadding(paddingLens, paddingGaps [][3]int) (length int, lens []int, gaps []time.Duration) {
 	if len(paddingLens) == 0 {
-		paddingLens = [][2]int{{111, 1111}, {3333, -1234}}
-		paddingGaps = [][2]int{{111, -66}}
+		paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
+		paddingGaps = [][3]int{{75, 0, 111}}
 	}
-	for _, l := range paddingLens {
-		lens = append(lens, int(max(0, crypto.RandBetween(int64(l[0]), int64(l[1])))))
-		length += lens[len(lens)-1]
+	for _, y := range paddingLens {
+		l := 0
+		if y[0] >= int(crypto.RandBetween(0, 100)) {
+			l = int(crypto.RandBetween(int64(y[1]), int64(y[2])))
+		}
+		lens = append(lens, l)
+		length += l
 	}
-	for _, g := range paddingGaps {
-		gaps = append(gaps, time.Duration(max(0, crypto.RandBetween(int64(g[0]), int64(g[1]))))*time.Millisecond)
+	for _, y := range paddingGaps {
+		g := 0
+		if y[0] >= int(crypto.RandBetween(0, 100)) {
+			g = int(crypto.RandBetween(int64(y[1]), int64(y[2])))
+		}
+		gaps = append(gaps, time.Duration(g)*time.Millisecond)
 	}
 	return
 }
