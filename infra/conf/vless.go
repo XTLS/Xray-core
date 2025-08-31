@@ -74,7 +74,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 
 		if account.Encryption != "" {
-			return nil, errors.New(`VLESS clients: "encryption" should not in inbound settings`)
+			return nil, errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
 		}
 
 		user.Account = serial.ToTypedMessage(account)
@@ -107,18 +107,31 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			}
 			config.Seconds = uint32(i)
 		}
-		for i := 3; i < len(s); i++ {
-			if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 64 {
+		padding := 0
+		for _, r := range s[3:] {
+			if len(r) < 20 {
+				padding += len(r) + 1
+				continue
+			}
+			if b, _ := base64.RawURLEncoding.DecodeString(r); len(b) != 32 && len(b) != 64 {
 				return false
 			}
 		}
 		config.Decryption = config.Decryption[27+len(s[2]):]
+		if padding > 0 {
+			config.Padding = config.Decryption[:padding-1]
+			config.Decryption = config.Decryption[padding:]
+		}
 		return true
 	}() && config.Decryption != "none" {
 		if config.Decryption == "" {
 			return nil, errors.New(`VLESS settings: please add/set "decryption":"none" to every settings`)
 		}
 		return nil, errors.New(`VLESS settings: unsupported "decryption": ` + config.Decryption)
+	}
+
+	if config.Decryption != "none" && c.Fallbacks != nil {
+		return nil, errors.New(`VLESS settings: "fallbacks" can not be used together with "decryption"`)
 	}
 
 	for _, fb := range c.Fallbacks {
@@ -250,12 +263,21 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				default:
 					return false
 				}
-				for i := 3; i < len(s); i++ {
-					if b, _ := base64.RawURLEncoding.DecodeString(s[i]); len(b) != 32 && len(b) != 1184 {
+				padding := 0
+				for _, r := range s[3:] {
+					if len(r) < 20 {
+						padding += len(r) + 1
+						continue
+					}
+					if b, _ := base64.RawURLEncoding.DecodeString(r); len(b) != 32 && len(b) != 1184 {
 						return false
 					}
 				}
 				account.Encryption = account.Encryption[27+len(s[2]):]
+				if padding > 0 {
+					account.Padding = account.Encryption[:padding-1]
+					account.Encryption = account.Encryption[padding:]
+				}
 				return true
 			}() && account.Encryption != "none" {
 				if account.Encryption == "" {

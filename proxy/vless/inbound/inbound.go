@@ -92,7 +92,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 			nfsSKeysBytes = append(nfsSKeysBytes, b)
 		}
 		handler.decryption = &encryption.ServerInstance{}
-		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.Seconds); err != nil {
+		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.Seconds, config.Padding); err != nil {
 			return nil, errors.New("failed to use decryption").Base(err).AtError()
 		}
 	}
@@ -220,8 +220,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	if h.decryption != nil {
 		var err error
-		connection, err = h.decryption.Handshake(connection)
-		if err != nil {
+		if connection, err = h.decryption.Handshake(connection, nil); err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
 	}
@@ -491,7 +490,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		// Flow: requestAddons.Flow,
 	}
 
-	var peerCache *[]byte
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	switch requestAddons.Flow {
@@ -504,16 +502,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
-				if serverConn, ok := connection.(*encryption.CommonConn); ok {
-					peerCache = &serverConn.PeerCache
-					if _, ok := serverConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
-						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
-					}
-					break
-				}
 				var t reflect.Type
 				var p uintptr
-				if tlsConn, ok := iConn.(*tls.Conn); ok {
+				if commonConn, ok := connection.(*encryption.CommonConn); ok {
+					if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
+						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
+					}
+					t = reflect.TypeOf(commonConn).Elem()
+					p = uintptr(unsafe.Pointer(commonConn))
+				} else if tlsConn, ok := iConn.(*tls.Conn); ok {
 					if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
 						return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 					}
@@ -579,7 +576,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if requestAddons.Flow == vless.XRV {
 			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
 			clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, peerCache, input, rawInput, trafficState, nil, true, ctx1)
+			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, true, ctx1)
 		} else {
 			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
 			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))

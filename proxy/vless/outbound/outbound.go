@@ -77,7 +77,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			nfsPKeysBytes = append(nfsPKeysBytes, b)
 		}
 		handler.encryption = &encryption.ClientInstance{}
-		if err := handler.encryption.Init(nfsPKeysBytes, a.XorMode, a.Seconds); err != nil {
+		if err := handler.encryption.Init(nfsPKeysBytes, a.XorMode, a.Seconds, a.Padding); err != nil {
 			return nil, errors.New("failed to use encryption").Base(err).AtError()
 		}
 	}
@@ -118,8 +118,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if h.encryption != nil {
 		var err error
-		conn, err = h.encryption.Handshake(conn)
-		if err != nil {
+		if conn, err = h.encryption.Handshake(conn); err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
 	}
@@ -146,7 +145,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Flow: account.Flow,
 	}
 
-	var peerCache *[]byte
 	var input *bytes.Reader
 	var rawInput *bytes.Buffer
 	allowUDP443 := false
@@ -165,16 +163,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP:
-			if clientConn, ok := conn.(*encryption.CommonConn); ok {
-				peerCache = &clientConn.PeerCache
-				if _, ok := clientConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
-					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
-				}
-				break
-			}
 			var t reflect.Type
 			var p uintptr
-			if tlsConn, ok := iConn.(*tls.Conn); ok {
+			if commonConn, ok := conn.(*encryption.CommonConn); ok {
+				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
+					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
+				}
+				t = reflect.TypeOf(commonConn).Elem()
+				p = uintptr(unsafe.Pointer(commonConn))
+			} else if tlsConn, ok := iConn.(*tls.Conn); ok {
 				t = reflect.TypeOf(tlsConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(tlsConn.Conn))
 			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
@@ -306,7 +303,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, peerCache, input, rawInput, trafficState, ob, false, ctx)
+			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, trafficState, ob, false, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))

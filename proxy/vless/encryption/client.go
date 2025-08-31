@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"lukechampine.com/blake3"
@@ -23,6 +22,8 @@ type ClientInstance struct {
 	RelaysLength  int
 	XorMode       uint32
 	Seconds       uint32
+	PaddingLens   [][2]int
+	PaddingGaps   [][2]int
 
 	RWLock sync.RWMutex
 	Expire time.Time
@@ -30,15 +31,13 @@ type ClientInstance struct {
 	Ticket []byte
 }
 
-func (i *ClientInstance) Init(nfsPKeysBytes [][]byte, xorMode, seconds uint32) (err error) {
+func (i *ClientInstance) Init(nfsPKeysBytes [][]byte, xorMode, seconds uint32, padding string) (err error) {
 	if i.NfsPKeys != nil {
-		err = errors.New("already initialized")
-		return
+		return errors.New("already initialized")
 	}
 	l := len(nfsPKeysBytes)
 	if l == 0 {
-		err = errors.New("empty nfsPKeysBytes")
-		return
+		return errors.New("empty nfsPKeysBytes")
 	}
 	i.NfsPKeys = make([]any, l)
 	i.NfsPKeysBytes = nfsPKeysBytes
@@ -60,7 +59,7 @@ func (i *ClientInstance) Init(nfsPKeysBytes [][]byte, xorMode, seconds uint32) (
 	i.RelaysLength -= 32
 	i.XorMode = xorMode
 	i.Seconds = seconds
-	return
+	return ParsePadding(padding, &i.PaddingLens, &i.PaddingGaps)
 }
 
 func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
@@ -71,7 +70,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 
 	ivAndRealysLength := 16 + i.RelaysLength
 	pfsKeyExchangeLength := 18 + 1184 + 32 + 16
-	paddingLength := int(crypto.RandBetween(100, 1000))
+	paddingLength, paddingLens, paddingGaps := CreatPadding(i.PaddingLens, i.PaddingGaps)
 	clientHello := make([]byte, ivAndRealysLength+pfsKeyExchangeLength+paddingLength)
 
 	iv := clientHello[:16]
@@ -140,10 +139,18 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	nfsAEAD.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
 	nfsAEAD.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
 
-	if _, err := conn.Write(clientHello); err != nil {
-		return nil, err
+	paddingLens[0] = ivAndRealysLength + pfsKeyExchangeLength + paddingLens[0]
+	for i, l := range paddingLens { // sends padding in a fragmented way, to create variable traffic pattern, before inner VLESS flow takes control
+		if l > 0 {
+			if _, err := conn.Write(clientHello[:l]); err != nil {
+				return nil, err
+			}
+			clientHello = clientHello[l:]
+		}
+		if len(paddingGaps) > i {
+			time.Sleep(paddingGaps[i])
+		}
 	}
-	// padding can be sent in a fragmented way, to create variable traffic pattern, before inner VLESS flow takes control
 
 	encryptedPfsPublicKey := make([]byte, 1088+32+16)
 	if _, err := io.ReadFull(conn, encryptedPfsPublicKey); err != nil {
