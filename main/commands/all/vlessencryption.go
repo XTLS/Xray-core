@@ -43,6 +43,9 @@ func executeVLESSEncryption(cmd *base.Command, args []string) {
 		seed, client, _ := genMLKEM768(nil)
 		serverKey = base64.RawURLEncoding.EncodeToString(seed[:])
 		clientKey = base64.RawURLEncoding.EncodeToString(client)
+	default:
+		fmt.Println("invalid key type: ", *input_vlessencryption_key)
+		return
 	}
 	encryption := generatePointConfig("mlkem768x25519plus", *input_vlessencryption_mode, "600s", serverKey)
 	decryption := generatePointConfig("mlkem768x25519plus", *input_vlessencryption_mode, "0rtt", clientKey)
