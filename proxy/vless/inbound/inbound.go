@@ -552,13 +552,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
-	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-	inbound.Timer = timer
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	trafficState := proxy.NewTrafficState(userSentID)
-
 	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
 	if requestAddons.Flow == vless.XRV {
 		clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
@@ -572,7 +566,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	bufferWriter.SetFlushNext()
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: clientReader,
+		Reader: &buf.TimeoutWrapperReader{Reader: clientReader},
 		Writer: clientWriter},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
