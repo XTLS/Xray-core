@@ -225,7 +225,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx)
+		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 		}
@@ -253,7 +253,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to write A request payload").Base(err).AtWarning()
 		}
 
-		var err error
 		if requestAddons.Flow == vless.XRV {
 			if tlsConn, ok := iConn.(*tls.Conn); ok {
 				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
@@ -264,12 +263,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version).AtWarning()
 				}
 			}
-			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
-			err = encoding.XtlsWrite(clientReader, serverWriter, timer, conn, trafficState, ob, true, ctx1)
-		} else {
-			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
-			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		}
+		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		if err != nil {
 			return errors.New("failed to transfer request payload").Base(err).AtInfo()
 		}
@@ -292,7 +287,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
 		if requestAddons.Flow == vless.XRV {
-			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx)
+			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
 		}
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			if requestAddons.Flow == vless.XRV {
@@ -303,7 +298,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, input, rawInput, trafficState, ob, false, ctx)
+			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, trafficState, false, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
