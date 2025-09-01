@@ -75,9 +75,10 @@ func (w *BufferToBytesWriter) ReadFrom(reader io.Reader) (int64, error) {
 // BufferedWriter is a Writer with internal buffer.
 type BufferedWriter struct {
 	sync.Mutex
-	writer   Writer
-	buffer   *Buffer
-	buffered bool
+	writer    Writer
+	buffer    *Buffer
+	buffered  bool
+	flushNext bool
 }
 
 // NewBufferedWriter creates a new BufferedWriter.
@@ -161,6 +162,12 @@ func (w *BufferedWriter) WriteMultiBuffer(b MultiBuffer) error {
 		}
 	}
 
+	if w.flushNext {
+		w.buffered = false
+		w.flushNext = false
+		return w.flushInternal()
+	}
+
 	return nil
 }
 
@@ -199,6 +206,13 @@ func (w *BufferedWriter) SetBuffered(f bool) error {
 		return w.flushInternal()
 	}
 	return nil
+}
+
+// SetFlushNext will wait the next WriteMultiBuffer to flush and set buffered = false
+func (w *BufferedWriter) SetFlushNext() {
+	w.Lock()
+	defer w.Unlock()
+	w.flushNext = true
 }
 
 // ReadFrom implements io.ReaderFrom.
