@@ -124,12 +124,15 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 			index = 1088
 		}
 		if i.XorMode > 0 {
-			NewCTR(i.NfsPKeysBytes[j], iv).XORKeyStream(relays, relays[:index]) // we don't use buggy elligator, because we have PSK :)
+			NewCTR(i.NfsPKeysBytes[j], iv).XORKeyStream(relays, relays[:index]) // we don't use buggy elligator2, because we have PSK :)
 		}
 		if k, ok := k.(*ecdh.PrivateKey); ok {
 			publicKey, err := ecdh.X25519().NewPublicKey(relays[:index])
 			if err != nil {
 				return nil, err
+			}
+			if publicKey.Bytes()[31] > 127 { // we just don't want the observer can change even one bit without breaking the connection, though it has nothing to do with security
+				return nil, errors.New("the highest bit of the last byte of the peer-sent X25519 public key must be 0")
 			}
 			nfsKey, err = k.ECDH(publicKey)
 			if err != nil {
