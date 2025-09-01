@@ -574,13 +574,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		var err error
 
 		if requestAddons.Flow == vless.XRV {
-			ctx1 := session.ContextWithInbound(ctx, nil) // TODO enable splice
-			clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx1)
-			err = encoding.XtlsRead(clientReader, serverWriter, timer, connection, input, rawInput, trafficState, nil, true, ctx1)
-		} else {
-			// from clientReader.ReadMultiBuffer to serverWriter.WriteMultiBuffer
-			err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
+			clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
 		}
+
+		err = buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 
 		if err != nil {
 			return errors.New("failed to transfer request payload").Base(err).AtInfo()
@@ -598,7 +595,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 
 		// default: clientWriter := bufferWriter
-		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx)
+		clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
 		multiBuffer, err1 := serverReader.ReadMultiBuffer()
 		if err1 != nil {
 			return err1 // ...
@@ -611,13 +608,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return errors.New("failed to write A response payload").Base(err).AtWarning()
 		}
 
-		var err error
-		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsWrite(serverReader, clientWriter, timer, connection, trafficState, nil, false, ctx)
-		} else {
-			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
-			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
-		}
+		err := buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
 		if err != nil {
 			return errors.New("failed to transfer response payload").Base(err).AtInfo()
 		}
