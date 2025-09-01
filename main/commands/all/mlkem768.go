@@ -40,11 +40,21 @@ func executeMLKEM768(cmd *base.Command, args []string) {
 	} else {
 		rand.Read(seed[:])
 	}
-	key, _ := mlkem.NewDecapsulationKey768(seed[:])
-	client := key.EncapsulationKey().Bytes()
-	hash32 := blake3.Sum256(client)
-	fmt.Printf("Seed: %v\nClient: %v\nHash32: %v",
+	seed, client, hash32 := genMLKEM768(&seed)
+	fmt.Printf("Seed: %v\nClient: %v\nHash32: %v\n",
 		base64.RawURLEncoding.EncodeToString(seed[:]),
 		base64.RawURLEncoding.EncodeToString(client),
 		base64.RawURLEncoding.EncodeToString(hash32[:]))
+}
+
+func genMLKEM768(inputSeed *[64]byte) (seed [64]byte, client []byte, hash32 [32]byte) {
+	if inputSeed == nil {
+		rand.Read(seed[:])
+	} else {
+		seed = *inputSeed
+	}
+	key, _ := mlkem.NewDecapsulationKey768(seed[:])
+	client = key.EncapsulationKey().Bytes()
+	hash32 = blake3.Sum256(client)
+	return
 }

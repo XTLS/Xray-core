@@ -21,9 +21,24 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 	if len(input_base64) > 0 {
 		privateKey, _ = encoding.DecodeString(input_base64)
 		if len(privateKey) != 32 {
-			fmt.Println("Invalid length of X25519 private key.")
+			fmt.Println("invalid length of X25519 private key")
 			return
 		}
+	}
+	privateKey, password, hash32, err := genCurve25519(privateKey)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("PrivateKey: %v\nPassword: %v\nHash32: %v\n",
+		encoding.EncodeToString(privateKey),
+		encoding.EncodeToString(password),
+		encoding.EncodeToString(hash32[:]))
+}
+
+func genCurve25519(inputPrivateKey []byte) (privateKey []byte, publicKey []byte, hash32 [32]byte, returnErr error) {
+	if len(inputPrivateKey) > 0 {
+		privateKey = inputPrivateKey
 	}
 	if privateKey == nil {
 		privateKey = make([]byte, 32)
@@ -39,13 +54,10 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 
 	key, err := ecdh.X25519().NewPrivateKey(privateKey)
 	if err != nil {
-		fmt.Println(err.Error())
+		returnErr = err
 		return
 	}
-	password := key.PublicKey().Bytes()
-	hash32 := blake3.Sum256(password)
-	fmt.Printf("PrivateKey: %v\nPassword: %v\nHash32: %v",
-		encoding.EncodeToString(privateKey),
-		encoding.EncodeToString(password),
-		encoding.EncodeToString(hash32[:]))
+	publicKey = key.PublicKey().Bytes()
+	hash32 = blake3.Sum256(publicKey)
+	return
 }
