@@ -7,34 +7,32 @@ import (
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
-var cmdVLESSEncryption = &base.Command{
-	UsageLine: `{{.Exec}} vlessencryption [-key x25519/mlkem]`,
+var cmdVLESSEnc = &base.Command{
+	UsageLine: `{{.Exec}} vlessenc [-key x25519/mlkem]`,
 	Short:     `Generate encryption/decryption pair for VLESS encryption`,
 	Long: `
 Generate encryption/decryption pair with suggested default value for VLESS encryption.
 
-Random: {{.Exec}} vlessencryption
-
-From seed: {{.Exec}} vlessencryption [-key x25519/mlkem] [-mode native/xorpub/random]"
+Custom key type and mode: {{.Exec}} vlessenc [-key x25519/mlkem] [-mode native/xorpub/random]"
 `,
 }
 
 func init() {
-	cmdVLESSEncryption.Run = executeVLESSEncryption // break init loop
+	cmdVLESSEnc.Run = executeVLESSEnc // break init loop
 }
 
-var input_vlessencryption_key = cmdVLESSEncryption.Flag.String("key", "x25519", "")
-var input_vlessencryption_mode = cmdVLESSEncryption.Flag.String("mode", "random", "")
+var input_vlessenc_key = cmdVLESSEnc.Flag.String("key", "x25519", "")
+var input_vlessenc_mode = cmdVLESSEnc.Flag.String("mode", "random", "")
 
-func executeVLESSEncryption(cmd *base.Command, args []string) {
-	switch *input_vlessencryption_mode {
+func executeVLESSEnc(cmd *base.Command, args []string) {
+	switch *input_vlessenc_mode {
 	case "native", "random", "xorpub":
 	default:
-		fmt.Println("invalid mode: ", *input_vlessencryption_mode)
+		fmt.Println("invalid mode: ", *input_vlessenc_mode)
 		return
 	}
 	var serverKey, clientKey string
-	switch *input_vlessencryption_key {
+	switch *input_vlessenc_key {
 	case "x25519":
 		privateKey, publicKey, _, _ := genCurve25519(nil)
 		serverKey = base64.RawURLEncoding.EncodeToString(privateKey)
@@ -44,11 +42,11 @@ func executeVLESSEncryption(cmd *base.Command, args []string) {
 		serverKey = base64.RawURLEncoding.EncodeToString(seed[:])
 		clientKey = base64.RawURLEncoding.EncodeToString(client)
 	default:
-		fmt.Println("invalid key type: ", *input_vlessencryption_key)
+		fmt.Println("invalid key type: ", *input_vlessenc_key)
 		return
 	}
-	encryption := generatePointConfig("mlkem768x25519plus", *input_vlessencryption_mode, "600s", serverKey)
-	decryption := generatePointConfig("mlkem768x25519plus", *input_vlessencryption_mode, "0rtt", clientKey)
+	encryption := generatePointConfig("mlkem768x25519plus", *input_vlessenc_mode, "600s", serverKey)
+	decryption := generatePointConfig("mlkem768x25519plus", *input_vlessenc_mode, "0rtt", clientKey)
 	fmt.Printf("------encryption------\n%v\n------decryption------\n%v\n", decryption, encryption)
 }
 

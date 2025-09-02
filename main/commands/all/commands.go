@@ -18,6 +18,6 @@ func init() {
 		cmdWG,
 		cmdMLDSA65,
 		cmdMLKEM768,
-		cmdVLESSEncryption,
+		cmdVLESSEnc,
 	)
 }
