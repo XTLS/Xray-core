@@ -96,16 +96,18 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		default:
 			return false
 		}
-		if s[2] != "1rtt" {
-			t := strings.TrimSuffix(s[2], "s")
-			if t == s[2] {
-				return false
-			}
-			i, err := strconv.Atoi(t)
+		t := strings.SplitN(strings.TrimSuffix(s[2], "s"), "-", 2)
+		i, err := strconv.Atoi(t[0])
+		if err != nil {
+			return false
+		}
+		config.SecondsFrom = uint32(i)
+		if len(t) > 1 {
+			i, err := strconv.Atoi(t[1])
 			if err != nil {
 				return false
 			}
-			config.Seconds = uint32(i)
+			config.SecondsTo = uint32(i)
 		}
 		padding := 0
 		for _, r := range s[3:] {

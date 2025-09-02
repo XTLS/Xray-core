@@ -93,7 +93,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 			nfsSKeysBytes = append(nfsSKeysBytes, b)
 		}
 		handler.decryption = &encryption.ServerInstance{}
-		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.Seconds, config.Padding); err != nil {
+		if err := handler.decryption.Init(nfsSKeysBytes, config.XorMode, config.SecondsFrom, config.SecondsTo, config.Padding); err != nil {
 			return nil, errors.New("failed to use decryption").Base(err).AtError()
 		}
 	}
@@ -176,9 +176,6 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.decryption != nil {
-		h.decryption.Close()
-	}
 	return errors.Combine(common.Close(h.validator))
 }
 

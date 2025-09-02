@@ -18,7 +18,6 @@ import (
 )
 
 type ServerSession struct {
-	Expire  time.Time
 	PfsKey  []byte
 	NfsKeys sync.Map
 }
@@ -29,16 +28,16 @@ type ServerInstance struct {
 	Hash32s       [][32]byte
 	RelaysLength  int
 	XorMode       uint32
-	Seconds       uint32
+	SecondsFrom   uint32
+	SecondsTo     uint32
 	PaddingLens   [][3]int
 	PaddingGaps   [][3]int
 
 	RWLock   sync.RWMutex
 	Sessions map[[16]byte]*ServerSession
-	Closed   bool
 }
 
-func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode, seconds uint32, padding string) (err error) {
+func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode, secondsFrom, secondsTo uint32, padding string) (err error) {
 	if i.NfsSKeys != nil {
 		return errors.New("already initialized")
 	}
@@ -67,35 +66,10 @@ func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode, seconds uint32, p
 	}
 	i.RelaysLength -= 32
 	i.XorMode = xorMode
-	if seconds > 0 {
-		i.Seconds = seconds
-		i.Sessions = make(map[[16]byte]*ServerSession)
-		go func() {
-			for {
-				time.Sleep(time.Minute)
-				i.RWLock.Lock()
-				if i.Closed {
-					i.RWLock.Unlock()
-					return
-				}
-				now := time.Now()
-				for ticket, session := range i.Sessions {
-					if now.After(session.Expire) {
-						delete(i.Sessions, ticket)
-					}
-				}
-				i.RWLock.Unlock()
-			}
-		}()
-	}
+	i.SecondsFrom = secondsFrom
+	i.SecondsTo = secondsTo
+	i.Sessions = make(map[[16]byte]*ServerSession)
 	return ParsePadding(padding, &i.PaddingLens, &i.PaddingGaps)
-}
-
-func (i *ServerInstance) Close() (err error) {
-	i.RWLock.Lock()
-	i.Closed = true
-	i.RWLock.Unlock()
-	return
 }
 
 func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn, error) {
@@ -132,7 +106,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 				return nil, err
 			}
 			if publicKey.Bytes()[31] > 127 { // we just don't want the observer can change even one bit without breaking the connection, though it has nothing to do with security
-				return nil, errors.New("the highest bit of the last byte of the peer-sent X25519 public key must be 0")
+				return nil, errors.New("the highest bit of the last byte of the peer-sent X25519 public key is not 0")
 			}
 			nfsKey, err = k.ECDH(publicKey)
 			if err != nil {
@@ -180,7 +154,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	length := DecodeLength(decryptedLength)
 
 	if length == 32 {
-		if i.Seconds == 0 {
+		if i.SecondsFrom == 0 && i.SecondsTo == 0 {
 			return nil, errors.New("0-RTT is not allowed")
 		}
 		encryptedTicket := make([]byte, 32)
@@ -252,14 +226,23 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 
 	ticket := make([]byte, 16)
 	rand.Read(ticket)
-	copy(ticket, EncodeLength(int(i.Seconds*4/5)))
-	if i.Seconds > 0 {
+	seconds := 0
+	if i.SecondsTo == 0 {
+		seconds = int(i.SecondsFrom) * int(crypto.RandBetween(50, 100)) / 100
+	} else {
+		seconds = int(crypto.RandBetween(int64(i.SecondsFrom), int64(i.SecondsTo)))
+	}
+	copy(ticket, EncodeLength(int(seconds)))
+	if seconds > 0 {
 		i.RWLock.Lock()
-		i.Sessions[[16]byte(ticket)] = &ServerSession{
-			Expire: time.Now().Add(time.Duration(i.Seconds) * time.Second),
-			PfsKey: pfsKey,
-		}
+		i.Sessions[[16]byte(ticket)] = &ServerSession{PfsKey: pfsKey}
 		i.RWLock.Unlock()
+		go func() {
+			time.Sleep(time.Duration(seconds)*time.Second + time.Minute)
+			i.RWLock.Lock()
+			delete(i.Sessions, [16]byte(ticket))
+			i.RWLock.Unlock()
+		}()
 	}
 
 	pfsKeyExchangeLength := 1088 + 32 + 16
