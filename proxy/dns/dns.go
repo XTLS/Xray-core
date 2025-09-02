@@ -168,11 +168,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, h.timeout)
+	terminate := func() {
+		cancel()
+		conn.Close()
+	}
+	timer := signal.CancelAfterInactivity(ctx, terminate, h.timeout)
+	defer timer.SetTimeout(0)
 
 	request := func() error {
-		defer conn.Close()
-
+		defer timer.SetTimeout(0)
 		for {
 			b, err := reader.ReadMessage()
 			if err == io.EOF {
@@ -219,6 +223,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	}
 
 	response := func() error {
+		defer timer.SetTimeout(0)
 		for {
 			b, err := connReader.ReadMessage()
 			if err == io.EOF {
@@ -371,6 +376,7 @@ type outboundConn struct {
 
 	conn      net.Conn
 	connReady chan struct{}
+	closed    bool
 }
 
 func (c *outboundConn) dial() error {
@@ -385,12 +391,16 @@ func (c *outboundConn) dial() error {
 
 func (c *outboundConn) Write(b []byte) (int, error) {
 	c.access.Lock()
+	if c.closed {
+		c.access.Unlock()
+		return 0, errors.New("outbound connection closed")
+	}
 
 	if c.conn == nil {
 		if err := c.dial(); err != nil {
 			c.access.Unlock()
 			errors.LogWarningInner(context.Background(), err, "failed to dial outbound connection")
-			return len(b), nil
+			return 0, err
 		}
 	}
 
@@ -400,24 +410,27 @@ func (c *outboundConn) Write(b []byte) (int, error) {
 }
 
 func (c *outboundConn) Read(b []byte) (int, error) {
-	var conn net.Conn
 	c.access.Lock()
-	conn = c.conn
-	c.access.Unlock()
+	if c.closed {
+		c.access.Unlock()
+		return 0, io.EOF
+	}
 
-	if conn == nil {
+	if c.conn == nil {
+		c.access.Unlock()
 		_, open := <-c.connReady
 		if !open {
 			return 0, io.EOF
 		}
-		conn = c.conn
+	} else {
+		c.access.Unlock()
 	}
-
-	return conn.Read(b)
+	return c.conn.Read(b)
 }
 
 func (c *outboundConn) Close() error {
 	c.access.Lock()
+	c.closed = true
 	close(c.connReady)
 	if c.conn != nil {
 		c.conn.Close()
