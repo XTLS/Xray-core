@@ -166,8 +166,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			var t reflect.Type
 			var p uintptr
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
-				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransport(iConn) {
-					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport can not use Linux Splice
+				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
+					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 				}
 				t = reflect.TypeOf(commonConn).Elem()
 				p = uintptr(unsafe.Pointer(commonConn))

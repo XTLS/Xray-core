@@ -96,7 +96,7 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if !proxy.IsRAWTransport(conn) {
+	if !proxy.IsRAWTransportWithoutSecurity(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 	var reader *bufio.Reader

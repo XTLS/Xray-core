@@ -337,7 +337,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		w.directWriteCounter = writerCounter
 		*switchToDirectCopy = false
 	}
-	if !mb.IsEmpty() &&  w.directWriteCounter != nil {
+	if !mb.IsEmpty() && w.directWriteCounter != nil {
 		w.directWriteCounter.Add(int64(mb.Len()))
 	}
 
@@ -725,7 +725,7 @@ func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer sign
 	return nil
 }
 
-func IsRAWTransport(conn stat.Connection) bool {
+func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
 	iConn := conn
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection

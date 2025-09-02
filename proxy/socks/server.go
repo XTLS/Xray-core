@@ -75,7 +75,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if !proxy.IsRAWTransport(conn) {
+	if !proxy.IsRAWTransportWithoutSecurity(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 
