@@ -8,12 +8,12 @@ import (
 )
 
 var cmdVLESSEnc = &base.Command{
-	UsageLine: `{{.Exec}} vlessenc [-key x25519/mlkem]`,
+	UsageLine: `{{.Exec}} vlessenc [-pq]`,
 	Short:     `Generate encryption/decryption pair for VLESS encryption`,
 	Long: `
 Generate encryption/decryption pair with suggested default value for VLESS encryption.
 
-Custom key type and mode: {{.Exec}} vlessenc [-key x25519/mlkem] [-mode native/xorpub/random]"
+Generate with MLKEM: {{.Exec}} vlessenc [-pq]"
 `,
 }
 
@@ -21,32 +21,21 @@ func init() {
 	cmdVLESSEnc.Run = executeVLESSEnc // break init loop
 }
 
-var input_vlessenc_key = cmdVLESSEnc.Flag.String("key", "x25519", "")
-var input_vlessenc_mode = cmdVLESSEnc.Flag.String("mode", "random", "")
+var input_vlessenc_useMLKEM = cmdVLESSEnc.Flag.Bool("pq", false, "use post quantum MLKEM algorithm")
 
 func executeVLESSEnc(cmd *base.Command, args []string) {
-	switch *input_vlessenc_mode {
-	case "native", "random", "xorpub":
-	default:
-		fmt.Println("invalid mode: ", *input_vlessenc_mode)
-		return
-	}
 	var serverKey, clientKey string
-	switch *input_vlessenc_key {
-	case "x25519":
-		privateKey, publicKey, _, _ := genCurve25519(nil)
-		serverKey = base64.RawURLEncoding.EncodeToString(privateKey)
-		clientKey = base64.RawURLEncoding.EncodeToString(publicKey)
-	case "mlkem":
+	if *input_vlessenc_useMLKEM {
 		seed, client, _ := genMLKEM768(nil)
 		serverKey = base64.RawURLEncoding.EncodeToString(seed[:])
 		clientKey = base64.RawURLEncoding.EncodeToString(client)
-	default:
-		fmt.Println("invalid key type: ", *input_vlessenc_key)
-		return
+	} else {
+		privateKey, publicKey, _, _ := genCurve25519(nil)
+		serverKey = base64.RawURLEncoding.EncodeToString(privateKey)
+		clientKey = base64.RawURLEncoding.EncodeToString(publicKey)
 	}
-	encryption := generatePointConfig("mlkem768x25519plus", *input_vlessenc_mode, "600s", serverKey)
-	decryption := generatePointConfig("mlkem768x25519plus", *input_vlessenc_mode, "0rtt", clientKey)
+	encryption := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKey)
+	decryption := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKey)
 	fmt.Printf("------encryption------\n%v\n------decryption------\n%v\n", decryption, encryption)
 }
 

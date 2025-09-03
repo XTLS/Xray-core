@@ -40,7 +40,7 @@ func executeMLDSA65(cmd *base.Command, args []string) {
 		rand.Read(seed[:])
 	}
 	pub, _ := mldsa65.NewKeyFromSeed(&seed)
-	fmt.Printf("Seed: %v\nVerify: %v",
+	fmt.Printf("Seed: %v\nVerify: %v\n",
 		base64.RawURLEncoding.EncodeToString(seed[:]),
 		base64.RawURLEncoding.EncodeToString(pub.Bytes()))
 }
