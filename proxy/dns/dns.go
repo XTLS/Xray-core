@@ -422,9 +422,9 @@ func (c *outboundConn) Read(b []byte) (int, error) {
 		if !open {
 			return 0, io.EOF
 		}
-	} else {
-		c.access.Unlock()
+		return c.conn.Read(b)
 	}
+	c.access.Unlock()
 	return c.conn.Read(b)
 }
 
