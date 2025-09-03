@@ -21,22 +21,21 @@ func init() {
 	cmdVLESSEnc.Run = executeVLESSEnc // break init loop
 }
 
-var input_vlessenc_useMLKEM = cmdVLESSEnc.Flag.Bool("pq", false, "use post quantum MLKEM algorithm")
-
 func executeVLESSEnc(cmd *base.Command, args []string) {
-	var serverKey, clientKey string
-	if *input_vlessenc_useMLKEM {
-		seed, client, _ := genMLKEM768(nil)
-		serverKey = base64.RawURLEncoding.EncodeToString(seed[:])
-		clientKey = base64.RawURLEncoding.EncodeToString(client)
-	} else {
-		privateKey, publicKey, _, _ := genCurve25519(nil)
-		serverKey = base64.RawURLEncoding.EncodeToString(privateKey)
-		clientKey = base64.RawURLEncoding.EncodeToString(publicKey)
-	}
+	fmt.Printf("Choose one authentication to use, do not mix them. Key exchange is Post-Quantum safe anyway.\n\n")
+	privateKey, publicKey, _, _ := genCurve25519(nil)
+	serverKey := base64.RawURLEncoding.EncodeToString(privateKey)
+	clientKey := base64.RawURLEncoding.EncodeToString(publicKey)
 	encryption := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKey)
 	decryption := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKey)
-	fmt.Printf("------encryption------\n%v\n------decryption------\n%v\n", decryption, encryption)
+	fmt.Printf("------ encryption (Authentication: X25519, not Post-Quantum) ------\n%v\n------ decryption (Authentication: X25519, not Post-Quantum) ------\n%v\n", decryption, encryption)
+	fmt.Println("")
+	seed, client, _ := genMLKEM768(nil)
+	serverKeyPQ := base64.RawURLEncoding.EncodeToString(seed[:])
+	clientKeyPQ := base64.RawURLEncoding.EncodeToString(client)
+	encryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKeyPQ)
+	decryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKeyPQ)
+	fmt.Printf("------ encryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n------ decryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n", decryptionPQ, encryptionPQ)
 }
 
 func generatePointConfig(fields ...string) string {
