@@ -4,6 +4,7 @@ import (
 	"context"
 	go_errors "errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -348,6 +349,10 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 }
 
 func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) error {
+	domainT := strings.TrimSuffix(domain, ".")
+	if domainT == "" {
+		return errors.New("empty domain name")
+	}
 	b := buf.New()
 	rawBytes := b.Extend(buf.Size)
 	builder := dnsmessage.NewBuilder(rawBytes[:0], dnsmessage.Header{
