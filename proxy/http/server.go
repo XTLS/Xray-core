@@ -193,7 +193,7 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, buffer *buf
 		inbound.CanSpliceCopy = 1
 	}
 	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
-		Reader: &buf.TimeoutWrapperReader{Reader: reader},
+		Reader: reader,
 		Writer: buf.NewWriter(conn)},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)

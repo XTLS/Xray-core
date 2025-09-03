@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -200,6 +201,7 @@ func (w *BridgeWorker) DispatchLink(ctx context.Context, dest net.Destination, l
 		return w.dispatcher.DispatchLink(ctx, dest, link)
 	}
 
+	link = w.dispatcher.(*dispatcher.DefaultDispatcher).WrapLink(ctx, link)
 	w.handleInternalConn(link)
 
 	return nil

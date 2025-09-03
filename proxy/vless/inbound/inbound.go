@@ -563,7 +563,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	bufferWriter.SetFlushNext()
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: &buf.TimeoutWrapperReader{Reader: clientReader},
+		Reader: clientReader,
 		Writer: clientWriter},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)

@@ -30,6 +30,7 @@ type TimeoutReader interface {
 
 type TimeoutWrapperReader struct {
 	Reader
+	stats.Counter
 	mb   MultiBuffer
 	err  error
 	done chan struct{}
@@ -39,11 +40,16 @@ func (r *TimeoutWrapperReader) ReadMultiBuffer() (MultiBuffer, error) {
 	if r.done != nil {
 		<-r.done
 		r.done = nil
+		if r.Counter != nil {
+			r.Counter.Add(int64(r.mb.Len()))
+		}
 		return r.mb, r.err
 	}
-	r.mb = nil
-	r.err = nil
-	return r.Reader.ReadMultiBuffer()
+	r.mb, r.err = r.Reader.ReadMultiBuffer()
+	if r.Counter != nil {
+		r.Counter.Add(int64(r.mb.Len()))
+	}
+	return r.mb, r.err
 }
 
 func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (MultiBuffer, error) {
@@ -62,6 +68,9 @@ func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (M
 	select {
 	case <-r.done:
 		r.done = nil
+		if r.Counter != nil {
+			r.Counter.Add(int64(r.mb.Len()))
+		}
 		return r.mb, r.err
 	case <-timeout:
 		return nil, nil
