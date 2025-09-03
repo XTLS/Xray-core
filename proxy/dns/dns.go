@@ -194,24 +194,36 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				if len(h.blockTypes) > 0 {
 					for _, blocktype := range h.blockTypes {
 						if blocktype == int32(qType) {
-							if h.nonIPQuery == "reject" {
-								go h.rejectNonIPQuery(id, qType, domain, writer)
-							}
+							b.Release()
 							errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
+							if h.nonIPQuery == "reject" {
+								err := h.rejectNonIPQuery(id, qType, domain, writer)
+								if err != nil {
+									return err
+								}
+							}
 							return nil
 						}
 					}
 				}
 				if isIPQuery {
-					go h.handleIPQuery(id, qType, domain, writer)
+					b.Release()
+					err := h.handleIPQuery(id, qType, domain, writer)
+					if err != nil {
+						return err
+					}
+					continue
 				}
-				if isIPQuery || h.nonIPQuery == "drop" {
+				if h.nonIPQuery == "drop" {
 					b.Release()
 					continue
 				}
 				if h.nonIPQuery == "reject" {
-					go h.rejectNonIPQuery(id, qType, domain, writer)
 					b.Release()
+					err := h.rejectNonIPQuery(id, qType, domain, writer)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 			}
@@ -249,7 +261,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	return nil
 }
 
-func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
+func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) error {
 	var ips []net.IP
 	var err error
 
@@ -274,7 +286,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	rcode := dns.RCodeFromError(err)
 	if rcode == 0 && len(ips) == 0 && !go_errors.Is(err, dns.ErrEmptyResponse) {
 		errors.LogInfoInner(context.Background(), err, "ip query")
-		return
+		return err
 	}
 
 	switch qType {
@@ -324,16 +336,18 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "pack message")
 		b.Release()
-		return
+		return err
 	}
 	b.Resize(0, int32(len(msgBytes)))
 
 	if err := writer.WriteMessage(b); err != nil {
 		errors.LogInfoInner(context.Background(), err, "write IP answer")
+		return err
 	}
+	return nil
 }
 
-func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) {
+func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) error {
 	b := buf.New()
 	rawBytes := b.Extend(buf.Size)
 	builder := dnsmessage.NewBuilder(rawBytes[:0], dnsmessage.Header{
@@ -354,20 +368,22 @@ func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain stri
 	if err != nil {
 		errors.LogInfo(context.Background(), "unexpected domain ", domain, " when building reject message: ", err)
 		b.Release()
-		return
+		return err
 	}
 
 	msgBytes, err := builder.Finish()
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "pack reject message")
 		b.Release()
-		return
+		return err
 	}
 	b.Resize(0, int32(len(msgBytes)))
 
 	if err := writer.WriteMessage(b); err != nil {
 		errors.LogInfoInner(context.Background(), err, "write reject answer")
+		return err
 	}
+	return nil
 }
 
 type outboundConn struct {
