@@ -26,16 +26,16 @@ func executeVLESSEnc(cmd *base.Command, args []string) {
 	privateKey, publicKey, _, _ := genCurve25519(nil)
 	serverKey := base64.RawURLEncoding.EncodeToString(privateKey)
 	clientKey := base64.RawURLEncoding.EncodeToString(publicKey)
-	encryption := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKey)
-	decryption := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKey)
-	fmt.Printf("------ encryption (Authentication: X25519, not Post-Quantum) ------\n%v\n------ decryption (Authentication: X25519, not Post-Quantum) ------\n%v\n", decryption, encryption)
+	decryption := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKey)
+	encryption := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKey)
+	fmt.Printf("------ decryption (Authentication: X25519, not Post-Quantum) ------\n%v\n------ encryption (Authentication: X25519, not Post-Quantum) ------\n%v\n", decryption, encryption)
 	fmt.Println("")
 	seed, client, _ := genMLKEM768(nil)
 	serverKeyPQ := base64.RawURLEncoding.EncodeToString(seed[:])
 	clientKeyPQ := base64.RawURLEncoding.EncodeToString(client)
-	encryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKeyPQ)
-	decryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKeyPQ)
-	fmt.Printf("------ encryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n------ decryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n", decryptionPQ, encryptionPQ)
+	decryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKeyPQ)
+	encryptionPQ := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKeyPQ)
+	fmt.Printf("------ decryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n------ encryption (Authentication: ML-KEM-768, Post-Quantum) ------\n%v\n", decryptionPQ, encryptionPQ)
 }
 
 func generatePointConfig(fields ...string) string {
