@@ -209,10 +209,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				}
 				if isIPQuery {
 					b.Release()
-					err := h.handleIPQuery(id, qType, domain, writer)
-					if err != nil {
-						return err
-					}
+					go h.handleIPQuery(id, qType, domain, writer)
 					continue
 				}
 				if h.nonIPQuery == "drop" {
