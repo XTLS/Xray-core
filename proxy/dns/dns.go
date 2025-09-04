@@ -209,7 +209,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				}
 				if isIPQuery {
 					b.Release()
-					go h.handleIPQuery(id, qType, domain, writer)
+					go h.handleIPQuery(id, qType, domain, writer, timer)
 					continue
 				}
 				if h.nonIPQuery == "drop" {
@@ -259,7 +259,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	return nil
 }
 
-func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) error {
+func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter, timer *signal.ActivityTimer) {
 	var ips []net.IP
 	var err error
 
@@ -284,7 +284,7 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	rcode := dns.RCodeFromError(err)
 	if rcode == 0 && len(ips) == 0 && !go_errors.Is(err, dns.ErrEmptyResponse) {
 		errors.LogInfoInner(context.Background(), err, "ip query")
-		return err
+		return
 	}
 
 	switch qType {
@@ -334,15 +334,14 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "pack message")
 		b.Release()
-		return err
+		timer.SetTimeout(0)
 	}
 	b.Resize(0, int32(len(msgBytes)))
 
 	if err := writer.WriteMessage(b); err != nil {
 		errors.LogInfoInner(context.Background(), err, "write IP answer")
-		return err
+		timer.SetTimeout(0)
 	}
-	return nil
 }
 
 func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain string, writer dns_proto.MessageWriter) error {
