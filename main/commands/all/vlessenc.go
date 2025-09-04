@@ -9,11 +9,11 @@ import (
 
 var cmdVLESSEnc = &base.Command{
 	UsageLine: `{{.Exec}} vlessenc [-pq]`,
-	Short:     `Generate encryption/decryption pair for VLESS encryption`,
+	Short:     `Generate encryption/decryption pair for VLESS encryption (VLESS)`,
 	Long: `
-Generate encryption/decryption pair with suggested default value for VLESS encryption.
+Generate encryption/decryption pair with suggested default value for VLESS encryption (VLESS).
 
-Generate with MLKEM: {{.Exec}} vlessenc [-pq]"
+Generate with MLKEM: {{.Exec}} vlessenc"
 `,
 }
 
@@ -23,9 +23,9 @@ func init() {
 
 func executeVLESSEnc(cmd *base.Command, args []string) {
 	fmt.Printf("Choose one authentication to use, do not mix them. Key exchange is Post-Quantum safe anyway.\n\n")
-	privateKey, publicKey, _, _ := genCurve25519(nil)
+	privateKey, password, _, _ := genCurve25519(nil)
 	serverKey := base64.RawURLEncoding.EncodeToString(privateKey)
-	clientKey := base64.RawURLEncoding.EncodeToString(publicKey)
+	clientKey := base64.RawURLEncoding.EncodeToString(password)
 	decryption := generatePointConfig("mlkem768x25519plus", "native", "600s", serverKey)
 	encryption := generatePointConfig("mlkem768x25519plus", "native", "0rtt", clientKey)
 	fmt.Printf("------ decryption (Authentication: X25519, not Post-Quantum) ------\n%v\n------ encryption (Authentication: X25519, not Post-Quantum) ------\n%v\n", decryption, encryption)
