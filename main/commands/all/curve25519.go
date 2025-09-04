@@ -36,7 +36,7 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 		encoding.EncodeToString(hash32[:]))
 }
 
-func genCurve25519(inputPrivateKey []byte) (privateKey []byte, publicKey []byte, hash32 [32]byte, returnErr error) {
+func genCurve25519(inputPrivateKey []byte) (privateKey []byte, password []byte, hash32 [32]byte, returnErr error) {
 	if len(inputPrivateKey) > 0 {
 		privateKey = inputPrivateKey
 	}
@@ -57,7 +57,7 @@ func genCurve25519(inputPrivateKey []byte) (privateKey []byte, publicKey []byte,
 		returnErr = err
 		return
 	}
-	publicKey = key.PublicKey().Bytes()
-	hash32 = blake3.Sum256(publicKey)
+	password = key.PublicKey().Bytes()
+	hash32 = blake3.Sum256(password)
 	return
 }
