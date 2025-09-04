@@ -23,7 +23,7 @@ message Config {
 
   string decryption = 3;
   uint32 xorMode = 4;
-  uint32 seconds_from = 5;
-  uint32 seconds_to = 6;
+  int64 seconds_from = 5;
+  int64 seconds_to = 6;
   string padding = 7;
 }

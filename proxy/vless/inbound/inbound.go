@@ -176,6 +176,9 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
+	if h.decryption != nil {
+		h.decryption.Close()
+	}
 	return errors.Combine(common.Close(h.validator))
 }
 

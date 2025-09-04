@@ -28,16 +28,19 @@ type ServerInstance struct {
 	Hash32s       [][32]byte
 	RelaysLength  int
 	XorMode       uint32
-	SecondsFrom   uint32
-	SecondsTo     uint32
+	SecondsFrom   int64
+	SecondsTo     int64
 	PaddingLens   [][3]int
 	PaddingGaps   [][3]int
 
 	RWLock   sync.RWMutex
+	Closed   bool
+	Lasts    map[int64][16]byte
+	Tickets  [][16]byte
 	Sessions map[[16]byte]*ServerSession
 }
 
-func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode, secondsFrom, secondsTo uint32, padding string) (err error) {
+func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode uint32, secondsFrom, secondsTo int64, padding string) (err error) {
 	if i.NfsSKeys != nil {
 		return errors.New("already initialized")
 	}
@@ -68,8 +71,47 @@ func (i *ServerInstance) Init(nfsSKeysBytes [][]byte, xorMode, secondsFrom, seco
 	i.XorMode = xorMode
 	i.SecondsFrom = secondsFrom
 	i.SecondsTo = secondsTo
-	i.Sessions = make(map[[16]byte]*ServerSession)
-	return ParsePadding(padding, &i.PaddingLens, &i.PaddingGaps)
+	err = ParsePadding(padding, &i.PaddingLens, &i.PaddingGaps)
+	if err != nil {
+		return
+	}
+	if i.SecondsFrom > 0 || i.SecondsTo > 0 {
+		i.Lasts = make(map[int64][16]byte)
+		i.Tickets = make([][16]byte, 0, 1024)
+		i.Sessions = make(map[[16]byte]*ServerSession)
+		go func() {
+			for {
+				time.Sleep(time.Minute)
+				i.RWLock.Lock()
+				if i.Closed {
+					i.RWLock.Unlock()
+					return
+				}
+				minute := time.Now().Unix() / 60
+				last := i.Lasts[minute]
+				delete(i.Lasts, minute)
+				delete(i.Lasts, minute-1) // for insurance
+				if last != [16]byte{} {
+					for j, ticket := range i.Tickets {
+						delete(i.Sessions, ticket)
+						if ticket == last {
+							i.Tickets = i.Tickets[j+1:]
+							break
+						}
+					}
+				}
+				i.RWLock.Unlock()
+			}
+		}()
+	}
+	return
+}
+
+func (i *ServerInstance) Close() (err error) {
+	i.RWLock.Lock()
+	i.Closed = true
+	i.RWLock.Unlock()
+	return
 }
 
 func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn, error) {
@@ -224,25 +266,21 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	c.AEAD = NewAEAD(pfsPublicKey, c.UnitedKey, c.UseAES)
 	c.PeerAEAD = NewAEAD(encryptedPfsPublicKey[:1184+32], c.UnitedKey, c.UseAES)
 
-	ticket := make([]byte, 16)
-	rand.Read(ticket)
-	seconds := 0
+	ticket := [16]byte{}
+	rand.Read(ticket[:])
+	var seconds int64
 	if i.SecondsTo == 0 {
-		seconds = int(i.SecondsFrom) * int(crypto.RandBetween(50, 100)) / 100
+		seconds = i.SecondsFrom * crypto.RandBetween(50, 100) / 100
 	} else {
-		seconds = int(crypto.RandBetween(int64(i.SecondsFrom), int64(i.SecondsTo)))
+		seconds = crypto.RandBetween(i.SecondsFrom, i.SecondsTo)
 	}
-	copy(ticket, EncodeLength(int(seconds)))
+	copy(ticket[:], EncodeLength(int(seconds)))
 	if seconds > 0 {
 		i.RWLock.Lock()
-		i.Sessions[[16]byte(ticket)] = &ServerSession{PfsKey: pfsKey}
+		i.Lasts[(time.Now().Unix()+max(i.SecondsFrom, i.SecondsTo))/60+2] = ticket
+		i.Tickets = append(i.Tickets, ticket)
+		i.Sessions[ticket] = &ServerSession{PfsKey: pfsKey}
 		i.RWLock.Unlock()
-		go func() {
-			time.Sleep(time.Duration(seconds)*time.Second + time.Minute)
-			i.RWLock.Lock()
-			delete(i.Sessions, [16]byte(ticket))
-			i.RWLock.Unlock()
-		}()
 	}
 
 	pfsKeyExchangeLength := 1088 + 32 + 16
@@ -250,7 +288,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	paddingLength, paddingLens, paddingGaps := CreatPadding(i.PaddingLens, i.PaddingGaps)
 	serverHello := make([]byte, pfsKeyExchangeLength+encryptedTicketLength+paddingLength)
 	nfsAEAD.Seal(serverHello[:0], MaxNonce, pfsPublicKey, nil)
-	c.AEAD.Seal(serverHello[:pfsKeyExchangeLength], nil, ticket, nil)
+	c.AEAD.Seal(serverHello[:pfsKeyExchangeLength], nil, ticket[:], nil)
 	padding := serverHello[pfsKeyExchangeLength+encryptedTicketLength:]
 	c.AEAD.Seal(padding[:0], nil, EncodeLength(paddingLength-18), nil)
 	c.AEAD.Seal(padding[:18], nil, padding[18:paddingLength-16], nil)
@@ -284,7 +322,7 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	}
 
 	if i.XorMode == 2 {
-		c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, ticket), NewCTR(c.UnitedKey, iv), 0, 0)
+		c.Conn = NewXorConn(conn, NewCTR(c.UnitedKey, ticket[:]), NewCTR(c.UnitedKey, iv), 0, 0)
 	}
 	return c, nil
 }

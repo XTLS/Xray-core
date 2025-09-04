@@ -101,13 +101,13 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		if err != nil {
 			return false
 		}
-		config.SecondsFrom = uint32(i)
-		if len(t) > 1 {
+		config.SecondsFrom = int64(i)
+		if len(t) == 2 {
 			i, err := strconv.Atoi(t[1])
 			if err != nil {
 				return false
 			}
-			config.SecondsTo = uint32(i)
+			config.SecondsTo = int64(i)
 		}
 		padding := 0
 		for _, r := range s[3:] {
