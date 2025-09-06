@@ -10,10 +10,10 @@ import (
 	"hash/crc32"
 	"io"
 	"math"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/antireplay"
+	"github.com/xtls/xray-core/proxy/vmess/time"
 )
 
 var (

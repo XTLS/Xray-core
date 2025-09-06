@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/proxy/vmess/time"
 )
 
 func SealVMessAEADHeader(key [16]byte, data []byte) []byte {

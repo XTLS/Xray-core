@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/vmess"
+	xtime "github.com/xtls/xray-core/proxy/vmess/time"
 )
 
 func (h *Handler) handleSwitchAccount(cmd *protocol.CommandSwitchAccount) {
@@ -25,7 +26,7 @@ func (h *Handler) handleSwitchAccount(cmd *protocol.CommandSwitchAccount) {
 		Account: account,
 	}
 	dest := net.TCPDestination(cmd.Host, cmd.Port)
-	until := time.Now().Add(time.Duration(cmd.ValidMin) * time.Minute)
+	until := xtime.Now().Add(time.Duration(cmd.ValidMin) * time.Minute)
 	h.serverList.AddServer(protocol.NewServerSpec(dest, protocol.BeforeTime(until), user))
 }
 
