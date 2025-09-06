@@ -3,8 +3,10 @@ package time
 import (
 	"context"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
+	"runtime"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -13,22 +15,7 @@ import (
 )
 
 var timeOffset atomic.Pointer[time.Duration]
-
-func init() {
-	timeOffset.Store(new(time.Duration))
-	domain := platform.NewEnvFlag("xray.vmess.time.domain").GetValue(func() string { return "https://apple.com" })
-	if domain == "" {
-		errors.LogError(context.Background(), "vmess time domain is empty, skip time sync")
-		return
-	}
-	err := updateTime(domain)
-	if err != nil {
-		errors.LogError(context.Background(), err)
-	}
-	errors.LogWarning(context.Background(), "Initial time offset for vmess:", timeOffset.Load())
-	// only one sync should be enough, so disable periodic update for now
-	//go updateTimeMonitor(context.TODO(), domain)
-}
+var initOnce sync.Once
 
 func updateTimeMonitor(ctx context.Context, domain string) {
 	for {
@@ -76,6 +63,24 @@ func updateTime(domain string) error {
 }
 
 func Now() time.Time {
+	initOnce.Do(func() {
+		timeOffset.Store(new(time.Duration))
+		go func() {
+			domain := platform.NewEnvFlag("xray.vmess.time.domain").GetValue(func() string { return "https://apple.com" })
+			if domain == "" {
+				errors.LogError(context.Background(), "vmess time domain is empty, skip time sync")
+				return
+			}
+			err := updateTime(domain)
+			if err != nil {
+				errors.LogError(context.Background(), err)
+			}
+			errors.LogWarning(context.Background(), "Initial time offset for vmess:", timeOffset.Load())
+			// only one sync should be enough, so disable periodic update for now
+			//go updateTimeMonitor(context.TODO(), domain)
+		}()
+		runtime.Gosched()
+	})
 	offset := timeOffset.Load()
 	return time.Now().Add(*offset)
 }
