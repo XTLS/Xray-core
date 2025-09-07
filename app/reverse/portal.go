@@ -97,7 +97,6 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
-
 	return p.client.Dispatch(ctx, link)
 }
 

@@ -11,9 +11,12 @@ import (
 	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
+	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
+	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
@@ -23,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
@@ -32,6 +36,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/pipe"
 )
 
 func init() {
@@ -47,6 +52,7 @@ type Handler struct {
 	policyManager policy.Manager
 	cone          bool
 	encryption    *encryption.ClientInstance
+	reverse       *Reverse
 }
 
 // New creates a new VLess outbound handler.
@@ -82,7 +88,40 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 	}
 
+	if a.Reverse != nil {
+		if err := core.RequireFeatures(ctx, func(d routing.Dispatcher) error {
+			ctx = session.ContextWithInbound(ctx, &session.Inbound{
+				Tag: a.Reverse.Tag,
+			})
+			ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{
+				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
+			}})
+			handler.reverse = &Reverse{
+				tag:        a.Reverse.Tag,
+				dispatcher: d,
+				ctx:        ctx,
+				handler:    handler,
+			}
+			handler.reverse.monitorTask = &task.Periodic{
+				Execute:  handler.reverse.monitor,
+				Interval: time.Second * 2,
+			}
+			handler.reverse.Start()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+
 	return handler, nil
+}
+
+// Close implements common.Closable.Close().
+func (h *Handler) Close() error {
+	if h.reverse != nil {
+		return h.reverse.Close()
+	}
+	return nil
 }
 
 // Process implements proxy.Outbound.Process().
@@ -127,8 +166,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if target.Network == net.Network_UDP {
 		command = protocol.RequestCommandUDP
 	}
-	if target.Address.Family().IsDomain() && target.Address.Domain() == "v1.mux.cool" {
-		command = protocol.RequestCommandMux
+	if target.Address.Family().IsDomain() {
+		switch target.Address.Domain() {
+		case "v1.mux.cool":
+			command = protocol.RequestCommandMux
+		case "v1.rvs.cool":
+			if target.Network != net.Network_Unknown {
+				return errors.New("nice try baby").AtError()
+			}
+			command = protocol.RequestCommandRvs
+		}
 	}
 
 	request := &protocol.RequestHeader{
@@ -320,4 +367,67 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	return nil
+}
+
+type Reverse struct {
+	tag         string
+	dispatcher  routing.Dispatcher
+	ctx         context.Context
+	handler     *Handler
+	workers     []*reverse.BridgeWorker
+	monitorTask *task.Periodic
+}
+
+func (r *Reverse) monitor() error {
+	var activeWorkers []*reverse.BridgeWorker
+	for _, w := range r.workers {
+		if w.IsActive() {
+			activeWorkers = append(activeWorkers, w)
+		}
+	}
+	if len(activeWorkers) != len(r.workers) {
+		r.workers = activeWorkers
+	}
+
+	var numConnections uint32
+	var numWorker uint32
+	for _, w := range r.workers {
+		if w.IsActive() {
+			numConnections += w.Connections()
+			numWorker++
+		}
+	}
+	if numWorker == 0 || numConnections/numWorker > 16 {
+		reader1, writer1 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
+		reader2, writer2 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
+		link1 := &transport.Link{
+			Reader: reader1,
+			Writer: writer2,
+		}
+		link2 := &transport.Link{
+			Reader: reader2,
+			Writer: writer1,
+		}
+		w := &reverse.BridgeWorker{
+			Tag:        r.tag,
+			Dispatcher: r.dispatcher,
+		}
+		worker, err := mux.NewServerWorker(r.ctx, w, link1)
+		if err != nil {
+			errors.LogWarningInner(context.Background(), err, "failed to create bridge worker")
+			return nil
+		}
+		w.Worker = worker
+		r.workers = append(r.workers, w)
+		go r.handler.Process(r.ctx, link2, session.HandlerFromContext(r.ctx).(*proxyman.Handler))
+	}
+	return nil
+}
+
+func (r *Reverse) Start() error {
+	return r.monitorTask.Start()
+}
+
+func (r *Reverse) Close() error {
+	return r.monitorTask.Close()
 }

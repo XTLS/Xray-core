@@ -77,6 +77,10 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
 		}
 
+		if account.Reverse != nil && account.Reverse.Tag == "" {
+			return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
+		}
+
 		user.Account = serial.ToTypedMessage(account)
 		config.Clients[idx] = user
 	}
@@ -286,6 +290,10 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
 				}
 				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
+			}
+
+			if account.Reverse != nil && account.Reverse.Tag == "" {
+				return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
 			}
 
 			user.Account = serial.ToTypedMessage(account)

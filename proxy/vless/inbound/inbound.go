@@ -12,19 +12,24 @@ import (
 	"time"
 	"unsafe"
 
+	app_dispatcher "github.com/xtls/xray-core/app/dispatcher"
+	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
+	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
+	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
@@ -179,6 +184,7 @@ func (h *Handler) Close() error {
 	if h.decryption != nil {
 		h.decryption.Close()
 	}
+	// TODO: remove reverse's handlers (needs ctx)
 	return errors.Combine(common.Close(h.validator))
 }
 
@@ -189,6 +195,19 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
+	u := h.validator.GetByEmail(e)
+	if u != nil {
+		a := u.Account.(*vless.MemoryAccount)
+		if a.Reverse != nil && a.Reverse.Tag != "" {
+			core.RequireFeatures(ctx, func(d routing.Dispatcher, om outbound.Manager) error { // not sure whether it works or not
+				go func() {
+					time.Sleep(time.Minute) // TODO: check firstLen
+					om.RemoveHandler(ctx, a.Reverse.Tag)
+				}()
+				return nil
+			})
+		}
+	}
 	return h.validator.Del(e)
 }
 
@@ -565,11 +584,93 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
 	bufferWriter.SetFlushNext()
 
+	if request.Command == protocol.RequestCommandRvs {
+		if account.Reverse == nil || account.Reverse.Tag == "" {
+			return errors.New("account " + account.ID.String() + " can not use reverse proxy")
+		}
+		var rd routing.Dispatcher
+		var obm outbound.Manager
+		if err := core.RequireFeatures(ctx, func(d routing.Dispatcher, om outbound.Manager) error {
+			rd = d
+			obm = om
+			return nil
+		}); err != nil {
+			return err
+		}
+		r := obm.GetHandler(account.Reverse.Tag)
+		if r == nil {
+			picker, _ := reverse.NewStaticMuxPicker()
+			r = &Reverse{tag: account.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+			if err := obm.AddHandler(ctx, r); err != nil {
+				return err
+			}
+		}
+		if r, ok := r.(*Reverse); ok {
+			return r.NewMux(ctx, rd.(*app_dispatcher.DefaultDispatcher).WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		}
+		return errors.New("mismatched reverse tag")
+	}
+
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
 		Reader: clientReader,
 		Writer: clientWriter},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
+	return nil
+}
+
+type Reverse struct {
+	tag    string
+	picker *reverse.StaticMuxPicker
+	client *mux.ClientManager
+}
+
+func (r *Reverse) Tag() string {
+	return r.tag
+}
+
+func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
+	muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
+	if err != nil {
+		return errors.New("failed to create mux client worker").Base(err).AtWarning()
+	}
+	worker, err := reverse.NewPortalWorker(muxClient)
+	if err != nil {
+		return errors.New("failed to create portal worker").Base(err)
+	}
+	r.picker.AddWorker(worker)
+	select {
+	case <-ctx.Done():
+	case <-muxClient.WaitClosed():
+	}
+	return nil
+}
+
+func (r *Reverse) Dispatch(ctx context.Context, link *transport.Link) {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds)-1]
+	if ob != nil {
+		if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
+			link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
+			link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
+		}
+		r.client.Dispatch(ctx, link)
+	}
+}
+
+func (r *Reverse) Start() error {
+	return nil
+}
+
+func (r *Reverse) Close() error {
+	return nil
+}
+
+func (r *Reverse) SenderSettings() *serial.TypedMessage {
+	return nil
+}
+
+func (r *Reverse) ProxySettings() *serial.TypedMessage {
 	return nil
 }

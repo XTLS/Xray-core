@@ -21,6 +21,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		XorMode:    a.XorMode,
 		Seconds:    a.Seconds,
 		Padding:    a.Padding,
+		Reverse:    a.Reverse,
 	}, nil
 }
 
@@ -35,6 +36,8 @@ type MemoryAccount struct {
 	XorMode    uint32
 	Seconds    uint32
 	Padding    string
+
+	Reverse *Reverse
 }
 
 // Equals implements protocol.Account.Equals().
@@ -54,5 +57,6 @@ func (a *MemoryAccount) ToProto() proto.Message {
 		XorMode:    a.XorMode,
 		Seconds:    a.Seconds,
 		Padding:    a.Padding,
+		Reverse:    a.Reverse,
 	}
 }
