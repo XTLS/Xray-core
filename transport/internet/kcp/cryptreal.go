@@ -9,5 +9,5 @@ import (
 
 func NewAEADAESGCMBasedOnSeed(seed string) cipher.AEAD {
 	hashedSeed := sha256.Sum256([]byte(seed))
-	return crypto.NewAesGcm(hashedSeed[:])
+	return crypto.NewAesGcm(hashedSeed[:16])
 }
