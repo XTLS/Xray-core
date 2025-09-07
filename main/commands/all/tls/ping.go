@@ -92,7 +92,7 @@ func executePing(cmd *base.Command, args []string) {
 	fmt.Println("-------------------")
 	fmt.Println("Pinging with SNI")
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: 443})
+		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
