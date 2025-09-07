@@ -84,7 +84,10 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 		p.picker.AddWorker(worker)
 
 		if _, ok := link.Reader.(*pipe.Reader); !ok {
-			<-ctx.Done() // from DispatchLink()
+			select {
+			case <-ctx.Done():
+			case <-muxClient.WaitClosed():
+			}
 		}
 		return nil
 	}
