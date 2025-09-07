@@ -215,6 +215,10 @@ func (m *ClientWorker) Closed() bool {
 	return m.done.Done()
 }
 
+func (m *ClientWorker) WaitClosed() <-chan struct{} {
+	return m.done.Wait()
+}
+
 func (m *ClientWorker) GetTimer() *time.Ticker {
 	return m.timer
 }
