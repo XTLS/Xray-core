@@ -219,14 +219,16 @@ func (m *ClientWorker) WaitClosed() <-chan struct{} {
 	return m.done.Wait()
 }
 
-func (m *ClientWorker) GetTimer() *time.Ticker {
-	return m.timer
+func (m *ClientWorker) Close() error {
+	return m.done.Close()
 }
 
 func (m *ClientWorker) monitor() {
 	defer m.timer.Stop()
 
 	for {
+		checkSize := m.sessionManager.Size()
+		checkCount := m.sessionManager.Count()
 		select {
 		case <-m.done.Wait():
 			m.sessionManager.Close()
@@ -234,8 +236,7 @@ func (m *ClientWorker) monitor() {
 			common.Interrupt(m.link.Reader)
 			return
 		case <-m.timer.C:
-			size := m.sessionManager.Size()
-			if size == 0 && m.sessionManager.CloseIfNoSession() {
+			if m.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
 				common.Must(m.done.Close())
 			}
 		}
@@ -255,7 +256,7 @@ func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 	return nil
 }
 
-func fetchInput(ctx context.Context, s *Session, output buf.Writer, timer *time.Ticker) {
+func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	transferType := protocol.TransferTypeStream
@@ -266,7 +267,6 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer, timer *time.
 	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx))
 	defer s.Close(false)
 	defer writer.Close()
-	defer timer.Reset(time.Second * 16)
 
 	errors.LogInfo(ctx, "dispatching request to ", ob.Target)
 	if err := writeFirstPayload(s.input, writer); err != nil {
@@ -316,10 +316,12 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	}
 	s.input = link.Reader
 	s.output = link.Writer
-	if _, ok := link.Reader.(*pipe.Reader); ok {
-		go fetchInput(ctx, s, m.link.Writer, m.timer)
-	} else {
-		fetchInput(ctx, s, m.link.Writer, m.timer)
+	go fetchInput(ctx, s, m.link.Writer)
+	if _, ok := link.Reader.(*pipe.Reader); !ok {
+		select {
+		case <-ctx.Done():
+		case <-s.done.Wait():
+		}
 	}
 	return true
 }
