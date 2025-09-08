@@ -246,7 +246,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	var userSentID []byte // not MemoryAccount.ID
 	var request *protocol.RequestHeader
-	var requestAddons *encoding.Addons
+	var requestAddons *proxy.Addons
 	var err error
 
 	napfb := h.fallbacks
@@ -487,8 +487,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
-	responseAddons := &encoding.Addons{
-		// Flow: requestAddons.Flow,
+	responseAddons := &proxy.Addons{
+		Flow: account.Flow,
+	}
+	encoding.PopulateSeed(account.Seed, responseAddons)
+	if check := encoding.CheckSeed(requestAddons, responseAddons); check != nil {
+		return errors.New("Seed configuration mis-match").Base(check).AtWarning()
 	}
 
 	var input *bytes.Reader
@@ -552,17 +556,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
-	trafficState := proxy.NewTrafficState(userSentID)
-	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
-	if requestAddons.Flow == vless.XRV {
-		clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
-	}
+	trafficState := proxy.NewTrafficState(userSentID, account.Flow)
+	clientReader := encoding.DecodeBodyAddons(reader, request, responseAddons, trafficState, true, ctx, connection, input, rawInput, nil)
 
 	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
 	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
 		return errors.New("failed to encode response header").Base(err).AtWarning()
 	}
-	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
+	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, responseAddons, trafficState, false, ctx, connection, nil)
 	bufferWriter.SetFlushNext()
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{

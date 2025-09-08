@@ -21,6 +21,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		XorMode:    a.XorMode,
 		Seconds:    a.Seconds,
 		Padding:    a.Padding,
+		Seed:       a.Seed,
 	}, nil
 }
 
@@ -35,6 +36,8 @@ type MemoryAccount struct {
 	XorMode    uint32
 	Seconds    uint32
 	Padding    string
+	// Seed. Details TBD
+	Seed string
 }
 
 // Equals implements protocol.Account.Equals().

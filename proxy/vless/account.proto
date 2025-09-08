@@ -16,4 +16,6 @@ message Account {
   uint32 xorMode = 4;
   uint32 seconds = 5;
   string padding = 6;
+  // Seed settings. Details TBD
+  string seed = 7;
 }
