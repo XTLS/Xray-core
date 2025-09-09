@@ -133,7 +133,7 @@ func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWo
 	terminate := func() {
 		worker.Close()
 	}
-	w.timer = signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour) // prevent leak
+	w.timer = signal.CancelAfterInactivity(ctx, terminate, 60*time.Second) // prevent leak
 	return w, nil
 }
 
@@ -166,14 +166,20 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
-			break
+			if w.Closed() {
+				w.timer.SetTimeout(0)
+			} else {
+				w.timer.SetTimeout(24 * time.Hour)
+			}
+			return
 		}
 		w.timer.Update()
 		for _, b := range mb {
 			var ctl Control
 			if err := proto.Unmarshal(b.Bytes(), &ctl); err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to parse proto message")
-				break
+				w.timer.SetTimeout(0)
+				return
 			}
 			if ctl.State != w.state {
 				w.state = ctl.State
