@@ -33,7 +33,7 @@ var globalConnMutex = &sync.Mutex{}
 type task struct {
 	Method   string `json:"method"`
 	URL      string `json:"url"`
-	ConnUUID string `json:"connUUID"`
+	ConnUUID string `json:"uuid"`
 	Extra    any    `json:"extra,omitempty"`
 }
 
