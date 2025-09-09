@@ -46,7 +46,7 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 		return errors.New("failed to write request command").Base(err)
 	}
 
-	if request.Command != protocol.RequestCommandMux {
+	if request.Command != protocol.RequestCommandMux && request.Command != protocol.RequestCommandRvs {
 		if err := addrParser.WriteAddressPort(&buffer, request.Address, request.Port); err != nil {
 			return errors.New("failed to write request address and port").Base(err)
 		}
@@ -112,7 +112,8 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		switch request.Command {
 		case protocol.RequestCommandMux:
 			request.Address = net.DomainAddress("v1.mux.cool")
-			request.Port = 0
+		case protocol.RequestCommandRvs:
+			request.Address = net.DomainAddress("v1.rvs.cool")
 		case protocol.RequestCommandTCP, protocol.RequestCommandUDP:
 			if addr, port, err := addrParser.ReadAddressPort(&buffer, reader); err == nil {
 				request.Address = addr

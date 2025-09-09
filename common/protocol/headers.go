@@ -16,11 +16,12 @@ const (
 	RequestCommandTCP = RequestCommand(0x01)
 	RequestCommandUDP = RequestCommand(0x02)
 	RequestCommandMux = RequestCommand(0x03)
+	RequestCommandRvs = RequestCommand(0x04)
 )
 
 func (c RequestCommand) TransferType() TransferType {
 	switch c {
-	case RequestCommandTCP, RequestCommandMux:
+	case RequestCommandTCP, RequestCommandMux, RequestCommandRvs:
 		return TransferTypeStream
 	case RequestCommandUDP:
 		return TransferTypePacket

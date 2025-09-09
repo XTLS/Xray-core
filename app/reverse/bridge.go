@@ -94,10 +94,10 @@ func (b *Bridge) Close() error {
 }
 
 type BridgeWorker struct {
-	tag        string
-	worker     *mux.ServerWorker
-	dispatcher routing.Dispatcher
-	state      Control_State
+	Tag        string
+	Worker     *mux.ServerWorker
+	Dispatcher routing.Dispatcher
+	State      Control_State
 }
 
 func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWorker, error) {
@@ -115,15 +115,15 @@ func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWo
 	}
 
 	w := &BridgeWorker{
-		dispatcher: d,
-		tag:        tag,
+		Dispatcher: d,
+		Tag:        tag,
 	}
 
 	worker, err := mux.NewServerWorker(context.Background(), w, link)
 	if err != nil {
 		return nil, err
 	}
-	w.worker = worker
+	w.Worker = worker
 
 	return w, nil
 }
@@ -141,11 +141,11 @@ func (w *BridgeWorker) Close() error {
 }
 
 func (w *BridgeWorker) IsActive() bool {
-	return w.state == Control_ACTIVE && !w.worker.Closed()
+	return w.State == Control_ACTIVE && !w.Worker.Closed()
 }
 
 func (w *BridgeWorker) Connections() uint32 {
-	return w.worker.ActiveConnections()
+	return w.Worker.ActiveConnections()
 }
 
 func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
@@ -161,8 +161,8 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 				errors.LogInfoInner(context.Background(), err, "failed to parse proto message")
 				break
 			}
-			if ctl.State != w.state {
-				w.state = ctl.State
+			if ctl.State != w.State {
+				w.State = ctl.State
 			}
 		}
 	}
@@ -171,9 +171,9 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 func (w *BridgeWorker) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
 	if !isInternalDomain(dest) {
 		ctx = session.ContextWithInbound(ctx, &session.Inbound{
-			Tag: w.tag,
+			Tag: w.Tag,
 		})
-		return w.dispatcher.Dispatch(ctx, dest)
+		return w.Dispatcher.Dispatch(ctx, dest)
 	}
 
 	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
@@ -194,12 +194,12 @@ func (w *BridgeWorker) Dispatch(ctx context.Context, dest net.Destination) (*tra
 func (w *BridgeWorker) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
 	if !isInternalDomain(dest) {
 		ctx = session.ContextWithInbound(ctx, &session.Inbound{
-			Tag: w.tag,
+			Tag: w.Tag,
 		})
-		return w.dispatcher.DispatchLink(ctx, dest, link)
+		return w.Dispatcher.DispatchLink(ctx, dest, link)
 	}
 
-	link = w.dispatcher.(*dispatcher.DefaultDispatcher).WrapLink(ctx, link)
+	link = w.Dispatcher.(*dispatcher.DefaultDispatcher).WrapLink(ctx, link)
 	w.handleInternalConn(link)
 
 	return nil
