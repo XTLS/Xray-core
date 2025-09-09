@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"io"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -196,6 +197,7 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	if r == nil {
 		picker, _ := reverse.NewStaticMuxPicker()
 		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+		runtime.Gosched() // prevents this outbound from becoming the default outbound
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
 			return nil, err
 		}
@@ -639,7 +641,7 @@ func (r *Reverse) Tag() string {
 	return r.tag
 }
 
-func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error { // XTLS? vnext? users?
+func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
 	muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
 	if err != nil {
 		return errors.New("failed to create mux client worker").Base(err).AtWarning()
