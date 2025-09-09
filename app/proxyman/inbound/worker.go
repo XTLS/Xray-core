@@ -2,6 +2,7 @@ package inbound
 
 import (
 	"context"
+	gonet "net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -76,6 +77,24 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 		case internet.SocketConfig_TProxy:
 			dest = net.DestinationFromAddr(conn.LocalAddr())
 		}
+		// Check if try to connect to this inbound itself (can cause loopback)
+		var isLoopBack bool
+		if w.address == net.AnyIP || w.address == net.AnyIPv6 {
+			if dest.Port.Value() == w.port.Value() && IsLocal(dest.Address.IP()) {
+				isLoopBack = true
+			}
+		} else {
+			if w.hub.Addr().String() == dest.NetAddr() {
+				isLoopBack = true
+			}
+		}
+		if isLoopBack {
+			cancel()
+			conn.Close()
+			errors.LogError(ctx, errors.New("loopback connection detected"))
+			return
+		}
+
 		if dest.IsValid() {
 			outbounds[0].Target = dest
 		}
@@ -543,4 +562,19 @@ func (w *dsWorker) Close() error {
 	}
 
 	return nil
+}
+
+func IsLocal(ip net.IP) bool {
+	addrs, err := gonet.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*gonet.IPNet); ok {
+			if ipnet.IP.Equal(ip) {
+				return true
+			}
+		}
+	}
+	return false
 }
