@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	app_dispatcher "github.com/xtls/xray-core/app/dispatcher"
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -71,12 +71,14 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
-	inboundHandlerManager feature_inbound.Manager
-	policyManager         policy.Manager
-	validator             vless.Validator
-	dns                   dns.Client
-	decryption            *encryption.ServerInstance
-	fallbacks             map[string]map[string]map[string]*Fallback // or nil
+	inboundHandlerManager  feature_inbound.Manager
+	policyManager          policy.Manager
+	validator              vless.Validator
+	decryption             *encryption.ServerInstance
+	outboundHandlerManager outbound.Manager
+	defaultDispatcher      *dispatcher.DefaultDispatcher
+	ctx                    context.Context
+	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -84,10 +86,12 @@ type Handler struct {
 func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
-		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		dns:                   dc,
-		validator:             validator,
+		inboundHandlerManager:  v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
+		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
+		validator:              validator,
+		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
+		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(*dispatcher.DefaultDispatcher),
+		ctx:                    ctx,
 	}
 
 	if config.Decryption != "" && config.Decryption != "none" {
@@ -179,12 +183,46 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 		firstBytes[6] == 2) // Network type: UDP
 }
 
+func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
+	u := h.validator.Get(a.ID.UUID())
+	if u == nil {
+		return nil, errors.New("reverse: user " + a.ID.String() + " doesn't exist anymore")
+	}
+	a = u.Account.(*vless.MemoryAccount)
+	if a.Reverse == nil || a.Reverse.Tag == "" {
+		return nil, errors.New("reverse: user " + a.ID.String() + " is not allowed to create reverse proxy")
+	}
+	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
+	if r == nil {
+		picker, _ := reverse.NewStaticMuxPicker()
+		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
+			return nil, err
+		}
+	}
+	if r, ok := r.(*Reverse); ok {
+		return r, nil
+	}
+	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type Reverse")
+}
+
+func (h *Handler) RemoveReverse(u *protocol.MemoryUser) {
+	if u != nil {
+		a := u.Account.(*vless.MemoryAccount)
+		if a.Reverse != nil && a.Reverse.Tag != "" {
+			h.outboundHandlerManager.RemoveHandler(h.ctx, a.Reverse.Tag)
+		}
+	}
+}
+
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
 	if h.decryption != nil {
 		h.decryption.Close()
 	}
-	// TODO: remove reverse's handlers (needs ctx)
+	for _, u := range h.validator.GetAll() {
+		h.RemoveReverse(u)
+	}
 	return errors.Combine(common.Close(h.validator))
 }
 
@@ -195,19 +233,7 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
-	u := h.validator.GetByEmail(e)
-	if u != nil {
-		a := u.Account.(*vless.MemoryAccount)
-		if a.Reverse != nil && a.Reverse.Tag != "" {
-			core.RequireFeatures(ctx, func(d routing.Dispatcher, om outbound.Manager) error { // not sure whether it works or not
-				go func() {
-					time.Sleep(time.Minute) // TODO: check firstLen
-					om.RemoveHandler(ctx, a.Reverse.Tag)
-				}()
-				return nil
-			})
-		}
-	}
+	h.RemoveReverse(h.validator.GetByEmail(e))
 	return h.validator.Del(e)
 }
 
@@ -519,6 +545,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return errors.New(requestAddons.Flow + " doesn't support UDP").AtWarning()
+			case protocol.RequestCommandRvs:
+				inbound.CanSpliceCopy = 3
 			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
@@ -585,30 +613,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	bufferWriter.SetFlushNext()
 
 	if request.Command == protocol.RequestCommandRvs {
-		if account.Reverse == nil || account.Reverse.Tag == "" {
-			return errors.New("account " + account.ID.String() + " can not use reverse proxy")
-		}
-		var rd routing.Dispatcher
-		var obm outbound.Manager
-		if err := core.RequireFeatures(ctx, func(d routing.Dispatcher, om outbound.Manager) error {
-			rd = d
-			obm = om
-			return nil
-		}); err != nil {
+		r, err := h.GetReverse(account)
+		if err != nil {
 			return err
 		}
-		r := obm.GetHandler(account.Reverse.Tag)
-		if r == nil {
-			picker, _ := reverse.NewStaticMuxPicker()
-			r = &Reverse{tag: account.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
-			if err := obm.AddHandler(ctx, r); err != nil {
-				return err
-			}
-		}
-		if r, ok := r.(*Reverse); ok {
-			return r.NewMux(ctx, rd.(*app_dispatcher.DefaultDispatcher).WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
-		}
-		return errors.New("mismatched reverse tag")
+		return r.NewMux(ctx, h.defaultDispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
 	}
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
@@ -630,14 +639,14 @@ func (r *Reverse) Tag() string {
 	return r.tag
 }
 
-func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
+func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error { // XTLS? vnext? users?
 	muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
 	if err != nil {
 		return errors.New("failed to create mux client worker").Base(err).AtWarning()
 	}
 	worker, err := reverse.NewPortalWorker(muxClient)
 	if err != nil {
-		return errors.New("failed to create portal worker").Base(err)
+		return errors.New("failed to create portal worker").Base(err).AtWarning()
 	}
 	r.picker.AddWorker(worker)
 	select {

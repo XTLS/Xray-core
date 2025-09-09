@@ -89,28 +89,20 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if a.Reverse != nil {
-		if err := core.RequireFeatures(ctx, func(d routing.Dispatcher) error {
-			ctx = session.ContextWithInbound(ctx, &session.Inbound{
-				Tag: a.Reverse.Tag,
-			})
-			ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{
-				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
-			}})
-			handler.reverse = &Reverse{
-				tag:        a.Reverse.Tag,
-				dispatcher: d,
-				ctx:        ctx,
-				handler:    handler,
-			}
-			handler.reverse.monitorTask = &task.Periodic{
-				Execute:  handler.reverse.monitor,
-				Interval: time.Second * 2,
-			}
-			handler.reverse.Start()
-			return nil
-		}); err != nil {
-			return nil, err
+		handler.reverse = &Reverse{
+			tag:        a.Reverse.Tag,
+			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
+			ctx:        ctx,
+			handler:    handler,
 		}
+		handler.reverse.monitorTask = &task.Periodic{
+			Execute:  handler.reverse.monitor,
+			Interval: time.Second * 2,
+		}
+		go func() {
+			time.Sleep(2 * time.Second)
+			handler.reverse.Start()
+		}()
 	}
 
 	return handler, nil
@@ -128,7 +120,7 @@ func (h *Handler) Close() error {
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	if !ob.Target.IsValid() {
+	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
 		return errors.New("target not specified").AtError()
 	}
 	ob.Name = "vless"
@@ -400,26 +392,27 @@ func (r *Reverse) monitor() error {
 	if numWorker == 0 || numConnections/numWorker > 16 {
 		reader1, writer1 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
 		reader2, writer2 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
-		link1 := &transport.Link{
-			Reader: reader1,
-			Writer: writer2,
-		}
-		link2 := &transport.Link{
-			Reader: reader2,
-			Writer: writer1,
-		}
+		link1 := &transport.Link{Reader: reader1, Writer: writer2}
+		link2 := &transport.Link{Reader: reader2, Writer: writer1}
 		w := &reverse.BridgeWorker{
 			Tag:        r.tag,
 			Dispatcher: r.dispatcher,
 		}
 		worker, err := mux.NewServerWorker(r.ctx, w, link1)
 		if err != nil {
-			errors.LogWarningInner(context.Background(), err, "failed to create bridge worker")
+			errors.LogWarningInner(r.ctx, err, "failed to create mux server worker")
 			return nil
 		}
 		w.Worker = worker
 		r.workers = append(r.workers, w)
-		go r.handler.Process(r.ctx, link2, session.HandlerFromContext(r.ctx).(*proxyman.Handler))
+		go func() {
+			ctx := session.ContextWithOutbounds(r.ctx, []*session.Outbound{{
+				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
+			}})
+			r.handler.Process(ctx, link2, session.HandlerFromContext(ctx).(*proxyman.Handler))
+			common.Interrupt(reader1)
+			common.Interrupt(reader2)
+		}()
 	}
 	return nil
 }

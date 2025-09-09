@@ -483,6 +483,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				handler = h
 			} else {
 				errors.LogWarning(ctx, "non existing outTag: ", outTag)
+				return
 			}
 		} else {
 			errors.LogInfo(ctx, "default route for ", destination)

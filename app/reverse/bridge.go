@@ -97,7 +97,7 @@ type BridgeWorker struct {
 	Tag        string
 	Worker     *mux.ServerWorker
 	Dispatcher routing.Dispatcher
-	state      Control_State
+	State      Control_State
 }
 
 func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWorker, error) {
@@ -141,7 +141,7 @@ func (w *BridgeWorker) Close() error {
 }
 
 func (w *BridgeWorker) IsActive() bool {
-	return w.state == Control_ACTIVE && !w.Worker.Closed()
+	return w.State == Control_ACTIVE && !w.Worker.Closed()
 }
 
 func (w *BridgeWorker) Connections() uint32 {
@@ -161,8 +161,8 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 				errors.LogInfoInner(context.Background(), err, "failed to parse proto message")
 				break
 			}
-			if ctl.State != w.state {
-				w.state = ctl.State
+			if ctl.State != w.State {
+				w.State = ctl.State
 			}
 		}
 	}
