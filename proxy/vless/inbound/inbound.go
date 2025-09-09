@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"io"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -198,7 +197,7 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 		picker, _ := reverse.NewStaticMuxPicker()
 		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
 		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
-			runtime.Gosched() // prevents this outbound from becoming the default outbound
+			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
 		}
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
 			return nil, err
