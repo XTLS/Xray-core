@@ -197,7 +197,9 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	if r == nil {
 		picker, _ := reverse.NewStaticMuxPicker()
 		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
-		runtime.Gosched() // prevents this outbound from becoming the default outbound
+		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
+			runtime.Gosched() // prevents this outbound from becoming the default outbound
+		}
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
 			return nil, err
 		}
@@ -547,9 +549,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return errors.New(requestAddons.Flow + " doesn't support UDP").AtWarning()
-			case protocol.RequestCommandRvs:
+			case protocol.RequestCommandMux, protocol.RequestCommandRvs:
 				inbound.CanSpliceCopy = 3
-			case protocol.RequestCommandMux:
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
 				var t reflect.Type
