@@ -2,16 +2,14 @@ package vtime
 
 import (
 	"context"
-	"net/http"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/common/protocol/http"
 )
 
 var timeOffset atomic.Pointer[time.Duration]
@@ -32,17 +30,7 @@ func updateTimeMonitor(ctx context.Context, domain string) {
 }
 
 func updateTime(domain string) error {
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dest, err := net.ParseDestination(network + ":" + addr)
-				if err != nil {
-					return nil, err
-				}
-				return internet.DialSystem(ctx, dest, nil)
-			},
-		},
-	}
+	httpClient := http.NewClient()
 	resp, err := httpClient.Get(domain)
 	if err != nil {
 		return errors.New("Failed to access monitor domain").Base(err)
