@@ -53,20 +53,20 @@ func init() {
 	if addr != "" {
 		token := uuid.New()
 		csrfToken := token.String()
-		webpage = bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
+		webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
 		conns = make(chan *websocket.Conn, 256)
 		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, "/websocket") {
+			if strings.HasPrefix(r.URL.Path, "/ws") {
 				if r.URL.Query().Get("token") == csrfToken {
 					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
 						pathParts := strings.Split(r.URL.Path, "/")
 						if len(pathParts) < 3 {
-							errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+							errors.LogError(context.Background(), "Browser dialer failed WebSocket upgrade: Insufficient UUID")
 						}
 						globalConnMutex.Lock()
 						pageUUID := pathParts[1]
 						connUUID := pathParts[2]
-						if connUUID == "control" {
+						if connUUID == "ctrl" {
 							page := &pageWithConnMap{
 								UUID:        pageUUID,
 								ControlConn: conn,
@@ -75,7 +75,7 @@ func init() {
 							globalConnMap[pageUUID] = page
 						} else {
 							if globalConnMap[pageUUID] == nil {
-								errors.LogError(context.Background(), "Browser dialer unexpected connection request")
+								errors.LogError(context.Background(), "Browser dialer unexpected connection: Unknown page UUID")
 							} else {
 								c := globalConnMap[pageUUID].ConnMap[connUUID]
 								if c != nil {
@@ -86,13 +86,13 @@ func init() {
 									}
 								} else {
 									conn.Close()
-									errors.LogError(context.Background(), "Orphan connection detected")
+									errors.LogError(context.Background(), "Browser dialer error: Detected orphaned connection")
 								}
 							}
 						}
 						globalConnMutex.Unlock()
 					} else {
-						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+						errors.LogError(context.Background(), "Browser dialer failed: Unhandled error")
 					}
 				}
 			} else {
@@ -108,7 +108,7 @@ func HasBrowserDialer() bool {
 }
 
 type webSocketExtra struct {
-	Protocol string `json:"protocol,omitempty"`
+	Protocol string `json:"p,omitempty"`
 }
 
 func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
@@ -129,8 +129,8 @@ func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 }
 
 type httpExtra struct {
-	Referrer string            `json:"referrer,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`
+	Referrer string            `json:"r,omitempty"`
+	Headers  map[string]string `json:"h,omitempty"`
 }
 
 func httpExtraFromHeaders(headers http.Header) *httpExtra {
