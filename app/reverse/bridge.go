@@ -55,7 +55,9 @@ func (b *Bridge) cleanup() {
 			activeWorkers = append(activeWorkers, w)
 		}
 		if w.Closed() {
-			w.Timer.SetTimeout(0)
+			if w.Timer != nil {
+				w.Timer.SetTimeout(0)
+			}
 		}
 	}
 
@@ -166,19 +168,25 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
-			if w.Closed() {
-				w.Timer.SetTimeout(0)
-			} else {
-				w.Timer.SetTimeout(24 * time.Hour)
+			if w.Timer != nil {
+				if w.Closed() {
+					w.Timer.SetTimeout(0)
+				} else {
+					w.Timer.SetTimeout(24 * time.Hour)
+				}
 			}
 			return
 		}
-		w.Timer.Update()
+		if w.Timer != nil {
+			w.Timer.Update()
+		}
 		for _, b := range mb {
 			var ctl Control
 			if err := proto.Unmarshal(b.Bytes(), &ctl); err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to parse proto message")
-				w.Timer.SetTimeout(0)
+				if w.Timer != nil {
+					w.Timer.SetTimeout(0)
+				}
 				return
 			}
 			if ctl.State != w.State {
