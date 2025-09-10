@@ -678,10 +678,10 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			errors.LogInfo(ctx, "CopyRawConn splice")
 			statWriter, _ := writer.(*dispatcher.SizeStatWriter)
 			//runtime.Gosched() // necessary
-			time.Sleep(time.Millisecond)    // without this, there will be a rare ssl error for freedom splice
-			timer.SetTimeout(8 * time.Hour) // prevent leak, just in case
+			time.Sleep(time.Millisecond)     // without this, there will be a rare ssl error for freedom splice
+			timer.SetTimeout(24 * time.Hour) // prevent leak, just in case
 			if inTimer != nil {
-				inTimer.SetTimeout(8 * time.Hour)
+				inTimer.SetTimeout(24 * time.Hour)
 			}
 			w, err := tc.ReadFrom(readerConn)
 			if readCounter != nil {

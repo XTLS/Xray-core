@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport"
@@ -159,6 +160,8 @@ func (p *StaticMuxPicker) cleanup() error {
 	for _, w := range p.workers {
 		if !w.Closed() {
 			activeWorkers = append(activeWorkers, w)
+		} else {
+			w.timer.SetTimeout(0)
 		}
 	}
 
@@ -225,6 +228,7 @@ type PortalWorker struct {
 	reader   buf.Reader
 	draining bool
 	counter  uint32
+	timer    *signal.ActivityTimer
 }
 
 func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
@@ -244,10 +248,14 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	if !f {
 		return nil, errors.New("unable to dispatch control connection")
 	}
+	terminate := func() {
+		client.Close()
+	}
 	w := &PortalWorker{
 		client: client,
 		reader: downlinkReader,
 		writer: uplinkWriter,
+		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
 	}
 	w.control = &task.Periodic{
 		Execute:  w.heartbeat,
@@ -274,7 +282,6 @@ func (w *PortalWorker) heartbeat() error {
 		msg.State = Control_DRAIN
 
 		defer func() {
-			w.client.GetTimer().Reset(time.Second * 16)
 			common.Close(w.writer)
 			common.Interrupt(w.reader)
 			w.writer = nil
@@ -286,6 +293,7 @@ func (w *PortalWorker) heartbeat() error {
 		b, err := proto.Marshal(msg)
 		common.Must(err)
 		mb := buf.MergeBytes(nil, b)
+		w.timer.Update()
 		return w.writer.WriteMultiBuffer(mb)
 	}
 	return nil

@@ -3,6 +3,7 @@ package mux
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/common"
@@ -12,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -63,8 +65,15 @@ func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *t
 		return s.dispatcher.DispatchLink(ctx, dest, link)
 	}
 	link = s.dispatcher.(*dispatcher.DefaultDispatcher).WrapLink(ctx, link)
-	_, err := NewServerWorker(ctx, s.dispatcher, link)
-	return err
+	worker, err := NewServerWorker(ctx, s.dispatcher, link)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+	case <-worker.done.Wait():
+	}
+	return nil
 }
 
 // Start implements common.Runnable.
@@ -81,6 +90,8 @@ type ServerWorker struct {
 	dispatcher     routing.Dispatcher
 	link           *transport.Link
 	sessionManager *SessionManager
+	done           *done.Instance
+	timer          *time.Ticker
 }
 
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
@@ -88,15 +99,14 @@ func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.
 		dispatcher:     d,
 		link:           link,
 		sessionManager: NewSessionManager(),
+		done:           done.New(),
+		timer:          time.NewTicker(60 * time.Second),
 	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.CanSpliceCopy = 3
 	}
-	if _, ok := link.Reader.(*pipe.Reader); ok {
-		go worker.run(ctx)
-	} else {
-		worker.run(ctx)
-	}
+	go worker.run(ctx)
+	go worker.monitor()
 	return worker, nil
 }
 
@@ -111,12 +121,40 @@ func handle(ctx context.Context, s *Session, output buf.Writer) {
 	s.Close(false)
 }
 
+func (w *ServerWorker) monitor() {
+	defer w.timer.Stop()
+
+	for {
+		checkSize := w.sessionManager.Size()
+		checkCount := w.sessionManager.Count()
+		select {
+		case <-w.done.Wait():
+			w.sessionManager.Close()
+			common.Interrupt(w.link.Writer)
+			common.Interrupt(w.link.Reader)
+			return
+		case <-w.timer.C:
+			if w.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
+				common.Must(w.done.Close())
+			}
+		}
+	}
+}
+
 func (w *ServerWorker) ActiveConnections() uint32 {
 	return uint32(w.sessionManager.Size())
 }
 
 func (w *ServerWorker) Closed() bool {
-	return w.sessionManager.Closed()
+	return w.done.Done()
+}
+
+func (w *ServerWorker) WaitClosed() <-chan struct{} {
+	return w.done.Wait()
+}
+
+func (w *ServerWorker) Close() error {
+	return w.done.Close()
 }
 
 func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.BufferedReader) error {
@@ -317,11 +355,11 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 }
 
 func (w *ServerWorker) run(ctx context.Context) {
-	reader := &buf.BufferedReader{Reader: w.link.Reader}
+	defer func() {
+		common.Must(w.done.Close())
+	}()
 
-	defer w.sessionManager.Close()
-	defer common.Interrupt(w.link.Reader)
-	defer common.Interrupt(w.link.Writer)
+	reader := &buf.BufferedReader{Reader: w.link.Reader}
 
 	for {
 		select {

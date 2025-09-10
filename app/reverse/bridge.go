@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
@@ -52,6 +53,9 @@ func (b *Bridge) cleanup() {
 	for _, w := range b.workers {
 		if w.IsActive() {
 			activeWorkers = append(activeWorkers, w)
+		}
+		if w.Closed() {
+			w.Timer.SetTimeout(0)
 		}
 	}
 
@@ -98,6 +102,7 @@ type BridgeWorker struct {
 	Worker     *mux.ServerWorker
 	Dispatcher routing.Dispatcher
 	State      Control_State
+	Timer      *signal.ActivityTimer
 }
 
 func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWorker, error) {
@@ -125,6 +130,10 @@ func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWo
 	}
 	w.Worker = worker
 
+	terminate := func() {
+		worker.Close()
+	}
+	w.Timer = signal.CancelAfterInactivity(ctx, terminate, 60*time.Second)
 	return w, nil
 }
 
@@ -144,6 +153,10 @@ func (w *BridgeWorker) IsActive() bool {
 	return w.State == Control_ACTIVE && !w.Worker.Closed()
 }
 
+func (w *BridgeWorker) Closed() bool {
+	return w.Worker.Closed()
+}
+
 func (w *BridgeWorker) Connections() uint32 {
 	return w.Worker.ActiveConnections()
 }
@@ -153,13 +166,20 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
-			break
+			if w.Closed() {
+				w.Timer.SetTimeout(0)
+			} else {
+				w.Timer.SetTimeout(24 * time.Hour)
+			}
+			return
 		}
+		w.Timer.Update()
 		for _, b := range mb {
 			var ctl Control
 			if err := proto.Unmarshal(b.Bytes(), &ctl); err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to parse proto message")
-				break
+				w.Timer.SetTimeout(0)
+				return
 			}
 			if ctl.State != w.State {
 				w.State = ctl.State
