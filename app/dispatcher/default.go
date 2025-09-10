@@ -483,7 +483,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				handler = h
 			} else {
 				errors.LogWarning(ctx, "non existing outTag: ", outTag)
-				return
+				return // DO NOT CHANGE: the traffic shouldn't be processed by default outbound if the specified outbound tag doesn't exist (yet), e.g., VLESS Reverse Proxy
 			}
 		} else {
 			errors.LogInfo(ctx, "default route for ", destination)
