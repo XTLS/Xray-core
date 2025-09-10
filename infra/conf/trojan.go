@@ -28,11 +28,29 @@ type TrojanServerTarget struct {
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
+	Address  *Address `json:"address"`
+	Port     uint16   `json:"port"`
+	Password string   `json:"password"`
+	Email    string   `json:"email"`
+	Level    byte     `json:"level"`
+	Flow     string   `json:"flow"`
 	Servers []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
+	if c.Address != nil {
+		c.Servers = []*TrojanServerTarget{
+			{
+				Address:  c.Address,
+				Port:     c.Port,
+				Password: c.Password,
+				Email:    c.Email,
+				Level:    c.Level,
+				Flow:     c.Flow,
+			},
+		}
+	}
 	if len(c.Servers) == 0 {
 		return nil, errors.New("0 Trojan server configured.")
 	}
