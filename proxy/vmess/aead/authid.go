@@ -13,7 +13,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/antireplay"
-	"github.com/xtls/xray-core/proxy/vmess/time"
+	"github.com/xtls/xray-core/proxy/vmess/vtime"
 )
 
 var (
@@ -105,7 +105,7 @@ func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
 			continue
 		}
 
-		if math.Abs(math.Abs(float64(t))-float64(time.Now().Unix())) > 120 {
+		if math.Abs(math.Abs(float64(t))-float64(vtime.Now().Unix())) > 120 {
 			continue
 		}
 

@@ -8,11 +8,11 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/proxy/vmess/time"
+	"github.com/xtls/xray-core/proxy/vmess/vtime"
 )
 
 func SealVMessAEADHeader(key [16]byte, data []byte) []byte {
-	generatedAuthID := CreateAuthID(key[:], time.Now().Unix())
+	generatedAuthID := CreateAuthID(key[:], vtime.Now().Unix())
 
 	connectionNonce := make([]byte, 8)
 	if _, err := io.ReadFull(rand.Reader, connectionNonce); err != nil {

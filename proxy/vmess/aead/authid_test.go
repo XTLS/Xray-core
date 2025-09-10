@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xtls/xray-core/proxy/vmess/time"
 )
 
 func TestCreateAuthID(t *testing.T) {
