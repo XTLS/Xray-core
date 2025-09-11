@@ -51,12 +51,27 @@ type HTTPRemoteConfig struct {
 }
 
 type HTTPClientConfig struct {
-	Servers []*HTTPRemoteConfig `json:"servers"`
-	Headers map[string]string   `json:"headers"`
+	Address  *Address          	 `json:"address"`
+	Port     uint16            	 `json:"port"`
+	Level    uint32              `json:"level"`
+	Email    string              `json:"email"`
+	Username string              `json:"user"`
+	Password string              `json:"pass"`
+	Servers  []*HTTPRemoteConfig `json:"servers"`
+	Headers  map[string]string   `json:"headers"`
 }
 
 func (v *HTTPClientConfig) Build() (proto.Message, error) {
 	config := new(http.ClientConfig)
+	if v.Address != nil {
+		v.Servers = []*HTTPRemoteConfig{
+			{
+				Address: v.Address,
+				Port:    v.Port,
+				Users:   []json.RawMessage{{}},
+			},
+		}
+	}
 	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
 	for idx, serverConfig := range v.Servers {
 		server := &protocol.ServerEndpoint{
@@ -65,12 +80,22 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 		}
 		for _, rawUser := range serverConfig.Users {
 			user := new(protocol.User)
-			if err := json.Unmarshal(rawUser, user); err != nil {
-				return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
+			if v.Address != nil {
+				user.Level = v.Level
+				user.Email = v.Email
+			} else {
+				if err := json.Unmarshal(rawUser, user); err != nil {
+					return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
+				}
 			}
 			account := new(HTTPAccount)
-			if err := json.Unmarshal(rawUser, account); err != nil {
-				return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
+			if v.Address != nil {
+				account.Username = v.Username
+				account.Password = v.Password
+			} else {
+				if err := json.Unmarshal(rawUser, account); err != nil {
+					return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
+				}
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
 			server.User = append(server.User, user)

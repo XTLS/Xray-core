@@ -117,13 +117,28 @@ type VMessOutboundTarget struct {
 }
 
 type VMessOutboundConfig struct {
-	Receivers []*VMessOutboundTarget `json:"vnext"`
+	Address     *Address               `json:"address"`
+	Port        uint16                 `json:"port"`
+	Level       uint32                 `json:"level"`
+	Email       string                 `json:"email"`
+	ID          string                 `json:"id"`
+	Security    string                 `json:"security"`
+	Experiments string                 `json:"experiments"`
+	Receivers   []*VMessOutboundTarget `json:"vnext"`
 }
 
 // Build implements Buildable
 func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 	config := new(outbound.Config)
-
+	if c.Address != nil {
+		c.Receivers = []*VMessOutboundTarget{
+			{
+				Address: c.Address,
+				Port:    c.Port,
+				Users:   []json.RawMessage{{}},
+			},
+		}
+	}
 	if len(c.Receivers) == 0 {
 		return nil, errors.New("0 VMess receiver configured")
 	}
@@ -141,12 +156,23 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 		}
 		for _, rawUser := range rec.Users {
 			user := new(protocol.User)
-			if err := json.Unmarshal(rawUser, user); err != nil {
-				return nil, errors.New("invalid VMess user").Base(err)
+			if c.Address != nil {
+				user.Level = c.Level
+				user.Email = c.Email
+			} else {
+				if err := json.Unmarshal(rawUser, user); err != nil {
+					return nil, errors.New("invalid VMess user").Base(err)
+				}
 			}
 			account := new(VMessAccount)
-			if err := json.Unmarshal(rawUser, account); err != nil {
-				return nil, errors.New("invalid VMess user").Base(err)
+			if c.Address != nil {
+				account.ID = c.ID
+				account.Security = c.Security
+				account.Experiments = c.Experiments
+			} else {
+				if err := json.Unmarshal(rawUser, account); err != nil {
+					return nil, errors.New("invalid VMess user").Base(err)
+				}
 			}
 
 			u, err := uuid.ParseString(account.ID)

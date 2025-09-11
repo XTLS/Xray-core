@@ -20,19 +20,37 @@ import (
 type TrojanServerTarget struct {
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
+	Email    string   `json:"email"`
+	Password string   `json:"password"`
 	Flow     string   `json:"flow"`
 }
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
+	Address  *Address `json:"address"`
+	Port     uint16   `json:"port"`
+	Level    byte     `json:"level"`
+	Email    string   `json:"email"`
+	Password string   `json:"password"`
+	Flow     string   `json:"flow"`
 	Servers []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
+	if c.Address != nil {
+		c.Servers = []*TrojanServerTarget{
+			{
+				Address:  c.Address,
+				Port:     c.Port,
+				Level:    c.Level,
+				Email:    c.Email,
+				Password: c.Password,
+				Flow:     c.Flow,
+			},
+		}
+	}
 	if len(c.Servers) == 0 {
 		return nil, errors.New("0 Trojan server configured.")
 	}
