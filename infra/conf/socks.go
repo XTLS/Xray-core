@@ -72,10 +72,10 @@ type SocksRemoteConfig struct {
 type SocksClientConfig struct {
 	Address  *Address             `json:"address"`
 	Port     uint16               `json:"port"`
+	Level    uint32               `json:"level"`
+	Email    string               `json:"email"`
 	Username string               `json:"user"`
 	Password string               `json:"pass"`
-	Email    string               `json:"email"`
-	Level    uint32               `json:"level"`
 	Servers  []*SocksRemoteConfig `json:"servers"`
 }
 

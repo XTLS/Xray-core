@@ -20,9 +20,9 @@ import (
 type TrojanServerTarget struct {
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
+	Email    string   `json:"email"`
+	Password string   `json:"password"`
 	Flow     string   `json:"flow"`
 }
 
@@ -30,9 +30,9 @@ type TrojanServerTarget struct {
 type TrojanClientConfig struct {
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
-	Password string   `json:"password"`
-	Email    string   `json:"email"`
 	Level    byte     `json:"level"`
+	Email    string   `json:"email"`
+	Password string   `json:"password"`
 	Flow     string   `json:"flow"`
 	Servers []*TrojanServerTarget `json:"servers"`
 }
@@ -44,9 +44,9 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			{
 				Address:  c.Address,
 				Port:     c.Port,
-				Password: c.Password,
-				Email:    c.Email,
 				Level:    c.Level,
+				Email:    c.Email,
+				Password: c.Password,
 				Flow:     c.Flow,
 			},
 		}

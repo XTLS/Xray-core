@@ -119,9 +119,9 @@ type VMessOutboundTarget struct {
 type VMessOutboundConfig struct {
 	Address     *Address               `json:"address"`
 	Port        uint16                 `json:"port"`
-	ID          string                 `json:"id"`
 	Level       uint32                 `json:"level"`
 	Email       string                 `json:"email"`
+	ID          string                 `json:"id"`
 	Security    string                 `json:"security"`
 	Experiments string                 `json:"experiments"`
 	Receivers   []*VMessOutboundTarget `json:"vnext"`
