@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/xtls/xray-core/app/dispatcher"
+	app_dispatcher "github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -76,7 +76,6 @@ type Handler struct {
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
-	defaultDispatcher      *dispatcher.DefaultDispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -90,7 +89,6 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
-		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(*dispatcher.DefaultDispatcher),
 		ctx:                    ctx,
 	}
 
@@ -619,7 +617,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, h.defaultDispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		if dispatcher, ok := dispatcher.(*app_dispatcher.DefaultDispatcher); ok {
+			return r.NewMux(ctx, dispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		} else {
+			return r.NewMux(ctx, &transport.Link{Reader: &buf.TimeoutWrapperReader{Reader: clientReader}, Writer: clientWriter})
+		}
 	}
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
