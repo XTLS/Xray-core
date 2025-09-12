@@ -7,12 +7,14 @@ import (
 
 // HealthPingStats is the statistics of HealthPingRTTS
 type HealthPingStats struct {
-	All       int
-	Fail      int
-	Deviation time.Duration
-	Average   time.Duration
-	Max       time.Duration
-	Min       time.Duration
+	All          int
+	Fail         int
+	Deviation    time.Duration
+	Average      time.Duration
+	Max          time.Duration
+	Min          time.Duration
+	LastSeenTime int64
+	LastTryTime  int64
 }
 
 // HealthPingRTTS holds ping rtts for health Checker
@@ -87,12 +89,19 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 	cnt := 0
 	validRTTs := make([]time.Duration, 0)
 	for _, rtt := range h.rtts {
+		timestamp := rtt.time.Unix()
+		if timestamp > stats.LastTryTime {
+			stats.LastTryTime = timestamp
+		}
 		switch {
 		case rtt.value == 0 || time.Since(rtt.time) > h.validity:
 			continue
 		case rtt.value == rttFailed:
 			stats.Fail++
 			continue
+		}
+		if timestamp > stats.LastSeenTime {
+			stats.LastSeenTime = timestamp
 		}
 		cnt++
 		sum += rtt.value
