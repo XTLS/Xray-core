@@ -1,8 +1,6 @@
 package dns
 
 import (
-	"context"
-
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
@@ -14,12 +12,17 @@ type ResolvableContext struct {
 	routing.Context
 	dnsClient   dns.Client
 	resolvedIPs []net.IP
+	lookupError error
 }
 
 // GetTargetIPs overrides original routing.Context's implementation.
 func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 	if len(ctx.resolvedIPs) > 0 {
 		return ctx.resolvedIPs
+	}
+
+	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
+		return ips
 	}
 
 	if domain := ctx.GetTargetDomain(); len(domain) != 0 {
@@ -32,14 +35,15 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 			ctx.resolvedIPs = ips
 			return ips
 		}
-		errors.LogInfoInner(context.Background(), err, "resolve ip for ", domain)
-	}
-
-	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
-		return ips
+		ctx.lookupError = errors.New("resolve ip for ", domain).Base(err)
 	}
 
 	return nil
+}
+
+// GetError override original routing.Context's implementation.
+func (ctx *ResolvableContext) GetError() error {
+	return ctx.lookupError
 }
 
 // ContextWithDNSClient creates a new routing context with domain resolving capability.

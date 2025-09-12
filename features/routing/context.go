@@ -49,4 +49,7 @@ type Context interface {
 
 	// GetSkipDNSResolve returns a flag switch for weather skip dns resolve during route pick.
 	GetSkipDNSResolve() bool
+
+	// GetError returns errors during route pick, e.g., built-in-dns fail to resolve domain to IP
+	GetError() error
 }

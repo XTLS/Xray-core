@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	go_errors "errors"
 	"regexp"
 	"strings"
 	"sync"
@@ -488,6 +489,12 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				return // DO NOT CHANGE: the traffic shouldn't be processed by default outbound if the specified outbound tag doesn't exist (yet), e.g., VLESS Reverse Proxy
 			}
 		} else {
+			if !go_errors.Is(err, common.ErrNoClue) {
+				errors.LogWarningInner(ctx, err, "get error during route pick ")
+				common.Close(link.Writer)
+				common.Interrupt(link.Reader)
+				return
+			}
 			errors.LogInfo(ctx, "default route for ", destination)
 		}
 	}

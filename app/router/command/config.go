@@ -51,6 +51,10 @@ func (c routingContext) GetSkipDNSResolve() bool {
 	return false
 }
 
+func (c routingContext) GetError() error {
+	return nil
+}
+
 // AsRoutingContext converts a protobuf RoutingContext into an implementation of routing.Context.
 func AsRoutingContext(r *RoutingContext) routing.Context {
 	return routingContext{r}
