@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package xray.proxy.sush;
+option csharp_namespace = "Xray.Proxy.Sush";
+option go_package = "github.com/xtls/xray-core/proxy/sush";
+option java_package = "com.xray.proxy.sush";
+option java_multiple_files = true;
+
+import "common/protocol/user.proto";
+import "common/protocol/server_spec.proto";
+
+// User represents a Sush user
+message User {
+  string id = 1;
+  string email = 2;
+  string policy = 3;
+  map<string, string> custom_params = 4;
+  uint32 level = 5;
+  string psk = 6;
+}
+
+// FallbackConfig represents fallback configuration
+message FallbackConfig {
+  string dest = 1;
+  string type = 2;
+  repeated string alpn = 3;
+  string path = 4;
+  string name = 5;
+  map<string, string> headers = 6;
+  uint32 weight = 7;
+}
+
+// HandshakeConfig contains HTTP handshake customization
+message HandshakeConfig {
+  map<string, string> headers = 1;
+  string user_agent = 2;
+  string host = 3;
+  string method = 4;
+  string path = 5;
+  string http_version = 6;
+  string connection_header = 7;
+  repeated string cipher_suites = 8;
+  bool randomize_ja3 = 9;
+}
+
+// SecurityConfig for advanced security features
+message SecurityConfig {
+  string encryption_method = 1;
+  string key_derivation = 2;
+  bool enable_forward_secrecy = 3;
+  int32 key_rotation_interval = 4;
+  bool enable_replay_protection = 5;
+  bool enable_timing_resistance = 6;
+  bool enable_dos_protection = 7;
+  int32 max_connections_per_ip = 8;
+  int32 handshake_timeout_ms = 9;
+}
+
+// InboundConfig represents Sush inbound configuration
+message InboundConfig {
+  repeated User users = 1;
+  repeated FallbackConfig fallbacks = 2;
+  string psk = 3;
+  TrafficShapingConfig traffic_shaping = 4;
+  HandshakeConfig handshake_config = 5;
+  SecurityConfig security_config = 6;
+}
+
+// OutboundConfig represents Sush outbound configuration
+message OutboundConfig {
+  repeated xray.common.protocol.ServerEndpoint vnext = 1;
+  string psk = 2;
+  TrafficShapingConfig traffic_shaping = 3;
+  SecurityConfig security_config = 4;
+}
+
+// TrafficShapingConfig represents traffic shaping configuration
+message TrafficShapingConfig {
+  bool enable_morphing = 1;
+  string profile = 2;
+  int32 min_packet_size = 3;
+  int32 max_packet_size = 4;
+  int64 min_delay_ms = 5;
+  int64 max_delay_ms = 6;
+  double burst_multiplier = 7;
+  double direction_bias = 8;
+  double jitter_percent = 9;
+}
+
+// Account represents a Sush account
+message Account {
+  string id = 1;
+  string policy = 2;
+  map<string, string> custom_params = 3;
+}
