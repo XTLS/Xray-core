@@ -64,12 +64,21 @@ type HTTPClientConfig struct {
 func (v *HTTPClientConfig) Build() (proto.Message, error) {
 	config := new(http.ClientConfig)
 	if v.Address != nil {
-		v.Servers = []*HTTPRemoteConfig{
-			{
-				Address: v.Address,
-				Port:    v.Port,
-				Users:   []json.RawMessage{{}},
-			},
+		if len(v.Username) == 0 {
+			v.Servers = []*HTTPRemoteConfig{
+				{
+					Address: v.Address,
+					Port:    v.Port,
+				},
+			}
+		} else {
+			v.Servers = []*HTTPRemoteConfig{
+				{
+					Address: v.Address,
+					Port:    v.Port,
+					Users:   []json.RawMessage{{}},
+				},
+			}
 		}
 	}
 	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))

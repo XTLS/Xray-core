@@ -82,12 +82,21 @@ type SocksClientConfig struct {
 func (v *SocksClientConfig) Build() (proto.Message, error) {
 	config := new(socks.ClientConfig)
 	if v.Address != nil {
-		v.Servers = []*SocksRemoteConfig{
-			{
-				Address: v.Address,
-				Port:    v.Port,
-				Users:   []json.RawMessage{{}},
-			},
+		if len(v.Username) == 0 {
+			v.Servers = []*SocksRemoteConfig{
+				{
+					Address: v.Address,
+					Port:    v.Port,
+				},
+			}
+		} else {
+			v.Servers = []*SocksRemoteConfig{
+				{
+					Address: v.Address,
+					Port:    v.Port,
+					Users:   []json.RawMessage{{}},
+				},
+			}
 		}
 	}
 	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
