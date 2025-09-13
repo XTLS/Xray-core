@@ -152,8 +152,11 @@ func (f *Frame) Unmarshal(data []byte) error {
 	f.Length = binary.BigEndian.Uint16(data[0:2])
 	f.Command = data[2]
 
-	if len(data) < int(FrameHeaderSize+12+f.Length) {
-		return fmt.Errorf("incomplete frame")
+	if len(data) < 15 {
+		return fmt.Errorf("incomplete frame: need at least 15 bytes, got %d", len(data))
+	}
+	if len(data) < 15+int(f.Length) {
+		return fmt.Errorf("incomplete frame: need %d bytes, got %d", 15+int(f.Length), len(data))
 	}
 
 	f.Nonce = make([]byte, 12)
@@ -167,12 +170,13 @@ func (f *Frame) Unmarshal(data []byte) error {
 
 // IsSushHandshake checks if the given data matches Sush handshake pattern
 func IsSushHandshake(data []byte) bool {
-	if len(data) < 2 {
+	if len(data) < 3 {
 		return false
 	}
 
 	magic := binary.BigEndian.Uint16(data[0:2])
-	return magic == MagicNumber
+	version := data[2]
+	return magic == MagicNumber && version == ProtocolVersion
 }
 
 // GetTrafficProfile returns a predefined traffic profile

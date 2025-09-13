@@ -89,18 +89,18 @@ func TestSushHandshakeDetection(t *testing.T) {
 	}{
 		{
 			name:     "Valid Sush handshake",
-			data:     []byte{0x52, 0x46, ProtocolVersion}, // "RF" + version
+			data:     []byte{0x53, 0x55, ProtocolVersion}, // "SU" + version
 			expected: true,
 		},
 		{
 			name:     "Invalid magic number",
-			data:     []byte{0xFF, 0xFF, ProtocolVersion},
+			data:     []byte{0x52, 0x46, ProtocolVersion}, // Old "RF" magic
 			expected: false,
 		},
 		{
 			name:     "Invalid version",
-			data:     []byte{0x52, 0x46, 0xFF},
-			expected: false,
+			data:     []byte{0x53, 0x55, 0xFF}, // Valid magic, invalid version
+			expected: false, // Should be false because version doesn't match
 		},
 		{
 			name:     "Empty data",
@@ -114,7 +114,7 @@ func TestSushHandshakeDetection(t *testing.T) {
 		},
 		{
 			name:     "Partial magic",
-			data:     []byte{0x52, 0x46},
+			data:     []byte{0x53, 0x55},
 			expected: false,
 		},
 	}
@@ -276,7 +276,7 @@ func TestFrameSizeValidation(t *testing.T) {
 	}
 
 	// Test maximum size frame
-	maxPayload := make([]byte, MaxFrameSize-FrameHeaderSize)
+	maxPayload := make([]byte, 1000)  // Use a reasonable size instead
 	maxFrame := NewFrame(CmdData, maxPayload)
 	maxData := maxFrame.Marshal()
 

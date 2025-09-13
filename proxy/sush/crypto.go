@@ -105,7 +105,7 @@ func (cm *CryptoManager) EncryptFrame(frame *Frame) error {
 	}
 
 	frame.Payload = encrypted
-	frame.Length = uint16(len(encrypted))
+	// Don't change frame.Length - keep original for decryption
 	return nil
 }
 
@@ -121,7 +121,7 @@ func (cm *CryptoManager) DecryptFrame(frame *Frame) error {
 	}
 
 	frame.Payload = decrypted
-	frame.Length = uint16(len(decrypted))
+	// Don't change frame.Length - it should remain the original
 	return nil
 }
 
