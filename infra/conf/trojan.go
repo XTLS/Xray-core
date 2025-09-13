@@ -28,13 +28,13 @@ type TrojanServerTarget struct {
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Level    byte     `json:"level"`
-	Email    string   `json:"email"`
-	Password string   `json:"password"`
-	Flow     string   `json:"flow"`
-	Servers []*TrojanServerTarget `json:"servers"`
+	Address  *Address              `json:"address"`
+	Port     uint16                `json:"port"`
+	Level    byte                  `json:"level"`
+	Email    string                `json:"email"`
+	Password string                `json:"password"`
+	Flow     string                `json:"flow"`
+	Servers  []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
@@ -51,8 +51,8 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			},
 		}
 	}
-	if len(c.Servers) == 0 {
-		return nil, errors.New("0 Trojan server configured.")
+	if len(c.Servers) != 1 {
+		return nil, errors.New(`Trojan settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Trojan outbounds and routing balancer instead`)
 	}
 
 	config := &trojan.ClientConfig{

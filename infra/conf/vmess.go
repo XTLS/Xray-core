@@ -139,16 +139,16 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 			},
 		}
 	}
-	if len(c.Receivers) == 0 {
-		return nil, errors.New("0 VMess receiver configured")
+	if len(c.Receivers) != 1 {
+		return nil, errors.New(`VMess settings: "vnext" should have one and only one member. Multiple endpoints in "vnext" should use multiple VMess outbounds and routing balancer instead`)
 	}
 	serverSpecs := make([]*protocol.ServerEndpoint, len(c.Receivers))
 	for idx, rec := range c.Receivers {
-		if len(rec.Users) == 0 {
-			return nil, errors.New("0 user configured for VMess outbound")
+		if len(rec.Users) != 1 {
+			return nil, errors.New(`VMess vnext: "users" should have one and only one member. Multiple members in "users" should use multiple VMess outbounds and routing balancer instead`)
 		}
 		if rec.Address == nil {
-			return nil, errors.New("address is not set in VMess outbound config")
+			return nil, errors.New(`VMess vnext: "address" is not set`)
 		}
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),

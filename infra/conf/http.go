@@ -64,25 +64,24 @@ type HTTPClientConfig struct {
 func (v *HTTPClientConfig) Build() (proto.Message, error) {
 	config := new(http.ClientConfig)
 	if v.Address != nil {
-		if len(v.Username) == 0 {
-			v.Servers = []*HTTPRemoteConfig{
-				{
-					Address: v.Address,
-					Port:    v.Port,
-				},
-			}
-		} else {
-			v.Servers = []*HTTPRemoteConfig{
-				{
-					Address: v.Address,
-					Port:    v.Port,
-					Users:   []json.RawMessage{{}},
-				},
-			}
+		v.Servers = []*HTTPRemoteConfig{
+			{
+				Address: v.Address,
+				Port:    v.Port,
+			},
 		}
+		if len(v.Username) > 0 {
+			v.Servers[0].Users = []json.RawMessage{{}}
+		}
+	}
+	if len(v.Servers) != 1 {
+		return nil, errors.New(`HTTP settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple HTTP outbounds and routing balancer instead`)
 	}
 	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
 	for idx, serverConfig := range v.Servers {
+		if len(serverConfig.Users) > 1 {
+			return nil, errors.New(`HTTP servers: "users" should have one member at most. Multiple members in "users" should use multiple HTTP outbounds and routing balancer instead`)
+		}
 		server := &protocol.ServerEndpoint{
 			Address: serverConfig.Address.Build(),
 			Port:    uint32(serverConfig.Port),

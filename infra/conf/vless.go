@@ -228,7 +228,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 		}
 	}
 	if len(c.Vnext) != 1 {
-		return nil, errors.New(`VLESS settings: "vnext" should have one and only one member`)
+		return nil, errors.New(`VLESS settings: "vnext" should have one and only one member. Multiple endpoints in "vnext" should use multiple VLESS outbounds and routing balancer instead`)
 	}
 	config.Vnext = make([]*protocol.ServerEndpoint, len(c.Vnext))
 	for idx, rec := range c.Vnext {
@@ -236,7 +236,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS vnext: "address" is not set`)
 		}
 		if len(rec.Users) != 1 {
-			return nil, errors.New(`VLESS vnext: "users" should have one and only one member`)
+			return nil, errors.New(`VLESS vnext: "users" should have one and only one member. Multiple members in "users" should use multiple VLESS outbounds and routing balancer instead`)
 		}
 		spec := &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),

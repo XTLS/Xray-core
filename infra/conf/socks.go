@@ -82,25 +82,24 @@ type SocksClientConfig struct {
 func (v *SocksClientConfig) Build() (proto.Message, error) {
 	config := new(socks.ClientConfig)
 	if v.Address != nil {
-		if len(v.Username) == 0 {
-			v.Servers = []*SocksRemoteConfig{
-				{
-					Address: v.Address,
-					Port:    v.Port,
-				},
-			}
-		} else {
-			v.Servers = []*SocksRemoteConfig{
-				{
-					Address: v.Address,
-					Port:    v.Port,
-					Users:   []json.RawMessage{{}},
-				},
-			}
+		v.Servers = []*SocksRemoteConfig{
+			{
+				Address: v.Address,
+				Port:    v.Port,
+			},
 		}
+		if len(v.Username) > 0 {
+			v.Servers[0].Users = []json.RawMessage{{}}
+		}
+	}
+	if len(v.Servers) != 1 {
+		return nil, errors.New(`SOCKS settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple SOCKS outbounds and routing balancer instead`)
 	}
 	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
 	for idx, serverConfig := range v.Servers {
+		if len(serverConfig.Users) > 1 {
+			return nil, errors.New(`SOCKS servers: "users" should have one member at most. Multiple members in "users" should use multiple SOCKS outbounds and routing balancer instead`)
+		}
 		server := &protocol.ServerEndpoint{
 			Address: serverConfig.Address.Build(),
 			Port:    uint32(serverConfig.Port),
