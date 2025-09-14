@@ -106,7 +106,7 @@ type Handler struct {
 	inboundHandlerManager feature_inbound.Manager
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
-	detours               *DetourConfig
+	// detours               *DetourConfig
 	sessionHistory        *encoding.SessionHistory
 }
 
@@ -117,7 +117,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		clients:               vmess.NewTimedUserValidator(),
-		detours:               config.Detour,
+		// detours:               config.Detour,
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
 	}
@@ -148,6 +148,7 @@ func (*Handler) Network() []net.Network {
 	return []net.Network{net.Network_TCP, net.Network_UNIX}
 }
 
+/*
 func (h *Handler) GetOrGenerateUser(email string) *protocol.MemoryUser {
 	user, existing := h.usersByEmail.GetOrGenerate(email)
 	if !existing {
@@ -155,6 +156,7 @@ func (h *Handler) GetOrGenerateUser(email string) *protocol.MemoryUser {
 	}
 	return user
 }
+	*/
 
 func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
 	return h.usersByEmail.Get(email)
@@ -307,9 +309,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		writer := buf.NewBufferedWriter(buf.NewWriter(connection))
 		defer writer.Flush()
 
+		response := &protocol.ResponseHeader{}
+		/*
 		response := &protocol.ResponseHeader{
 			Command: h.generateCommand(ctx, request),
 		}
+			*/
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
@@ -323,6 +328,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	return nil
 }
 
+/*
 func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	if h.detours != nil {
 		tag := h.detours.To
@@ -357,6 +363,7 @@ func (h *Handler) generateCommand(ctx context.Context, request *protocol.Request
 
 	return nil
 }
+	*/
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {

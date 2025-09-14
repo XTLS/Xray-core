@@ -1,5 +1,6 @@
 package encoding_test
 
+/*
 import (
 	"testing"
 
@@ -53,3 +54,4 @@ func TestSwitchAccountBugOffByOne(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, cmd)
 }
+	*/

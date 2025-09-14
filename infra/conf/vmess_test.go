@@ -106,9 +106,6 @@ func TestVMessInbound(t *testing.T) {
 				"default": {
 					"level": 0
 				},
-				"detour": {
-					"to": "tag_to_detour"
-				},
 				"disableInsecureEncryption": true
 			}`,
 			Parser: loadJSON(creator),
@@ -127,9 +124,6 @@ func TestVMessInbound(t *testing.T) {
 				},
 				Default: &inbound.DefaultConfig{
 					Level: 0,
-				},
-				Detour: &inbound.DetourConfig{
-					To: "tag_to_detour",
 				},
 			},
 		},

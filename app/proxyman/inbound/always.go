@@ -5,7 +5,7 @@ import (
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
+	// "github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -178,6 +178,7 @@ func (h *AlwaysOnInboundHandler) Close() error {
 	return nil
 }
 
+/*
 func (h *AlwaysOnInboundHandler) GetRandomInboundProxy() (interface{}, net.Port, int) {
 	if len(h.workers) == 0 {
 		return nil, 0, 0
@@ -185,6 +186,7 @@ func (h *AlwaysOnInboundHandler) GetRandomInboundProxy() (interface{}, net.Port,
 	w := h.workers[dice.Roll(len(h.workers))]
 	return w.Proxy(), w.Port(), 9999
 }
+	*/
 
 func (h *AlwaysOnInboundHandler) Tag() string {
 	return h.tag

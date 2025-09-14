@@ -193,6 +193,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+		header, err := session.DecodeResponseHeader(reader)
+		if err != nil {
+			return errors.New("failed to read header").Base(err)
+		}
+		h.handleCommand(h.server.Destination(), header.Command)
 
 		bodyReader, err := session.DecodeResponseBody(request, reader)
 		if err != nil {

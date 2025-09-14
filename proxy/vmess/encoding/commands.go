@@ -7,10 +7,10 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
+	// "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
-	"github.com/xtls/xray-core/common/uuid"
+	// "github.com/xtls/xray-core/common/serial"
+	// "github.com/xtls/xray-core/common/uuid"
 )
 
 var (
@@ -29,9 +29,9 @@ func MarshalCommand(command interface{}, writer io.Writer) error {
 	var cmdID byte
 	var factory CommandFactory
 	switch command.(type) {
-	case *protocol.CommandSwitchAccount:
-		factory = new(CommandSwitchAccountFactory)
-		cmdID = 1
+	// case *protocol.CommandSwitchAccount:
+	// 	factory = new(CommandSwitchAccountFactory)
+	// 	cmdID = 1
 	default:
 		return ErrUnknownCommand
 	}
@@ -67,8 +67,8 @@ func UnmarshalCommand(cmdID byte, data []byte) (protocol.ResponseCommand, error)
 
 	var factory CommandFactory
 	switch cmdID {
-	case 1:
-		factory = new(CommandSwitchAccountFactory)
+	// case 1:
+	// 	factory = new(CommandSwitchAccountFactory)
 	default:
 		return nil, ErrUnknownCommand
 	}
@@ -80,8 +80,11 @@ type CommandFactory interface {
 	Unmarshal(data []byte) (interface{}, error)
 }
 
+/*
 type CommandSwitchAccountFactory struct{}
+	*/
 
+/*
 func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Writer) error {
 	cmd, ok := command.(*protocol.CommandSwitchAccount)
 	if !ok {
@@ -108,7 +111,9 @@ func (f *CommandSwitchAccountFactory) Marshal(command interface{}, writer io.Wri
 	common.Must2(writer.Write([]byte{cmd.ValidMin}))
 	return nil
 }
+	*/
 
+/*
 func (f *CommandSwitchAccountFactory) Unmarshal(data []byte) (interface{}, error) {
 	cmd := new(protocol.CommandSwitchAccount)
 	if len(data) == 0 {
@@ -143,3 +148,4 @@ func (f *CommandSwitchAccountFactory) Unmarshal(data []byte) (interface{}, error
 	cmd.ValidMin = data[timeStart]
 	return cmd, nil
 }
+	*/

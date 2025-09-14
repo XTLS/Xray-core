@@ -1,5 +1,6 @@
 package inbound
 
+/*
 import (
 	"context"
 	"sync"
@@ -220,3 +221,4 @@ func (h *DynamicInboundHandler) ProxySettings() *serial.TypedMessage {
 	}
 	return nil
 }
+	*/

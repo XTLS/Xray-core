@@ -183,9 +183,11 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 		return NewAlwaysOnInboundHandler(ctx, tag, receiverSettings, proxySettings)
 	}
 
+	/*
 	if allocStrategy.Type == proxyman.AllocationStrategy_Random {
 		return NewDynamicInboundHandler(ctx, tag, receiverSettings, proxySettings)
 	}
+		*/
 	return nil, errors.New("unknown allocation strategy: ", receiverSettings.AllocationStrategy.Type).AtError()
 }
 

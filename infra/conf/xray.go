@@ -3,7 +3,7 @@ package conf
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	// "fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -120,12 +120,15 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	}, nil
 }
 
+/*
 type InboundDetourAllocationConfig struct {
 	Strategy    string  `json:"strategy"`
 	Concurrency *uint32 `json:"concurrency"`
 	RefreshMin  *uint32 `json:"refresh"`
 }
+	*/
 
+/*
 // Build implements Buildable.
 func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, error) {
 	config := new(proxyman.AllocationStrategy)
@@ -153,6 +156,7 @@ func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, e
 
 	return config, nil
 }
+*/
 
 type InboundDetourConfig struct {
 	Protocol       string                         `json:"protocol"`
@@ -160,7 +164,7 @@ type InboundDetourConfig struct {
 	ListenOn       *Address                       `json:"listen"`
 	Settings       *json.RawMessage               `json:"settings"`
 	Tag            string                         `json:"tag"`
-	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
+	// Allocation     *InboundDetourAllocationConfig `json:"allocate"`
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
 }
@@ -197,6 +201,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		}
 	}
 
+	/*
 	if c.Allocation != nil {
 		concurrency := -1
 		if c.Allocation.Concurrency != nil && c.Allocation.Strategy == "random" {
@@ -221,6 +226,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		}
 		receiverSettings.AllocationStrategy = as
 	}
+		*/
 	if c.StreamSetting != nil {
 		ss, err := c.StreamSetting.Build()
 		if err != nil {
