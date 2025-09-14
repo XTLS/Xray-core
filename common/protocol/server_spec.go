@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -98,6 +97,8 @@ func (s *ServerSpec) AddUser(user *MemoryUser) {
 	s.users = append(s.users, user)
 }
 
+// Locking it only using the first user when user(s) exists.
+// Should change after refactor
 func (s *ServerSpec) PickUser() *MemoryUser {
 	s.RLock()
 	defer s.RUnlock()
@@ -106,10 +107,8 @@ func (s *ServerSpec) PickUser() *MemoryUser {
 	switch userCount {
 	case 0:
 		return nil
-	case 1:
-		return s.users[0]
 	default:
-		return s.users[dice.Roll(userCount)]
+		return s.users[0]
 	}
 }
 

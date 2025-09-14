@@ -22,27 +22,25 @@ import (
 
 // Client is a inbound handler for trojan protocol
 type Client struct {
-	serverPicker  protocol.ServerPicker
+	server        *protocol.ServerSpec
 	policyManager policy.Manager
 }
 
 // NewClient create a new trojan client.
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
-	serverList := protocol.NewServerList()
-	for _, rec := range config.Server {
-		s, err := protocol.NewServerSpecFromPB(rec)
-		if err != nil {
-			return nil, errors.New("failed to parse server spec").Base(err)
-		}
-		serverList.AddServer(s)
+	if len(config.Server) != 1 {
+		return nil, errors.New(`only one target server allowed`)
 	}
-	if serverList.Size() == 0 {
-		return nil, errors.New("0 server")
+	// Harcoded [0] for processing compatibility.
+	// Should change after refactor.
+	server, err := protocol.NewServerSpecFromPB(config.Server[0])
+	if err != nil {
+		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
 	v := core.MustFromContext(ctx)
 	client := &Client{
-		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
+		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 	return client, nil
@@ -60,12 +58,10 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	destination := ob.Target
 	network := destination.Network
 
-	var server *protocol.ServerSpec
 	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
-		server = c.serverPicker.PickServer()
-		rawConn, err := dialer.Dial(ctx, server.Destination())
+		rawConn, err := dialer.Dial(ctx, c.server.Destination())
 		if err != nil {
 			return err
 		}
@@ -76,11 +72,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if err != nil {
 		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
-	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", server.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", c.server.Destination().NetAddr())
 
 	defer conn.Close()
 
-	user := server.PickUser()
+	user := c.server.PickUser()
 	account, ok := user.Account.(*MemoryAccount)
 	if !ok {
 		return errors.New("user account is not valid")
