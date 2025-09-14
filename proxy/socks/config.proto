@@ -35,5 +35,5 @@ message ServerConfig {
 // ClientConfig is the protobuf config for Socks client.
 message ClientConfig {
   // Sever is a list of Socks server addresses.
-  repeated xray.common.protocol.ServerEndpoint server = 1;
+  xray.common.protocol.ServerEndpoint server = 1;
 }

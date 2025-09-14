@@ -28,12 +28,10 @@ type Client struct {
 
 // NewClient create a new Shadowsocks client.
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
-	if len(config.Server) != 1 {
-		return nil, errors.New(`only one target server allowed`)
+	if config.Server == nil {
+		return nil, errors.New(`no target server found`)
 	}
-	// Harcoded [0] for processing compatibility.
-	// Should change after refactor.
-	server, err := protocol.NewServerSpecFromPB(config.Server[0])
+	server, err := protocol.NewServerSpecFromPB(config.Server)
 	if err != nil {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}

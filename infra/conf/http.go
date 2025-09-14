@@ -77,8 +77,7 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 	if len(v.Servers) != 1 {
 		return nil, errors.New(`HTTP settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple HTTP outbounds and routing balancer instead`)
 	}
-	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
-	for idx, serverConfig := range v.Servers {
+	for _, serverConfig := range v.Servers {
 		if len(serverConfig.Users) > 1 {
 			return nil, errors.New(`HTTP servers: "users" should have one member at most. Multiple members in "users" should use multiple HTTP outbounds and routing balancer instead`)
 		}
@@ -106,9 +105,11 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 				}
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
-			server.User = append(server.User, user)
+			server.User = user
+			break
 		}
-		config.Server[idx] = server
+		config.Server = server
+		break
 	}
 	config.Header = make([]*http.Header, 0, 32)
 	for key, value := range v.Headers {

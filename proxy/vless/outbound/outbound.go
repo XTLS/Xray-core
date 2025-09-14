@@ -56,12 +56,10 @@ type Handler struct {
 
 // New creates a new VLess outbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
-	if len(config.Vnext) != 1 {
-		return nil, errors.New(`only one vnext allowed`)
+	if config.Vnext == nil {
+		return nil, errors.New(`no vnext found`)
 	}
-	// Harcoded [0] for processing compatibility.
-	// Should change after refactor.
-	server, err := protocol.NewServerSpecFromPB(config.Vnext[0])
+	server, err := protocol.NewServerSpecFromPB(config.Vnext)
 	if err != nil {
 		return nil, errors.New("failed to get server spec").Base(err).AtError()
 	}

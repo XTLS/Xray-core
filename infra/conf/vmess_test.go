@@ -34,26 +34,22 @@ func TestVMessOutbound(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &outbound.Config{
-				Receiver: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
-							},
+				Receiver: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Ip{
+							Ip: []byte{127, 0, 0, 1},
 						},
-						Port: 80,
-						User: []*protocol.User{
-							{
-								Email: "love@example.com",
-								Level: 255,
-								Account: serial.ToTypedMessage(&vmess.Account{
-									Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
-									SecuritySettings: &protocol.SecurityConfig{
-										Type: protocol.SecurityType_AUTO,
-									},
-								}),
+					},
+					Port: 80,
+					User: &protocol.User{
+						Email: "love@example.com",
+						Level: 255,
+						Account: serial.ToTypedMessage(&vmess.Account{
+							Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
+							SecuritySettings: &protocol.SecurityConfig{
+								Type: protocol.SecurityType_AUTO,
 							},
-						},
+						}),
 					},
 				},
 			},
@@ -68,26 +64,22 @@ func TestVMessOutbound(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &outbound.Config{
-				Receiver: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
-							},
+				Receiver: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Ip{
+							Ip: []byte{127, 0, 0, 1},
 						},
-						Port: 80,
-						User: []*protocol.User{
-							{
-								Email: "love@example.com",
-								Level: 255,
-								Account: serial.ToTypedMessage(&vmess.Account{
-									Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
-									SecuritySettings: &protocol.SecurityConfig{
-										Type: protocol.SecurityType_AUTO,
-									},
-								}),
+					},
+					Port: 80,
+					User: &protocol.User{
+						Email: "love@example.com",
+						Level: 255,
+						Account: serial.ToTypedMessage(&vmess.Account{
+							Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
+							SecuritySettings: &protocol.SecurityConfig{
+								Type: protocol.SecurityType_AUTO,
 							},
-						},
+						}),
 					},
 				},
 			},

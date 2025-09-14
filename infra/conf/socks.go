@@ -95,8 +95,7 @@ func (v *SocksClientConfig) Build() (proto.Message, error) {
 	if len(v.Servers) != 1 {
 		return nil, errors.New(`SOCKS settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple SOCKS outbounds and routing balancer instead`)
 	}
-	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
-	for idx, serverConfig := range v.Servers {
+	for _, serverConfig := range v.Servers {
 		if len(serverConfig.Users) > 1 {
 			return nil, errors.New(`SOCKS servers: "users" should have one member at most. Multiple members in "users" should use multiple SOCKS outbounds and routing balancer instead`)
 		}
@@ -124,9 +123,11 @@ func (v *SocksClientConfig) Build() (proto.Message, error) {
 				}
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
-			server.User = append(server.User, user)
+			server.User = user
+			break
 		}
-		config.Server[idx] = server
+		config.Server = server
+		break
 	}
 	return config, nil
 }

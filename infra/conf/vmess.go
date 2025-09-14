@@ -142,8 +142,7 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 	if len(c.Receivers) != 1 {
 		return nil, errors.New(`VMess settings: "vnext" should have one and only one member. Multiple endpoints in "vnext" should use multiple VMess outbounds and routing balancer instead`)
 	}
-	serverSpecs := make([]*protocol.ServerEndpoint, len(c.Receivers))
-	for idx, rec := range c.Receivers {
+	for _, rec := range c.Receivers {
 		if len(rec.Users) != 1 {
 			return nil, errors.New(`VMess vnext: "users" should have one and only one member. Multiple members in "users" should use multiple VMess outbounds and routing balancer instead`)
 		}
@@ -182,10 +181,11 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 			account.ID = u.String()
 
 			user.Account = serial.ToTypedMessage(account.Build())
-			spec.User = append(spec.User, user)
+			spec.User = user
+			break
 		}
-		serverSpecs[idx] = spec
+		config.Receiver = spec
+		break
 	}
-	config.Receiver = serverSpecs
 	return config, nil
 }
