@@ -195,6 +195,9 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
 		}
+		if err := ctx.GetError(); err != nil {
+			return nil, ctx, err
+		}
 	}
 
 	if r.domainStrategy != Config_IpIfNonMatch || len(ctx.GetTargetDomain()) == 0 || skipDNSResolve {
@@ -207,6 +210,9 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	for _, rule := range r.rules {
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
+		}
+		if err := ctx.GetError(); err != nil {
+			return nil, ctx, err
 		}
 	}
 
