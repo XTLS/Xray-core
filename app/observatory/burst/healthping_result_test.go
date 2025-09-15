@@ -25,6 +25,8 @@ func TestHealthPingResults(t *testing.T) {
 		Min:       60,
 	}
 	actual := hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
@@ -32,6 +34,8 @@ func TestHealthPingResults(t *testing.T) {
 	hr.Put(rttFailed)
 	expected.Fail = 2
 	actual = hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("failed half-failures test, expected: %v, actual: %v", expected, actual)
 	}
@@ -46,6 +50,8 @@ func TestHealthPingResults(t *testing.T) {
 		Min:       0,
 	}
 	actual = hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("failed all-failures test, expected: %v, actual: %v", expected, actual)
 	}
@@ -71,6 +77,8 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		Min:       60,
 	}
 	actual := hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("failed 'half-outdated' test, expected: %v, actual: %v", expected, actual)
 	}
@@ -85,6 +93,8 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		Min:       0,
 	}
 	actual = hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("failed 'outdated / not-tested' test, expected: %v, actual: %v", expected, actual)
 	}
@@ -100,6 +110,8 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		Min:       60,
 	}
 	actual = hr.Get()
+	actual.LastSeenTime = 0
+	actual.LastTryTime = 0
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
