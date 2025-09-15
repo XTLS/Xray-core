@@ -65,23 +65,19 @@ func TestSocksOutboundConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &socks.ClientConfig{
-				Server: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
-							},
+				Server: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Ip{
+							Ip: []byte{127, 0, 0, 1},
 						},
-						Port: 1234,
-						User: []*protocol.User{
-							{
-								Email: "test@email.com",
-								Account: serial.ToTypedMessage(&socks.Account{
-									Username: "test user",
-									Password: "test pass",
-								}),
-							},
-						},
+					},
+					Port: 1234,
+					User: &protocol.User{
+						Email: "test@email.com",
+						Account: serial.ToTypedMessage(&socks.Account{
+							Username: "test user",
+							Password: "test pass",
+						}),
 					},
 				},
 			},
@@ -96,23 +92,19 @@ func TestSocksOutboundConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &socks.ClientConfig{
-				Server: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Ip{
-								Ip: []byte{127, 0, 0, 1},
-							},
+				Server: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Ip{
+							Ip: []byte{127, 0, 0, 1},
 						},
-						Port: 1234,
-						User: []*protocol.User{
-							{
-								Email: "test@email.com",
-								Account: serial.ToTypedMessage(&socks.Account{
-									Username: "test user",
-									Password: "test pass",
-								}),
-							},
-						},
+					},
+					Port: 1234,
+					User: &protocol.User{
+						Email: "test@email.com",
+						Account: serial.ToTypedMessage(&socks.Account{
+							Username: "test user",
+							Password: "test pass",
+						}),
 					},
 				},
 			},

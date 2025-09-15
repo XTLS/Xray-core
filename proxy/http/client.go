@@ -31,7 +31,7 @@ import (
 )
 
 type Client struct {
-	serverPicker  protocol.ServerPicker
+	server        *protocol.ServerSpec
 	policyManager policy.Manager
 	header        []*Header
 }
@@ -48,21 +48,17 @@ var (
 
 // NewClient create a new http client based on the given config.
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
-	serverList := protocol.NewServerList()
-	for _, rec := range config.Server {
-		s, err := protocol.NewServerSpecFromPB(rec)
-		if err != nil {
-			return nil, errors.New("failed to get server spec").Base(err)
-		}
-		serverList.AddServer(s)
+	if config.Server == nil {
+		return nil, errors.New(`no target server found`)
 	}
-	if serverList.Size() == 0 {
-		return nil, errors.New("0 target server")
+	server, err := protocol.NewServerSpecFromPB(config.Server)
+	if err != nil {
+		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
 	v := core.MustFromContext(ctx)
 	return &Client{
-		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
+		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		header:        config.Header,
 	}, nil
@@ -84,7 +80,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("UDP is not supported by HTTP outbound")
 	}
 
-	var user *protocol.MemoryUser
+	server := c.server
+	dest := server.Destination
+	user := server.User
 	var conn stat.Connection
 
 	mbuf, _ := link.Reader.ReadMultiBuffer()
@@ -102,10 +100,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
-		server := c.serverPicker.PickServer()
-		dest := server.Destination()
-		user = server.PickUser()
-
 		netConn, err := setUpHTTPTunnel(ctx, dest, targetAddr, user, dialer, header, firstPayload)
 		if netConn != nil {
 			if _, ok := netConn.(*http2Conn); !ok {

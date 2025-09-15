@@ -13,33 +13,6 @@ import "common/serial/typed_message.proto";
 
 message InboundConfig {}
 
-message AllocationStrategy {
-  enum Type {
-    // Always allocate all connection handlers.
-    Always = 0;
-
-    // Randomly allocate specific range of handlers.
-    Random = 1;
-
-    // External. Not supported yet.
-    External = 2;
-  }
-
-  Type type = 1;
-
-  message AllocationStrategyConcurrency { uint32 value = 1; }
-
-  // Number of handlers (ports) running in parallel.
-  // Default value is 3 if unset.
-  AllocationStrategyConcurrency concurrency = 2;
-
-  message AllocationStrategyRefresh { uint32 value = 1; }
-
-  // Number of minutes before a handler is regenerated.
-  // Default value is 5 if unset.
-  AllocationStrategyRefresh refresh = 3;
-}
-
 message SniffingConfig {
   // Whether or not to enable content sniffing on an inbound connection.
   bool enabled = 1;
@@ -62,11 +35,10 @@ message ReceiverConfig {
   xray.common.net.PortList port_list = 1;
   // Listen specifies the IP address that the Receiver should listen on.
   xray.common.net.IPOrDomain listen = 2;
-  AllocationStrategy allocation_strategy = 3;
-  xray.transport.internet.StreamConfig stream_settings = 4;
-  bool receive_original_destination = 5;
-  reserved 6;
-  SniffingConfig sniffing_settings = 7;
+  xray.transport.internet.StreamConfig stream_settings = 3;
+  bool receive_original_destination = 4;
+  reserved 5;
+  SniffingConfig sniffing_settings = 6;
 }
 
 message InboundHandlerConfig {

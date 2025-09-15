@@ -35,24 +35,20 @@ func TestVLessOutbound(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &outbound.Config{
-				Vnext: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Domain{
-								Domain: "example.com",
-							},
+				Vnext: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Domain{
+							Domain: "example.com",
 						},
-						Port: 443,
-						User: []*protocol.User{
-							{
-								Account: serial.ToTypedMessage(&vless.Account{
-									Id:         "27848739-7e62-4138-9fd3-098a63964b6b",
-									Flow:       "xtls-rprx-vision-udp443",
-									Encryption: "none",
-								}),
-								Level: 0,
-							},
-						},
+					},
+					Port: 443,
+					User: &protocol.User{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id:         "27848739-7e62-4138-9fd3-098a63964b6b",
+							Flow:       "xtls-rprx-vision-udp443",
+							Encryption: "none",
+						}),
+						Level: 0,
 					},
 				},
 			},
@@ -68,24 +64,20 @@ func TestVLessOutbound(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &outbound.Config{
-				Vnext: []*protocol.ServerEndpoint{
-					{
-						Address: &net.IPOrDomain{
-							Address: &net.IPOrDomain_Domain{
-								Domain: "example.com",
-							},
+				Vnext: &protocol.ServerEndpoint{
+					Address: &net.IPOrDomain{
+						Address: &net.IPOrDomain_Domain{
+							Domain: "example.com",
 						},
-						Port: 443,
-						User: []*protocol.User{
-							{
-								Account: serial.ToTypedMessage(&vless.Account{
-									Id:         "27848739-7e62-4138-9fd3-098a63964b6b",
-									Flow:       "xtls-rprx-vision-udp443",
-									Encryption: "none",
-								}),
-								Level: 0,
-							},
-						},
+					},
+					Port: 443,
+					User: &protocol.User{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id:         "27848739-7e62-4138-9fd3-098a63964b6b",
+							Flow:       "xtls-rprx-vision-udp443",
+							Encryption: "none",
+						}),
+						Level: 0,
 					},
 				},
 			},

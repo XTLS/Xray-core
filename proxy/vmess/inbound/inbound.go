@@ -106,7 +106,6 @@ type Handler struct {
 	inboundHandlerManager feature_inbound.Manager
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
-	detours               *DetourConfig
 	sessionHistory        *encoding.SessionHistory
 }
 
@@ -117,7 +116,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		clients:               vmess.NewTimedUserValidator(),
-		detours:               config.Detour,
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
 	}
@@ -323,38 +321,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	return nil
 }
 
+// Stub command generator
 func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
-	if h.detours != nil {
-		tag := h.detours.To
-		if h.inboundHandlerManager != nil {
-			handler, err := h.inboundHandlerManager.GetHandler(ctx, tag)
-			if err != nil {
-				errors.LogWarningInner(ctx, err, "failed to get detour handler: ", tag)
-				return nil
-			}
-			proxyHandler, port, availableMin := handler.GetRandomInboundProxy()
-			inboundHandler, ok := proxyHandler.(*Handler)
-			if ok && inboundHandler != nil {
-				if availableMin > 255 {
-					availableMin = 255
-				}
-
-				errors.LogDebug(ctx, "pick detour handler for port ", port, " for ", availableMin, " minutes.")
-				user := inboundHandler.GetOrGenerateUser(request.User.Email)
-				if user == nil {
-					return nil
-				}
-				account := user.Account.(*vmess.MemoryAccount)
-				return &protocol.CommandSwitchAccount{
-					Port:     port,
-					ID:       account.ID.UUID(),
-					Level:    user.Level,
-					ValidMin: byte(availableMin),
-				}
-			}
-		}
-	}
-
 	return nil
 }
 
