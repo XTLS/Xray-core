@@ -71,7 +71,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		cone:          ctx.Value("cone").(bool),
 	}
 
-	a := handler.server.PickUser().Account.(*vless.MemoryAccount)
+	a := handler.server.User.Account.(*vless.MemoryAccount)
 	if a.Encryption != "" && a.Encryption != "none" {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
@@ -122,10 +122,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ob.Name = "vless"
 
+	rec := h.server
 	var conn stat.Connection
+
 	if err := retry.ExponentialBackoff(5, 200).On(func() error {
 		var err error
-		conn, err = dialer.Dial(ctx, h.server.Destination())
+		conn, err = dialer.Dial(ctx, rec.Destination)
 		if err != nil {
 			return err
 		}
@@ -140,7 +142,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		iConn = statConn.Connection
 	}
 	target := ob.Target
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", h.server.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
 	if h.encryption != nil {
 		var err error
@@ -167,7 +169,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
-		User:    h.server.PickUser(),
+		User:    rec.User,
 		Command: command,
 		Address: target.Address,
 		Port:    target.Port,

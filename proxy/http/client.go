@@ -80,7 +80,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("UDP is not supported by HTTP outbound")
 	}
 
-	var user *protocol.MemoryUser
+	server := c.server
+	dest := server.Destination
+	user := server.User
 	var conn stat.Connection
 
 	mbuf, _ := link.Reader.ReadMultiBuffer()
@@ -98,9 +100,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
-		dest := c.server.Destination()
-		user = c.server.PickUser()
-
 		netConn, err := setUpHTTPTunnel(ctx, dest, targetAddr, user, dialer, header, firstPayload)
 		if netConn != nil {
 			if _, ok := netConn.(*http2Conn); !ok {

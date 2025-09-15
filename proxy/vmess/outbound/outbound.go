@@ -64,9 +64,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "vmess"
 	ob.CanSpliceCopy = 3
 
+	rec := h.server
 	var conn stat.Connection
+
 	err := retry.ExponentialBackoff(5, 200).On(func() error {
-		rawConn, err := dialer.Dial(ctx, h.server.Destination())
+		rawConn, err := dialer.Dial(ctx, rec.Destination)
 		if err != nil {
 			return err
 		}
@@ -80,7 +82,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	defer conn.Close()
 
 	target := ob.Target
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", h.server.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
 	command := protocol.RequestCommandTCP
 	if target.Network == net.Network_UDP {
@@ -90,7 +92,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		command = protocol.RequestCommandMux
 	}
 
-	user := h.server.PickUser()
+	user := rec.User
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
 		User:    user,
@@ -197,7 +199,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return errors.New("failed to read header").Base(err)
 		}
-		h.handleCommand(h.server.Destination(), header.Command)
+		h.handleCommand(rec.Destination, header.Command)
 
 		bodyReader, err := session.DecodeResponseBody(request, reader)
 		if err != nil {

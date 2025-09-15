@@ -5,14 +5,14 @@ import (
 )
 
 type ServerSpec struct {
-	dest  net.Destination
-	user  *MemoryUser
+	Destination  net.Destination
+	User         *MemoryUser
 }
 
 func NewServerSpec(dest net.Destination, user *MemoryUser) *ServerSpec {
 	return &ServerSpec{
-		dest:  dest,
-		user:  user,
+		Destination: dest,
+		User:        user,
 	}
 }
 
@@ -27,16 +27,4 @@ func NewServerSpecFromPB(spec *ServerEndpoint) (*ServerSpec, error) {
 		dUser = user
 	}
 	return NewServerSpec(dest, dUser), nil
-}
-
-func (s *ServerSpec) Destination() net.Destination {
-	return s.dest
-}
-
-func (s *ServerSpec) PickUser() *MemoryUser {
-	if s.user != nil {
-		return s.user
-	} else {
-		return nil
-	}
 }

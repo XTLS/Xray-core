@@ -105,8 +105,7 @@ func TestVMessInbound(t *testing.T) {
 				],
 				"default": {
 					"level": 0
-				},
-				"disableInsecureEncryption": true
+				}
 			}`,
 			Parser: loadJSON(creator),
 			Output: &inbound.Config{

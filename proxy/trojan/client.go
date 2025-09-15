@@ -56,10 +56,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	destination := ob.Target
 	network := destination.Network
 
+	server := c.server
 	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
-		rawConn, err := dialer.Dial(ctx, c.server.Destination())
+		rawConn, err := dialer.Dial(ctx, server.Destination)
 		if err != nil {
 			return err
 		}
@@ -70,11 +71,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if err != nil {
 		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
-	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", c.server.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", server.Destination.NetAddr())
 
 	defer conn.Close()
 
-	user := c.server.PickUser()
+	user := server.User
 	account, ok := user.Account.(*MemoryAccount)
 	if !ok {
 		return errors.New("user account is not valid")

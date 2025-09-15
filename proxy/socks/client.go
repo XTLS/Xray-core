@@ -57,13 +57,13 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	// Destination of the inner request.
 	destination := ob.Target
 
-	// Outbound server's destination.
-	var dest net.Destination
+	// Outbound server.
+	server := c.server
+	dest := server.Destination
 	// Connection to the outbound server.
 	var conn stat.Connection
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
-		dest = c.server.Destination()
 		rawConn, err := dialer.Dial(ctx, dest)
 		if err != nil {
 			return err
@@ -94,7 +94,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		request.Command = protocol.RequestCommandUDP
 	}
 
-	user := c.server.PickUser()
+	user := server.User
 	if user != nil {
 		request.User = user
 		p = c.policyManager.ForLevel(user.Level)

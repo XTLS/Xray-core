@@ -46,21 +46,6 @@ func (a *VMessAccount) Build() *vmess.Account {
 	}
 }
 
-/*
-type VMessDetourConfig struct {
-	ToTag string `json:"to"`
-}
-	*/
-
-	/*
-// Build implements Buildable
-func (c *VMessDetourConfig) Build() *inbound.DetourConfig {
-	return &inbound.DetourConfig{
-		To: c.ToTag,
-	}
-}
-	*/
-
 type VMessDefaultConfig struct {
 	Level byte `json:"level"`
 }
@@ -75,7 +60,6 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 type VMessInboundConfig struct {
 	Users        []json.RawMessage   `json:"clients"`
 	Defaults     *VMessDefaultConfig `json:"default"`
-	// DetourConfig *VMessDetourConfig  `json:"detour"`
 }
 
 // Build implements Buildable
@@ -85,12 +69,6 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 	if c.Defaults != nil {
 		config.Default = c.Defaults.Build()
 	}
-
-	/*
-	if c.DetourConfig != nil {
-		config.Detour = c.DetourConfig.Build()
-	}
-		*/
 
 	config.User = make([]*protocol.User, len(c.Users))
 	for idx, rawData := range c.Users {
