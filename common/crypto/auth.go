@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"io"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -231,6 +232,7 @@ type AuthenticationWriter struct {
 	sizeParser   ChunkSizeEncoder
 	transferType protocol.TransferType
 	padding      PaddingLengthGenerator
+	mu           sync.Mutex
 }
 
 func NewAuthenticationWriter(auth Authenticator, sizeParser ChunkSizeEncoder, writer io.Writer, transferType protocol.TransferType, padding PaddingLengthGenerator) *AuthenticationWriter {
@@ -336,6 +338,8 @@ func (w *AuthenticationWriter) writePacket(mb buf.MultiBuffer) error {
 
 // WriteMultiBuffer implements buf.Writer.
 func (w *AuthenticationWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if mb.IsEmpty() {
 		eb, err := w.seal([]byte{})
 		common.Must(err)
