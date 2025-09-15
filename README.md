@@ -105,13 +105,15 @@
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [OneXray](https://github.com/OneXray/OneXray)
-  - [GoXRay](https://github.com/goxray/desktop)
+  - [GoXRay Desktop](https://github.com/goxray/desktop)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
-  - [GoXRay](https://github.com/goxray/desktop)
+  - **GoXRay Project**
+    - [GoXRay Desktop](https://github.com/goxray/desktop) - available as [precompiled binary](https://github.com/goxray/desktop/releases) and [Ubuntu PPA package](https://launchpad.net/~twdragon/+archive/ubuntu/xray)
+    - [GoXRay TUN CLI](https://github.com/goxray/tun)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
