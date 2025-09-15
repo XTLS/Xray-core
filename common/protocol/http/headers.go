@@ -9,7 +9,7 @@ import (
 )
 
 // ParseXForwardedFor parses X-Forwarded-For header in http headers, and return the IP list in it.
-func ParseXForwardedFor(header http.Header) []net.Address {
+func parseXForwardedFor(header http.Header) []net.Address {
 	xff := header.Get("X-Forwarded-For")
 	if xff == "" {
 		return nil
@@ -18,6 +18,22 @@ func ParseXForwardedFor(header http.Header) []net.Address {
 	addrs := make([]net.Address, 0, len(list))
 	for _, proxy := range list {
 		addrs = append(addrs, net.ParseAddress(proxy))
+	}
+	return addrs
+}
+
+func parseCFConnectingIP(header http.Header) []net.Address {
+	value := header.Get("CF-Connecting-IP")
+	if value == "" {
+		return nil
+	}
+	return []net.Address{net.ParseAddress(value)}
+}
+
+func ParseXForwardedFor(header http.Header) []net.Address {
+	addrs := parseXForwardedFor(header)
+	if len(addrs) == 0 {
+		addrs = parseCFConnectingIP(header)
 	}
 	return addrs
 }
