@@ -3,7 +3,7 @@ package tls
 import (
 	gotls "crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -156,8 +156,14 @@ func printTLSConnDetail(tlsConn *gotls.Conn) {
 
 func showCert() func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-		hash := GenerateCertChainHash(rawCerts)
-		fmt.Println("Certificate Chain Hash: ", base64.StdEncoding.EncodeToString(hash))
+		var hash []byte
+		for _, asn1Data := range rawCerts {
+			cert, _ := x509.ParseCertificate(asn1Data)
+			if cert.IsCA {
+				hash = GenerateCertHash(cert)
+			}
+		}
+		fmt.Println("Certificate Leaf Hash: ", hex.EncodeToString(hash))
 		return nil
 	}
 }
