@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"os"
 	"slices"
 	"strings"
@@ -281,31 +280,25 @@ func (c *Config) parseServerName() string {
 	return c.ServerName
 }
 
-func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-	// pinned chain has the highest priority
-	// pass if successfull and fail if not
-	if r.PinnedPeerCertificateChainSha256 != nil {
-		hashValue := GenerateCertChainHash(rawCerts)
-		for _, v := range r.PinnedPeerCertificateChainSha256 {
-			if hmac.Equal(hashValue, v) {
-				return nil
-			}
-		}
-		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
+func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) (err error) {
+	// extract x509 certificates from rawCerts(verifiedChains will be nil if InsecureSkipVerify is true)
+	certs := make([]*x509.Certificate, len(rawCerts))
+	for i, asn1Data := range rawCerts {
+		certs[i], _ = x509.ParseCertificate(asn1Data)
 	}
 
 	// directly return success if pinned cert is leaf
 	// or add the CA to RootCAs if pinned cert is CA(and can be used in VerifyPeerCertInNames for Self signed CA)
 	RootCAs := r.RootCAs
 	if r.PinnedPeerCertificateSha256 != nil {
-		verifyResult, verifiedCert := verifyChain(verifiedChains, r.PinnedPeerCertificateSha256)
+		verifyResult, verifiedCert := verifyChain(certs, r.PinnedPeerCertificateSha256)
 		switch verifyResult {
 		case certNotFound:
 			return errors.New("peer cert is unrecognized")
 		case foundLeaf:
 			return nil
 		case foundCA:
-			RootCAs = RootCAs.Clone()
+			RootCAs = x509.NewCertPool()
 			RootCAs.AddCert(verifiedCert)
 		default:
 			panic("impossible PinnedPeerCertificateSha256 verify result")
@@ -314,10 +307,6 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 
 	if r.VerifyPeerCertInNames != nil {
 		if len(r.VerifyPeerCertInNames) > 0 {
-			certs := make([]*x509.Certificate, len(rawCerts))
-			for i, asn1Data := range rawCerts {
-				certs[i], _ = x509.ParseCertificate(asn1Data)
-			}
 			opts := x509.VerifyOptions{
 				Roots:         RootCAs,
 				CurrentTime:   time.Now(),
@@ -337,10 +326,9 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 }
 
 type RandCarrier struct {
-	RootCAs                          *x509.CertPool
-	VerifyPeerCertInNames            []string
-	PinnedPeerCertificateChainSha256 [][]byte
-	PinnedPeerCertificateSha256      [][]byte
+	RootCAs                     *x509.CertPool
+	VerifyPeerCertInNames       []string
+	PinnedPeerCertificateSha256 [][]byte
 }
 
 func (r *RandCarrier) Read(p []byte) (n int, err error) {
@@ -365,10 +353,9 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	randCarrier := &RandCarrier{
-		RootCAs:                          root,
-		VerifyPeerCertInNames:            slices.Clone(c.VerifyPeerCertInNames),
-		PinnedPeerCertificateChainSha256: c.PinnedPeerCertificateChainSha256,
-		PinnedPeerCertificateSha256:      c.PinnedPeerCertificateSha256,
+		RootCAs:                     root,
+		VerifyPeerCertInNames:       slices.Clone(c.VerifyPeerCertInNames),
+		PinnedPeerCertificateSha256: c.PinnedPeerCertificateSha256,
 	}
 	config := &tls.Config{
 		Rand:                   randCarrier,
@@ -538,19 +525,17 @@ const (
 	foundCA
 )
 
-func verifyChain(verifiedChains [][]*x509.Certificate, PinnedPeerCertificateSha256 [][]byte) (verifyResult, *x509.Certificate) {
-	for _, v := range verifiedChains {
-		for _, cert := range v {
-			certHash := GenerateCertHash(cert)
-			for _, c := range PinnedPeerCertificateSha256 {
-				if hmac.Equal(certHash, c) {
-					if cert.IsCA {
-						return foundCA, cert
-					} else {
-						return foundLeaf, cert
-					}
-
+func verifyChain(certs []*x509.Certificate, PinnedPeerCertificateSha256 [][]byte) (verifyResult, *x509.Certificate) {
+	for _, cert := range certs {
+		certHash := GenerateCertHash(cert)
+		for _, c := range PinnedPeerCertificateSha256 {
+			if hmac.Equal(certHash, c) {
+				if cert.IsCA {
+					return foundCA, cert
+				} else {
+					return foundLeaf, cert
 				}
+
 			}
 		}
 	}
