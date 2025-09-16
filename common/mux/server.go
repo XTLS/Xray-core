@@ -64,7 +64,14 @@ func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *t
 	if dest.Address != muxCoolAddress {
 		return s.dispatcher.DispatchLink(ctx, dest, link)
 	}
-	link = s.dispatcher.(*dispatcher.DefaultDispatcher).WrapLink(ctx, link)
+	if dispatcher, ok := s.dispatcher.(*dispatcher.DefaultDispatcher); ok {
+		link = dispatcher.WrapLink(ctx, link)
+	} else {
+		link = &transport.Link{
+			Reader: &buf.TimeoutWrapperReader{Reader: link.Reader},
+			Writer: link.Writer,
+		}
+	}
 	worker, err := NewServerWorker(ctx, s.dispatcher, link)
 	if err != nil {
 		return err
