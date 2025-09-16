@@ -36,7 +36,7 @@ func GenerateCertChainHash(rawCerts [][]byte) []byte {
 	return hashValue
 }
 
-func GenerateCertPublicKeyHash(cert *x509.Certificate) []byte {
-	out := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+func GenerateCertHash(cert *x509.Certificate) []byte {
+	out := sha256.Sum256(cert.Raw)
 	return out[:]
 }

@@ -282,6 +282,36 @@ func (c *Config) parseServerName() string {
 }
 
 func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	// pinned chain has the highest priority
+	// pass if successfull and fail if not
+	if r.PinnedPeerCertificateChainSha256 != nil {
+		hashValue := GenerateCertChainHash(rawCerts)
+		for _, v := range r.PinnedPeerCertificateChainSha256 {
+			if hmac.Equal(hashValue, v) {
+				return nil
+			}
+		}
+		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
+	}
+
+	// directly return success if pinned cert is leaf
+	// or add the CA to RootCAs if pinned cert is CA(and can be used in VerifyPeerCertInNames for Self signed CA)
+	RootCAs := r.RootCAs
+	if r.PinnedPeerCertificateSha256 != nil {
+		verifyResult, verifiedCert := verifyChain(verifiedChains, r.PinnedPeerCertificateSha256)
+		switch verifyResult {
+		case certNotFound:
+			return errors.New("peer cert is unrecognized")
+		case foundLeaf:
+			return nil
+		case foundCA:
+			RootCAs = RootCAs.Clone()
+			RootCAs.AddCert(verifiedCert)
+		default:
+			panic("impossible PinnedPeerCertificateSha256 verify result")
+		}
+	}
+
 	if r.VerifyPeerCertInNames != nil {
 		if len(r.VerifyPeerCertInNames) > 0 {
 			certs := make([]*x509.Certificate, len(rawCerts))
@@ -289,7 +319,7 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 				certs[i], _ = x509.ParseCertificate(asn1Data)
 			}
 			opts := x509.VerifyOptions{
-				Roots:         r.RootCAs,
+				Roots:         RootCAs,
 				CurrentTime:   time.Now(),
 				Intermediates: x509.NewCertPool(),
 			}
@@ -302,42 +332,15 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 				}
 			}
 		}
-		if r.PinnedPeerCertificateChainSha256 == nil {
-			return errors.New("peer cert is invalid.")
-		}
-	}
-
-	if r.PinnedPeerCertificateChainSha256 != nil {
-		hashValue := GenerateCertChainHash(rawCerts)
-		for _, v := range r.PinnedPeerCertificateChainSha256 {
-			if hmac.Equal(hashValue, v) {
-				return nil
-			}
-		}
-		return errors.New("peer cert is unrecognized: ", base64.StdEncoding.EncodeToString(hashValue))
-	}
-
-	if r.PinnedPeerCertificatePublicKeySha256 != nil {
-		for _, v := range verifiedChains {
-			for _, cert := range v {
-				publicHash := GenerateCertPublicKeyHash(cert)
-				for _, c := range r.PinnedPeerCertificatePublicKeySha256 {
-					if hmac.Equal(publicHash, c) {
-						return nil
-					}
-				}
-			}
-		}
-		return errors.New("peer public key is unrecognized.")
 	}
 	return nil
 }
 
 type RandCarrier struct {
-	RootCAs                              *x509.CertPool
-	VerifyPeerCertInNames                []string
-	PinnedPeerCertificateChainSha256     [][]byte
-	PinnedPeerCertificatePublicKeySha256 [][]byte
+	RootCAs                          *x509.CertPool
+	VerifyPeerCertInNames            []string
+	PinnedPeerCertificateChainSha256 [][]byte
+	PinnedPeerCertificateSha256      [][]byte
 }
 
 func (r *RandCarrier) Read(p []byte) (n int, err error) {
@@ -362,10 +365,10 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	randCarrier := &RandCarrier{
-		RootCAs:                              root,
-		VerifyPeerCertInNames:                slices.Clone(c.VerifyPeerCertInNames),
-		PinnedPeerCertificateChainSha256:     c.PinnedPeerCertificateChainSha256,
-		PinnedPeerCertificatePublicKeySha256: c.PinnedPeerCertificatePublicKeySha256,
+		RootCAs:                          root,
+		VerifyPeerCertInNames:            slices.Clone(c.VerifyPeerCertInNames),
+		PinnedPeerCertificateChainSha256: c.PinnedPeerCertificateChainSha256,
+		PinnedPeerCertificateSha256:      c.PinnedPeerCertificateSha256,
 	}
 	config := &tls.Config{
 		Rand:                   randCarrier,
@@ -525,4 +528,31 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 
 func IsFromMitm(str string) bool {
 	return strings.ToLower(str) == "frommitm"
+}
+
+type verifyResult int
+
+const (
+	certNotFound verifyResult = iota
+	foundLeaf
+	foundCA
+)
+
+func verifyChain(verifiedChains [][]*x509.Certificate, PinnedPeerCertificateSha256 [][]byte) (verifyResult, *x509.Certificate) {
+	for _, v := range verifiedChains {
+		for _, cert := range v {
+			certHash := GenerateCertHash(cert)
+			for _, c := range PinnedPeerCertificateSha256 {
+				if hmac.Equal(certHash, c) {
+					if cert.IsCA {
+						return foundCA, cert
+					} else {
+						return foundLeaf, cert
+					}
+
+				}
+			}
+		}
+	}
+	return certNotFound, nil
 }
