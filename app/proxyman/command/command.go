@@ -71,6 +71,9 @@ type handlerServer struct {
 }
 
 func (s *handlerServer) AddInbound(ctx context.Context, request *AddInboundRequest) (*AddInboundResponse, error) {
+	if request.Inbound == nil {
+		return nil, errors.New("inbound config is nil")
+	}
 	if err := core.AddInboundHandler(s.s, request.Inbound); err != nil {
 		return nil, err
 	}
@@ -163,6 +166,9 @@ func (s *handlerServer) GetInboundUsersCount(ctx context.Context, request *GetIn
 }
 
 func (s *handlerServer) AddOutbound(ctx context.Context, request *AddOutboundRequest) (*AddOutboundResponse, error) {
+	if request.Outbound == nil {
+		return nil, errors.New("outbound config is nil")
+	}
 	if err := core.AddOutboundHandler(s.s, request.Outbound); err != nil {
 		return nil, err
 	}
