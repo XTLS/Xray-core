@@ -51,9 +51,9 @@ func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {
 	case result := <-c:
 		return result.n, result.err
 	case <-time.After(300 * time.Second):
-		common.Interrupt(w.R)
 		common.Close(w.R)
-		return 0, io.EOF
+		common.Interrupt(w.R)
+		return 0, buf.ErrReadTimeout
 	}
 }
 
