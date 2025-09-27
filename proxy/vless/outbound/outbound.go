@@ -198,7 +198,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
-		case protocol.RequestCommandTCP:
+		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
 			var t reflect.Type
 			var p uintptr
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
@@ -223,6 +223,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			r, _ := t.FieldByName("rawInput")
 			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
 			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+		default:
+			panic("unknown VLESS request command")
 		}
 	default:
 		ob.CanSpliceCopy = 3
