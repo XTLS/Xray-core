@@ -94,17 +94,13 @@ func TestVless(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id: userID.String(),
-									}),
-								},
-							},
+					Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User:    &protocol.User{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id: userID.String(),
+							}),
 						},
 					},
 				}),
@@ -199,17 +195,13 @@ func TestVlessTls(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id: userID.String(),
-									}),
-								},
-							},
+					Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User:    &protocol.User{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id: userID.String(),
+							}),
 						},
 					},
 				}),
@@ -322,18 +314,14 @@ func TestVlessXtlsVision(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id:   userID.String(),
-										Flow: vless.XRV,
-									}),
-								},
-							},
+					Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User:    &protocol.User{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id:   userID.String(),
+								Flow: vless.XRV,
+							}),
 						},
 					},
 				}),
@@ -456,18 +444,14 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Vnext: []*protocol.ServerEndpoint{
-						{
-							Address: net.NewIPOrDomain(net.LocalHostIP),
-							Port:    uint32(serverPort),
-							User: []*protocol.User{
-								{
-									Account: serial.ToTypedMessage(&vless.Account{
-										Id:   userID.String(),
-										Flow: vless.XRV,
-									}),
-								},
-							},
+					Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User:    &protocol.User{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id:   userID.String(),
+								Flow: vless.XRV,
+							}),
 						},
 					},
 				}),

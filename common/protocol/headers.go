@@ -5,7 +5,6 @@ import (
 
 	"github.com/xtls/xray-core/common/bitmask"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/uuid"
 	"golang.org/x/sys/cpu"
 )
 
@@ -69,14 +68,6 @@ type ResponseCommand interface{}
 type ResponseHeader struct {
 	Option  bitmask.Byte
 	Command ResponseCommand
-}
-
-type CommandSwitchAccount struct {
-	Host     net.Address
-	Port     net.Port
-	ID       uuid.UUID
-	Level    uint32
-	ValidMin byte
 }
 
 var (

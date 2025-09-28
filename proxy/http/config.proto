@@ -28,6 +28,6 @@ message Header {
 // ClientConfig is the protobuf config for HTTP proxy client.
 message ClientConfig {
   // Sever is a list of HTTP server addresses.
-  repeated xray.common.protocol.ServerEndpoint server = 1;
+  xray.common.protocol.ServerEndpoint server = 1;
   repeated Header header = 2;
 }

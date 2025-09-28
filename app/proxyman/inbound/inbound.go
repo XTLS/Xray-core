@@ -178,15 +178,7 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
-	allocStrategy := receiverSettings.AllocationStrategy
-	if allocStrategy == nil || allocStrategy.Type == proxyman.AllocationStrategy_Always {
-		return NewAlwaysOnInboundHandler(ctx, tag, receiverSettings, proxySettings)
-	}
-
-	if allocStrategy.Type == proxyman.AllocationStrategy_Random {
-		return NewDynamicInboundHandler(ctx, tag, receiverSettings, proxySettings)
-	}
-	return nil, errors.New("unknown allocation strategy: ", receiverSettings.AllocationStrategy.Type).AtError()
+	return NewAlwaysOnInboundHandler(ctx, tag, receiverSettings, proxySettings)
 }
 
 func init() {

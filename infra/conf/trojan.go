@@ -28,13 +28,13 @@ type TrojanServerTarget struct {
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
-	Level    byte     `json:"level"`
-	Email    string   `json:"email"`
-	Password string   `json:"password"`
-	Flow     string   `json:"flow"`
-	Servers []*TrojanServerTarget `json:"servers"`
+	Address  *Address              `json:"address"`
+	Port     uint16                `json:"port"`
+	Level    byte                  `json:"level"`
+	Email    string                `json:"email"`
+	Password string                `json:"password"`
+	Flow     string                `json:"flow"`
+	Servers  []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
@@ -51,15 +51,13 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			},
 		}
 	}
-	if len(c.Servers) == 0 {
-		return nil, errors.New("0 Trojan server configured.")
+	if len(c.Servers) != 1 {
+		return nil, errors.New(`Trojan settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Trojan outbounds and routing balancer instead`)
 	}
 
-	config := &trojan.ClientConfig{
-		Server: make([]*protocol.ServerEndpoint, len(c.Servers)),
-	}
+	config := &trojan.ClientConfig{}
 
-	for idx, rec := range c.Servers {
+	for _, rec := range c.Servers {
 		if rec.Address == nil {
 			return nil, errors.New("Trojan server address is not set.")
 		}
@@ -73,19 +71,19 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
 		}
 
-		config.Server[idx] = &protocol.ServerEndpoint{
+		config.Server = &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
-			User: []*protocol.User{
-				{
-					Level: uint32(rec.Level),
-					Email: rec.Email,
-					Account: serial.ToTypedMessage(&trojan.Account{
-						Password: rec.Password,
-					}),
-				},
+			User:    &protocol.User{
+				Level: uint32(rec.Level),
+				Email: rec.Email,
+				Account: serial.ToTypedMessage(&trojan.Account{
+					Password: rec.Password,
+				}),
 			},
 		}
+
+		break
 	}
 
 	return config, nil

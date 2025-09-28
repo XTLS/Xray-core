@@ -47,8 +47,7 @@ func init() {
 
 // Handler is an outbound connection handler for VLess protocol.
 type Handler struct {
-	serverList    *protocol.ServerList
-	serverPicker  protocol.ServerPicker
+	server        *protocol.ServerSpec
 	policyManager policy.Manager
 	cone          bool
 	encryption    *encryption.ClientInstance
@@ -57,24 +56,22 @@ type Handler struct {
 
 // New creates a new VLess outbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
-	serverList := protocol.NewServerList()
-	for _, rec := range config.Vnext {
-		s, err := protocol.NewServerSpecFromPB(rec)
-		if err != nil {
-			return nil, errors.New("failed to parse server spec").Base(err).AtError()
-		}
-		serverList.AddServer(s)
+	if config.Vnext == nil {
+		return nil, errors.New(`no vnext found`)
+	}
+	server, err := protocol.NewServerSpecFromPB(config.Vnext)
+	if err != nil {
+		return nil, errors.New("failed to get server spec").Base(err).AtError()
 	}
 
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		serverList:    serverList,
-		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
+		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
 
-	a := handler.serverPicker.PickServer().PickUser().Account.(*vless.MemoryAccount)
+	a := handler.server.User.Account.(*vless.MemoryAccount)
 	if a.Encryption != "" && a.Encryption != "none" {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
@@ -125,12 +122,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ob.Name = "vless"
 
-	var rec *protocol.ServerSpec
+	rec := h.server
 	var conn stat.Connection
+
 	if err := retry.ExponentialBackoff(5, 200).On(func() error {
-		rec = h.serverPicker.PickServer()
 		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination())
+		conn, err = dialer.Dial(ctx, rec.Destination)
 		if err != nil {
 			return err
 		}
@@ -145,7 +142,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		iConn = statConn.Connection
 	}
 	target := ob.Target
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination().NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
 	if h.encryption != nil {
 		var err error
@@ -172,7 +169,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
-		User:    rec.PickUser(),
+		User:    rec.User,
 		Command: command,
 		Address: target.Address,
 		Port:    target.Port,
