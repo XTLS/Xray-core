@@ -14,12 +14,22 @@ type ResolvableContext struct {
 	routing.Context
 	dnsClient   dns.Client
 	resolvedIPs []net.IP
+	hasError    bool
 }
 
 // GetTargetIPs overrides original routing.Context's implementation.
 func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
+
+	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
+		return ips
+	}
+
 	if len(ctx.resolvedIPs) > 0 {
 		return ctx.resolvedIPs
+	}
+
+	if ctx.hasError {
+		return nil
 	}
 
 	if domain := ctx.GetTargetDomain(); len(domain) != 0 {
@@ -32,11 +42,8 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 			ctx.resolvedIPs = ips
 			return ips
 		}
+		ctx.hasError = true
 		errors.LogInfoInner(context.Background(), err, "resolve ip for ", domain)
-	}
-
-	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
-		return ips
 	}
 
 	return nil
