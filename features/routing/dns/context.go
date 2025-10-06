@@ -12,20 +12,15 @@ import (
 // ResolvableContext is an implementation of routing.Context, with domain resolving capability.
 type ResolvableContext struct {
 	routing.Context
-	dnsClient   dns.Client
-	resolvedIPs []net.IP
-	hasError    bool
+	dnsClient dns.Client
+	cacheIPs  []net.IP
+	hasError  bool
 }
 
 // GetTargetIPs overrides original routing.Context's implementation.
 func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
-
-	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
-		return ips
-	}
-
-	if len(ctx.resolvedIPs) > 0 {
-		return ctx.resolvedIPs
+	if len(ctx.cacheIPs) > 0 {
+		return ctx.cacheIPs
 	}
 
 	if ctx.hasError {
@@ -39,13 +34,18 @@ func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 			FakeEnable: false,
 		})
 		if err == nil {
-			ctx.resolvedIPs = ips
+			ctx.cacheIPs = ips
 			return ips
 		}
-		ctx.hasError = true
 		errors.LogInfoInner(context.Background(), err, "resolve ip for ", domain)
 	}
 
+	if ips := ctx.Context.GetTargetIPs(); len(ips) != 0 {
+		ctx.cacheIPs = ips
+		return ips
+	}
+
+	ctx.hasError = true
 	return nil
 }
 
