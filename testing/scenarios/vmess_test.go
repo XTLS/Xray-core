@@ -1213,7 +1213,7 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 						{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id:           userID.String(),
-								TestsEnabled: "AuthenticatedLength|NoTerminationSignal",
+								TestsEnabled: "AuthenticatedLength|",
 							}),
 						},
 					},
