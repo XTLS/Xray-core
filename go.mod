@@ -22,7 +22,7 @@ require (
 	github.com/xtls/reality v0.0.0-20250904214705-431b6ff8c67c
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.42.0
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.45.0
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.36.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
