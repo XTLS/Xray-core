@@ -19,7 +19,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
 	github.com/vishvananda/netlink v1.3.1
-	github.com/xtls/reality v0.0.0-20250904214705-431b6ff8c67c
+	github.com/xtls/reality v0.0.0-20251014195629-e4eec4520535
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0
