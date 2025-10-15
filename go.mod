@@ -13,8 +13,8 @@ require (
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.55.0
 	github.com/refraction-networking/utls v1.8.1
-	github.com/sagernet/sing v0.5.1
-	github.com/sagernet/sing-shadowsocks v0.2.7
+	github.com/sagernet/sing v0.7.12
+	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771
 	github.com/stretchr/testify v1.11.1
 	github.com/v2fly/ss-bloomring v0.0.0-20210312155135-28617310f63e
@@ -25,33 +25,33 @@ require (
 	golang.org/x/net v0.46.0
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
+	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
-	gvisor.dev/gvisor v0.0.0-20250428193742-2d800c3129d5
+	gvisor.dev/gvisor v0.0.0-20251015025612-b3f000ac172f
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.4.1
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dgryski/go-metro v0.0.0-20200812162917-85c65e2d0165 // indirect
-	github.com/google/btree v1.1.2 // indirect
+	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
+	github.com/google/btree v1.1.3 // indirect
 	github.com/juju/ratelimit v1.0.2 // indirect
-	github.com/klauspost/compress v1.17.4 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
-	golang.org/x/mod v0.28.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	golang.org/x/time v0.7.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
