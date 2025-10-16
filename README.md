@@ -101,6 +101,7 @@
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
 - macOS arm64 & x64
+  - [v2rayN](https://github.com/2dust/v2rayN)
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
@@ -109,6 +110,7 @@
   - [GoXRay](https://github.com/goxray/desktop)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
 - Linux
+  - [v2rayN](https://github.com/2dust/v2rayN)
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
