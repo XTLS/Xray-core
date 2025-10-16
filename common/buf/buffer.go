@@ -333,7 +333,7 @@ func (b *Buffer) ReadFrom(reader io.Reader) (int64, error) {
 // ReadFullFrom reads exact size of bytes from given reader, or until error occurs.
 func (b *Buffer) ReadFullFrom(reader io.Reader, size int32) (int64, error) {
 	end := b.end + size
-	if end > int32(len(b.v)) {
+	if end > int32(len(b.v)) || end < int32(b.end) {
 		v := end
 		return 0, errors.New("out of bound: ", v)
 	}
