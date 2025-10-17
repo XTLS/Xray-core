@@ -10,6 +10,7 @@ import (
 	. "github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -32,13 +33,13 @@ func TestReaderWriter(t *testing.T) {
 	pReader, pWriter := pipe.New(pipe.WithSizeLimit(1024))
 
 	dest := net.TCPDestination(net.DomainAddress("example.com"), 80)
-	writer := NewWriter(1, dest, pWriter, protocol.TransferTypeStream, [8]byte{})
+	writer := NewWriter(1, dest, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
 
 	dest2 := net.TCPDestination(net.LocalHostIP, 443)
-	writer2 := NewWriter(2, dest2, pWriter, protocol.TransferTypeStream, [8]byte{})
+	writer2 := NewWriter(2, dest2, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
 
 	dest3 := net.TCPDestination(net.LocalHostIPv6, 18374)
-	writer3 := NewWriter(3, dest3, pWriter, protocol.TransferTypeStream, [8]byte{})
+	writer3 := NewWriter(3, dest3, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
 
 	writePayload := func(writer *Writer, payload ...byte) error {
 		b := buf.New()
@@ -62,7 +63,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     1,
 			SessionStatus: SessionStatusNew,
@@ -81,7 +82,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionStatus: SessionStatusNew,
 			SessionID:     2,
@@ -94,7 +95,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     1,
 			SessionStatus: SessionStatusKeep,
@@ -112,7 +113,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     3,
 			SessionStatus: SessionStatusNew,
@@ -131,7 +132,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     1,
 			SessionStatus: SessionStatusEnd,
@@ -143,7 +144,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     3,
 			SessionStatus: SessionStatusEnd,
@@ -155,7 +156,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     2,
 			SessionStatus: SessionStatusKeep,
@@ -173,7 +174,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		common.Must(meta.Unmarshal(bytesReader))
+		common.Must(meta.Unmarshal(bytesReader, false))
 		if r := cmp.Diff(meta, FrameMetadata{
 			SessionID:     2,
 			SessionStatus: SessionStatusEnd,
@@ -187,7 +188,7 @@ func TestReaderWriter(t *testing.T) {
 
 	{
 		var meta FrameMetadata
-		err := meta.Unmarshal(bytesReader)
+		err := meta.Unmarshal(bytesReader, false)
 		if err == nil {
 			t.Error("nil error")
 		}

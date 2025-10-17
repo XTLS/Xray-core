@@ -2,6 +2,8 @@ package external
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,6 +20,9 @@ import (
 func ConfigLoader(arg string) (out io.Reader, err error) {
 	var data []byte
 	switch {
+	case strings.HasPrefix(arg, "http+unix://"):
+		data, err = FetchUnixSocketHTTPContent(arg)
+
 	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "https://"):
 		data, err = FetchHTTPContent(arg)
 
@@ -67,6 +72,60 @@ func FetchHTTPContent(target string) ([]byte, error) {
 		return nil, errors.New("failed to read HTTP response").Base(err)
 	}
 
+	return content, nil
+}
+
+// Format: http+unix:///path/to/socket.sock/api/endpoint
+func FetchUnixSocketHTTPContent(target string) ([]byte, error) {
+	path := strings.TrimPrefix(target, "http+unix://")
+	
+	if !strings.HasPrefix(path, "/") {
+		return nil, errors.New("unix socket path must be absolute")
+	}
+	
+	var socketPath, httpPath string
+	
+	sockIdx := strings.Index(path, ".sock")
+	if sockIdx != -1 {
+		socketPath = path[:sockIdx+5]
+		httpPath = path[sockIdx+5:]
+		if httpPath == "" {
+			httpPath = "/"
+		}
+	} else {
+		return nil, errors.New("cannot determine socket path, socket file should have .sock extension")
+	}
+	
+	if _, err := os.Stat(socketPath); err != nil {
+		return nil, errors.New("socket file not found: ", socketPath).Base(err)
+	}
+	
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", socketPath)
+			},
+		},
+	}
+	defer client.CloseIdleConnections()
+	
+	resp, err := client.Get("http://localhost" + httpPath)
+	if err != nil {
+		return nil, errors.New("failed to fetch from unix socket: ", socketPath).Base(err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, errors.New("unexpected HTTP status code: ", resp.StatusCode)
+	}
+	
+	content, err := buf.ReadAllToBytes(resp.Body)
+	if err != nil {
+		return nil, errors.New("failed to read response").Base(err)
+	}
+	
 	return content, nil
 }
 

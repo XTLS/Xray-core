@@ -89,8 +89,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		handler.reverse = &Reverse{
 			tag:        a.Reverse.Tag,
 			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
-			ctx:        ctx,
-			handler:    handler,
+			ctx: session.ContextWithInbound(ctx, &session.Inbound{
+				Tag:  a.Reverse.Tag,
+				User: handler.server.User, // TODO: email
+			}),
+			handler: handler,
 		}
 		handler.reverse.monitorTask = &task.Periodic{
 			Execute:  handler.reverse.monitor,
@@ -198,7 +201,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
-		case protocol.RequestCommandTCP:
+		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
 			var t reflect.Type
 			var p uintptr
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
@@ -223,6 +226,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			r, _ := t.FieldByName("rawInput")
 			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
 			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+		default:
+			panic("unknown VLESS request command")
 		}
 	default:
 		ob.CanSpliceCopy = 3
@@ -395,7 +400,7 @@ func (r *Reverse) monitor() error {
 			Tag:        r.tag,
 			Dispatcher: r.dispatcher,
 		}
-		worker, err := mux.NewServerWorker(r.ctx, w, link1)
+		worker, err := mux.NewServerWorker(session.ContextWithIsReverseMux(r.ctx, true), w, link1)
 		if err != nil {
 			errors.LogWarningInner(r.ctx, err, "failed to create mux server worker")
 			return nil
@@ -406,7 +411,7 @@ func (r *Reverse) monitor() error {
 			ctx := session.ContextWithOutbounds(r.ctx, []*session.Outbound{{
 				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
 			}})
-			r.handler.Process(ctx, link2, session.HandlerFromContext(ctx).(*proxyman.Handler))
+			r.handler.Process(ctx, link2, session.FullHandlerFromContext(ctx).(*proxyman.Handler))
 			common.Interrupt(reader1)
 			common.Interrupt(reader2)
 		}()
