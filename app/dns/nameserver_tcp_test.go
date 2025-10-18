@@ -16,7 +16,7 @@ import (
 func TestTCPLocalNameServer(t *testing.T) {
 	url, err := url.Parse("tcp+local://8.8.8.8")
 	common.Must(err)
-	s, err := NewTCPLocalNameServer(url, false, net.IP(nil))
+	s, err := NewTCPLocalNameServer(url, false, false, 0, net.IP(nil))
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", dns_feature.IPOption{
@@ -33,7 +33,7 @@ func TestTCPLocalNameServer(t *testing.T) {
 func TestTCPLocalNameServerWithCache(t *testing.T) {
 	url, err := url.Parse("tcp+local://8.8.8.8")
 	common.Must(err)
-	s, err := NewTCPLocalNameServer(url, false, net.IP(nil))
+	s, err := NewTCPLocalNameServer(url, false, false, 0, net.IP(nil))
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", dns_feature.IPOption{
@@ -61,7 +61,7 @@ func TestTCPLocalNameServerWithCache(t *testing.T) {
 func TestTCPLocalNameServerWithIPv4Override(t *testing.T) {
 	url, err := url.Parse("tcp+local://8.8.8.8")
 	common.Must(err)
-	s, err := NewTCPLocalNameServer(url, false, net.IP(nil))
+	s, err := NewTCPLocalNameServer(url, false, false, 0, net.IP(nil))
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", dns_feature.IPOption{
@@ -85,7 +85,7 @@ func TestTCPLocalNameServerWithIPv4Override(t *testing.T) {
 func TestTCPLocalNameServerWithIPv6Override(t *testing.T) {
 	url, err := url.Parse("tcp+local://8.8.8.8")
 	common.Must(err)
-	s, err := NewTCPLocalNameServer(url, false, net.IP(nil))
+	s, err := NewTCPLocalNameServer(url, false, false, 0, net.IP(nil))
 	common.Must(err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ips, _, err := s.QueryIP(ctx, "google.com", dns_feature.IPOption{

@@ -34,10 +34,10 @@ type TCPNameServer struct {
 func NewTCPNameServer(
 	url *url.URL,
 	dispatcher routing.Dispatcher,
-	disableCache bool,
+	disableCache bool, serveStale bool, serveExpiredTTL uint32,
 	clientIP net.IP,
 ) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCP", disableCache, clientIP)
+	s, err := baseTCPNameServer(url, "TCP", disableCache, serveStale, serveExpiredTTL, clientIP)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +58,8 @@ func NewTCPNameServer(
 }
 
 // NewTCPLocalNameServer creates DNS over TCP client object for local resolving
-func NewTCPLocalNameServer(url *url.URL, disableCache bool, clientIP net.IP) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCPL", disableCache, clientIP)
+func NewTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCPL", disableCache, serveStale, serveExpiredTTL, clientIP)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func NewTCPLocalNameServer(url *url.URL, disableCache bool, clientIP net.IP) (*T
 	return s, nil
 }
 
-func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, clientIP net.IP) (*TCPNameServer, error) {
+func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
 	port := net.Port(53)
 	if url.Port() != "" {
 		var err error
@@ -82,7 +82,7 @@ func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, clientIP 
 	dest := net.TCPDestination(net.ParseAddress(url.Hostname()), port)
 
 	s := &TCPNameServer{
-		cacheController: NewCacheController(prefix+"//"+dest.NetAddr(), disableCache),
+		cacheController: NewCacheController(prefix+"//"+dest.NetAddr(), disableCache, serveStale, serveExpiredTTL),
 		destination:     &dest,
 		clientIP:        clientIP,
 	}
@@ -131,14 +131,18 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to pack dns query")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 
 			conn, err := s.dial(dnsCtx)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to dial namesever")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			defer conn.Close()
@@ -146,13 +150,17 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			err = binary.Write(dnsReqBuf, binary.BigEndian, uint16(b.Len()))
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "binary write failed")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			_, err = dnsReqBuf.Write(b.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "buffer write failed")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			b.Release()
@@ -160,7 +168,9 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			_, err = conn.Write(dnsReqBuf.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to send query")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			dnsReqBuf.Release()
@@ -170,28 +180,36 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			n, err := respBuf.ReadFullFrom(conn, 2)
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			var length int16
 			err = binary.Read(bytes.NewReader(respBuf.Bytes()), binary.BigEndian, &length)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to parse response length")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			respBuf.Clear()
 			n, err = respBuf.ReadFullFrom(conn, int32(length))
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 
 			rec, err := parseResponse(respBuf.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to parse DNS over TCP response")
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 
@@ -211,9 +229,16 @@ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 	} else {
 		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 		if !go_errors.Is(err, errRecordNotFound) {
-			errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
+			if ttl > 0 {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
+				log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
+				return ips, uint32(ttl), err
+			}
+			if s.cacheController.serveStale && (s.cacheController.serveExpiredTTL == 0 || s.cacheController.serveExpiredTTL < ttl) {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache OPTIMISTE ", domain, " -> ", ips)
+				go s.sendQuery(ctx, nil, fqdn, option)
+				return ips, 1, err
+			}
 		}
 	}
 
@@ -244,6 +269,11 @@ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 
 	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
-
+	var rTTL uint32
+	if ttl <= 0 {
+		rTTL = 1
+	} else {
+		rTTL = uint32(ttl)
+	}
+	return ips, rTTL, err
 }
