@@ -46,6 +46,10 @@ func NewCacheController(name string, disableCache bool, serveStale bool, serveEx
 // CacheCleanup clears expired items from cache
 func (c *CacheController) CacheCleanup() error {
 	now := time.Now()
+	if c.serveStale && c.serveExpiredTTL != 0 {
+		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	}
+
 	c.Lock()
 	defer c.Unlock()
 
@@ -115,7 +119,9 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	}
 
 	c.Unlock()
-	common.Must(c.cacheCleanup.Start())
+	if !c.serveStale || c.serveExpiredTTL != 0 {
+		common.Must(c.cacheCleanup.Start())
+	}
 }
 
 func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, int32, error) {
