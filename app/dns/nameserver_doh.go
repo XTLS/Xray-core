@@ -38,7 +38,7 @@ type DoHNameServer struct {
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
-func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, clientIP net.IP) *DoHNameServer {
+func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *DoHNameServer {
 	url.Scheme = "https"
 	mode := "DOH"
 	if dispatcher == nil {
@@ -46,7 +46,7 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
 	}
 	errors.LogInfo(context.Background(), "DNS: created ", mode, " client for ", url.String(), ", with h2c ", h2c)
 	s := &DoHNameServer{
-		cacheController: NewCacheController(mode+"//"+url.Host, disableCache),
+		cacheController: NewCacheController(mode+"//"+url.Host, disableCache, serveStale, serveExpiredTTL),
 		dohURL:          url.String(),
 		clientIP:        clientIP,
 	}
@@ -126,7 +126,9 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 	if s.Name()+"." == "DOH//"+domain {
 		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead.")
-		noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+		if noResponseErrCh != nil {
+			noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+		}
 		return
 	}
 
@@ -167,19 +169,25 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", domain)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", domain)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", domain)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			s.cacheController.updateIP(r, rec)
@@ -226,9 +234,16 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 	} else {
 		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 		if !go_errors.Is(err, errRecordNotFound) {
-			errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
+			if ttl > 0 {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
+				log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
+				return ips, uint32(ttl), err
+			}
+			if s.cacheController.serveStale && (s.cacheController.serveExpiredTTL == 0 || s.cacheController.serveExpiredTTL < ttl) {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache OPTIMISTE ", domain, " -> ", ips)
+				go s.sendQuery(ctx, nil, fqdn, option)
+				return ips, 1, err
+			}
 		}
 	}
 
@@ -259,6 +274,11 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 
 	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
-
+	var rTTL uint32
+	if ttl <= 0 {
+		rTTL = 1
+	} else {
+		rTTL = uint32(ttl)
+	}
+	return ips, rTTL, err
 }

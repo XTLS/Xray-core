@@ -41,7 +41,7 @@ type Client struct {
 }
 
 // NewServer creates a name server object according to the network destination url.
-func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dispatcher, disableCache bool, clientIP net.IP) (Server, error) {
+func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (Server, error) {
 	if address := dest.Address; address.Family().IsDomain() {
 		u, err := url.Parse(address.Domain())
 		if err != nil {
@@ -51,19 +51,19 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		case strings.EqualFold(u.String(), "localhost"):
 			return NewLocalNameServer(), nil
 		case strings.EqualFold(u.Scheme, "https"): // DNS-over-HTTPS Remote mode
-			return NewDoHNameServer(u, dispatcher, false, disableCache, clientIP), nil
+			return NewDoHNameServer(u, dispatcher, false, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 		case strings.EqualFold(u.Scheme, "h2c"): // DNS-over-HTTPS h2c Remote mode
-			return NewDoHNameServer(u, dispatcher, true, disableCache, clientIP), nil
+			return NewDoHNameServer(u, dispatcher, true, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 		case strings.EqualFold(u.Scheme, "https+local"): // DNS-over-HTTPS Local mode
-			return NewDoHNameServer(u, nil, false, disableCache, clientIP), nil
+			return NewDoHNameServer(u, nil, false, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 		case strings.EqualFold(u.Scheme, "h2c+local"): // DNS-over-HTTPS h2c Local mode
-			return NewDoHNameServer(u, nil, true, disableCache, clientIP), nil
+			return NewDoHNameServer(u, nil, true, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 		case strings.EqualFold(u.Scheme, "quic+local"): // DNS-over-QUIC Local mode
-			return NewQUICNameServer(u, disableCache, clientIP)
+			return NewQUICNameServer(u, disableCache, serveStale, serveExpiredTTL, clientIP)
 		case strings.EqualFold(u.Scheme, "tcp"): // DNS-over-TCP Remote mode
-			return NewTCPNameServer(u, dispatcher, disableCache, clientIP)
+			return NewTCPNameServer(u, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
 		case strings.EqualFold(u.Scheme, "tcp+local"): // DNS-over-TCP Local mode
-			return NewTCPLocalNameServer(u, disableCache, clientIP)
+			return NewTCPLocalNameServer(u, disableCache, serveStale, serveExpiredTTL, clientIP)
 		case strings.EqualFold(u.String(), "fakedns"):
 			var fd dns.FakeDNSEngine
 			err = core.RequireFeatures(ctx, func(fdns dns.FakeDNSEngine) {
@@ -79,7 +79,7 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 		dest.Network = net.Network_UDP
 	}
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
-		return NewClassicNameServer(dest, dispatcher, disableCache, clientIP), nil
+		return NewClassicNameServer(dest, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 	}
 	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
 }
@@ -89,7 +89,7 @@ func NewClient(
 	ctx context.Context,
 	ns *NameServer,
 	clientIP net.IP,
-	disableCache bool,
+	disableCache bool, serveStale bool, serveExpiredTTL uint32,
 	tag string,
 	ipOption dns.IPOption,
 	matcherInfos *[]*DomainMatcherInfo,
@@ -99,7 +99,7 @@ func NewClient(
 
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
-		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, clientIP)
+		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
 		if err != nil {
 			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}

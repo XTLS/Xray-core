@@ -39,14 +39,14 @@ type udpDnsRequest struct {
 }
 
 // NewClassicNameServer creates udp server object for remote resolving.
-func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, clientIP net.IP) *ClassicNameServer {
+func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *ClassicNameServer {
 	// default to 53 if unspecific
 	if address.Port == 0 {
 		address.Port = net.Port(53)
 	}
 
 	s := &ClassicNameServer{
-		cacheController: NewCacheController(strings.ToUpper(address.String()), disableCache),
+		cacheController: NewCacheController(strings.ToUpper(address.String()), disableCache, serveStale, serveExpiredTTL),
 		address:         &address,
 		requests:        make(map[uint16]*udpDnsRequest),
 		clientIP:        clientIP,
@@ -179,9 +179,16 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option d
 	} else {
 		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 		if !go_errors.Is(err, errRecordNotFound) {
-			errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
+			if ttl > 0 {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
+				log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
+				return ips, uint32(ttl), err
+			}
+			if s.cacheController.serveStale && (s.cacheController.serveExpiredTTL == 0 || s.cacheController.serveExpiredTTL < ttl) {
+				errors.LogDebugInner(ctx, err, s.Name(), " cache OPTIMISTE ", domain, " -> ", ips)
+				go s.sendQuery(ctx, nil, fqdn, option)
+				return ips, 1, err
+			}
 		}
 	}
 
@@ -212,6 +219,11 @@ func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option d
 
 	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
-
+	var rTTL uint32
+	if ttl <= 0 {
+		rTTL = 1
+	} else {
+		rTTL = uint32(ttl)
+	}
+	return ips, rTTL, err
 }
