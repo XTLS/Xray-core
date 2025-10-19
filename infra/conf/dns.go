@@ -196,6 +196,7 @@ type DNSConfig struct {
 	DisableCache           bool                `json:"disableCache"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    bool                `json:"enableParallelQuery"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
 }
 
@@ -393,6 +394,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableCache:           c.DisableCache,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
+		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 
