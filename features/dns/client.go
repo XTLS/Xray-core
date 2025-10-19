@@ -68,5 +68,6 @@ func RCodeFromError(err error) uint16 {
 	if r, ok := cause.(RCodeError); ok {
 		return uint16(r)
 	}
-	return 0
+	// unknown error
+	return 2
 }
