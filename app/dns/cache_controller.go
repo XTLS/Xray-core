@@ -102,20 +102,8 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	switch req.reqType {
 	case dnsmessage.TypeA:
 		c.pub.Publish(req.domain+"4", nil)
-		if !c.disableCache {
-			_, _, err := rec.AAAA.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
-				c.pub.Publish(req.domain+"6", nil)
-			}
-		}
 	case dnsmessage.TypeAAAA:
 		c.pub.Publish(req.domain+"6", nil)
-		if !c.disableCache {
-			_, _, err := rec.A.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
-				c.pub.Publish(req.domain+"4", nil)
-			}
-		}
 	}
 
 	c.Unlock()
@@ -124,13 +112,13 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	}
 }
 
-func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, int32, error) {
+func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, int32, bool, bool, error) {
 	c.RLock()
 	record, found := c.ips[domain]
 	c.RUnlock()
 
 	if !found {
-		return nil, 0, errRecordNotFound
+		return nil, 0, true, true, errRecordNotFound
 	}
 
 	var errs []error
@@ -139,43 +127,55 @@ func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPO
 
 	mergeReq := option.IPv4Enable && option.IPv6Enable
 
+	isARecordExpired := true
 	if option.IPv4Enable {
 		ips, ttl, err := record.A.getIPs()
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
-			return ips, ttl, err
+		if ttl > 0 {
+			isARecordExpired = false
+		}
+		if !mergeReq {
+			return ips, ttl, isARecordExpired, true, err
 		}
 		if ttl < rTTL {
 			rTTL = ttl
 		}
 		if len(ips) > 0 {
 			allIPs = append(allIPs, ips...)
-		} else {
-			errs = append(errs, err)
 		}
+		errs = append(errs, err)
+
 	}
 
+	isAAAARecordExpired := true
 	if option.IPv6Enable {
 		ips, ttl, err := record.AAAA.getIPs()
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
-			return ips, ttl, err
+		if ttl > 0 {
+			isAAAARecordExpired = false
+		}
+		if !mergeReq {
+			return ips, ttl, true, isAAAARecordExpired, err
 		}
 		if ttl < rTTL {
 			rTTL = ttl
 		}
 		if len(ips) > 0 {
 			allIPs = append(allIPs, ips...)
-		} else {
-			errs = append(errs, err)
 		}
+		errs = append(errs, err)
+
+	}
+
+	if go_errors.Is(errs[0], errRecordNotFound) || go_errors.Is(errs[1], errRecordNotFound) {
+		return nil, 0, isARecordExpired, isAAAARecordExpired, errRecordNotFound
 	}
 
 	if len(allIPs) > 0 {
-		return allIPs, rTTL, nil
+		return allIPs, rTTL, isARecordExpired, isAAAARecordExpired, nil
 	}
 	if go_errors.Is(errs[0], errs[1]) {
-		return nil, rTTL, errs[0]
+		return nil, rTTL, isARecordExpired, isAAAARecordExpired, errs[0]
 	}
-	return nil, rTTL, errors.Combine(errs...)
+	return nil, rTTL, isARecordExpired, isAAAARecordExpired, errors.Combine(errs...)
 }
 
 func (c *CacheController) registerSubscribers(domain string, option dns_feature.IPOption) (sub4 *pubsub.Subscriber, sub6 *pubsub.Subscriber) {

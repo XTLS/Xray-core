@@ -229,10 +229,22 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 	sub4, sub6 := s.cacheController.registerSubscribers(fqdn, option)
 	defer closeSubscribers(sub4, sub6)
 
+	queryOption := option
+
 	if s.cacheController.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.Name())
 	} else {
-		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
+		ips, ttl, isARecordExpired, isAAAARecordExpired, err := s.cacheController.findIPsForDomain(fqdn, option)
+		if sub4 != nil && !isARecordExpired {
+			sub4.Close()
+			sub4 = nil
+			queryOption.IPv4Enable = false
+		}
+		if sub6 != nil && !isAAAARecordExpired {
+			sub6.Close()
+			sub6 = nil
+			queryOption.IPv6Enable = false
+		}
 		if !go_errors.Is(err, errRecordNotFound) {
 			if ttl > 0 {
 				errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
@@ -241,14 +253,14 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 			}
 			if s.cacheController.serveStale && (s.cacheController.serveExpiredTTL == 0 || s.cacheController.serveExpiredTTL < ttl) {
 				errors.LogDebugInner(ctx, err, s.Name(), " cache OPTIMISTE ", domain, " -> ", ips)
-				go s.sendQuery(ctx, nil, fqdn, option)
+				s.sendQuery(ctx, nil, fqdn, queryOption)
 				return ips, 1, err
 			}
 		}
 	}
 
 	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
+	s.sendQuery(ctx, noResponseErrCh, fqdn, queryOption)
 	start := time.Now()
 
 	if sub4 != nil {
@@ -272,7 +284,7 @@ func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 		}
 	}
 
-	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
+	ips, ttl, _, _, err := s.cacheController.findIPsForDomain(fqdn, option)
 	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 	var rTTL uint32
 	if ttl <= 0 {
