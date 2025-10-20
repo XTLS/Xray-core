@@ -5,6 +5,7 @@ import (
 	"context"
 	go_errors "errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -355,7 +356,7 @@ var cachedSystemNetwork struct {
 }
 
 func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
-	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+	if isGUIPlatform() {
 		return checkSystemNetworkInternal()
 	}
 
@@ -363,4 +364,19 @@ func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
 		cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6 = checkSystemNetworkInternal()
 	})
 	return cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6
+}
+
+func isGUIPlatform() bool {
+	switch runtime.GOOS {
+	case "android", "ios", "windows", "darwin":
+		return true
+	case "linux", "freebsd", "openbsd":
+		if t := os.Getenv("XDG_SESSION_TYPE"); t == "wayland" || t == "x11" {
+			return true
+		}
+		if os.Getenv("DISPLAY") != "" {
+			return true
+		}
+	}
+	return false
 }
