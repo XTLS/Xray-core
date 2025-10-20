@@ -217,11 +217,7 @@ func (c *Client) IsFinalQuery() bool {
 
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if c.checkSystem {
-		supportIPv4, supportIPv6 := checkSystemNetwork()
-		option.IPv4Enable = option.IPv4Enable && supportIPv4
-		option.IPv6Enable = option.IPv6Enable && supportIPv6
-	} else {
+	if !c.checkSystem {
 		option.IPv4Enable = option.IPv4Enable && c.ipOption.IPv4Enable
 		option.IPv6Enable = option.IPv6Enable && c.ipOption.IPv6Enable
 	}
