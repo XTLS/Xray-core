@@ -5,6 +5,7 @@ import (
 	"context"
 	go_errors "errors"
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -328,7 +329,7 @@ func init() {
 	}))
 }
 
-func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
+func checkSystemNetworkInternal() (supportIPv4 bool, supportIPv6 bool) {
 	conn4, err4 := net.Dial("udp4", "192.33.4.12:53")
 	if err4 != nil {
 		supportIPv4 = false
@@ -345,4 +346,21 @@ func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
 		conn6.Close()
 	}
 	return
+}
+
+var cachedSystemNetwork struct {
+	sync.Once
+	ipv4 bool
+	ipv6 bool
+}
+
+func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
+	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+		return checkSystemNetworkInternal()
+	}
+
+	cachedSystemNetwork.Once.Do(func() {
+		cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6 = checkSystemNetworkInternal()
+	})
+	return cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6
 }
