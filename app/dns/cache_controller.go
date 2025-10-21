@@ -103,16 +103,16 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	case dnsmessage.TypeA:
 		c.pub.Publish(req.domain+"4", nil)
 		if !c.disableCache {
-			_, _, err := rec.AAAA.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
+			_, ttl, err := rec.AAAA.getIPs()
+			if ttl > 0 && !go_errors.Is(err, errRecordNotFound) {
 				c.pub.Publish(req.domain+"6", nil)
 			}
 		}
 	case dnsmessage.TypeAAAA:
 		c.pub.Publish(req.domain+"6", nil)
 		if !c.disableCache {
-			_, _, err := rec.A.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
+			_, ttl, err := rec.A.getIPs()
+			if ttl > 0 && !go_errors.Is(err, errRecordNotFound) {
 				c.pub.Publish(req.domain+"4", nil)
 			}
 		}

@@ -221,8 +221,6 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 // QueryIP implements Server.
 func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
-	sub4, sub6 := s.cacheController.registerSubscribers(fqdn, option)
-	defer closeSubscribers(sub4, sub6)
 
 	if s.cacheController.disableCache {
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.Name())
@@ -236,11 +234,14 @@ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_f
 			}
 			if s.cacheController.serveStale && (s.cacheController.serveExpiredTTL == 0 || s.cacheController.serveExpiredTTL < ttl) {
 				errors.LogDebugInner(ctx, err, s.Name(), " cache OPTIMISTE ", domain, " -> ", ips)
-				go s.sendQuery(ctx, nil, fqdn, option)
+				s.sendQuery(ctx, nil, fqdn, option)
 				return ips, 1, err
 			}
 		}
 	}
+
+	sub4, sub6 := s.cacheController.registerSubscribers(fqdn, option)
+	defer closeSubscribers(sub4, sub6)
 
 	noResponseErrCh := make(chan error, 2)
 	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
