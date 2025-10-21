@@ -93,7 +93,7 @@ func (c *CacheController) CacheCleanup() error {
 			" reduction_since_peak=", reductionFromPeak,
 		)
 
-		shrunkMap := make(map[string]*record, lenAfter)
+		shrunkMap := make(map[string]*record, int(float64(lenAfter)*1.1))
 		for k, v := range c.ips {
 			shrunkMap[k] = v
 		}
