@@ -3,6 +3,9 @@ package dns
 import (
 	"context"
 	go_errors "errors"
+	"sync"
+	"time"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -10,17 +13,22 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
-	"sync"
-	"time"
+)
+
+const (
+	minSizeForEmptyRebuild  = 200
+	shrinkAbsoluteThreshold = 5000
+	shrinkRatioThreshold    = 0.5
 )
 
 type CacheController struct {
 	sync.RWMutex
-	ips          map[string]*record
-	pub          *pubsub.Service
-	cacheCleanup *task.Periodic
-	name         string
-	disableCache bool
+	ips           map[string]*record
+	pub           *pubsub.Service
+	cacheCleanup  *task.Periodic
+	name          string
+	disableCache  bool
+	highWatermark int
 }
 
 func NewCacheController(name string, disableCache bool) *CacheController {
@@ -32,7 +40,7 @@ func NewCacheController(name string, disableCache bool) *CacheController {
 	}
 
 	c.cacheCleanup = &task.Periodic{
-		Interval: time.Minute,
+		Interval: 300 * time.Second,
 		Execute:  c.CacheCleanup,
 	}
 	return c
@@ -44,8 +52,12 @@ func (c *CacheController) CacheCleanup() error {
 	c.Lock()
 	defer c.Unlock()
 
-	if len(c.ips) == 0 {
+	lenBefore := len(c.ips)
+	if lenBefore == 0 {
 		return errors.New("nothing to do. stopping...")
+	}
+	if lenBefore > c.highWatermark {
+		c.highWatermark = lenBefore
 	}
 
 	for domain, record := range c.ips {
@@ -57,15 +69,36 @@ func (c *CacheController) CacheCleanup() error {
 		}
 
 		if record.A == nil && record.AAAA == nil {
-			errors.LogDebug(context.Background(), c.name, "cache cleanup ", domain)
+			errors.LogDebug(context.Background(), c.name, "cache cleanup domain=", domain)
 			delete(c.ips, domain)
-		} else {
-			c.ips[domain] = record
 		}
 	}
 
-	if len(c.ips) == 0 {
+	lenAfter := len(c.ips)
+	if lenAfter == 0 && c.highWatermark >= minSizeForEmptyRebuild {
+		errors.LogDebug(context.Background(), c.name,
+			"rebuilding empty cache map to reclaim memory.",
+			" size_before_cleanup=", lenBefore,
+			" peak_size_before_rebuild=", c.highWatermark,
+		)
+
 		c.ips = make(map[string]*record)
+		c.highWatermark = 0
+	} else if reductionFromPeak := c.highWatermark - lenAfter; reductionFromPeak > shrinkAbsoluteThreshold &&
+		float64(reductionFromPeak) > float64(c.highWatermark)*shrinkRatioThreshold {
+		errors.LogDebug(context.Background(), c.name,
+			"shrinking cache map to reclaim memory.",
+			" new_size=", lenAfter,
+			" peak_size_before_shrink=", c.highWatermark,
+			" reduction_since_peak=", reductionFromPeak,
+		)
+
+		shrunkMap := make(map[string]*record, lenAfter)
+		for k, v := range c.ips {
+			shrunkMap[k] = v
+		}
+		c.ips = shrunkMap
+		c.highWatermark = lenAfter
 	}
 
 	return nil
