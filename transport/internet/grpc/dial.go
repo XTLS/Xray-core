@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	gonet "net"
+	"runtime"
 	sync "sync"
 	"time"
 
@@ -200,6 +201,11 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if err == nil {
 		// Store the connection in LRU cache
 		clientConnCache.Put(key, conn)
+		runtime.AddCleanup(conn, func(c *grpc.ClientConn) {
+			if c != nil {
+				c.Close()
+			}
+		}, conn)
 	}
 
 	return conn, err
