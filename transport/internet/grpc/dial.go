@@ -93,8 +93,12 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	// Check if we have a cached connection that's still valid
 	if cached, found := clientConnCache.Get(key); found {
-		if client, ok := cached.(*grpc.ClientConn); ok && client.GetState() != connectivity.Shutdown {
-			return client, nil
+		if client, ok := cached.(*grpc.ClientConn); ok {
+			state := client.GetState()
+			if state != connectivity.Shutdown && state != connectivity.TransientFailure {
+				return client, nil
+			}
+			client.Close()
 		}
 	}
 
