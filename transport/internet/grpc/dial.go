@@ -18,7 +18,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
@@ -43,7 +42,7 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]*grpc.ClientConn
+	// globalDialerMap    map[dialerConf]*grpc.ClientConn
 	globalDialerAccess sync.Mutex
 )
 
@@ -77,17 +76,17 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
-	}
+	// if globalDialerMap == nil {
+	// 	globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
+	// }
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
-		return client, nil
-	}
+	// if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
+	// 	return client, nil
+	// }
 
 	dialOptions := []grpc.DialOption{
 		grpc.WithConnectParams(grpc.ConnectParams{
@@ -183,6 +182,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	globalDialerMap[dialerConf{dest, streamSettings}] = conn
+	// globalDialerMap[dialerConf{dest, streamSettings}] = conn
 	return conn, err
 }
