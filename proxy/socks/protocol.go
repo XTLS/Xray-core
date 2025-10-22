@@ -347,34 +347,19 @@ func DecodeUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
 }
 
 func EncodeUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer, error) {
-	header := buf.StackNew()
-	defer header.Release()
-
-	if _, err := header.Write([]byte{0, 0, 0 /* Fragment */}); err != nil {
+	b := buf.New()
+	common.Must2(b.Write([]byte{0, 0, 0 /* Fragment */}))
+	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
+		b.Release()
 		return nil, err
 	}
-	if err := addrParser.WriteAddressPort(&header, request.Address, request.Port); err != nil {
-		return nil, err
+	// if data is too large, return an empty buffer (drop too big data)
+	if b.Available() < int32(len(data)) {
+		b.Clear()
+		return b, nil
 	}
-
-	totalLen := header.Len() + int32(len(data))
-	var packet *buf.Buffer
-	if totalLen <= buf.Size {
-		packet = buf.New()
-	} else {
-		packet = buf.NewWithSize(totalLen)
-	}
-
-	if _, err := packet.Write(header.Bytes()); err != nil {
-		packet.Release()
-		return nil, err
-	}
-	if _, err := packet.Write(data); err != nil {
-		packet.Release()
-		return nil, err
-	}
-
-	return packet, nil
+	common.Must2(b.Write(data))
+	return b, nil
 }
 
 type UDPReader struct {
