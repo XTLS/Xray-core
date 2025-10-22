@@ -3,10 +3,11 @@ package grpc
 import (
 	"context"
 	gonet "net"
-	"sync"
+	sync "sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/cache"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -18,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 )
@@ -34,6 +36,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+
+	clientConnCacheInit = &sync.Once{}
 }
 
 type dialerConf struct {
@@ -42,8 +46,9 @@ type dialerConf struct {
 }
 
 var (
-	// globalDialerMap    map[dialerConf]*grpc.ClientConn
-	globalDialerAccess sync.Mutex
+	clientConnCache     cache.Lru
+	clientConnCacheInit *sync.Once
+	clientConnCacheSize = 100
 )
 
 func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
@@ -73,20 +78,25 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 }
 
 func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
-	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
 
-	// if globalDialerMap == nil {
-	// 	globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
-	// }
+	clientConnCacheInit.Do(func() {
+		clientConnCache = cache.NewLru(clientConnCacheSize)
+	})
+
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	sockopt := streamSettings.SocketSettings
 	grpcSettings := streamSettings.ProtocolSettings.(*Config)
 
-	// if client, found := globalDialerMap[dialerConf{dest, streamSettings}]; found && client.GetState() != connectivity.Shutdown {
-	// 	return client, nil
-	// }
+	// Create a cache key based on destination and stream settings
+	key := dialerConf{dest, streamSettings}
+
+	// Check if we have a cached connection that's still valid
+	if cached, found := clientConnCache.Get(key); found {
+		if client, ok := cached.(*grpc.ClientConn); ok && client.GetState() != connectivity.Shutdown {
+			return client, nil
+		}
+	}
 
 	dialOptions := []grpc.DialOption{
 		grpc.WithConnectParams(grpc.ConnectParams{
@@ -182,6 +192,11 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	// globalDialerMap[dialerConf{dest, streamSettings}] = conn
+
+	if err == nil {
+		// Store the connection in LRU cache
+		clientConnCache.Put(key, conn)
+	}
+
 	return conn, err
 }
