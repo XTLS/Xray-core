@@ -17,6 +17,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/cache"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -36,9 +37,16 @@ type dialerConf struct {
 }
 
 var (
-	globalDialerMap    map[dialerConf]*XmuxManager
-	globalDialerAccess sync.Mutex
+	clientCache        cache.Lru
+	clientCacheInit    *sync.Once
+	ClientCacheSize    = 100
+	downloadSettingsMu sync.Mutex
 )
+
+func init() {
+	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+	clientCacheInit = &sync.Once{}
+}
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
@@ -47,18 +55,18 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
 	}
 
-	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
-
-	if globalDialerMap == nil {
-		globalDialerMap = make(map[dialerConf]*XmuxManager)
-	}
+	clientCacheInit.Do(func() {
+		clientCache = cache.NewLru(ClientCacheSize)
+	})
 
 	key := dialerConf{dest, streamSettings}
 
-	xmuxManager, found := globalDialerMap[key]
+	var xmuxManager *XmuxManager
 
-	if !found {
+	// Check if we have a cached XmuxManager
+	if cached, found := clientCache.Get(key); found {
+		xmuxManager = cached.(*XmuxManager)
+	} else {
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		var xmuxConfig XmuxConfig
 		if transportConfig.Xmux != nil {
@@ -68,7 +76,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		xmuxManager = NewXmuxManager(xmuxConfig, func() XmuxConn {
 			return createHTTPClient(dest, streamSettings)
 		})
-		globalDialerMap[key] = xmuxManager
+		clientCache.Put(key, xmuxManager)
 	}
 
 	xmuxClient := xmuxManager.GetXmuxClient(ctx)
@@ -295,14 +303,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	httpClient2 := httpClient
 	xmuxClient2 := xmuxClient
 	if transportConfiguration.DownloadSettings != nil {
-		globalDialerAccess.Lock()
+		downloadSettingsMu.Lock()
 		if streamSettings.DownloadSettings == nil {
 			streamSettings.DownloadSettings = common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings))
 			if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.Penetrate {
 				streamSettings.DownloadSettings.SocketSettings = streamSettings.SocketSettings
 			}
 		}
-		globalDialerAccess.Unlock()
+		downloadSettingsMu.Unlock()
 		memory2 := streamSettings.DownloadSettings
 		dest2 := *memory2.Destination // just panic
 		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
