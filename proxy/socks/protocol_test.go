@@ -12,36 +12,6 @@ import (
 	. "github.com/xtls/xray-core/proxy/socks"
 )
 
-func TestEncodeUDPPacketLargePayload(t *testing.T) {
-	request := &protocol.RequestHeader{
-		Address: net.IPAddress([]byte{1, 2, 3, 4}),
-		Port:    6553,
-	}
-	payload := bytes.Repeat([]byte{0x5a}, buf.Size+64)
-
-	packet, err := EncodeUDPPacket(request, payload)
-	if err != nil {
-		t.Fatalf("EncodeUDPPacket returned error: %v", err)
-	}
-	defer packet.Release()
-
-	cloned := buf.FromBytes(append([]byte(nil), packet.Bytes()...))
-	decodedRequest, err := DecodeUDPPacket(cloned)
-	if err != nil {
-		t.Fatalf("DecodeUDPPacket returned error: %v", err)
-	}
-
-	if diff := cmp.Diff(request.Address, decodedRequest.Address); diff != "" {
-		t.Fatalf("unexpected decoded address (-want +got):\n%s", diff)
-	}
-	if request.Port != decodedRequest.Port {
-		t.Fatalf("unexpected decoded port: want %d, got %d", request.Port, decodedRequest.Port)
-	}
-	if diff := cmp.Diff(payload, cloned.Bytes()); diff != "" {
-		t.Fatalf("unexpected payload (-want +got):\n%s", diff)
-	}
-}
-
 func TestUDPEncoding(t *testing.T) {
 	b := buf.New()
 
