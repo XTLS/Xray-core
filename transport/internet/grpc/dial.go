@@ -48,7 +48,7 @@ type dialerConf struct {
 var (
 	clientConnCache     cache.Lru
 	clientConnCacheInit *sync.Once
-	clientConnCacheSize = 100
+	ClientConnCacheSize = 100
 )
 
 func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
@@ -80,7 +80,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
 
 	clientConnCacheInit.Do(func() {
-		clientConnCache = cache.NewLru(clientConnCacheSize)
+		clientConnCache = cache.NewLru(ClientConnCacheSize)
 	})
 
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
