@@ -248,10 +248,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	return client
 }
 
-func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
-}
-
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
