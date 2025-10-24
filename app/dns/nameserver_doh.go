@@ -126,10 +126,10 @@ func (s *DoHNameServer) getCacheController() *CacheController {
 }
 
 // sendQuery implements CachedNameserver.
-func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogInfo(ctx, s.Name(), " querying: ", domain)
+func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
 
-	if s.Name()+"." == "DOH//"+domain {
+	if s.Name()+"." == "DOH//"+fqdn {
 		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead.")
 		noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
 		return
@@ -137,7 +137,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
 	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -171,19 +171,19 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", fqdn)
 				noResponseErrCh <- err
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", fqdn)
 				noResponseErrCh <- err
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", fqdn)
 				noResponseErrCh <- err
 				return
 			}

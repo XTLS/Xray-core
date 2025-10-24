@@ -103,10 +103,10 @@ func (s *TCPNameServer) getCacheController() *CacheController {
 }
 
 // sendQuery implements CachedNameserver.
-func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", domain)
+func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {

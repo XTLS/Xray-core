@@ -154,10 +154,10 @@ func (s *ClassicNameServer) getCacheController() *CacheController {
 }
 
 // sendQuery implements CachedNameserver.
-func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", domain)
+func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	for _, req := range reqs {
 		udpReq := &udpDnsRequest{

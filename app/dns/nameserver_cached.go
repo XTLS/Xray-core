@@ -15,28 +15,32 @@ import (
 type CachedNameserver interface {
 	getCacheController() *CacheController
 
-	sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns.IPOption)
+	sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns.IPOption)
 }
 
 // queryIP is called from dns.Server->queryIPTimeout
 func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	cache := s.getCacheController()
 	fqdn := Fqdn(domain)
 
+	cache := s.getCacheController()
 	if !cache.disableCache {
 		if rec := cache.findRecords(fqdn); rec != nil {
 			ips, ttl, err := merge(option, rec.A, rec.AAAA)
 			if !go_errors.Is(err, errRecordNotFound) {
-				// errors.LogDebugInner(ctx, err, cache.name, " cache HIT ", domain, " -> ", ips)
-				log.Record(&log.DNSLog{Server: cache.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
+				// errors.LogDebugInner(ctx, err, cache.name, " cache HIT ", fqdn, " -> ", ips)
+				log.Record(&log.DNSLog{Server: cache.name, Domain: fqdn, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 				return ips, ttl, err
 			}
 		}
 	} else {
-		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", cache.name)
+		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", fqdn, " at ", cache.name)
 	}
 
-	sub4, sub6 := cache.registerSubscribers(fqdn, option)
+	return fetch(ctx, s, fqdn, option)
+}
+
+func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
+	sub4, sub6 := s.getCacheController().registerSubscribers(fqdn, option)
 	defer closeSubscribers(sub4, sub6)
 
 	noResponseErrCh := make(chan error, 2)
@@ -70,7 +74,7 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 	}
 
 	ips, ttl, err := merge(option, rec4, rec6, errs...)
-	log.Record(&log.DNSLog{Server: cache.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
+	log.Record(&log.DNSLog{Server: s.getCacheController().name, Domain: fqdn, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
 	return ips, ttl, err
 }
 

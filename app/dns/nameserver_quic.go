@@ -71,10 +71,10 @@ func (s *QUICNameServer) newReqID() uint16 {
 func (s *QUICNameServer) getCacheController() *CacheController { return s.cacheController }
 
 // sendQuery implements CachedNameServer.
-func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogInfo(ctx, s.Name(), " querying: ", domain)
+func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {

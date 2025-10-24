@@ -17,6 +17,7 @@ import (
 )
 
 // Fqdn normalizes domain make sure it ends with '.'
+// case-sensitive
 func Fqdn(domain string) string {
 	if len(domain) > 0 && strings.HasSuffix(domain, ".") {
 		return domain
