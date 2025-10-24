@@ -40,6 +40,31 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 }
 
 func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
+	key := fqdn + "f"
+	switch {
+	case option.IPv4Enable && option.IPv6Enable:
+		key = key + "46"
+	case option.IPv4Enable:
+		key = key + "4"
+	case option.IPv6Enable:
+		key = key + "6"
+	}
+
+	v, _, _ := s.getCacheController().requestGroup.Do(key, func() (any, error) {
+		return doFetch(ctx, s, fqdn, option), nil
+	})
+	ret := v.(result)
+
+	return ret.ips, ret.ttl, ret.error
+}
+
+type result struct {
+	ips []net.IP
+	ttl uint32
+	error
+}
+
+func doFetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) result {
 	sub4, sub6 := s.getCacheController().registerSubscribers(fqdn, option)
 	defer closeSubscribers(sub4, sub6)
 
@@ -55,7 +80,7 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 			return nil, err
 		case msg := <-sub.Wait():
 			sub.Close()
-			return msg.(*IPRecord), nil
+			return msg.(*IPRecord), nil // should panic
 		}
 	}
 
@@ -75,7 +100,7 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 
 	ips, ttl, err := merge(option, rec4, rec6, errs...)
 	log.Record(&log.DNSLog{Server: s.getCacheController().name, Domain: fqdn, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
+	return result{ips, ttl, err}
 }
 
 func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) ([]net.IP, uint32, error) {
@@ -85,7 +110,7 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 	mergeReq := option.IPv4Enable && option.IPv6Enable
 
 	if option.IPv4Enable {
-		ips, ttl, err := rec4.getIPs() // safe!
+		ips, ttl, err := rec4.getIPs() // it's safe
 		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
@@ -100,7 +125,7 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 	}
 
 	if option.IPv6Enable {
-		ips, ttl, err := rec6.getIPs() // safe!
+		ips, ttl, err := rec6.getIPs() // it's safe
 		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}

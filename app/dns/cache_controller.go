@@ -12,7 +12,9 @@ import (
 	"github.com/xtls/xray-core/common/signal/pubsub"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
+
 	"golang.org/x/net/dns/dnsmessage"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -31,6 +33,7 @@ type CacheController struct {
 	name          string
 	disableCache  bool
 	highWatermark int
+	requestGroup  singleflight.Group
 }
 
 func NewCacheController(name string, disableCache bool) *CacheController {
