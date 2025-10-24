@@ -277,9 +277,9 @@ func (c *CacheController) updateRecord(req *dnsRequest, rep *IPRecord) {
 	c.Unlock()
 
 	if pubRecord != nil {
-		ips, _ /*ttl*/, err := pubRecord.getIPs()
+		_, _ /*ttl*/, err := pubRecord.getIPs()
 		if /*ttl >= 0 &&*/ !go_errors.Is(err, errRecordNotFound) {
-			c.pub.Publish(req.domain+pubSuffix, ips)
+			c.pub.Publish(req.domain+pubSuffix, pubRecord)
 		}
 	}
 
