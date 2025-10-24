@@ -112,7 +112,7 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 	if len(allIPs) > 0 {
 		return allIPs, rTTL, nil
 	}
-	if len(errs) >= 2 && go_errors.Is(errs[0], errs[1]) {
+	if len(errs) == 2 && go_errors.Is(errs[0], errs[1]) {
 		return nil, rTTL, errs[0]
 	}
 	return nil, rTTL, errors.Combine(errs...)
