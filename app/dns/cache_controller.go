@@ -9,7 +9,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/pubsub"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
@@ -225,103 +224,79 @@ func (c *CacheController) flush(batch []migrationEntry) {
 	}
 }
 
-func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
-	elapsed := time.Since(req.start)
+func (c *CacheController) updateRecord(req *dnsRequest, rep *IPRecord) {
+	rtt := time.Since(req.start)
+
+	switch req.reqType {
+	case dnsmessage.TypeA:
+		c.pub.Publish(req.domain+"4", rep)
+	case dnsmessage.TypeAAAA:
+		c.pub.Publish(req.domain+"6", rep)
+	}
+
+	if c.disableCache {
+		errors.LogInfo(context.Background(), c.name, " got answer: ", req.domain, " ", req.reqType, " -> ", rep.IP, ", rtt: ", rtt)
+		return
+	}
 
 	c.Lock()
-	rec, found := c.ips[req.domain]
-	if !found {
-		rec = &record{}
+	lockWait := time.Since(req.start) - rtt
+
+	newRec := &record{}
+	oldRec := c.ips[req.domain]
+	var dirtyRec *record
+	if c.dirtyips != nil {
+		dirtyRec = c.dirtyips[req.domain]
 	}
+
+	var pubRecord *IPRecord
+	var pubSuffix string
 
 	switch req.reqType {
 	case dnsmessage.TypeA:
-		rec.A = ipRec
+		newRec.A = rep
+		if oldRec != nil && oldRec.AAAA != nil {
+			newRec.AAAA = oldRec.AAAA
+			pubRecord = oldRec.AAAA
+		} else if dirtyRec != nil && dirtyRec.AAAA != nil {
+			pubRecord = dirtyRec.AAAA
+		}
+		pubSuffix = "6"
 	case dnsmessage.TypeAAAA:
-		rec.AAAA = ipRec
+		newRec.AAAA = rep
+		if oldRec != nil && oldRec.A != nil {
+			newRec.A = oldRec.A
+			pubRecord = oldRec.A
+		} else if dirtyRec != nil && dirtyRec.A != nil {
+			pubRecord = dirtyRec.A
+		}
+		pubSuffix = "4"
 	}
 
-	errors.LogInfo(context.Background(), c.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
-	c.ips[req.domain] = rec
-
-	switch req.reqType {
-	case dnsmessage.TypeA:
-		c.pub.Publish(req.domain+"4", nil)
-		if !c.disableCache && rec.AAAA != nil {
-			_, _, err := rec.AAAA.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
-				c.pub.Publish(req.domain+"6", nil)
-			}
-		}
-	case dnsmessage.TypeAAAA:
-		c.pub.Publish(req.domain+"6", nil)
-		if !c.disableCache && rec.A != nil {
-			_, _, err := rec.A.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
-				c.pub.Publish(req.domain+"4", nil)
-			}
-		}
-	}
-
+	c.ips[req.domain] = newRec
 	c.Unlock()
+
+	if pubRecord != nil {
+		ips, _ /*ttl*/, err := pubRecord.getIPs()
+		if /*ttl >= 0 &&*/ !go_errors.Is(err, errRecordNotFound) {
+			c.pub.Publish(req.domain+pubSuffix, ips)
+		}
+	}
+
+	errors.LogInfo(context.Background(), c.name, " got answer: ", req.domain, " ", req.reqType, " -> ", rep.IP, ", rtt: ", rtt, ", lock: ", lockWait)
+
 	common.Must(c.cacheCleanup.Start())
 }
 
-func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
+func (c *CacheController) findRecords(domain string) *record {
 	c.RLock()
 	defer c.RUnlock()
 
-	rec, found := c.ips[domain]
-	if !found && c.dirtyips != nil {
-		rec, found = c.dirtyips[domain]
+	rec := c.ips[domain]
+	if rec == nil && c.dirtyips != nil {
+		rec = c.dirtyips[domain]
 	}
-	if !found {
-		return nil, 0, errRecordNotFound
-	}
-
-	var errs []error
-	var allIPs []net.IP
-	var rTTL uint32 = dns_feature.DefaultTTL
-
-	mergeReq := option.IPv4Enable && option.IPv6Enable
-
-	if option.IPv4Enable && rec.A != nil {
-		ips, ttl, err := rec.A.getIPs()
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
-			return ips, ttl, err
-		}
-		if ttl < rTTL {
-			rTTL = ttl
-		}
-		if len(ips) > 0 {
-			allIPs = append(allIPs, ips...)
-		} else {
-			errs = append(errs, err)
-		}
-	}
-
-	if option.IPv6Enable && rec.AAAA != nil {
-		ips, ttl, err := rec.AAAA.getIPs()
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
-			return ips, ttl, err
-		}
-		if ttl < rTTL {
-			rTTL = ttl
-		}
-		if len(ips) > 0 {
-			allIPs = append(allIPs, ips...)
-		} else {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(allIPs) > 0 {
-		return allIPs, rTTL, nil
-	}
-	if len(errs) == 2 && go_errors.Is(errs[0], errs[1]) {
-		return nil, rTTL, errs[0]
-	}
-	return nil, rTTL, errors.Combine(errs...)
+	return rec
 }
 
 func (c *CacheController) registerSubscribers(domain string, option dns_feature.IPOption) (sub4 *pubsub.Subscriber, sub6 *pubsub.Subscriber) {
