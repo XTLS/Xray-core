@@ -27,6 +27,7 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 		if rec := cache.findRecords(fqdn); rec != nil {
 			ips, ttl, err := merge(option, rec.A, rec.AAAA)
 			if !go_errors.Is(err, errRecordNotFound) {
+				// errors.LogDebugInner(ctx, err, cache.name, " cache HIT ", domain, " -> ", ips)
 				log.Record(&log.DNSLog{Server: cache.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 				return ips, ttl, err
 			}
@@ -79,8 +80,8 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 
 	mergeReq := option.IPv4Enable && option.IPv6Enable
 
-	if option.IPv4Enable && rec4 != nil {
-		ips, ttl, err := rec4.getIPs()
+	if option.IPv4Enable {
+		ips, ttl, err := rec4.getIPs() // safe!
 		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
@@ -94,8 +95,8 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 		}
 	}
 
-	if option.IPv6Enable && rec6 != nil {
-		ips, ttl, err := rec6.getIPs()
+	if option.IPv6Enable {
+		ips, ttl, err := rec6.getIPs() // safe!
 		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
 			return ips, ttl, err
 		}
