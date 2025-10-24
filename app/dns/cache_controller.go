@@ -36,7 +36,7 @@ type CacheController struct {
 	requestGroup  singleflight.Group
 }
 
-func NewCacheController(name string, disableCache bool) *CacheController {
+func NewCacheController(name string, disableCache bool, todo1 bool, todo2 uint32) *CacheController {
 	c := &CacheController{
 		name:         name,
 		disableCache: disableCache,
