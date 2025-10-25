@@ -266,9 +266,6 @@ func (b *Buffer) IsFull() bool {
 func (b *Buffer) Write(data []byte) (int, error) {
 	nBytes := copy(b.v[b.end:], data)
 	b.end += int32(nBytes)
-	if nBytes < len(data) {
-		return nBytes, ErrBufferFull
-	}
 	return nBytes, nil
 }
 
