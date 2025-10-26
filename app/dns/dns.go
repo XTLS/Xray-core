@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -193,7 +194,7 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 	}
 
 	if s.checkSystem {
-		supportIPv4, supportIPv6 := checkSystemNetwork()
+		supportIPv4, supportIPv6 := checkRoutes()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
 		option.IPv6Enable = option.IPv6Enable && supportIPv6
 	} else {
@@ -330,40 +331,51 @@ func init() {
 	}))
 }
 
-func checkSystemNetworkInternal() (supportIPv4 bool, supportIPv6 bool) {
-	conn4, err4 := net.Dial("udp4", "192.33.4.12:53")
-	if err4 != nil {
-		supportIPv4 = false
-	} else {
-		supportIPv4 = true
-		conn4.Close()
+func probeRoutes() (ipv4 bool, ipv6 bool) {
+	if conn, err := net.Dial("udp4", "192.33.4.12:53"); err == nil {
+		ipv4 = true
+		conn.Close()
 	}
-
-	conn6, err6 := net.Dial("udp6", "[2001:500:2::c]:53")
-	if err6 != nil {
-		supportIPv6 = false
-	} else {
-		supportIPv6 = true
-		conn6.Close()
+	if conn, err := net.Dial("udp6", "[2001:500:2::c]:53"); err == nil {
+		ipv6 = true
+		conn.Close()
 	}
 	return
 }
 
-var cachedSystemNetwork struct {
+var routeCache struct {
 	sync.Once
-	ipv4 bool
-	ipv6 bool
+	sync.RWMutex
+	expire     time.Time
+	ipv4, ipv6 bool
 }
 
-func checkSystemNetwork() (supportIPv4 bool, supportIPv6 bool) {
-	if isGUIPlatform() {
-		return checkSystemNetworkInternal()
+func checkRoutes() (bool, bool) {
+	if !isGUIPlatform() {
+		routeCache.Once.Do(func() {
+			routeCache.ipv4, routeCache.ipv6 = probeRoutes()
+		})
+		return routeCache.ipv4, routeCache.ipv6
 	}
 
-	cachedSystemNetwork.Once.Do(func() {
-		cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6 = checkSystemNetworkInternal()
-	})
-	return cachedSystemNetwork.ipv4, cachedSystemNetwork.ipv6
+	routeCache.RWMutex.RLock()
+	now := time.Now()
+	if routeCache.expire.After(now) {
+		routeCache.RWMutex.RUnlock()
+		return routeCache.ipv4, routeCache.ipv6
+	}
+	routeCache.RWMutex.RUnlock()
+
+	routeCache.RWMutex.Lock()
+	defer routeCache.RWMutex.Unlock()
+
+	now = time.Now()
+	if routeCache.expire.After(now) { // double-check
+		return routeCache.ipv4, routeCache.ipv6
+	}
+	routeCache.ipv4, routeCache.ipv6 = probeRoutes()    // ~2ms
+	routeCache.expire = now.Add(100 * time.Millisecond) // ttl
+	return routeCache.ipv4, routeCache.ipv6
 }
 
 func isGUIPlatform() bool {
@@ -374,7 +386,7 @@ func isGUIPlatform() bool {
 		if t := os.Getenv("XDG_SESSION_TYPE"); t == "wayland" || t == "x11" {
 			return true
 		}
-		if os.Getenv("DISPLAY") != "" {
+		if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
 			return true
 		}
 	}
