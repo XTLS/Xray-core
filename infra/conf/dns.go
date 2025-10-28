@@ -28,7 +28,7 @@ type NameServerConfig struct {
 	TimeoutMs       uint64     `json:"timeoutMs"`
 	DisableCache    bool       `json:"disableCache"`
 	ServeStale      bool       `json:"serveStale"`
-	ServeExpiredTTL uint32     `json:"serveExpiredTTL"`
+	ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
 	FinalQuery      bool       `json:"finalQuery"`
 	UnexpectedIPs   StringList `json:"unexpectedIPs"`
 }
@@ -54,7 +54,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		TimeoutMs       uint64     `json:"timeoutMs"`
 		DisableCache    bool       `json:"disableCache"`
 		ServeStale      bool       `json:"serveStale"`
-		ServeExpiredTTL uint32     `json:"serveExpiredTTL"`
+		ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
 		FinalQuery      bool       `json:"finalQuery"`
 		UnexpectedIPs   StringList `json:"unexpectedIPs"`
 	}
@@ -180,7 +180,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		TimeoutMs:         c.TimeoutMs,
 		DisableCache:      c.DisableCache,
 		ServeStale:        c.ServeStale,
-		ServeExpiredTTL:   &c.ServeExpiredTTL,
+		ServeExpiredTTL:   c.ServeExpiredTTL,
 		FinalQuery:        c.FinalQuery,
 		UnexpectedGeoip:   unexpectedGeoipList,
 		ActUnprior:        actUnprior,
