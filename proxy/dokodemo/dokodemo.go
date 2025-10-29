@@ -307,3 +307,8 @@ type PacketConnTimeWrapper struct {
 	lastUsedTime time.Time
 	isMainConn   bool
 }
+
+func (c *PacketConnTimeWrapper) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	c.lastUsedTime = time.Now()
+	return c.PacketConn.WriteTo(b, addr)
+}
