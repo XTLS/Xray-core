@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -52,6 +53,10 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
+
+	testpre uint32
+	locker  sync.Mutex
+	conns   []stat.Connection
 }
 
 // New creates a new VLess outbound handler.
@@ -105,6 +110,8 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}()
 	}
 
+	handler.testpre = a.Testpre
+
 	return handler, nil
 }
 
@@ -128,15 +135,44 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	if err := retry.ExponentialBackoff(5, 200).On(func() error {
-		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination)
-		if err != nil {
-			return err
+	if h.testpre > 0 && h.reverse == nil {
+		h.locker.Lock()
+		if h.conns == nil {
+			h.conns = make([]stat.Connection, 0)
+			go func() {
+				for { // TODO: close & inactive
+					time.Sleep(100 * time.Millisecond) // TODO: customize & randomize
+					h.locker.Lock()
+					if len(h.conns) >= int(h.testpre) {
+						h.locker.Unlock()
+						continue
+					}
+					h.locker.Unlock()
+					if conn, err := dialer.Dial(context.Background(), rec.Destination); err == nil { // TODO: timeout & concurrency? & ctx mitm?
+						h.locker.Lock()
+						h.conns = append(h.conns, conn) // TODO: vision paddings
+						h.locker.Unlock()
+					}
+				}
+			}()
+		} else if len(h.conns) > 0 {
+			conn = h.conns[0]
+			h.conns = h.conns[1:]
 		}
-		return nil
-	}); err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+		h.locker.Unlock()
+	}
+
+	if conn == nil {
+		if err := retry.ExponentialBackoff(5, 200).On(func() error {
+			var err error
+			conn, err = dialer.Dial(ctx, rec.Destination)
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return errors.New("failed to find an available destination").Base(err).AtWarning()
+		}
 	}
 	defer conn.Close()
 
