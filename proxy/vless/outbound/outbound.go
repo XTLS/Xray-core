@@ -176,6 +176,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	defer conn.Close()
 
+	ob.Conn = conn // for Vision's pre-connect
+
 	iConn := conn
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
