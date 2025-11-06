@@ -54,9 +54,9 @@ type Handler struct {
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
 
-	testpre uint32
-	locker  sync.Mutex
-	conns   []stat.Connection
+	testpre   uint32
+	initConns sync.Once
+	conns     chan stat.Connection
 }
 
 // New creates a new VLess outbound handler.
@@ -136,30 +136,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 
 	if h.testpre > 0 && h.reverse == nil {
-		h.locker.Lock()
-		if h.conns == nil {
-			h.conns = make([]stat.Connection, 0)
-			go func() {
-				for { // TODO: close & inactive
-					time.Sleep(100 * time.Millisecond) // TODO: customize & randomize
-					h.locker.Lock()
-					if len(h.conns) >= int(h.testpre) {
-						h.locker.Unlock()
-						continue
-					}
-					h.locker.Unlock()
-					if conn, err := dialer.Dial(context.Background(), rec.Destination); err == nil { // TODO: timeout & concurrency? & ctx mitm?
-						h.locker.Lock()
-						h.conns = append(h.conns, conn) // TODO: vision paddings
-						h.locker.Unlock()
-					}
-				}
-			}()
-		} else if len(h.conns) > 0 {
-			conn = h.conns[0]
-			h.conns = h.conns[1:]
+		h.initConns.Do(func() {
+			h.conns = make(chan stat.Connection, h.testpre)
+			go h.preConnWorker(dialer, rec.Destination)
+		})
+		select {
+		case conn = <-h.conns:
+		default:
 		}
-		h.locker.Unlock()
 	}
 
 	if conn == nil {
@@ -463,4 +447,12 @@ func (r *Reverse) Start() error {
 
 func (r *Reverse) Close() error {
 	return r.monitorTask.Close()
+}
+
+func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
+	for {
+		if conn, err := dialer.Dial(context.Background(), dest); err == nil {
+			h.conns <- conn
+		}
+	}
 }
