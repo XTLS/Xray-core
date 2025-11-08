@@ -72,15 +72,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(&AttributeMatcher{configuredKeys})
 	}
 
-	if len(rr.Domain) > 0 {
-		matcher, err := NewMphMatcherGroup(rr.Domain)
-		if err != nil {
-			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
-		}
-		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
-		conds.Add(matcher)
-	}
-
 	if len(rr.Geoip) > 0 {
 		cond, err := NewMultiGeoIPMatcher(rr.Geoip, "target")
 		if err != nil {
@@ -104,6 +95,15 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		}
 		conds.Add(cond)
 		errors.LogWarning(context.Background(), "Due to some limitations, in UDP connections, localIP is always equal to listen interface IP, so \"localIP\" rule condition does not work properly on UDP inbound connections that listen on all interfaces")
+	}
+
+	if len(rr.Domain) > 0 {
+		matcher, err := NewMphMatcherGroup(rr.Domain)
+		if err != nil {
+			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
+		}
+		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
+		conds.Add(matcher)
 	}
 
 	if conds.Len() == 0 {
