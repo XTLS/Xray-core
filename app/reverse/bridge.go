@@ -236,6 +236,8 @@ func (w *BridgeWorker) DispatchLink(ctx context.Context, dest net.Destination, l
 	return nil
 }
 
+// WrapLink this method will never be called; it's only used to implement the routing.Dispatcher interface.
 func (w *BridgeWorker) WrapLink(ctx context.Context, link *transport.Link) *transport.Link {
-	return link
+	// if this line of code is called, there may be duplicate calls. please remove it.
+	return w.Dispatcher.WrapLink(ctx, link) // noop, duplicate calls
 }

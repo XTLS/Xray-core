@@ -75,8 +75,10 @@ func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *t
 	return nil
 }
 
+// WrapLink this method will never be called; it's only used to implement the routing.Dispatcher interface.
 func (s *Server) WrapLink(ctx context.Context, link *transport.Link) *transport.Link {
-	return link
+	// if this line of code is called, there may be duplicate calls. please remove it.
+	return s.dispatcher.WrapLink(ctx, link) // noop, duplicate calls
 }
 
 // Start implements common.Runnable.
