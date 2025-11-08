@@ -76,6 +76,10 @@ func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *t
 	return nil
 }
 
+func (s *Server) WrapLink(ctx context.Context, link *transport.Link) *transport.Link {
+	return link
+}
+
 // Start implements common.Runnable.
 func (s *Server) Start() error {
 	return nil

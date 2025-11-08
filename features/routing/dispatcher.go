@@ -18,6 +18,8 @@ type Dispatcher interface {
 	// Dispatch returns a Ray for transporting data for the given request.
 	Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error)
 	DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error
+
+	WrapLink(ctx context.Context, link *transport.Link) *transport.Link
 }
 
 // DispatcherType returns the type of Dispatcher interface. Can be used to implement common.HasType.

@@ -236,3 +236,7 @@ func (w *BridgeWorker) DispatchLink(ctx context.Context, dest net.Destination, l
 
 	return nil
 }
+
+func (w *BridgeWorker) WrapLink(ctx context.Context, link *transport.Link) *transport.Link {
+	return link
+}
