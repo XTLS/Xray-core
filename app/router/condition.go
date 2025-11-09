@@ -96,52 +96,43 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
-type MultiGeoIPMatcher struct {
-	matchers []*GeoIPMatcher
-	asType   string // local, source, target
+type IPMatcher struct {
+	matcher GeoIPMatcher
+	asType  IPMatcherAsType
 }
 
-func NewMultiGeoIPMatcher(geoips []*GeoIP, asType string) (*MultiGeoIPMatcher, error) {
-	var matchers []*GeoIPMatcher
-	for _, geoip := range geoips {
-		matcher, err := GlobalGeoIPContainer.Add(geoip)
-		if err != nil {
-			return nil, err
-		}
-		matchers = append(matchers, matcher)
-	}
+type IPMatcherAsType byte
 
-	matcher := &MultiGeoIPMatcher{
-		matchers: matchers,
-		asType:   asType,
-	}
+const (
+	IPMatcherAsType_Local IPMatcherAsType = iota
+	IPMatcherAsType_Source
+	IPMatcherAsType_Target
+)
 
-	return matcher, nil
+func NewIPMatcher(geoips []*GeoIP, asType IPMatcherAsType) (*IPMatcher, error) {
+	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
+	if err != nil {
+		return nil, err
+	}
+	return &IPMatcher{matcher: matcher, asType: asType}, nil
 }
 
 // Apply implements Condition.
-func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
+func (m *IPMatcher) Apply(ctx routing.Context) bool {
 	var ips []net.IP
 
 	switch m.asType {
-	case "local":
+	case IPMatcherAsType_Local:
 		ips = ctx.GetLocalIPs()
-	case "source":
+	case IPMatcherAsType_Source:
 		ips = ctx.GetSourceIPs()
-	case "target":
+	case IPMatcherAsType_Target:
 		ips = ctx.GetTargetIPs()
 	default:
 		panic("unreachable, asType should be local or source or target")
 	}
 
-	for _, ip := range ips {
-		for _, matcher := range m.matchers {
-			if matcher.Match(ip) {
-				return true
-			}
-		}
-	}
-	return false
+	return m.matcher.Matches(ips)
 }
 
 type PortMatcher struct {

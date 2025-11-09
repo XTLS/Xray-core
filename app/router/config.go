@@ -70,7 +70,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Geoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.Geoip, "target")
+		cond, err := NewIPMatcher(rr.Geoip, IPMatcherAsType_Target)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.SourceGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, "source")
+		cond, err := NewIPMatcher(rr.SourceGeoip, IPMatcherAsType_Source)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.LocalGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.LocalGeoip, "local")
+		cond, err := NewIPMatcher(rr.LocalGeoip, IPMatcherAsType_Local)
 		if err != nil {
 			return nil, err
 		}
