@@ -96,20 +96,21 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
-type IPMatcher struct {
-	matcher GeoIPMatcher
-	asType  IPMatcherAsType
-}
-
-type IPMatcherAsType byte
+type MatcherAsType byte
 
 const (
-	IPMatcherAsType_Local IPMatcherAsType = iota
-	IPMatcherAsType_Source
-	IPMatcherAsType_Target
+	MatcherAsType_Local MatcherAsType = iota
+	MatcherAsType_Source
+	MatcherAsType_Target
+	MatcherAsType_VlessRoute // for port
 )
 
-func NewIPMatcher(geoips []*GeoIP, asType IPMatcherAsType) (*IPMatcher, error) {
+type IPMatcher struct {
+	matcher GeoIPMatcher
+	asType  MatcherAsType
+}
+
+func NewIPMatcher(geoips []*GeoIP, asType MatcherAsType) (*IPMatcher, error) {
 	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
 	if err != nil {
 		return nil, err
@@ -122,11 +123,11 @@ func (m *IPMatcher) Apply(ctx routing.Context) bool {
 	var ips []net.IP
 
 	switch m.asType {
-	case IPMatcherAsType_Local:
+	case MatcherAsType_Local:
 		ips = ctx.GetLocalIPs()
-	case IPMatcherAsType_Source:
+	case MatcherAsType_Source:
 		ips = ctx.GetSourceIPs()
-	case IPMatcherAsType_Target:
+	case MatcherAsType_Target:
 		ips = ctx.GetTargetIPs()
 	default:
 		panic("unreachable, asType should be local or source or target")
@@ -137,11 +138,11 @@ func (m *IPMatcher) Apply(ctx routing.Context) bool {
 
 type PortMatcher struct {
 	port   net.MemoryPortList
-	asType string // local, source, target
+	asType MatcherAsType
 }
 
 // NewPortMatcher create a new port matcher that can match source or local or destination port
-func NewPortMatcher(list *net.PortList, asType string) *PortMatcher {
+func NewPortMatcher(list *net.PortList, asType MatcherAsType) *PortMatcher {
 	return &PortMatcher{
 		port:   net.PortListFromProto(list),
 		asType: asType,
@@ -151,18 +152,17 @@ func NewPortMatcher(list *net.PortList, asType string) *PortMatcher {
 // Apply implements Condition.
 func (v *PortMatcher) Apply(ctx routing.Context) bool {
 	switch v.asType {
-	case "local":
+	case MatcherAsType_Local:
 		return v.port.Contains(ctx.GetLocalPort())
-	case "source":
+	case MatcherAsType_Source:
 		return v.port.Contains(ctx.GetSourcePort())
-	case "target":
+	case MatcherAsType_Target:
 		return v.port.Contains(ctx.GetTargetPort())
-	case "vlessRoute":
+	case MatcherAsType_VlessRoute:
 		return v.port.Contains(ctx.GetVlessRoute())
 	default:
 		panic("unreachable, asType should be local or source or target")
 	}
-
 }
 
 type NetworkMatcher struct {

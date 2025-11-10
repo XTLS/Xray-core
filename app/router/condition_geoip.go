@@ -16,32 +16,32 @@ import (
 type GeoIPMatcher interface {
 	// TODO: (PERF) all net.IP -> netipx.Addr
 
-	// Invalid IPs always return false.
+	// Invalid IP always return false.
 	Match(ip net.IP) bool
 
-	// Returns true if *all* IPs match; invalid IPs are treated as non-matching.
+	// Returns true only if *all* IPs are valid and match. Any invalid IP, or non-matching valid IP, causes false.
 	Matches(ips []net.IP) bool
 
-	// Filters IPs into matched and unmatched. Invalid IPs are silently ignored.
+	// Filters IPs. Invalid IPs are silently dropped and not included in either result.
 	FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP)
 
-	Reverse()
+	ToggleReverse()
 
 	SetReverse(reverse bool)
 }
 
-type GeoIPXSet struct {
+type GeoIPSet struct {
 	ipv4 *netipx.IPSet
 	ipv6 *netipx.IPSet
 }
 
-type BinarySearchGeoIPMatcher struct {
-	set     *GeoIPXSet
+type HeuristicGeoIPMatcher struct {
+	ipset   *GeoIPSet
 	reverse bool
 }
 
 // Match implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) Match(ip net.IP) bool {
+func (m *HeuristicGeoIPMatcher) Match(ip net.IP) bool {
 	ipx, ok := netipx.FromStdIP(ip)
 	if !ok {
 		return false
@@ -49,18 +49,18 @@ func (m *BinarySearchGeoIPMatcher) Match(ip net.IP) bool {
 	return m.matchAddr(ipx)
 }
 
-func (m *BinarySearchGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
+func (m *HeuristicGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
 	if ipx.Is4() {
-		return m.set.ipv4.Contains(ipx) != m.reverse
+		return m.ipset.ipv4.Contains(ipx) != m.reverse
 	}
 	if ipx.Is6() {
-		return m.set.ipv6.Contains(ipx) != m.reverse
+		return m.ipset.ipv6.Contains(ipx) != m.reverse
 	}
 	return false
 }
 
 // Matches implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) Matches(ips []net.IP) bool {
+func (m *HeuristicGeoIPMatcher) Matches(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -136,7 +136,7 @@ func prefixKeyFromIP(ip net.IP) (key [7]byte, ok bool) {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -169,8 +169,8 @@ func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matche
 		b, exists := buckets[key]
 		if !exists {
 			// build bucket
-			ipx, ok2 := netipx.FromStdIP(ip)
-			if !ok2 {
+			ipx, ok := netipx.FromStdIP(ip)
+			if !ok {
 				continue
 			}
 			b = &bucket{
@@ -196,13 +196,13 @@ func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matche
 	return
 }
 
-// Reverse implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) Reverse() {
+// ToggleReverse implements GeoIPMatcher.
+func (m *HeuristicGeoIPMatcher) ToggleReverse() {
 	m.reverse = !m.reverse
 }
 
 // SetReverse implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) SetReverse(reverse bool) {
+func (m *HeuristicGeoIPMatcher) SetReverse(reverse bool) {
 	m.reverse = reverse
 }
 
@@ -238,19 +238,19 @@ func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (match
 		if len(unmatched) == 0 {
 			break
 		}
-		var ret []net.IP
-		ret, unmatched = m.FilterIPs(unmatched, reverse)
-		if len(ret) > 0 {
-			matched = append(matched, ret...)
+		var mtch []net.IP
+		mtch, unmatched = m.FilterIPs(unmatched, reverse)
+		if len(mtch) > 0 {
+			matched = append(matched, mtch...)
 		}
 	}
 	return
 }
 
-// Reverse implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) Reverse() {
+// ToggleReverse implements GeoIPMatcher.
+func (mm *GeneralMultiGeoIPMatcher) ToggleReverse() {
 	for _, m := range mm.matchers {
-		m.Reverse()
+		m.ToggleReverse()
 	}
 }
 
@@ -261,12 +261,12 @@ func (mm *GeneralMultiGeoIPMatcher) SetReverse(reverse bool) {
 	}
 }
 
-type BinarySearchMultiGeoIPMatcher struct {
-	matchers []*BinarySearchGeoIPMatcher
+type HeuristicMultiGeoIPMatcher struct {
+	matchers []*HeuristicGeoIPMatcher
 }
 
 // Match implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) Match(ip net.IP) bool {
+func (mm *HeuristicMultiGeoIPMatcher) Match(ip net.IP) bool {
 	ipx, ok := netipx.FromStdIP(ip)
 	if !ok {
 		return false
@@ -281,7 +281,7 @@ func (mm *BinarySearchMultiGeoIPMatcher) Match(ip net.IP) bool {
 }
 
 // Matches implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) Matches(ips []net.IP) bool {
+func (mm *HeuristicMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -320,7 +320,7 @@ func (mm *BinarySearchMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -355,8 +355,8 @@ func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (
 		b, exists := buckets[key]
 		if !exists {
 			// build bucket
-			ipx, ok2 := netipx.FromStdIP(ip)
-			if !ok2 {
+			ipx, ok := netipx.FromStdIP(ip)
+			if !ok {
 				continue
 			}
 			b = &bucket{
@@ -395,30 +395,28 @@ func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (
 	return
 }
 
-// Reverse implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) Reverse() {
+// ToggleReverse implements GeoIPMatcher.
+func (mm *HeuristicMultiGeoIPMatcher) ToggleReverse() {
 	for _, m := range mm.matchers {
-		m.Reverse()
+		m.ToggleReverse()
 	}
 }
 
 // SetReverse implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) SetReverse(reverse bool) {
+func (mm *HeuristicMultiGeoIPMatcher) SetReverse(reverse bool) {
 	for _, m := range mm.matchers {
 		m.SetReverse(reverse)
 	}
 }
 
-type GeoIPXSetFactory struct {
+type GeoIPSetFactory struct {
 	sync.Mutex
-	shared map[string]*GeoIPXSet
+	shared map[string]*GeoIPSet // TODO: cleanup
 }
 
-var geoIPXSetFactory = GeoIPXSetFactory{
-	shared: make(map[string]*GeoIPXSet),
-}
+var ipsetFactory = GeoIPSetFactory{shared: make(map[string]*GeoIPSet)}
 
-func (f *GeoIPXSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPXSet, error) {
+func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPSet, error) {
 	f.Lock()
 	defer f.Unlock()
 
@@ -433,7 +431,7 @@ func (f *GeoIPXSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIP
 	return set, err
 }
 
-func (f *GeoIPXSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPXSet, error) {
+func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
 
 	for _, cidrGroup := range cidrGroups {
@@ -471,7 +469,7 @@ func (f *GeoIPXSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPXSet, error) {
 		return nil, errors.New("failed to build IPv6 set").Base(err)
 	}
 
-	return &GeoIPXSet{ipv4: ipv4, ipv6: ipv6}, nil
+	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6}, nil
 }
 
 func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
@@ -480,7 +478,7 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 		return nil, errors.New("no geoip configs provided")
 	}
 
-	var subs []*BinarySearchGeoIPMatcher
+	var subs []*HeuristicGeoIPMatcher
 	pos := make([]*GeoIP, 0, n)
 	neg := make([]*GeoIP, 0, n/2)
 
@@ -489,11 +487,11 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 			return nil, errors.New("geoip entry is nil")
 		}
 		if geoip.CountryCode == "" {
-			set, err := geoIPXSetFactory.Create(geoip.Cidr)
+			set, err := ipsetFactory.Create(geoip.Cidr)
 			if err != nil {
 				return nil, err
 			}
-			subs = append(subs, &BinarySearchGeoIPMatcher{set: set, reverse: geoip.ReverseMatch})
+			subs = append(subs, &HeuristicGeoIPMatcher{ipset: set, reverse: geoip.ReverseMatch})
 			continue
 		}
 		if !geoip.ReverseMatch {
@@ -503,7 +501,7 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 		}
 	}
 
-	tryGetOrCreateMergedIPXSet := func(mergeables []*GeoIP) (*GeoIPXSet, error) {
+	buildIPSet := func(mergeables []*GeoIP) (*GeoIPSet, error) {
 		n := len(mergeables)
 		if n == 0 {
 			return nil, nil
@@ -527,23 +525,23 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 			}
 		}
 
-		return geoIPXSetFactory.GetOrCreate(sb.String(), cidrGroups)
+		return ipsetFactory.GetOrCreate(sb.String(), cidrGroups)
 	}
 
-	set, err := tryGetOrCreateMergedIPXSet(pos)
+	ipset, err := buildIPSet(pos)
 	if err != nil {
 		return nil, err
 	}
-	if set != nil {
-		subs = append(subs, &BinarySearchGeoIPMatcher{set: set, reverse: false})
+	if ipset != nil {
+		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: false})
 	}
 
-	set, err = tryGetOrCreateMergedIPXSet(neg)
+	ipset, err = buildIPSet(neg)
 	if err != nil {
 		return nil, err
 	}
-	if set != nil {
-		subs = append(subs, &BinarySearchGeoIPMatcher{set: set, reverse: true})
+	if ipset != nil {
+		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: true})
 	}
 
 	switch len(subs) {
@@ -552,6 +550,6 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 	case 1:
 		return subs[0], nil
 	default:
-		return &BinarySearchMultiGeoIPMatcher{matchers: subs}, nil
+		return &HeuristicMultiGeoIPMatcher{matchers: subs}, nil
 	}
 }

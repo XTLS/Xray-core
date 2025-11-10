@@ -35,31 +35,6 @@ func getAssetPath(file string) (string, error) {
 	return path, nil
 }
 
-// func TestGeoIPMatcherContainer(t *testing.T) {
-// 	m1, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
-// 		CountryCode: "CN",
-// 	})
-// 	common.Must(err)
-
-// 	m2, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
-// 		CountryCode: "US",
-// 	})
-// 	common.Must(err)
-
-// 	m3, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
-// 		CountryCode: "CN",
-// 	})
-// 	common.Must(err)
-
-// 	if m1 != m3 {
-// 		t.Error("expect same matcher for same geoip, but not")
-// 	}
-
-// 	if m1 == m2 {
-// 		t.Error("expect different matcher for different geoip, but actually same")
-// 	}
-// }
-
 func TestGeoIPMatcher(t *testing.T) {
 	cidrList := []*router.CIDR{
 		{Ip: []byte{0, 0, 0, 0}, Prefix: 8},
