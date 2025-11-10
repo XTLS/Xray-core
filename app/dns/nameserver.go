@@ -242,7 +242,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if c.expectedIPs != nil && !c.actPrior {
-		ips, _ = c.expectedIPs.FilterIPs(ips, false)
+		ips, _ = c.expectedIPs.FilterIPs(ips)
 		errors.LogDebug(context.Background(), "domain ", domain, " expectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
@@ -250,7 +250,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if c.unexpectedIPs != nil && !c.actUnprior {
-		ips, _ = c.unexpectedIPs.FilterIPs(ips, true)
+		_, ips = c.unexpectedIPs.FilterIPs(ips)
 		errors.LogDebug(context.Background(), "domain ", domain, " unexpectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
@@ -258,7 +258,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if c.expectedIPs != nil && c.actPrior {
-		ipsNew, _ := c.expectedIPs.FilterIPs(ips, false)
+		ipsNew, _ := c.expectedIPs.FilterIPs(ips)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " priorIPs ", ips, " matched at server ", c.Name())
@@ -266,7 +266,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	if c.unexpectedIPs != nil && c.actUnprior {
-		ipsNew, _ := c.unexpectedIPs.FilterIPs(ips, true)
+		_, ipsNew := c.unexpectedIPs.FilterIPs(ips)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " unpriorIPs ", ips, " matched at server ", c.Name())

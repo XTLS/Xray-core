@@ -23,7 +23,7 @@ type GeoIPMatcher interface {
 	Matches(ips []net.IP) bool
 
 	// Filters IPs. Invalid IPs are silently dropped and not included in either result.
-	FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP)
+	FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP)
 
 	ToggleReverse()
 
@@ -136,7 +136,7 @@ func prefixKeyFromIP(ip net.IP) (key [7]byte, ok bool) {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -147,7 +147,7 @@ func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched [
 		if !ok {
 			return []net.IP{}, []net.IP{}
 		}
-		if m.matchAddr(ipx) != reverse {
+		if m.matchAddr(ipx) {
 			return ips, []net.IP{}
 		}
 		return []net.IP{}, ips
@@ -187,7 +187,7 @@ func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched [
 	unmatched = make([]net.IP, 0, n)
 	for _, key := range order {
 		b := buckets[key]
-		if m.matchAddr(b.rep) != reverse {
+		if m.matchAddr(b.rep) {
 			matched = append(matched, b.ips...)
 		} else {
 			unmatched = append(unmatched, b.ips...)
@@ -231,7 +231,7 @@ func (mm *GeneralMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	matched = make([]net.IP, 0, len(ips))
 	unmatched = ips
 	for _, m := range mm.matchers {
@@ -239,7 +239,7 @@ func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (match
 			break
 		}
 		var mtch []net.IP
-		mtch, unmatched = m.FilterIPs(unmatched, reverse)
+		mtch, unmatched = m.FilterIPs(unmatched)
 		if len(mtch) > 0 {
 			matched = append(matched, mtch...)
 		}
@@ -320,7 +320,7 @@ func (mm *HeuristicMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -332,7 +332,7 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (mat
 			return []net.IP{}, []net.IP{}
 		}
 		for _, m := range mm.matchers {
-			if m.matchAddr(ipx) != reverse {
+			if m.matchAddr(ipx) {
 				return ips, []net.IP{}
 			}
 		}
@@ -376,7 +376,7 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (mat
 			if b == nil {
 				continue
 			}
-			if m.matchAddr(b.rep) != reverse {
+			if m.matchAddr(b.rep) {
 				buckets[key] = nil
 				matched = append(matched, b.ips...)
 			}
