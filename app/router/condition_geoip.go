@@ -420,15 +420,15 @@ func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPS
 	f.Lock()
 	defer f.Unlock()
 
-	if set := f.shared[key]; set != nil {
-		return set, nil
+	if ipset := f.shared[key]; ipset != nil {
+		return ipset, nil
 	}
 
-	set, err := f.Create(cidrGroups...)
+	ipset, err := f.Create(cidrGroups...)
 	if err == nil {
-		f.shared[key] = set
+		f.shared[key] = ipset
 	}
-	return set, err
+	return ipset, err
 }
 
 func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
@@ -487,11 +487,11 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 			return nil, errors.New("geoip entry is nil")
 		}
 		if geoip.CountryCode == "" {
-			set, err := ipsetFactory.Create(geoip.Cidr)
+			ipset, err := ipsetFactory.Create(geoip.Cidr)
 			if err != nil {
 				return nil, err
 			}
-			subs = append(subs, &HeuristicGeoIPMatcher{ipset: set, reverse: geoip.ReverseMatch})
+			subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: geoip.ReverseMatch})
 			continue
 		}
 		if !geoip.ReverseMatch {
