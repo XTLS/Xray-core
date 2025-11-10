@@ -15,10 +15,18 @@ import (
 
 type GeoIPMatcher interface {
 	// TODO: (PERF) all net.IP -> netipx.Addr
+
+	// Invalid IPs always return false.
 	Match(ip net.IP) bool
+
+	// Returns true if *all* IPs match; invalid IPs are treated as non-matching.
 	Matches(ips []net.IP) bool
-	FilterIPs(ips []net.IP, reverse bool) []net.IP
+
+	// Filters IPs into matched and unmatched. Invalid IPs are silently ignored.
+	FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP)
+
 	Reverse()
+
 	SetReverse(reverse bool)
 }
 
@@ -128,20 +136,21 @@ func prefixKeyFromIP(ip net.IP) (key [7]byte, ok bool) {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) []net.IP {
+func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
-		return []net.IP{}
+		return []net.IP{}, []net.IP{}
 	}
 
 	if n == 1 {
-		ip := ips[0]
-		if ipx, ok := netipx.FromStdIP(ip); ok {
-			if m.matchAddr(ipx) != reverse {
-				return ips
-			}
+		ipx, ok := netipx.FromStdIP(ips[0])
+		if !ok {
+			return []net.IP{}, []net.IP{}
 		}
-		return []net.IP{}
+		if m.matchAddr(ipx) != reverse {
+			return ips, []net.IP{}
+		}
+		return []net.IP{}, ips
 	}
 
 	type bucket struct {
@@ -174,17 +183,17 @@ func (m *BinarySearchGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) []net.I
 		b.ips = append(b.ips, ip)
 	}
 
-	out := make([]net.IP, 0, n)
-
+	matched = make([]net.IP, 0, n)
+	unmatched = make([]net.IP, 0, n)
 	for _, key := range order {
 		b := buckets[key]
-		matched := m.matchAddr(b.rep)
-		if matched != reverse {
-			out = append(out, b.ips...)
+		if m.matchAddr(b.rep) != reverse {
+			matched = append(matched, b.ips...)
+		} else {
+			unmatched = append(unmatched, b.ips...)
 		}
 	}
-
-	return out
+	return
 }
 
 // Reverse implements GeoIPMatcher.
@@ -222,24 +231,20 @@ func (mm *GeneralMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) []net.IP {
-	out := make([]net.IP, 0, len(ips))
-	for _, ip := range ips {
-		if _, ok := netipx.FromStdIP(ip); !ok {
-			continue // illegal ip, ignore
+func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
+	matched = make([]net.IP, 0, len(ips))
+	unmatched = ips
+	for _, m := range mm.matchers {
+		if len(unmatched) == 0 {
+			break
 		}
-		matched := false
-		for _, m := range mm.matchers {
-			if m.Match(ip) {
-				matched = true
-				break
-			}
-		}
-		if matched != reverse {
-			out = append(out, ip)
+		var ret []net.IP
+		ret, unmatched = m.FilterIPs(unmatched, reverse)
+		if len(ret) > 0 {
+			matched = append(matched, ret...)
 		}
 	}
-	return out
+	return
 }
 
 // Reverse implements GeoIPMatcher.
@@ -315,27 +320,23 @@ func (mm *BinarySearchMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 }
 
 // FilterIPs implements GeoIPMatcher.
-func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) []net.IP {
+func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
-		return []net.IP{}
+		return []net.IP{}, []net.IP{}
 	}
 
 	if n == 1 {
-		ip := ips[0]
-		if ipx, ok := netipx.FromStdIP(ip); ok {
-			matched := false
-			for _, m := range mm.matchers {
-				if m.matchAddr(ipx) {
-					matched = true
-					break
-				}
-			}
-			if matched != reverse {
-				return ips
+		ipx, ok := netipx.FromStdIP(ips[0])
+		if !ok {
+			return []net.IP{}, []net.IP{}
+		}
+		for _, m := range mm.matchers {
+			if m.matchAddr(ipx) != reverse {
+				return ips, []net.IP{}
 			}
 		}
-		return []net.IP{}
+		return []net.IP{}, ips
 	}
 
 	type bucket struct {
@@ -368,23 +369,30 @@ func (mm *BinarySearchMultiGeoIPMatcher) FilterIPs(ips []net.IP, reverse bool) [
 		b.ips = append(b.ips, ip)
 	}
 
-	out := make([]net.IP, 0, n)
-
-	for _, key := range order {
-		b := buckets[key]
-		matched := false
-		for _, m := range mm.matchers {
-			if m.matchAddr(b.rep) {
-				matched = true
-				break
+	matched = make([]net.IP, 0, n)
+	for _, m := range mm.matchers {
+		for _, key := range order {
+			b := buckets[key]
+			if b == nil {
+				continue
 			}
-		}
-		if matched != reverse {
-			out = append(out, b.ips...)
+			if m.matchAddr(b.rep) != reverse {
+				buckets[key] = nil
+				matched = append(matched, b.ips...)
+			}
 		}
 	}
 
-	return out
+	unmatched = make([]net.IP, 0, n-len(matched))
+	for _, key := range order {
+		b := buckets[key]
+		if b == nil {
+			continue
+		}
+		unmatched = append(unmatched, b.ips...)
+	}
+
+	return
 }
 
 // Reverse implements GeoIPMatcher.
@@ -472,7 +480,7 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 		return nil, errors.New("no geoip configs provided")
 	}
 
-	var subs []GeoIPMatcher
+	var subs []*BinarySearchGeoIPMatcher
 	pos := make([]*GeoIP, 0, n)
 	neg := make([]*GeoIP, 0, n/2)
 
@@ -544,6 +552,6 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 	case 1:
 		return subs[0], nil
 	default:
-		return &GeneralMultiGeoIPMatcher{matchers: subs}, nil
+		return &BinarySearchMultiGeoIPMatcher{matchers: subs}, nil
 	}
 }
