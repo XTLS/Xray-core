@@ -206,6 +206,7 @@ type DNSConfig struct {
 	ServeExpiredTTL        uint32              `json:"serveExpiredTTL"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    bool                `json:"enableParallelQuery"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
 }
 
@@ -405,6 +406,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		ServeExpiredTTL:        c.ServeExpiredTTL,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
+		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 

@@ -25,6 +25,7 @@ type DNS struct {
 	sync.Mutex
 	disableFallback        bool
 	disableFallbackIfMatch bool
+	enableParallelQuery    bool
 	ipOption               *dns.IPOption
 	hosts                  *StaticHosts
 	clients                []*Client
@@ -157,6 +158,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		matcherInfos:           matcherInfos,
 		disableFallback:        config.DisableFallback,
 		disableFallbackIfMatch: config.DisableFallbackIfMatch,
+		enableParallelQuery:    config.EnableParallelQuery,
 		checkSystem:            checkSystem,
 	}, nil
 }
