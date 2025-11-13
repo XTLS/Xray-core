@@ -135,7 +135,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
 
 	if s.Name()+"." == "DOH//"+fqdn {
-		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead.")
+		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead")
 		if noResponseErrCh != nil {
 			noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
 		}

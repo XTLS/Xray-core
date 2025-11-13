@@ -299,9 +299,9 @@ func (s *DNS) sortClients(domain string) []*Client {
 		if len(s.clients) > 0 {
 			clients = append(clients, s.clients[0])
 			clientNames = append(clientNames, s.clients[0].Name())
-			errors.LogDebug(s.ctx, "domain ", domain, " will use the first DNS: ", clientNames)
+			errors.LogWarning(s.ctx, "domain ", domain, " will use the first DNS: ", clientNames)
 		} else {
-			errors.LogDebug(s.ctx, "no DNS clients available for domain ", domain, " and no default clients configured")
+			errors.LogError(s.ctx, "no DNS clients available for domain ", domain, " and no default clients configured")
 		}
 	}
 
