@@ -309,18 +309,27 @@ func (s *DNS) sortClients(domain string) []*Client {
 }
 
 func mergeQueryErrors(domain string, errs []error) error {
-	if len(errs) > 0 {
-		allErrs := errors.Combine(errs...)
-		err0 := errs[0]
-		if errors.AllEqual(err0, allErrs) {
-			if go_errors.Is(err0, dns.ErrEmptyResponse) {
-				return dns.ErrEmptyResponse
-			}
-			return errors.New("returning nil for domain ", domain).Base(err0)
-		}
-		return errors.New("returning nil for domain ", domain).Base(allErrs)
+	if len(errs) == 0 {
+		return dns.ErrEmptyResponse
 	}
-	return dns.ErrEmptyResponse
+
+	var noRNF error
+	for _, err := range errs {
+		if go_errors.Is(err, errRecordNotFound) {
+			continue // server no response, ignore
+		} else if noRNF == nil {
+			noRNF = err
+		} else if !go_errors.Is(err, noRNF) {
+			return errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
+		}
+	}
+	if go_errors.Is(noRNF, dns.ErrEmptyResponse) {
+		return dns.ErrEmptyResponse
+	}
+	if noRNF == nil {
+		noRNF = errRecordNotFound
+	}
+	return errors.New("returning nil for domain ", domain).Base(noRNF)
 }
 
 func (s *DNS) serialQuery(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
