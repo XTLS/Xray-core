@@ -38,6 +38,7 @@ type Client struct {
 	finalQuery    bool
 	ipOption      *dns.IPOption
 	checkSystem   bool
+	policyID      uint32
 }
 
 // NewServer creates a name server object according to the network destination url.
@@ -199,6 +200,7 @@ func NewClient(
 		client.finalQuery = ns.FinalQuery
 		client.ipOption = &ipOption
 		client.checkSystem = checkSystem
+		client.policyID = ns.PolicyID
 		return nil
 	})
 	return client, err
@@ -207,10 +209,6 @@ func NewClient(
 // Name returns the server name the client manages.
 func (c *Client) Name() string {
 	return c.server.Name()
-}
-
-func (c *Client) IsFinalQuery() bool {
-	return c.finalQuery
 }
 
 // QueryIP sends DNS query to the name server with the client's IP.
