@@ -35,7 +35,7 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 				if cache.serveStale && (cache.serveExpiredTTL == 0 || cache.serveExpiredTTL < ttl) {
 					// errors.LogDebugInner(ctx, err, cache.name, " cache OPTIMISTE ", fqdn, " -> ", ips)
 					log.Record(&log.DNSLog{Server: cache.name, Domain: fqdn, Result: ips, Status: log.DNSCacheOptimiste, Elapsed: 0, Error: err})
-					go fetch(ctx, s, fqdn, option)
+					go pull(ctx, s, fqdn, option)
 					return ips, 1, err
 				}
 			}
@@ -47,8 +47,15 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 	return fetch(ctx, s, fqdn, option)
 }
 
+func pull(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) {
+	nctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
+	defer cancel()
+
+	fetch(nctx, s, fqdn, option)
+}
+
 func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
-	key := fqdn + "f"
+	key := fqdn
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
 		key = key + "46"
