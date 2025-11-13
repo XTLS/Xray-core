@@ -238,29 +238,96 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 
 	// Name servers lookup
 	var errs []error
-	for _, client := range s.sortClients(domain) {
-		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
-			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
-			continue
-		}
-
-		ips, ttl, err := client.QueryIP(s.ctx, domain, option)
-
-		if len(ips) > 0 {
-			if ttl == 0 {
-				ttl = 1
+	clients := s.sortClients(domain)
+	numClients := len(clients)
+	if !s.enableParallelQuery {
+		for _, client := range clients {
+			if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
+				errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+				continue
 			}
-			return ips, ttl, nil
+
+			ips, ttl, err := client.QueryIP(s.ctx, domain, option)
+
+			if len(ips) > 0 {
+				return ips, ttl, nil
+			}
+
+			errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name(), " in serial query mode")
+			if err == nil {
+				err = dns.ErrEmptyResponse
+			}
+			errs = append(errs, err)
+		}
+	} else {
+		strictMode := false
+
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		type result struct {
+			ips   []net.IP
+			ttl   uint32
+			err   error
+			index int
+		}
+		resultsChan := make(chan result, numClients)
+
+		for i, client := range clients {
+			if !strictMode && (len(client.expectedIPs) != 0 || len(client.unexpectedIPs) != 0) {
+				strictMode = true
+			}
+
+			if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
+				errors.LogDebug(ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+				go func(i int) {
+					resultsChan <- result{err: dns.ErrEmptyResponse, index: i}
+				}(i)
+				continue
+			}
+
+			go func(i int, c *Client) {
+				ips, ttl, err := c.QueryIP(ctx, domain, option)
+				resultsChan <- result{ips: ips, ttl: ttl, err: err, index: i}
+			}(i, client)
 		}
 
-		errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name())
-		if err == nil {
-			err = dns.ErrEmptyResponse
-		}
-		errs = append(errs, err)
-
-		if client.IsFinalQuery() {
-			break
+		if strictMode {
+			results := make([]*result, numClients)
+			for range numClients {
+				res := <-resultsChan
+				results[res.index] = &res
+				for j := 0; j < numClients; j++ {
+					if results[j] == nil {
+						break
+					}
+					if results[j].index == -1 {
+						continue
+					}
+					res := results[j]
+					if len(res.ips) > 0 {
+						return res.ips, res.ttl, nil
+					}
+					errors.LogInfoInner(ctx, res.err, "failed to lookup ip for domain ", domain, " at server ", clients[res.index].Name(), " in strict parallel query mode")
+					if res.err == nil {
+						res.err = dns.ErrEmptyResponse
+					}
+					errs = append(errs, res.err)
+					res.index = -1
+				}
+			}
+		} else {
+			for range numClients {
+				res := <-resultsChan
+				if len(res.ips) > 0 {
+					return res.ips, res.ttl, nil
+				}
+				errors.LogInfoInner(ctx, res.err, "failed to lookup ip for domain ", domain, " at server ", clients[res.index].Name(), " in opportunistic parallel query mode")
+				if res.err == nil {
+					res.err = dns.ErrEmptyResponse
+				}
+				errs = append(errs, res.err)
+			}
 		}
 	}
 
@@ -302,6 +369,9 @@ func (s *DNS) sortClients(domain string) []*Client {
 		clients = append(clients, client)
 		clientNames = append(clientNames, client.Name())
 		hasMatch = true
+		if client.finalQuery {
+			break
+		}
 	}
 
 	if !(s.disableFallback || s.disableFallbackIfMatch && hasMatch) {
@@ -313,6 +383,9 @@ func (s *DNS) sortClients(domain string) []*Client {
 			clientUsed[idx] = true
 			clients = append(clients, client)
 			clientNames = append(clientNames, client.Name())
+			if client.finalQuery {
+				break
+			}
 		}
 	}
 
