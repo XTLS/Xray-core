@@ -444,6 +444,11 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.QueryStrategy)))
 		sb.WriteByte('|')
 
+		// Tag
+		sb.WriteString("tag=")
+		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.Tag)))
+		sb.WriteByte('|')
+
 		// []string helper
 		writeList := func(tag string, lst []string) {
 			if len(lst) == 0 {
