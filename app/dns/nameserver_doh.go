@@ -116,6 +116,11 @@ func (s *DoHNameServer) Name() string {
 	return s.cacheController.name
 }
 
+// IsDisableCache implements Server.
+func (s *DoHNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
+}
+
 func (s *DoHNameServer) newReqID() uint16 {
 	return 0
 }

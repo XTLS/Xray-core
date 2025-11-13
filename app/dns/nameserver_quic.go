@@ -63,6 +63,11 @@ func (s *QUICNameServer) Name() string {
 	return s.cacheController.name
 }
 
+// IsDisableCache implements Server.
+func (s *QUICNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
+}
+
 func (s *QUICNameServer) newReqID() uint16 {
 	return 0
 }

@@ -93,6 +93,11 @@ func (s *TCPNameServer) Name() string {
 	return s.cacheController.name
 }
 
+// IsDisableCache implements Server.
+func (s *TCPNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
+}
+
 func (s *TCPNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }

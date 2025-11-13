@@ -423,7 +423,13 @@ func asyncQueryAll(domain string, option dns.IPOption, clients []*Client, ctx co
 		}
 
 		go func(i int, c *Client) {
-			ips, ttl, err := c.QueryIP(ctx, domain, option)
+			qctx := ctx
+			if !c.server.IsDisableCache() {
+				nctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeoutMs*2)
+				qctx = nctx
+				defer cancel()
+			}
+			ips, ttl, err := c.QueryIP(qctx, domain, option)
 			ch <- queryResult{ips: ips, ttl: ttl, err: err, index: i}
 		}(i, client)
 	}

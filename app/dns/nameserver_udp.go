@@ -63,6 +63,11 @@ func (s *ClassicNameServer) Name() string {
 	return s.cacheController.name
 }
 
+// IsDisableCache implements Server.
+func (s *ClassicNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
+}
+
 // RequestsCleanup clears expired items from cache
 func (s *ClassicNameServer) RequestsCleanup() error {
 	now := time.Now()
