@@ -153,7 +153,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 			v.endpoint = endpoint
 			v.err = err
 			v.waiter.Done()
-			if err != nil && errors.Is(err, io.EOF) {
+			if err != nil && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe)) {
 				endpoint.conn = nil
 				return
 			}
