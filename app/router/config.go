@@ -46,7 +46,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if rr.VlessRouteList != nil {
-		conds.Add(NewPortMatcher(rr.VlessRouteList, "vlessRoute"))
+		conds.Add(NewPortMatcher(rr.VlessRouteList, MatcherAsType_VlessRoute))
 	}
 
 	if len(rr.InboundTag) > 0 {
@@ -54,15 +54,15 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if rr.PortList != nil {
-		conds.Add(NewPortMatcher(rr.PortList, "target"))
+		conds.Add(NewPortMatcher(rr.PortList, MatcherAsType_Target))
 	}
 
 	if rr.SourcePortList != nil {
-		conds.Add(NewPortMatcher(rr.SourcePortList, "source"))
+		conds.Add(NewPortMatcher(rr.SourcePortList, MatcherAsType_Source))
 	}
 
 	if rr.LocalPortList != nil {
-		conds.Add(NewPortMatcher(rr.LocalPortList, "local"))
+		conds.Add(NewPortMatcher(rr.LocalPortList, MatcherAsType_Local))
 	}
 
 	if len(rr.Networks) > 0 {
@@ -70,7 +70,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Geoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.Geoip, "target")
+		cond, err := NewIPMatcher(rr.Geoip, MatcherAsType_Target)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.SourceGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.SourceGeoip, "source")
+		cond, err := NewIPMatcher(rr.SourceGeoip, MatcherAsType_Source)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.LocalGeoip) > 0 {
-		cond, err := NewMultiGeoIPMatcher(rr.LocalGeoip, "local")
+		cond, err := NewIPMatcher(rr.LocalGeoip, MatcherAsType_Local)
 		if err != nil {
 			return nil, err
 		}
