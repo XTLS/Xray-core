@@ -3,6 +3,9 @@ package dns
 import (
 	"context"
 	go_errors "errors"
+	"sync"
+	"time"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -10,25 +13,27 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/dns/dnsmessage"
-	"sync"
-	"time"
 )
 
 type CacheController struct {
 	sync.RWMutex
-	ips          map[string]*record
-	pub          *pubsub.Service
-	cacheCleanup *task.Periodic
-	name         string
-	disableCache bool
+	ips             map[string]*record
+	pub             *pubsub.Service
+	cacheCleanup    *task.Periodic
+	name            string
+	disableCache    bool
+	serveStale      bool
+	serveExpiredTTL int32
 }
 
-func NewCacheController(name string, disableCache bool) *CacheController {
+func NewCacheController(name string, disableCache bool, serveStale bool, serveExpiredTTL uint32) *CacheController {
 	c := &CacheController{
-		name:         name,
-		disableCache: disableCache,
-		ips:          make(map[string]*record),
-		pub:          pubsub.NewService(),
+		name:            name,
+		disableCache:    disableCache,
+		serveStale:      serveStale,
+		serveExpiredTTL: -int32(serveExpiredTTL),
+		ips:             make(map[string]*record),
+		pub:             pubsub.NewService(),
 	}
 
 	c.cacheCleanup = &task.Periodic{
@@ -41,6 +46,10 @@ func NewCacheController(name string, disableCache bool) *CacheController {
 // CacheCleanup clears expired items from cache
 func (c *CacheController) CacheCleanup() error {
 	now := time.Now()
+	if c.serveStale && c.serveExpiredTTL != 0 {
+		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	}
+
 	c.Lock()
 	defer c.Unlock()
 
@@ -94,26 +103,28 @@ func (c *CacheController) updateIP(req *dnsRequest, ipRec *IPRecord) {
 	case dnsmessage.TypeA:
 		c.pub.Publish(req.domain+"4", nil)
 		if !c.disableCache {
-			_, _, err := rec.AAAA.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
+			_, ttl, err := rec.AAAA.getIPs()
+			if ttl > 0 && !go_errors.Is(err, errRecordNotFound) {
 				c.pub.Publish(req.domain+"6", nil)
 			}
 		}
 	case dnsmessage.TypeAAAA:
 		c.pub.Publish(req.domain+"6", nil)
 		if !c.disableCache {
-			_, _, err := rec.A.getIPs()
-			if !go_errors.Is(err, errRecordNotFound) {
+			_, ttl, err := rec.A.getIPs()
+			if ttl > 0 && !go_errors.Is(err, errRecordNotFound) {
 				c.pub.Publish(req.domain+"4", nil)
 			}
 		}
 	}
 
 	c.Unlock()
-	common.Must(c.cacheCleanup.Start())
+	if !c.serveStale || c.serveExpiredTTL != 0 {
+		common.Must(c.cacheCleanup.Start())
+	}
 }
 
-func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
+func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, int32, error) {
 	c.RLock()
 	record, found := c.ips[domain]
 	c.RUnlock()
@@ -124,7 +135,7 @@ func (c *CacheController) findIPsForDomain(domain string, option dns_feature.IPO
 
 	var errs []error
 	var allIPs []net.IP
-	var rTTL uint32 = dns_feature.DefaultTTL
+	var rTTL int32 = dns_feature.DefaultTTL
 
 	mergeReq := option.IPv4Enable && option.IPv6Enable
 

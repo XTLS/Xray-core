@@ -16,19 +16,21 @@ import (
 )
 
 type NameServerConfig struct {
-	Address       *Address   `json:"address"`
-	ClientIP      *Address   `json:"clientIp"`
-	Port          uint16     `json:"port"`
-	SkipFallback  bool       `json:"skipFallback"`
-	Domains       []string   `json:"domains"`
-	ExpectedIPs   StringList `json:"expectedIPs"`
-	ExpectIPs     StringList `json:"expectIPs"`
-	QueryStrategy string     `json:"queryStrategy"`
-	Tag           string     `json:"tag"`
-	TimeoutMs     uint64     `json:"timeoutMs"`
-	DisableCache  bool       `json:"disableCache"`
-	FinalQuery    bool       `json:"finalQuery"`
-	UnexpectedIPs StringList `json:"unexpectedIPs"`
+	Address         *Address   `json:"address"`
+	ClientIP        *Address   `json:"clientIp"`
+	Port            uint16     `json:"port"`
+	SkipFallback    bool       `json:"skipFallback"`
+	Domains         []string   `json:"domains"`
+	ExpectedIPs     StringList `json:"expectedIPs"`
+	ExpectIPs       StringList `json:"expectIPs"`
+	QueryStrategy   string     `json:"queryStrategy"`
+	Tag             string     `json:"tag"`
+	TimeoutMs       uint64     `json:"timeoutMs"`
+	DisableCache    bool       `json:"disableCache"`
+	ServeStale      bool       `json:"serveStale"`
+	ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
+	FinalQuery      bool       `json:"finalQuery"`
+	UnexpectedIPs   StringList `json:"unexpectedIPs"`
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
@@ -40,19 +42,21 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address       *Address   `json:"address"`
-		ClientIP      *Address   `json:"clientIp"`
-		Port          uint16     `json:"port"`
-		SkipFallback  bool       `json:"skipFallback"`
-		Domains       []string   `json:"domains"`
-		ExpectedIPs   StringList `json:"expectedIPs"`
-		ExpectIPs     StringList `json:"expectIPs"`
-		QueryStrategy string     `json:"queryStrategy"`
-		Tag           string     `json:"tag"`
-		TimeoutMs     uint64     `json:"timeoutMs"`
-		DisableCache  bool       `json:"disableCache"`
-		FinalQuery    bool       `json:"finalQuery"`
-		UnexpectedIPs StringList `json:"unexpectedIPs"`
+		Address         *Address   `json:"address"`
+		ClientIP        *Address   `json:"clientIp"`
+		Port            uint16     `json:"port"`
+		SkipFallback    bool       `json:"skipFallback"`
+		Domains         []string   `json:"domains"`
+		ExpectedIPs     StringList `json:"expectedIPs"`
+		ExpectIPs       StringList `json:"expectIPs"`
+		QueryStrategy   string     `json:"queryStrategy"`
+		Tag             string     `json:"tag"`
+		TimeoutMs       uint64     `json:"timeoutMs"`
+		DisableCache    bool       `json:"disableCache"`
+		ServeStale      bool       `json:"serveStale"`
+		ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
+		FinalQuery      bool       `json:"finalQuery"`
+		UnexpectedIPs   StringList `json:"unexpectedIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -66,6 +70,8 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.Tag = advanced.Tag
 		c.TimeoutMs = advanced.TimeoutMs
 		c.DisableCache = advanced.DisableCache
+		c.ServeStale = advanced.ServeStale
+		c.ServeExpiredTTL = advanced.ServeExpiredTTL
 		c.FinalQuery = advanced.FinalQuery
 		c.UnexpectedIPs = advanced.UnexpectedIPs
 		return nil
@@ -173,6 +179,8 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		Tag:               c.Tag,
 		TimeoutMs:         c.TimeoutMs,
 		DisableCache:      c.DisableCache,
+		ServeStale:        c.ServeStale,
+		ServeExpiredTTL:   c.ServeExpiredTTL,
 		FinalQuery:        c.FinalQuery,
 		UnexpectedGeoip:   unexpectedGeoipList,
 		ActUnprior:        actUnprior,
@@ -194,6 +202,8 @@ type DNSConfig struct {
 	Tag                    string              `json:"tag"`
 	QueryStrategy          string              `json:"queryStrategy"`
 	DisableCache           bool                `json:"disableCache"`
+	ServeStale             bool                `json:"serveStale"`
+	ServeExpiredTTL        uint32              `json:"serveExpiredTTL"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
@@ -391,6 +401,8 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	config := &dns.Config{
 		Tag:                    c.Tag,
 		DisableCache:           c.DisableCache,
+		ServeStale:             c.ServeStale,
+		ServeExpiredTTL:        c.ServeExpiredTTL,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
