@@ -68,6 +68,7 @@ func TestDNSConfigParsing(t *testing.T) {
 								Size: 1,
 							},
 						},
+						PolicyID: 1, // Servers with certain identical fields share this ID, incrementing starting from 1. See: Build PolicyID
 					},
 				},
 				StaticHosts: []*dns.Config_HostMapping{

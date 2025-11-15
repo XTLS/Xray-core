@@ -196,6 +196,7 @@ type DNSConfig struct {
 	DisableCache           bool                `json:"disableCache"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    bool                `json:"enableParallelQuery"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
 }
 
@@ -393,6 +394,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableCache:           c.DisableCache,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
+		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 
@@ -403,11 +405,78 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		config.ClientIp = []byte(c.ClientIP.IP())
 	}
 
+	// Build PolicyID
+	policyMap := map[string]uint32{}
+	nextPolicyID := uint32(1)
+	buildPolicyID := func(nsc *NameServerConfig) uint32 {
+		var sb strings.Builder
+
+		// ClientIP
+		if nsc.ClientIP != nil {
+			sb.WriteString("client=")
+			sb.WriteString(nsc.ClientIP.String())
+			sb.WriteByte('|')
+		} else {
+			sb.WriteString("client=none|")
+		}
+
+		// SkipFallback
+		if nsc.SkipFallback {
+			sb.WriteString("skip=1|")
+		} else {
+			sb.WriteString("skip=0|")
+		}
+
+		// QueryStrategy
+		sb.WriteString("qs=")
+		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.QueryStrategy)))
+		sb.WriteByte('|')
+
+		// Tag
+		sb.WriteString("tag=")
+		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.Tag)))
+		sb.WriteByte('|')
+
+		// []string helper
+		writeList := func(tag string, lst []string) {
+			if len(lst) == 0 {
+				sb.WriteString(tag)
+				sb.WriteString("=[]|")
+				return
+			}
+			cp := make([]string, len(lst))
+			for i, s := range lst {
+				cp[i] = strings.TrimSpace(strings.ToLower(s))
+			}
+			sort.Strings(cp)
+			sb.WriteString(tag)
+			sb.WriteByte('=')
+			sb.WriteString(strings.Join(cp, ","))
+			sb.WriteByte('|')
+		}
+
+		writeList("domains", nsc.Domains)
+		writeList("expected", nsc.ExpectedIPs)
+		writeList("expect", nsc.ExpectIPs)
+		writeList("unexpected", nsc.UnexpectedIPs)
+
+		key := sb.String()
+
+		if id, ok := policyMap[key]; ok {
+			return id
+		}
+		id := nextPolicyID
+		nextPolicyID++
+		policyMap[key] = id
+		return id
+	}
+
 	for _, server := range c.Servers {
 		ns, err := server.Build()
 		if err != nil {
 			return nil, errors.New("failed to build nameserver").Base(err)
 		}
+		ns.PolicyID = buildPolicyID(server)
 		config.NameServer = append(config.NameServer, ns)
 	}
 
