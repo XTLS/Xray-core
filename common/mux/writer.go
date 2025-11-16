@@ -1,8 +1,11 @@
 package mux
 
 import (
+	"context"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -79,10 +82,10 @@ func writeMetaWithFrame(writer buf.Writer, meta FrameMetadata, data buf.MultiBuf
 	if _, err := serial.WriteUint16(frame, uint16(data.Len())); err != nil {
 		return err
 	}
-
 	mb2 := make(buf.MultiBuffer, 0, len(data)+1)
 	mb2 = append(mb2, frame)
 	mb2 = append(mb2, data...)
+	mb2 = buf.Compact(mb2)
 	return writer.WriteMultiBuffer(mb2)
 }
 
@@ -110,6 +113,7 @@ func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			mb = mb2
 			chunk = buf.MultiBuffer{b}
 		}
+		errors.LogInfo(context.Background(), "MuxWriter write ", chunk.Len(), w.dest)
 		if err := w.writeData(chunk); err != nil {
 			return err
 		}
