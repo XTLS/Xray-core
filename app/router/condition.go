@@ -130,7 +130,7 @@ func (m *IPMatcher) Apply(ctx routing.Context) bool {
 	case MatcherAsType_Target:
 		ips = ctx.GetTargetIPs()
 	default:
-		panic("unreachable, asType should be local or source or target")
+		panic("unk asType")
 	}
 
 	return m.matcher.Matches(ips)
@@ -161,7 +161,7 @@ func (v *PortMatcher) Apply(ctx routing.Context) bool {
 	case MatcherAsType_VlessRoute:
 		return v.port.Contains(ctx.GetVlessRoute())
 	default:
-		panic("unreachable, asType should be local or source or target")
+		panic("unk asType")
 	}
 }
 

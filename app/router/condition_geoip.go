@@ -31,13 +31,18 @@ type GeoIPMatcher interface {
 }
 
 type GeoIPSet struct {
-	ipv4 *netipx.IPSet
-	ipv6 *netipx.IPSet
+	ipv4, ipv6 *netipx.IPSet
+	max4, max6 uint8
 }
 
 type HeuristicGeoIPMatcher struct {
 	ipset   *GeoIPSet
 	reverse bool
+}
+
+type ipBucket struct {
+	rep netip.Addr
+	ips []net.IP
 }
 
 // Match implements GeoIPMatcher.
@@ -70,17 +75,45 @@ func (m *HeuristicGeoIPMatcher) Matches(ips []net.IP) bool {
 		return m.Match(ips[0])
 	}
 
-	buckets := make(map[[7]byte]netip.Addr, n)
+	heur4 := m.ipset.max4 <= 24
+	heur6 := m.ipset.max6 <= 64
+	if !heur4 && !heur6 {
+		for _, ip := range ips {
+			ipx, ok := netipx.FromStdIP(ip)
+			if !ok {
+				return false
+			}
+			if !m.matchAddr(ipx) {
+				return false
+			}
+		}
+		return true
+	}
+
+	buckets := make(map[[9]byte]netip.Addr, n)
+	precise := make([]netip.Addr, 0, n)
+
 	for _, ip := range ips {
-		ipx, ok := netipx.FromStdIP(ip)
+		key, ok := prefixKeyFromIP(ip)
 		if !ok {
 			return false
 		}
-		key, ok := prefixKeyFromIPX(ipx)
-		if !ok {
-			return false
+
+		if (key[0] == 4 && heur4) || (key[0] == 6 && heur6) {
+			if _, exists := buckets[key]; !exists {
+				ipx, ok := netipx.FromStdIP(ip)
+				if !ok {
+					return false
+				}
+				buckets[key] = ipx
+			}
+		} else {
+			ipx, ok := netipx.FromStdIP(ip)
+			if !ok {
+				return false
+			}
+			precise = append(precise, ipx)
 		}
-		buckets[key] = ipx
 	}
 
 	for _, ipx := range buckets {
@@ -88,33 +121,15 @@ func (m *HeuristicGeoIPMatcher) Matches(ips []net.IP) bool {
 			return false
 		}
 	}
+	for _, ipx := range precise {
+		if !m.matchAddr(ipx) {
+			return false
+		}
+	}
 	return true
 }
 
-func prefixKeyFromIPX(ipx netip.Addr) (key [7]byte, ok bool) {
-	if ipx.Is4() {
-		v4 := ipx.As4()
-		key[0] = 4
-		key[1] = v4[0]
-		key[2] = v4[1]
-		key[3] = v4[2] // /24
-		return key, true
-	}
-	if ipx.Is6() {
-		v6 := ipx.As16()
-		key[0] = 6
-		key[1] = v6[0]
-		key[2] = v6[1]
-		key[3] = v6[2]
-		key[4] = v6[3]
-		key[5] = v6[4]
-		key[6] = v6[5] // /48
-		return key, true
-	}
-	return key, false // illegal
-}
-
-func prefixKeyFromIP(ip net.IP) (key [7]byte, ok bool) {
+func prefixKeyFromIP(ip net.IP) (key [9]byte, ok bool) {
 	if ip4 := ip.To4(); ip4 != nil {
 		key[0] = 4
 		key[1] = ip4[0]
@@ -129,7 +144,9 @@ func prefixKeyFromIP(ip net.IP) (key [7]byte, ok bool) {
 		key[3] = ip16[2]
 		key[4] = ip16[3]
 		key[5] = ip16[4]
-		key[6] = ip16[5] // /48
+		key[6] = ip16[5]
+		key[7] = ip16[6]
+		key[8] = ip16[7] // /64
 		return key, true
 	}
 	return key, false // illegal
@@ -153,12 +170,27 @@ func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmat
 		return []net.IP{}, ips
 	}
 
-	type bucket struct {
-		rep netip.Addr
-		ips []net.IP
+	heur4 := m.ipset.max4 <= 24
+	heur6 := m.ipset.max6 <= 64
+	if !heur4 && !heur6 {
+		matched = make([]net.IP, 0, n)
+		unmatched = make([]net.IP, 0, n)
+		for _, ip := range ips {
+			ipx, ok := netipx.FromStdIP(ip)
+			if !ok {
+				continue // illegal ip, ignore
+			}
+			if m.matchAddr(ipx) {
+				matched = append(matched, ip)
+			} else {
+				unmatched = append(unmatched, ip)
+			}
+		}
+		return
 	}
-	buckets := make(map[[7]byte]*bucket, n)
-	order := make([][7]byte, 0, n)
+
+	buckets := make(map[[9]byte]*ipBucket, n)
+	precise := make([]net.IP, 0, n)
 
 	for _, ip := range ips {
 		key, ok := prefixKeyFromIP(ip)
@@ -166,31 +198,45 @@ func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmat
 			continue // illegal ip, ignore
 		}
 
+		if (key[0] == 4 && !heur4) || (key[0] == 6 && !heur6) {
+			precise = append(precise, ip)
+			continue
+		}
+
 		b, exists := buckets[key]
 		if !exists {
 			// build bucket
 			ipx, ok := netipx.FromStdIP(ip)
 			if !ok {
-				continue
+				continue // illegal ip, ignore
 			}
-			b = &bucket{
+			b = &ipBucket{
 				rep: ipx,
 				ips: make([]net.IP, 0, 4), // for dns answer
 			}
 			buckets[key] = b
-			order = append(order, key)
 		}
 		b.ips = append(b.ips, ip)
 	}
 
 	matched = make([]net.IP, 0, n)
 	unmatched = make([]net.IP, 0, n)
-	for _, key := range order {
-		b := buckets[key]
+	for _, b := range buckets {
 		if m.matchAddr(b.rep) {
 			matched = append(matched, b.ips...)
 		} else {
 			unmatched = append(unmatched, b.ips...)
+		}
+	}
+	for _, ip := range precise {
+		ipx, ok := netipx.FromStdIP(ip)
+		if !ok {
+			continue // illegal ip, ignore
+		}
+		if m.matchAddr(ipx) {
+			matched = append(matched, ip)
+		} else {
+			unmatched = append(unmatched, ip)
 		}
 	}
 	return
@@ -291,25 +337,45 @@ func (mm *HeuristicMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 		return mm.Match(ips[0])
 	}
 
-	buckets := make(map[[7]byte]netip.Addr, n)
-	for _, ip := range ips {
-		ipx, ok := netipx.FromStdIP(ip)
-		if !ok {
-			return false
-		}
-		key, ok := prefixKeyFromIPX(ipx)
-		if !ok {
-			return false
-		}
-		buckets[key] = ipx
-	}
-
+	var views ipViews
 	for _, m := range mm.matchers {
+		if !views.ensureForMatcher(m, ips) {
+			return false
+		}
+
 		matched := true
-		for _, ipx := range buckets {
-			if !m.matchAddr(ipx) {
-				matched = false
-				break
+		if m.ipset.max4 <= 24 {
+			for _, ipx := range views.buckets4 {
+				if !m.matchAddr(ipx) {
+					matched = false
+					break
+				}
+			}
+		} else {
+			for _, ipx := range views.precise4 {
+				if !m.matchAddr(ipx) {
+					matched = false
+					break
+				}
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		if m.ipset.max6 <= 64 {
+			for _, ipx := range views.buckets6 {
+				if !m.matchAddr(ipx) {
+					matched = false
+					break
+				}
+			}
+		} else {
+			for _, ipx := range views.precise6 {
+				if !m.matchAddr(ipx) {
+					matched = false
+					break
+				}
 			}
 		}
 		if matched {
@@ -317,6 +383,89 @@ func (mm *HeuristicMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 		}
 	}
 	return false
+}
+
+type ipViews struct {
+	buckets4, buckets6 map[[9]byte]netip.Addr
+	precise4, precise6 []netip.Addr
+}
+
+func (v *ipViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP) bool {
+	needHeur4 := m.ipset.max4 <= 24 && v.buckets4 == nil
+	needHeur6 := m.ipset.max6 <= 64 && v.buckets6 == nil
+	needPrec4 := m.ipset.max4 > 24 && v.precise4 == nil
+	needPrec6 := m.ipset.max6 > 64 && v.precise6 == nil
+
+	if !needHeur4 && !needHeur6 && !needPrec4 && !needPrec6 {
+		return true
+	}
+
+	if needHeur4 {
+		v.buckets4 = make(map[[9]byte]netip.Addr, len(ips))
+	}
+	if needHeur6 {
+		v.buckets6 = make(map[[9]byte]netip.Addr, len(ips))
+	}
+	if needPrec4 {
+		v.precise4 = make([]netip.Addr, 0, len(ips))
+	}
+	if needPrec6 {
+		v.precise6 = make([]netip.Addr, 0, len(ips))
+	}
+
+	for _, ip := range ips {
+		key, ok := prefixKeyFromIP(ip)
+		if !ok {
+			return false
+		}
+
+		switch key[0] {
+		case 4:
+			var ipx netip.Addr
+			if needHeur4 {
+				if _, exists := v.buckets4[key]; !exists {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						return false
+					}
+					v.buckets4[key] = ipx
+				}
+			}
+			if needPrec4 {
+				if !ipx.IsValid() {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						return false
+					}
+				}
+				v.precise4 = append(v.precise4, ipx)
+			}
+		case 6:
+			var ipx netip.Addr
+			if needHeur6 {
+				if _, exists := v.buckets6[key]; !exists {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						return false
+					}
+					v.buckets6[key] = ipx
+				}
+			}
+			if needPrec6 {
+				if !ipx.IsValid() {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						return false
+					}
+				}
+				v.precise6 = append(v.precise6, ipx)
+			}
+		default:
+			return false
+		}
+	}
+
+	return true
 }
 
 // FilterIPs implements GeoIPMatcher.
@@ -339,12 +488,8 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP,
 		return []net.IP{}, ips
 	}
 
-	type bucket struct {
-		rep netip.Addr
-		ips []net.IP
-	}
-	buckets := make(map[[7]byte]*bucket, n)
-	order := make([][7]byte, 0, n)
+	buckets := make(map[[9]byte]*ipBucket, n)
+	order := make([][9]byte, 0, n)
 
 	for _, ip := range ips {
 		key, ok := prefixKeyFromIP(ip)
@@ -359,7 +504,7 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP,
 			if !ok {
 				continue
 			}
-			b = &bucket{
+			b = &ipBucket{
 				rep: ipx,
 				ips: make([]net.IP, 0, 4), // for dns answer
 			}
@@ -433,6 +578,7 @@ func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPS
 
 func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
+	var max4, max6 int
 
 	for _, cidrGroup := range cidrGroups {
 		for _, cidrEntry := range cidrGroup {
@@ -453,8 +599,14 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 
 			if addr.Is4() {
 				ipv4Builder.AddPrefix(prefix)
+				if prefixLen > max4 {
+					max4 = prefixLen
+				}
 			} else if addr.Is6() {
 				ipv6Builder.AddPrefix(prefix)
+				if prefixLen > max6 {
+					max6 = prefixLen
+				}
 			}
 		}
 	}
@@ -469,7 +621,7 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 		return nil, errors.New("failed to build IPv6 set").Base(err)
 	}
 
-	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6}, nil
+	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
 }
 
 func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
