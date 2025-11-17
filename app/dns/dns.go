@@ -351,7 +351,7 @@ var routeCache struct {
 }
 
 func checkRoutes() (bool, bool) {
-	if !isGUIPlatform() {
+	if !isGUIPlatform {
 		routeCache.Once.Do(func() {
 			routeCache.ipv4, routeCache.ipv6 = probeRoutes()
 		})
@@ -378,7 +378,9 @@ func checkRoutes() (bool, bool) {
 	return routeCache.ipv4, routeCache.ipv6
 }
 
-func isGUIPlatform() bool {
+var isGUIPlatform = detectGUIPlatform()
+
+func detectGUIPlatform() bool {
 	switch runtime.GOOS {
 	case "android", "ios", "windows", "darwin":
 		return true
