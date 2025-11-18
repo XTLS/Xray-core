@@ -488,8 +488,121 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP,
 		return []net.IP{}, ips
 	}
 
-	buckets := make(map[[9]byte]*ipBucket, n)
-	order := make([][9]byte, 0, n)
+	var views ipBucketViews
+
+	matched = make([]net.IP, 0, n)
+	for _, m := range mm.matchers {
+		views.ensureForMatcher(m, ips)
+
+		if m.ipset.max4 <= 24 {
+			for key, b := range views.buckets4 {
+				if b == nil {
+					continue
+				}
+				if m.matchAddr(b.rep) {
+					views.buckets4[key] = nil
+					matched = append(matched, b.ips...)
+				}
+			}
+		} else {
+			for ipx, ip := range views.precise4 {
+				if ip == nil {
+					continue
+				}
+				if m.matchAddr(ipx) {
+					views.precise4[ipx] = nil
+					matched = append(matched, ip)
+				}
+			}
+		}
+
+		if m.ipset.max6 <= 64 {
+			for key, b := range views.buckets6 {
+				if b == nil {
+					continue
+				}
+				if m.matchAddr(b.rep) {
+					views.buckets6[key] = nil
+					matched = append(matched, b.ips...)
+				}
+			}
+		} else {
+			for ipx, ip := range views.precise6 {
+				if ip == nil {
+					continue
+				}
+				if m.matchAddr(ipx) {
+					views.precise6[ipx] = nil
+					matched = append(matched, ip)
+				}
+			}
+		}
+	}
+
+	unmatched = make([]net.IP, 0, n-len(matched))
+	if views.buckets4 != nil {
+		for _, b := range views.buckets4 {
+			if b == nil {
+				continue
+			}
+			unmatched = append(unmatched, b.ips...)
+		}
+	}
+	if views.precise4 != nil {
+		for _, ip := range views.precise4 {
+			if ip == nil {
+				continue
+			}
+			unmatched = append(unmatched, ip)
+		}
+	}
+	if views.buckets6 != nil {
+		for _, b := range views.buckets6 {
+			if b == nil {
+				continue
+			}
+			unmatched = append(unmatched, b.ips...)
+		}
+	}
+	if views.precise6 != nil {
+		for _, ip := range views.precise6 {
+			if ip == nil {
+				continue
+			}
+			unmatched = append(unmatched, ip)
+		}
+	}
+
+	return
+}
+
+type ipBucketViews struct {
+	buckets4, buckets6 map[[9]byte]*ipBucket
+	precise4, precise6 map[netip.Addr]net.IP
+}
+
+func (v *ipBucketViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP) {
+	needHeur4 := m.ipset.max4 <= 24 && v.buckets4 == nil
+	needHeur6 := m.ipset.max6 <= 64 && v.buckets6 == nil
+	needPrec4 := m.ipset.max4 > 24 && v.precise4 == nil
+	needPrec6 := m.ipset.max6 > 64 && v.precise6 == nil
+
+	if !needHeur4 && !needHeur6 && !needPrec4 && !needPrec6 {
+		return
+	}
+
+	if needHeur4 {
+		v.buckets4 = make(map[[9]byte]*ipBucket, len(ips))
+	}
+	if needHeur6 {
+		v.buckets6 = make(map[[9]byte]*ipBucket, len(ips))
+	}
+	if needPrec4 {
+		v.precise4 = make(map[netip.Addr]net.IP, len(ips))
+	}
+	if needPrec6 {
+		v.precise6 = make(map[netip.Addr]net.IP, len(ips))
+	}
 
 	for _, ip := range ips {
 		key, ok := prefixKeyFromIP(ip)
@@ -497,47 +610,63 @@ func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP,
 			continue // illegal ip, ignore
 		}
 
-		b, exists := buckets[key]
-		if !exists {
-			// build bucket
-			ipx, ok := netipx.FromStdIP(ip)
-			if !ok {
-				continue
+		switch key[0] {
+		case 4:
+			var ipx netip.Addr
+			if needHeur4 {
+				b, exists := v.buckets4[key]
+				if !exists {
+					// build bucket
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						continue // illegal ip, ignore
+					}
+					b = &ipBucket{
+						rep: ipx,
+						ips: make([]net.IP, 0, 4), // for dns answer
+					}
+					v.buckets4[key] = b
+				}
+				b.ips = append(b.ips, ip)
 			}
-			b = &ipBucket{
-				rep: ipx,
-				ips: make([]net.IP, 0, 4), // for dns answer
+			if needPrec4 {
+				if !ipx.IsValid() {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						continue // illegal ip, ignore
+					}
+				}
+				v.precise4[ipx] = ip
 			}
-			buckets[key] = b
-			order = append(order, key)
+		case 6:
+			var ipx netip.Addr
+			if needHeur6 {
+				b, exists := v.buckets6[key]
+				if !exists {
+					// build bucket
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						continue // illegal ip, ignore
+					}
+					b = &ipBucket{
+						rep: ipx,
+						ips: make([]net.IP, 0, 4), // for dns answer
+					}
+					v.buckets6[key] = b
+				}
+				b.ips = append(b.ips, ip)
+			}
+			if needPrec6 {
+				if !ipx.IsValid() {
+					ipx, ok = netipx.FromStdIP(ip)
+					if !ok {
+						continue // illegal ip, ignore
+					}
+				}
+				v.precise6[ipx] = ip
+			}
 		}
-		b.ips = append(b.ips, ip)
 	}
-
-	matched = make([]net.IP, 0, n)
-	for _, m := range mm.matchers {
-		for _, key := range order {
-			b := buckets[key]
-			if b == nil {
-				continue
-			}
-			if m.matchAddr(b.rep) {
-				buckets[key] = nil
-				matched = append(matched, b.ips...)
-			}
-		}
-	}
-
-	unmatched = make([]net.IP, 0, n-len(matched))
-	for _, key := range order {
-		b := buckets[key]
-		if b == nil {
-			continue
-		}
-		unmatched = append(unmatched, b.ips...)
-	}
-
-	return
 }
 
 // ToggleReverse implements GeoIPMatcher.
@@ -578,7 +707,6 @@ func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPS
 
 func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
-	var max4, max6 int
 
 	for _, cidrGroup := range cidrGroups {
 		for _, cidrEntry := range cidrGroup {
@@ -599,14 +727,8 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 
 			if addr.Is4() {
 				ipv4Builder.AddPrefix(prefix)
-				if prefixLen > max4 {
-					max4 = prefixLen
-				}
 			} else if addr.Is6() {
 				ipv6Builder.AddPrefix(prefix)
-				if prefixLen > max6 {
-					max6 = prefixLen
-				}
 			}
 		}
 	}
@@ -615,10 +737,29 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	if err != nil {
 		return nil, errors.New("failed to build IPv4 set").Base(err)
 	}
-
 	ipv6, err := ipv6Builder.IPSet()
 	if err != nil {
 		return nil, errors.New("failed to build IPv6 set").Base(err)
+	}
+
+	var max4, max6 int
+
+	for _, p := range ipv4.Prefixes() {
+		if b := p.Bits(); b > max4 {
+			max4 = b
+		}
+	}
+	for _, p := range ipv6.Prefixes() {
+		if b := p.Bits(); b > max6 {
+			max6 = b
+		}
+	}
+
+	if max4 == 0 {
+		max4 = 0xff
+	}
+	if max6 == 0 {
+		max6 = 0xff
 	}
 
 	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
