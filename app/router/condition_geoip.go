@@ -400,10 +400,40 @@ func (mm *HeuristicMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
 		return mm.Match(ips[0])
 	}
 
-	// TODO: faster
-	for _, m := range mm.matchers {
-		if m.AnyMatch(ips) {
-			return true
+	buckets := make(map[[9]byte]struct{}, n)
+	for _, ip := range ips {
+		var ipx netip.Addr
+		state := uint8(0) // 0 = Not initialized, 1 = Initialized, 4 = IPv4 can be skipped, 6 = IPv6 can be skipped
+		for _, m := range mm.matchers {
+			heur4 := m.ipset.max4 <= 24
+			heur6 := m.ipset.max6 <= 64
+
+			if state == 0 && (heur4 || heur6) {
+				key, ok := prefixKeyFromIP(ip)
+				if !ok {
+					break
+				}
+				if _, exists := buckets[key]; exists {
+					state = key[0]
+				} else {
+					buckets[key] = struct{}{}
+					state = 1
+				}
+			}
+			if (heur4 && state == 4) || (heur6 && state == 6) {
+				continue
+			}
+
+			if !ipx.IsValid() {
+				nipx, ok := netipx.FromStdIP(ip)
+				if !ok {
+					break
+				}
+				ipx = nipx
+			}
+			if m.matchAddr(ipx) {
+				return true
+			}
 		}
 	}
 	return false
