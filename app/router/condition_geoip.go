@@ -19,6 +19,9 @@ type GeoIPMatcher interface {
 	// Invalid IP always return false.
 	Match(ip net.IP) bool
 
+	// Returns true if *any* IP is valid and match.
+	AnyMatch(ips []net.IP) bool
+
 	// Returns true only if *all* IPs are valid and match. Any invalid IP, or non-matching valid IP, causes false.
 	Matches(ips []net.IP) bool
 
@@ -60,6 +63,56 @@ func (m *HeuristicGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
 	}
 	if ipx.Is6() {
 		return m.ipset.ipv6.Contains(ipx) != m.reverse
+	}
+	return false
+}
+
+// AnyMatch implements GeoIPMatcher.
+func (m *HeuristicGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+	n := len(ips)
+	if n == 0 {
+		return false
+	}
+
+	if n == 1 {
+		return m.Match(ips[0])
+	}
+
+	heur4 := m.ipset.max4 <= 24
+	heur6 := m.ipset.max6 <= 64
+	if !heur4 && !heur6 {
+		for _, ip := range ips {
+			if ipx, ok := netipx.FromStdIP(ip); ok {
+				if m.matchAddr(ipx) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	buckets := make(map[[9]byte]struct{}, n)
+	for _, ip := range ips {
+		key, ok := prefixKeyFromIP(ip)
+		if !ok {
+			continue
+		}
+		heur := (key[0] == 4 && heur4) || (key[0] == 6 && heur6)
+		if heur {
+			if _, exists := buckets[key]; exists {
+				continue
+			}
+		}
+		ipx, ok := netipx.FromStdIP(ip)
+		if !ok {
+			continue
+		}
+		if m.matchAddr(ipx) {
+			return true
+		}
+		if heur {
+			buckets[key] = struct{}{}
+		}
 	}
 	return false
 }
@@ -266,6 +319,16 @@ func (mm *GeneralMultiGeoIPMatcher) Match(ip net.IP) bool {
 	return false
 }
 
+// AnyMatch implements GeoIPMatcher.
+func (mm *GeneralMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+	for _, m := range mm.matchers {
+		if m.AnyMatch(ips) {
+			return true
+		}
+	}
+	return false
+}
+
 // Matches implements GeoIPMatcher.
 func (mm *GeneralMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 	for _, m := range mm.matchers {
@@ -320,6 +383,26 @@ func (mm *HeuristicMultiGeoIPMatcher) Match(ip net.IP) bool {
 
 	for _, m := range mm.matchers {
 		if m.matchAddr(ipx) {
+			return true
+		}
+	}
+	return false
+}
+
+// AnyMatch implements GeoIPMatcher.
+func (mm *HeuristicMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+	n := len(ips)
+	if n == 0 {
+		return false
+	}
+
+	if n == 1 {
+		return mm.Match(ips[0])
+	}
+
+	// TODO: faster
+	for _, m := range mm.matchers {
+		if m.AnyMatch(ips) {
 			return true
 		}
 	}

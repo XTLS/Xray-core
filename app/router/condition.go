@@ -133,7 +133,7 @@ func (m *IPMatcher) Apply(ctx routing.Context) bool {
 		panic("unk asType")
 	}
 
-	return m.matcher.Matches(ips)
+	return m.matcher.AnyMatch(ips)
 }
 
 type PortMatcher struct {
