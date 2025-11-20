@@ -121,12 +121,14 @@
   - [OneXray](https://github.com/OneXray/OneXray)
   - [GoXRay](https://github.com/goxray/desktop)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
+  - [v2rayN](https://github.com/2dust/v2rayN)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [GorzRay](https://github.com/ketetefid/GorzRay)
   - [GoXRay](https://github.com/goxray/desktop)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
+  - [v2rayN](https://github.com/2dust/v2rayN)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
