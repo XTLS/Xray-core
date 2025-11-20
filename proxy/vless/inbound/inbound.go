@@ -78,8 +78,10 @@ type Handler struct {
 	outboundHandlerManager outbound.Manager
 	defaultDispatcher      *dispatcher.DefaultDispatcher
 	ctx                    context.Context
-	fallbacks              map[string]map[string]map[string]*Fallback // or nil
-	// regexps               map[string]*regexp.Regexp       // or nil
+	fallbacks              map[string]map[string]map[string]*Fallback
+
+	connTypeCache map[string]reflect.Type
+	fieldOffsets  map[string]map[string]uintptr
 }
 
 // New creates a new VLess inbound handler.
@@ -109,7 +111,6 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 
 	if config.Fallbacks != nil {
 		handler.fallbacks = make(map[string]map[string]map[string]*Fallback)
-		// handler.regexps = make(map[string]*regexp.Regexp)
 		for _, fb := range config.Fallbacks {
 			if handler.fallbacks[fb.Name] == nil {
 				handler.fallbacks[fb.Name] = make(map[string]map[string]*Fallback)
@@ -118,15 +119,6 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 				handler.fallbacks[fb.Name][fb.Alpn] = make(map[string]*Fallback)
 			}
 			handler.fallbacks[fb.Name][fb.Alpn][fb.Path] = fb
-			/*
-				if fb.Path != "" {
-					if r, err := regexp.Compile(fb.Path); err != nil {
-						return nil, errors.New("invalid path regexp").Base(err).AtError()
-					} else {
-						handler.regexps[fb.Path] = r
-					}
-				}
-			*/
 		}
 		if handler.fallbacks[""] != nil {
 			for name, apfb := range handler.fallbacks {
@@ -167,7 +159,51 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		}
 	}
 
+	handler.connTypeCache = make(map[string]reflect.Type)
+	handler.fieldOffsets = make(map[string]map[string]uintptr)
+	handler.cacheConnectionTypes()
+
 	return handler, nil
+}
+
+func (h *Handler) cacheConnectionTypes() {
+	// Cache CommonConn type and field offsets
+	if commonConnType := reflect.TypeOf((*encryption.CommonConn)(nil)).Elem(); commonConnType != nil {
+		h.connTypeCache["CommonConn"] = commonConnType
+		h.fieldOffsets["CommonConn"] = make(map[string]uintptr)
+
+		if inputField, ok := commonConnType.FieldByName("input"); ok {
+			h.fieldOffsets["CommonConn"]["input"] = inputField.Offset
+		}
+		if rawInputField, ok := commonConnType.FieldByName("rawInput"); ok {
+			h.fieldOffsets["CommonConn"]["rawInput"] = rawInputField.Offset
+		}
+	}
+
+	// Cache TLS Conn underlying type and field offsets
+	// Note: tls.Conn has a 'conn' field which is the underlying net.Conn
+	// For XTLS, we need the underlying transport connection's input/rawInput
+	if tlsConnType := reflect.TypeOf((*tls.Conn)(nil)); tlsConnType != nil {
+		if tlsConnType.Kind() == reflect.Ptr && tlsConnType.Elem().Kind() == reflect.Struct {
+			tlsElem := tlsConnType.Elem()
+			if connField, ok := tlsElem.FieldByName("conn"); ok {
+				h.fieldOffsets["TLSConn"] = make(map[string]uintptr)
+				h.fieldOffsets["TLSConn"]["conn"] = connField.Offset
+			}
+		}
+	}
+
+	// Cache Reality Conn underlying type and field offsets
+	// Note: reality.Conn also has a 'conn' field for the underlying transport
+	if realityConnType := reflect.TypeOf((*reality.Conn)(nil)); realityConnType != nil {
+		if realityConnType.Kind() == reflect.Ptr && realityConnType.Elem().Kind() == reflect.Struct {
+			realityElem := realityConnType.Elem()
+			if connField, ok := realityElem.FieldByName("conn"); ok {
+				h.fieldOffsets["RealityConn"] = make(map[string]uintptr)
+				h.fieldOffsets["RealityConn"]["conn"] = connField.Offset
+			}
+		}
+	}
 }
 
 func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
@@ -196,9 +232,25 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	if r == nil {
 		picker, _ := reverse.NewStaticMuxPicker()
 		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
-		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
-			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
+
+		deadline := time.Now().Add(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			if len(h.outboundHandlerManager.ListHandlers(h.ctx)) > 0 {
+				break
+			}
+			select {
+			case <-ticker.C:
+				if time.Now().After(deadline) {
+					return nil, errors.New("reverse: timeout waiting for outbound handlers").AtWarning()
+				}
+			case <-h.ctx.Done():
+				return nil, h.ctx.Err()
+			}
 		}
+
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
 			return nil, err
 		}
@@ -267,16 +319,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		iConn = statConn.Connection
 	}
 
+	sessionPolicy := h.policyManager.ForLevel(0)
+	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
+		return errors.New("unable to set read deadline").Base(err).AtWarning()
+	}
+
 	if h.decryption != nil {
 		var err error
 		if connection, err = h.decryption.Handshake(connection, nil); err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
-	}
-
-	sessionPolicy := h.policyManager.ForLevel(0)
-	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	first := buf.FromBytes(make([]byte, buf.Size))
@@ -319,20 +371,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				cs := tlsConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = "+name)
-				errors.LogInfo(ctx, "realAlpn = "+alpn)
+				errors.LogInfo(ctx, "tls connection established", "serverName", name, "alpn", alpn)
 			} else if realityConn, ok := iConn.(*reality.Conn); ok {
 				cs := realityConn.ConnectionState()
 				name = cs.ServerName
 				alpn = cs.NegotiatedProtocol
-				errors.LogInfo(ctx, "realName = "+name)
-				errors.LogInfo(ctx, "realAlpn = "+alpn)
+				errors.LogInfo(ctx, "reality connection established", "serverName", name, "alpn", alpn)
 			}
 			name = strings.ToLower(name)
 			alpn = strings.ToLower(alpn)
 
+			var apfb map[string]map[string]*Fallback
 			if len(napfb) > 1 || napfb[""] == nil {
-				if name != "" && napfb[name] == nil {
+				apfb = napfb[name]
+				if name != "" && apfb == nil {
 					match := ""
 					for n := range napfb {
 						if n != "" && strings.Contains(name, n) && len(n) > len(match) {
@@ -340,13 +392,15 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 						}
 					}
 					name = match
+					apfb = napfb[name]
 				}
+			} else {
+				apfb = napfb[name]
 			}
 
-			if napfb[name] == nil {
-				name = ""
+			if apfb == nil {
+				apfb = napfb[""]
 			}
-			apfb := napfb[name]
 			if apfb == nil {
 				return errors.New(`failed to find the default "name" config`).AtWarning()
 			}
@@ -391,7 +445,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 								}
 								if k == '?' || k == ' ' {
 									path = string(firstBytes[i:j])
-									errors.LogInfo(ctx, "realPath = "+path)
+									errors.LogInfo(ctx, "http path extracted", "path", path)
 									if pfb[path] == nil {
 										path = ""
 									}
@@ -527,13 +581,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {
-		panic("no inbound metadata")
+		return errors.New("no inbound metadata in context").AtWarning()
 	}
 	inbound.Name = "vless"
 	inbound.User = request.User
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
 
-	account := request.User.Account.(*vless.MemoryAccount)
+	account, ok := request.User.Account.(*vless.MemoryAccount)
+	if !ok {
+		return errors.New("invalid account type, expected VLESS MemoryAccount").AtWarning()
+	}
 
 	responseAddons := &encoding.Addons{
 		// Flow: requestAddons.Flow,
@@ -552,28 +609,50 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				inbound.CanSpliceCopy = 3
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
-				var t reflect.Type
 				var p uintptr
+				var t reflect.Type
+
 				if commonConn, ok := connection.(*encryption.CommonConn); ok {
 					if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
 						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 					}
-					t = reflect.TypeOf(commonConn).Elem()
 					p = uintptr(unsafe.Pointer(commonConn))
+
+					// Use cached type and offsets for CommonConn (most common in hot path)
+					if cachedType, ok := h.connTypeCache["CommonConn"]; ok && h.fieldOffsets["CommonConn"] != nil {
+						t = cachedType
+					} else {
+						t = reflect.TypeOf(commonConn).Elem()
+					}
 				} else if tlsConn, ok := iConn.(*tls.Conn); ok {
 					if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
 						return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version).AtWarning()
 					}
-					t = reflect.TypeOf(tlsConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(tlsConn.Conn))
+					// TLS Conn: use reflection (not in hot path)
+					t = reflect.TypeOf(tlsConn.Conn).Elem()
 				} else if realityConn, ok := iConn.(*reality.Conn); ok {
-					t = reflect.TypeOf(realityConn.Conn).Elem()
 					p = uintptr(unsafe.Pointer(realityConn.Conn))
+					// Reality Conn: use reflection (not in hot path)
+					t = reflect.TypeOf(realityConn.Conn).Elem()
 				} else {
 					return errors.New("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 				}
-				i, _ := t.FieldByName("input")
-				r, _ := t.FieldByName("rawInput")
+
+				if p == 0 {
+					return errors.New("invalid connection pointer").AtWarning()
+				}
+
+				i, ok := t.FieldByName("input")
+				if !ok {
+					return errors.New("field 'input' not found in connection type").AtWarning()
+				}
+
+				r, ok := t.FieldByName("rawInput")
+				if !ok {
+					return errors.New("field 'rawInput' not found in connection type").AtWarning()
+				}
+
 				input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
 				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 			}
