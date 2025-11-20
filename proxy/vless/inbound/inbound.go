@@ -267,16 +267,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		iConn = statConn.Connection
 	}
 
+	sessionPolicy := h.policyManager.ForLevel(0)
+	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
+		return errors.New("unable to set read deadline").Base(err).AtWarning()
+	}
+
 	if h.decryption != nil {
 		var err error
 		if connection, err = h.decryption.Handshake(connection, nil); err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
-	}
-
-	sessionPolicy := h.policyManager.ForLevel(0)
-	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
 	first := buf.FromBytes(make([]byte, buf.Size))
