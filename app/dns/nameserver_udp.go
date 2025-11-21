@@ -2,7 +2,6 @@ package dns
 
 import (
 	"context"
-	go_errors "errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
@@ -134,7 +132,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 		}
 	}
 
-	s.cacheController.updateIP(&req.dnsRequest, ipRec)
+	s.cacheController.updateRecord(&req.dnsRequest, ipRec)
 }
 
 func (s *ClassicNameServer) newReqID() uint16 {
@@ -150,10 +148,16 @@ func (s *ClassicNameServer) addPendingRequest(req *udpDnsRequest) {
 	common.Must(s.requestsCleanup.Start())
 }
 
-func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", domain)
+// getCacheController implements CachedNameserver.
+func (s *ClassicNameServer) getCacheController() *CacheController {
+	return s.cacheController
+}
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+// sendQuery implements CachedNameserver.
+func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
+
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	for _, req := range reqs {
 		udpReq := &udpDnsRequest{
@@ -170,48 +174,5 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, domai
 
 // QueryIP implements Server.
 func (s *ClassicNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
-	fqdn := Fqdn(domain)
-	sub4, sub6 := s.cacheController.registerSubscribers(fqdn, option)
-	defer closeSubscribers(sub4, sub6)
-
-	if s.cacheController.disableCache {
-		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.Name())
-	} else {
-		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
-		if !go_errors.Is(err, errRecordNotFound) {
-			errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
-		}
-	}
-
-	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
-	start := time.Now()
-
-	if sub4 != nil {
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case err := <-noResponseErrCh:
-			return nil, 0, err
-		case <-sub4.Wait():
-			sub4.Close()
-		}
-	}
-	if sub6 != nil {
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case err := <-noResponseErrCh:
-			return nil, 0, err
-		case <-sub6.Wait():
-			sub6.Close()
-		}
-	}
-
-	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
-	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
-
+	return queryIP(ctx, s, domain, option)
 }

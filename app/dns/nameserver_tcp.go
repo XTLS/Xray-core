@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	go_errors "errors"
 	"net/url"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
@@ -99,10 +97,16 @@ func (s *TCPNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }
 
-func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, domain string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", domain)
+// getCacheController implements CachedNameserver.
+func (s *TCPNameServer) getCacheController() *CacheController {
+	return s.cacheController
+}
 
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+// sendQuery implements CachedNameserver.
+func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
+
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -195,55 +199,12 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 				return
 			}
 
-			s.cacheController.updateIP(r, rec)
+			s.cacheController.updateRecord(r, rec)
 		}(req)
 	}
 }
 
 // QueryIP implements Server.
 func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
-	fqdn := Fqdn(domain)
-	sub4, sub6 := s.cacheController.registerSubscribers(fqdn, option)
-	defer closeSubscribers(sub4, sub6)
-
-	if s.cacheController.disableCache {
-		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.Name())
-	} else {
-		ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
-		if !go_errors.Is(err, errRecordNotFound) {
-			errors.LogDebugInner(ctx, err, s.Name(), " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
-		}
-	}
-
-	noResponseErrCh := make(chan error, 2)
-	s.sendQuery(ctx, noResponseErrCh, fqdn, option)
-	start := time.Now()
-
-	if sub4 != nil {
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case err := <-noResponseErrCh:
-			return nil, 0, err
-		case <-sub4.Wait():
-			sub4.Close()
-		}
-	}
-	if sub6 != nil {
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case err := <-noResponseErrCh:
-			return nil, 0, err
-		case <-sub6.Wait():
-			sub6.Close()
-		}
-	}
-
-	ips, ttl, err := s.cacheController.findIPsForDomain(fqdn, option)
-	log.Record(&log.DNSLog{Server: s.Name(), Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-	return ips, ttl, err
-
+	return queryIP(ctx, s, domain, option)
 }
