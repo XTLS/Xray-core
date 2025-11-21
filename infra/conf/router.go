@@ -83,8 +83,6 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 	}
 
 	switch strings.ToLower(ds) {
-	case "alwaysip":
-		return router.Config_UseIp
 	case "ipifnonmatch":
 		return router.Config_IpIfNonMatch
 	case "ipondemand":

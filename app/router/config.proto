@@ -147,8 +147,8 @@ message Config {
     // Use domain as is.
     AsIs = 0;
 
-    // Always resolve IP for domains.
-    UseIp = 1;
+    // [Deprecated] Always resolve IP for domains.
+    // UseIp = 1;
 
     // Resolve to IP if the domain doesn't match any rules.
     IpIfNonMatch = 2;
