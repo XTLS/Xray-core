@@ -25,6 +25,7 @@ type DNS struct {
 	sync.Mutex
 	disableFallback        bool
 	disableFallbackIfMatch bool
+	enableParallelQuery    bool
 	ipOption               *dns.IPOption
 	hosts                  *StaticHosts
 	clients                []*Client
@@ -157,6 +158,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		matcherInfos:           matcherInfos,
 		disableFallback:        config.DisableFallback,
 		disableFallbackIfMatch: config.DisableFallbackIfMatch,
+		enableParallelQuery:    config.EnableParallelQuery,
 		checkSystem:            checkSystem,
 	}, nil
 }
@@ -235,45 +237,11 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 	}
 
 	// Name servers lookup
-	var errs []error
-	for _, client := range s.sortClients(domain) {
-		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
-			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
-			continue
-		}
-
-		ips, ttl, err := client.QueryIP(s.ctx, domain, option)
-
-		if len(ips) > 0 {
-			if ttl == 0 {
-				ttl = 1
-			}
-			return ips, ttl, nil
-		}
-
-		errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name())
-		if err == nil {
-			err = dns.ErrEmptyResponse
-		}
-		errs = append(errs, err)
-
-		if client.IsFinalQuery() {
-			break
-		}
+	if s.enableParallelQuery {
+		return s.parallelQuery(domain, option)
+	} else {
+		return s.serialQuery(domain, option)
 	}
-
-	if len(errs) > 0 {
-		allErrs := errors.Combine(errs...)
-		err0 := errs[0]
-		if errors.AllEqual(err0, allErrs) {
-			if go_errors.Is(err0, dns.ErrEmptyResponse) {
-				return nil, 0, dns.ErrEmptyResponse
-			}
-			return nil, 0, errors.New("returning nil for domain ", domain).Base(err0)
-		}
-		return nil, 0, errors.New("returning nil for domain ", domain).Base(allErrs)
-	}
-	return nil, 0, dns.ErrEmptyResponse
 }
 
 func (s *DNS) sortClients(domain string) []*Client {
@@ -300,6 +268,9 @@ func (s *DNS) sortClients(domain string) []*Client {
 		clients = append(clients, client)
 		clientNames = append(clientNames, client.Name())
 		hasMatch = true
+		if client.finalQuery {
+			return clients
+		}
 	}
 
 	if !(s.disableFallback || s.disableFallbackIfMatch && hasMatch) {
@@ -311,6 +282,9 @@ func (s *DNS) sortClients(domain string) []*Client {
 			clientUsed[idx] = true
 			clients = append(clients, client)
 			clientNames = append(clientNames, client.Name())
+			if client.finalQuery {
+				return clients
+			}
 		}
 	}
 
@@ -322,12 +296,212 @@ func (s *DNS) sortClients(domain string) []*Client {
 	}
 
 	if len(clients) == 0 {
-		clients = append(clients, s.clients[0])
-		clientNames = append(clientNames, s.clients[0].Name())
-		errors.LogDebug(s.ctx, "domain ", domain, " will use the first DNS: ", clientNames)
+		if len(s.clients) > 0 {
+			clients = append(clients, s.clients[0])
+			clientNames = append(clientNames, s.clients[0].Name())
+			errors.LogWarning(s.ctx, "domain ", domain, " will use the first DNS: ", clientNames)
+		} else {
+			errors.LogError(s.ctx, "no DNS clients available for domain ", domain, " and no default clients configured")
+		}
 	}
 
 	return clients
+}
+
+func mergeQueryErrors(domain string, errs []error) error {
+	if len(errs) == 0 {
+		return dns.ErrEmptyResponse
+	}
+
+	var noRNF error
+	for _, err := range errs {
+		if go_errors.Is(err, errRecordNotFound) {
+			continue // server no response, ignore
+		} else if noRNF == nil {
+			noRNF = err
+		} else if !go_errors.Is(err, noRNF) {
+			return errors.New("returning nil for domain ", domain).Base(errors.Combine(errs...))
+		}
+	}
+	if go_errors.Is(noRNF, dns.ErrEmptyResponse) {
+		return dns.ErrEmptyResponse
+	}
+	if noRNF == nil {
+		noRNF = errRecordNotFound
+	}
+	return errors.New("returning nil for domain ", domain).Base(noRNF)
+}
+
+func (s *DNS) serialQuery(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	var errs []error
+	for _, client := range s.sortClients(domain) {
+		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
+			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+			continue
+		}
+
+		ips, ttl, err := client.QueryIP(s.ctx, domain, option)
+
+		if len(ips) > 0 {
+			return ips, ttl, nil
+		}
+
+		errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name(), " in serial query mode")
+		if err == nil {
+			err = dns.ErrEmptyResponse
+		}
+		errs = append(errs, err)
+	}
+	return nil, 0, mergeQueryErrors(domain, errs)
+}
+
+func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	var errs []error
+	clients := s.sortClients(domain)
+
+	resultsChan := asyncQueryAll(domain, option, clients, s.ctx)
+
+	groups, groupOf := makeGroups( /*s.ctx,*/ clients)
+	results := make([]*queryResult, len(clients))
+	pending := make([]int, len(groups))
+	for gi, g := range groups {
+		pending[gi] = g.end - g.start + 1
+	}
+
+	nextGroup := 0
+	for range clients {
+		result := <-resultsChan
+		results[result.index] = &result
+
+		gi := groupOf[result.index]
+		pending[gi]--
+
+		for nextGroup < len(groups) {
+			g := groups[nextGroup]
+
+			// group race, minimum rtt -> return
+			for j := g.start; j <= g.end; j++ {
+				r := results[j]
+				if r != nil && r.err == nil && len(r.ips) > 0 {
+					return r.ips, r.ttl, nil
+				}
+			}
+
+			// current group is incomplete and no one success -> continue pending
+			if pending[nextGroup] > 0 {
+				break
+			}
+
+			// all failed -> log and continue next group
+			for j := g.start; j <= g.end; j++ {
+				r := results[j]
+				e := r.err
+				if e == nil {
+					e = dns.ErrEmptyResponse
+				}
+				errors.LogInfoInner(s.ctx, e, "failed to lookup ip for domain ", domain, " at server ", clients[j].Name(), " in parallel query mode")
+				errs = append(errs, e)
+			}
+			nextGroup++
+		}
+	}
+
+	return nil, 0, mergeQueryErrors(domain, errs)
+}
+
+type queryResult struct {
+	ips   []net.IP
+	ttl   uint32
+	err   error
+	index int
+}
+
+func asyncQueryAll(domain string, option dns.IPOption, clients []*Client, ctx context.Context) chan queryResult {
+	if len(clients) == 0 {
+		ch := make(chan queryResult)
+		close(ch)
+		return ch
+	}
+
+	ch := make(chan queryResult, len(clients))
+	for i, client := range clients {
+		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
+			errors.LogDebug(ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+			ch <- queryResult{err: dns.ErrEmptyResponse, index: i}
+			continue
+		}
+
+		go func(i int, c *Client) {
+			qctx := ctx
+			if !c.server.IsDisableCache() {
+				nctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeoutMs*2)
+				qctx = nctx
+				defer cancel()
+			}
+			ips, ttl, err := c.QueryIP(qctx, domain, option)
+			ch <- queryResult{ips: ips, ttl: ttl, err: err, index: i}
+		}(i, client)
+	}
+	return ch
+}
+
+type group struct{ start, end int }
+
+// merge only adjacent and rule-equivalent Client into a single group
+func makeGroups( /*ctx context.Context,*/ clients []*Client) ([]group, []int) {
+	n := len(clients)
+	if n == 0 {
+		return nil, nil
+	}
+	groups := make([]group, 0, n)
+	groupOf := make([]int, n)
+
+	s, e := 0, 0
+	for i := 1; i < n; i++ {
+		if clients[i-1].policyID == clients[i].policyID {
+			e = i
+		} else {
+			for k := s; k <= e; k++ {
+				groupOf[k] = len(groups)
+			}
+			groups = append(groups, group{start: s, end: e})
+			s, e = i, i
+		}
+	}
+	for k := s; k <= e; k++ {
+		groupOf[k] = len(groups)
+	}
+	groups = append(groups, group{start: s, end: e})
+
+	// var b strings.Builder
+	// b.WriteString("dns grouping: total clients=")
+	// b.WriteString(strconv.Itoa(n))
+	// b.WriteString(", groups=")
+	// b.WriteString(strconv.Itoa(len(groups)))
+
+	// for gi, g := range groups {
+	// 	b.WriteString("\n  [")
+	// 	b.WriteString(strconv.Itoa(g.start))
+	// 	b.WriteString("..")
+	// 	b.WriteString(strconv.Itoa(g.end))
+	// 	b.WriteString("] gid=")
+	// 	b.WriteString(strconv.Itoa(gi))
+	// 	b.WriteString(" pid=")
+	// 	b.WriteString(strconv.FormatUint(uint64(clients[g.start].policyID), 10))
+	// 	b.WriteString(" members: ")
+
+	// 	for i := g.start; i <= g.end; i++ {
+	// 		if i > g.start {
+	// 			b.WriteString(", ")
+	// 		}
+	// 		b.WriteString(strconv.Itoa(i))
+	// 		b.WriteByte(':')
+	// 		b.WriteString(clients[i].Name())
+	// 	}
+	// }
+	// errors.LogDebug(ctx, b.String())
+
+	return groups, groupOf
 }
 
 func init() {

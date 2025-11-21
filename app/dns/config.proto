@@ -37,6 +37,7 @@ message NameServer {
   bool finalQuery = 12;
   repeated xray.app.router.GeoIP unexpected_geoip = 13;
   bool actUnprior = 14;
+  uint32 policyID = 17;
 }
 
 enum DomainMatchingType {
@@ -89,4 +90,6 @@ message Config {
 
   bool disableFallback = 10;
   bool disableFallbackIfMatch = 11;
+
+  bool enableParallelQuery = 14;
 }

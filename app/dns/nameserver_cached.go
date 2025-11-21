@@ -28,12 +28,12 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 			ips, ttl, err := merge(option, rec.A, rec.AAAA)
 			if !go_errors.Is(err, errRecordNotFound) {
 				if ttl > 0 {
-					// errors.LogDebugInner(ctx, err, cache.name, " cache HIT ", fqdn, " -> ", ips)
+					errors.LogDebugInner(ctx, err, cache.name, " cache HIT ", fqdn, " -> ", ips)
 					log.Record(&log.DNSLog{Server: cache.name, Domain: fqdn, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
 					return ips, uint32(ttl), err
 				}
 				if cache.serveStale && (cache.serveExpiredTTL == 0 || cache.serveExpiredTTL < ttl) {
-					// errors.LogDebugInner(ctx, err, cache.name, " cache OPTIMISTE ", fqdn, " -> ", ips)
+					errors.LogDebugInner(ctx, err, cache.name, " cache OPTIMISTE ", fqdn, " -> ", ips)
 					log.Record(&log.DNSLog{Server: cache.name, Domain: fqdn, Result: ips, Status: log.DNSCacheOptimiste, Elapsed: 0, Error: err})
 					go pull(ctx, s, fqdn, option)
 					return ips, 1, err

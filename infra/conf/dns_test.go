@@ -74,6 +74,7 @@ func TestDNSConfigParsing(t *testing.T) {
 						},
 						ServeStale:      true,
 						ServeExpiredTTL: &expectedServeExpiredTTL,
+						PolicyID:        1, // Servers with certain identical fields share this ID, incrementing starting from 1. See: Build PolicyID
 					},
 				},
 				StaticHosts: []*dns.Config_HostMapping{

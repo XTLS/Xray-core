@@ -194,7 +194,7 @@ func (c *CacheController) migrate() {
 		return
 	}
 
-	errors.LogDebug(context.Background(), c.name, " starting background cache migration for ", len(dirtyips), " items.")
+	errors.LogDebug(context.Background(), c.name, " starting background cache migration for ", len(dirtyips), " items")
 
 	batch := make([]migrationEntry, 0, migrationBatchSize)
 	for domain, recD := range dirtyips {
@@ -214,7 +214,7 @@ func (c *CacheController) migrate() {
 	c.dirtyips = nil
 	c.Unlock()
 
-	errors.LogDebug(context.Background(), c.name, " cache migration completed.")
+	errors.LogDebug(context.Background(), c.name, " cache migration completed")
 }
 
 func (c *CacheController) flush(batch []migrationEntry) {

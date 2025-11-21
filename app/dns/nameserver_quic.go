@@ -37,8 +37,6 @@ type QUICNameServer struct {
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
 func NewQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*QUICNameServer, error) {
-	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
-
 	var err error
 	port := net.Port(853)
 	if url.Port() != "" {
@@ -55,12 +53,18 @@ func NewQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveEx
 		clientIP:        clientIP,
 	}
 
+	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
 	return s, nil
 }
 
 // Name implements Server.
 func (s *QUICNameServer) Name() string {
 	return s.cacheController.name
+}
+
+// IsDisableCache implements Server.
+func (s *QUICNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
 }
 
 func (s *QUICNameServer) newReqID() uint16 {

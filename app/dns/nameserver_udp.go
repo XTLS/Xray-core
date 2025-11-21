@@ -54,6 +54,7 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		Execute:  s.RequestsCleanup,
 	}
 	s.udpServer = udp.NewDispatcher(dispatcher, s.HandleResponse)
+
 	errors.LogInfo(context.Background(), "DNS: created UDP client initialized for ", address.NetAddr())
 	return s
 }
@@ -61,6 +62,11 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 // Name implements Server.
 func (s *ClassicNameServer) Name() string {
 	return s.cacheController.name
+}
+
+// IsDisableCache implements Server.
+func (s *ClassicNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
 }
 
 // RequestsCleanup clears expired items from cache
@@ -92,7 +98,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 	ipRec, err := parseResponse(payload.Bytes())
 	payload.Release()
 	if err != nil {
-		errors.LogError(ctx, s.Name(), " fail to parse responded DNS udp")
+		errors.LogErrorInner(ctx, err, s.Name(), " fail to parse responded DNS udp")
 		return
 	}
 
@@ -105,7 +111,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 	}
 	s.Unlock()
 	if !ok {
-		errors.LogError(ctx, s.Name(), " cannot find the pending request")
+		errors.LogErrorInner(ctx, err, s.Name(), " cannot find the pending request")
 		return
 	}
 
@@ -155,7 +161,7 @@ func (s *ClassicNameServer) getCacheController() *CacheController {
 
 // sendQuery implements CachedNameserver.
 func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, fqdn string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
+	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
 	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 

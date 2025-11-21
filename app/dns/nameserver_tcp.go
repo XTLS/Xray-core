@@ -52,6 +52,7 @@ func NewTCPNameServer(
 		), nil
 	}
 
+	errors.LogInfo(context.Background(), "DNS: created TCP client initialized for ", url.String())
 	return s, nil
 }
 
@@ -66,6 +67,7 @@ func NewTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, ser
 		return internet.DialSystem(ctx, *s.destination, nil)
 	}
 
+	errors.LogInfo(context.Background(), "DNS: created Local TCP client initialized for ", url.String())
 	return s, nil
 }
 
@@ -93,6 +95,11 @@ func (s *TCPNameServer) Name() string {
 	return s.cacheController.name
 }
 
+// IsDisableCache implements Server.
+func (s *TCPNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
+}
+
 func (s *TCPNameServer) newReqID() uint16 {
 	return uint16(atomic.AddUint32(&s.reqID, 1))
 }
@@ -104,7 +111,7 @@ func (s *TCPNameServer) getCacheController() *CacheController {
 
 // sendQuery implements CachedNameserver.
 func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
-	errors.LogDebug(ctx, s.Name(), " querying DNS for: ", fqdn)
+	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
 	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
 
