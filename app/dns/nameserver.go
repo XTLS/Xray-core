@@ -29,8 +29,8 @@ type Client struct {
 	server        Server
 	skipFallback  bool
 	domains       []string
-	expectedIPs   []*router.GeoIPMatcher
-	unexpectedIPs []*router.GeoIPMatcher
+	expectedIPs   router.GeoIPMatcher
+	unexpectedIPs router.GeoIPMatcher
 	actPrior      bool
 	actUnprior    bool
 	tag           string
@@ -154,23 +154,21 @@ func NewClient(
 		}
 
 		// Establish expected IPs
-		var expectedMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.ExpectedGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
+		var expectedMatcher router.GeoIPMatcher
+		if len(ns.ExpectedGeoip) > 0 {
+			expectedMatcher, err = router.BuildOptimizedGeoIPMatcher(ns.ExpectedGeoip...)
 			if err != nil {
 				return errors.New("failed to create expected ip matcher").Base(err).AtWarning()
 			}
-			expectedMatchers = append(expectedMatchers, matcher)
 		}
 
 		// Establish unexpected IPs
-		var unexpectedMatchers []*router.GeoIPMatcher
-		for _, geoip := range ns.UnexpectedGeoip {
-			matcher, err := router.GlobalGeoIPContainer.Add(geoip)
+		var unexpectedMatcher router.GeoIPMatcher
+		if len(ns.UnexpectedGeoip) > 0 {
+			unexpectedMatcher, err = router.BuildOptimizedGeoIPMatcher(ns.UnexpectedGeoip...)
 			if err != nil {
 				return errors.New("failed to create unexpected ip matcher").Base(err).AtWarning()
 			}
-			unexpectedMatchers = append(unexpectedMatchers, matcher)
 		}
 
 		if len(clientIP) > 0 {
@@ -192,8 +190,8 @@ func NewClient(
 		client.server = server
 		client.skipFallback = ns.SkipFallback
 		client.domains = rules
-		client.expectedIPs = expectedMatchers
-		client.unexpectedIPs = unexpectedMatchers
+		client.expectedIPs = expectedMatcher
+		client.unexpectedIPs = unexpectedMatcher
 		client.actPrior = ns.ActPrior
 		client.actUnprior = ns.ActUnprior
 		client.tag = tag
@@ -243,32 +241,32 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		return nil, 0, dns.ErrEmptyResponse
 	}
 
-	if len(c.expectedIPs) > 0 && !c.actPrior {
-		ips = router.MatchIPs(c.expectedIPs, ips, false)
+	if c.expectedIPs != nil && !c.actPrior {
+		ips, _ = c.expectedIPs.FilterIPs(ips)
 		errors.LogDebug(context.Background(), "domain ", domain, " expectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
 		}
 	}
 
-	if len(c.unexpectedIPs) > 0 && !c.actUnprior {
-		ips = router.MatchIPs(c.unexpectedIPs, ips, true)
+	if c.unexpectedIPs != nil && !c.actUnprior {
+		_, ips = c.unexpectedIPs.FilterIPs(ips)
 		errors.LogDebug(context.Background(), "domain ", domain, " unexpectedIPs ", ips, " matched at server ", c.Name())
 		if len(ips) == 0 {
 			return nil, 0, dns.ErrEmptyResponse
 		}
 	}
 
-	if len(c.expectedIPs) > 0 && c.actPrior {
-		ipsNew := router.MatchIPs(c.expectedIPs, ips, false)
+	if c.expectedIPs != nil && c.actPrior {
+		ipsNew, _ := c.expectedIPs.FilterIPs(ips)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " priorIPs ", ips, " matched at server ", c.Name())
 		}
 	}
 
-	if len(c.unexpectedIPs) > 0 && c.actUnprior {
-		ipsNew := router.MatchIPs(c.unexpectedIPs, ips, true)
+	if c.unexpectedIPs != nil && c.actUnprior {
+		_, ipsNew := c.unexpectedIPs.FilterIPs(ips)
 		if len(ipsNew) > 0 {
 			ips = ipsNew
 			errors.LogDebug(context.Background(), "domain ", domain, " unpriorIPs ", ips, " matched at server ", c.Name())
