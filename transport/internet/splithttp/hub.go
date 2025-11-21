@@ -27,13 +27,14 @@ import (
 )
 
 type requestHandler struct {
-	config    *Config
-	host      string
-	path      string
-	ln        *Listener
-	sessionMu *sync.Mutex
-	sessions  sync.Map
-	localAddr net.Addr
+	config         *Config
+	host           string
+	path           string
+	ln             *Listener
+	sessionMu      *sync.Mutex
+	sessions       sync.Map
+	localAddr      net.Addr
+	socketSettings *internet.SocketConfig
 }
 
 type httpSession struct {
@@ -154,6 +155,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			IP:   remoteAddr.(*net.TCPAddr).IP,
 			Port: remoteAddr.(*net.TCPAddr).Port,
 		}
+	}
+	if h.socketSettings != nil && h.socketSettings.DiscardXForwardedFor {
+		forwardedAddrs = nil
 	}
 	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
@@ -356,12 +360,13 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		}
 	}
 	handler := &requestHandler{
-		config:    l.config,
-		host:      l.config.Host,
-		path:      l.config.GetNormalizedPath(),
-		ln:        l,
-		sessionMu: &sync.Mutex{},
-		sessions:  sync.Map{},
+		config:         l.config,
+		host:           l.config.Host,
+		path:           l.config.GetNormalizedPath(),
+		ln:             l,
+		sessionMu:      &sync.Mutex{},
+		sessions:       sync.Map{},
+		socketSettings: streamSettings.SocketSettings,
 	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"

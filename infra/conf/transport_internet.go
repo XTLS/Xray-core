@@ -810,6 +810,7 @@ type SocketConfig struct {
 	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
 	AddressPortStrategy   string                 `json:"addressPortStrategy"`
 	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
+	DiscardXForwardedFor  bool                   `json:"discardXForwardedFor"`
 }
 
 // Build implements Buildable.
@@ -929,6 +930,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		CustomSockopt:        customSockopts,
 		AddressPortStrategy:  addressPortStrategy,
 		HappyEyeballs:        happyEyeballs,
+		DiscardXForwardedFor: c.DiscardXForwardedFor,
 	}, nil
 }
 

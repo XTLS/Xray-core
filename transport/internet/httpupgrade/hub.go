@@ -20,6 +20,7 @@ type server struct {
 	config         *Config
 	addConn        internet.ConnHandler
 	innnerListener net.Listener
+	socketSettings *internet.SocketConfig
 }
 
 func (s *server) Close() error {
@@ -72,6 +73,9 @@ func (s *server) Handle(conn net.Conn) (stat.Connection, error) {
 
 	forwardedAddrs := http_proto.ParseXForwardedFor(req.Header)
 	remoteAddr := conn.RemoteAddr()
+	if s.socketSettings != nil && s.socketSettings.DiscardXForwardedFor {
+		forwardedAddrs = nil
+	}
 	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
 			IP:   forwardedAddrs[0].IP(),
@@ -141,6 +145,7 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 		config:         transportConfiguration,
 		addConn:        addConn,
 		innnerListener: listener,
+		socketSettings: streamSettings.SocketSettings,
 	}
 	go serverInstance.keepAccepting()
 	return serverInstance, nil

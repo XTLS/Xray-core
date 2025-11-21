@@ -21,9 +21,10 @@ import (
 )
 
 type requestHandler struct {
-	host string
-	path string
-	ln   *Listener
+	host           string
+	path           string
+	ln             *Listener
+	socketSettings *internet.SocketConfig
 }
 
 var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
@@ -66,6 +67,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	forwardedAddrs := http_proto.ParseXForwardedFor(request.Header)
 	remoteAddr := conn.RemoteAddr()
+	if h.socketSettings != nil && h.socketSettings.DiscardXForwardedFor {
+		forwardedAddrs = nil
+	}
 	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
 			IP:   forwardedAddrs[0].IP(),
@@ -132,9 +136,10 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	l.server = http.Server{
 		Handler: &requestHandler{
-			host: wsSettings.Host,
-			path: wsSettings.GetNormalizedPath(),
-			ln:   l,
+			host:           wsSettings.Host,
+			path:           wsSettings.GetNormalizedPath(),
+			ln:             l,
+			socketSettings: streamSettings.SocketSettings,
 		},
 		ReadHeaderTimeout: time.Second * 4,
 		MaxHeaderBytes:    8192,
