@@ -37,7 +37,7 @@ type DoHNameServer struct {
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
-func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, clientIP net.IP) *DoHNameServer {
+func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *DoHNameServer {
 	url.Scheme = "https"
 	mode := "DOH"
 	if dispatcher == nil {
@@ -45,7 +45,7 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
 	}
 	errors.LogInfo(context.Background(), "DNS: created ", mode, " client for ", url.String(), ", with h2c ", h2c)
 	s := &DoHNameServer{
-		cacheController: NewCacheController(mode+"//"+url.Host, disableCache),
+		cacheController: NewCacheController(mode+"//"+url.Host, disableCache, serveStale, serveExpiredTTL),
 		dohURL:          url.String(),
 		clientIP:        clientIP,
 	}
@@ -131,7 +131,9 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 	if s.Name()+"." == "DOH//"+fqdn {
 		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead.")
-		noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+		if noResponseErrCh != nil {
+			noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+		}
 		return
 	}
 
@@ -172,19 +174,25 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", fqdn)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", fqdn)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", fqdn)
-				noResponseErrCh <- err
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			s.cacheController.updateRecord(r, rec)

@@ -25,23 +25,29 @@ const (
 )
 
 type CacheController struct {
+	name            string
+	disableCache    bool
+	serveStale      bool
+	serveExpiredTTL int32
+
+	ips      map[string]*record
+	dirtyips map[string]*record
+
 	sync.RWMutex
-	ips           map[string]*record
-	dirtyips      map[string]*record
 	pub           *pubsub.Service
 	cacheCleanup  *task.Periodic
-	name          string
-	disableCache  bool
 	highWatermark int
 	requestGroup  singleflight.Group
 }
 
-func NewCacheController(name string, disableCache bool) *CacheController {
+func NewCacheController(name string, disableCache bool, serveStale bool, serveExpiredTTL uint32) *CacheController {
 	c := &CacheController{
-		name:         name,
-		disableCache: disableCache,
-		ips:          make(map[string]*record),
-		pub:          pubsub.NewService(),
+		name:            name,
+		disableCache:    disableCache,
+		serveStale:      serveStale,
+		serveExpiredTTL: -int32(serveExpiredTTL),
+		ips:             make(map[string]*record),
+		pub:             pubsub.NewService(),
 	}
 
 	c.cacheCleanup = &task.Periodic{
@@ -78,6 +84,10 @@ func (c *CacheController) collectExpiredKeys() ([]string, error) {
 	}
 
 	now := time.Now()
+	if c.serveStale && c.serveExpiredTTL != 0 {
+		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	}
+
 	expiredKeys := make([]string, 0, len(c.ips)/4) // pre-allocate
 
 	for domain, rec := range c.ips {
@@ -105,6 +115,10 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 	}
 
 	now := time.Now()
+	if c.serveStale && c.serveExpiredTTL != 0 {
+		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	}
+
 	for _, domain := range expiredKeys {
 		rec := c.ips[domain]
 		if rec == nil {
@@ -280,15 +294,17 @@ func (c *CacheController) updateRecord(req *dnsRequest, rep *IPRecord) {
 	c.Unlock()
 
 	if pubRecord != nil {
-		_, _ /*ttl*/, err := pubRecord.getIPs()
-		if /*ttl >= 0 &&*/ !go_errors.Is(err, errRecordNotFound) {
+		_, ttl, err := pubRecord.getIPs()
+		if ttl > 0 && !go_errors.Is(err, errRecordNotFound) {
 			c.pub.Publish(req.domain+pubSuffix, pubRecord)
 		}
 	}
 
 	errors.LogInfo(context.Background(), c.name, " got answer: ", req.domain, " ", req.reqType, " -> ", rep.IP, ", rtt: ", rtt, ", lock: ", lockWait)
 
-	common.Must(c.cacheCleanup.Start())
+	if !c.serveStale || c.serveExpiredTTL != 0 {
+		common.Must(c.cacheCleanup.Start())
+	}
 }
 
 func (c *CacheController) findRecords(domain string) *record {

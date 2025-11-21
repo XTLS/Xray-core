@@ -121,6 +121,11 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		}
 
 		disableCache := config.DisableCache || ns.DisableCache
+		serveStale := config.ServeStale || ns.ServeStale
+		serveExpiredTTL := config.ServeExpiredTTL
+		if ns.ServeExpiredTTL != nil {
+			serveExpiredTTL = *ns.ServeExpiredTTL
+		}
 
 		var tag = defaultTag
 		if len(ns.Tag) > 0 {
@@ -131,7 +136,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			return nil, errors.New("no QueryStrategy available for ", ns.Address)
 		}
 
-		client, err := NewClient(ctx, ns, myClientIP, disableCache, tag, clientIPOption, &matcherInfos, updateDomain)
+		client, err := NewClient(ctx, ns, myClientIP, disableCache, serveStale, serveExpiredTTL, tag, clientIPOption, &matcherInfos, updateDomain)
 		if err != nil {
 			return nil, errors.New("failed to create client").Base(err)
 		}
