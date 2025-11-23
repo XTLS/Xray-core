@@ -126,6 +126,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "vless"
 
 	rec := h.server
+	sessionPolicy := h.policyManager.ForLevel(rec.User.Level)
 	var conn stat.Connection
 
 	if err := retry.ExponentialBackoff(5, 200).On(func() error {
@@ -239,7 +240,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
-	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, func() {
 		cancel()
