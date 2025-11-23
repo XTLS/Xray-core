@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -52,6 +53,10 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
+
+	testpre   uint32
+	initConns sync.Once
+	conns     chan stat.Connection
 }
 
 // New creates a new VLess outbound handler.
@@ -105,6 +110,8 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}()
 	}
 
+	handler.testpre = a.Testpre
+
 	return handler, nil
 }
 
@@ -128,17 +135,32 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	if err := retry.ExponentialBackoff(5, 200).On(func() error {
-		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination)
-		if err != nil {
-			return err
+	if h.testpre > 0 && h.reverse == nil {
+		h.initConns.Do(func() {
+			h.conns = make(chan stat.Connection, h.testpre)
+			go h.preConnWorker(dialer, rec.Destination)
+		})
+		select {
+		case conn = <-h.conns:
+		default:
 		}
-		return nil
-	}); err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+	}
+
+	if conn == nil {
+		if err := retry.ExponentialBackoff(5, 200).On(func() error {
+			var err error
+			conn, err = dialer.Dial(ctx, rec.Destination)
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return errors.New("failed to find an available destination").Base(err).AtWarning()
+		}
 	}
 	defer conn.Close()
+
+	ob.Conn = conn // for Vision's pre-connect
 
 	iConn := conn
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {
@@ -425,4 +447,12 @@ func (r *Reverse) Start() error {
 
 func (r *Reverse) Close() error {
 	return r.monitorTask.Close()
+}
+
+func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
+	for {
+		if conn, err := dialer.Dial(context.Background(), dest); err == nil {
+			h.conns <- conn
+		}
+	}
 }
