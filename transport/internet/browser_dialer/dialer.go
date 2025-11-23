@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
+	u "github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/common/uuid"
 )
 
@@ -24,16 +25,15 @@ type pageWithConnMap struct {
 	UUID        string
 	ControlConn *websocket.Conn
 	ConnMap     map[string]chan *websocket.Conn
+	ConnMapLock sync.Mutex
 }
 
-var globalConnMap = make(map[string]*pageWithConnMap)
-
-var globalConnMutex = &sync.Mutex{}
+var globalConnMap = u.NewTypedSyncMap[string, *pageWithConnMap]()
 
 type task struct {
-	Method   string `json:"m"` // request method
-	URL      string `json:"u"` // destination URL
-	ConnUUID string `json:"c"` // connection UUID
+	Method   string `json:"m"`           // request method
+	URL      string `json:"u"`           // destination URL
+	ConnUUID string `json:"c"`           // connection UUID
 	Extra    any    `json:"e,omitempty"` // extra information (headers, WS subprotocol, referrer...)
 }
 
@@ -50,57 +50,72 @@ var upgrader = &websocket.Upgrader{
 
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
-	if addr != "" {
-		token := uuid.New()
-		csrfToken := token.String()
-		webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
-		conns = make(chan *websocket.Conn, 256)
-		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, "/ws") {
-				if r.URL.Query().Get("token") == csrfToken {
-					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-						pathParts := strings.Split(r.URL.Path, "/")
-						if len(pathParts) < 3 {
-							errors.LogError(context.Background(), "Browser dialer failed WebSocket upgrade: Insufficient UUID")
-						}
-						globalConnMutex.Lock()
-						pageUUID := pathParts[1]
-						connUUID := pathParts[2]
-						if connUUID == "ctrl" {
-							page := &pageWithConnMap{
-								UUID:        pageUUID,
-								ControlConn: conn,
-								ConnMap:     make(map[string]chan *websocket.Conn),
-							}
-							globalConnMap[pageUUID] = page
-						} else {
-							if globalConnMap[pageUUID] == nil {
-								errors.LogError(context.Background(), "Browser dialer unexpected connection: Unknown page UUID")
-							} else {
-								c := globalConnMap[pageUUID].ConnMap[connUUID]
-								if c != nil {
-									select {
-									case c <- conn:
-									default:
-										errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
-									}
-								} else {
-									conn.Close()
-									errors.LogError(context.Background(), "Browser dialer error: Detected orphaned connection")
-								}
-							}
-						}
-						globalConnMutex.Unlock()
-					} else {
-						errors.LogError(context.Background(), "Browser dialer failed: Unhandled error")
-					}
-				}
-			} else {
-				w.Write(webpage)
-			}
-		}))
-		go monitor()
+	if addr == "" {
+		return
 	}
+	token := uuid.New()
+	csrfToken := token.String()
+	webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
+	conns = make(chan *websocket.Conn, 256)
+	go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// user requests the HTML page
+		if !strings.HasPrefix(r.URL.Path, "/ws") {
+			w.Write(webpage)
+			return
+		}
+		if !(r.URL.Query().Get("token") == csrfToken) {
+			errors.LogError(context.Background(), "Browser dialer rejected connection: Invalid CSRF token")
+			w.WriteHeader(403)
+			return
+		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			errors.LogError(context.Background(), "Browser dialer failed: Unhandled error")
+			return
+		}
+		pathParts := strings.Split(r.URL.Path, "/")
+		if len(pathParts) < 3 {
+			errors.LogError(context.Background(), "Browser dialer failed WebSocket upgrade: Insufficient UUID")
+			return
+		}
+		pageUUID := pathParts[1]
+		connUUID := pathParts[2]
+		if connUUID == "ctrl" {
+			page := &pageWithConnMap{
+				UUID:        pageUUID,
+				ControlConn: conn,
+				ConnMap:     make(map[string]chan *websocket.Conn),
+			}
+			if _, ok := globalConnMap.Load(pageUUID); ok {
+				errors.LogError(context.Background(), "Browser dialer received duplicate control connection with same page UUID")
+				conn.Close()
+				return
+			}
+			globalConnMap.Store(pageUUID, page)
+		} else {
+			var page *pageWithConnMap
+			if page, _ = globalConnMap.Load(pageUUID); page == nil {
+				errors.LogError(context.Background(), "Browser dialer received sub-connection without existing control connection")
+				conn.Close()
+				return
+			}
+			page.ConnMapLock.Lock()
+			c := page.ConnMap[connUUID]
+			page.ConnMapLock.Unlock()
+			if c == nil {
+				conn.Close()
+				errors.LogError(context.Background(), "Browser dialer received a sub-connection but we didn't request it")
+				return
+			}
+			select {
+			case c <- conn:
+			case <-time.After(5 * time.Second):
+				conn.Close()
+				errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+			}
+		}
+	}))
+	go monitor()
 }
 
 func HasBrowserDialer() bool {
@@ -195,30 +210,26 @@ func dialTask(task task) (*websocket.Conn, error) {
 		return nil, err
 	}
 
-	globalConnMutex.Lock()
-	var ControlConn *websocket.Conn
-	var pageUUID string
+	var Page *pageWithConnMap
 	// the order of iterating a map is random
-	for uuid, page := range globalConnMap {
-		ControlConn = page.ControlConn
-		pageUUID = uuid
-		break
-	}
-	if ControlConn == nil {
+	globalConnMap.Range(func(_ string, page *pageWithConnMap) bool {
+		Page = page
+		return false
+	})
+	if Page == nil {
 		return nil, errors.New("no control connection available")
 	}
 	var conn *websocket.Conn
 	connChan := make(chan *websocket.Conn, 1)
-	globalConnMap[pageUUID].ConnMap[task.ConnUUID] = connChan
-	globalConnMutex.Unlock()
+	Page.ConnMapLock.Lock()
+	Page.ConnMap[task.ConnUUID] = connChan
+	Page.ConnMapLock.Unlock()
 	defer func() {
-		globalConnMutex.Lock()
-		if globalConnMap[pageUUID] != nil {
-			delete(globalConnMap[pageUUID].ConnMap, task.ConnUUID)
-		}
-		globalConnMutex.Unlock()
+		Page.ConnMapLock.Lock()
+		delete(Page.ConnMap, task.ConnUUID)
+		Page.ConnMapLock.Unlock()
 	}()
-	err = ControlConn.WriteMessage(websocket.TextMessage, data)
+	err = Page.ControlConn.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
 		return nil, errors.New("failed to send task to control connection").Base(err)
 	}
@@ -231,23 +242,19 @@ func dialTask(task task) (*websocket.Conn, error) {
 }
 
 func monitor() {
+	ticker := time.NewTicker(16 * time.Second)
+	defer ticker.Stop()
 	for {
-		globalConnMutex.Lock()
-		newGlobalConnMap := make(map[string]*pageWithConnMap)
-		for pageUUID, page := range globalConnMap {
-			newGlobalConnMap[pageUUID] = page
-		}
-		globalConnMutex.Unlock()
-		for pageUUID, page := range newGlobalConnMap {
+		<-ticker.C
+		var pageToDel []*pageWithConnMap
+		globalConnMap.Range(func(_ string, page *pageWithConnMap) bool {
 			if err := page.ControlConn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
-				globalConnMutex.Lock()
-				page.ControlConn.Close()
-				if globalConnMap[pageUUID] == newGlobalConnMap[pageUUID] {
-					delete(globalConnMap, pageUUID)
-				}
-				globalConnMutex.Unlock()
+				pageToDel = append(pageToDel, page)
 			}
+			return true
+		})
+		for _, page := range pageToDel {
+			globalConnMap.Delete(page.UUID)
 		}
-		time.Sleep(16 * time.Second)
 	}
 }
