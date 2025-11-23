@@ -132,6 +132,8 @@ message SocketConfig {
   AddressPortStrategy address_port_strategy = 21;
 
   HappyEyeballsConfig happy_eyeballs = 22;
+
+  repeated string trusted_x_forwarded_for = 23;
 }
 
 message HappyEyeballsConfig {
