@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -42,9 +43,16 @@ var upgrader = &websocket.Upgrader{
 	WriteBufferSize:  0,
 	HandshakeTimeout: time.Second * 4,
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		if r.URL.Query().Get("token") == csrfToken {
+			return true
+		} else {
+			errors.LogError(context.Background(), "Browser dialer rejected connection: Invalid CSRF token")
+			return false
+		}
 	},
 }
+
+var csrfToken string
 
 func init() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
@@ -52,18 +60,13 @@ func init() {
 		return
 	}
 	token := uuid.New()
-	csrfToken := token.String()
+	csrfToken = token.String()
 	globalConnMap = u.NewTypedSyncMap[string, *pageWithConnMap]()
 	webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
 	go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// user requests the HTML page
 		if !strings.HasPrefix(r.URL.Path, "/ws") {
 			w.Write(webpage)
-			return
-		}
-		if !(r.URL.Query().Get("token") == csrfToken) {
-			errors.LogError(context.Background(), "Browser dialer rejected connection: Invalid CSRF token")
-			w.WriteHeader(403)
 			return
 		}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -91,6 +94,14 @@ func init() {
 				return
 			}
 			globalConnMap.Store(pageUUID, page)
+			go func() {
+				_, reader, err := conn.NextReader()
+				if err != nil {
+					return
+				}
+				// design and implement control message handling in the future if needed
+				io.Copy(io.Discard, reader)
+			}()
 		} else {
 			var page *pageWithConnMap
 			if page, _ = globalConnMap.Load(pageUUID); page == nil {
