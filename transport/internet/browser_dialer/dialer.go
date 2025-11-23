@@ -31,10 +31,10 @@ var globalConnMap = make(map[string]*pageWithConnMap)
 var globalConnMutex = &sync.Mutex{}
 
 type task struct {
-	Method   string `json:"method"`
-	URL      string `json:"url"`
-	ConnUUID string `json:"uuid"`
-	Extra    any    `json:"extra,omitempty"`
+	Method   string `json:"m"` // request method
+	URL      string `json:"u"` // destination URL
+	ConnUUID string `json:"c"` // connection UUID
+	Extra    any    `json:"e,omitempty"` // extra information (headers, WS subprotocol, referrer...)
 }
 
 var conns chan *websocket.Conn
