@@ -28,7 +28,7 @@ type pageWithConnMap struct {
 	ConnMapLock sync.Mutex
 }
 
-var globalConnMap = u.NewTypedSyncMap[string, *pageWithConnMap]()
+var globalConnMap *u.TypedSyncMap[string, *pageWithConnMap]
 
 type task struct {
 	Method   string `json:"m"`           // request method
@@ -36,8 +36,6 @@ type task struct {
 	ConnUUID string `json:"c"`           // connection UUID
 	Extra    any    `json:"e,omitempty"` // extra information (headers, WS subprotocol, referrer...)
 }
-
-var conns chan *websocket.Conn
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -55,8 +53,8 @@ func init() {
 	}
 	token := uuid.New()
 	csrfToken := token.String()
+	globalConnMap = u.NewTypedSyncMap[string, *pageWithConnMap]()
 	webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
-	conns = make(chan *websocket.Conn, 256)
 	go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// user requests the HTML page
 		if !strings.HasPrefix(r.URL.Path, "/ws") {
@@ -73,13 +71,14 @@ func init() {
 			errors.LogError(context.Background(), "Browser dialer failed: Unhandled error")
 			return
 		}
-		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) < 3 {
+		path := strings.TrimPrefix(r.URL.Path, "/ws/")
+		pathParts := strings.Split(path, "/")
+		if len(pathParts) < 2 {
 			errors.LogError(context.Background(), "Browser dialer failed WebSocket upgrade: Insufficient UUID")
 			return
 		}
-		pageUUID := pathParts[1]
-		connUUID := pathParts[2]
+		pageUUID := pathParts[0]
+		connUUID := pathParts[1]
 		if connUUID == "ctrl" {
 			page := &pageWithConnMap{
 				UUID:        pageUUID,
@@ -103,8 +102,8 @@ func init() {
 			c := page.ConnMap[connUUID]
 			page.ConnMapLock.Unlock()
 			if c == nil {
-				conn.Close()
 				errors.LogError(context.Background(), "Browser dialer received a sub-connection but we didn't request it")
+				conn.Close()
 				return
 			}
 			select {
@@ -119,7 +118,7 @@ func init() {
 }
 
 func HasBrowserDialer() bool {
-	return conns != nil
+	return globalConnMap != nil
 }
 
 type webSocketExtra struct {
