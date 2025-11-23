@@ -538,6 +538,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
+	if account.Reverse != nil && request.Command != protocol.RequestCommandRvs {
+		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
+	}
+
 	responseAddons := &encoding.Addons{
 		// Flow: requestAddons.Flow,
 	}
