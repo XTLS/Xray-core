@@ -281,9 +281,16 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.XPaddingBytes != (Int32Range{}) && (c.XPaddingBytes.From <= 0 || c.XPaddingBytes.To <= 0) {
-		return nil, errors.New("xPaddingBytes cannot be disabled")
-	}
+if c.XPaddingBytes != (Int32Range{}) {
+    // Разрешаем:
+    //  - оба -1 (выключено),
+    //  - положительные диапазоны (как раньше).
+    if !((c.XPaddingBytes.From == -1 && c.XPaddingBytes.To == -1) ||
+        (c.XPaddingBytes.From > 0 && c.XPaddingBytes.To > 0)) {
+        return nil, errors.New("xPaddingBytes must be positive or -1 to disable")
+    }
+}
+
 
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")

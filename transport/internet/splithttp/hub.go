@@ -121,12 +121,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	} else {
 		paddingLength = len(request.URL.Query().Get("x_padding"))
 	}
-
-	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
-		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
-		writer.WriteHeader(http.StatusBadRequest)
-		return
-	}
+if !h.config.XPaddingDisabled() {
+    if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
+        errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
+        writer.WriteHeader(http.StatusBadRequest)
+        return
+    }
+}
 
 	sessionId := ""
 	subpath := strings.Split(request.URL.Path[len(h.path):], "/")
@@ -206,18 +207,21 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.Header().Set("X-Accel-Buffering", "no")
 				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
-				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
-				if referrer != "" && scStreamUpServerSecs.To > 0 {
-					go func() {
-						for {
-							_, err := httpSC.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
-							if err != nil {
-								break
-							}
-							time.Sleep(time.Duration(scStreamUpServerSecs.rand()) * time.Second)
-						}
-					}()
-				}
+                scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
+                if referrer != "" && scStreamUpServerSecs.To > 0 {
+                go func() {
+                for {
+                if !h.config.XPaddingDisabled() {
+                _, err := httpSC.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
+                if err != nil {
+                    return
+                }
+            }
+            time.Sleep(time.Second * time.Duration(scStreamUpServerSecs.rand()))
+        }
+    }()
+}
+
 				select {
 				case <-request.Context().Done():
 				case <-httpSC.Wait():
