@@ -12,7 +12,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -76,7 +75,7 @@ type Handler struct {
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
-	defaultDispatcher      *dispatcher.DefaultDispatcher
+	wrapLink               func(ctx context.Context, link *transport.Link) *transport.Link
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -85,12 +84,16 @@ type Handler struct {
 // New creates a new VLess inbound handler.
 func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
+	var wrapLinkFunc func(ctx context.Context, link *transport.Link) *transport.Link
+	if dispatcher, ok := v.GetFeature(routing.DispatcherType()).(routing.WrapLinkDispatcher); ok {
+		wrapLinkFunc = dispatcher.WrapLink
+	}
 	handler := &Handler{
 		inboundHandlerManager:  v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
-		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(*dispatcher.DefaultDispatcher),
+		wrapLink:               wrapLinkFunc,
 		ctx:                    ctx,
 	}
 
@@ -535,6 +538,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	account := request.User.Account.(*vless.MemoryAccount)
 
+	if account.Reverse != nil && request.Command != protocol.RequestCommandRvs {
+		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
+	}
+
 	responseAddons := &encoding.Addons{
 		// Flow: requestAddons.Flow,
 	}
@@ -619,7 +626,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, h.defaultDispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		if h.wrapLink == nil {
+			return errors.New("VLESS reverse must have a dispatcher that implemented routing.WrapLinkDispatcher")
+		}
+		return r.NewMux(ctx, h.wrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
 	}
 
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{

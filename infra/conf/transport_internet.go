@@ -628,6 +628,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 		config.ShortIds = make([][]byte, len(c.ShortIds))
 		for i, s := range c.ShortIds {
+			if len(s) > 16 {
+				return nil, errors.New(`too long "shortIds[`, i, `]": `, s)
+			}
 			config.ShortIds[i] = make([]byte, 8)
 			if _, err = hex.Decode(config.ShortIds[i], []byte(s)); err != nil {
 				return nil, errors.New(`invalid "shortIds[`, i, `]": `, s)
@@ -678,6 +681,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 		if len(c.ShortIds) != 0 {
 			return nil, errors.New(`non-empty "shortIds", please use "shortId" instead`)
+		}
+		if len(c.ShortIds) > 16 {
+			return nil, errors.New(`too long "shortId": `, c.ShortId)
 		}
 		config.ShortId = make([]byte, 8)
 		if _, err = hex.Decode(config.ShortId, []byte(c.ShortId)); err != nil {
@@ -804,6 +810,7 @@ type SocketConfig struct {
 	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
 	AddressPortStrategy   string                 `json:"addressPortStrategy"`
 	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
+	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
 }
 
 // Build implements Buildable.
@@ -923,6 +930,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		CustomSockopt:        customSockopts,
 		AddressPortStrategy:  addressPortStrategy,
 		HappyEyeballs:        happyEyeballs,
+		TrustedXForwardedFor: c.TrustedXForwardedFor,
 	}, nil
 }
 

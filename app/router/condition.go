@@ -47,20 +47,6 @@ var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 	Domain_Full:   strmatcher.Full,
 }
 
-func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
-	matcherType, f := matcherTypeMap[domain.Type]
-	if !f {
-		return nil, errors.New("unsupported domain type", domain.Type)
-	}
-
-	matcher, err := matcherType.New(domain.Value)
-	if err != nil {
-		return nil, errors.New("failed to create domain matcher").Base(err)
-	}
-
-	return matcher, nil
-}
-
 type DomainMatcher struct {
 	matchers strmatcher.IndexMatcher
 }
@@ -96,61 +82,53 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
-type MultiGeoIPMatcher struct {
-	matchers []*GeoIPMatcher
-	asType   string // local, source, target
+type MatcherAsType byte
+
+const (
+	MatcherAsType_Local MatcherAsType = iota
+	MatcherAsType_Source
+	MatcherAsType_Target
+	MatcherAsType_VlessRoute // for port
+)
+
+type IPMatcher struct {
+	matcher GeoIPMatcher
+	asType  MatcherAsType
 }
 
-func NewMultiGeoIPMatcher(geoips []*GeoIP, asType string) (*MultiGeoIPMatcher, error) {
-	var matchers []*GeoIPMatcher
-	for _, geoip := range geoips {
-		matcher, err := GlobalGeoIPContainer.Add(geoip)
-		if err != nil {
-			return nil, err
-		}
-		matchers = append(matchers, matcher)
+func NewIPMatcher(geoips []*GeoIP, asType MatcherAsType) (*IPMatcher, error) {
+	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
+	if err != nil {
+		return nil, err
 	}
-
-	matcher := &MultiGeoIPMatcher{
-		matchers: matchers,
-		asType:   asType,
-	}
-
-	return matcher, nil
+	return &IPMatcher{matcher: matcher, asType: asType}, nil
 }
 
 // Apply implements Condition.
-func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
+func (m *IPMatcher) Apply(ctx routing.Context) bool {
 	var ips []net.IP
 
 	switch m.asType {
-	case "local":
+	case MatcherAsType_Local:
 		ips = ctx.GetLocalIPs()
-	case "source":
+	case MatcherAsType_Source:
 		ips = ctx.GetSourceIPs()
-	case "target":
+	case MatcherAsType_Target:
 		ips = ctx.GetTargetIPs()
 	default:
-		panic("unreachable, asType should be local or source or target")
+		panic("unk asType")
 	}
 
-	for _, ip := range ips {
-		for _, matcher := range m.matchers {
-			if matcher.Match(ip) {
-				return true
-			}
-		}
-	}
-	return false
+	return m.matcher.AnyMatch(ips)
 }
 
 type PortMatcher struct {
 	port   net.MemoryPortList
-	asType string // local, source, target
+	asType MatcherAsType
 }
 
 // NewPortMatcher create a new port matcher that can match source or local or destination port
-func NewPortMatcher(list *net.PortList, asType string) *PortMatcher {
+func NewPortMatcher(list *net.PortList, asType MatcherAsType) *PortMatcher {
 	return &PortMatcher{
 		port:   net.PortListFromProto(list),
 		asType: asType,
@@ -160,18 +138,17 @@ func NewPortMatcher(list *net.PortList, asType string) *PortMatcher {
 // Apply implements Condition.
 func (v *PortMatcher) Apply(ctx routing.Context) bool {
 	switch v.asType {
-	case "local":
+	case MatcherAsType_Local:
 		return v.port.Contains(ctx.GetLocalPort())
-	case "source":
+	case MatcherAsType_Source:
 		return v.port.Contains(ctx.GetSourcePort())
-	case "target":
+	case MatcherAsType_Target:
 		return v.port.Contains(ctx.GetTargetPort())
-	case "vlessRoute":
+	case MatcherAsType_VlessRoute:
 		return v.port.Contains(ctx.GetVlessRoute())
 	default:
-		panic("unreachable, asType should be local or source or target")
+		panic("unk asType")
 	}
-
 }
 
 type NetworkMatcher struct {

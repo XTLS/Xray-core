@@ -26,3 +26,9 @@ type Dispatcher interface {
 func DispatcherType() interface{} {
 	return (*Dispatcher)(nil)
 }
+
+// Just for type assertion
+type WrapLinkDispatcher interface {
+	Dispatcher
+	WrapLink(ctx context.Context, link *transport.Link) *transport.Link
+}
