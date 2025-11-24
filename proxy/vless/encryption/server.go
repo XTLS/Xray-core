@@ -277,7 +277,8 @@ func (i *ServerInstance) Handshake(conn net.Conn, fallback *[]byte) (*CommonConn
 	copy(ticket[:], EncodeLength(int(seconds)))
 	if seconds > 0 {
 		i.RWLock.Lock()
-		i.Lasts[(time.Now().Unix()+max(i.SecondsFrom, i.SecondsTo))/60+2] = ticket
+		expireMinute := (time.Now().Unix() + seconds) / 60
+		i.Lasts[expireMinute+2] = ticket
 		i.Tickets = append(i.Tickets, ticket)
 		i.Sessions[ticket] = &ServerSession{PfsKey: pfsKey}
 		i.RWLock.Unlock()
