@@ -22,6 +22,9 @@ import (
 //go:embed dialer.html
 var webpage []byte
 
+//go:embed dialer.mjs
+var dialerModule []byte
+
 type pageWithConnMap struct {
 	UUID        string
 	ControlConn *websocket.Conn
@@ -65,6 +68,11 @@ func init() {
 	webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
 	go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// user requests the HTML page
+		if strings == "/dialer.mjs" {
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			w.Write(dialerModule)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/ws") {
 			w.Write(webpage)
 			return
