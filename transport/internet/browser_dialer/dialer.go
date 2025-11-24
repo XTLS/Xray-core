@@ -68,7 +68,7 @@ func init() {
 	webpage = bytes.ReplaceAll(webpage, []byte("__CSRF_TOKEN__"), []byte(csrfToken))
 	go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// user requests the HTML page
-		if strings == "/dialer.mjs" {
+		if r.URL.Path == "/dialer.mjs" {
 			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 			w.Write(dialerModule)
 			return
