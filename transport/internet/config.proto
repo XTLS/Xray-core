@@ -134,6 +134,14 @@ message SocketConfig {
   HappyEyeballsConfig happy_eyeballs = 22;
 
   repeated string trusted_x_forwarded_for = 23;
+
+  DesyncConfig desync = 24;
+}
+
+message DesyncConfig {
+  bool enabled = 1;
+  int32 ttl = 2;
+  bytes payload = 3;
 }
 
 message HappyEyeballsConfig {

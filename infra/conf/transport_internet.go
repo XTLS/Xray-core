@@ -790,6 +790,12 @@ func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type DesyncConfig struct {
+	Enabled bool   `json:"enabled"`
+	TTL     int32  `json:"ttl"`
+	Payload string `json:"payload"`
+}
+
 type SocketConfig struct {
 	Mark                  int32                  `json:"mark"`
 	TFO                   interface{}            `json:"tcpFastOpen"`
@@ -811,6 +817,7 @@ type SocketConfig struct {
 	AddressPortStrategy   string                 `json:"addressPortStrategy"`
 	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
 	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
+	Desync                *DesyncConfig          `json:"desync"`
 }
 
 // Build implements Buildable.
@@ -910,7 +917,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
 	}
 
-	return &internet.SocketConfig{
+	result := &internet.SocketConfig{
 		Mark:                 c.Mark,
 		Tfo:                  tfo,
 		Tproxy:               tproxy,
@@ -931,7 +938,25 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		AddressPortStrategy:  addressPortStrategy,
 		HappyEyeballs:        happyEyeballs,
 		TrustedXForwardedFor: c.TrustedXForwardedFor,
-	}, nil
+	}
+
+	if c.Desync != nil {
+		if c.Desync.Enabled {
+			if c.Desync.TTL <= 0 {
+				return nil, errors.New("Desync TTL must be positive")
+			}
+			if len(c.Desync.Payload) == 0 {
+				return nil, errors.New("Desync payload cannot be empty")
+			}
+			result.Desync = &internet.DesyncConfig{
+				Enabled: c.Desync.Enabled,
+				Ttl:     c.Desync.TTL,
+				Payload: []byte(c.Desync.Payload),
+			}
+		}
+	}
+
+	return result, nil
 }
 
 type StreamConfig struct {

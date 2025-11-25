@@ -2,6 +2,7 @@ package internet_test
 
 import (
 	"context"
+	"os"
 	"syscall"
 	"testing"
 
@@ -12,7 +13,9 @@ import (
 )
 
 func TestSockOptMark(t *testing.T) {
-	t.Skip("requires CAP_NET_ADMIN")
+	if os.Geteuid() != 0 {
+		t.Skip("requires CAP_NET_ADMIN")
+	}
 
 	tcpServer := tcp.Server{
 		MsgProcessor: func(b []byte) []byte {

@@ -24,6 +24,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
+	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.Desync != nil && streamSettings.SocketSettings.Desync.Enabled {
+		if err := performDesync(conn, streamSettings.SocketSettings.Desync); err != nil {
+			errors.LogInfo(ctx, "failed to perform desync: ", err)
+		}
+	}
+
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		mitmServerName := session.MitmServerNameFromContext(ctx)
 		mitmAlpn11 := session.MitmAlpn11FromContext(ctx)
