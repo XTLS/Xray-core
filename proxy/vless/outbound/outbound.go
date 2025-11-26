@@ -5,6 +5,7 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -137,7 +138,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if h.testpre > 0 && h.reverse == nil {
 		h.initConns.Do(func() {
-			h.conns = make(chan stat.Connection, h.testpre)
+			if h.testpre==1{
+				h.testpre=2
+			}
+			h.conns = make(chan stat.Connection, h.testpre/2)
 			go h.preConnWorker(dialer, rec.Destination)
 		})
 		select {
@@ -450,9 +454,23 @@ func (r *Reverse) Close() error {
 }
 
 func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
-	for {
-		if conn, err := dialer.Dial(context.Background(), dest); err == nil {
-			h.conns <- conn
-		}
+
+	for range h.testpre / 2 {
+		go func() {
+			for {
+				timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				conn, err := dialer.Dial(timeoutCtx, dest)
+				cancel()
+				if err == nil {
+					h.conns <- conn
+				}
+
+				if err != nil {
+					// configuration error or network issue
+					time.Sleep(time.Second * 10)
+				}
+				errors.LogDebug(context.Background(), fmt.Sprintf("error %v  testpre %v  now conns %v", err, h.testpre, len(h.conns)))
+			}
+		}()
 	}
 }
