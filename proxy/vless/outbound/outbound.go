@@ -121,6 +121,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Close() error {
 	if h.preConnStop != nil {
 		close(h.preConnStop)
+		close(h.preConns)
 		for range h.testpre {
 			conn := <-h.preConns
 			common.CloseIfExists(conn)
