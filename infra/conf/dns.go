@@ -26,8 +26,8 @@ type NameServerConfig struct {
 	QueryStrategy   string     `json:"queryStrategy"`
 	Tag             string     `json:"tag"`
 	TimeoutMs       uint64     `json:"timeoutMs"`
-	DisableCache    bool       `json:"disableCache"`
-	ServeStale      bool       `json:"serveStale"`
+	DisableCache    *bool      `json:"disableCache"`
+	ServeStale      *bool      `json:"serveStale"`
 	ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
 	FinalQuery      bool       `json:"finalQuery"`
 	UnexpectedIPs   StringList `json:"unexpectedIPs"`
@@ -52,8 +52,8 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		QueryStrategy   string     `json:"queryStrategy"`
 		Tag             string     `json:"tag"`
 		TimeoutMs       uint64     `json:"timeoutMs"`
-		DisableCache    bool       `json:"disableCache"`
-		ServeStale      bool       `json:"serveStale"`
+		DisableCache    *bool      `json:"disableCache"`
+		ServeStale      *bool      `json:"serveStale"`
 		ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
 		FinalQuery      bool       `json:"finalQuery"`
 		UnexpectedIPs   StringList `json:"unexpectedIPs"`

@@ -121,8 +121,16 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			myClientIP = net.IP(ns.ClientIp)
 		}
 
-		disableCache := config.DisableCache || ns.DisableCache
-		serveStale := config.ServeStale || ns.ServeStale
+		disableCache := config.DisableCache
+		if ns.DisableCache != nil {
+			disableCache = *ns.DisableCache
+		}
+
+		serveStale := config.ServeStale
+		if ns.ServeStale != nil {
+			serveStale = *ns.ServeStale
+		}
+
 		serveExpiredTTL := config.ServeExpiredTTL
 		if ns.ServeExpiredTTL != nil {
 			serveExpiredTTL = *ns.ServeExpiredTTL
