@@ -121,10 +121,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Close() error {
 	if h.preConnStop != nil {
 		close(h.preConnStop)
-		for range h.testpre {
-			conn := <-h.preConns
-			common.CloseIfExists(conn)
-		}
 	}
 	if h.reverse != nil {
 		return h.reverse.Close()
@@ -147,6 +143,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if h.testpre > 0 && h.reverse == nil {
 		h.initConns.Do(func() {
 			h.preConns = make(chan stat.Connection, h.testpre)
+			h.preConnWait = make(chan struct{})
 			h.preConnStop = make(chan struct{})
 			go h.preConnWorker(dialer, rec.Destination)
 		})
@@ -472,7 +469,13 @@ func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
 			errors.LogError(context.Background(), "failed to dial VLESS pre connection: ", err)
 			common.CloseIfExists(conn)
 		}
-		conns <- conn
+		select {
+		case <-h.preConnStop:
+			common.CloseIfExists(conn)
+			return
+		default:
+			conns <- conn
+		}
 	}
 	go func() {
 		go dial() // get a conn immediately
@@ -483,6 +486,16 @@ func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
 			case <-h.preConnStop:
 				return
 			}
+		}
+	}()
+	defer func() {
+		close(h.preConns)
+		for {
+			conn, ok := <-h.preConns
+			if !ok {
+				break
+			}
+			common.CloseIfExists(conn)
 		}
 	}()
 	for {
