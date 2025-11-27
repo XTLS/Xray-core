@@ -31,8 +31,8 @@ message NameServer {
   bool actPrior = 8;
   string tag = 9;
   uint64 timeoutMs = 10;
-  bool disableCache = 11;
-  bool serveStale = 15;
+  optional bool disableCache = 11;
+  optional bool serveStale = 15;
   optional uint32 serveExpiredTTL = 16;
   bool finalQuery = 12;
   repeated xray.app.router.GeoIP unexpected_geoip = 13;

@@ -20,6 +20,7 @@ func TestDNSConfigParsing(t *testing.T) {
 			return config.Build()
 		}
 	}
+	expectedServeStale := true
 	expectedServeExpiredTTL := uint32(172800)
 	runMultiTestCase(t, []TestCase{
 		{
@@ -72,7 +73,7 @@ func TestDNSConfigParsing(t *testing.T) {
 								Size: 1,
 							},
 						},
-						ServeStale:      true,
+						ServeStale:      &expectedServeStale,
 						ServeExpiredTTL: &expectedServeExpiredTTL,
 						PolicyID:        1, // Servers with certain identical fields share this ID, incrementing starting from 1. See: Build PolicyID
 					},
