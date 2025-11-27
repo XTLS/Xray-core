@@ -98,6 +98,9 @@ type Manager interface {
 	UnregisterChannel(string) error
 	// GetChannel returns a channel by its identifier.
 	GetChannel(string) Channel
+
+	// GetAllOnlineUsers returns all online users from all OnlineMaps.
+	GetAllOnlineUsers() []string
 }
 
 // GetOrRegisterCounter tries to get the StatCounter first. If not exist, it then tries to create a new counter.
@@ -187,6 +190,11 @@ func (NoopManager) UnregisterChannel(string) error {
 
 // GetChannel implements Manager.
 func (NoopManager) GetChannel(string) Channel {
+	return nil
+}
+
+// GetAllOnlineUsers implements Manager.
+func (NoopManager) GetAllOnlineUsers() []string {
 	return nil
 }
 

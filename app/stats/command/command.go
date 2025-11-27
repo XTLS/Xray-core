@@ -80,6 +80,12 @@ func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStat
 	}, nil
 }
 
+func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnlineUsersRequest) (*GetAllOnlineUsersResponse, error) {
+	return &GetAllOnlineUsersResponse{
+		Users: s.stats.GetAllOnlineUsers(),
+	}, nil
+}
+
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
 	matcher, err := strmatcher.Substr.New(request.Pattern)
 	if err != nil {
