@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package xray.proxy.hysteria2;
+option csharp_namespace = "Xray.Proxy.Hysteria2";
+option go_package = "github.com/xtls/xray-core/proxy/hysteria2";
+option java_package = "com.xray.proxy.hysteria2";
+option java_multiple_files = true;
+
+import "google/protobuf/struct.proto";
+
+// InboundConfig keeps Hysteria2 server settings.
+message InboundConfig {
+  // Raw Hysteria2 server configuration. The schema matches the original
+  // Hysteria2 JSON/YAML config. Extra Xray-only tweaks can be placed under
+  // the optional "xray" object and are stripped before handing to Hysteria.
+  google.protobuf.Struct settings = 1;
+}
+
+// OutboundConfig keeps Hysteria2 client settings.
+message OutboundConfig {
+  // Raw Hysteria2 client configuration. Schema follows upstream Hysteria2
+  // config format.
+  google.protobuf.Struct settings = 1;
+}

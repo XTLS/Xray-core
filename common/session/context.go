@@ -26,6 +26,7 @@ const (
 	fullHandlerKey            ctx.SessionKey = 10 // outbound gets full handler
 	mitmAlpn11Key             ctx.SessionKey = 11 // used by TLS dialer
 	mitmServerNameKey         ctx.SessionKey = 12 // used by TLS dialer
+	streamSettingsKey         ctx.SessionKey = 13 // outbound stream settings
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -191,4 +192,12 @@ func MitmServerNameFromContext(ctx context.Context) string {
 		return val
 	}
 	return ""
+}
+
+func ContextWithStreamSettings(ctx context.Context, stream interface{}) context.Context {
+	return context.WithValue(ctx, streamSettingsKey, stream)
+}
+
+func StreamSettingsFromContext(ctx context.Context) interface{} {
+	return ctx.Value(streamSettingsKey)
 }

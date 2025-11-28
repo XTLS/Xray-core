@@ -168,6 +168,12 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 		return nil, errors.New("not a ReceiverConfig").AtError()
 	}
 
+	if custom, ok := proxySettings.(interface {
+		BuildInboundHandler(context.Context, string, *proxyman.ReceiverConfig) (inbound.Handler, error)
+	}); ok {
+		return custom.BuildInboundHandler(ctx, tag, receiverSettings)
+	}
+
 	streamSettings := receiverSettings.StreamSettings
 	if streamSettings != nil && streamSettings.SocketSettings != nil {
 		ctx = session.ContextWithSockopt(ctx, &session.Sockopt{
