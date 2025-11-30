@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -56,13 +55,9 @@ type Handler struct {
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
 
-	testpre             uint32
-	initConns           sync.Once
-	preConns            chan stat.Connection
-	preConnWait         chan struct{}
-	preConnWarmFinished atomic.Bool
-	preConnCtx          context.Context
-	preConnStop         context.CancelFunc
+	testpre  uint32
+	initpre  sync.Once
+	preConns chan stat.Connection
 }
 
 // New creates a new VLess outbound handler.
@@ -123,8 +118,8 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.preConnStop != nil {
-		h.preConnStop()
+	if h.preConns != nil {
+		close(h.preConns)
 	}
 	if h.reverse != nil {
 		return h.reverse.Close()
@@ -145,23 +140,26 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 
 	if h.testpre > 0 && h.reverse == nil {
-		h.initConns.Do(func() {
+		h.initpre.Do(func() {
 			h.preConns = make(chan stat.Connection)
-			h.preConnWait = make(chan struct{}, h.testpre)
-			preConnCtx, preConnStop := context.WithCancel(context.Background())
-			preConnCtx = xctx.ContextWithID(preConnCtx, session.NewID())
-			h.preConnCtx = preConnCtx
-			h.preConnStop = preConnStop
-			for range h.testpre {
-				h.preConnWait <- struct{}{}
+			for range h.testpre { // TODO: randomize
+				go func() {
+					defer func() { recover() }()
+					ctx = xctx.ContextWithID(context.Background(), session.NewID())
+					for {
+						time.Sleep(time.Millisecond * 200) // TODO: randomize
+						conn, err := dialer.Dial(ctx, rec.Destination)
+						if err != nil {
+							errors.LogWarningInner(ctx, err, "pre-connect failed")
+							continue
+						}
+						h.preConns <- conn
+					}
+				}()
 			}
 		})
-		if !h.preConnWarmFinished.Load() {
-			h.tryStartDialPreConn(dialer, rec.Destination)
-		}
-		select {
-		case conn = <-h.preConns:
-		default:
+		if conn = <-h.preConns; conn == nil {
+			return errors.New("closed handler").AtWarning()
 		}
 	}
 
@@ -402,34 +400,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	return nil
-}
-
-func (h *Handler) tryStartDialPreConn(dialer internet.Dialer, dest net.Destination) {
-	select {
-	case <-h.preConnWait:
-		go func() {
-			// TODO: Randomnized
-			time.Sleep(time.Second * 2)
-			for {
-				conn, err := dialer.Dial(h.preConnCtx, dest)
-				if err != nil {
-					errors.LogWarningInner(h.preConnCtx, err, "pre-connect failed")
-				}
-				select {
-				case h.preConns <- conn:
-					if err != nil {
-						// TODO: Randomnized
-						time.Sleep(time.Second * 2)
-					}
-				case <-h.preConnCtx.Done():
-					common.CloseIfExists(conn)
-					return
-				}
-			}
-		}()
-	default:
-		h.preConnWarmFinished.Store(true)
-	}
 }
 
 type Reverse struct {
