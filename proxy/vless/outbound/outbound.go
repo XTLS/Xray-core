@@ -148,7 +148,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		default:
 			needEncryptionHandshake = true
 			// todo control the number of pre-connections
-			go h.preConnWorker(ctx, dialer, rec.Destination)
+			go h.preConnWorker(dialer, rec.Destination)
 		}
 	}
 
@@ -455,19 +455,13 @@ func (r *Reverse) Close() error {
 	return r.monitorTask.Close()
 }
 
-func (h *Handler) preConnWorker(ctx context.Context, dialer internet.Dialer, dest net.Destination) {
+func (h *Handler) preConnWorker(dialer internet.Dialer, dest net.Destination) {
 	defer func() { recover() }()
-	ctx = xctx.ContextWithID(context.Background(), session.NewID())
+	ctx := xctx.ContextWithID(context.Background(), session.NewID())
 	for range 30 {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			time.Sleep(time.Millisecond * 200) // TODO: randomize
-		}
+		time.Sleep(time.Millisecond * 200) // TODO: randomize
 		conn, err := dialer.Dial(ctx, dest)
 		if err != nil {
-
 			errors.LogWarningInner(ctx, err, "pre-connect failed")
 			continue
 		}
