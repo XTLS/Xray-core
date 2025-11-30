@@ -138,7 +138,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	rec := h.server
 	var conn stat.Connection
-
+	var needEncryptionHandshake bool
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
 			h.preConns = make(chan stat.Connection)
@@ -146,6 +146,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		select {
 		case conn = <-h.preConns:
 		default:
+			needEncryptionHandshake = true
 			// todo control the number of pre-connections
 			go h.preConnWorker(ctx, dialer, rec.Destination)
 		}
@@ -174,7 +175,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
-	if h.encryption != nil {
+	if h.encryption != nil && needEncryptionHandshake {
 		var err error
 		if conn, err = h.encryption.Handshake(conn); err != nil {
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
@@ -466,7 +467,12 @@ func (h *Handler) preConnWorker(ctx context.Context, dialer internet.Dialer, des
 		}
 		conn, err := dialer.Dial(ctx, dest)
 		if err != nil {
+
 			errors.LogWarningInner(ctx, err, "pre-connect failed")
+			continue
+		}
+		if conn, err = h.encryption.Handshake(conn); err != nil {
+			errors.LogWarningInner(ctx, err, "ML-KEM-768 handshake failed")
 			continue
 		}
 		h.preConns <- conn
