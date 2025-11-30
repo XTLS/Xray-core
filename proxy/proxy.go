@@ -350,10 +350,11 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx) // we do a long padding to hide vless header
 			return w.Writer.WriteMultiBuffer(mb)
 		}
+		isComplete := IsCompleteRecord(mb)
 		mb = ReshapeMultiBuffer(w.ctx, mb)
 		longPadding := w.trafficState.IsTLS
 		for i, b := range mb {
-			if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) {
+			if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
 				if w.trafficState.EnableXtls {
 					*switchToDirectCopy = true
 				}
@@ -384,6 +385,71 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	return w.Writer.WriteMultiBuffer(mb)
+}
+
+// IsCompleteRecord Is complete tls data record
+func IsCompleteRecord(buffer buf.MultiBuffer) bool {
+	mb2 := make(buf.MultiBuffer, 0, len(buffer))
+	for _, buffer1 := range buffer {
+		buffer2 := buf.New()
+		buffer2.Write(buffer1.Bytes())
+		mb2 = append(mb2, buffer2)
+	}
+	isComplete := true
+	var headerLen int32 = 5
+	var recordLen int32
+	for _, buffer2 := range mb2 {
+		for buffer2.Len() > 0 {
+			if headerLen > 0 {
+				data, _ := buffer2.ReadByte()
+				switch headerLen {
+				case 5:
+					if data != 0x17 {
+						isComplete = false
+						break
+					}
+				case 4:
+					if data != 0x03 {
+						isComplete = false
+						break
+					}
+				case 3:
+					if data != 0x03 {
+						isComplete = false
+						break
+					}
+				case 2:
+					recordLen = int32(data) << 8
+				case 1:
+					recordLen = recordLen | int32(data)
+				}
+				headerLen--
+			} else if recordLen > 0 {
+				var len = recordLen
+				if buffer2.Len() < recordLen{
+					len = buffer2.Len()
+				}
+				buffer2.Advance(len)
+				recordLen -= len
+				if recordLen == 0 {
+					headerLen = 5
+				}
+			} else {
+				isComplete = false
+			}
+		}
+		if !isComplete {
+			break
+		}
+	}
+	for _, buffer2 := range mb2 {
+		buffer2.Release()
+		buffer2 = nil
+	}
+	if headerLen == 5 && recordLen == 0 && isComplete {
+		return true	
+	}
+	return false
 }
 
 // ReshapeMultiBuffer prepare multi buffer for padding structure (max 21 bytes)
