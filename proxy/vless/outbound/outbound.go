@@ -5,6 +5,7 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
+	xctx "github.com/xtls/xray-core/common/ctx"
 	"reflect"
 	"strings"
 	"sync"
@@ -16,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	xctx "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -142,24 +142,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
 			h.preConns = make(chan stat.Connection)
-			for range h.testpre { // TODO: randomize
-				go func() {
-					defer func() { recover() }()
-					ctx = xctx.ContextWithID(context.Background(), session.NewID())
-					for {
-						time.Sleep(time.Millisecond * 200) // TODO: randomize
-						conn, err := dialer.Dial(ctx, rec.Destination)
-						if err != nil {
-							errors.LogWarningInner(ctx, err, "pre-connect failed")
-							continue
-						}
-						h.preConns <- conn
-					}
-				}()
-			}
 		})
-		if conn = <-h.preConns; conn == nil {
-			return errors.New("closed handler").AtWarning()
+		select {
+		case conn = <-h.preConns:
+		default:
+			// todo control the number of pre-connections
+			go h.preConnWorker(ctx, dialer, rec.Destination)
 		}
 	}
 
@@ -464,4 +452,24 @@ func (r *Reverse) Start() error {
 
 func (r *Reverse) Close() error {
 	return r.monitorTask.Close()
+}
+
+func (h *Handler) preConnWorker(ctx context.Context, dialer internet.Dialer, dest net.Destination) {
+	defer func() { recover() }()
+	ctx = xctx.ContextWithID(context.Background(), session.NewID())
+	for range 30 {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			time.Sleep(time.Millisecond * 200) // TODO: randomize
+		}
+		conn, err := dialer.Dial(ctx, dest)
+		if err != nil {
+			errors.LogWarningInner(ctx, err, "pre-connect failed")
+			continue
+		}
+		h.preConns <- conn
+	}
+
 }
