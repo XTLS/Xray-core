@@ -212,6 +212,7 @@ type VLessOutboundConfig struct {
 	Seed       string                `json:"seed"`
 	Encryption string                `json:"encryption"`
 	Reverse    *vless.Reverse        `json:"reverse"`
+	Testpre    uint32                `json:"testpre"`
 	Vnext      []*VLessOutboundVnext `json:"vnext"`
 }
 
@@ -258,6 +259,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				//account.Seed = c.Seed
 				account.Encryption = c.Encryption
 				account.Reverse = c.Reverse
+				account.Testpre = c.Testpre
 			} else {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New(`VLESS users: invalid user`).Base(err)
