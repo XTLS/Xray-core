@@ -317,8 +317,12 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds)-1]
-	ob.Conn = conn
+	if outbounds != nil {
+		ob := outbounds[len(outbounds)-1]
+		ob.Conn = conn
+	} else {
+		// for Vision's pre-connect
+	}
 	return conn, err
 }
 

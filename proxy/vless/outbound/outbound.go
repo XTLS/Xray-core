@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	xctx "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -52,6 +54,10 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
+
+	testpre  uint32
+	initpre  sync.Once
+	preConns chan stat.Connection
 }
 
 // New creates a new VLess outbound handler.
@@ -105,11 +111,16 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}()
 	}
 
+	handler.testpre = a.Testpre
+
 	return handler, nil
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
+	if h.preConns != nil {
+		close(h.preConns)
+	}
 	if h.reverse != nil {
 		return h.reverse.Close()
 	}
@@ -128,17 +139,45 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	if err := retry.ExponentialBackoff(5, 200).On(func() error {
-		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination)
-		if err != nil {
-			return err
+	if h.testpre > 0 && h.reverse == nil {
+		h.initpre.Do(func() {
+			h.preConns = make(chan stat.Connection)
+			for range h.testpre { // TODO: randomize
+				go func() {
+					defer func() { recover() }()
+					ctx := xctx.ContextWithID(context.Background(), session.NewID())
+					for {
+						time.Sleep(time.Millisecond * 200) // TODO: randomize
+						conn, err := dialer.Dial(ctx, rec.Destination)
+						if err != nil {
+							errors.LogWarningInner(ctx, err, "pre-connect failed")
+							continue
+						}
+						h.preConns <- conn
+					}
+				}()
+			}
+		})
+		if conn = <-h.preConns; conn == nil {
+			return errors.New("closed handler").AtWarning()
 		}
-		return nil
-	}); err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+	}
+
+	if conn == nil {
+		if err := retry.ExponentialBackoff(5, 200).On(func() error {
+			var err error
+			conn, err = dialer.Dial(ctx, rec.Destination)
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return errors.New("failed to find an available destination").Base(err).AtWarning()
+		}
 	}
 	defer conn.Close()
+
+	ob.Conn = conn // for Vision's pre-connect
 
 	iConn := conn
 	if statConn, ok := iConn.(*stat.CounterConnection); ok {

@@ -296,11 +296,16 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
+
+	testseed []uint32
 }
 
-func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, ob *session.Outbound) *VisionWriter {
+func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, ob *session.Outbound, testseed []uint32) *VisionWriter {
 	w := make([]byte, len(trafficState.UserUUID))
 	copy(w, trafficState.UserUUID)
+	if len(testseed) < 4 {
+		testseed = []uint32{900, 500, 900, 256}
+	}
 	return &VisionWriter{
 		Writer:            writer,
 		trafficState:      trafficState,
@@ -309,6 +314,7 @@ func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink boo
 		isUplink:          isUplink,
 		conn:              conn,
 		ob:                ob,
+		testseed:          testseed,
 	}
 }
 
@@ -347,7 +353,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 	if *isPadding {
 		if len(mb) == 1 && mb[0] == nil {
-			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx) // we do a long padding to hide vless header
+			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx, w.testseed) // we do a long padding to hide vless header
 			return w.Writer.WriteMultiBuffer(mb)
 		}
 		isComplete := IsCompleteRecord(mb)
@@ -365,13 +371,13 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						command = CommandPaddingDirect
 					}
 				}
-				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx)
+				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx, w.testseed)
 				*isPadding = false // padding going to end
 				longPadding = false
 				continue
 			} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
 				*isPadding = false
-				mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx)
+				mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
 				break
 			}
 			var command byte = CommandPaddingContinue
@@ -381,7 +387,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					command = CommandPaddingDirect
 				}
 			}
-			mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx)
+			mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
 		}
 	}
 	return w.Writer.WriteMultiBuffer(mb)
@@ -488,20 +494,20 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 }
 
 // XtlsPadding add padding to eliminate length signature during tls handshake
-func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context) *buf.Buffer {
+func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool, ctx context.Context, testseed []uint32) *buf.Buffer {
 	var contentLen int32 = 0
 	var paddingLen int32 = 0
 	if b != nil {
 		contentLen = b.Len()
 	}
-	if contentLen < 900 && longPadding {
-		l, err := rand.Int(rand.Reader, big.NewInt(500))
+	if contentLen < int32(testseed[0]) && longPadding {
+		l, err := rand.Int(rand.Reader, big.NewInt(int64(testseed[1])))
 		if err != nil {
 			errors.LogDebugInner(ctx, err, "failed to generate padding")
 		}
-		paddingLen = int32(l.Int64()) + 900 - contentLen
+		paddingLen = int32(l.Int64()) + int32(testseed[2]) - contentLen
 	} else {
-		l, err := rand.Int(rand.Reader, big.NewInt(256))
+		l, err := rand.Int(rand.Reader, big.NewInt(int64(testseed[3])))
 		if err != nil {
 			errors.LogDebugInner(ctx, err, "failed to generate padding")
 		}
