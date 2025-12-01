@@ -68,7 +68,7 @@ func EncodeBodyAddons(writer buf.Writer, request *protocol.RequestHeader, reques
 		return NewMultiLengthPacketWriter(writer)
 	}
 	if requestAddons.Flow == vless.XRV {
-		return proxy.NewVisionWriter(writer, state, isUplink, context, conn, ob)
+		return proxy.NewVisionWriter(writer, state, isUplink, context, conn, ob, request.User.Account.(*vless.MemoryAccount).Testseed)
 	}
 	return writer
 }

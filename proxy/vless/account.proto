@@ -24,4 +24,5 @@ message Account {
   Reverse reverse = 7;
 
   uint32 testpre = 8;
+  repeated uint32 testseed = 9;
 }
