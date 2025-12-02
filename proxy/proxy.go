@@ -395,65 +395,54 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 // IsCompleteRecord Is complete tls data record
 func IsCompleteRecord(buffer buf.MultiBuffer) bool {
-	mb2 := make(buf.MultiBuffer, 0, len(buffer))
-	for _, buffer1 := range buffer {
-		buffer2 := buf.New()
-		buffer2.Write(buffer1.Bytes())
-		mb2 = append(mb2, buffer2)
+	b := make([]byte, buffer.Len())
+	if buffer.Copy(b) != int(buffer.Len()) {
+		panic("impossible bytes allocation")
 	}
-	isComplete := true
-	var headerLen int32 = 5
-	var recordLen int32
-	for _, buffer2 := range mb2 {
-		for buffer2.Len() > 0 {
-			if headerLen > 0 {
-				data, _ := buffer2.ReadByte()
-				switch headerLen {
-				case 5:
-					if data != 0x17 {
-						isComplete = false
-						break
-					}
-				case 4:
-					if data != 0x03 {
-						isComplete = false
-						break
-					}
-				case 3:
-					if data != 0x03 {
-						isComplete = false
-						break
-					}
-				case 2:
-					recordLen = int32(data) << 8
-				case 1:
-					recordLen = recordLen | int32(data)
+	var headerLen int = 5
+	var recordLen int
+
+	totalLen := len(b)
+	i := 0
+	for i < totalLen {
+		// record header: 0x17 0x3 0x3 + 2 bytes length
+		if headerLen > 0 {
+			data := b[i]
+			i++
+			switch headerLen {
+			case 5:
+				if data != 0x17 {
+					return false
 				}
-				headerLen--
-			} else if recordLen > 0 {
-				var len = recordLen
-				if buffer2.Len() < recordLen{
-					len = buffer2.Len()
+			case 4:
+				if data != 0x03 {
+					return false
 				}
-				buffer2.Advance(len)
-				recordLen -= len
-				if recordLen == 0 {
-					headerLen = 5
+			case 3:
+				if data != 0x03 {
+					return false
 				}
-			} else {
-				isComplete = false
+			case 2:
+				recordLen = int(data) << 8
+			case 1:
+				recordLen = recordLen | int(data)
 			}
-		}
-		if !isComplete {
-			break
+			headerLen--
+		} else if recordLen > 0 {
+			remaining := totalLen - i
+			if remaining < recordLen {
+				return false
+			} else {
+				i += recordLen
+				recordLen = 0
+				headerLen = 5
+			}
+		} else {
+			return false
 		}
 	}
-	for _, buffer2 := range mb2 {
-		buffer2.Release()
-		buffer2 = nil
-	}
-	if headerLen == 5 && recordLen == 0 && isComplete {
-		return true	
+	if headerLen == 5 && recordLen == 0 {
+		return true
 	}
 	return false
 }
