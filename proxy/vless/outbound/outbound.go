@@ -57,7 +57,12 @@ type Handler struct {
 
 	testpre  uint32
 	initpre  sync.Once
-	preConns chan stat.Connection
+	preConns chan *ConnExpire
+}
+
+type ConnExpire struct {
+	Conn   stat.Connection
+	Expire time.Time
 }
 
 // New creates a new VLess outbound handler.
@@ -141,25 +146,33 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
-			h.preConns = make(chan stat.Connection)
+			h.preConns = make(chan *ConnExpire)
 			for range h.testpre { // TODO: randomize
 				go func() {
 					defer func() { recover() }()
 					ctx := xctx.ContextWithID(context.Background(), session.NewID())
 					for {
-						time.Sleep(time.Millisecond * 200) // TODO: randomize
 						conn, err := dialer.Dial(ctx, rec.Destination)
 						if err != nil {
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
 							continue
 						}
-						h.preConns <- conn
+						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
+						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
 					}
 				}()
 			}
 		})
-		if conn = <-h.preConns; conn == nil {
-			return errors.New("closed handler").AtWarning()
+		for {
+			connTime := <-h.preConns
+			if connTime == nil {
+				return errors.New("closed handler").AtWarning()
+			}
+			if time.Now().Before(connTime.Expire) {
+				conn = connTime.Conn
+				break
+			}
+			connTime.Conn.Close()
 		}
 	}
 
