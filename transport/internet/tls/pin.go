@@ -3,40 +3,37 @@ package tls
 import (
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 )
 
-func CalculatePEMCertChainSHA256Hash(certContent []byte) string {
-	var certChain [][]byte
+func CalculatePEMLeafCertSHA256Hash(certContent []byte) (string, error) {
+	var leafCert *x509.Certificate
 	for {
+		var err error
 		block, remain := pem.Decode(certContent)
 		if block == nil {
 			break
 		}
-		certChain = append(certChain, block.Bytes)
+		leafCert, err = x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return "", err
+		}
 		certContent = remain
 	}
-	certChainHash := GenerateCertChainHash(certChain)
-	certChainHashB64 := base64.StdEncoding.EncodeToString(certChainHash)
-	return certChainHashB64
+	certHash := GenerateCertHash(leafCert)
+	certHashHex := hex.EncodeToString(certHash)
+	return certHashHex, nil
 }
 
-func GenerateCertChainHash(rawCerts [][]byte) []byte {
-	var hashValue []byte
-	for _, certValue := range rawCerts {
-		out := sha256.Sum256(certValue)
-		if hashValue == nil {
-			hashValue = out[:]
-		} else {
-			newHashValue := sha256.Sum256(append(hashValue, out[:]...))
-			hashValue = newHashValue[:]
-		}
+// []byte must be ASN.1 DER content
+func GenerateCertHash[T *x509.Certificate | []byte](cert T) []byte {
+	var out [32]byte
+	switch v := any(cert).(type) {
+	case *x509.Certificate:
+		out = sha256.Sum256(v.Raw)
+	case []byte:
+		out = sha256.Sum256(v)
 	}
-	return hashValue
-}
-
-func GenerateCertPublicKeyHash(cert *x509.Certificate) []byte {
-	out := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	return out[:]
 }
