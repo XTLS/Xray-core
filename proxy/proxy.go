@@ -269,9 +269,9 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		w.rawInput = nil
 
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil && inbound.Conn != nil {
-			if w.isUplink && inbound.CanSpliceCopy == 2 {
-				inbound.CanSpliceCopy = 1
-			}
+			// if w.isUplink && inbound.CanSpliceCopy == 2 { // TODO: enable uplink splice
+			// 	inbound.CanSpliceCopy = 1
+			// }
 			if !w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // ob need to be passed in due to context can have more than one ob
 				w.ob.CanSpliceCopy = 1
 			}
@@ -334,9 +334,9 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if !w.isUplink && inbound.CanSpliceCopy == 2 {
 				inbound.CanSpliceCopy = 1
 			}
-			if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 {
-				w.ob.CanSpliceCopy = 1
-			}
+			// if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // TODO: enable uplink splice
+			// 	w.ob.CanSpliceCopy = 1
+			// }
 		}
 		rawConn, _, writerCounter := UnwrapRawConn(w.conn)
 		w.Writer = buf.NewWriter(rawConn)
