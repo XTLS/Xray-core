@@ -248,7 +248,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			*withinPaddingBuffers = false
 			*switchToDirectCopy = true
 		} else {
-			errors.LogInfo(w.ctx, "XtlsRead unknown command ", *currentCommand, buffer.Len())
+			errors.LogDebug(w.ctx, "XtlsRead unknown command ", *currentCommand, buffer.Len())
 		}
 	}
 	if w.trafficState.NumberOfPacketToFilter > 0 {
@@ -478,7 +478,7 @@ func ReshapeMultiBuffer(ctx context.Context, buffer buf.MultiBuffer) buf.MultiBu
 		buffer[i] = nil
 	}
 	buffer = buffer[:0]
-	errors.LogInfo(ctx, "ReshapeMultiBuffer ", toPrint)
+	errors.LogDebug(ctx, "ReshapeMultiBuffer ", toPrint)
 	return mb2
 }
 
@@ -517,7 +517,7 @@ func XtlsPadding(b *buf.Buffer, command byte, userUUID *[]byte, longPadding bool
 		b = nil
 	}
 	newbuffer.Extend(paddingLen)
-	errors.LogInfo(ctx, "XtlsPadding ", contentLen, " ", paddingLen, " ", command)
+	errors.LogDebug(ctx, "XtlsPadding ", contentLen, " ", paddingLen, " ", command)
 	return newbuffer
 }
 
@@ -564,7 +564,7 @@ func XtlsUnpadding(b *buf.Buffer, s *TrafficState, isUplink bool, ctx context.Co
 				*remainingPadding = int32(data) << 8
 			case 1:
 				*remainingPadding = *remainingPadding | int32(data)
-				errors.LogInfo(ctx, "Xtls Unpadding new block, content ", *remainingContent, " padding ", *remainingPadding, " command ", *currentCommand)
+				errors.LogDebug(ctx, "Xtls Unpadding new block, content ", *remainingContent, " padding ", *remainingPadding, " command ", *currentCommand)
 			}
 			*remainingCommand--
 		} else if *remainingContent > 0 {
@@ -623,11 +623,11 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 					cipherSuite := b.BytesRange(43+sessionIdLen+1, 43+sessionIdLen+3)
 					trafficState.Cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
 				} else {
-					errors.LogInfo(ctx, "XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", trafficState.RemainingServerHello)
+					errors.LogDebug(ctx, "XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", trafficState.RemainingServerHello)
 				}
 			} else if bytes.Equal(TlsClientHandShakeStart, startsBytes[:2]) && startsBytes[5] == TlsHandshakeTypeClientHello {
 				trafficState.IsTLS = true
-				errors.LogInfo(ctx, "XtlsFilterTls found tls client hello! ", buffer.Len())
+				errors.LogDebug(ctx, "XtlsFilterTls found tls client hello! ", buffer.Len())
 			}
 		}
 		if trafficState.RemainingServerHello > 0 {
@@ -643,18 +643,18 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 				} else if v != "TLS_AES_128_CCM_8_SHA256" {
 					trafficState.EnableXtls = true
 				}
-				errors.LogInfo(ctx, "XtlsFilterTls found tls 1.3! ", b.Len(), " ", v)
+				errors.LogDebug(ctx, "XtlsFilterTls found tls 1.3! ", b.Len(), " ", v)
 				trafficState.NumberOfPacketToFilter = 0
 				return
 			} else if trafficState.RemainingServerHello <= 0 {
-				errors.LogInfo(ctx, "XtlsFilterTls found tls 1.2! ", b.Len())
+				errors.LogDebug(ctx, "XtlsFilterTls found tls 1.2! ", b.Len())
 				trafficState.NumberOfPacketToFilter = 0
 				return
 			}
-			errors.LogInfo(ctx, "XtlsFilterTls inconclusive server hello ", b.Len(), " ", trafficState.RemainingServerHello)
+			errors.LogDebug(ctx, "XtlsFilterTls inconclusive server hello ", b.Len(), " ", trafficState.RemainingServerHello)
 		}
 		if trafficState.NumberOfPacketToFilter <= 0 {
-			errors.LogInfo(ctx, "XtlsFilterTls stop filtering", buffer.Len())
+			errors.LogDebug(ctx, "XtlsFilterTls stop filtering", buffer.Len())
 		}
 	}
 }
@@ -736,7 +736,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			}
 		}
 		if splice {
-			errors.LogInfo(ctx, "CopyRawConn splice")
+			errors.LogDebug(ctx, "CopyRawConn splice")
 			statWriter, _ := writer.(*dispatcher.SizeStatWriter)
 			//runtime.Gosched() // necessary
 			time.Sleep(time.Millisecond)     // without this, there will be a rare ssl error for freedom splice
@@ -779,7 +779,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 }
 
 func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, readCounter stats.Counter) error {
-	errors.LogInfo(ctx, "CopyRawConn (maybe) readv")
+	errors.LogDebug(ctx, "CopyRawConn (maybe) readv")
 	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
 		return errors.New("failed to process response").Base(err)
 	}
