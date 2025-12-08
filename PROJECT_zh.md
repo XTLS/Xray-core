@@ -220,6 +220,89 @@ xray run -c config.json
 xray version
 ```
 
+### `xray api`
+调用 Xray 进程中的 API。
+
+```bash
+xray api [subcommand] [arguments]
+```
+
+**子命令：**
+- `restartlogger`: 重启日志记录器。
+- `stats`, `statsquery`, `sysstats`, `onlinestats`: 查询统计信息。
+- `balancer`, `balanceroverride`: 管理负载均衡器。
+- `addinbounds`, `addoutbounds`, `removeinbounds`, `removeoutbounds`: 管理入站/出站代理。
+- `listinbounds`, `listoutbounds`: 列出入站/出站代理。
+- `addinboundusers`, `removeinboundusers`, `inbounduser`, `inboundusercount`: 管理入站用户。
+- `addrules`, `removerules`: 管理路由规则。
+- `sourceipblock`: 管理源 IP 封锁。
+
+### `xray convert`
+在不同格式之间转换配置文件。
+
+```bash
+xray convert [subcommand] [arguments]
+```
+
+**子命令：**
+- `json`: 转换为 JSON。
+- `protobuf`: 转换为 Protobuf。
+
+### `xray tls`
+TLS 工具。
+
+```bash
+xray tls [subcommand] [arguments]
+```
+
+**子命令：**
+- `cert`: 生成 TLS 证书。
+- `ping`: 使用 TLS ping 服务器。
+- `certchainhash`: 计算证书链哈希。
+- `ech`: 生成 ECH 配置。
+
+### `xray uuid`
+生成 UUIDv4 或 UUIDv5。
+
+```bash
+xray uuid [-i "example"]
+```
+
+### `xray x25519`
+生成 X25519 密钥交换的密钥对 (用于 REALITY, VLESS Encryption)。
+
+```bash
+xray x25519 [-i "private key"]
+```
+
+### `xray wg`
+生成 WireGuard 的密钥对。
+
+```bash
+xray wg [-i "private key"]
+```
+
+### `xray mldsa65`
+生成 ML-DSA-65 后量子签名的密钥对 (用于 REALITY)。
+
+```bash
+xray mldsa65
+```
+
+### `xray mlkem768`
+生成 ML-KEM-768 后量子密钥交换的密钥对 (用于 VLESS Encryption)。
+
+```bash
+xray mlkem768
+```
+
+### `xray vlessenc`
+生成 VLESS Encryption 的解密/加密 JSON 对。
+
+```bash
+xray vlessenc
+```
+
 ## 6. 关键协议
 
 ### VLESS

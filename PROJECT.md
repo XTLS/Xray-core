@@ -220,6 +220,89 @@ Prints the version information.
 xray version
 ```
 
+### `xray api`
+Call an API in an Xray process.
+
+```bash
+xray api [subcommand] [arguments]
+```
+
+**Subcommands:**
+- `restartlogger`: Restart the logger.
+- `stats`, `statsquery`, `sysstats`, `onlinestats`: Query statistics.
+- `balancer`, `balanceroverride`: Manage balancers.
+- `addinbounds`, `addoutbounds`, `removeinbounds`, `removeoutbounds`: Manage inbounds/outbounds.
+- `listinbounds`, `listoutbounds`: List inbounds/outbounds.
+- `addinboundusers`, `removeinboundusers`, `inbounduser`, `inboundusercount`: Manage inbound users.
+- `addrules`, `removerules`: Manage routing rules.
+- `sourceipblock`: Manage source IP blocking.
+
+### `xray convert`
+Convert config files between formats.
+
+```bash
+xray convert [subcommand] [arguments]
+```
+
+**Subcommands:**
+- `json`: Convert to JSON.
+- `protobuf`: Convert to Protobuf.
+
+### `xray tls`
+TLS tools.
+
+```bash
+xray tls [subcommand] [arguments]
+```
+
+**Subcommands:**
+- `cert`: Generate TLS certificates.
+- `ping`: Ping a server with TLS.
+- `certchainhash`: Calculate certificate chain hash.
+- `ech`: Generate ECH configs.
+
+### `xray uuid`
+Generate UUIDv4 or UUIDv5.
+
+```bash
+xray uuid [-i "example"]
+```
+
+### `xray x25519`
+Generate key pair for X25519 key exchange (REALITY, VLESS Encryption).
+
+```bash
+xray x25519 [-i "private key"]
+```
+
+### `xray wg`
+Generate key pair for WireGuard.
+
+```bash
+xray wg [-i "private key"]
+```
+
+### `xray mldsa65`
+Generate key pair for ML-DSA-65 post-quantum signature (REALITY).
+
+```bash
+xray mldsa65
+```
+
+### `xray mlkem768`
+Generate key pair for ML-KEM-768 post-quantum key exchange (VLESS Encryption).
+
+```bash
+xray mlkem768
+```
+
+### `xray vlessenc`
+Generate decryption/encryption json pair (VLESS Encryption).
+
+```bash
+xray vlessenc
+```
+
 ## 6. Key Protocols
 
 ### VLESS
