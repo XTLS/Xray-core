@@ -8,17 +8,8 @@ import (
 	"path/filepath"
 )
 
-func ExpandEnv(s string) string {
-	return os.ExpandEnv(s)
-}
-
 func LineSeparator() string {
 	return "\n"
-}
-
-func GetToolLocation(file string) string {
-	toolPath := NewEnvFlag(ToolLocation).GetValue(getExecutableDir)
-	return filepath.Join(toolPath, file)
 }
 
 // GetAssetLocation searches for `file` in the env dir, the executable dir, and certain locations

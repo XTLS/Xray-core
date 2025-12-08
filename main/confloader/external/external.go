@@ -13,7 +13,6 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform/ctlcmd"
 	"github.com/xtls/xray-core/main/confloader"
 )
 
@@ -129,16 +128,6 @@ func FetchUnixSocketHTTPContent(target string) ([]byte, error) {
 	return content, nil
 }
 
-func ExtConfigLoader(files []string, reader io.Reader) (io.Reader, error) {
-	buf, err := ctlcmd.Run(append([]string{"convert"}, files...), reader)
-	if err != nil {
-		return nil, err
-	}
-
-	return strings.NewReader(buf.String()), nil
-}
-
 func init() {
 	confloader.EffectiveConfigFileLoader = ConfigLoader
-	confloader.EffectiveExtConfigLoader = ExtConfigLoader
 }
