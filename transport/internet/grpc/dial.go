@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	gonet "net"
 	"sync"
 	"time"
 
@@ -99,7 +98,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			},
 			MinConnectTimeout: 5 * time.Second,
 		}),
-		grpc.WithContextDialer(func(gctx context.Context, s string) (gonet.Conn, error) {
+		grpc.WithContextDialer(func(gctx context.Context, s string) (net.Conn, error) {
 			select {
 			case <-gctx.Done():
 				return nil, gctx.Err()
@@ -180,7 +179,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	conn, err := grpc.Dial(
-		gonet.JoinHostPort(grpcDestHost, dest.Port.String()),
+		net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn

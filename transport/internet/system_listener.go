@@ -2,7 +2,6 @@ package internet
 
 import (
 	"context"
-	gonet "net"
 	"os"
 	"runtime"
 	"strconv"
@@ -95,7 +94,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 			if sockopt.TcpKeepAliveIdle*sockopt.TcpKeepAliveInterval < 0 {
 				return nil, errors.New("invalid TcpKeepAliveIdle or TcpKeepAliveInterval value: ", sockopt.TcpKeepAliveIdle, " ", sockopt.TcpKeepAliveInterval)
 			}
-			lc.KeepAliveConfig = gonet.KeepAliveConfig{
+			lc.KeepAliveConfig = net.KeepAliveConfig{
 				Enable:   false,
 				Idle:     -1,
 				Interval: -1,

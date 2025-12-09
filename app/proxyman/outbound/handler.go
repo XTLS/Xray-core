@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	gonet "net"
 	"os"
 
 	"github.com/xtls/xray-core/common/dice"
@@ -398,7 +397,7 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
 
-	_, ipnet, _ := gonet.ParseCIDR(addr.IP().String() + "/" + prefix)
+	_, ipnet, _ := net.ParseCIDR(addr.IP().String() + "/" + prefix)
 
 	ones, bits := ipnet.Mask.Size()
 	subnetSize := new(big.Int).Lsh(big.NewInt(1), uint(bits-ones))
@@ -412,5 +411,5 @@ func ParseRandomIP(addr net.Address, prefix string) net.Address {
 	padded := make([]byte, len(ipnet.IP))
 	copy(padded[len(padded)-len(rndBytes):], rndBytes)
 
-	return net.ParseAddress(gonet.IP(padded).String())
+	return net.ParseAddress(net.IP(padded).String())
 }
