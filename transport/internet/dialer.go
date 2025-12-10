@@ -3,7 +3,6 @@ package internet
 import (
 	"context"
 	"fmt"
-	gonet "net"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -183,7 +182,7 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 		if len(parts) != 3 {
 			return nil, errors.New("invalid address format", dest.Address.String())
 		}
-		_, srvRecords, err := gonet.DefaultResolver.LookupSRV(context.Background(), parts[0][1:], parts[1][1:], parts[2])
+		_, srvRecords, err := net.DefaultResolver.LookupSRV(context.Background(), parts[0][1:], parts[1][1:], parts[2])
 		if err != nil {
 			return nil, errors.New("failed to lookup SRV record").Base(err)
 		}
@@ -198,7 +197,7 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 	}
 	if OverrideBy == "txt" {
 		errors.LogDebug(ctx, "query TXT record for "+dest.Address.String())
-		txtRecords, err := gonet.DefaultResolver.LookupTXT(ctx, dest.Address.String())
+		txtRecords, err := net.DefaultResolver.LookupTXT(ctx, dest.Address.String())
 		if err != nil {
 			errors.LogError(ctx, "failed to lookup SRV record: "+err.Error())
 			return nil, errors.New("failed to lookup SRV record").Base(err)

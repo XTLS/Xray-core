@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	gonet "net"
 	"net/http"
 	"net/http/httptrace"
 	"sync"
@@ -42,7 +41,7 @@ func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed
 }
 
-func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr gonet.Addr, err error) {
+func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
 	// this is done when the TCP/UDP connection to the server was established,
 	// and we can unblock the Dial function and print correct net addresses in
 	// logs

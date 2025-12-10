@@ -2,7 +2,6 @@ package inbound
 
 import (
 	"context"
-	gonet "net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -565,12 +564,12 @@ func (w *dsWorker) Close() error {
 }
 
 func IsLocal(ip net.IP) bool {
-	addrs, err := gonet.InterfaceAddrs()
+	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return false
 	}
 	for _, addr := range addrs {
-		if ipnet, ok := addr.(*gonet.IPNet); ok {
+		if ipnet, ok := addr.(*net.IPNet); ok {
 			if ipnet.IP.Equal(ip) {
 				return true
 			}
