@@ -170,7 +170,7 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 
 type ClientStrategy struct {
 	MaxConcurrency uint32
-	MaxConnection  uint32
+	MaxReuseTimes  uint32
 }
 
 type ClientWorker struct {
@@ -288,7 +288,7 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 
 func (m *ClientWorker) IsClosing() bool {
 	sm := m.sessionManager
-	if m.strategy.MaxConnection > 0 && sm.Count() >= int(m.strategy.MaxConnection) {
+	if m.strategy.MaxReuseTimes > 0 && sm.Count() >= int(m.strategy.MaxReuseTimes) {
 		return true
 	}
 	return false

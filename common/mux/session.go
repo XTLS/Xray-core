@@ -56,11 +56,12 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
 	defer m.Unlock()
 
 	MaxConcurrency := int(Strategy.MaxConcurrency)
-	MaxConnection := uint16(Strategy.MaxConnection)
+	MaxReuseTimes := uint16(Strategy.MaxReuseTimes)
 
-	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= MaxConnection) {
+	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxReuseTimes > 0 && m.count >= MaxReuseTimes) {
 		return nil
 	}
+	errors.LogInfo(context.Background(), "Allocated mux.cool session id ", m.count, "/", MaxReuseTimes)
 
 	m.count++
 	s := &Session{
