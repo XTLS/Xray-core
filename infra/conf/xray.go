@@ -102,6 +102,7 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 type MuxConfig struct {
 	Enabled         bool   `json:"enabled"`
 	Concurrency     int16  `json:"concurrency"`
+	BrutalBPS       uint64 `json:"brutalBPS"`
 	XudpConcurrency int16  `json:"xudpConcurrency"`
 	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
@@ -118,6 +119,7 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	return &proxyman.MultiplexingConfig{
 		Enabled:         m.Enabled,
 		Concurrency:     int32(m.Concurrency),
+		BrutalBPS:       m.BrutalBPS,
 		XudpConcurrency: int32(m.XudpConcurrency),
 		XudpProxyUDP443: m.XudpProxyUDP443,
 	}, nil

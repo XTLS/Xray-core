@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	"encoding/binary"
 	goerrors "errors"
 	"io"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -171,6 +173,7 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 type ClientStrategy struct {
 	MaxConcurrency uint32
 	MaxReuseTimes  uint32
+	BrutalBPS      uint64
 }
 
 type ClientWorker struct {
@@ -198,6 +201,9 @@ func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, er
 
 	go c.fetchOutput()
 	go c.monitor()
+	if s.BrutalBPS > 0 {
+		go c.sendSetBrutal(s.BrutalBPS)
+	}
 
 	return c, nil
 }
@@ -416,4 +422,25 @@ func (m *ClientWorker) fetchOutput() {
 			return
 		}
 	}
+}
+
+func (m *ClientWorker) sendSetBrutal(sendBPS uint64) {
+	meta := FrameMetadata{
+		SessionID:     91,
+		SessionStatus: SessionStatusSetBrutal,
+	}
+	meta.Option.Set(OptionData)
+	frame := buf.New()
+	common.Must(meta.WriteTo(frame))
+	lengthByte := frame.Extend(2)
+	speedByte := frame.Extend(int32(200 + dice.Roll(200)))
+	binary.BigEndian.PutUint64(speedByte, sendBPS)
+	binary.BigEndian.PutUint16(lengthByte, uint16(len(speedByte)))
+	errors.LogError(context.Background(), "Start sending SetBrutal frame with speed: ", sendBPS)
+	err := m.link.Writer.WriteMultiBuffer(buf.MultiBuffer{frame})
+	if err != nil {
+		frame.Release()
+		errors.LogError(context.Background(), "failed to send SetBrutal frame: ", err)
+	}
+	errors.LogInfo(context.Background(), "SetBrutal frame sent successfully")
 }

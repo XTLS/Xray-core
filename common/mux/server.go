@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/brutal"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -333,6 +335,40 @@ func (w *ServerWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.Buffered
 	return nil
 }
 
+// note: do not return error, just log it
+func (w *ServerWorker) HandleSetBrutal(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
+	if meta.Option.Has(OptionData) == false {
+		errors.LogError(ctx, "SetBrutal frame missing data")
+		return nil
+	}
+	chunkReader := NewStreamReader(reader)
+	data, err := chunkReader.ReadMultiBuffer()
+	if err != nil {
+		errors.LogError(ctx, "unexpected error when reading brutal data: ", err)
+	}
+	speed := binary.BigEndian.Uint64(data.Bytes())
+
+	inbound := session.InboundFromContext(ctx)
+	if inbound == nil || inbound.Conn == nil {
+		errors.LogError(ctx, "no inbound connection found for brutal set")
+		return nil
+	}
+	conn := inbound.Conn
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		errors.LogError(ctx, "brutal can only be set on TCP connections")
+		return nil
+	}
+	err = brutal.SetBrutal(tcpConn, speed)
+	if err != nil {
+		errors.LogError(ctx, "failed to set brutal: ", err)
+		return nil
+	} else {
+		errors.LogInfo(ctx, "successfully set brutal speed: ", speed)
+	}
+	return nil
+}
+
 func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedReader) error {
 	var meta FrameMetadata
 	err := meta.Unmarshal(reader, session.IsReverseMuxFromContext(ctx))
@@ -349,6 +385,8 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 		err = w.handleStatusNew(session.ContextWithIsReverseMux(ctx, false), &meta, reader)
 	case SessionStatusKeep:
 		err = w.handleStatusKeep(&meta, reader)
+	case SessionStatusSetBrutal:
+		err = w.HandleSetBrutal(ctx, &meta, reader)
 	default:
 		status := meta.SessionStatus
 		return errors.New("unknown status: ", status).AtError()

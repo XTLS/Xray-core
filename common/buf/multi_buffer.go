@@ -75,6 +75,12 @@ func (mb MultiBuffer) Copy(b []byte) int {
 	return total
 }
 
+func (mb MultiBuffer) Bytes() []byte {
+	b := make([]byte, mb.Len())
+	mb.Copy(b)
+	return b
+}
+
 // ReadFrom reads all content from reader until EOF.
 func ReadFrom(reader io.Reader) (MultiBuffer, error) {
 	mb := make(MultiBuffer, 0, 16)
