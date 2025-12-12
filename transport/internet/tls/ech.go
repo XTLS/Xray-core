@@ -257,7 +257,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		}
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
-		req.Header.Set("X-Padding", strings.Repeat("X", int(crypto.RandBetween(100, 1000))))
+		req.Header.Set("X-Signature", utils.GetPadding())
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err

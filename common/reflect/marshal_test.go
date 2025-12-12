@@ -217,7 +217,8 @@ func getConfig() string {
             "noSSEHeader": false,
             "scMaxEachPostBytes": 1000000,
             "scMaxBufferedPosts": 30,
-            "xPaddingBytes": "100-1000"
+            "xPaddingBytes": "100-1000",
+			"XPaddingQueryParam": "x_padding"
           }
         },
         "sockopt": {

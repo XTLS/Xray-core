@@ -226,6 +226,7 @@ type SplitHTTPConfig struct {
 	Mode                 string            `json:"mode"`
 	Headers              map[string]string `json:"headers"`
 	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
+	XPaddingQueryParam   string            `json:"xPaddingQueryParam"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -285,6 +286,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("xPaddingBytes cannot be disabled")
 	}
 
+	if c.XPaddingQueryParam == "" {
+		c.XPaddingQueryParam = "x_padding"
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -303,6 +308,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		Mode:                 c.Mode,
 		Headers:              c.Headers,
 		XPaddingBytes:        newRangeConfig(c.XPaddingBytes),
+		XPaddingQueryParam:   c.XPaddingQueryParam,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
