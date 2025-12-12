@@ -111,19 +111,20 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
 	paddingLength := 0
+	paddingParam := h.config.XPaddingQueryParam
 
 	referrer := request.Header.Get("Referer")
 	if referrer != "" {
 		if referrerURL, err := url.Parse(referrer); err == nil {
 			// Browser dialer cannot control the host part of referrer header, so only check the query
-			paddingLength = len(referrerURL.Query().Get("x_padding"))
+			paddingLength = len(referrerURL.Query().Get(paddingParam))
 		}
 	} else {
-		paddingLength = len(request.URL.Query().Get("x_padding"))
+		paddingLength = len(request.URL.Query().Get(paddingParam))
 	}
 
 	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
-		errors.LogInfo(context.Background(), "invalid x_padding length:", int32(paddingLength))
+		errors.LogInfo(context.Background(), "invalid padding ("+paddingParam+") length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}

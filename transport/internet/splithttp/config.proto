@@ -36,4 +36,5 @@ message Config {
   RangeConfig scStreamUpServerSecs = 11;
   XmuxConfig xmux = 12;
   xray.transport.internet.StreamConfig downloadSettings = 13;
+  string xPaddingQueryParam = 14;
 }
