@@ -30,11 +30,13 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
-	Flow       string                  `json:"flow"`
-	Testseed   []uint32                `json:"testseed"`
+	Clients           []json.RawMessage       `json:"clients"`
+	Decryption        string                  `json:"decryption"`
+	Fallbacks         []*VLessInboundFallback `json:"fallbacks"`
+	Flow              string                  `json:"flow"`
+	Validator         string                  `json:"validator"`
+	ValidatorEndpoint string                  `json:"validatorEndpoint"`
+	Testseed          []uint32                `json:"testseed"`
 }
 
 // Build implements Buildable
@@ -91,6 +93,8 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	}
 
 	config.Decryption = c.Decryption
+	config.Validator = c.Validator
+	config.ValidatorEndpoint = c.ValidatorEndpoint
 	if !func() bool {
 		s := strings.Split(config.Decryption, ".")
 		if len(s) < 4 || s[0] != "mlkem768x25519plus" {

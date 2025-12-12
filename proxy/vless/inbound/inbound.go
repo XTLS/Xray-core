@@ -64,7 +64,19 @@ func init() {
 			}
 		}
 
-		return New(ctx, c, dc, validator)
+		var selectedValidator vless.Validator = validator
+		switch strings.ToLower(c.Validator) {
+		case "", "default":
+		case "remote":
+			if c.ValidatorEndpoint == "" {
+				return nil, errors.New("validatorEndpoint is required when validator is remote").AtError()
+			}
+			selectedValidator = newRemoteValidator(validator, c.ValidatorEndpoint)
+		default:
+			return nil, errors.New("unknown validator option: ", c.Validator).AtError()
+		}
+
+		return New(ctx, c, dc, selectedValidator)
 	}))
 }
 
