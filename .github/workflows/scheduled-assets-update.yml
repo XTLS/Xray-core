@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: resources
           key: xray-geodat-
@@ -58,7 +58,7 @@ jobs:
             done
 
       - name: Save Geodat Cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: ${{ steps.update.outputs.unhit }}
         with:
           path: resources

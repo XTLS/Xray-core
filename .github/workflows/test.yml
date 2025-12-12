@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: resources
           key: xray-geodat-
@@ -52,7 +52,7 @@ jobs:
           go-version-file: go.mod
           check-latest: true
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: resources
           key: xray-geodat-

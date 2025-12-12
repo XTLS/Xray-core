@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: resources
           key: xray-geodat-
@@ -207,7 +207,7 @@ jobs:
           fi
 
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: resources
           key: xray-geodat-
