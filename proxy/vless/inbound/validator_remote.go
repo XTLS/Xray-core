@@ -2,11 +2,13 @@ package inbound
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vless"
@@ -97,22 +99,26 @@ func (r *remoteValidator) checkRemote(uuidStr string) bool {
 	payload := map[string]string{"uuid": uuidStr}
 	body, err := json.Marshal(payload)
 	if err != nil {
+		errors.LogInfo(context.Background(), "remote validator marshal error: ", err)
 		return false
 	}
 
 	req, err := http.NewRequest(http.MethodPost, r.endpoint, bytes.NewReader(body))
 	if err != nil {
+		errors.LogInfo(context.Background(), "remote validator request build error: ", err)
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := r.client.Do(req)
 	if err != nil {
+		errors.LogInfo(context.Background(), "remote validator http error: ", err)
 		return false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errors.LogInfo(context.Background(), "remote validator bad status: ", resp.StatusCode)
 		return false
 	}
 
@@ -120,9 +126,11 @@ func (r *remoteValidator) checkRemote(uuidStr string) bool {
 		Status int `json:"status"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		errors.LogInfo(context.Background(), "remote validator decode error: ", err)
 		return false
 	}
 
+	errors.LogInfo(context.Background(), "remote validator status response: ", result.Status)
 	return result.Status == 0
 }
 

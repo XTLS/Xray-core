@@ -67,11 +67,13 @@ func init() {
 		var selectedValidator vless.Validator = validator
 		switch strings.ToLower(c.Validator) {
 		case "", "default":
+			errors.LogInfo(ctx, "vless inbound using default memory validator")
 		case "remote":
 			if c.ValidatorEndpoint == "" {
 				return nil, errors.New("validatorEndpoint is required when validator is remote").AtError()
 			}
 			selectedValidator = newRemoteValidator(validator, c.ValidatorEndpoint)
+			errors.LogInfo(ctx, "vless inbound using remote validator at ", c.ValidatorEndpoint)
 		default:
 			return nil, errors.New("unknown validator option: ", c.Validator).AtError()
 		}
@@ -318,6 +320,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = errors.New("fallback directly")
 	} else {
+		errors.LogInfo(ctx, "decoding VLESS request header with validator ", reflect.TypeOf(h.validator))
 		userSentID, request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
 	}
 
