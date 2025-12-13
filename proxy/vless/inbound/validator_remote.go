@@ -44,11 +44,6 @@ func (r *remoteValidator) Del(email string) error {
 }
 
 func (r *remoteValidator) Get(id uuid.UUID) *protocol.MemoryUser {
-	user := r.local.Get(id)
-	if user == nil {
-		return nil
-	}
-
 	norm := vless.ProcessUUID(id)
 	normalized := uuid.UUID(norm)
 	key := normalized.String()
@@ -57,7 +52,10 @@ func (r *remoteValidator) Get(id uuid.UUID) *protocol.MemoryUser {
 		entry := cached.(cachedStatus)
 		if time.Now().Before(entry.expiry) {
 			if entry.allowed {
-				return user
+				if user := r.local.Get(id); user != nil {
+					return user
+				}
+				return r.syntheticUser(id)
 			}
 			return nil
 		}
@@ -68,7 +66,11 @@ func (r *remoteValidator) Get(id uuid.UUID) *protocol.MemoryUser {
 	if !allowed {
 		return nil
 	}
-	return user
+
+	if user := r.local.Get(id); user != nil {
+		return user
+	}
+	return r.syntheticUser(id)
 }
 
 func (r *remoteValidator) GetByEmail(email string) *protocol.MemoryUser {
@@ -81,6 +83,14 @@ func (r *remoteValidator) GetAll() []*protocol.MemoryUser {
 
 func (r *remoteValidator) GetCount() int64 {
 	return r.local.GetCount()
+}
+
+func (r *remoteValidator) syntheticUser(id uuid.UUID) *protocol.MemoryUser {
+	return &protocol.MemoryUser{
+		Account: &vless.MemoryAccount{
+			ID: protocol.NewID(id),
+		},
+	}
 }
 
 func (r *remoteValidator) checkRemote(uuidStr string) bool {

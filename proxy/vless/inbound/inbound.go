@@ -562,7 +562,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	var rawInput *bytes.Buffer
 	switch requestAddons.Flow {
 	case vless.XRV:
-		if account.Flow == requestAddons.Flow {
+		if account.Flow == "" || account.Flow == requestAddons.Flow {
 			inbound.CanSpliceCopy = 2
 			switch request.Command {
 			case protocol.RequestCommandUDP:
@@ -605,7 +605,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return errors.New("account " + account.ID.String() + " is rejected since the client flow is empty. Note that the pure TLS proxy has certain TLS in TLS characters.").AtWarning()
 		}
 	default:
-		return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()
+		if account.Flow == "" {
+			inbound.CanSpliceCopy = 3
+		} else {
+			return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()
+		}
 	}
 
 	if request.Command != protocol.RequestCommandMux {
