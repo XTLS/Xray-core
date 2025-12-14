@@ -137,10 +137,26 @@ export default class AppatDialer {
 						if (wsClosed === 0) {
 							wsClosed = 2;
 							wsStream.close(closeObj);
+							if (upThis.report) {
+								let report = {
+									"c": data.c,
+									"s": closeObj.closeCode,
+									"t": closeObj.reason
+								};
+								upThis.#controller.send(JSON.stringify(report));
+							};
 						};
 					});
 					let wsTunLocal = await wsStream.opened;
 					let wsTunRemote = await wsExternal.opened;
+					if (upThis.report) {
+						let report = {
+							"c": data.c,
+							"s": 101,
+							"t": "WebSocket upgrade"
+						};
+						upThis.#controller.send(JSON.stringify(report));
+					};
 					wsTunLocal.readable.pipeTo(wsTunRemote.writable);
 					wsTunRemote.readable.pipeTo(wsTunLocal.writable);
 					break;
