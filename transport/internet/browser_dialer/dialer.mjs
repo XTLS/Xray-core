@@ -37,7 +37,7 @@ export default class AppatDialer {
 	#uploader = new Map();
 	#uploadDeny = new Set();
 	removeUploader(key) {
-		this.#uploader.get(key)[0].close();
+		this.#uploader.get(key)[1].close();
 		this.#uploader.delete(key);
 	};
 	constructor(prefix, csrf) {
@@ -106,10 +106,47 @@ export default class AppatDialer {
 					break;
 				};
 				case "WS": {
-					console.debug("Mweh!");
+					//console.debug("Mweh!");
+					if (upThis.#uploadDeny.has(data.c)) {
+						// Just cancel initiation altogether.
+						upThis.#uploadDeny.delete(data.c);
+						break;
+					};
+					let destUrl = data.u;
+					if (destUrl.substring(0, 4) === "http") {
+						destUrl = `ws${destUrl.substring(4)}`;
+					};
+					let wsOpt = {};
+					if (data.e?.hasOwnProperty("p")) {
+						wsOpt.protocols = [data.e.p];
+					};
+					let wsStream = new WebSocketStream(`${upThis.#compiledWsPrefix}/${data.c}?token=${upThis.#csrf}`);
+					let wsExternal = new WebSocketStream(destUrl, wsOpt);
+					upThis.#uploader.set(data.c, [
+						data.m,
+						wsStream
+					]);
+					let wsClosed = 0; // not closed, local close, remote close
+					wsStream.closed.then(async (closeObj) => {
+						if (wsClosed === 0) {
+							wsClosed = 1;
+							wsExternal.close(closeObj);
+						};
+					});
+					wsExternal.closed.then(async (closeObj) => {
+						if (wsClosed === 0) {
+							wsClosed = 2;
+							wsStream.close(closeObj);
+						};
+					});
+					let wsTunLocal = await wsStream.opened;
+					let wsTunRemote = await wsExternal.opened;
+					wsTunLocal.readable.pipeTo(wsTunRemote.writable);
+					wsTunRemote.readable.pipeTo(wsTunLocal.writable);
 					break;
 				};
 				case "WT": {
+					console.warn("WebTransport is not yet supported.");
 					break;
 				};
 				case "HEAD":
@@ -151,6 +188,7 @@ export default class AppatDialer {
 									}),
 									"start": async (controller) => {
 										upThis.#uploader.set(data.c, [
+											data.m,
 											controller,
 											sourceReader
 										])
