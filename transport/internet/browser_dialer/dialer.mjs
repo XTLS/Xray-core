@@ -36,6 +36,10 @@ export default class AppatDialer {
 	#aborter;
 	#uploader = new Map();
 	#uploadDeny = new Set();
+	removeUploader(key) {
+		this.#uploader.get(key)[0].close();
+		this.#uploader.delete(key);
+	};
 	constructor(prefix, csrf) {
 		if (!Request.prototype.hasOwnProperty("body")) {
 			this.#rqNext = false;
@@ -90,7 +94,7 @@ export default class AppatDialer {
 					switch (data.e?.appat) {
 						case "requestEnd": {
 							if (upThis.#uploader.has(data.c)) {
-								upThis.#uploader.get(data.c)[2]();
+								upThis.removeUploader(data.c)();
 								console.info(`Closed an ongoing upload.`);
 							} else {
 								upThis.#uploadDeny.add(data.c);
@@ -102,6 +106,7 @@ export default class AppatDialer {
 					break;
 				};
 				case "WS": {
+					console.debug("Mweh!");
 					break;
 				};
 				case "WT": {
@@ -147,16 +152,12 @@ export default class AppatDialer {
 									"start": async (controller) => {
 										upThis.#uploader.set(data.c, [
 											controller,
-											sourceReader,
-											() => {
-												controller.close();
-												upThis.#uploader.delete(data.c);
-											}
+											sourceReader
 										])
 									},
 									"pull": async (controller) => {
 										if (upThis.#uploadDeny.has(data.c)) {
-											upThis.#uploader.get(data.c)[2]();
+											upThis.removeUploader(data.c)();
 											upThis.#uploadDeny.delete(data.c);
 										} else if (upThis.#uploader.has(data.c)) {
 											// Only pipe when still active
@@ -165,7 +166,7 @@ export default class AppatDialer {
 												controller.enqueue(value);
 											};
 											if (done || upThis.#uploadDeny.has(data.c)) {
-												upThis.#uploader.get(data.c)[2]();
+												upThis.removeUploader(data.c)();
 												upThis.#uploadDeny.delete(data.c);
 											};
 										};
