@@ -300,14 +300,14 @@ func (h *Handler) createIPCRequest() string {
 				errors.LogInfo(h.bind.ctx, "createIPCRequest use dialer dest ip: ", addr)
 			} else {
 				ips, _, err := h.dns.LookupIP(addr.Domain(), dns.IPOption{
-					IPv4Enable: h.hasIPv4 && h.conf.preferIP4(),
-					IPv6Enable: h.hasIPv6 && h.conf.preferIP6(),
+					IPv4Enable: h.conf.preferIP4(),
+					IPv6Enable: h.conf.preferIP6(),
 				})
 				{ // Resolve fallback
 					if (len(ips) == 0 || err != nil) && h.conf.hasFallback() {
 						ips, _, err = h.dns.LookupIP(addr.Domain(), dns.IPOption{
-							IPv4Enable: h.hasIPv4 && h.conf.fallbackIP4(),
-							IPv6Enable: h.hasIPv6 && h.conf.fallbackIP6(),
+							IPv4Enable: h.conf.fallbackIP4(),
+							IPv6Enable: h.conf.fallbackIP6(),
 						})
 					}
 				}
