@@ -85,6 +85,11 @@ export default class AppatDialer {
 		upThis.#controller.addEventListener("message", async (ev) => {
 			let data = JSON.parse(ev.data);
 			console.debug(data);
+			if (upThis.#uploader.has(data.c)) {
+				upThis.#controller.send(`{"c":"${data.c}","s":0,"t":"AppatError","e":"appat.cidCollision"}`);
+				console.warn(`Connection "${data.c}" already existed. Request cancelled.`);
+				return;
+			};
 			switch (data.m) {
 				case "PING": {
 					console.debug(`Pong!`);
