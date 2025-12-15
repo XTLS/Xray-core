@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -10,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 )
@@ -91,7 +93,11 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		}
 
 		if request.User = validator.Get(id); request.User == nil {
-			return nil, nil, nil, isfb, errors.New("invalid request user id")
+			u, uErr := uuid.ParseBytes(id[:])
+			if uErr != nil {
+				return nil, nil, nil, isfb, errors.New("invalid request user id")
+			}
+			return nil, nil, nil, isfb, errors.New(fmt.Sprintf("invalid request user id: %s", u.String()))
 		}
 
 		if isfb {
