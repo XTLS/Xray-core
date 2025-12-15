@@ -184,7 +184,9 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			client := &http.Client{
 				Transport: &http2.Transport{
 					DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (net.Conn, error) {
-						fmt.Printf("REALITY localAddr: %v\tDialTLSContext\n", localAddr)
+						if config.Show {
+							fmt.Printf("REALITY localAddr: %v\tDialTLSContext\n", localAddr)
+						}
 						return uConn, nil
 					},
 				},
