@@ -132,7 +132,7 @@ jobs:
           mv build_assets Xray-${{ env.ASSET_NAME }}
 
       - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: Xray-${{ env.ASSET_NAME }}
           path: |
