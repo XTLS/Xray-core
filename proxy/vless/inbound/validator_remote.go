@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,12 +16,16 @@ import (
 )
 
 // remoteValidator wraps the in-memory validator and adds remote UUID verification with caching.
+// It also emits async notifications on connect/disconnect.
 type remoteValidator struct {
-	local    *vless.MemoryValidator
-	endpoint string
-	client   *http.Client
-	cache    sync.Map // map[string]cachedStatus keyed by normalized UUID string
-	ttl      time.Duration
+	local           *vless.MemoryValidator
+	baseURL         string
+	checkURL        string
+	connectedURL    string
+	disconnectedURL string
+	client          *http.Client
+	cache           sync.Map // map[string]cachedStatus keyed by normalized UUID string
+	ttl             time.Duration
 }
 
 type cachedStatus struct {
@@ -29,11 +34,15 @@ type cachedStatus struct {
 }
 
 func newRemoteValidator(local *vless.MemoryValidator, endpoint string) vless.Validator {
+	base := strings.TrimRight(endpoint, "/")
 	return &remoteValidator{
-		local:    local,
-		endpoint: endpoint,
-		client:   &http.Client{Timeout: 5 * time.Second},
-		ttl:      6 * time.Hour,
+		local:           local,
+		baseURL:         base,
+		checkURL:        base + "/check",
+		connectedURL:    base + "/connected",
+		disconnectedURL: base + "/disconnected",
+		client:          &http.Client{Timeout: 5 * time.Second},
+		ttl:             6 * time.Hour,
 	}
 }
 
@@ -87,6 +96,34 @@ func (r *remoteValidator) GetCount() int64 {
 	return r.local.GetCount()
 }
 
+func (r *remoteValidator) NotifyConnected(uuidStr string, remoteAddr string) {
+	go r.notify(r.connectedURL, uuidStr, remoteAddr)
+}
+
+func (r *remoteValidator) NotifyDisconnected(uuidStr string, remoteAddr string) {
+	go r.notify(r.disconnectedURL, uuidStr, remoteAddr)
+}
+
+func (r *remoteValidator) notify(url, uuidStr string, remoteAddr string) {
+	if url == "" {
+		return
+	}
+	payload := map[string]string{
+		"uuid":       uuidStr,
+		"remoteAddr": remoteAddr,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	_, _ = r.client.Do(req) // fire-and-forget
+}
+
 func (r *remoteValidator) syntheticUser(id uuid.UUID) *protocol.MemoryUser {
 	return &protocol.MemoryUser{
 		Account: &vless.MemoryAccount{
@@ -96,6 +133,7 @@ func (r *remoteValidator) syntheticUser(id uuid.UUID) *protocol.MemoryUser {
 }
 
 func (r *remoteValidator) checkRemote(uuidStr string) bool {
+	errors.LogInfo(context.Background(), "remote validator calling ", r.checkURL, " for uuid ", uuidStr)
 	payload := map[string]string{"uuid": uuidStr}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -103,7 +141,7 @@ func (r *remoteValidator) checkRemote(uuidStr string) bool {
 		return false
 	}
 
-	req, err := http.NewRequest(http.MethodPost, r.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, r.checkURL, bytes.NewReader(body))
 	if err != nil {
 		errors.LogInfo(context.Background(), "remote validator request build error: ", err)
 		return false
