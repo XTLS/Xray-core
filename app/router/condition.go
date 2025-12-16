@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -56,11 +57,13 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	for _, d := range domains {
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
-			return nil, errors.New("unsupported domain type", d.Type)
+			errors.LogError(context.Background(), "ignore unsupported domain type ", d.Type, " of rule ", d.Value)
+			continue
 		}
 		_, err := g.AddPattern(d.Value, matcherType)
 		if err != nil {
-			return nil, err
+			errors.LogErrorInner(context.Background(), err, "ignore domain rule ", d.Type, " ", d.Value)
+			continue
 		}
 	}
 	g.Build()
