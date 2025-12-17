@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // interface to abstract between use of browser dialer, vs net/http
@@ -32,6 +33,9 @@ type DefaultDialerClient struct {
 	client          *http.Client
 	closed          bool
 	httpVersion     string
+	// normalized domain for the underlying dial destination (if any).
+	// Used for XHTTP-only DNS pinning when connections are reused and DialContext is not invoked.
+	dialDomain string
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
@@ -50,6 +54,26 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 		GotConn: func(connInfo httptrace.GotConnInfo) {
 			remoteAddr = connInfo.Conn.RemoteAddr()
 			localAddr = connInfo.Conn.LocalAddr()
+			// If the connection is reused, DialContext isn't invoked; still pin the
+			// actual remote IP to keep upload/download legs stable when enabled.
+			if c.dialDomain != "" {
+				var ip net.IP
+				switch ra := remoteAddr.(type) {
+				case *net.TCPAddr:
+					ip = ra.IP
+				case *net.UDPAddr:
+					ip = ra.IP
+				default:
+					if h, _, e := net.SplitHostPort(remoteAddr.String()); e == nil {
+						if addr := net.ParseAddress(h); addr.Family().IsIP() {
+							ip = addr.IP()
+						}
+					}
+				}
+				if len(ip) > 0 {
+					_ = internet.SetDNSPinIfAbsent(ctx, c.dialDomain, ip)
+				}
+			}
 			gotConn.Close()
 		},
 	})

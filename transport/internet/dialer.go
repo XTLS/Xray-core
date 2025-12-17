@@ -225,6 +225,15 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 
 // DialSystem calls system dialer to create a network connection.
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+	// Opt-in DNS pinning (only when ctx carries a pin store).
+	pinDomain := ""
+	if dest.Address.Family().IsDomain() {
+		pinDomain = dest.Address.Domain()
+		if ip, ok := getDNSPin(ctx, pinDomain); ok {
+			dest.Address = net.IPAddress(ip)
+		}
+	}
+
 	var src net.Address
 	outbounds := session.OutboundsFromContext(ctx)
 	var outboundName string
@@ -241,12 +250,29 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		}
 	}
 	if sockopt == nil {
-		return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
+		conn, err := effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
+		// If OS resolver was used (domain dial), pin the actual remote IP.
+		if err == nil && conn != nil && pinDomain != "" {
+			if host, _, e := net.SplitHostPort(conn.RemoteAddr().String()); e == nil {
+				if addr := net.ParseAddress(host); addr.Family().IsIP() {
+					_ = SetDNSPinIfAbsent(ctx, pinDomain, addr.IP())
+				}
+			}
+		}
+		return conn, err
 	}
 
 	if newDest, err := checkAddressPortStrategy(ctx, dest, sockopt); err == nil && newDest != nil {
 		errors.LogInfo(ctx, "replace destination with "+newDest.String())
 		dest = *newDest
+		// Re-evaluate pin target after potential address override.
+		pinDomain = ""
+		if dest.Address.Family().IsDomain() {
+			pinDomain = dest.Address.Domain()
+			if ip, ok := getDNSPin(ctx, pinDomain); ok {
+				dest.Address = net.IPAddress(ip)
+			}
+		}
 	}
 
 	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
@@ -261,10 +287,22 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 				return nil, err
 			}
 		} else if sockopt.HappyEyeballs == nil || sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0 || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
-			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			chosen := ips[dice.Roll(len(ips))]
+			dest.Address = net.IPAddress(chosen)
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
+			if pinDomain != "" && len(sockopt.DialerProxy) == 0 {
+				_ = SetDNSPinIfAbsent(ctx, pinDomain, chosen)
+			}
 		} else {
-			return TcpRaceDial(ctx, src, ips, dest.Port, sockopt, dest.Address.String())
+			conn, err := TcpRaceDial(ctx, src, ips, dest.Port, sockopt, dest.Address.String())
+			if err == nil && conn != nil && pinDomain != "" && len(sockopt.DialerProxy) == 0 {
+				if host, _, e := net.SplitHostPort(conn.RemoteAddr().String()); e == nil {
+					if addr := net.ParseAddress(host); addr.Family().IsIP() {
+						_ = SetDNSPinIfAbsent(ctx, pinDomain, addr.IP())
+					}
+				}
+			}
+			return conn, err
 		}
 	}
 
@@ -279,7 +317,15 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		return redirect(ctx, dest, sockopt.DialerProxy, h), nil
 	}
 
-	return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
+	conn, err := effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
+	if err == nil && conn != nil && pinDomain != "" && len(sockopt.DialerProxy) == 0 {
+		if host, _, e := net.SplitHostPort(conn.RemoteAddr().String()); e == nil {
+			if addr := net.ParseAddress(host); addr.Family().IsIP() {
+				_ = SetDNSPinIfAbsent(ctx, pinDomain, addr.IP())
+			}
+		}
+	}
+	return conn, err
 }
 
 func InitSystemDialer(dc dns.Client, om outbound.Manager) {

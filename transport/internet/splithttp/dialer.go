@@ -9,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,6 +237,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		uploadRawPool:  &sync.Pool{},
 		dialUploadConn: dialContext,
 	}
+	if dest.Address.Family().IsDomain() {
+		client.dialDomain = strings.TrimSuffix(strings.ToLower(dest.Address.Domain()), ".")
+	}
 
 	return client
 }
@@ -254,6 +258,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+
+	downloadCfg := transportConfiguration.DownloadSettings
+	enablePin := xhttpDownloadEnableDNSPin(downloadCfg)
+	if enablePin {
+		ctx = internet.ContextWithDNSPin(ctx)
+	}
+
 	var requestURL url.URL
 
 	if tlsConfig != nil || realityConfig != nil {
@@ -304,7 +315,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
-		dest2 := *memory2.Destination // just panic
+		// Support "same"/empty address shortcut: inherit primary destination address,
+		// while still allowing different port and other transport/security settings.
+		xhttpApplyDownloadSameAddress(dest, downloadCfg, memory2)
+		if memory2.Destination == nil {
+			return nil, errors.New("XHTTP downloadSettings missing destination address/port")
+		}
+		dest2 := *memory2.Destination
 		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
 		realityConfig2 := reality.ConfigFromStreamSettings(memory2)
 		httpVersion2 := decideHTTPVersion(tlsConfig2, realityConfig2)
