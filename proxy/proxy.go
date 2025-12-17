@@ -787,10 +787,7 @@ func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer sign
 }
 
 func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
-	iConn := conn
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+	iConn := stat.TryUnwrapStatsConn(conn)
 	_, ok1 := iConn.(*proxyproto.Conn)
 	_, ok2 := iConn.(*net.TCPConn)
 	_, ok3 := iConn.(*internet.UnixConnWrapper)
