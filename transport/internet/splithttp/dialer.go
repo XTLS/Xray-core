@@ -9,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +40,13 @@ var (
 	globalDialerMap    map[dialerConf]*XmuxManager
 	globalDialerAccess sync.Mutex
 )
+
+type pinState struct {
+	domain string
+	ip     net.IP
+}
+
+type pinKey struct{}
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
@@ -112,7 +120,13 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
-		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+		dialDest := dest
+		if dialDest.Address.Family().IsDomain() {
+			if p, _ := ctxInner.Value(pinKey{}).(*pinState); p != nil && p.domain == dialDest.Address.Domain() && len(p.ip) > 0 {
+				dialDest.Address = net.IPAddress(p.ip)
+			}
+		}
+		conn, err := internet.DialSystem(ctxInner, dialDest, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +176,13 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
-				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				dialDest := dest
+				if dialDest.Address.Family().IsDomain() {
+					if p, _ := ctx.Value(pinKey{}).(*pinState); p != nil && p.domain == dialDest.Address.Domain() && len(p.ip) > 0 {
+						dialDest.Address = net.IPAddress(p.ip)
+					}
+				}
+				conn, err := internet.DialSystem(ctx, dialDest, streamSettings.SocketSettings)
 				if err != nil {
 					return nil, err
 				}
@@ -254,6 +274,20 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+
+	downloadCfg := transportConfiguration.DownloadSettings
+	same := false
+	if downloadCfg != nil {
+		if dom, ok := downloadCfg.Address.Address.(*net.IPOrDomain_Domain); ok {
+			same = strings.EqualFold(dom.Domain, "same")
+		}
+	}
+	var pin *pinState
+	if same && dest.Address.Family().IsDomain() {
+		pin = &pinState{domain: dest.Address.Domain()}
+		ctx = context.WithValue(ctx, pinKey{}, pin)
+	}
+
 	var requestURL url.URL
 
 	if tlsConfig != nil || realityConfig != nil {
@@ -304,6 +338,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
+		if same {
+			port := dest.Port
+			if downloadCfg != nil && downloadCfg.Port != 0 {
+				port = net.Port(downloadCfg.Port)
+			}
+			memory2.Destination = &net.Destination{Address: dest.Address, Port: port, Network: net.Network_TCP}
+		}
 		dest2 := *memory2.Destination // just panic
 		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
 		realityConfig2 := reality.ConfigFromStreamSettings(memory2)
@@ -375,6 +416,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), nil, false)
 		if err != nil { // browser dialer only
 			return nil, err
+		}
+		if pin != nil && len(pin.ip) == 0 {
+			if a, ok := conn.remoteAddr.(*net.TCPAddr); ok && len(a.IP) > 0 {
+				pin.ip = append(net.IP(nil), a.IP...)
+			} else if a, ok := conn.remoteAddr.(*net.UDPAddr); ok && len(a.IP) > 0 {
+				pin.ip = append(net.IP(nil), a.IP...)
+			}
 		}
 	}
 	if mode == "stream-up" {
