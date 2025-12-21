@@ -6,7 +6,6 @@ import (
 	gotls "crypto/tls"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,6 +99,25 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	h.config.WriteResponseHeader(writer)
+	length := int(h.config.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{
+		Length: length,
+	}
+
+	if h.config.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: Placement(h.config.XPaddingPlacement),
+			Key:       h.config.XPaddingKey,
+			Header:    h.config.XPaddingHeader,
+		}
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementHeader,
+			Header:    "X-Padding",
+		}
+	}
+
+	h.config.ApplyXPaddingToHeader(writer.Header(), config)
 
 	/*
 		clientVer := []int{0, 0, 0}
@@ -110,21 +128,11 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	*/
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
-	paddingLength := 0
-	paddingParam := h.config.XPaddingQueryParam
-
-	referrer := request.Header.Get("Referer")
-	if referrer != "" {
-		if referrerURL, err := url.Parse(referrer); err == nil {
-			// Browser dialer cannot control the host part of referrer header, so only check the query
-			paddingLength = len(referrerURL.Query().Get(paddingParam))
-		}
-	} else {
-		paddingLength = len(request.URL.Query().Get(paddingParam))
-	}
+	paddingValue, paddingPlacement := h.config.ExtractXPaddingFromRequest(request, h.config.XPaddingObfsMode)
+	paddingLength := len(paddingValue)
 
 	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
-		errors.LogInfo(context.Background(), "invalid padding ("+paddingParam+") length:", int32(paddingLength))
+		errors.LogInfo(context.Background(), "invalid padding ("+paddingPlacement+") length:", int32(paddingLength))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -208,6 +216,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
 				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
+				referrer := request.Header.Get("Referer")
 				if referrer != "" && scStreamUpServerSecs.To > 0 {
 					go func() {
 						for {

@@ -173,7 +173,11 @@ type Config struct {
 	ScStreamUpServerSecs *RangeConfig           `protobuf:"bytes,11,opt,name=scStreamUpServerSecs,proto3" json:"scStreamUpServerSecs,omitempty"`
 	Xmux                 *XmuxConfig            `protobuf:"bytes,12,opt,name=xmux,proto3" json:"xmux,omitempty"`
 	DownloadSettings     *internet.StreamConfig `protobuf:"bytes,13,opt,name=downloadSettings,proto3" json:"downloadSettings,omitempty"`
-	XPaddingQueryParam   string                 `protobuf:"bytes,14,opt,name=xPaddingQueryParam,proto3" json:"xPaddingQueryParam,omitempty"`
+	XPaddingObfsMode     bool                   `protobuf:"varint,14,opt,name=xPaddingObfsMode,proto3" json:"xPaddingObfsMode,omitempty"`
+	XPaddingKey          string                 `protobuf:"bytes,15,opt,name=xPaddingKey,proto3" json:"xPaddingKey,omitempty"`
+	XPaddingHeader       string                 `protobuf:"bytes,16,opt,name=xPaddingHeader,proto3" json:"xPaddingHeader,omitempty"`
+	XPaddingPlacement    string                 `protobuf:"bytes,17,opt,name=xPaddingPlacement,proto3" json:"xPaddingPlacement,omitempty"`
+	XPaddingMethod       string                 `protobuf:"bytes,18,opt,name=xPaddingMethod,proto3" json:"xPaddingMethod,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -299,9 +303,37 @@ func (x *Config) GetDownloadSettings() *internet.StreamConfig {
 	return nil
 }
 
-func (x *Config) GetXPaddingQueryParam() string {
+func (x *Config) GetXPaddingObfsMode() bool {
 	if x != nil {
-		return x.XPaddingQueryParam
+		return x.XPaddingObfsMode
+	}
+	return false
+}
+
+func (x *Config) GetXPaddingKey() string {
+	if x != nil {
+		return x.XPaddingKey
+	}
+	return ""
+}
+
+func (x *Config) GetXPaddingHeader() string {
+	if x != nil {
+		return x.XPaddingHeader
+	}
+	return ""
+}
+
+func (x *Config) GetXPaddingPlacement() string {
+	if x != nil {
+		return x.XPaddingPlacement
+	}
+	return ""
+}
+
+func (x *Config) GetXPaddingMethod() string {
+	if x != nil {
+		return x.XPaddingMethod
 	}
 	return ""
 }
@@ -321,7 +353,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\x8c\a\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xa8\b\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -336,8 +368,12 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	" \x01(\x03R\x12scMaxBufferedPosts\x12b\n" +
 	"\x14scStreamUpServerSecs\x18\v \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x14scStreamUpServerSecs\x12A\n" +
 	"\x04xmux\x18\f \x01(\v2-.xray.transport.internet.splithttp.XmuxConfigR\x04xmux\x12Q\n" +
-	"\x10downloadSettings\x18\r \x01(\v2%.xray.transport.internet.StreamConfigR\x10downloadSettings\x12.\n" +
-	"\x12xPaddingQueryParam\x18\x0e \x01(\tR\x12xPaddingQueryParam\x1a:\n" +
+	"\x10downloadSettings\x18\r \x01(\v2%.xray.transport.internet.StreamConfigR\x10downloadSettings\x12*\n" +
+	"\x10xPaddingObfsMode\x18\x0e \x01(\bR\x10xPaddingObfsMode\x12 \n" +
+	"\vxPaddingKey\x18\x0f \x01(\tR\vxPaddingKey\x12&\n" +
+	"\x0exPaddingHeader\x18\x10 \x01(\tR\x0exPaddingHeader\x12,\n" +
+	"\x11xPaddingPlacement\x18\x11 \x01(\tR\x11xPaddingPlacement\x12&\n" +
+	"\x0exPaddingMethod\x18\x12 \x01(\tR\x0exPaddingMethod\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +

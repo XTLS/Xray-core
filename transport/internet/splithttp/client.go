@@ -59,7 +59,30 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 		method = "POST" // stream-up/one
 	}
 	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
-	req.Header = c.transportConfig.GetRequestHeader(url)
+	req.Header = c.transportConfig.GetRequestHeader()
+	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{
+		Length: length,
+	}
+
+	if c.transportConfig.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: Placement(c.transportConfig.XPaddingPlacement),
+			Key:       c.transportConfig.XPaddingKey,
+			Header:    c.transportConfig.XPaddingHeader,
+			RawURL:    url,
+		}
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    url,
+		}
+	}
+
+	c.transportConfig.ApplyXPaddingToRequest(req, config)
+
 	if method == "POST" && !c.transportConfig.NoGRPCHeader {
 		req.Header.Set("Content-Type", "application/grpc")
 	}
@@ -98,7 +121,29 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body i
 		return err
 	}
 	req.ContentLength = contentLength
-	req.Header = c.transportConfig.GetRequestHeader(url)
+	req.Header = c.transportConfig.GetRequestHeader()
+	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{
+		Length: length,
+	}
+
+	if c.transportConfig.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: Placement(c.transportConfig.XPaddingPlacement),
+			Key:       c.transportConfig.XPaddingKey,
+			Header:    c.transportConfig.XPaddingHeader,
+			RawURL:    url,
+		}
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    url,
+		}
+	}
+
+	c.transportConfig.ApplyXPaddingToRequest(req, config)
 
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
