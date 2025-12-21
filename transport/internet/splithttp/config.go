@@ -2,12 +2,10 @@ package splithttp
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -44,21 +42,11 @@ func (c *Config) GetNormalizedQuery() string {
 	return query
 }
 
-func (c *Config) GetRequestHeader(rawURL string) http.Header {
+func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
 	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
-
-	u, _ := url.Parse(rawURL)
-	// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
-	// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
-	// 'X' is assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
-	// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
-	// h3's similar QPACK feature uses the same huffman table.
-	u.RawQuery = c.XPaddingQueryParam + "=" + utils.GetPadding()
-	header.Set("Referer", u.String())
-
 	return header
 }
 
@@ -67,18 +55,6 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
 	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
 	// writer.Header().Set("X-Version", core.Version())
-	writer.Header().Set("X-Signature", utils.GetPadding())
-}
-
-func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
-	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
-		return RangeConfig{
-			From: 100,
-			To:   1000,
-		}
-	}
-
-	return *c.XPaddingBytes
 }
 
 func (c *Config) GetNormalizedScMaxEachPostBytes() RangeConfig {
