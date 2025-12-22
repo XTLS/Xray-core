@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 )
 
@@ -147,7 +147,7 @@ func copyV(r *SingleReader, w Writer, handler *copyHandler) error {
 	// 0 in ARM MIPS MIPSLE
 	// 4kb in ARM64 MIPS64 MIPS64LE
 	// 512kb in others
-	channelBuffer := (policy.SessionDefault().Buffer.PerConnection)/Size
+	channelBuffer := (policy.SessionDefault().Buffer.PerConnection) / Size
 	if channelBuffer <= 0 {
 		channelBuffer = 4
 	}
@@ -217,9 +217,8 @@ func copyV(r *SingleReader, w Writer, handler *copyHandler) error {
 		}
 	}()
 	wg.Wait()
-	for range cache {
-		// drain cache
-		b := <-cache
+	// drain cache
+	for b := range cache {
 		b.Release()
 	}
 	if wErr != nil {
