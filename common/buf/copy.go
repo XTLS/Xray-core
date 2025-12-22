@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/features/stats"
@@ -141,8 +142,16 @@ func CopyOnceTimeout(reader Reader, writer Writer, timeout time.Duration) error 
 }
 
 func copyV(r *SingleReader, w Writer, handler *copyHandler) error {
-	// max packet len is 8192, so buffer channel size is 512, about 4MB memory usage
-	cache := make(chan *Buffer, 512)
+	// channel buffer size is maxBuffer/maxPerPacketLen (ignore the case of many small packets)
+	// default buffer size:
+	// 0 in ARM MIPS MIPSLE
+	// 4kb in ARM64 MIPS64 MIPS64LE
+	// 512kb in others
+	channelBuffer := (policy.SessionDefault().Buffer.PerConnection)/Size
+	if channelBuffer <= 0 {
+		channelBuffer = 4
+	}
+	cache := make(chan *Buffer, channelBuffer)
 	stopRead := make(chan struct{})
 	var rErr error
 	var wErr error
