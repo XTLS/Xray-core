@@ -336,6 +336,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		XPaddingBytes:        newRangeConfig(c.XPaddingBytes),
 		XPaddingObfsMode:     c.XPaddingObfsMode,
 		XPaddingKey:          c.XPaddingKey,
+		XPaddingHeader:       c.XPaddingHeader,
 		XPaddingPlacement:    c.XPaddingPlacement,
 		XPaddingMethod:       c.XPaddingMethod,
 		NoGRPCHeader:         c.NoGRPCHeader,

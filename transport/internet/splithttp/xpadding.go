@@ -1,9 +1,13 @@
 package splithttp
 
 import (
+	"crypto/rand"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/http2/hpack"
 )
 
 type Placement string
@@ -21,6 +25,13 @@ const (
 	PaddingMethodTokenish PaddingMethod = "tokenish"
 )
 
+const charsetBase62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// Huffman encoding gives ~20% size reduction for base62 sequences
+const avgHuffmanBytesPerCharBase62 = 0.8
+
+const validationTolerance = 2
+
 type XPaddingPlacement struct {
 	Placement Placement
 	Key       string
@@ -34,13 +45,103 @@ type XPaddingConfig struct {
 	Method    PaddingMethod
 }
 
+func randStringFromCharset(n int, charset string) (string, bool) {
+	if n <= 0 || len(charset) == 0 {
+		return "", false
+	}
+
+	m := len(charset)
+	limit := byte(256 - (256 % m))
+
+	result := make([]byte, n)
+	i := 0
+
+	buf := make([]byte, 256)
+	for i < n {
+		if _, err := rand.Read(buf); err != nil {
+			return "", false
+		}
+		for _, rb := range buf {
+			if rb >= limit {
+				continue
+			}
+			result[i] = charset[int(rb)%m]
+			i++
+			if i == n {
+				break
+			}
+		}
+	}
+
+	return string(result), true
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func GenerateTokenishPaddingBase62(targetHuffmanBytes int) string {
+	n := int(math.Ceil(float64(targetHuffmanBytes) / avgHuffmanBytesPerCharBase62))
+	if n < 1 {
+		n = 1
+	}
+
+	randBase62Str, ok := randStringFromCharset(n, charsetBase62)
+	if !ok {
+		return ""
+	}
+
+	const maxIter = 150
+	adjustChar := byte('X')
+
+	// Adjust until close enough
+	for iter := 0; iter < maxIter; iter++ {
+		currentLength := int(hpack.HuffmanEncodeLength(randBase62Str))
+		diff := currentLength - targetHuffmanBytes
+
+		if absInt(diff) <= validationTolerance {
+			return randBase62Str
+		}
+
+		if diff < 0 {
+			// Too small -> append padding char(s)
+			randBase62Str += string(adjustChar)
+
+			// Avoid a long run of identical chars
+			if adjustChar == 'X' {
+				adjustChar = 'Z'
+			} else {
+				adjustChar = 'X'
+			}
+		} else {
+			// Too big -> remove from the end
+			if len(randBase62Str) <= 1 {
+				return randBase62Str
+			}
+			randBase62Str = randBase62Str[:len(randBase62Str)-1]
+		}
+	}
+
+	return randBase62Str
+}
+
 func GeneratePadding(method PaddingMethod, length int) string {
+	if length <= 0 {
+		return ""
+	}
+
 	switch method {
 	case PaddingMethodRepeatX:
 		return strings.Repeat("X", length)
 	case PaddingMethodTokenish:
-		// TODO: implement tokenish
-		return strings.Repeat("X", length)
+		paddingValue := GenerateTokenishPaddingBase62(length)
+		if paddingValue == "" {
+			return strings.Repeat("X", length)
+		}
+		return paddingValue
 	default:
 		return strings.Repeat("X", length)
 	}
@@ -84,15 +185,16 @@ func (c *Config) ApplyXPaddingToHeader(h http.Header, config XPaddingConfig) {
 
 	paddingValue := GeneratePadding(config.Method, config.Length)
 
-	if config.Placement.Placement == PlacementHeader {
-		h.Set(config.Placement.Header, paddingValue)
-	} else if config.Placement.Placement == PlacementQueryInHeader {
-		u, err := url.Parse(config.Placement.RawURL)
+	switch p := config.Placement; p.Placement {
+	case PlacementHeader:
+		h.Set(p.Header, paddingValue)
+	case PlacementQueryInHeader:
+		u, err := url.Parse(p.RawURL)
 		if err != nil || u == nil {
 			return
 		}
-		u.RawQuery = config.Placement.Key + "=" + paddingValue
-		h.Set(config.Placement.Header, u.String())
+		u.RawQuery = p.Key + "=" + paddingValue
+		h.Set(p.Header, u.String())
 	}
 }
 
@@ -124,7 +226,7 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 		return "", ""
 	}
 
-	if obfsMode {
+	if !obfsMode {
 		referrer := req.Header.Get("Referer")
 
 		if referrer != "" {
@@ -173,4 +275,33 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 	}
 
 	return "", ""
+}
+
+func (c *Config) IsPaddingValid(paddingValue string, from, to int32, method PaddingMethod) bool {
+	if paddingValue == "" {
+		return false
+	}
+	if to <= 0 {
+		r := c.GetNormalizedXPaddingBytes()
+		from, to = r.From, r.To
+	}
+
+	switch method {
+	case PaddingMethodRepeatX:
+		n := int32(len(paddingValue))
+		return n >= from && n <= to
+	case PaddingMethodTokenish:
+		const tolerance = int32(validationTolerance)
+
+		n := int32(hpack.HuffmanEncodeLength(paddingValue))
+		f := from - tolerance
+		t := to + tolerance
+		if f < 0 {
+			f = 0
+		}
+		return n >= f && n <= t
+	default:
+		n := int32(len(paddingValue))
+		return n >= from && n <= to
+	}
 }
