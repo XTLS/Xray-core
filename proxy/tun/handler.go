@@ -65,16 +65,21 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {
+		_ = tunInterface.Close()
 		return err
 	}
 
 	err = tunStack.Start()
 	if err != nil {
+		_ = tunStack.Close()
+		_ = tunInterface.Close()
 		return err
 	}
 
 	err = tunInterface.Start()
 	if err != nil {
+		_ = tunStack.Close()
+		_ = tunInterface.Close()
 		return err
 	}
 
