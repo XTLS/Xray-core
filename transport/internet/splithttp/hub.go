@@ -110,6 +110,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Key:       h.config.XPaddingKey,
 			Header:    h.config.XPaddingHeader,
 		}
+		config.Method = PaddingMethod(h.config.XPaddingMethod)
 	} else {
 		config.Placement = XPaddingPlacement{
 			Placement: PlacementHeader,
@@ -129,10 +130,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	validRange := h.config.GetNormalizedXPaddingBytes()
 	paddingValue, paddingPlacement := h.config.ExtractXPaddingFromRequest(request, h.config.XPaddingObfsMode)
-	paddingLength := len(paddingValue)
 
-	if int32(paddingLength) < validRange.From || int32(paddingLength) > validRange.To {
-		errors.LogInfo(context.Background(), "invalid padding ("+paddingPlacement+") length:", int32(paddingLength))
+	if !h.config.IsPaddingValid(paddingValue, validRange.From, validRange.To, PaddingMethod(h.config.XPaddingMethod)) {
+		errors.LogInfo(context.Background(), "invalid padding ("+paddingPlacement+") length:", int32(len(paddingValue)))
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}

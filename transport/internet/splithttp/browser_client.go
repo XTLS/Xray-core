@@ -37,6 +37,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body i
 			Header:    c.transportConfig.XPaddingHeader,
 			RawURL:    url,
 		}
+		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
 	} else {
 		config.Placement = XPaddingPlacement{
 			Placement: PlacementQueryInHeader,
@@ -76,6 +77,7 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, body i
 			Header:    c.transportConfig.XPaddingHeader,
 			RawURL:    url,
 		}
+		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
 	} else {
 		config.Placement = XPaddingPlacement{
 			Placement: PlacementQueryInHeader,
