@@ -180,7 +180,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		fmt.Printf("REALITY localAddr: %v\tuConn.Verified: %v\n", localAddr, uConn.Verified)
 	}
 	if !uConn.Verified {
-		errors.LogError(ctx, "REALITY: peer verification failed (potential MITM or redirection)")
+		errors.LogError(ctx, "REALITY: received real certificate (potential MITM or redirection)")
 		go func() {
 			client := &http.Client{
 				Transport: &http2.Transport{
