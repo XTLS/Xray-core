@@ -1,6 +1,7 @@
 package strmatcher
 
 import (
+	"errors"
 	"regexp"
 )
 
@@ -44,7 +45,7 @@ func (t Type) New(pattern string) (Matcher, error) {
 			pattern: r,
 		}, nil
 	default:
-		panic("Unknown type")
+		return nil, errors.New("unk type")
 	}
 }
 
