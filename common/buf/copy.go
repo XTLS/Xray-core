@@ -115,12 +115,7 @@ func Copy(reader Reader, writer Writer, options ...CopyOption) error {
 	for _, option := range options {
 		option(&handler)
 	}
-	var err error
-	if sReader, ok := reader.(*SingleReader); ok && false {
-		err = copyV(sReader, writer, &handler)
-	} else {
-		err = copyInternal(reader, writer, &handler)
-	}
+	err := copyInternal(reader, writer, &handler)
 	if err != nil && errors.Cause(err) != io.EOF {
 		return err
 	}
@@ -141,7 +136,31 @@ func CopyOnceTimeout(reader Reader, writer Writer, timeout time.Duration) error 
 	return writer.WriteMultiBuffer(mb)
 }
 
-func copyV(r *SingleReader, w Writer, handler *copyHandler) error {
+func TryCopyV(reader Reader, writer Writer, options ...CopyOption) error {
+	var doCopyV bool
+	if tr, ok := reader.(*TimeoutWrapperReader); ok {
+		if _, ok := tr.Reader.(*SingleReader); ok {
+			doCopyV = true
+		}
+	}
+	if _, ok := reader.(*SingleReader); ok {
+		doCopyV = true
+	}
+	if !doCopyV {
+		return Copy(reader, writer, options...)
+	}
+	var handler copyHandler
+	for _, option := range options {
+		option(&handler)
+	}
+	err := copyVInternal(reader, writer, &handler)
+	if err != nil && errors.Cause(err) != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func copyVInternal(r Reader, w Writer, handler *copyHandler) error {
 	// channel buffer size is maxBuffer/maxPerPacketLen (ignore the case of many small packets)
 	// default buffer size:
 	// 0 in ARM MIPS MIPSLE
@@ -162,23 +181,25 @@ func copyV(r *SingleReader, w Writer, handler *copyHandler) error {
 		defer wg.Done()
 		defer close(cache)
 		for {
-			b, err := r.readBuffer()
-			if err == nil {
-				select {
-				case cache <- b:
-				// must be write error
-				case <-stopRead:
-					b.Release()
+			mb, err := r.ReadMultiBuffer()
+			for _, b := range mb {
+				if err == nil {
+					select {
+					case cache <- b:
+					// must be write error
+					case <-stopRead:
+						b.Release()
+						return
+					}
+				} else {
+					rErr = err
+					select {
+					case cache <- b:
+					case <-stopRead:
+						b.Release()
+					}
 					return
 				}
-			} else {
-				rErr = err
-				select {
-				case cache <- b:
-				case <-stopRead:
-					b.Release()
-				}
-				return
 			}
 		}
 	}()
