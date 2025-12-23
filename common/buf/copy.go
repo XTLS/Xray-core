@@ -115,7 +115,12 @@ func Copy(reader Reader, writer Writer, options ...CopyOption) error {
 	for _, option := range options {
 		option(&handler)
 	}
-	err := copyInternal(reader, writer, &handler)
+	var err error
+	if shouldUseCopyV(reader, writer) {
+		err = copyVInternal(reader, writer, &handler)
+	} else {
+		err = copyInternal(reader, writer, &handler)
+	}
 	if err != nil && errors.Cause(err) != io.EOF {
 		return err
 	}
@@ -136,7 +141,12 @@ func CopyOnceTimeout(reader Reader, writer Writer, timeout time.Duration) error 
 	return writer.WriteMultiBuffer(mb)
 }
 
-func TryCopyV(reader Reader, writer Writer, options ...CopyOption) error {
+func shouldUseCopyV(reader Reader, writer Writer) bool {
+	// if writer is not support writeV, directly return false
+	if _, ok := writer.(*BufferToBytesWriter); !ok {
+		return false
+	}
+	// try to figure out if the underlying reader is SingleReader
 	var doCopyV bool
 	if tr, ok := reader.(*TimeoutWrapperReader); ok {
 		if _, ok := tr.Reader.(*SingleReader); ok {
@@ -146,18 +156,7 @@ func TryCopyV(reader Reader, writer Writer, options ...CopyOption) error {
 	if _, ok := reader.(*SingleReader); ok {
 		doCopyV = true
 	}
-	if !doCopyV {
-		return Copy(reader, writer, options...)
-	}
-	var handler copyHandler
-	for _, option := range options {
-		option(&handler)
-	}
-	err := copyVInternal(reader, writer, &handler)
-	if err != nil && errors.Cause(err) != io.EOF {
-		return err
-	}
-	return nil
+	return doCopyV
 }
 
 func copyVInternal(r Reader, w Writer, handler *copyHandler) error {

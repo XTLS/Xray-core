@@ -394,7 +394,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, trafficState, false, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
-			err = buf.TryCopyV(serverReader, clientWriter, buf.UpdateActivity(timer))
+			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
 		}
 
 		if err != nil {
