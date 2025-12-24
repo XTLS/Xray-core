@@ -178,6 +178,7 @@ type Config struct {
 	XPaddingHeader       string                 `protobuf:"bytes,16,opt,name=xPaddingHeader,proto3" json:"xPaddingHeader,omitempty"`
 	XPaddingPlacement    string                 `protobuf:"bytes,17,opt,name=xPaddingPlacement,proto3" json:"xPaddingPlacement,omitempty"`
 	XPaddingMethod       string                 `protobuf:"bytes,18,opt,name=xPaddingMethod,proto3" json:"xPaddingMethod,omitempty"`
+	UplinkHTTPMethod     string                 `protobuf:"bytes,19,opt,name=uplinkHTTPMethod,proto3" json:"uplinkHTTPMethod,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -338,6 +339,13 @@ func (x *Config) GetXPaddingMethod() string {
 	return ""
 }
 
+func (x *Config) GetUplinkHTTPMethod() string {
+	if x != nil {
+		return x.UplinkHTTPMethod
+	}
+	return ""
+}
+
 var File_transport_internet_splithttp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_splithttp_config_proto_rawDesc = "" +
@@ -353,7 +361,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xa8\b\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xd4\b\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -373,7 +381,8 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\vxPaddingKey\x18\x0f \x01(\tR\vxPaddingKey\x12&\n" +
 	"\x0exPaddingHeader\x18\x10 \x01(\tR\x0exPaddingHeader\x12,\n" +
 	"\x11xPaddingPlacement\x18\x11 \x01(\tR\x11xPaddingPlacement\x12&\n" +
-	"\x0exPaddingMethod\x18\x12 \x01(\tR\x0exPaddingMethod\x1a:\n" +
+	"\x0exPaddingMethod\x18\x12 \x01(\tR\x0exPaddingMethod\x12*\n" +
+	"\x10uplinkHTTPMethod\x18\x13 \x01(\tR\x10uplinkHTTPMethod\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +

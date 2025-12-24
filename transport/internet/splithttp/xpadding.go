@@ -133,6 +133,12 @@ func GeneratePadding(method PaddingMethod, length int) string {
 		return ""
 	}
 
+	// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
+	// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
+	// 'X' and 'Z' are assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
+	// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
+	// h3's similar QPACK feature uses the same huffman table.
+
 	switch method {
 	case PaddingMethodRepeatX:
 		return strings.Repeat("X", length)
@@ -206,14 +212,16 @@ func (c *Config) ApplyXPaddingToRequest(req *http.Request, config XPaddingConfig
 		req.Header = make(http.Header)
 	}
 
-	if config.Placement.Placement == PlacementHeader || config.Placement.Placement == PlacementQueryInHeader {
+	placement := config.Placement.Placement
+
+	if placement == PlacementHeader || placement == PlacementQueryInHeader {
 		c.ApplyXPaddingToHeader(req.Header, config)
 		return
 	}
 
 	paddingValue := GeneratePadding(config.Method, config.Length)
 
-	switch config.Placement.Placement {
+	switch placement {
 	case PlacementCookie:
 		ApplyPaddingToCookie(req, config.Placement.Key, paddingValue)
 	case PlacementQuery:
