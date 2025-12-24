@@ -53,8 +53,16 @@ func (c *Config) GetRequestHeader() http.Header {
 func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	// CORS headers for the browser dialer
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
-	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+	writer.Header().Set("Access-Control-Allow-Methods", "*")
 	// writer.Header().Set("X-Version", core.Version())
+}
+
+func (c *Config) GetNormalizedUplinkHTTPMethod() string {
+	if c.UplinkHTTPMethod == "" {
+		return "POST"
+	}
+
+	return c.UplinkHTTPMethod
 }
 
 func (c *Config) GetNormalizedScMaxEachPostBytes() RangeConfig {

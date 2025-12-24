@@ -41,4 +41,5 @@ message Config {
   string xPaddingHeader = 16;
   string xPaddingPlacement = 17;
   string xPaddingMethod = 18;
+  string uplinkHTTPMethod = 19;
 }
