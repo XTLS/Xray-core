@@ -187,8 +187,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		currentSession = h.upsertSession(sessionId)
 	}
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
+	uplinkHTTPMethodmethod := h.config.GetNormalizedUplinkHTTPMethod()
 
-	if request.Method == "POST" && sessionId != "" { // stream-up, packet-up
+	if request.Method == uplinkHTTPMethodmethod && sessionId != "" { // stream-up, packet-up
 		seq := ""
 		if len(subpath) > 1 {
 			seq = subpath[1]
