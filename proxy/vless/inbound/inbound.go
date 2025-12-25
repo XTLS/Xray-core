@@ -76,7 +76,7 @@ type Handler struct {
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
-	defaultDispatcher      *dispatcher.DefaultDispatcher
+	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -90,7 +90,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
-		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(*dispatcher.DefaultDispatcher),
+		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
 	}
 
@@ -261,7 +261,7 @@ func (*Handler) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatch routing.Dispatcher) error {
 	iConn := stat.TryUnwrapStatsConn(connection)
 
 	if h.decryption != nil {
@@ -620,10 +620,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, h.defaultDispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		defaultDispatcher, ok := h.defaultDispatcher.(*dispatcher.DefaultDispatcher)
+		if !ok {
+			return errors.New("VLESS reverse must have a dispatcher that implemented routing.WrapLinkDispatcher")
+		}
+		return r.NewMux(ctx, defaultDispatcher.WrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
 	}
 
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
+	if err := dispatch.DispatchLink(ctx, request.Destination(), &transport.Link{
 		Reader: clientReader,
 		Writer: clientWriter},
 	); err != nil {
