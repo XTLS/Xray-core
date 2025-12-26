@@ -51,12 +51,19 @@ message GetStatsOnlineIpListResponse {
   map<string, int64> ips = 2;
 }
 
+message GetAllOnlineUsersRequest {}
+
+message GetAllOnlineUsersResponse {
+  repeated string users = 1;
+}
+
 service StatsService {
   rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {}
   rpc GetStatsOnline(GetStatsRequest) returns (GetStatsResponse) {}
   rpc QueryStats(QueryStatsRequest) returns (QueryStatsResponse) {}
   rpc GetSysStats(SysStatsRequest) returns (SysStatsResponse) {}
   rpc GetStatsOnlineIpList(GetStatsRequest) returns (GetStatsOnlineIpListResponse) {}
+  rpc GetAllOnlineUsers(GetAllOnlineUsersRequest) returns (GetAllOnlineUsersResponse) {}
 }
 
 message Config {}
