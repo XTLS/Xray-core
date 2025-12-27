@@ -159,6 +159,11 @@ func (r *SingleReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return MultiBuffer{b}, err
 }
 
+func (r *SingleReader) readBuffer() (*Buffer, error) {
+	b, err := ReadBuffer(r.Reader)
+	return b, err
+}
+
 // PacketReader is a Reader that read one Buffer every time.
 type PacketReader struct {
 	io.Reader
