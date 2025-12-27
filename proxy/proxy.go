@@ -28,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -791,5 +792,9 @@ func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
 	_, ok1 := iConn.(*proxyproto.Conn)
 	_, ok2 := iConn.(*net.TCPConn)
 	_, ok3 := iConn.(*internet.UnixConnWrapper)
+	httpconn, httpok := iConn.(*httpupgrade.ConnRF)
+	if httpok {
+		return httpconn.Req.URL.Scheme == "http"
+	}
 	return ok1 || ok2 || ok3
 }
