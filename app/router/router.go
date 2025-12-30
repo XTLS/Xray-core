@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	sync "sync"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -25,6 +26,12 @@ type Router struct {
 	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
 	mu         sync.Mutex
+
+	// Route cache for performance optimization
+	cache        *RouteCache
+	cacheEnabled bool
+	cacheTTL     int64 // TTL in seconds, 0 means use default
+	cacheMaxSize int32 // Max cache size, 0 means use default
 }
 
 // Route is an implementation of routing.Route.
@@ -75,6 +82,23 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 		r.rules = append(r.rules, rr)
 	}
 
+	// Initialize route cache
+	r.cacheEnabled = config.RouteCache
+	r.cacheTTL = config.RouteCacheTtl
+	r.cacheMaxSize = config.RouteCacheMaxSize
+	if r.cacheEnabled {
+		ttl := DefaultRouteCacheTTL
+		if r.cacheTTL > 0 {
+			ttl = time.Duration(r.cacheTTL) * time.Second
+		}
+		maxSize := DefaultRouteCacheSize
+		if r.cacheMaxSize > 0 {
+			maxSize = int(r.cacheMaxSize)
+		}
+		r.cache = NewRouteCache(maxSize, ttl)
+		errors.LogInfo(ctx, "Route cache enabled with max size ", maxSize, " and TTL ", ttl)
+	}
+
 	return nil
 }
 
@@ -107,6 +131,11 @@ func (r *Router) AddRule(config *serial.TypedMessage, shouldAppend bool) error {
 func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Invalidate cache when rules change
+	if r.cache != nil {
+		r.cache.Invalidate()
+	}
 
 	if !shouldAppend {
 		r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
@@ -168,6 +197,11 @@ func (r *Router) RemoveRule(tag string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Invalidate cache when rules change
+	if r.cache != nil {
+		r.cache.Invalidate()
+	}
+
 	newRules := []*Rule{}
 	if tag != "" {
 		for _, rule := range r.rules {
@@ -187,17 +221,36 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	// this prevents cycle resolving dead loop
 	skipDNSResolve := ctx.GetSkipDNSResolve()
 
+	// Try to get from cache first
+	if r.cache != nil && !skipDNSResolve {
+		if cachedRule, _, found := r.cache.Get(ctx); found {
+			if cachedRule != nil {
+				return cachedRule, ctx, nil
+			}
+			// Cached "no match" result - return default
+			return nil, ctx, common.ErrNoClue
+		}
+	}
+
 	if r.domainStrategy == Config_IpOnDemand && !skipDNSResolve {
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
 	for _, rule := range r.rules {
 		if rule.Apply(ctx) {
+			// Cache the result (only for rules without balancers)
+			if r.cache != nil && !skipDNSResolve {
+				r.cache.Put(ctx, rule, rule.Tag)
+			}
 			return rule, ctx, nil
 		}
 	}
 
 	if r.domainStrategy != Config_IpIfNonMatch || len(ctx.GetTargetDomain()) == 0 || skipDNSResolve {
+		// Cache the "no match" result
+		if r.cache != nil && !skipDNSResolve {
+			r.cache.Put(ctx, nil, "")
+		}
 		return nil, ctx, common.ErrNoClue
 	}
 
@@ -206,6 +259,8 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	// Try applying rules again if we have IPs.
 	for _, rule := range r.rules {
 		if rule.Apply(ctx) {
+			// Note: We don't cache results from IpIfNonMatch path
+			// because the routing decision depends on DNS resolution
 			return rule, ctx, nil
 		}
 	}
@@ -240,6 +295,23 @@ func (r *Route) GetOutboundTag() string {
 
 func (r *Route) GetRuleTag() string {
 	return r.ruleTag
+}
+
+// GetCacheStats returns cache statistics if cache is enabled
+func (r *Router) GetCacheStats() (hits, misses, evictions uint64, size int, hitRate float64) {
+	if r.cache == nil {
+		return 0, 0, 0, 0, 0
+	}
+	hits, misses, evictions, size = r.cache.Stats()
+	hitRate = r.cache.HitRate()
+	return
+}
+
+// InvalidateCache clears the route cache
+func (r *Router) InvalidateCache() {
+	if r.cache != nil {
+		r.cache.Invalidate()
+	}
 }
 
 func init() {

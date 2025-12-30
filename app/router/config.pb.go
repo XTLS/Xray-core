@@ -7,12 +7,13 @@
 package router
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	net "github.com/xtls/xray-core/common/net"
 	serial "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -884,9 +885,12 @@ type Config struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	DomainStrategy Config_DomainStrategy `protobuf:"varint,1,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.app.router.Config_DomainStrategy" json:"domain_strategy,omitempty"`
-	Rule           []*RoutingRule        `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
-	BalancingRule  []*BalancingRule      `protobuf:"bytes,3,rep,name=balancing_rule,json=balancingRule,proto3" json:"balancing_rule,omitempty"`
+	DomainStrategy    Config_DomainStrategy `protobuf:"varint,1,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.app.router.Config_DomainStrategy" json:"domain_strategy,omitempty"`
+	Rule              []*RoutingRule        `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
+	BalancingRule     []*BalancingRule      `protobuf:"bytes,3,rep,name=balancing_rule,json=balancingRule,proto3" json:"balancing_rule,omitempty"`
+	RouteCache        bool                  `protobuf:"varint,4,opt,name=route_cache,json=routeCache,proto3" json:"route_cache,omitempty"`
+	RouteCacheTtl     int64                 `protobuf:"varint,5,opt,name=route_cache_ttl,json=routeCacheTtl,proto3" json:"route_cache_ttl,omitempty"`
+	RouteCacheMaxSize int32                 `protobuf:"varint,6,opt,name=route_cache_max_size,json=routeCacheMaxSize,proto3" json:"route_cache_max_size,omitempty"`
 }
 
 func (x *Config) Reset() {
@@ -938,6 +942,27 @@ func (x *Config) GetBalancingRule() []*BalancingRule {
 		return x.BalancingRule
 	}
 	return nil
+}
+
+func (x *Config) GetRouteCache() bool {
+	if x != nil {
+		return x.RouteCache
+	}
+	return false
+}
+
+func (x *Config) GetRouteCacheTtl() int64 {
+	if x != nil {
+		return x.RouteCacheTtl
+	}
+	return 0
+}
+
+func (x *Config) GetRouteCacheMaxSize() int32 {
+	if x != nil {
+		return x.RouteCacheMaxSize
+	}
+	return 0
 }
 
 type Domain_Attribute struct {

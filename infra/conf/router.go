@@ -71,9 +71,12 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 }
 
 type RouterConfig struct {
-	RuleList       []json.RawMessage `json:"rules"`
-	DomainStrategy *string           `json:"domainStrategy"`
-	Balancers      []*BalancingRule  `json:"balancers"`
+	RuleList          []json.RawMessage `json:"rules"`
+	DomainStrategy    *string           `json:"domainStrategy"`
+	Balancers         []*BalancingRule  `json:"balancers"`
+	RouteCache        bool              `json:"routeCache"`
+	RouteCacheTTL     int64             `json:"routeCacheTTL"`
+	RouteCacheMaxSize int32             `json:"routeCacheMaxSize"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -95,6 +98,11 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 func (c *RouterConfig) Build() (*router.Config, error) {
 	config := new(router.Config)
 	config.DomainStrategy = c.getDomainStrategy()
+
+	// Route cache configuration
+	config.RouteCache = c.RouteCache
+	config.RouteCacheTtl = c.RouteCacheTTL
+	config.RouteCacheMaxSize = c.RouteCacheMaxSize
 
 	var rawRuleList []json.RawMessage
 	if c != nil {

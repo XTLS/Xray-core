@@ -159,4 +159,13 @@ message Config {
   DomainStrategy domain_strategy = 1;
   repeated RoutingRule rule = 2;
   repeated BalancingRule balancing_rule = 3;
+
+  // Enable route caching for performance optimization
+  bool route_cache = 4;
+
+  // Route cache TTL in seconds (default: 300)
+  int64 route_cache_ttl = 5;
+
+  // Route cache max size (default: 4096)
+  int32 route_cache_max_size = 6;
 }
