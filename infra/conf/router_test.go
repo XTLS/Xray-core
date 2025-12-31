@@ -182,14 +182,16 @@ func TestRouterConfig(t *testing.T) {
 				},
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "baidu.com",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "qq.com",
+						Domain: &router.GeoSite{
+							Domain: []*router.Domain{
+								{
+									Type:  router.Domain_Plain,
+									Value: "baidu.com",
+								},
+								{
+									Type:  router.Domain_Plain,
+									Value: "qq.com",
+								},
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{
@@ -197,16 +199,18 @@ func TestRouterConfig(t *testing.T) {
 						},
 					},
 					{
-						Geoip: []*router.GeoIP{
-							{
-								Cidr: []*router.CIDR{
-									{
-										Ip:     []byte{10, 0, 0, 0},
-										Prefix: 8,
-									},
-									{
-										Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-										Prefix: 128,
+						Geoip: &router.GeoIPList{
+							Entry: []*router.GeoIP{
+								{
+									Cidr: []*router.CIDR{
+										{
+											Ip:     []byte{10, 0, 0, 0},
+											Prefix: 8,
+										},
+										{
+											Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+											Prefix: 128,
+										},
 									},
 								},
 							},
@@ -265,14 +269,16 @@ func TestRouterConfig(t *testing.T) {
 				DomainStrategy: router.Config_IpIfNonMatch,
 				Rule: []*router.RoutingRule{
 					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "baidu.com",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "qq.com",
+						Domain: &router.GeoSite{
+							Domain: []*router.Domain{
+								{
+									Type:  router.Domain_Plain,
+									Value: "baidu.com",
+								},
+								{
+									Type:  router.Domain_Plain,
+									Value: "qq.com",
+								},
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{
@@ -280,16 +286,18 @@ func TestRouterConfig(t *testing.T) {
 						},
 					},
 					{
-						Geoip: []*router.GeoIP{
-							{
-								Cidr: []*router.CIDR{
-									{
-										Ip:     []byte{10, 0, 0, 0},
-										Prefix: 8,
-									},
-									{
-										Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-										Prefix: 128,
+						Geoip: &router.GeoIPList{
+							Entry: []*router.GeoIP{
+								{
+									Cidr: []*router.CIDR{
+										{
+											Ip:     []byte{10, 0, 0, 0},
+											Prefix: 8,
+										},
+										{
+											Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+											Prefix: 128,
+										},
 									},
 								},
 							},

@@ -303,11 +303,11 @@ func TestServiceTestRoute(t *testing.T) {
 				TargetTag:      &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				Domain:    []*router.Domain{{Type: router.Domain_Domain, Value: "com"}},
+				Domain:    &router.GeoSite{Domain: []*router.Domain{{Type: router.Domain_Domain, Value: "com"}}},
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				SourceGeoip: []*router.GeoIP{{CountryCode: "private", Cidr: []*router.CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
+				SourceGeoip: &router.GeoIPList{Entry: []*router.GeoIP{{CountryCode: "private", Cidr: []*router.CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}}},
 				TargetTag:   &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
