@@ -19,11 +19,11 @@ import (
 type DialerClient interface {
 	IsClosed() bool
 
-	// ctx, url, body, uploadOnly
-	OpenStream(context.Context, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error)
+	// ctx, url, sessionId, body, uploadOnly
+	OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error)
 
-	// ctx, url, body, contentLength
-	PostPacket(context.Context, string, io.Reader, int64) error
+	// ctx, url, sessionId, seqStr, body, contentLength
+	PostPacket(context.Context, string, string, string, io.Reader, int64) error
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -41,7 +41,7 @@ func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed
 }
 
-func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
+func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
 	// this is done when the TCP/UDP connection to the server was established,
 	// and we can unblock the Dial function and print correct net addresses in
 	// logs
@@ -56,11 +56,34 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 
 	method := "GET" // stream-down
 	if body != nil {
-		method = "POST" // stream-up/one
+		method = c.transportConfig.UplinkHTTPMethod
 	}
 	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
-	req.Header = c.transportConfig.GetRequestHeader(url)
-	if method == "POST" && !c.transportConfig.NoGRPCHeader {
+	req.Header = c.transportConfig.GetRequestHeader()
+	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{Length: length}
+
+	if c.transportConfig.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: c.transportConfig.XPaddingPlacement,
+			Key:       c.transportConfig.XPaddingKey,
+			Header:    c.transportConfig.XPaddingHeader,
+			RawURL:    url,
+		}
+		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    url,
+		}
+	}
+
+	c.transportConfig.ApplyXPaddingToRequest(req, config)
+	c.transportConfig.ApplyMetaToRequest(req, sessionId, "")
+
+	if method != "GET" && !c.transportConfig.NoGRPCHeader {
 		req.Header.Set("Content-Type", "application/grpc")
 	}
 
@@ -92,13 +115,36 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 	return
 }
 
-func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body io.Reader, contentLength int64) error {
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), "POST", url, body)
+func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
+	method := c.transportConfig.UplinkHTTPMethod
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
 	if err != nil {
 		return err
 	}
 	req.ContentLength = contentLength
-	req.Header = c.transportConfig.GetRequestHeader(url)
+	req.Header = c.transportConfig.GetRequestHeader()
+	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{Length: length}
+
+	if c.transportConfig.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: c.transportConfig.XPaddingPlacement,
+			Key:       c.transportConfig.XPaddingKey,
+			Header:    c.transportConfig.XPaddingHeader,
+			RawURL:    url,
+		}
+		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    url,
+		}
+	}
+
+	c.transportConfig.ApplyXPaddingToRequest(req, config)
+	c.transportConfig.ApplyMetaToRequest(req, sessionId, seqStr)
 
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)

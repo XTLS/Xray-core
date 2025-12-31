@@ -2,7 +2,6 @@ package splithttp
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -43,41 +42,19 @@ func (c *Config) GetNormalizedQuery() string {
 	return query
 }
 
-func (c *Config) GetRequestHeader(rawURL string) http.Header {
+func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
 	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
-
-	u, _ := url.Parse(rawURL)
-	// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-B
-	// h2's HPACK Header Compression feature employs a huffman encoding using a static table.
-	// 'X' is assigned an 8 bit code, so HPACK compression won't change actual padding length on the wire.
-	// https://www.rfc-editor.org/rfc/rfc9204.html#section-4.1.2-2
-	// h3's similar QPACK feature uses the same huffman table.
-	u.RawQuery = "x_padding=" + strings.Repeat("X", int(c.GetNormalizedXPaddingBytes().rand()))
-	header.Set("Referer", u.String())
-
 	return header
 }
 
 func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
 	// CORS headers for the browser dialer
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
-	writer.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+	writer.Header().Set("Access-Control-Allow-Methods", "*")
 	// writer.Header().Set("X-Version", core.Version())
-	writer.Header().Set("X-Padding", strings.Repeat("X", int(c.GetNormalizedXPaddingBytes().rand())))
-}
-
-func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
-	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
-		return RangeConfig{
-			From: 100,
-			To:   1000,
-		}
-	}
-
-	return *c.XPaddingBytes
 }
 
 func (c *Config) GetNormalizedScMaxEachPostBytes() RangeConfig {
@@ -119,6 +96,73 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 	}
 
 	return *c.ScMinPostsIntervalMs
+}
+
+func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr string) {
+	switch c.SessionPlacement {
+	case PlacementPath:
+		req.URL.Path = appendToPath(req.URL.Path, sessionId)
+	case PlacementQuery:
+		q := req.URL.Query()
+		q.Set(c.SessionKey, sessionId)
+		req.URL.RawQuery = q.Encode()
+	case PlacementHeader:
+		req.Header.Set(c.SessionKey, sessionId)
+	case PlacementCookie:
+		req.AddCookie(&http.Cookie{Name: c.SessionKey, Value: sessionId})
+	}
+
+	if seqStr != "" {
+		switch c.SeqPlacement {
+		case PlacementPath:
+			req.URL.Path = appendToPath(req.URL.Path, seqStr)
+		case PlacementQuery:
+			q := req.URL.Query()
+			q.Set(c.SeqKey, seqStr)
+			req.URL.RawQuery = q.Encode()
+		case PlacementHeader:
+			req.Header.Set(c.SeqKey, seqStr)
+		case PlacementCookie:
+			req.AddCookie(&http.Cookie{Name: c.SeqKey, Value: seqStr})
+		}
+	}
+}
+
+func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (sessionId string, seqStr string) {
+	if c.SessionPlacement == PlacementPath {
+		subpath := strings.Split(req.URL.Path[len(path):], "/")
+		if len(subpath) > 0 {
+			sessionId = subpath[0]
+		}
+		if len(subpath) > 1 {
+			seqStr = subpath[1]
+		}
+		return sessionId, seqStr
+	}
+
+	switch c.SessionPlacement {
+	case PlacementQuery:
+		sessionId = req.URL.Query().Get(c.SessionKey)
+	case PlacementHeader:
+		sessionId = req.Header.Get(c.SessionKey)
+	case PlacementCookie:
+		if cookie, e := req.Cookie(c.SessionKey); e == nil {
+			sessionId = cookie.Value
+		}
+	}
+
+	switch c.SeqPlacement {
+	case PlacementQuery:
+		seqStr = req.URL.Query().Get(c.SeqKey)
+	case PlacementHeader:
+		seqStr = req.Header.Get(c.SeqKey)
+	case PlacementCookie:
+		if cookie, e := req.Cookie(c.SeqKey); e == nil {
+			seqStr = cookie.Value
+		}
+	}
+
+	return sessionId, seqStr
 }
 
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
@@ -184,4 +228,11 @@ func init() {
 
 func (c RangeConfig) rand() int32 {
 	return int32(crypto.RandBetween(int64(c.From), int64(c.To)))
+}
+
+func appendToPath(path, value string) string {
+	if strings.HasSuffix(path, "/") {
+		return path + value
+	}
+	return path + "/" + value
 }
