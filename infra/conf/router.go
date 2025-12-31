@@ -517,6 +517,14 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 	return geoipList, nil
 }
 
+func addDomain(domain *router.GeoSite, domainList []*router.Domain) *router.GeoSite {
+	if domain == nil {
+		domain = &router.GeoSite{}
+	}
+	domain.Domain = append(domain.Domain, domainList...)
+	return domain
+}
+
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
@@ -563,7 +571,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 			if err != nil {
 				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
 			}
-			rule.Domain = append(rule.Domain, rules...)
+			rule.Domain = addDomain(rule.Domain, rules)
 		}
 	}
 
@@ -573,16 +581,17 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 			if err != nil {
 				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
 			}
-			rule.Domain = append(rule.Domain, rules...)
+			rule.Domain = addDomain(rule.Domain, rules)
 		}
 	}
 
 	if rawFieldRule.IP != nil {
+		rule.Geoip = &router.GeoIPList{}
 		geoipList, err := ToCidrList(*rawFieldRule.IP)
 		if err != nil {
 			return nil, err
 		}
-		rule.Geoip = geoipList
+		rule.Geoip.Entry = geoipList
 	}
 
 	if rawFieldRule.Port != nil {
@@ -598,11 +607,12 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
+		rule.SourceGeoip = &router.GeoIPList{}
 		geoipList, err := ToCidrList(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}
-		rule.SourceGeoip = geoipList
+		rule.SourceGeoip.Entry = geoipList
 	}
 
 	if rawFieldRule.SourcePort != nil {
@@ -610,11 +620,12 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.LocalIP != nil {
+		rule.LocalGeoip = &router.GeoIPList{}
 		geoipList, err := ToCidrList(*rawFieldRule.LocalIP)
 		if err != nil {
 			return nil, err
 		}
-		rule.LocalGeoip = geoipList
+		rule.LocalGeoip.Entry = geoipList
 	}
 
 	if rawFieldRule.LocalPort != nil {

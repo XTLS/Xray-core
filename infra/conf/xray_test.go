@@ -95,7 +95,7 @@ func TestXrayConfig(t *testing.T) {
 						DomainStrategy: router.Config_AsIs,
 						Rule: []*router.RoutingRule{
 							{
-								Geoip: []*router.GeoIP{
+								Geoip: &router.GeoIPList{Entry: []*router.GeoIP{
 									{
 										Cidr: []*router.CIDR{
 											{
@@ -104,6 +104,7 @@ func TestXrayConfig(t *testing.T) {
 											},
 										},
 									},
+								},
 								},
 								TargetTag: &router.RoutingRule_Tag{
 									Tag: "blocked",

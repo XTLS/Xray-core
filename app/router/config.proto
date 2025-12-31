@@ -82,13 +82,13 @@ message RoutingRule {
     string rule_tag = 19;
 
   // List of domains for target domain matching.
-  repeated Domain domain = 2;
+  xray.app.router.GeoSite domain = 2;
 
   // List of GeoIPs for target IP address matching. If this entry exists, the
   // cidr above will have no effect. GeoIP fields with the same country code are
   // supposed to contain exactly same content. They will be merged during
   // runtime. For customized GeoIPs, please leave country code empty.
-  repeated GeoIP geoip = 10;
+  xray.app.router.GeoIPList geoip = 10;
 
   // List of ports.
   xray.common.net.PortList port_list = 14;
@@ -98,7 +98,7 @@ message RoutingRule {
 
   // List of GeoIPs for source IP address matching. If this entry exists, the
   // source_cidr above will have no effect.
-  repeated GeoIP source_geoip = 11;
+  xray.app.router.GeoIPList source_geoip = 11;
 
   // List of ports for source port matching.
   xray.common.net.PortList source_port_list = 16;
@@ -109,7 +109,7 @@ message RoutingRule {
 
   map<string, string> attributes = 15;
 
-  repeated GeoIP local_geoip = 17;
+  xray.app.router.GeoIPList local_geoip = 17;
   xray.common.net.PortList local_port_list = 18;
 
   xray.common.net.PortList vless_route_list = 20;

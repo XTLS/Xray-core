@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -155,12 +156,14 @@ func TestIPOnDemand(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Geoip: []*GeoIP{
-					{
-						Cidr: []*CIDR{
-							{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+				Geoip: &router.GeoIPList{
+					Entry: []*GeoIP{
+						{
+							Cidr: []*CIDR{
+								{
+									Ip:     []byte{192, 168, 0, 0},
+									Prefix: 16,
+								},
 							},
 						},
 					},
@@ -200,12 +203,14 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Geoip: []*GeoIP{
-					{
-						Cidr: []*CIDR{
-							{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+				Geoip: &router.GeoIPList{
+					Entry: []*GeoIP{
+						{
+							Cidr: []*CIDR{
+								{
+									Ip:     []byte{192, 168, 0, 0},
+									Prefix: 16,
+								},
 							},
 						},
 					},
@@ -245,12 +250,14 @@ func TestIPIfNonMatchIP(t *testing.T) {
 				TargetTag: &RoutingRule_Tag{
 					Tag: "test",
 				},
-				Geoip: []*GeoIP{
-					{
-						Cidr: []*CIDR{
-							{
-								Ip:     []byte{127, 0, 0, 0},
-								Prefix: 8,
+				Geoip: &router.GeoIPList{
+					Entry: []*GeoIP{
+						{
+							Cidr: []*CIDR{
+								{
+									Ip:     []byte{127, 0, 0, 0},
+									Prefix: 8,
+								},
 							},
 						},
 					},

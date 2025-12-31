@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -45,18 +46,20 @@ func TestRoutingRule(t *testing.T) {
 	}{
 		{
 			rule: &RoutingRule{
-				Domain: []*Domain{
-					{
-						Value: "example.com",
-						Type:  Domain_Plain,
-					},
-					{
-						Value: "google.com",
-						Type:  Domain_Domain,
-					},
-					{
-						Value: "^facebook\\.com$",
-						Type:  Domain_Regex,
+				Domain: &router.GeoSite{
+					Domain: []*Domain{
+						{
+							Value: "example.com",
+							Type:  Domain_Plain,
+						},
+						{
+							Value: "google.com",
+							Type:  Domain_Domain,
+						},
+						{
+							Value: "^facebook\\.com$",
+							Type:  Domain_Regex,
+						},
 					},
 				},
 			},
@@ -93,20 +96,22 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				Geoip: []*GeoIP{
-					{
-						Cidr: []*CIDR{
-							{
-								Ip:     []byte{8, 8, 8, 8},
-								Prefix: 32,
-							},
-							{
-								Ip:     []byte{8, 8, 8, 8},
-								Prefix: 32,
-							},
-							{
-								Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
-								Prefix: 128,
+				Geoip: &router.GeoIPList{
+					Entry: []*GeoIP{
+						{
+							Cidr: []*CIDR{
+								{
+									Ip:     []byte{8, 8, 8, 8},
+									Prefix: 32,
+								},
+								{
+									Ip:     []byte{8, 8, 8, 8},
+									Prefix: 32,
+								},
+								{
+									Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
+									Prefix: 128,
+								},
 							},
 						},
 					},
@@ -133,12 +138,14 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				SourceGeoip: []*GeoIP{
-					{
-						Cidr: []*CIDR{
-							{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+				SourceGeoip: &router.GeoIPList{
+					Entry: []*GeoIP{
+						{
+							Cidr: []*CIDR{
+								{
+									Ip:     []byte{192, 168, 0, 0},
+									Prefix: 16,
+								},
 							},
 						},
 					},
