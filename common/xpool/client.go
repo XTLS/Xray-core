@@ -61,7 +61,9 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) erro
 	session.SetConn(conn)
 
 	requestDone := func() error {
-		return buf.Copy(link.Reader, session)
+		err := buf.Copy(link.Reader, session)
+		session.CloseWrite()
+		return err
 	}
 
 	responseDone := func() error {

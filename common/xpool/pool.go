@@ -114,6 +114,20 @@ func (p *ConnectionPool) Remove(sid uint32, conn *GatewayConn) {
 		}
 	}
 
+	p.mu.Unlock() // unlock to avoid deadlock if OnConnectionClose calls pool methods?
+	// But we need to access sessions.
+	// sessions map access needs lock.
+	p.mu.Lock() // re-lock? No, we shouldn't unlock if we accessed maps.
+	// If OnConnectionClose doesn't call Pool, it's fine.
+	// ClientSession.OnConnectionClose just signals channel. Fine.
+
+	session := p.sessions[sid]
+	if session != nil {
+		if s, ok := session.(interface{ OnConnectionClose(*GatewayConn) }); ok {
+			s.OnConnectionClose(conn)
+		}
+	}
+
 	if c, ok := p.active[sid]; ok && c == conn {
 		delete(p.active, sid)
 		delete(p.connToSID, conn)
@@ -159,9 +173,7 @@ func (p *ConnectionPool) OnSegment(conn *GatewayConn, seg *Segment) {
 	p.mu.Unlock()
 
 	if session != nil {
-		if s, ok := session.(interface{ OnSegment(*Segment) }); ok {
-			s.OnSegment(seg)
-		}
+		session.OnSegment(conn, seg)
 	} else {
 		if p.onNewSession != nil {
 			session = p.onNewSession(conn, seg)
@@ -169,9 +181,7 @@ func (p *ConnectionPool) OnSegment(conn *GatewayConn, seg *Segment) {
 				p.mu.Lock()
 				p.sessions[session.GetID()] = session
 				p.mu.Unlock()
-				if s, ok := session.(interface{ OnSegment(*Segment) }); ok {
-					s.OnSegment(seg)
-				}
+				session.OnSegment(conn, seg)
 				return
 			}
 		}

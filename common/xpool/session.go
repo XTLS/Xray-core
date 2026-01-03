@@ -12,6 +12,8 @@ type Session interface {
 	GetNextSeq() uint32
 	GetAck() uint32
 	UpdateAck(seq uint32)
+	OnSegment(conn *GatewayConn, seg *Segment)
+	OnConnectionClose(conn *GatewayConn)
 }
 
 type BaseSession struct {
@@ -56,6 +58,7 @@ type ClientSession struct {
 
 	recvChan chan *buf.Buffer
 	done     chan struct{}
+	connLost chan struct{}
 }
 
 func NewClientSession(sid uint32, pool *ConnectionPool) *ClientSession {
@@ -65,6 +68,7 @@ func NewClientSession(sid uint32, pool *ConnectionPool) *ClientSession {
 		Pool:        pool,
 		recvChan:    make(chan *buf.Buffer, 128),
 		done:        make(chan struct{}),
+		connLost:    make(chan struct{}, 1),
 	}
 }
 
@@ -76,20 +80,65 @@ func (s *ClientSession) SetConn(conn *GatewayConn) {
 }
 
 func (s *ClientSession) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	s.mu.Lock()
-	writer := s.Writer
-	s.mu.Unlock()
-	if writer == nil {
-		return io.ErrClosedPipe
+	for i := 0; i < 5; i++ {
+		s.mu.Lock()
+		writer := s.Writer
+		s.mu.Unlock()
+		if writer == nil {
+			return io.ErrClosedPipe
+		}
+
+		err := writer.WriteMultiBuffer(mb)
+		if err == nil {
+			return nil
+		}
+
+		if mErr := s.Migrate(); mErr != nil {
+			return err
+		}
 	}
-	return writer.WriteMultiBuffer(mb)
+	return io.ErrClosedPipe
+}
+
+func (s *ClientSession) Migrate() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.Conn != nil {
+		s.Pool.Remove(s.ID, s.Conn)
+	}
+
+	conn, err := s.Pool.Get(s.ID)
+	if err != nil {
+		return err
+	}
+
+	s.Conn = conn
+	s.Writer = NewXPoolWriter(conn, s.SendBuffer, s)
+
+	unacked := s.SendBuffer.GetUnacked()
+	if len(unacked) == 0 {
+		return s.Writer.WriteKeepAlive()
+	}
+	return s.Writer.Resend(unacked)
+}
+
+func (s *ClientSession) OnConnectionClose(conn *GatewayConn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Conn == conn {
+		select {
+		case s.connLost <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (s *ClientSession) OnPeerAck(ack uint32) {
 	s.SendBuffer.OnAck(ack)
 }
 
-func (s *ClientSession) OnSegment(seg *Segment) {
+func (s *ClientSession) OnSegment(conn *GatewayConn, seg *Segment) {
 	s.OnPeerAck(seg.Ack)
 
 	if seg.Payload != nil {
@@ -112,14 +161,20 @@ func (s *ClientSession) OnSegment(seg *Segment) {
 }
 
 func (s *ClientSession) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	select {
-	case b, ok := <-s.recvChan:
-		if !ok {
+	for {
+		select {
+		case b, ok := <-s.recvChan:
+			if !ok {
+				return nil, io.EOF
+			}
+			return buf.MultiBuffer{b}, nil
+		case <-s.done:
 			return nil, io.EOF
+		case <-s.connLost:
+			if err := s.Migrate(); err != nil {
+				return nil, err
+			}
 		}
-		return buf.MultiBuffer{b}, nil
-	case <-s.done:
-		return nil, io.EOF
 	}
 }
 
@@ -162,7 +217,13 @@ func (s *ServerSession) OnPeerAck(ack uint32) {
 	s.SendBuffer.OnAck(ack)
 }
 
-func (s *ServerSession) OnSegment(seg *Segment) {
+func (s *ServerSession) OnSegment(conn *GatewayConn, seg *Segment) {
+	s.mu.Lock()
+	if s.ReplyConn != conn {
+		s.ReplyConn = conn
+	}
+	s.mu.Unlock()
+
 	s.OnPeerAck(seg.Ack)
 
 	if seg.Payload != nil {
@@ -215,4 +276,24 @@ func (s *ServerSession) Close() {
 		close(s.done)
 	}
 	s.SendBuffer.Clear()
+}
+
+func (s *ServerSession) OnConnectionClose(conn *GatewayConn) {
+}
+
+func (s *ClientSession) CloseWrite() error {
+	s.mu.Lock()
+	writer := s.Writer
+	s.mu.Unlock()
+	if writer == nil {
+		return io.ErrClosedPipe
+	}
+	return writer.WriteEOF()
+}
+
+func (s *ServerSession) CloseWrite() error {
+	s.mu.Lock()
+	writer := NewXPoolWriter(s.ReplyConn, s.SendBuffer, s)
+	s.mu.Unlock()
+	return writer.WriteEOF()
 }

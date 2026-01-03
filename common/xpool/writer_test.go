@@ -95,3 +95,6 @@ func TestXPoolWriter(t *testing.T) {
 		}
 	}
 }
+
+func (s *MockSession) OnConnectionClose(conn *xpool.GatewayConn) {}
+func (s *MockSession) OnSegment(conn *xpool.GatewayConn, seg *xpool.Segment) {}
