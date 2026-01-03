@@ -3,6 +3,8 @@ package xpool
 import (
 	"io"
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type GatewayConn struct {
@@ -33,6 +35,7 @@ func (c *GatewayConn) readLoop() {
 	for {
 		seg, err := reader.ReadSegment()
 		if err != nil {
+			errors.LogInfoInner(nil, err, "gateway connection read error")
 			c.pool.Remove(0, c)
 			return
 		}

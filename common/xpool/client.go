@@ -49,6 +49,8 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) erro
 		sid = rand.Uint32()
 	}
 
+	errors.LogDebug(ctx, "dispatching XPool session ", sid)
+
 	session := NewClientSession(sid, m.Pool)
 	defer session.Close()
 
@@ -56,7 +58,7 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) erro
 
 	conn, err := m.Pool.Get(sid)
 	if err != nil {
-		return err
+		return errors.New("failed to get connection").Base(err)
 	}
 	session.SetConn(conn)
 

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type Session interface {
@@ -104,13 +105,15 @@ func (s *ClientSession) Migrate() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	errors.LogInfo(nil, "migrating session ", s.ID)
+
 	if s.Conn != nil {
 		s.Pool.Remove(s.ID, s.Conn)
 	}
 
 	conn, err := s.Pool.Get(s.ID)
 	if err != nil {
-		return err
+		return errors.New("failed to get new connection").Base(err)
 	}
 
 	s.Conn = conn

@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type PoolConfig struct {
@@ -63,6 +65,7 @@ func (p *ConnectionPool) Get(sid uint32) (*GatewayConn, error) {
 
 		p.active[sid] = conn
 		p.connToSID[conn] = sid
+		errors.LogDebug(nil, "reusing idle connection for session ", sid)
 		return conn, nil
 	}
 
@@ -77,6 +80,7 @@ func (p *ConnectionPool) Get(sid uint32) (*GatewayConn, error) {
 	conn := NewGatewayConn(rwc, p)
 	p.active[sid] = conn
 	p.connToSID[conn] = sid
+	errors.LogDebug(nil, "dialed new connection for session ", sid)
 	return conn, nil
 }
 
@@ -114,18 +118,15 @@ func (p *ConnectionPool) Remove(sid uint32, conn *GatewayConn) {
 		}
 	}
 
-	p.mu.Unlock() // unlock to avoid deadlock if OnConnectionClose calls pool methods?
-	// But we need to access sessions.
-	// sessions map access needs lock.
-	p.mu.Lock() // re-lock? No, we shouldn't unlock if we accessed maps.
-	// If OnConnectionClose doesn't call Pool, it's fine.
-	// ClientSession.OnConnectionClose just signals channel. Fine.
+	errors.LogDebug(nil, "removing connection for session ", sid)
 
 	session := p.sessions[sid]
 	if session != nil {
+		p.mu.Unlock()
 		if s, ok := session.(interface{ OnConnectionClose(*GatewayConn) }); ok {
 			s.OnConnectionClose(conn)
 		}
+		p.mu.Lock()
 	}
 
 	if c, ok := p.active[sid]; ok && c == conn {
@@ -142,6 +143,8 @@ func (p *ConnectionPool) Remove(sid uint32, conn *GatewayConn) {
 func (p *ConnectionPool) CleanupExpired() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	errors.LogDebug(nil, "cleaning up expired connections")
 
 	now := time.Now()
 	for elem := p.idle.Front(); elem != nil; {

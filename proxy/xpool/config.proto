@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package xray.proxy.xpool;
+option csharp_namespace = "Xray.Proxy.XPool";
+option go_package = "github.com/xtls/xray-core/proxy/xpool";
+option java_package = "com.xray.proxy.xpool";
+option java_multiple_files = true;
+
+message ServerConfig {
+}
