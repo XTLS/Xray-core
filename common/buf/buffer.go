@@ -346,3 +346,15 @@ func (b *Buffer) ReadFullFrom(reader io.Reader, size int32) (int64, error) {
 func (b *Buffer) String() string {
 	return string(b.Bytes())
 }
+
+// Prepend writes data before the current content.
+// Returns error if no space.
+func (b *Buffer) Prepend(data []byte) error {
+	n := int32(len(data))
+	if b.start < n {
+		return errors.New("no space to prepend")
+	}
+	b.start -= n
+	copy(b.v[b.start:b.start+n], data)
+	return nil
+}
