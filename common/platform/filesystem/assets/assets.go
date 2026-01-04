@@ -1,4 +1,4 @@
-//go:build !windows && !wasm
+//go:build ios || darwin
 
 package assets
 
@@ -95,29 +95,9 @@ func (m *MMapFile) Open(path string) error {
 	m.size = size
 	m.mu.Unlock()
 
-	m.BuildGeoMetaList()
+	m.buildGeoMetaList()
 
 	return nil
-}
-
-func (m *MMapFile) BuildGeoMetaList() {
-	if platform.IsAssetMapEnabled() {
-		m.BuildGeoMetaFromMapFile()
-	} else {
-		debug.SetGCPercent(10)
-		debug.SetMemoryLimit(10)
-		defer func() {
-			debug.SetGCPercent(100)
-			debug.SetMemoryLimit(-1)
-		}()
-		m.BuildGeoMetaFromMemmory(func(code []byte, start, length int64) error {
-			m.AddGeoMeta(string(code), int(start), int(length))
-			runtime.GC()
-
-			return nil
-		})
-
-	}
 }
 
 func (m *MMapFile) Close() error {
@@ -173,7 +153,27 @@ func (m *MMapFile) unmapLocked() error {
 	return err
 }
 
-func (m *MMapFile) BuildGeoMetaFromMemmory(onEntry func(code []byte, start, length int64) error) error {
+func (m *MMapFile) buildGeoMetaList() {
+	if platform.IsAssetMapEnabled() {
+		m.buildGeoMetaFromMappedFile()
+	} else {
+		debug.SetGCPercent(10)
+		debug.SetMemoryLimit(10)
+		defer func() {
+			debug.SetGCPercent(100)
+			debug.SetMemoryLimit(-1)
+		}()
+		m.buildGeoMetaFromMemmory(func(code []byte, start, length int64) error {
+			m.AddGeoMeta(string(code), int(start), int(length))
+			runtime.GC()
+
+			return nil
+		})
+
+	}
+}
+
+func (m *MMapFile) buildGeoMetaFromMemmory(onEntry func(code []byte, start, length int64) error) error {
 	data := m.Bytes()
 	baseLen := len(data)
 	var off int64 = 0
@@ -220,7 +220,8 @@ func (m *MMapFile) BuildGeoMetaFromMemmory(onEntry func(code []byte, start, leng
 	}
 }
 
-func (m *MMapFile) BuildGeoMetaFromMapFile() error {
+// the mapped file should be along side the geo file, if file is geosite.dat , mapped should be geosite.dat.map
+func (m *MMapFile) buildGeoMetaFromMappedFile() error {
 	f, err := os.Open(m.path + ".map")
 	if err != nil {
 		return err

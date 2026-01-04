@@ -11,7 +11,10 @@ const (
 	ConfigLocation  = "xray.location.config"
 	ConfdirLocation = "xray.location.confdir"
 	AssetLocation   = "xray.location.asset"
-	CertLocation    = "xray.location.cert"
+	// only apply if !windows && !wasm
+	AssetMapEnabled = "xray.asset.mapped"
+
+	CertLocation = "xray.location.cert"
 
 	UseReadV         = "xray.buf.readv"
 	UseFreedomSplice = "xray.buf.splice"

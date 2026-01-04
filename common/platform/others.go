@@ -34,6 +34,13 @@ func GetAssetLocation(file string) string {
 	return defPath
 }
 
+// only apply if ios or darwin for now
+// IsAssetMapEnabled to load mapped geosite or geoip (file name : geosite.dat.map)
+func IsAssetMapEnabled() bool {
+	isEnabled := NewEnvFlag(AssetMapEnabled).GetValueAsInt(0)
+	return isEnabled != 0
+}
+
 // GetCertLocation searches for `file` in the env dir and the executable dir
 func GetCertLocation(file string) string {
 	certPath := NewEnvFlag(CertLocation).GetValue(getExecutableDir)

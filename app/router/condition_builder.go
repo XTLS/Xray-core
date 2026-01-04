@@ -1,4 +1,4 @@
-//go:build windows || wasm
+//go:build !ios && !darwin
 
 package router
 
