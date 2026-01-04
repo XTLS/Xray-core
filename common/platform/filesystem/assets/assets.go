@@ -164,7 +164,7 @@ func (m *MMapFile) buildGeoMetaList() {
 			debug.SetMemoryLimit(oldLimit)
 		}()
 
-		m.buildGeoMetaFromMemmory(func(code []byte, start, length int64) error {
+		m.buildGeoMetaFromMemory(func(code []byte, start, length int64) error {
 			m.AddGeoMeta(string(code), int(start), int(length))
 			runtime.GC()
 
@@ -174,7 +174,7 @@ func (m *MMapFile) buildGeoMetaList() {
 	}
 }
 
-func (m *MMapFile) buildGeoMetaFromMemmory(onEntry func(code []byte, start, length int64) error) error {
+func (m *MMapFile) buildGeoMetaFromMemory(onEntry func(code []byte, start, length int64) error) error {
 	data := m.Bytes()
 	baseLen := len(data)
 	var off int64 = 0
