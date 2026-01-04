@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,13 +156,6 @@ func (m *MMapFile) buildGeoMetaList() {
 	if platform.IsAssetMapEnabled() {
 		m.buildGeoMetaFromMappedFile()
 	} else {
-		// set memory limit then unset
-
-		oldLimit := debug.SetMemoryLimit(1 << 20)
-		defer func() {
-			debug.SetMemoryLimit(oldLimit)
-		}()
-
 		m.buildGeoMetaFromMemory(func(code []byte, start, length int64) error {
 			m.AddGeoMeta(string(code), int(start), int(length))
 			runtime.GC()
