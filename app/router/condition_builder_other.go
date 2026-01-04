@@ -111,16 +111,18 @@ func getGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
 	for _, ip := range ips {
 		if ip.CountryCode != "" {
 			geoMeta := assets.GeoIP.GetGeoMeta(ip.CountryCode)
-			if geoMeta != nil && geoMeta.Length != 0 {
-				bs := assets.GeoIP.Slice(geoMeta.Start, geoMeta.Start+geoMeta.Length)
-				var geoip GeoIP
-
-				if err := proto.Unmarshal(bs, &geoip); err != nil {
-					return nil, errors.New("failed Unmarshal :").Base(err)
-				}
-				geoipList = append(geoipList, &geoip)
-
+			if geoMeta == nil || geoMeta.Length == 0 {
+				return nil, errors.New("geoip not founded: ", ip.CountryCode)
 			}
+
+			bs := assets.GeoIP.Slice(geoMeta.Start, geoMeta.Start+geoMeta.Length)
+			var geoip GeoIP
+
+			if err := proto.Unmarshal(bs, &geoip); err != nil {
+				return nil, errors.New("failed Unmarshal :").Base(err)
+			}
+			geoipList = append(geoipList, &geoip)
+
 		} else {
 			geoipList = append(geoipList, ip)
 		}
@@ -135,16 +137,17 @@ func getDomainList(domains []*Domain) ([]*Domain, error) {
 		if code, ok := strings.CutPrefix(domain.Value, "geosite:"); ok {
 
 			geoMeta := assets.GeoSite.GetGeoMeta(code)
-			if geoMeta != nil && geoMeta.Length != 0 {
-				bs := assets.GeoSite.Slice(geoMeta.Start, geoMeta.Start+geoMeta.Length)
-				var geosite GeoSite
-
-				if err := proto.Unmarshal(bs, &geosite); err != nil {
-					return nil, errors.New("failed Unmarshal :").Base(err)
-				}
-				domainList = append(domainList, geosite.Domain...)
-
+			if geoMeta == nil || geoMeta.Length == 0 {
+				return nil, errors.New("geosite not founded: ", code)
 			}
+			bs := assets.GeoSite.Slice(geoMeta.Start, geoMeta.Start+geoMeta.Length)
+			var geosite GeoSite
+
+			if err := proto.Unmarshal(bs, &geosite); err != nil {
+				return nil, errors.New("failed Unmarshal :").Base(err)
+			}
+			domainList = append(domainList, geosite.Domain...)
+
 		} else {
 			domainList = append(domainList, domain)
 		}
