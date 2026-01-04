@@ -158,9 +158,10 @@ func (m *MMapFile) buildGeoMetaList() {
 		m.buildGeoMetaFromMappedFile()
 	} else {
 		// set memory limit then unset
-		debug.SetMemoryLimit(1 << 20)
+
+		oldLimit := debug.SetMemoryLimit(1 << 20)
 		defer func() {
-			debug.SetMemoryLimit(-1)
+			debug.SetMemoryLimit(oldLimit)
 		}()
 
 		m.buildGeoMetaFromMemmory(func(code []byte, start, length int64) error {
