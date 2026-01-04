@@ -106,6 +106,14 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(matcher)
 	}
 
+	if len(rr.ProcessName) > 0 {
+		refinedNames := make([]string, 0, len(rr.ProcessName))
+		for _, name := range rr.ProcessName {
+			refinedNames = append(refinedNames, strings.TrimSuffix(name, ".exe"))
+		}
+		conds.Add(&ProcessNameMatcher{refinedNames})
+	}
+
 	if conds.Len() == 0 {
 		return nil, errors.New("this rule has no effective fields").AtWarning()
 	}

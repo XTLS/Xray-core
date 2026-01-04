@@ -4,6 +4,7 @@ package net
 
 import (
 	"net/netip"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -48,6 +49,12 @@ func initWin32API() error {
 }
 
 func FindProcess(dest Destination) (int, string, error) {
+	once.Do(func() {
+		initErr = initWin32API()
+	})
+	if initErr != nil {
+		return 0, "", initErr
+	}
 	isLocal, err := IsLocal(dest.Address.IP())
 	if err != nil {
 		return 0, "", errors.New("failed to determine if address is local: ", err)
@@ -83,13 +90,6 @@ func FindProcess(dest Destination) (int, string, error) {
 	}
 	addr = addr.Unmap()
 
-	once.Do(func() {
-		initErr = initWin32API()
-	})
-	if initErr != nil {
-		return 0, "", initErr
-	}
-
 	family := windows.AF_INET
 	if addr.Is6() {
 		family = windows.AF_INET6
@@ -106,8 +106,10 @@ func FindProcess(dest Destination) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	pp, err := getExecPathFromPID(pid)
-	return int(pid), pp, err
+	name, err := getExecPathFromPID(pid)
+	// drop .exe
+	name = strings.TrimSuffix(name, ".exe")
+	return int(pid), name, err
 }
 
 type searcher struct {
@@ -122,7 +124,7 @@ type searcher struct {
 func (s *searcher) Search(b []byte, ip netip.Addr, port uint16) (uint32, error) {
 	n := int(readNativeUint32(b[:4]))
 	itemSize := s.itemSize
-	for i := 0; i < n; i++ {
+	for i := range n {
 		row := b[4+itemSize*i : 4+itemSize*(i+1)]
 
 		if s.tcpState >= 0 {
@@ -232,5 +234,10 @@ func getExecPathFromPID(pid uint32) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return syscall.UTF16ToString(buf[:size]), nil
+	// full path will like: C:\Windows\System32\curl.exe
+	// we only need the executable name
+	fullPathName := syscall.UTF16ToString(buf[:size])
+	nameSplit := strings.Split(fullPathName, "\\")
+	name := nameSplit[len(nameSplit)-1]
+	return name, nil
 }

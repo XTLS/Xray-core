@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -304,4 +305,34 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 	return m.Match(attributes)
+}
+
+type ProcessNameMatcher struct {
+	names []string
+}
+
+func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	srcPort := ctx.GetSourcePort().String()
+	srcIP := ctx.GetSourceIPs()[0].String()
+	var network string
+	switch ctx.GetNetwork() {
+	case net.Network_TCP:
+		network = "tcp"
+	case net.Network_UDP:
+		network = "udp"
+	default:
+		return false
+	}
+	src, err := net.ParseDestination(strings.Join([]string{network, srcIP, srcPort}, ":"))
+	if err != nil {
+		return false
+	}
+	_, name, err := net.FindProcess(src)
+	if err != nil {
+		if err != net.ErrNotLocal {
+			errors.LogError(context.Background(), "Unables to find local process name: ", err)
+		}
+		return false
+	}
+	return slices.Contains(m.names, name)
 }
