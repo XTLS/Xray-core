@@ -2,8 +2,8 @@ package router
 
 import (
 	"context"
+	"os"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -327,12 +327,20 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	if err != nil {
 		return false
 	}
-	_, name, err := net.FindProcess(src)
+	pid, name, err := net.FindProcess(src)
 	if err != nil {
 		if err != net.ErrNotLocal {
 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
 		}
 		return false
 	}
-	return slices.Contains(m.names, name)
+	for _, n := range m.names {
+		if name == "/self" && pid == os.Getpid() {
+			return true
+		}
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
