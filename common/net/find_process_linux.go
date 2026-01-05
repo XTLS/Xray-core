@@ -13,13 +13,13 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-func FindProcess(dest Destination) (int, string, error) {
+func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, err error) {
 	isLocal, err := IsLocal(dest.Address.IP())
 	if err != nil {
-		return 0, "", errors.New("failed to determine if address is local: ", err)
+		return 0, "", "", errors.New("failed to determine if address is local: ", err)
 	}
 	if !isLocal {
-		return 0, "", ErrNotLocal
+		return 0, "", "", ErrNotLocal
 	}
 	if dest.Network != Network_TCP && dest.Network != Network_UDP {
 		panic("Unsupported network type for process lookup.")
@@ -51,36 +51,39 @@ func FindProcess(dest Destination) (int, string, error) {
 
 	targetHexAddr, err := formatLittleEndianString(dest.Address, dest.Port)
 	if err != nil {
-		return 0, "", errors.New("failed to format address: ", err)
+		return 0, "", "", errors.New("failed to format address: ", err)
 	}
 
 	inode, err := findInodeInFile(procFile, targetHexAddr)
 	if err != nil {
-		return 0, "", errors.New("could not search in ", procFile).Base(err)
+		return 0, "", "", errors.New("could not search in ", procFile).Base(err)
 	}
 	if inode == "" {
-		return 0, "", errors.New("connection for ", dest.Address, ":", dest.Port, " not found in ", procFile)
+		return 0, "", "", errors.New("connection for ", dest.Address, ":", dest.Port, " not found in ", procFile)
 	}
 
 	pidStr, err := findPidByInode(inode)
 	if err != nil {
-		return 0, "", errors.New("could not find PID for inode ", inode, ": ", err)
+		return 0, "", "", errors.New("could not find PID for inode ", inode, ": ", err)
 	}
 	if pidStr == "" {
-		return 0, "", errors.New("no process found for inode ", inode)
+		return 0, "", "", errors.New("no process found for inode ", inode)
 	}
 
-	procName, err := getProcessName(pidStr)
+	absPath, err := getAbsPath(pidStr)
 	if err != nil {
-		return 0, "", fmt.Errorf("could not get process name for PID %s: %w", pidStr, err)
+		return 0, "", "", errors.New("could not get process name for PID ", pidStr, ":", err)
 	}
+
+	nameSplit := strings.Split(absPath, "/")
+	procName := nameSplit[len(nameSplit)-1]
 
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
-		return 0, "", errors.New("failed to parse PID: ", err)
+		return 0, "", "", errors.New("failed to parse PID: ", err)
 	}
 
-	return pid, procName, nil
+	return pid, procName, absPath, nil
 }
 
 func formatLittleEndianString(addr Address, port Port) (string, error) {
@@ -167,12 +170,7 @@ func findPidByInode(inode string) (string, error) {
 	return "", nil
 }
 
-func getProcessName(pid string) (string, error) {
-	path := fmt.Sprintf("/proc/%s/comm", pid)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	// remove trailing \n
-	return strings.TrimSpace(string(content)), nil
+func getAbsPath(pid string) (string, error) {
+	path := fmt.Sprintf("/proc/%s/exe", pid)
+	return os.Readlink(path)
 }

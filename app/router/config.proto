@@ -113,7 +113,7 @@ message RoutingRule {
   xray.common.net.PortList local_port_list = 18;
 
   xray.common.net.PortList vless_route_list = 20;
-  repeated string process_name = 21;
+  repeated string process = 21;
 }
 
 message BalancingRule {
