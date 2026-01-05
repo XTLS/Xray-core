@@ -17,59 +17,36 @@ func DecodeVarint(buf []byte) (x uint64, n int) {
 	return 0, 0
 }
 
-func Find(data, code []byte) (found []byte, startByte int) {
+func Find(data, code []byte) []byte {
 	codeL := len(code)
 	if codeL == 0 {
-		return nil, -1
+		return nil
 	}
-
-	base := data
-	offset := 0
-
 	for {
 		dataL := len(data)
 		if dataL < 2 {
-			return nil, -1
+			return nil
 		}
-
 		x, y := DecodeVarint(data[1:])
 		if x == 0 && y == 0 {
-			return nil, -1
+			return nil
 		}
-
-		headL := 1 + y
-		bodyL := int(x)
-
-		if dataL < headL+bodyL {
-			return nil, -1
+		headL, bodyL := 1+y, int(x)
+		dataL -= headL
+		if dataL < bodyL {
+			return nil
 		}
-
-		// Move to body
 		data = data[headL:]
-		offset += headL
-
-		// Check code match
 		if int(data[1]) == codeL {
-			match := true
-			for i := 0; i < codeL; i++ {
-				if data[2+i] != code[i] {
-					match = false
-					break
+			for i := 0; i < codeL && data[2+i] == code[i]; i++ {
+				if i+1 == codeL {
+					return data[:bodyL]
 				}
 			}
-			if match {
-				start := offset
-				end := offset + bodyL
-				return base[start:end], start
-			}
 		}
-
-		// Advance to next record
+		if dataL == bodyL {
+			return nil
+		}
 		data = data[bodyL:]
-		offset += bodyL
-
-		if len(data) == 0 {
-			return nil, -1
-		}
 	}
 }

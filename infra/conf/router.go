@@ -2,12 +2,15 @@ package conf
 
 import (
 	"encoding/json"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform/filesystem"
+	"github.com/xtls/xray-core/common/platform/filesystem/assets"
 	"github.com/xtls/xray-core/common/serial"
 	"google.golang.org/protobuf/proto"
 )
@@ -180,6 +183,83 @@ var (
 	IPCache   = make(map[string]*router.GeoIP)
 	SiteCache = make(map[string]*router.GeoSite)
 )
+
+func loadFile(file string) ([]byte, error) {
+	if FileCache[file] == nil {
+		bs, err := filesystem.ReadAsset(file)
+		if err != nil {
+			return nil, errors.New("failed to open file: ", file).Base(err)
+		}
+		if len(bs) == 0 {
+			return nil, errors.New("empty file: ", file)
+		}
+		// Do not cache file, may save RAM when there
+		// are many files, but consume CPU each time.
+		return bs, nil
+		FileCache[file] = bs
+	}
+	return FileCache[file], nil
+}
+
+func loadIP(file, code string) ([]*router.CIDR, error) {
+	index := file + ":" + code
+	if IPCache[index] == nil {
+		var geoip router.GeoIP
+
+		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+			// dont pass code becuase we have country code in top level router.GeoIP
+			geoip = router.GeoIP{Cidr: []*router.CIDR{}}
+		} else {
+			bs, err := loadFile(file)
+			if err != nil {
+				return nil, errors.New("failed to load file: ", file).Base(err)
+			}
+			bs = assets.Find(bs, []byte(code))
+			if bs == nil {
+				return nil, errors.New("code not found in ", file, ": ", code)
+			}
+			if err := proto.Unmarshal(bs, &geoip); err != nil {
+				return nil, errors.New("error unmarshal IP in ", file, ": ", code).Base(err)
+			}
+		}
+		defer runtime.GC()     // or debug.FreeOSMemory()
+		return geoip.Cidr, nil // do not cache geoip
+		IPCache[index] = &geoip
+	}
+	return IPCache[index].Cidr, nil
+}
+
+func loadSite(file, code string) ([]*router.Domain, error) {
+	index := file + ":" + code
+	if SiteCache[index] == nil {
+		var geosite router.GeoSite
+
+		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+			// pass file:code so can build optimized matcher later
+			domain := router.Domain{Value: file + "_" + code}
+			geosite = router.GeoSite{Domain: []*router.Domain{&domain}}
+
+		} else {
+
+			bs, err := loadFile(file)
+			if err != nil {
+				return nil, errors.New("failed to load file: ", file).Base(err)
+			}
+			bs = assets.Find(bs, []byte(code))
+			if bs == nil {
+				return nil, errors.New("list not found in ", file, ": ", code)
+			}
+			if err := proto.Unmarshal(bs, &geosite); err != nil {
+				return nil, errors.New("error unmarshal Site in ", file, ": ", code).Base(err)
+			}
+		}
+
+		defer runtime.GC()         // or debug.FreeOSMemory()
+		return geosite.Domain, nil // do not cache geosite
+		SiteCache[index] = &geosite
+	}
+	return SiteCache[index].Domain, nil
+}
 
 type AttributeMatcher interface {
 	Match(*router.Domain) bool
