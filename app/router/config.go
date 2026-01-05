@@ -78,7 +78,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 
 	if len(rr.Geoip) > 0 {
 		geoip := rr.Geoip
-		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			var err error
 			geoip, err = getGeoIPList(rr.Geoip)
 			if err != nil {
@@ -111,7 +111,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 
 	if len(rr.Domain) > 0 {
 		domains := rr.Domain
-		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			var err error
 			domains, err = getDomainList(rr.Domain)
 			if err != nil {

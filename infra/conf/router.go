@@ -206,7 +206,7 @@ func loadIP(file, code string) ([]*router.CIDR, error) {
 	if IPCache[index] == nil {
 		var geoip router.GeoIP
 
-		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			// dont pass code becuase we have country code in top level router.GeoIP
 			geoip = router.GeoIP{Cidr: []*router.CIDR{}}
 		} else {
@@ -234,7 +234,7 @@ func loadSite(file, code string) ([]*router.Domain, error) {
 	if SiteCache[index] == nil {
 		var geosite router.GeoSite
 
-		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			// pass file:code so can build optimized matcher later
 			domain := router.Domain{Value: file + "_" + code}
 			geosite = router.GeoSite{Domain: []*router.Domain{&domain}}
