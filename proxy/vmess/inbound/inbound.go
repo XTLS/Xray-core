@@ -229,10 +229,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	iConn := connection
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+	iConn := stat.TryUnwrapStatsConn(connection)
 	_, isDrain := iConn.(*net.TCPConn)
 	if !isDrain {
 		_, isDrain = iConn.(*net.UnixConn)

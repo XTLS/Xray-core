@@ -111,7 +111,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				destinationOverridden = true
 			}
 		}
-		if tlsConn, ok := conn.(tls.Interface); ok && !destinationOverridden {
+		iConn := stat.TryUnwrapStatsConn(conn)
+		if tlsConn, ok := iConn.(tls.Interface); ok && !destinationOverridden {
 			if serverName := tlsConn.HandshakeContextServerName(ctx); serverName != "" {
 				dest.Address = net.DomainAddress(serverName)
 				destinationOverridden = true

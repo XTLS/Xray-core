@@ -1,6 +1,8 @@
 package router
 
 import (
+	"context"
+	"os"
 	"regexp"
 	"strings"
 
@@ -56,11 +58,13 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	for _, d := range domains {
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
-			return nil, errors.New("unsupported domain type", d.Type)
+			errors.LogError(context.Background(), "ignore unsupported domain type ", d.Type, " of rule ", d.Value)
+			continue
 		}
 		_, err := g.AddPattern(d.Value, matcherType)
 		if err != nil {
-			return nil, err
+			errors.LogErrorInner(context.Background(), err, "ignore domain rule ", d.Type, " ", d.Value)
+			continue
 		}
 	}
 	g.Build()
@@ -301,4 +305,42 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 	return m.Match(attributes)
+}
+
+type ProcessNameMatcher struct {
+	names []string
+}
+
+func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	srcPort := ctx.GetSourcePort().String()
+	srcIP := ctx.GetSourceIPs()[0].String()
+	var network string
+	switch ctx.GetNetwork() {
+	case net.Network_TCP:
+		network = "tcp"
+	case net.Network_UDP:
+		network = "udp"
+	default:
+		return false
+	}
+	src, err := net.ParseDestination(strings.Join([]string{network, srcIP, srcPort}, ":"))
+	if err != nil {
+		return false
+	}
+	pid, name, err := net.FindProcess(src)
+	if err != nil {
+		if err != net.ErrNotLocal {
+			errors.LogError(context.Background(), "Unables to find local process name: ", err)
+		}
+		return false
+	}
+	for _, n := range m.names {
+		if name == "/self" && pid == os.Getpid() {
+			return true
+		}
+		if n == name {
+			return true
+		}
+	}
+	return false
 }

@@ -246,7 +246,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 				},
 			}
 			c := &http.Client{
-				Timeout:   5 * time.Second,
+				Timeout:   30 * time.Second,
 				Transport: tr,
 			}
 			client, _ = clientForECHDOH.LoadOrStore(serverKey, c)

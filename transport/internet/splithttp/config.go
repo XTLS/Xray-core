@@ -118,7 +118,7 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 		}
 	}
 
-	return *c.ScMinPostsIntervalMs
+	return *c.ScStreamUpServerSecs
 }
 
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {

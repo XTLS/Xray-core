@@ -147,11 +147,7 @@ func (s *Server) Network() []net.Network {
 
 // Process implements proxy.Inbound.Process().
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
-		iConn = statConn.Connection
-	}
+	iConn := stat.TryUnwrapStatsConn(conn)
 
 	sessionPolicy := s.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
