@@ -215,7 +215,7 @@ func getDomainList(domains []*Domain) ([]*Domain, error) {
 	for _, domain := range domains {
 		val := strings.Split(domain.Value, "_")
 
-		if len(val) == 2 {
+		if len(val) >= 2 {
 
 			fileName := val[0]
 			code := val[1]
@@ -230,6 +230,24 @@ func getDomainList(domains []*Domain) ([]*Domain, error) {
 			if err := proto.Unmarshal(bs, &geosite); err != nil {
 				return nil, errors.New("failed Unmarshal :").Base(err)
 			}
+
+			// parse attr
+			if len(val) == 3 {
+				siteWithAttr := strings.Split(val[2], ",")
+				attrs := ParseAttrs(siteWithAttr)
+
+				if !attrs.IsEmpty() {
+					filteredDomains := make([]*Domain, 0, len(domains))
+					for _, domain := range geosite.Domain {
+						if attrs.Match(domain) {
+							filteredDomains = append(filteredDomains, domain)
+						}
+					}
+					geosite.Domain = filteredDomains
+				}
+
+			}
+
 			domainList = append(domainList, geosite.Domain...)
 
 		} else {

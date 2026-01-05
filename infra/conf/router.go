@@ -260,60 +260,24 @@ func loadSite(file, code string) ([]*router.Domain, error) {
 	return SiteCache[index].Domain, nil
 }
 
-type AttributeMatcher interface {
-	Match(*router.Domain) bool
-}
-
-type BooleanMatcher string
-
-func (m BooleanMatcher) Match(domain *router.Domain) bool {
-	for _, attr := range domain.Attribute {
-		if attr.Key == string(m) {
-			return true
-		}
-	}
-	return false
-}
-
-type AttributeList struct {
-	matcher []AttributeMatcher
-}
-
-func (al *AttributeList) Match(domain *router.Domain) bool {
-	for _, matcher := range al.matcher {
-		if !matcher.Match(domain) {
-			return false
-		}
-	}
-	return true
-}
-
-func (al *AttributeList) IsEmpty() bool {
-	return len(al.matcher) == 0
-}
-
-func parseAttrs(attrs []string) *AttributeList {
-	al := new(AttributeList)
-	for _, attr := range attrs {
-		lc := strings.ToLower(attr)
-		al.matcher = append(al.matcher, BooleanMatcher(lc))
-	}
-	return al
-}
-
 func loadGeositeWithAttr(file string, siteWithAttr string) ([]*router.Domain, error) {
 	parts := strings.Split(siteWithAttr, "@")
 	if len(parts) == 0 {
 		return nil, errors.New("empty site")
 	}
 	country := strings.ToUpper(parts[0])
-	attrs := parseAttrs(parts[1:])
+	attrs := router.ParseAttrs(parts[1:])
 	domains, err := loadSite(file, country)
 	if err != nil {
 		return nil, err
 	}
 
 	if attrs.IsEmpty() {
+		return domains, nil
+	}
+
+	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
+		domains[0].Value = domains[0].Value + "_" + strings.Join(parts[1:], ",")
 		return domains, nil
 	}
 
