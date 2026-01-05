@@ -1,4 +1,4 @@
-package assets
+package filesystem
 
 func DecodeVarint(buf []byte) (x uint64, n int) {
 	for shift := uint(0); shift < 64; shift += 7 {

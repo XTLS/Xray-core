@@ -8,7 +8,6 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform/filesystem"
-	"github.com/xtls/xray-core/common/platform/filesystem/assets"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	"google.golang.org/protobuf/proto"
@@ -194,7 +193,7 @@ func getGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
 			if err != nil {
 				return nil, errors.New("failed to load file: ", fileName).Base(err)
 			}
-			bs = assets.Find(bs, []byte(ip.CountryCode))
+			bs = filesystem.Find(bs, []byte(ip.CountryCode))
 
 			var geoip GeoIP
 
@@ -225,7 +224,7 @@ func getDomainList(domains []*Domain) ([]*Domain, error) {
 			if err != nil {
 				return nil, errors.New("failed to load file: ", fileName).Base(err)
 			}
-			bs = assets.Find(bs, []byte(code))
+			bs = filesystem.Find(bs, []byte(code))
 			var geosite GeoSite
 
 			if err := proto.Unmarshal(bs, &geosite); err != nil {
