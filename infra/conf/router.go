@@ -520,21 +520,22 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList       `json:"domain"`
-		Domains    *StringList       `json:"domains"`
-		IP         *StringList       `json:"ip"`
-		Port       *PortList         `json:"port"`
-		Network    *NetworkList      `json:"network"`
-		SourceIP   *StringList       `json:"sourceIP"`
-		Source     *StringList       `json:"source"`
-		SourcePort *PortList         `json:"sourcePort"`
-		User       *StringList       `json:"user"`
-		VlessRoute *PortList         `json:"vlessRoute"`
-		InboundTag *StringList       `json:"inboundTag"`
-		Protocols  *StringList       `json:"protocol"`
-		Attributes map[string]string `json:"attrs"`
-		LocalIP    *StringList       `json:"localIP"`
-		LocalPort  *PortList         `json:"localPort"`
+		Domain      *StringList       `json:"domain"`
+		Domains     *StringList       `json:"domains"`
+		IP          *StringList       `json:"ip"`
+		Port        *PortList         `json:"port"`
+		Network     *NetworkList      `json:"network"`
+		SourceIP    *StringList       `json:"sourceIP"`
+		Source      *StringList       `json:"source"`
+		SourcePort  *PortList         `json:"sourcePort"`
+		User        *StringList       `json:"user"`
+		VlessRoute  *PortList         `json:"vlessRoute"`
+		InboundTag  *StringList       `json:"inboundTag"`
+		Protocols   *StringList       `json:"protocol"`
+		Attributes  map[string]string `json:"attrs"`
+		LocalIP     *StringList       `json:"localIP"`
+		LocalPort   *PortList         `json:"localPort"`
+		ProcessName *StringList       `json:"processName"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -645,6 +646,12 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if len(rawFieldRule.Attributes) > 0 {
 		rule.Attributes = rawFieldRule.Attributes
+	}
+
+	if rawFieldRule.ProcessName != nil {
+		for _, s := range *rawFieldRule.ProcessName {
+			rule.ProcessName = append(rule.ProcessName, s)
+		}
 	}
 
 	return rule, nil
