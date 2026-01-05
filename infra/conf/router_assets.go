@@ -36,7 +36,7 @@ func loadIP(file, code string) ([]*router.CIDR, error) {
 		if err != nil {
 			return nil, errors.New("failed to load file: ", file).Base(err)
 		}
-		bs = assets.Find(bs, []byte(code))
+		bs, _ = assets.Find(bs, []byte(code))
 		if bs == nil {
 			return nil, errors.New("code not found in ", file, ": ", code)
 		}
@@ -58,7 +58,7 @@ func loadSite(file, code string) ([]*router.Domain, error) {
 		if err != nil {
 			return nil, errors.New("failed to load file: ", file).Base(err)
 		}
-		bs = assets.Find(bs, []byte(code))
+		bs, _ = assets.Find(bs, []byte(code))
 		if bs == nil {
 			return nil, errors.New("list not found in ", file, ": ", code)
 		}

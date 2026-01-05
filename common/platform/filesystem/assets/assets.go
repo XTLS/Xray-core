@@ -94,9 +94,7 @@ func (m *MMapFile) Open(path string) error {
 	m.size = size
 	m.mu.Unlock()
 
-	m.buildGeoMetaList()
-
-	return nil
+	return m.buildGeoMetaList()
 }
 
 func (m *MMapFile) Close() error {
@@ -152,9 +150,9 @@ func (m *MMapFile) unmapLocked() error {
 	return err
 }
 
-func (m *MMapFile) buildGeoMetaList() {
+func (m *MMapFile) buildGeoMetaList() error {
 	if platform.IsAssetMapEnabled() {
-		m.buildGeoMetaFromMappedFile()
+		return m.buildGeoMetaFromMappedFile()
 	} else {
 		m.buildGeoMetaFromMemory(func(code []byte, start, length int64) error {
 			m.AddGeoMeta(string(code), int(start), int(length))
@@ -164,6 +162,7 @@ func (m *MMapFile) buildGeoMetaList() {
 		})
 
 	}
+	return nil
 }
 
 func (m *MMapFile) buildGeoMetaFromMemory(onEntry func(code []byte, start, length int64) error) error {
