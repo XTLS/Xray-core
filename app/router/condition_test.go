@@ -2,8 +2,10 @@ package router_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -300,8 +302,16 @@ func TestRoutingRule(t *testing.T) {
 	}
 }
 
-func loadGeoSite(country string) ([]*Domain, error) {
-	path, err := getAssetPath("geosite.dat")
+func loadGeositeWithAttr(file string, siteWithAttr string) ([]*Domain, error) {
+
+	parts := strings.Split(siteWithAttr, "@")
+	if len(parts) == 0 {
+		return nil, errors.New("empty site")
+	}
+	country := strings.ToUpper(parts[0])
+	attrs := router.ParseAttrs(parts[1:])
+
+	path, err := getAssetPath(file)
 	if err != nil {
 		return nil, err
 	}
@@ -314,18 +324,32 @@ func loadGeoSite(country string) ([]*Domain, error) {
 	if err := proto.Unmarshal(geositeBytes, &geositeList); err != nil {
 		return nil, err
 	}
-
+	var domainList []*Domain
 	for _, site := range geositeList.Entry {
 		if site.CountryCode == country {
-			return site.Domain, nil
+			domainList = site.Domain
+		}
+	}
+	if domainList == nil {
+		return nil, errors.New("country not found: " + country)
+	}
+
+	if attrs.IsEmpty() {
+		return domainList, nil
+	}
+
+	filteredDomains := make([]*router.Domain, 0, len(domainList))
+	for _, domain := range domainList {
+		if attrs.Match(domain) {
+			filteredDomains = append(filteredDomains, domain)
 		}
 	}
 
-	return nil, errors.New("country not found: " + country)
+	return filteredDomains, nil
 }
 
 func TestChinaSites(t *testing.T) {
-	domains, err := loadGeoSite("CN")
+	domains, err := loadGeositeWithAttr("geosite.dat", "CN")
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -366,8 +390,50 @@ func TestChinaSites(t *testing.T) {
 	}
 }
 
+func TestChinaSitesWithAttrs(t *testing.T) {
+	domains, err := loadGeositeWithAttr("geosite.dat", "google@CN")
+	common.Must(err)
+
+	acMatcher, err := NewMphMatcherGroup(domains)
+	common.Must(err)
+
+	type TestCase struct {
+		Domain string
+		Output bool
+	}
+	testCases := []TestCase{
+		{
+			Domain: "google.cn",
+			Output: true,
+		},
+		{
+			Domain: "recaptcha.net",
+			Output: true,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+	}
+
+	for i := 0; i < 1024; i++ {
+		testCases = append(testCases, TestCase{Domain: strconv.Itoa(i) + ".not-exists.com", Output: false})
+	}
+
+	for _, testCase := range testCases {
+		r := acMatcher.ApplyDomain(testCase.Domain)
+		if r != testCase.Output {
+			t.Error("ACDomainMatcher expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r)
+		}
+	}
+}
+
 func BenchmarkMphDomainMatcher(b *testing.B) {
-	domains, err := loadGeoSite("CN")
+	domains, err := loadGeositeWithAttr("geosite.dat", "CN")
 	common.Must(err)
 
 	matcher, err := NewMphMatcherGroup(domains)
