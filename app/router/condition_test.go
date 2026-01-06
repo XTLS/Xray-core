@@ -300,13 +300,23 @@ func TestRoutingRule(t *testing.T) {
 	}
 }
 
-func TestChinaSites(t *testing.T) {
-	domains, err := conf.ParseDomainRule("geosite:cn")
+func loadGeoSiteDomains(geo string) ([]*Domain, error) {
+	domains, err := conf.ParseDomainRule(geo)
+	if err != nil {
+		return nil, err
+	}
 
 	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 		domains, err = router.GetDomainList(domains)
+		if err != nil {
+			return nil, err
+		}
 	}
+	return domains, nil
+}
 
+func TestChinaSites(t *testing.T) {
+	domains, err := loadGeoSiteDomains("geosite:cn")
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -348,12 +358,7 @@ func TestChinaSites(t *testing.T) {
 }
 
 func TestChinaSitesWithAttrs(t *testing.T) {
-	domains, err := conf.ParseDomainRule("geosite:google@cn")
-
-	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
-		domains, err = router.GetDomainList(domains)
-	}
-
+	domains, err := loadGeoSiteDomains("geosite:google@cn")
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -395,7 +400,7 @@ func TestChinaSitesWithAttrs(t *testing.T) {
 }
 
 func BenchmarkMphDomainMatcher(b *testing.B) {
-	domains, err := conf.ParseDomainRule("geosite:cn")
+	domains, err := loadGeoSiteDomains("geosite:cn")
 	common.Must(err)
 
 	matcher, err := NewMphMatcherGroup(domains)
