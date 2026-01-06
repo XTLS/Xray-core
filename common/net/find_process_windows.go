@@ -4,6 +4,7 @@ package net
 
 import (
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -48,19 +49,19 @@ func initWin32API() error {
 	return nil
 }
 
-func FindProcess(dest Destination) (int, string, error) {
+func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, err error) {
 	once.Do(func() {
 		initErr = initWin32API()
 	})
 	if initErr != nil {
-		return 0, "", initErr
+		return 0, "", "", initErr
 	}
 	isLocal, err := IsLocal(dest.Address.IP())
 	if err != nil {
-		return 0, "", errors.New("failed to determine if address is local: ", err)
+		return 0, "", "", errors.New("failed to determine if address is local: ", err)
 	}
 	if !isLocal {
-		return 0, "", ErrNotLocal
+		return 0, "", "", ErrNotLocal
 	}
 	if dest.Network != Network_TCP && dest.Network != Network_UDP {
 		panic("Unsupported network type for process lookup.")
@@ -86,7 +87,7 @@ func FindProcess(dest Destination) (int, string, error) {
 
 	addr, ok := netip.AddrFromSlice(ip)
 	if !ok {
-		return 0, "", errors.New("invalid IP address")
+		return 0, "", "", errors.New("invalid IP address")
 	}
 	addr = addr.Unmap()
 
@@ -97,19 +98,23 @@ func FindProcess(dest Destination) (int, string, error) {
 
 	buf, err := getTransportTable(fn, family, class)
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
 
 	s := newSearcher(dest.Network, dest.Address.Family())
 
 	pid, err := s.Search(buf, addr, uint16(port))
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
-	name, err := getExecPathFromPID(pid)
-	// drop .exe
-	name = strings.TrimSuffix(name, ".exe")
-	return int(pid), name, err
+	NameWithPath, err := getExecPathFromPID(pid)
+	NameWithPath = filepath.ToSlash(NameWithPath)
+
+	// drop .exe and path
+	nameSplit := strings.Split(NameWithPath, "/")
+	procName := nameSplit[len(nameSplit)-1]
+	procName = strings.TrimSuffix(procName, ".exe")
+	return int(pid), procName, NameWithPath, err
 }
 
 type searcher struct {
@@ -234,10 +239,5 @@ func getExecPathFromPID(pid uint32) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// full path will like: C:\Windows\System32\curl.exe
-	// we only need the executable name
-	fullPathName := syscall.UTF16ToString(buf[:size])
-	nameSplit := strings.Split(fullPathName, "\\")
-	name := nameSplit[len(nameSplit)-1]
-	return name, nil
+	return syscall.UTF16ToString(buf[:size]), nil
 }

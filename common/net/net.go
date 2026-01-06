@@ -21,22 +21,22 @@ const ChromeH2KeepAlivePeriod = 45 * time.Second
 
 var ErrNotLocal = errors.New("the source address is not from local machine.")
 
-type localIPCahceEntry struct {
+type localIPCacheEntry struct {
 	addrs      []net.Addr
 	lastUpdate time.Time
 }
 
-var localIPCahce = atomic.Pointer[localIPCahceEntry]{}
+var localIPCache = atomic.Pointer[localIPCacheEntry]{}
 
 func IsLocal(ip net.IP) (bool, error) {
 	var addrs []net.Addr
-	if entry := localIPCahce.Load(); entry == nil || time.Since(entry.lastUpdate) > time.Minute {
+	if entry := localIPCache.Load(); entry == nil || time.Since(entry.lastUpdate) > time.Minute {
 		var err error
 		addrs, err = net.InterfaceAddrs()
 		if err != nil {
 			return false, err
 		}
-		localIPCahce.Store(&localIPCahceEntry{
+		localIPCache.Store(&localIPCacheEntry{
 			addrs:      addrs,
 			lastUpdate: time.Now(),
 		})

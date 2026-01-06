@@ -3,7 +3,9 @@ package router
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -350,7 +352,51 @@ func ParseAttrs(attrs []string) *GeoAttributeList {
 }
 
 type ProcessNameMatcher struct {
-	names []string
+	ProcessNames  []string
+	AbsPaths      []string
+	Folders       []string
+	MatchXraySelf bool
+}
+
+func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+	processNames := []string{}
+	folders := []string{}
+	absPaths := []string{}
+	matchXraySelf := false
+	for _, name := range names {
+		if name == "self/" {
+			matchXraySelf = true
+			continue
+		}
+		// replace xray/ with self executable path
+		if name == "xray/" {
+			xrayPath, err := os.Executable()
+			if err != nil {
+				errors.LogError(context.Background(), "Failed to get xray executable path: ", err)
+				continue
+			}
+			name = xrayPath
+		}
+		name := filepath.ToSlash(name)
+		// /usr/bin/
+		if strings.HasSuffix(name, "/") {
+			folders = append(folders, name)
+			continue
+		}
+		// /usr/bin/curl
+		if strings.Contains(name, "/") {
+			absPaths = append(absPaths, name)
+			continue
+		}
+		// curl.exe or curl
+		processNames = append(processNames, strings.TrimSuffix(name, ".exe"))
+	}
+	return &ProcessNameMatcher{
+		ProcessNames:  processNames,
+		AbsPaths:      absPaths,
+		Folders:       folders,
+		MatchXraySelf: matchXraySelf,
+	}
 }
 
 func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
@@ -369,18 +415,26 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	if err != nil {
 		return false
 	}
-	pid, name, err := net.FindProcess(src)
+	pid, name, absPath, err := net.FindProcess(src)
 	if err != nil {
 		if err != net.ErrNotLocal {
 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
 		}
 		return false
 	}
-	for _, n := range m.names {
-		if name == "/self" && pid == os.Getpid() {
+	if m.MatchXraySelf {
+		if pid == os.Getpid() {
 			return true
 		}
-		if n == name {
+	}
+	if slices.Contains(m.ProcessNames, name) {
+		return true
+	}
+	if slices.Contains(m.AbsPaths, absPath) {
+		return true
+	}
+	for _, f := range m.Folders {
+		if strings.HasPrefix(absPath, f) {
 			return true
 		}
 	}
