@@ -22,7 +22,7 @@ on:
 
 jobs:
   geodat:
-    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push'|| github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
@@ -66,7 +66,7 @@ jobs:
           key: xray-geodat-${{ github.sha }}-${{ github.run_number }}
 
   wintun:
-    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push'|| github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Restore Wintun Cache
@@ -75,8 +75,8 @@ jobs:
           path: resources
           key: xray-wintun-
 
-      - name: Force downloading if run manually
-        if: github.event_name == 'workflow_dispatch'
+      - name: Force downloading if run manually or on file update
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: |
           echo "FORCE_UPDATE=true" >> $GITHUB_ENV
 
