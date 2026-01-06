@@ -103,8 +103,21 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			err := parseDomains(ns)
 			if err != nil {
-				return nil, errors.New("can't parse domain rules: ").Base(err)
+				return nil, errors.New("failed to parse dns domain rules: ").Base(err)
 			}
+
+			expectedGeoip, err := router.GetGeoIPList(ns.ExpectedGeoip)
+			if err != nil {
+				return nil, errors.New("failed to parse dns expectIPs rules: ").Base(err)
+			}
+			ns.ExpectedGeoip = expectedGeoip
+
+			unexpectedGeoip, err := router.GetGeoIPList(ns.UnexpectedGeoip)
+			if err != nil {
+				return nil, errors.New("failed to parse dns expectIPs rules: ").Base(err)
+			}
+			ns.UnexpectedGeoip = unexpectedGeoip
+
 		}
 		domainRuleCount += len(ns.PrioritizedDomain)
 	}
