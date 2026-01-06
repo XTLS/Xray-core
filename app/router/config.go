@@ -79,7 +79,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		geoip := rr.Geoip
 		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			var err error
-			geoip, err = getGeoIPList(rr.Geoip)
+			geoip, err = GetGeoIPList(rr.Geoip)
 			if err != nil {
 				return nil, errors.New("failed to build geoip from mmap").Base(err)
 			}
@@ -188,7 +188,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	}
 }
 
-func getGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
+func GetGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
 	geoipList := []*GeoIP{}
 	for _, ip := range ips {
 		if ip.CountryCode != "" {

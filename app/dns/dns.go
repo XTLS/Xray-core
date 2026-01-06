@@ -12,12 +12,15 @@ import (
 	"sync"
 	"time"
 
+	router "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/dns"
+	"google.golang.org/protobuf/proto"
 )
 
 // DNS is a DNS rely server.
@@ -97,6 +100,25 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 	}
 
 	for _, ns := range config.NameServer {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
+			err := parseDomains(ns)
+			if err != nil {
+				return nil, errors.New("failed to parse dns domain rules: ").Base(err)
+			}
+
+			expectedGeoip, err := router.GetGeoIPList(ns.ExpectedGeoip)
+			if err != nil {
+				return nil, errors.New("failed to parse dns expectIPs rules: ").Base(err)
+			}
+			ns.ExpectedGeoip = expectedGeoip
+
+			unexpectedGeoip, err := router.GetGeoIPList(ns.UnexpectedGeoip)
+			if err != nil {
+				return nil, errors.New("failed to parse dns unexpectedGeoip rules: ").Base(err)
+			}
+			ns.UnexpectedGeoip = unexpectedGeoip
+
+		}
 		domainRuleCount += len(ns.PrioritizedDomain)
 	}
 
@@ -579,4 +601,77 @@ func detectGUIPlatform() bool {
 		}
 	}
 	return false
+}
+
+func parseDomains(ns *NameServer) error {
+	pureDomains := []*router.Domain{}
+
+	// convert to pure domain
+	for _, pd := range ns.PrioritizedDomain {
+		pureDomains = append(pureDomains, &router.Domain{
+			Type:  router.Domain_Type(pd.Type),
+			Value: pd.Domain,
+		})
+	}
+
+	domainList := []*router.Domain{}
+	for _, domain := range pureDomains {
+		val := strings.Split(domain.Value, "_")
+		if len(val) >= 2 {
+
+			fileName := val[0]
+			code := val[1]
+
+			bs, err := filesystem.ReadAsset(fileName)
+			if err != nil {
+				return errors.New("failed to load file: ", fileName).Base(err)
+			}
+			bs = filesystem.Find(bs, []byte(code))
+			var geosite router.GeoSite
+
+			if err := proto.Unmarshal(bs, &geosite); err != nil {
+				return errors.New("failed Unmarshal :").Base(err)
+			}
+
+			// parse attr
+			if len(val) == 3 {
+				siteWithAttr := strings.Split(val[2], ",")
+				attrs := router.ParseAttrs(siteWithAttr)
+				if !attrs.IsEmpty() {
+					filteredDomains := make([]*router.Domain, 0, len(pureDomains))
+					for _, domain := range geosite.Domain {
+						if attrs.Match(domain) {
+							filteredDomains = append(filteredDomains, domain)
+						}
+					}
+					geosite.Domain = filteredDomains
+				}
+
+			}
+
+			domainList = append(domainList, geosite.Domain...)
+
+			// update ns.OriginalRules Size
+			ruleTag := strings.Join(val, ":")
+			for i, oRule := range ns.OriginalRules {
+				if oRule.Rule == strings.ToLower(ruleTag) {
+					ns.OriginalRules[i].Size = uint32(len(geosite.Domain))
+				}
+			}
+
+		} else {
+			domainList = append(domainList, domain)
+		}
+	}
+
+	// convert back to NameServer_PriorityDomain
+	ns.PrioritizedDomain = []*NameServer_PriorityDomain{}
+	for _, pd := range domainList {
+		ns.PrioritizedDomain = append(ns.PrioritizedDomain, &NameServer_PriorityDomain{
+			Type:   ToDomainMatchingType(pd.Type),
+			Domain: pd.Value,
+		})
+	}
+
+	return nil
 }
