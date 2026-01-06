@@ -541,7 +541,7 @@ func TestIPMatch(t *testing.T) {
 						},
 						ExpectedGeoip: []*router.GeoIP{
 							{
-								CountryCode: "local",
+								// local
 								Cidr: []*router.CIDR{
 									{
 										// inner ip, will not match
@@ -565,7 +565,7 @@ func TestIPMatch(t *testing.T) {
 						},
 						ExpectedGeoip: []*router.GeoIP{
 							{
-								CountryCode: "test",
+								// test
 								Cidr: []*router.CIDR{
 									{
 										Ip:     []byte{8, 8, 8, 8},
@@ -574,7 +574,7 @@ func TestIPMatch(t *testing.T) {
 								},
 							},
 							{
-								CountryCode: "test",
+								// test
 								Cidr: []*router.CIDR{
 									{
 										Ip:     []byte{8, 8, 8, 4},

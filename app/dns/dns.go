@@ -114,7 +114,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 
 			unexpectedGeoip, err := router.GetGeoIPList(ns.UnexpectedGeoip)
 			if err != nil {
-				return nil, errors.New("failed to parse dns expectIPs rules: ").Base(err)
+				return nil, errors.New("failed to parse dns unexpectedGeoip rules: ").Base(err)
 			}
 			ns.UnexpectedGeoip = unexpectedGeoip
 
