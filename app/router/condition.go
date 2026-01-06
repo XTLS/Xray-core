@@ -324,6 +324,16 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
 	for _, name := range names {
 		if name == "self/" {
 			matchXraySelf = true
+			continue
+		}
+		// replace xray/ with self executable path
+		if name == "xray/" {
+			xrayPath, err := os.Executable()
+			if err != nil {
+				errors.LogError(context.Background(), "Failed to get xray executable path: ", err)
+				continue
+			}
+			name = xrayPath
 		}
 		name := filepath.ToSlash(name)
 		// /usr/bin/
