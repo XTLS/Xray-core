@@ -440,11 +440,11 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 	var geoips []*GeoIP
 
 	{
-		ips, err := loadGeoIP("CN")
+		ips, err := loadGeoIP("geoip:cn")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "CN",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
@@ -453,25 +453,25 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "JP",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
 	{
-		ips, err := loadGeoIP("CA")
+		ips, err := loadGeoIP("geoip:ca")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "CA",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
 	{
-		ips, err := loadGeoIP("US")
+		ips, err := loadGeoIP("geoip:us")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "US",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
