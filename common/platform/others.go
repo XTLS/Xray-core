@@ -13,8 +13,19 @@ func LineSeparator() string {
 	return "\n"
 }
 
-func IsTest() bool {
-	return flag.Lookup("test.v") != nil
+func TestAssetPath(file string) string {
+	if flag.Lookup("test.v") != nil {
+		path := filepath.Join("..", "..", "resources", file)
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return ""
+		}
+		if err != nil {
+			return ""
+		}
+		return path
+	}
+	return ""
 }
 
 // GetAssetLocation searches for `file` in the env dir, the executable dir, and certain locations
@@ -35,16 +46,8 @@ func GetAssetLocation(file string) string {
 		return p
 	}
 
-	if IsTest() {
-		path := filepath.Join("..", "..", "resources", file)
-		_, err := os.Stat(path)
-		if os.IsNotExist(err) {
-			return defPath
-		}
-		if err != nil {
-			return defPath
-		}
-		return path
+	if testPath := TestAssetPath(file); testPath != "" {
+		return testPath
 	}
 
 	// asset not found, let the caller throw out the error
