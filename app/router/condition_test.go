@@ -1,22 +1,20 @@
 package router_test
 
 import (
+	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
-	"google.golang.org/protobuf/proto"
+	"github.com/xtls/xray-core/infra/conf"
 )
 
 func withBackground() routing.Context {
@@ -302,54 +300,13 @@ func TestRoutingRule(t *testing.T) {
 	}
 }
 
-func loadGeositeWithAttr(file string, siteWithAttr string) ([]*Domain, error) {
-
-	parts := strings.Split(siteWithAttr, "@")
-	if len(parts) == 0 {
-		return nil, errors.New("empty site")
-	}
-	country := strings.ToUpper(parts[0])
-	attrs := router.ParseAttrs(parts[1:])
-
-	path, err := getAssetPath(file)
-	if err != nil {
-		return nil, err
-	}
-	geositeBytes, err := filesystem.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var geositeList GeoSiteList
-	if err := proto.Unmarshal(geositeBytes, &geositeList); err != nil {
-		return nil, err
-	}
-	var domainList []*Domain
-	for _, site := range geositeList.Entry {
-		if site.CountryCode == country {
-			domainList = site.Domain
-		}
-	}
-	if domainList == nil {
-		return nil, errors.New("country not found: " + country)
-	}
-
-	if attrs.IsEmpty() {
-		return domainList, nil
-	}
-
-	filteredDomains := make([]*router.Domain, 0, len(domainList))
-	for _, domain := range domainList {
-		if attrs.Match(domain) {
-			filteredDomains = append(filteredDomains, domain)
-		}
-	}
-
-	return filteredDomains, nil
-}
-
 func TestChinaSites(t *testing.T) {
-	domains, err := loadGeositeWithAttr("geosite.dat", "CN")
+	domains, err := conf.ParseDomainRule("geosite:cn")
+
+	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
+		domains, err = router.GetDomainList(domains)
+	}
+
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -391,7 +348,12 @@ func TestChinaSites(t *testing.T) {
 }
 
 func TestChinaSitesWithAttrs(t *testing.T) {
-	domains, err := loadGeositeWithAttr("geosite.dat", "google@CN")
+	domains, err := conf.ParseDomainRule("geosite:google@cn")
+
+	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
+		domains, err = router.GetDomainList(domains)
+	}
+
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -433,7 +395,7 @@ func TestChinaSitesWithAttrs(t *testing.T) {
 }
 
 func BenchmarkMphDomainMatcher(b *testing.B) {
-	domains, err := loadGeositeWithAttr("geosite.dat", "CN")
+	domains, err := conf.ParseDomainRule("geosite:cn")
 	common.Must(err)
 
 	matcher, err := NewMphMatcherGroup(domains)
