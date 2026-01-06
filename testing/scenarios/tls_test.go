@@ -743,8 +743,8 @@ func TestSimpleTLSConnectionPinned(t *testing.T) {
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
-								AllowInsecure:               true,
-								PinnedPeerCertificateSha256: [][]byte{certHash},
+								AllowInsecure:        true,
+								PinnedPeerCertSha256: [][]byte{certHash},
 							}),
 						},
 					},
@@ -841,8 +841,8 @@ func TestSimpleTLSConnectionPinnedWrongCert(t *testing.T) {
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
-								AllowInsecure:               true,
-								PinnedPeerCertificateSha256: [][]byte{certHash},
+								AllowInsecure:        true,
+								PinnedPeerCertSha256: [][]byte{certHash},
 							}),
 						},
 					},
@@ -938,9 +938,9 @@ func TestUTLSConnectionPinned(t *testing.T) {
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
-								Fingerprint:                 "random",
-								AllowInsecure:               true,
-								PinnedPeerCertificateSha256: [][]byte{certHash},
+								Fingerprint:          "random",
+								AllowInsecure:        true,
+								PinnedPeerCertSha256: [][]byte{certHash},
 							}),
 						},
 					},
@@ -1037,9 +1037,9 @@ func TestUTLSConnectionPinnedWrongCert(t *testing.T) {
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
-								Fingerprint:                 "random",
-								AllowInsecure:               true,
-								PinnedPeerCertificateSha256: [][]byte{certHash},
+								Fingerprint:          "random",
+								AllowInsecure:        true,
+								PinnedPeerCertSha256: [][]byte{certHash},
 							}),
 						},
 					},
