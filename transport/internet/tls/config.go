@@ -290,8 +290,8 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 	// directly return success if pinned cert is leaf
 	// or add the CA to RootCAs if pinned cert is CA(and can be used in VerifyPeerCertInNames for Self signed CA)
 	RootCAs := r.RootCAs
-	if r.PinnedPeerCertificateSha256 != nil {
-		verifyResult, verifiedCert := verifyChain(certs, r.PinnedPeerCertificateSha256)
+	if r.PinnedPeerCertSha256 != nil {
+		verifyResult, verifiedCert := verifyChain(certs, r.PinnedPeerCertSha256)
 		switch verifyResult {
 		case certNotFound:
 			return errors.New("peer cert is unrecognized")
@@ -326,9 +326,9 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 }
 
 type RandCarrier struct {
-	RootCAs                     *x509.CertPool
-	VerifyPeerCertInNames       []string
-	PinnedPeerCertificateSha256 [][]byte
+	RootCAs               *x509.CertPool
+	VerifyPeerCertInNames []string
+	PinnedPeerCertSha256  [][]byte
 }
 
 func (r *RandCarrier) Read(p []byte) (n int, err error) {
@@ -353,9 +353,9 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	}
 
 	randCarrier := &RandCarrier{
-		RootCAs:                     root,
-		VerifyPeerCertInNames:       slices.Clone(c.VerifyPeerCertInNames),
-		PinnedPeerCertificateSha256: c.PinnedPeerCertificateSha256,
+		RootCAs:               root,
+		VerifyPeerCertInNames: slices.Clone(c.VerifyPeerCertInNames),
+		PinnedPeerCertSha256:  c.PinnedPeerCertSha256,
 	}
 	config := &tls.Config{
 		Rand:                   randCarrier,
