@@ -20,14 +20,12 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 var useSplice bool
@@ -35,8 +33,8 @@ var useSplice bool
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
-		if err := core.RequireFeatures(ctx, func(pm policy.Manager, d dns.Client) error {
-			return h.Init(config.(*Config), pm, d)
+		if err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
+			return h.Init(config.(*Config), pm)
 		}); err != nil {
 			return nil, err
 		}
@@ -53,16 +51,13 @@ func init() {
 // Handler handles Freedom connections.
 type Handler struct {
 	policyManager policy.Manager
-	dns           dns.Client
 	config        *Config
 }
 
 // Init initializes the Handler with necessary parameters.
-func (h *Handler) Init(config *Config, pm policy.Manager, d dns.Client) error {
+func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
-	h.dns = d
-
 	return nil
 }
 
@@ -71,35 +66,13 @@ func (h *Handler) policy() policy.Session {
 	return p
 }
 
-func (h *Handler) resolveIP(ctx context.Context, domain string, localAddr net.Address) net.Address {
-	ips, _, err := h.dns.LookupIP(domain, dns.IPOption{
-		IPv4Enable: (localAddr == nil || localAddr.Family().IsIPv4()) && h.config.preferIP4(),
-		IPv6Enable: (localAddr == nil || localAddr.Family().IsIPv6()) && h.config.preferIP6(),
-	})
-	{ // Resolve fallback
-		if (len(ips) == 0 || err != nil) && h.config.hasFallback() && localAddr == nil {
-			ips, _, err = h.dns.LookupIP(domain, dns.IPOption{
-				IPv4Enable: h.config.fallbackIP4(),
-				IPv6Enable: h.config.fallbackIP6(),
-			})
-		}
-	}
-	if err != nil {
-		errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", domain)
-	}
-	if len(ips) == 0 {
-		return nil
-	}
-	return net.IPAddress(ips[dice.Roll(len(ips))])
-}
-
 func isValidAddress(addr *net.IPOrDomain) bool {
 	if addr == nil {
 		return false
 	}
 
 	a := addr.AsAddress()
-	return a != net.AnyIP
+	return a != net.AnyIP && a != net.AnyIPv6
 }
 
 // Process implements proxy.Outbound.
@@ -114,6 +87,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	inbound := session.InboundFromContext(ctx)
 
 	destination := ob.Target
+	origTargetAddr := ob.OriginalTarget.Address
+	if origTargetAddr == nil {
+		origTargetAddr = ob.Target.Address
+	}
+	dialer.SetOutboundGateway(ctx, ob)
+	outGateway := ob.Gateway
 	UDPOverride := net.UDPDestination(nil, 0)
 	if h.config.DestinationOverride != nil {
 		server := h.config.DestinationOverride.Server
@@ -133,17 +112,24 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
-		if h.config.hasStrategy() && dialDest.Address.Family().IsDomain() {
-			ip := h.resolveIP(ctx, dialDest.Address.Domain(), dialer.Address())
-			if ip != nil {
+		if h.config.DomainStrategy.HasStrategy() && dialDest.Address.Family().IsDomain() {
+			strategy := h.config.DomainStrategy
+			if destination.Network == net.Network_UDP && origTargetAddr != nil && outGateway == nil {
+				strategy = strategy.GetDynamicStrategy(origTargetAddr.Family())
+			}
+			ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
+				if h.config.DomainStrategy.ForceIP() {
+					return err
+				}
+			} else {
 				dialDest = net.Destination{
 					Network: dialDest.Network,
-					Address: ip,
+					Address: net.IPAddress(ips[dice.Roll(len(ips))]),
 					Port:    dialDest.Port,
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
-			} else if h.config.forceIP() {
-				return dns.ErrEmptyResponse
 			}
 		}
 
@@ -194,7 +180,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			if h.config.Fragment != nil {
 				errors.LogDebug(ctx, "FRAGMENT", h.config.Fragment.PacketsFrom, h.config.Fragment.PacketsTo, h.config.Fragment.LengthMin, h.config.Fragment.LengthMax,
-					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax)
+					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax, h.config.Fragment.MaxSplitMin, h.config.Fragment.MaxSplitMax)
 				writer = buf.NewWriter(&FragmentWriter{
 					fragment: h.config.Fragment,
 					writer:   conn,
@@ -203,7 +189,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, ctx, UDPOverride, destination)
+			writer = NewPacketWriter(conn, h, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -211,6 +197,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					noises:      h.config.Noises,
 					firstWrite:  true,
 					UDPOverride: UDPOverride,
+					remoteAddr:  net.DestinationFromAddr(conn.RemoteAddr()).Address,
 				}
 			}
 		}
@@ -224,16 +211,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-		if destination.Network == net.Network_TCP {
+		if destination.Network == net.Network_TCP && useSplice && proxy.IsRAWTransportWithoutSecurity(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
 			var writeConn net.Conn
 			var inTimer *signal.ActivityTimer
-			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil && useSplice {
+			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
 				writeConn = inbound.Conn
 				inTimer = inbound.Timer
 			}
-			if !isTLSConn(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
-				return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
-			}
+			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
 		}
 		var reader buf.Reader
 		if destination.Network == net.Network_TCP {
@@ -258,22 +243,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func isTLSConn(conn stat.Connection) bool {
-	if conn != nil {
-		statConn, ok := conn.(*stat.CounterConnection)
-		if ok {
-			conn = statConn.Connection
-		}
-		if _, ok := conn.(*tls.Conn); ok {
-			return true
-		}
-		if _, ok := conn.(*tls.UConn); ok {
-			return true
-		}
-	}
-	return false
-}
-
 func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
@@ -289,14 +258,13 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 		if UDPOverride.Address != nil || UDPOverride.Port != 0 {
 			isOverridden = true
 		}
-		changedAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
 			IsOverridden:      isOverridden,
 			InitUnchangedAddr: DialDest.Address,
-			InitChangedAddr:   net.ParseAddress(changedAddress),
+			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
 		}
 	}
 	return &buf.PacketReader{Reader: conn}
@@ -339,7 +307,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -354,16 +322,15 @@ func NewPacketWriter(conn net.Conn, h *Handler, ctx context.Context, UDPOverride
 		// check this behavior and add it to map
 		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
 		if DialDest.Address.Family().IsDomain() {
-			RemoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-			resolvedUDPAddr.Store(DialDest.Address.String(), net.ParseAddress(RemoteAddress))
+			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
 		}
 		return &PacketWriter{
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
-			Context:           ctx,
 			UDPOverride:       UDPOverride,
-			resolvedUDPAddr:   resolvedUDPAddr,
+			ResolvedUDPAddr:   resolvedUDPAddr,
+			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
 		}
 
 	}
@@ -374,14 +341,14 @@ type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
 	*Handler
-	context.Context
 	UDPOverride net.Destination
 
 	// Dest of udp packets might be a domain, we will resolve them to IP
 	// But resolver will return a random one if the domain has many IPs
 	// Resulting in these packets being sent to many different IPs randomly
 	// So, cache and keep the resolve result
-	resolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
+	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
+	LocalAddr       net.Address
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -401,19 +368,21 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.UDP.Port = w.UDPOverride.Port
 			}
 			if b.UDP.Address.Family().IsDomain() {
-				if ip, ok := w.resolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
+				if ip, ok := w.ResolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
 					b.UDP.Address = ip
 				} else {
 					ShouldUseSystemResolver := true
-					if w.Handler.config.hasStrategy() {
-						ip = w.Handler.resolveIP(w.Context, b.UDP.Address.Domain(), nil)
-						if ip != nil {
+					if w.Handler.config.DomainStrategy.HasStrategy() {
+						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), w.Handler.config.DomainStrategy, w.LocalAddr)
+						if err != nil {
+							// drop packet if resolve failed when forceIP
+							if w.Handler.config.DomainStrategy.ForceIP() {
+								b.Release()
+								continue
+							}
+						} else {
+							ip = net.IPAddress(ips[dice.Roll(len(ips))])
 							ShouldUseSystemResolver = false
-						}
-						// drop packet if resolve failed when forceIP
-						if ip == nil && w.Handler.config.forceIP() {
-							b.Release()
-							continue
 						}
 					}
 					if ShouldUseSystemResolver {
@@ -426,11 +395,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						}
 					}
 					if ip != nil {
-						b.UDP.Address, _ = w.resolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
+						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
 				}
 			}
-			destAddr, _ := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
 				b.Release()
 				continue
@@ -456,6 +425,7 @@ type NoisePacketWriter struct {
 	noises      []*Noise
 	firstWrite  bool
 	UDPOverride net.Destination
+	remoteAddr  net.Address
 }
 
 // MultiBuffer writer with Noise before first packet
@@ -468,8 +438,24 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		var noise []byte
 		var err error
+		if w.remoteAddr.Family().IsDomain() {
+			panic("impossible, remoteAddr is always IP")
+		}
 		for _, n := range w.noises {
-			//User input string or base64 encoded string
+			switch n.ApplyTo {
+			case "ipv4":
+				if w.remoteAddr.Family().IsIPv6() {
+					continue
+				}
+			case "ipv6":
+				if w.remoteAddr.Family().IsIPv4() {
+					continue
+				}
+			case "ip":
+			default:
+				panic("unreachable, applyTo is ip/ipv4/ipv6")
+			}
+			//User input string or base64 encoded string or hex string
 			if n.Packet != nil {
 				noise = n.Packet
 			} else {
@@ -480,7 +466,10 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if err != nil {
 				return err
 			}
-			w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
+			if err != nil {
+				return err
+			}
 
 			if n.DelayMin != 0 || n.DelayMax != 0 {
 				time.Sleep(time.Duration(crypto.RandBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
@@ -509,23 +498,29 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			return f.writer.Write(b)
 		}
 		data := b[5:recordLen]
-		buf := make([]byte, 1024)
+		buff := make([]byte, 2048)
 		var hello []byte
+		maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
+		var splitNum int64
 		for from := 0; ; {
 			to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-			if to > len(data) {
+			splitNum++
+			if to > len(data) || (maxSplit > 0 && splitNum >= maxSplit) {
 				to = len(data)
 			}
-			copy(buf[:3], b)
-			copy(buf[5:], data[from:to])
 			l := to - from
+			if 5+l > len(buff) {
+				buff = make([]byte, 5+l)
+			}
+			copy(buff[:3], b)
+			copy(buff[5:], data[from:to])
 			from = to
-			buf[3] = byte(l >> 8)
-			buf[4] = byte(l)
+			buff[3] = byte(l >> 8)
+			buff[4] = byte(l)
 			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
-				hello = append(hello, buf[:5+l]...)
+				hello = append(hello, buff[:5+l]...)
 			} else {
-				_, err := f.writer.Write(buf[:5+l])
+				_, err := f.writer.Write(buff[:5+l])
 				time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 				if err != nil {
 					return 0, err
@@ -552,17 +547,20 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 	if f.fragment.PacketsFrom != 0 && (f.count < f.fragment.PacketsFrom || f.count > f.fragment.PacketsTo) {
 		return f.writer.Write(b)
 	}
+	maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
+	var splitNum int64
 	for from := 0; ; {
 		to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-		if to > len(b) {
+		splitNum++
+		if to > len(b) || (maxSplit > 0 && splitNum >= maxSplit) {
 			to = len(b)
 		}
 		n, err := f.writer.Write(b[from:to])
 		from += n
-		time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 		if err != nil {
 			return from, err
 		}
+		time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
 		if from >= len(b) {
 			return from, nil
 		}

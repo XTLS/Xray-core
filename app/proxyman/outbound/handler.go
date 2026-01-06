@@ -6,8 +6,9 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	gonet "net"
 	"os"
+
+	"github.com/xtls/xray-core/common/dice"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -106,6 +107,8 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	}
 	h.proxyConfig = proxyConfig
 
+	ctx = session.ContextWithFullHandler(ctx, h)
+
 	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
 	if err != nil {
 		return nil, err
@@ -177,6 +180,29 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
+	content := session.ContentFromContext(ctx)
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() && (content == nil || !content.SkipDNSResolve) {
+		strategy := h.senderSettings.TargetStrategy
+		if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil {
+			strategy = strategy.GetDynamicStrategy(ob.OriginalTarget.Address.Family())
+		}
+		ips, err := internet.LookupForIP(ob.Target.Address.Domain(), strategy, nil)
+		if err != nil {
+			errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
+			if h.senderSettings.TargetStrategy.ForceIP() {
+				err := errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
+				session.SubmitOutboundErrorToOriginator(ctx, err)
+				common.Interrupt(link.Writer)
+				common.Interrupt(link.Reader)
+				return
+			}
+
+		} else {
+			unchangedDomain := ob.Target.Address.Domain()
+			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
+		}
+	}
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
@@ -188,6 +214,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				session.SubmitOutboundErrorToOriginator(ctx, err)
 				errors.LogInfo(ctx, err.Error())
 				common.Interrupt(link.Writer)
+				common.Interrupt(link.Reader)
 			}
 		}
 		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
@@ -213,8 +240,10 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	}
 out:
 	err := h.proxy.Process(ctx, link, h)
+	var errC error
 	if err != nil {
-		if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, context.Canceled) {
+		errC = errors.Cause(err)
+		if goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled) {
 			err = nil
 		}
 	}
@@ -225,17 +254,13 @@ out:
 		errors.LogInfo(ctx, err.Error())
 		common.Interrupt(link.Writer)
 	} else {
-		common.Close(link.Writer)
+		if errC != nil && goerrors.Is(errC, io.ErrClosedPipe) {
+			common.Interrupt(link.Writer)
+		} else {
+			common.Close(link.Writer)
+		}
 	}
 	common.Interrupt(link.Reader)
-}
-
-// Address implements internet.Dialer.
-func (h *Handler) Address() net.Address {
-	if h.senderSettings == nil || h.senderSettings.Via == nil {
-		return nil
-	}
-	return h.senderSettings.Via.AsAddress()
 }
 
 func (h *Handler) DestIpAddress() net.IP {
@@ -272,49 +297,16 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 				return h.getStatCouterConnection(conn), nil
 			}
 
-			errors.LogWarning(ctx, "failed to get outbound handler with tag: ", tag)
+			errors.LogError(ctx, "failed to get outbound handler with tag: ", tag)
+			return nil, errors.New("failed to get outbound handler with tag: " + tag)
 		}
 
 		if h.senderSettings.Via != nil {
-
 			outbounds := session.OutboundsFromContext(ctx)
 			ob := outbounds[len(outbounds)-1]
-			var domain string
-			addr := h.senderSettings.Via.AsAddress()
-			domain = h.senderSettings.Via.GetDomain()
-			switch {
-			case h.senderSettings.ViaCidr != "":
-				ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
-
-			case domain == "origin":
-
-				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Conn != nil {
-						origin, _, err := net.SplitHostPort(inbound.Conn.LocalAddr().String())
-						if err == nil {
-							ob.Gateway = net.ParseAddress(origin)
-							errors.LogDebug(ctx, "use receive package ip as snedthrough: ", origin)
-						}
-					}
-				}
-			case domain == "srcip":
-				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if inbound.Conn != nil {
-						clientaddr, _, err := net.SplitHostPort(inbound.Conn.RemoteAddr().String())
-						if err == nil {
-							ob.Gateway = net.ParseAddress(clientaddr)
-							errors.LogDebug(ctx, "use client src ip as snedthrough: ", clientaddr)
-						}
-					}
-
-				}
-			//case addr.Family().IsDomain():
-			default:
-				ob.Gateway = addr
-
-			}
-
+			h.SetOutboundGateway(ctx, ob)
 		}
+
 	}
 
 	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
@@ -324,9 +316,45 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
 	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds)-1]
-	ob.Conn = conn
+	if outbounds != nil {
+		ob := outbounds[len(outbounds)-1]
+		ob.Conn = conn
+	} else {
+		// for Vision's pre-connect
+	}
 	return conn, err
+}
+
+func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
+	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil && !h.senderSettings.ProxySettings.HasTag() && (h.streamSettings.SocketSettings == nil || len(h.streamSettings.SocketSettings.DialerProxy) == 0) {
+		var domain string
+		addr := h.senderSettings.Via.AsAddress()
+		domain = h.senderSettings.Via.GetDomain()
+		switch {
+		case h.senderSettings.ViaCidr != "":
+			ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
+
+		case domain == "origin":
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
+					ob.Gateway = inbound.Local.Address
+					errors.LogDebug(ctx, "use inbound local ip as sendthrough: ", inbound.Local.Address.String())
+				}
+			}
+		case domain == "srcip":
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				if inbound.Source.IsValid() && inbound.Source.Address.Family().IsIP() {
+					ob.Gateway = inbound.Source.Address
+					errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
+				}
+			}
+		//case addr.Family().IsDomain():
+		default:
+			ob.Gateway = addr
+
+		}
+
+	}
 }
 
 func (h *Handler) getStatCouterConnection(conn stat.Connection) stat.Connection {
@@ -369,7 +397,7 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
 
-	_, ipnet, _ := gonet.ParseCIDR(addr.IP().String() + "/" + prefix)
+	_, ipnet, _ := net.ParseCIDR(addr.IP().String() + "/" + prefix)
 
 	ones, bits := ipnet.Mask.Size()
 	subnetSize := new(big.Int).Lsh(big.NewInt(1), uint(bits-ones))
@@ -383,5 +411,5 @@ func ParseRandomIP(addr net.Address, prefix string) net.Address {
 	padded := make([]byte, len(ipnet.IP))
 	copy(padded[len(padded)-len(rndBytes):], rndBytes)
 
-	return net.ParseAddress(gonet.IP(padded).String())
+	return net.ParseAddress(net.IP(padded).String())
 }

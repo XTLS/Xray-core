@@ -1,6 +1,8 @@
 package router
 
 import (
+	"context"
+	"os"
 	"regexp"
 	"strings"
 
@@ -47,20 +49,6 @@ var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 	Domain_Full:   strmatcher.Full,
 }
 
-func domainToMatcher(domain *Domain) (strmatcher.Matcher, error) {
-	matcherType, f := matcherTypeMap[domain.Type]
-	if !f {
-		return nil, errors.New("unsupported domain type", domain.Type)
-	}
-
-	matcher, err := matcherType.New(domain.Value)
-	if err != nil {
-		return nil, errors.New("failed to create domain matcher").Base(err)
-	}
-
-	return matcher, nil
-}
-
 type DomainMatcher struct {
 	matchers strmatcher.IndexMatcher
 }
@@ -70,29 +58,16 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	for _, d := range domains {
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
-			return nil, errors.New("unsupported domain type", d.Type)
+			errors.LogError(context.Background(), "ignore unsupported domain type ", d.Type, " of rule ", d.Value)
+			continue
 		}
 		_, err := g.AddPattern(d.Value, matcherType)
 		if err != nil {
-			return nil, err
+			errors.LogErrorInner(context.Background(), err, "ignore domain rule ", d.Type, " ", d.Value)
+			continue
 		}
 	}
 	g.Build()
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
-}
-
-func NewDomainMatcher(domains []*Domain) (*DomainMatcher, error) {
-	g := new(strmatcher.MatcherGroup)
-	for _, d := range domains {
-		m, err := domainToMatcher(d)
-		if err != nil {
-			return nil, err
-		}
-		g.Add(m)
-	}
-
 	return &DomainMatcher{
 		matchers: g,
 	}, nil
@@ -111,66 +86,72 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	return m.ApplyDomain(domain)
 }
 
-type MultiGeoIPMatcher struct {
-	matchers []*GeoIPMatcher
-	onSource bool
+type MatcherAsType byte
+
+const (
+	MatcherAsType_Local MatcherAsType = iota
+	MatcherAsType_Source
+	MatcherAsType_Target
+	MatcherAsType_VlessRoute // for port
+)
+
+type IPMatcher struct {
+	matcher GeoIPMatcher
+	asType  MatcherAsType
 }
 
-func NewMultiGeoIPMatcher(geoips []*GeoIP, onSource bool) (*MultiGeoIPMatcher, error) {
-	var matchers []*GeoIPMatcher
-	for _, geoip := range geoips {
-		matcher, err := GlobalGeoIPContainer.Add(geoip)
-		if err != nil {
-			return nil, err
-		}
-		matchers = append(matchers, matcher)
+func NewIPMatcher(geoips []*GeoIP, asType MatcherAsType) (*IPMatcher, error) {
+	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
+	if err != nil {
+		return nil, err
 	}
-
-	matcher := &MultiGeoIPMatcher{
-		matchers: matchers,
-		onSource: onSource,
-	}
-
-	return matcher, nil
+	return &IPMatcher{matcher: matcher, asType: asType}, nil
 }
 
 // Apply implements Condition.
-func (m *MultiGeoIPMatcher) Apply(ctx routing.Context) bool {
+func (m *IPMatcher) Apply(ctx routing.Context) bool {
 	var ips []net.IP
-	if m.onSource {
+
+	switch m.asType {
+	case MatcherAsType_Local:
+		ips = ctx.GetLocalIPs()
+	case MatcherAsType_Source:
 		ips = ctx.GetSourceIPs()
-	} else {
+	case MatcherAsType_Target:
 		ips = ctx.GetTargetIPs()
+	default:
+		panic("unk asType")
 	}
-	for _, ip := range ips {
-		for _, matcher := range m.matchers {
-			if matcher.Match(ip) {
-				return true
-			}
-		}
-	}
-	return false
+
+	return m.matcher.AnyMatch(ips)
 }
 
 type PortMatcher struct {
-	port     net.MemoryPortList
-	onSource bool
+	port   net.MemoryPortList
+	asType MatcherAsType
 }
 
-// NewPortMatcher create a new port matcher that can match source or destination port
-func NewPortMatcher(list *net.PortList, onSource bool) *PortMatcher {
+// NewPortMatcher create a new port matcher that can match source or local or destination port
+func NewPortMatcher(list *net.PortList, asType MatcherAsType) *PortMatcher {
 	return &PortMatcher{
-		port:     net.PortListFromProto(list),
-		onSource: onSource,
+		port:   net.PortListFromProto(list),
+		asType: asType,
 	}
 }
 
 // Apply implements Condition.
 func (v *PortMatcher) Apply(ctx routing.Context) bool {
-	if v.onSource {
+	switch v.asType {
+	case MatcherAsType_Local:
+		return v.port.Contains(ctx.GetLocalPort())
+	case MatcherAsType_Source:
 		return v.port.Contains(ctx.GetSourcePort())
-	} else {
+	case MatcherAsType_Target:
 		return v.port.Contains(ctx.GetTargetPort())
+	case MatcherAsType_VlessRoute:
+		return v.port.Contains(ctx.GetVlessRoute())
+	default:
+		panic("unk asType")
 	}
 }
 
@@ -324,4 +305,84 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 	return m.Match(attributes)
+}
+
+// Geo attribute
+type GeoAttributeMatcher interface {
+	Match(*Domain) bool
+}
+
+type GeoBooleanMatcher string
+
+func (m GeoBooleanMatcher) Match(domain *Domain) bool {
+	for _, attr := range domain.Attribute {
+		if attr.Key == string(m) {
+			return true
+		}
+	}
+	return false
+}
+
+type GeoAttributeList struct {
+	Matcher []GeoAttributeMatcher
+}
+
+func (al *GeoAttributeList) Match(domain *Domain) bool {
+	for _, matcher := range al.Matcher {
+		if !matcher.Match(domain) {
+			return false
+		}
+	}
+	return true
+}
+
+func (al *GeoAttributeList) IsEmpty() bool {
+	return len(al.Matcher) == 0
+}
+
+func ParseAttrs(attrs []string) *GeoAttributeList {
+	al := new(GeoAttributeList)
+	for _, attr := range attrs {
+		lc := strings.ToLower(attr)
+		al.Matcher = append(al.Matcher, GeoBooleanMatcher(lc))
+	}
+	return al
+}
+
+type ProcessNameMatcher struct {
+	names []string
+}
+
+func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	srcPort := ctx.GetSourcePort().String()
+	srcIP := ctx.GetSourceIPs()[0].String()
+	var network string
+	switch ctx.GetNetwork() {
+	case net.Network_TCP:
+		network = "tcp"
+	case net.Network_UDP:
+		network = "udp"
+	default:
+		return false
+	}
+	src, err := net.ParseDestination(strings.Join([]string{network, srcIP, srcPort}, ":"))
+	if err != nil {
+		return false
+	}
+	pid, name, err := net.FindProcess(src)
+	if err != nil {
+		if err != net.ErrNotLocal {
+			errors.LogError(context.Background(), "Unables to find local process name: ", err)
+		}
+		return false
+	}
+	for _, n := range m.names {
+		if name == "/self" && pid == os.Getpid() {
+			return true
+		}
+		if n == name {
+			return true
+		}
+	}
+	return false
 }

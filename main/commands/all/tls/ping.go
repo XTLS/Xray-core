@@ -6,9 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
-	"reflect"
 	"strconv"
-	"unsafe"
 
 	"github.com/xtls/xray-core/main/commands/base"
 	. "github.com/xtls/xray-core/transport/internet/tls"
@@ -94,7 +92,7 @@ func executePing(cmd *base.Command, args []string) {
 	fmt.Println("-------------------")
 	fmt.Println("Pinging with SNI")
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: 443})
+		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
@@ -139,14 +137,15 @@ func printCertificates(certs []*x509.Certificate) {
 }
 
 func printTLSConnDetail(tlsConn *gotls.Conn) {
+	connectionState := tlsConn.ConnectionState()
 	var tlsVersion string
-	if tlsConn.ConnectionState().Version == gotls.VersionTLS13 {
+	if connectionState.Version == gotls.VersionTLS13 {
 		tlsVersion = "TLS 1.3"
-	} else if tlsConn.ConnectionState().Version == gotls.VersionTLS12 {
+	} else if connectionState.Version == gotls.VersionTLS12 {
 		tlsVersion = "TLS 1.2"
 	}
 	fmt.Println("TLS Version: ", tlsVersion)
-	curveID := *(*gotls.CurveID)(unsafe.Pointer(reflect.ValueOf(tlsConn).Elem().FieldByName("curveID").UnsafeAddr()))
+	curveID := connectionState.CurveID
 	if curveID != 0 {
 		PostQuantum := (curveID == gotls.X25519MLKEM768)
 		fmt.Println("TLS Post-Quantum key exchange: ", PostQuantum, "("+curveID.String()+")")

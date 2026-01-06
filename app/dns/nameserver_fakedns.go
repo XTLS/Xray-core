@@ -20,6 +20,11 @@ func (FakeDNSServer) Name() string {
 	return "FakeDNS"
 }
 
+// IsDisableCache implements Server.
+func (s *FakeDNSServer) IsDisableCache() bool {
+	return true
+}
+
 func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, opt dns.IPOption) ([]net.IP, uint32, error) {
 	if f.fakeDNSEngine == nil {
 		return nil, 0, errors.New("Unable to locate a fake DNS Engine").AtError()

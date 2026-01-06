@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"io"
-	gonet "net"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -64,7 +63,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		tlsConfig := tConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		dialer.TLSClientConfig = tlsConfig
 		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
-			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (gonet.Conn, error) {
+			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (net.Conn, error) {
 				// Like the NetDial in the dialer
 				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {

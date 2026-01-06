@@ -31,10 +31,13 @@ message NameServer {
   bool actPrior = 8;
   string tag = 9;
   uint64 timeoutMs = 10;
-  bool disableCache = 11;
+  optional bool disableCache = 11;
+  optional bool serveStale = 15;
+  optional uint32 serveExpiredTTL = 16;
   bool finalQuery = 12;
   repeated xray.app.router.GeoIP unexpected_geoip = 13;
   bool actUnprior = 14;
+  uint32 policyID = 17;
 }
 
 enum DomainMatchingType {
@@ -80,9 +83,13 @@ message Config {
 
   // DisableCache disables DNS cache
   bool disableCache = 8;
+  bool serveStale = 12;
+  uint32 serveExpiredTTL = 13;
 
   QueryStrategy query_strategy = 9;
 
   bool disableFallback = 10;
   bool disableFallbackIfMatch = 11;
+
+  bool enableParallelQuery = 14;
 }

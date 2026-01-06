@@ -18,6 +18,12 @@ type Validator interface {
 	GetCount() int64
 }
 
+func ProcessUUID(id [16]byte) [16]byte {
+	id[6] = 0
+	id[7] = 0
+	return id
+}
+
 // MemoryValidator stores valid VLESS users.
 type MemoryValidator struct {
 	// Considering email's usage here, map + sync.Mutex/RWMutex may have better performance.
@@ -33,7 +39,7 @@ func (v *MemoryValidator) Add(u *protocol.MemoryUser) error {
 			return errors.New("User ", u.Email, " already exists.")
 		}
 	}
-	v.users.Store(u.Account.(*MemoryAccount).ID.UUID(), u)
+	v.users.Store(ProcessUUID(u.Account.(*MemoryAccount).ID.UUID()), u)
 	return nil
 }
 
@@ -48,13 +54,13 @@ func (v *MemoryValidator) Del(e string) error {
 		return errors.New("User ", e, " not found.")
 	}
 	v.email.Delete(le)
-	v.users.Delete(u.(*protocol.MemoryUser).Account.(*MemoryAccount).ID.UUID())
+	v.users.Delete(ProcessUUID(u.(*protocol.MemoryUser).Account.(*MemoryAccount).ID.UUID()))
 	return nil
 }
 
 // Get a VLESS user with UUID, nil if user doesn't exist.
 func (v *MemoryValidator) Get(id uuid.UUID) *protocol.MemoryUser {
-	u, _ := v.users.Load(id)
+	u, _ := v.users.Load(ProcessUUID(id))
 	if u != nil {
 		return u.(*protocol.MemoryUser)
 	}

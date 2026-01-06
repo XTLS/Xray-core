@@ -23,6 +23,12 @@ type Context interface {
 	// GetTargetPort returns the target port of the connection.
 	GetTargetPort() net.Port
 
+	// GetLocalIPs returns the local IPs bound to the connection.
+	GetLocalIPs() []net.IP
+
+	// GetLocalPort returns the local port of the connection.
+	GetLocalPort() net.Port
+
 	// GetTargetDomain returns the target domain of the connection, if exists.
 	GetTargetDomain() string
 
@@ -34,6 +40,9 @@ type Context interface {
 
 	// GetUser returns the user email from the connection content, if exists.
 	GetUser() string
+
+	// GetVlessRoute returns the user-sent VLESS UUID's 7th<<8 | 8th bytes, if exists.
+	GetVlessRoute() net.Port
 
 	// GetAttributes returns extra attributes from the conneciont content.
 	GetAttributes() map[string]string

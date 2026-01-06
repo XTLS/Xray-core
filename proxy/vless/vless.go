@@ -6,5 +6,6 @@
 package vless
 
 const (
-	XRV = "xtls-rprx-vision"
+	None = "none"
+	XRV  = "xtls-rprx-vision"
 )

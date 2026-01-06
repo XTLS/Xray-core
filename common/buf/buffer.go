@@ -13,7 +13,7 @@ const (
 	Size = 8192
 )
 
-var zero = [Size * 10]byte{0}
+var ErrBufferFull = errors.New("buffer is full")
 
 var pool = bytespool.GetPool(Size)
 
@@ -144,7 +144,7 @@ func (b *Buffer) Bytes() []byte {
 }
 
 // Extend increases the buffer size by n bytes, and returns the extended part.
-// It panics if result size is larger than buf.Size.
+// It panics if result size is larger than size of this buffer.
 func (b *Buffer) Extend(n int32) []byte {
 	end := b.end + n
 	if end > int32(len(b.v)) {
@@ -152,7 +152,7 @@ func (b *Buffer) Extend(n int32) []byte {
 	}
 	ext := b.v[b.end:end]
 	b.end = end
-	copy(ext, zero[:])
+	clear(ext)
 	return ext
 }
 
@@ -215,7 +215,7 @@ func (b *Buffer) Resize(from, to int32) {
 	b.start += from
 	b.Check()
 	if b.end > oldEnd {
-		copy(b.v[oldEnd:b.end], zero[:])
+		clear(b.v[oldEnd:b.end])
 	}
 }
 
@@ -244,6 +244,14 @@ func (b *Buffer) Cap() int32 {
 	return int32(len(b.v))
 }
 
+// Available returns the available capacity of the buffer content.
+func (b *Buffer) Available() int32 {
+	if b == nil {
+		return 0
+	}
+	return int32(len(b.v)) - b.end
+}
+
 // IsEmpty returns true if the buffer is empty.
 func (b *Buffer) IsEmpty() bool {
 	return b.Len() == 0
@@ -258,13 +266,16 @@ func (b *Buffer) IsFull() bool {
 func (b *Buffer) Write(data []byte) (int, error) {
 	nBytes := copy(b.v[b.end:], data)
 	b.end += int32(nBytes)
+	if nBytes < len(data) {
+		return nBytes, ErrBufferFull
+	}
 	return nBytes, nil
 }
 
 // WriteByte writes a single byte into the buffer.
 func (b *Buffer) WriteByte(v byte) error {
 	if b.IsFull() {
-		return errors.New("buffer full")
+		return ErrBufferFull
 	}
 	b.v[b.end] = v
 	b.end++

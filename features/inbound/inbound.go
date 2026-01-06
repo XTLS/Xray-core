@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
@@ -20,9 +19,6 @@ type Handler interface {
 	ReceiverSettings() *serial.TypedMessage
 	// Returns the active proxy settings.
 	ProxySettings() *serial.TypedMessage
-
-	// Deprecated: Do not use in new code.
-	GetRandomInboundProxy() (interface{}, net.Port, int)
 }
 
 // Manager is a feature that manages InboundHandlers.

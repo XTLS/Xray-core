@@ -51,31 +51,65 @@ type HTTPRemoteConfig struct {
 }
 
 type HTTPClientConfig struct {
-	Servers []*HTTPRemoteConfig `json:"servers"`
-	Headers map[string]string   `json:"headers"`
+	Address  *Address          	 `json:"address"`
+	Port     uint16            	 `json:"port"`
+	Level    uint32              `json:"level"`
+	Email    string              `json:"email"`
+	Username string              `json:"user"`
+	Password string              `json:"pass"`
+	Servers  []*HTTPRemoteConfig `json:"servers"`
+	Headers  map[string]string   `json:"headers"`
 }
 
 func (v *HTTPClientConfig) Build() (proto.Message, error) {
 	config := new(http.ClientConfig)
-	config.Server = make([]*protocol.ServerEndpoint, len(v.Servers))
-	for idx, serverConfig := range v.Servers {
+	if v.Address != nil {
+		v.Servers = []*HTTPRemoteConfig{
+			{
+				Address: v.Address,
+				Port:    v.Port,
+			},
+		}
+		if len(v.Username) > 0 {
+			v.Servers[0].Users = []json.RawMessage{{}}
+		}
+	}
+	if len(v.Servers) != 1 {
+		return nil, errors.New(`HTTP settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple HTTP outbounds and routing balancer instead`)
+	}
+	for _, serverConfig := range v.Servers {
+		if len(serverConfig.Users) > 1 {
+			return nil, errors.New(`HTTP servers: "users" should have one member at most. Multiple members in "users" should use multiple HTTP outbounds and routing balancer instead`)
+		}
 		server := &protocol.ServerEndpoint{
 			Address: serverConfig.Address.Build(),
 			Port:    uint32(serverConfig.Port),
 		}
 		for _, rawUser := range serverConfig.Users {
 			user := new(protocol.User)
-			if err := json.Unmarshal(rawUser, user); err != nil {
-				return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
+			if v.Address != nil {
+				user.Level = v.Level
+				user.Email = v.Email
+			} else {
+				if err := json.Unmarshal(rawUser, user); err != nil {
+					return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
+				}
 			}
 			account := new(HTTPAccount)
-			if err := json.Unmarshal(rawUser, account); err != nil {
-				return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
+			if v.Address != nil {
+				account.Username = v.Username
+				account.Password = v.Password
+			} else {
+				if err := json.Unmarshal(rawUser, account); err != nil {
+					return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
+				}
 			}
 			user.Account = serial.ToTypedMessage(account.Build())
-			server.User = append(server.User, user)
+			server.User = user
+			break
 		}
-		config.Server[idx] = server
+		config.Server = server
+		break
 	}
 	config.Header = make([]*http.Header, 0, 32)
 	for key, value := range v.Headers {

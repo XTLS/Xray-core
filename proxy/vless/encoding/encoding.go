@@ -1,7 +1,6 @@
 package encoding
 
 import (
-	"bytes"
 	"context"
 	"io"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 )
@@ -48,7 +47,7 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 		return errors.New("failed to write request command").Base(err)
 	}
 
-	if request.Command != protocol.RequestCommandMux {
+	if request.Command != protocol.RequestCommandMux && request.Command != protocol.RequestCommandRvs {
 		if err := addrParser.WriteAddressPort(&buffer, request.Address, request.Port); err != nil {
 			return errors.New("failed to write request address and port").Base(err)
 		}
@@ -62,7 +61,7 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator vless.Validator) (*protocol.RequestHeader, *Addons, bool, error) {
+func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator vless.Validator) ([]byte, *protocol.RequestHeader, *Addons, bool, error) {
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -72,7 +71,7 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		request.Version = first.Byte(0)
 	} else {
 		if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-			return nil, nil, false, errors.New("failed to read request version").Base(err)
+			return nil, nil, nil, false, errors.New("failed to read request version").Base(err)
 		}
 		request.Version = buffer.Byte(0)
 	}
@@ -87,13 +86,14 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		} else {
 			buffer.Clear()
 			if _, err := buffer.ReadFullFrom(reader, 16); err != nil {
-				return nil, nil, false, errors.New("failed to read request user id").Base(err)
+				return nil, nil, nil, false, errors.New("failed to read request user id").Base(err)
 			}
 			copy(id[:], buffer.Bytes())
 		}
 
 		if request.User = validator.Get(id); request.User == nil {
-			return nil, nil, isfb, errors.New("invalid request user id")
+			u := uuid.UUID(id)
+			return nil, nil, nil, isfb, errors.New("invalid request user id: " + u.String())
 		}
 
 		if isfb {
@@ -102,19 +102,20 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 
 		requestAddons, err := DecodeHeaderAddons(&buffer, reader)
 		if err != nil {
-			return nil, nil, false, errors.New("failed to decode request header addons").Base(err)
+			return nil, nil, nil, false, errors.New("failed to decode request header addons").Base(err)
 		}
 
 		buffer.Clear()
 		if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-			return nil, nil, false, errors.New("failed to read request command").Base(err)
+			return nil, nil, nil, false, errors.New("failed to read request command").Base(err)
 		}
 
 		request.Command = protocol.RequestCommand(buffer.Byte(0))
 		switch request.Command {
 		case protocol.RequestCommandMux:
 			request.Address = net.DomainAddress("v1.mux.cool")
-			request.Port = 0
+		case protocol.RequestCommandRvs:
+			request.Address = net.DomainAddress("v1.rvs.cool")
 		case protocol.RequestCommandTCP, protocol.RequestCommandUDP:
 			if addr, port, err := addrParser.ReadAddressPort(&buffer, reader); err == nil {
 				request.Address = addr
@@ -122,11 +123,11 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 			}
 		}
 		if request.Address == nil {
-			return nil, nil, false, errors.New("invalid request address")
+			return nil, nil, nil, false, errors.New("invalid request address")
 		}
-		return request, requestAddons, false, nil
+		return id[:], request, requestAddons, false, nil
 	default:
-		return nil, nil, isfb, errors.New("invalid request version")
+		return nil, nil, nil, isfb, errors.New("invalid request version")
 	}
 }
 
@@ -171,8 +172,8 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 	return responseAddons, nil
 }
 
-// XtlsRead filter and read xtls protocol
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, trafficState *proxy.TrafficState, ob *session.Outbound, isUplink bool, ctx context.Context) error {
+// XtlsRead can switch to splice copy
+func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, conn net.Conn, trafficState *proxy.TrafficState, isUplink bool, ctx context.Context) error {
 	err := func() error {
 		for {
 			if isUplink && trafficState.Inbound.UplinkReaderDirectCopy || !isUplink && trafficState.Outbound.DownlinkReaderDirectCopy {
@@ -181,74 +182,11 @@ func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer,
 				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
 					writerConn = inbound.Conn
 					inTimer = inbound.Timer
-					if isUplink && inbound.CanSpliceCopy == 2 {
-						inbound.CanSpliceCopy = 1
-					}
-					if !isUplink && ob != nil && ob.CanSpliceCopy == 2 { // ob need to be passed in due to context can change
-						ob.CanSpliceCopy = 1
-					}
 				}
 				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer, inTimer)
 			}
 			buffer, err := reader.ReadMultiBuffer()
 			if !buffer.IsEmpty() {
-				timer.Update()
-				if isUplink && trafficState.Inbound.UplinkReaderDirectCopy || !isUplink && trafficState.Outbound.DownlinkReaderDirectCopy {
-					// XTLS Vision processes struct TLS Conn's input and rawInput
-					if inputBuffer, err := buf.ReadFrom(input); err == nil {
-						if !inputBuffer.IsEmpty() {
-							buffer, _ = buf.MergeMulti(buffer, inputBuffer)
-						}
-					}
-					if rawInputBuffer, err := buf.ReadFrom(rawInput); err == nil {
-						if !rawInputBuffer.IsEmpty() {
-							buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
-						}
-					}
-				}
-				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
-					return werr
-				}
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}()
-	if err != nil && errors.Cause(err) != io.EOF {
-		return err
-	}
-	return nil
-}
-
-// XtlsWrite filter and write xtls protocol
-func XtlsWrite(reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, conn net.Conn, trafficState *proxy.TrafficState, ob *session.Outbound, isUplink bool, ctx context.Context) error {
-	err := func() error {
-		var ct stats.Counter
-		for {
-			buffer, err := reader.ReadMultiBuffer()
-			if isUplink && trafficState.Outbound.UplinkWriterDirectCopy || !isUplink && trafficState.Inbound.DownlinkWriterDirectCopy {
-				if inbound := session.InboundFromContext(ctx); inbound != nil {
-					if !isUplink && inbound.CanSpliceCopy == 2 {
-						inbound.CanSpliceCopy = 1
-					}
-					if isUplink && ob != nil && ob.CanSpliceCopy == 2 {
-						ob.CanSpliceCopy = 1
-					}
-				}
-				rawConn, _, writerCounter := proxy.UnwrapRawConn(conn)
-				writer = buf.NewWriter(rawConn)
-				ct = writerCounter
-				if isUplink {
-					trafficState.Outbound.UplinkWriterDirectCopy = false
-				} else {
-					trafficState.Inbound.DownlinkWriterDirectCopy = false
-				}
-			}
-			if !buffer.IsEmpty() {
-				if ct != nil {
-					ct.Add(int64(buffer.Len()))
-				}
 				timer.Update()
 				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
 					return werr

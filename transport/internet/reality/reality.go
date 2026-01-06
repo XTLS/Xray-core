@@ -3,8 +3,6 @@ package reality
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/hmac"
@@ -77,8 +75,7 @@ func (c *UConn) HandshakeAddress() net.Address {
 func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 	if c.Config.Show {
 		localAddr := c.LocalAddr().String()
-		curveID := *(*utls.CurveID)(unsafe.Pointer(reflect.ValueOf(c).Elem().FieldByName("curveID").UnsafeAddr()))
-		fmt.Printf("REALITY localAddr: %v\tis using X25519MLKEM768 for TLS' communication: %v\n", localAddr, curveID == utls.X25519MLKEM768)
+		fmt.Printf("REALITY localAddr: %v\tis using X25519MLKEM768 for TLS' communication: %v\n", localAddr, c.HandshakeState.ServerHello.ServerShare.Group == utls.X25519MLKEM768)
 		fmt.Printf("REALITY localAddr: %v\tis using ML-DSA-65 for cert's extra verification: %v\n", localAddr, len(c.Config.Mldsa65Verify) > 0)
 	}
 	p, _ := reflect.TypeOf(c.Conn).Elem().FieldByName("peerCertificates")
@@ -169,8 +166,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		if _, err := hkdf.New(sha256.New, uConn.AuthKey, hello.Random[:20], []byte("REALITY")).Read(uConn.AuthKey); err != nil {
 			return nil, err
 		}
-		block, _ := aes.NewCipher(uConn.AuthKey)
-		aead, _ := cipher.NewGCM(block)
+		aead := crypto.NewAesGcm(uConn.AuthKey)
 		if config.Show {
 			fmt.Printf("REALITY localAddr: %v\tuConn.AuthKey[:16]: %v\tAEAD: %T\n", localAddr, uConn.AuthKey[:16], aead)
 		}
@@ -184,11 +180,14 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		fmt.Printf("REALITY localAddr: %v\tuConn.Verified: %v\n", localAddr, uConn.Verified)
 	}
 	if !uConn.Verified {
+		errors.LogError(ctx, "REALITY: received real certificate (potential MITM or redirection)")
 		go func() {
 			client := &http.Client{
 				Transport: &http2.Transport{
 					DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (net.Conn, error) {
-						fmt.Printf("REALITY localAddr: %v\tDialTLSContext\n", localAddr)
+						if config.Show {
+							fmt.Printf("REALITY localAddr: %v\tDialTLSContext\n", localAddr)
+						}
 						return uConn, nil
 					},
 				},

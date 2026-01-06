@@ -17,8 +17,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("user do not exist")
-	ErrReplay   = errors.New("replayed request")
+	ErrNotFound     = errors.New("user do not exist")
+	ErrNeagtiveTime = errors.New("timestamp is negative")
+	ErrInvalidTime  = errors.New("invalid timestamp, perhaps unsynchronized time")
+	ErrReplay       = errors.New("replayed request")
 )
 
 func CreateAuthID(cmdKey []byte, time int64) [16]byte {
@@ -102,11 +104,11 @@ func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
 		}
 
 		if t < 0 {
-			continue
+			return nil, ErrNeagtiveTime
 		}
 
 		if math.Abs(math.Abs(float64(t))-float64(time.Now().Unix())) > 120 {
-			continue
+			return nil, ErrInvalidTime
 		}
 
 		if !a.filter.Check(authID[:]) {

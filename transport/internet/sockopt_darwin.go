@@ -2,7 +2,6 @@ package internet
 
 import (
 	"context"
-	gonet "net"
 	"os"
 	"runtime"
 	"strconv"
@@ -135,7 +134,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 	}
 
 	if config.Interface != "" {
-		iface, err := gonet.InterfaceByName(config.Interface)
+		iface, err := net.InterfaceByName(config.Interface)
 
 		if err != nil {
 			return errors.New("failed to get interface ", config.Interface).Base(err)
@@ -226,7 +225,7 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	}
 
 	if config.Interface != "" {
-		iface, err := gonet.InterfaceByName(config.Interface)
+		iface, err := net.InterfaceByName(config.Interface)
 
 		if err != nil {
 			return errors.New("failed to get interface ", config.Interface).Base(err)

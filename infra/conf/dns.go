@@ -16,19 +16,21 @@ import (
 )
 
 type NameServerConfig struct {
-	Address       *Address   `json:"address"`
-	ClientIP      *Address   `json:"clientIp"`
-	Port          uint16     `json:"port"`
-	SkipFallback  bool       `json:"skipFallback"`
-	Domains       []string   `json:"domains"`
-	ExpectedIPs   StringList `json:"expectedIPs"`
-	ExpectIPs     StringList `json:"expectIPs"`
-	QueryStrategy string     `json:"queryStrategy"`
-	Tag           string     `json:"tag"`
-	TimeoutMs     uint64     `json:"timeoutMs"`
-	DisableCache  bool       `json:"disableCache"`
-	FinalQuery    bool       `json:"finalQuery"`
-	UnexpectedIPs StringList `json:"unexpectedIPs"`
+	Address         *Address   `json:"address"`
+	ClientIP        *Address   `json:"clientIp"`
+	Port            uint16     `json:"port"`
+	SkipFallback    bool       `json:"skipFallback"`
+	Domains         []string   `json:"domains"`
+	ExpectedIPs     StringList `json:"expectedIPs"`
+	ExpectIPs       StringList `json:"expectIPs"`
+	QueryStrategy   string     `json:"queryStrategy"`
+	Tag             string     `json:"tag"`
+	TimeoutMs       uint64     `json:"timeoutMs"`
+	DisableCache    *bool      `json:"disableCache"`
+	ServeStale      *bool      `json:"serveStale"`
+	ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
+	FinalQuery      bool       `json:"finalQuery"`
+	UnexpectedIPs   StringList `json:"unexpectedIPs"`
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
@@ -40,19 +42,21 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address       *Address   `json:"address"`
-		ClientIP      *Address   `json:"clientIp"`
-		Port          uint16     `json:"port"`
-		SkipFallback  bool       `json:"skipFallback"`
-		Domains       []string   `json:"domains"`
-		ExpectedIPs   StringList `json:"expectedIPs"`
-		ExpectIPs     StringList `json:"expectIPs"`
-		QueryStrategy string     `json:"queryStrategy"`
-		Tag           string     `json:"tag"`
-		TimeoutMs     uint64     `json:"timeoutMs"`
-		DisableCache  bool       `json:"disableCache"`
-		FinalQuery    bool       `json:"finalQuery"`
-		UnexpectedIPs StringList `json:"unexpectedIPs"`
+		Address         *Address   `json:"address"`
+		ClientIP        *Address   `json:"clientIp"`
+		Port            uint16     `json:"port"`
+		SkipFallback    bool       `json:"skipFallback"`
+		Domains         []string   `json:"domains"`
+		ExpectedIPs     StringList `json:"expectedIPs"`
+		ExpectIPs       StringList `json:"expectIPs"`
+		QueryStrategy   string     `json:"queryStrategy"`
+		Tag             string     `json:"tag"`
+		TimeoutMs       uint64     `json:"timeoutMs"`
+		DisableCache    *bool      `json:"disableCache"`
+		ServeStale      *bool      `json:"serveStale"`
+		ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
+		FinalQuery      bool       `json:"finalQuery"`
+		UnexpectedIPs   StringList `json:"unexpectedIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -66,6 +70,8 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		c.Tag = advanced.Tag
 		c.TimeoutMs = advanced.TimeoutMs
 		c.DisableCache = advanced.DisableCache
+		c.ServeStale = advanced.ServeStale
+		c.ServeExpiredTTL = advanced.ServeExpiredTTL
 		c.FinalQuery = advanced.FinalQuery
 		c.UnexpectedIPs = advanced.UnexpectedIPs
 		return nil
@@ -173,6 +179,8 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		Tag:               c.Tag,
 		TimeoutMs:         c.TimeoutMs,
 		DisableCache:      c.DisableCache,
+		ServeStale:        c.ServeStale,
+		ServeExpiredTTL:   c.ServeExpiredTTL,
 		FinalQuery:        c.FinalQuery,
 		UnexpectedGeoip:   unexpectedGeoipList,
 		ActUnprior:        actUnprior,
@@ -194,8 +202,11 @@ type DNSConfig struct {
 	Tag                    string              `json:"tag"`
 	QueryStrategy          string              `json:"queryStrategy"`
 	DisableCache           bool                `json:"disableCache"`
+	ServeStale             bool                `json:"serveStale"`
+	ServeExpiredTTL        uint32              `json:"serveExpiredTTL"`
 	DisableFallback        bool                `json:"disableFallback"`
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    bool                `json:"enableParallelQuery"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
 }
 
@@ -391,8 +402,11 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	config := &dns.Config{
 		Tag:                    c.Tag,
 		DisableCache:           c.DisableCache,
+		ServeStale:             c.ServeStale,
+		ServeExpiredTTL:        c.ServeExpiredTTL,
 		DisableFallback:        c.DisableFallback,
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
+		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 
@@ -403,11 +417,78 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		config.ClientIp = []byte(c.ClientIP.IP())
 	}
 
+	// Build PolicyID
+	policyMap := map[string]uint32{}
+	nextPolicyID := uint32(1)
+	buildPolicyID := func(nsc *NameServerConfig) uint32 {
+		var sb strings.Builder
+
+		// ClientIP
+		if nsc.ClientIP != nil {
+			sb.WriteString("client=")
+			sb.WriteString(nsc.ClientIP.String())
+			sb.WriteByte('|')
+		} else {
+			sb.WriteString("client=none|")
+		}
+
+		// SkipFallback
+		if nsc.SkipFallback {
+			sb.WriteString("skip=1|")
+		} else {
+			sb.WriteString("skip=0|")
+		}
+
+		// QueryStrategy
+		sb.WriteString("qs=")
+		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.QueryStrategy)))
+		sb.WriteByte('|')
+
+		// Tag
+		sb.WriteString("tag=")
+		sb.WriteString(strings.ToLower(strings.TrimSpace(nsc.Tag)))
+		sb.WriteByte('|')
+
+		// []string helper
+		writeList := func(tag string, lst []string) {
+			if len(lst) == 0 {
+				sb.WriteString(tag)
+				sb.WriteString("=[]|")
+				return
+			}
+			cp := make([]string, len(lst))
+			for i, s := range lst {
+				cp[i] = strings.TrimSpace(strings.ToLower(s))
+			}
+			sort.Strings(cp)
+			sb.WriteString(tag)
+			sb.WriteByte('=')
+			sb.WriteString(strings.Join(cp, ","))
+			sb.WriteByte('|')
+		}
+
+		writeList("domains", nsc.Domains)
+		writeList("expected", nsc.ExpectedIPs)
+		writeList("expect", nsc.ExpectIPs)
+		writeList("unexpected", nsc.UnexpectedIPs)
+
+		key := sb.String()
+
+		if id, ok := policyMap[key]; ok {
+			return id
+		}
+		id := nextPolicyID
+		nextPolicyID++
+		policyMap[key] = id
+		return id
+	}
+
 	for _, server := range c.Servers {
 		ns, err := server.Build()
 		if err != nil {
 			return nil, errors.New("failed to build nameserver").Base(err)
 		}
+		ns.PolicyID = buildPolicyID(server)
 		config.NameServer = append(config.NameServer, ns)
 	}
 

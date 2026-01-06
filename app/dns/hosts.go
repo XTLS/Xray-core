@@ -27,7 +27,8 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 	for _, mapping := range hosts {
 		matcher, err := toStrMatcher(mapping.Type, mapping.Domain)
 		if err != nil {
-			return nil, errors.New("failed to create domain matcher").Base(err)
+			errors.LogErrorInner(context.Background(), err, "failed to create domain matcher, ignore domain rule [type: ", mapping.Type, ", domain: ", mapping.Domain, "]")
+			continue
 		}
 		id := g.Add(matcher)
 		ips := make([]net.Address, 0, len(mapping.Ip)+1)
@@ -46,9 +47,13 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 			for _, ip := range mapping.Ip {
 				addr := net.IPAddress(ip)
 				if addr == nil {
-					return nil, errors.New("invalid IP address in static hosts: ", ip).AtWarning()
+					errors.LogError(context.Background(), "invalid IP address in static hosts: ", ip, ", ignore this ip for rule [type: ", mapping.Type, ", domain: ", mapping.Domain, "]")
+					continue
 				}
 				ips = append(ips, addr)
+			}
+			if len(ips) == 0 {
+				continue
 			}
 		}
 

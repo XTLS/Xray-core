@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport"
@@ -82,7 +83,19 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 		}
 
 		p.picker.AddWorker(worker)
+
+		if _, ok := link.Reader.(*pipe.Reader); !ok {
+			select {
+			case <-ctx.Done():
+			case <-muxClient.WaitClosed():
+			}
+		}
 		return nil
+	}
+
+	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
+		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
+		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
 	return p.client.Dispatch(ctx, link)
@@ -101,6 +114,7 @@ func (o *Outbound) Dispatch(ctx context.Context, link *transport.Link) {
 	if err := o.portal.HandleConnection(ctx, link); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to process reverse connection")
 		common.Interrupt(link.Writer)
+		common.Interrupt(link.Reader)
 	}
 }
 
@@ -146,6 +160,8 @@ func (p *StaticMuxPicker) cleanup() error {
 	for _, w := range p.workers {
 		if !w.Closed() {
 			activeWorkers = append(activeWorkers, w)
+		} else {
+			w.timer.SetTimeout(0)
 		}
 	}
 
@@ -212,6 +228,7 @@ type PortalWorker struct {
 	reader   buf.Reader
 	draining bool
 	counter  uint32
+	timer    *signal.ActivityTimer
 }
 
 func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
@@ -231,10 +248,14 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	if !f {
 		return nil, errors.New("unable to dispatch control connection")
 	}
+	terminate := func() {
+		client.Close()
+	}
 	w := &PortalWorker{
 		client: client,
 		reader: downlinkReader,
 		writer: uplinkWriter,
+		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
 	}
 	w.control = &task.Periodic{
 		Execute:  w.heartbeat,
@@ -261,7 +282,6 @@ func (w *PortalWorker) heartbeat() error {
 		msg.State = Control_DRAIN
 
 		defer func() {
-			w.client.GetTimer().Reset(time.Second * 16)
 			common.Close(w.writer)
 			common.Interrupt(w.reader)
 			w.writer = nil
@@ -273,6 +293,7 @@ func (w *PortalWorker) heartbeat() error {
 		b, err := proto.Marshal(msg)
 		common.Must(err)
 		mb := buf.MergeBytes(nil, b)
+		w.timer.Update()
 		return w.writer.WriteMultiBuffer(mb)
 	}
 	return nil

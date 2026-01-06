@@ -353,6 +353,11 @@ func EncodeUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer,
 		b.Release()
 		return nil, err
 	}
+	// if data is too large, return an empty buffer (drop too big data)
+	if b.Available() < int32(len(data)) {
+		b.Clear()
+		return b, nil
+	}
 	common.Must2(b.Write(data))
 	return b, nil
 }

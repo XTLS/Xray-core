@@ -18,11 +18,12 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -94,6 +95,9 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.CanSpliceCopy = 2
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
+	}
+	if !proxy.IsRAWTransportWithoutSecurity(conn) {
+		inbound.CanSpliceCopy = 3
 	}
 	var reader *bufio.Reader
 	if len(firstbyte) > 0 {
@@ -169,62 +173,31 @@ Start:
 	return err
 }
 
-func (s *Server) handleConnect(ctx context.Context, _ *http.Request, reader *bufio.Reader, conn stat.Connection, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
+func (s *Server) handleConnect(ctx context.Context, _ *http.Request, buffer *bufio.Reader, conn stat.Connection, dest net.Destination, dispatcher routing.Dispatcher, inbound *session.Inbound) error {
 	_, err := conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 	if err != nil {
 		return errors.New("failed to write back OK response").Base(err)
 	}
 
-	plcy := s.policy()
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
-
-	if inbound != nil {
-		inbound.Timer = timer
-	}
-
-	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return err
-	}
-
-	if reader.Buffered() > 0 {
-		payload, err := buf.ReadFrom(io.LimitReader(reader, int64(reader.Buffered())))
+	reader := buf.NewReader(conn)
+	if buffer.Buffered() > 0 {
+		payload, err := buf.ReadFrom(io.LimitReader(buffer, int64(buffer.Buffered())))
 		if err != nil {
 			return err
 		}
-		if err := link.Writer.WriteMultiBuffer(payload); err != nil {
-			return err
-		}
-		reader = nil
+		reader = &buf.BufferedReader{Reader: reader, Buffer: payload}
+		buffer = nil
 	}
 
-	requestDone := func() error {
-		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
-
-		return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
-	}
-
-	responseDone := func() error {
+	if inbound.CanSpliceCopy == 2 {
 		inbound.CanSpliceCopy = 1
-		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-
-		v2writer := buf.NewWriter(conn)
-		if err := buf.Copy(link.Reader, v2writer, buf.UpdateActivity(timer)); err != nil {
-			return err
-		}
-
-		return nil
 	}
-
-	closeWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, closeWriter, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
-		return errors.New("connection ends").Base(err)
+	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
+		Reader: reader,
+		Writer: buf.NewWriter(conn)},
+	); err != nil {
+		return errors.New("failed to dispatch request").Base(err)
 	}
-
 	return nil
 }
 
