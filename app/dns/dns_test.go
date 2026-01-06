@@ -669,7 +669,7 @@ func TestLocalDomain(t *testing.T) {
 						},
 						ExpectedGeoip: []*router.GeoIP{
 							{ // Will match localhost, localhost-a and localhost-b,
-								CountryCode: "local",
+								// local
 								Cidr: []*router.CIDR{
 									{Ip: []byte{127, 0, 0, 2}, Prefix: 32},
 									{Ip: []byte{127, 0, 0, 3}, Prefix: 32},
