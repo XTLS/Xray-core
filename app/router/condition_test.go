@@ -1,6 +1,8 @@
 package router_test
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -301,6 +303,8 @@ func TestRoutingRule(t *testing.T) {
 }
 
 func loadGeoSiteDomains(geo string) ([]*Domain, error) {
+	os.Setenv("XRAY_LOCATION_ASSET", filepath.Join("..", "..", "resources"))
+
 	domains, err := conf.ParseDomainRule(geo)
 	if err != nil {
 		return nil, err

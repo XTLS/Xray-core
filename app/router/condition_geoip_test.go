@@ -1,6 +1,8 @@
 package router_test
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -183,6 +185,8 @@ func TestGeoIPMatcher6US(t *testing.T) {
 }
 
 func loadGeoIP(geo string) (*router.GeoIP, error) {
+	os.Setenv("XRAY_LOCATION_ASSET", filepath.Join("..", "..", "resources"))
+
 	geoip, err := conf.ToCidrList([]string{geo})
 	if err != nil {
 		return nil, err

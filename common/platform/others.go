@@ -21,7 +21,6 @@ func GetAssetLocation(file string) string {
 		filepath.Join("/usr/local/share/xray/", file),
 		filepath.Join("/usr/share/xray/", file),
 		filepath.Join("/opt/share/xray/", file),
-		filepath.Join("..", "..", "resources", file),
 	} {
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			continue

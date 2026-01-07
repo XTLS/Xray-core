@@ -4,7 +4,6 @@
 package platform
 
 import (
-	"os"
 	"path/filepath"
 )
 
@@ -15,21 +14,8 @@ func LineSeparator() string {
 // GetAssetLocation searches for `file` in the env dir and the executable dir
 func GetAssetLocation(file string) string {
 	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
-	defPath := filepath.Join(assetPath, file)
 
-	for _, p := range []string{
-		defPath,
-		filepath.Join("..", "..", "resources", file),
-	} {
-		if _, err := os.Stat(p); os.IsNotExist(err) {
-			continue
-		}
-
-		// asset found
-		return p
-	}
-
-	return defPath
+	return filepath.Join(assetPath, file)
 }
 
 // GetCertLocation searches for `file` in the env dir and the executable dir
