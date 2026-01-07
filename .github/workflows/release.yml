@@ -40,7 +40,7 @@ jobs:
               break
             fi
           done
-          LIST=('amd64' 'x86' 'arm64' 'arm')
+          LIST=('amd64' 'x86' 'arm64')
           for ARCHITECTURE in "${LIST[@]}"
           do
             echo -e "Checking wintun.dll for ${ARCHITECTURE}..."
@@ -246,9 +246,6 @@ jobs:
             fi
             if [[ ${GOARCH} == 'arm64' ]]; then
               mv resources/wintun/bin/arm64/wintun.dll build_assets/
-            fi
-            if [[ ${GOARCH} == 'arm' ]]; then
-              mv resources/wintun/bin/arm/wintun.dll build_assets/
             fi
             mv resources/wintun/LICENSE.txt build_assets/LICENSE-wintun.txt
           fi
