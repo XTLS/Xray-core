@@ -18,6 +18,12 @@ jobs:
           path: resources
           key: xray-geodat-
 
+      - name: Restore Wintun Cache
+        uses: actions/cache/restore@v5
+        with:
+          path: resources
+          key: xray-wintun-
+
       - name: Check Assets Existence
         id: check-assets
         run: |
@@ -30,6 +36,18 @@ jobs:
               echo -e "${FILE_NAME} exists."
             else
               echo -e "${FILE_NAME} does not exist."
+              echo "missing=true" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
+          LIST=('amd64' 'x86' 'arm64' 'arm')
+          for ARCHITECTURE in "${LIST[@]}"
+          do
+            echo -e "Checking wintun.dll for ${ARCHITECTURE}..."
+            if [ -s "./resources/wintun/bin/${ARCHITECTURE}/wintun.dll" ]; then
+              echo -e "wintun.dll for ${ARCHITECTURE} exists."
+            else
+              echo -e "wintun.dll for ${ARCHITECTURE} is missing."
               echo "missing=true" >> $GITHUB_OUTPUT
               break
             fi
@@ -191,8 +209,6 @@ jobs:
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Building Xray for Windows...'
             go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-            echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
-            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
             # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
             # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           else
@@ -212,9 +228,36 @@ jobs:
           path: resources
           key: xray-geodat-
 
+      - name: Restore Wintun Cache
+        if: matrix.goos == 'windows'
+        uses: actions/cache/restore@v5
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Add additional assets into package
+        run: |
+          mv -f resources/geo* build_assets/
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
+            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
+            if [[ ${GOARCH} == 'amd64' ]]; then
+              mv resources/wintun/bin/amd64/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == '386' ]]; then
+              mv resources/wintun/bin/x86/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == 'arm64' ]]; then
+              mv resources/wintun/bin/arm64/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == 'arm' ]]; then
+              mv resources/wintun/bin/arm/wintun.dll build_assets/
+            fi
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-wintun.txt
+          fi
+
       - name: Copy README.md & LICENSE
         run: |
-          mv -f resources/* build_assets
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
 
@@ -233,17 +276,6 @@ jobs:
             openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
 
-      - name: Change the name
-        run: |
-          mv build_assets Xray-${{ env.ASSET_NAME }}
-
-      - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: Xray-${{ env.ASSET_NAME }}
-          path: |
-            ./Xray-${{ env.ASSET_NAME }}/*
-
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
@@ -252,3 +284,10 @@ jobs:
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
+
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*

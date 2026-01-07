@@ -4,6 +4,7 @@ name: Scheduled assets update
 #       routine manner, for example: GeoIP/GeoSite.
 #       Currently updating:
 #       - Geodat (GeoIP/Geosite)
+#       - Wintun (wintun.dll)
 
 on:
   workflow_dispatch:
@@ -21,7 +22,7 @@ on:
 
 jobs:
   geodat:
-    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push'|| github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
@@ -63,3 +64,66 @@ jobs:
         with:
           path: resources
           key: xray-geodat-${{ github.sha }}-${{ github.run_number }}
+
+  wintun:
+    if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore Wintun Cache
+        uses: actions/cache/restore@v5
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Force downloading if run manually or on file update
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        run: |
+          echo "FORCE_UPDATE=true" >> $GITHUB_ENV
+
+      - name: Update Wintun
+        id: update
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 60
+          retry_wait_seconds: 60
+          max_attempts: 60
+          command: |
+            [ -d 'resources' ] || mkdir resources
+            LIST=('amd64' 'x86' 'arm64' 'arm')
+            for ARCHITECTURE in "${LIST[@]}"
+            do
+              FILE_PATH="resources/wintun/bin/${ARCHITECTURE}/wintun.dll"
+              echo -e "Checking if wintun.dll for ${ARCHITECTURE} exists..."
+              if [ -s "./resources/wintun/bin/${ARCHITECTURE}/wintun.dll" ]; then
+                  echo -e "wintun.dll for ${ARCHITECTURE} exists"
+                  continue
+              else
+                  echo -e "wintun.dll for ${ARCHITECTURE} is missing"
+                  missing=true
+              fi
+            done
+            if [ -s "./resources/wintun/LICENSE.txt" ]; then
+              echo -e "LICENSE for Wintun exists"
+            else
+              echo -e "LICENSE for Wintun is missing"
+              missing=true
+            fi
+            if [[ -v FORCE_UPDATE ]]; then
+              missing=true
+            fi
+            if [[ "$missing" == true ]]; then
+              FILENAME=wintun.zip
+              DOWNLOAD_FILE=wintun-0.14.1.zip
+              echo -e "Downloading https://www.wintun.net/builds/${DOWNLOAD_FILE}..."
+              curl -L "https://www.wintun.net/builds/${DOWNLOAD_FILE}" -o "${FILENAME}"
+              echo -e "Unpacking wintun..."
+              unzip -u ${FILENAME} -d resources/
+              echo "unhit=true" >> $GITHUB_OUTPUT
+            fi
+
+      - name: Save Wintun Cache
+        uses: actions/cache/save@v5
+        if: ${{ steps.update.outputs.unhit }}
+        with:
+          path: resources
+          key: xray-wintun-${{ github.sha }}-${{ github.run_number }}
