@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 )
 
@@ -15,9 +15,10 @@ type Handler interface {
 	common.Runnable
 	// The tag of this handler.
 	Tag() string
-
-	// Deprecated: Do not use in new code.
-	GetRandomInboundProxy() (interface{}, net.Port, int)
+	// Returns the active receiver settings.
+	ReceiverSettings() *serial.TypedMessage
+	// Returns the active proxy settings.
+	ProxySettings() *serial.TypedMessage
 }
 
 // Manager is a feature that manages InboundHandlers.
@@ -32,6 +33,9 @@ type Manager interface {
 
 	// RemoveHandler removes a handler from Manager.
 	RemoveHandler(ctx context.Context, tag string) error
+
+	// ListHandlers returns a list of inbound.Handler.
+	ListHandlers(ctx context.Context) []Handler
 }
 
 // ManagerType returns the type of Manager interface. Can be used for implementing common.HasType.

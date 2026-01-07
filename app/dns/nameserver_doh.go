@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
@@ -21,12 +20,9 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/pubsub"
-	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet"
-	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/http2"
 )
 
@@ -34,18 +30,14 @@ import (
 // which is compatible with traditional dns over udp(RFC1035),
 // thus most of the DOH implementation is copied from udpns.go
 type DoHNameServer struct {
-	sync.RWMutex
-	ips           map[string]*record
-	pub           *pubsub.Service
-	cleanup       *task.Periodic
-	httpClient    *http.Client
-	dohURL        string
-	name          string
-	queryStrategy QueryStrategy
+	cacheController *CacheController
+	httpClient      *http.Client
+	dohURL          string
+	clientIP        net.IP
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
-func NewDoHNameServer(url *url.URL, queryStrategy QueryStrategy, dispatcher routing.Dispatcher, h2c bool) *DoHNameServer {
+func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *DoHNameServer {
 	url.Scheme = "https"
 	mode := "DOH"
 	if dispatcher == nil {
@@ -53,15 +45,9 @@ func NewDoHNameServer(url *url.URL, queryStrategy QueryStrategy, dispatcher rout
 	}
 	errors.LogInfo(context.Background(), "DNS: created ", mode, " client for ", url.String(), ", with h2c ", h2c)
 	s := &DoHNameServer{
-		ips:           make(map[string]*record),
-		pub:           pubsub.NewService(),
-		name:          mode + "//" + url.Host,
-		dohURL:        url.String(),
-		queryStrategy: queryStrategy,
-	}
-	s.cleanup = &task.Periodic{
-		Interval: time.Minute,
-		Execute:  s.Cleanup,
+		cacheController: NewCacheController(mode+"//"+url.Host, disableCache, serveStale, serveExpiredTTL),
+		dohURL:          url.String(),
+		clientIP:        clientIP,
 	}
 	s.httpClient = &http.Client{
 		Transport: &http2.Transport{
@@ -127,101 +113,38 @@ func NewDoHNameServer(url *url.URL, queryStrategy QueryStrategy, dispatcher rout
 
 // Name implements Server.
 func (s *DoHNameServer) Name() string {
-	return s.name
+	return s.cacheController.name
 }
 
-// Cleanup clears expired items from cache
-func (s *DoHNameServer) Cleanup() error {
-	now := time.Now()
-	s.Lock()
-	defer s.Unlock()
-
-	if len(s.ips) == 0 {
-		return errors.New("nothing to do. stopping...")
-	}
-
-	for domain, record := range s.ips {
-		if record.A != nil && record.A.Expire.Before(now) {
-			record.A = nil
-		}
-		if record.AAAA != nil && record.AAAA.Expire.Before(now) {
-			record.AAAA = nil
-		}
-
-		if record.A == nil && record.AAAA == nil {
-			errors.LogDebug(context.Background(), s.name, " cleanup ", domain)
-			delete(s.ips, domain)
-		} else {
-			s.ips[domain] = record
-		}
-	}
-
-	if len(s.ips) == 0 {
-		s.ips = make(map[string]*record)
-	}
-
-	return nil
-}
-
-func (s *DoHNameServer) updateIP(req *dnsRequest, ipRec *IPRecord) {
-	elapsed := time.Since(req.start)
-
-	s.Lock()
-	rec, found := s.ips[req.domain]
-	if !found {
-		rec = &record{}
-	}
-	updated := false
-
-	switch req.reqType {
-	case dnsmessage.TypeA:
-		if isNewer(rec.A, ipRec) {
-			rec.A = ipRec
-			updated = true
-		}
-	case dnsmessage.TypeAAAA:
-		addr := make([]net.Address, 0, len(ipRec.IP))
-		for _, ip := range ipRec.IP {
-			if len(ip.IP()) == net.IPv6len {
-				addr = append(addr, ip)
-			}
-		}
-		ipRec.IP = addr
-		if isNewer(rec.AAAA, ipRec) {
-			rec.AAAA = ipRec
-			updated = true
-		}
-	}
-	errors.LogInfo(context.Background(), s.name, " got answer: ", req.domain, " ", req.reqType, " -> ", ipRec.IP, " ", elapsed)
-
-	if updated {
-		s.ips[req.domain] = rec
-	}
-	switch req.reqType {
-	case dnsmessage.TypeA:
-		s.pub.Publish(req.domain+"4", nil)
-	case dnsmessage.TypeAAAA:
-		s.pub.Publish(req.domain+"6", nil)
-	}
-	s.Unlock()
-	common.Must(s.cleanup.Start())
+// IsDisableCache implements Server.
+func (s *DoHNameServer) IsDisableCache() bool {
+	return s.cacheController.disableCache
 }
 
 func (s *DoHNameServer) newReqID() uint16 {
 	return 0
 }
 
-func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption) {
-	errors.LogInfo(ctx, s.name, " querying: ", domain)
+// getCacheController implements CachedNameserver.
+func (s *DoHNameServer) getCacheController() *CacheController {
+	return s.cacheController
+}
 
-	if s.name+"." == "DOH//"+domain {
-		errors.LogError(ctx, s.name, " tries to resolve itself! Use IP or set \"hosts\" instead.")
+// sendQuery implements CachedNameserver.
+func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
+	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
+
+	if s.Name()+"." == "DOH//"+fqdn {
+		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead")
+		if noResponseErrCh != nil {
+			noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+		}
 		return
 	}
 
 	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
 	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
-	reqs := buildReqMsgs(domain, option, s.newReqID, genEDNS0Options(clientIP, int(crypto.RandBetween(100, 300))))
+	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {
@@ -255,20 +178,29 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, domain string, clientIP n
 
 			b, err := dns.PackMessage(r.msg)
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to pack dns query for ", fqdn)
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			resp, err := s.dohHTTPSContext(dnsCtx, b.Bytes())
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to retrieve response for ", fqdn)
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
 			rec, err := parseResponse(resp)
 			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", domain)
+				errors.LogErrorInner(ctx, err, "failed to handle DOH response for ", fqdn)
+				if noResponseErrCh != nil {
+					noResponseErrCh <- err
+				}
 				return
 			}
-			s.updateIP(r, rec)
+			s.cacheController.updateRecord(r, rec)
 		}(req)
 	}
 }
@@ -301,109 +233,7 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 	return io.ReadAll(resp.Body)
 }
 
-func (s *DoHNameServer) findIPsForDomain(domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
-	s.RLock()
-	record, found := s.ips[domain]
-	s.RUnlock()
-
-	if !found {
-		return nil, 0, errRecordNotFound
-	}
-
-	var err4 error
-	var err6 error
-	var ips []net.Address
-	var ip6 []net.Address
-	var ttl uint32
-
-	if option.IPv4Enable {
-		ips, ttl, err4 = record.A.getIPs()
-	}
-
-	if option.IPv6Enable {
-		ip6, ttl, err6 = record.AAAA.getIPs()
-		ips = append(ips, ip6...)
-	}
-
-	if len(ips) > 0 {
-		netips, err := toNetIP(ips)
-		return netips, ttl, err
-	}
-
-	if err4 != nil {
-		return nil, 0, err4
-	}
-
-	if err6 != nil {
-		return nil, 0, err6
-	}
-
-	if (option.IPv4Enable && record.A != nil) || (option.IPv6Enable && record.AAAA != nil) {
-		return nil, 0, dns_feature.ErrEmptyResponse
-	}
-
-	return nil, 0, errRecordNotFound
-}
-
 // QueryIP implements Server.
-func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, clientIP net.IP, option dns_feature.IPOption, disableCache bool) ([]net.IP, uint32, error) { // nolint: dupl
-	fqdn := Fqdn(domain)
-	option = ResolveIpOptionOverride(s.queryStrategy, option)
-	if !option.IPv4Enable && !option.IPv6Enable {
-		return nil, 0, dns_feature.ErrEmptyResponse
-	}
-
-	if disableCache {
-		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", domain, " at ", s.name)
-	} else {
-		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err == nil || err == dns_feature.ErrEmptyResponse || dns_feature.RCodeFromError(err) == 3 {
-			errors.LogDebugInner(ctx, err, s.name, " cache HIT ", domain, " -> ", ips)
-			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSCacheHit, Elapsed: 0, Error: err})
-			return ips, ttl, err
-		}
-	}
-
-	// ipv4 and ipv6 belong to different subscription groups
-	var sub4, sub6 *pubsub.Subscriber
-	if option.IPv4Enable {
-		sub4 = s.pub.Subscribe(fqdn + "4")
-		defer sub4.Close()
-	}
-	if option.IPv6Enable {
-		sub6 = s.pub.Subscribe(fqdn + "6")
-		defer sub6.Close()
-	}
-	done := make(chan interface{})
-	go func() {
-		if sub4 != nil {
-			select {
-			case <-sub4.Wait():
-			case <-ctx.Done():
-			}
-		}
-		if sub6 != nil {
-			select {
-			case <-sub6.Wait():
-			case <-ctx.Done():
-			}
-		}
-		close(done)
-	}()
-	s.sendQuery(ctx, fqdn, clientIP, option)
-	start := time.Now()
-
-	for {
-		ips, ttl, err := s.findIPsForDomain(fqdn, option)
-		if err != errRecordNotFound {
-			log.Record(&log.DNSLog{Server: s.name, Domain: domain, Result: ips, Status: log.DNSQueried, Elapsed: time.Since(start), Error: err})
-			return ips, ttl, err
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, 0, ctx.Err()
-		case <-done:
-		}
-	}
+func (s *DoHNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
+	return queryIP(ctx, s, domain, option)
 }

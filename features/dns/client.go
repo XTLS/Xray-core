@@ -24,10 +24,6 @@ type Client interface {
 	LookupIP(domain string, option IPOption) ([]net.IP, uint32, error)
 }
 
-type HostsLookup interface {
-	LookupHosts(domain string) *net.Address
-}
-
 // ClientType returns the type of Client interface. Can be used for implementing common.HasType.
 //
 // xray:api:beta
@@ -38,11 +34,31 @@ func ClientType() interface{} {
 // ErrEmptyResponse indicates that DNS query succeeded but no answer was returned.
 var ErrEmptyResponse = errors.New("empty response")
 
+const DefaultTTL = 300
+
 type RCodeError uint16
 
 func (e RCodeError) Error() string {
 	return serial.Concat("rcode: ", uint16(e))
 }
+
+func (RCodeError) IP() net.IP {
+	panic("Calling IP() on a RCodeError.")
+}
+
+func (RCodeError) Domain() string {
+	panic("Calling Domain() on a RCodeError.")
+}
+
+func (RCodeError) Family() net.AddressFamily {
+	panic("Calling Family() on a RCodeError.")
+}
+
+func (e RCodeError) String() string {
+	return e.Error()
+}
+
+var _ net.Address = (*RCodeError)(nil)
 
 func RCodeFromError(err error) uint16 {
 	if err == nil {

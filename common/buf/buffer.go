@@ -13,7 +13,18 @@ const (
 	Size = 8192
 )
 
+var ErrBufferFull = errors.New("buffer is full")
+
 var pool = bytespool.GetPool(Size)
+
+// ownership represents the data owner of the buffer.
+type ownership uint8
+
+const (
+	managed ownership = iota
+	unmanaged
+	bytespools
+)
 
 // Buffer is a recyclable allocation of a byte array. Buffer.Release() recycles
 // the buffer into an internal buffer pool, in order to recreate a buffer more
@@ -22,11 +33,11 @@ type Buffer struct {
 	v         []byte
 	start     int32
 	end       int32
-	unmanaged bool
+	ownership ownership
 	UDP       *net.Destination
 }
 
-// New creates a Buffer with 0 length and 8K capacity.
+// New creates a Buffer with 0 length and 8K capacity, managed.
 func New() *Buffer {
 	buf := pool.Get().([]byte)
 	if cap(buf) >= Size {
@@ -40,7 +51,7 @@ func New() *Buffer {
 	}
 }
 
-// NewExisted creates a managed, standard size Buffer with an existed bytearray
+// NewExisted creates a standard size Buffer with an existed bytearray, managed.
 func NewExisted(b []byte) *Buffer {
 	if cap(b) < Size {
 		panic("Invalid buffer")
@@ -57,16 +68,16 @@ func NewExisted(b []byte) *Buffer {
 	}
 }
 
-// FromBytes creates a Buffer with an existed bytearray
+// FromBytes creates a Buffer with an existed bytearray, unmanaged.
 func FromBytes(b []byte) *Buffer {
 	return &Buffer{
 		v:         b,
 		end:       int32(len(b)),
-		unmanaged: true,
+		ownership: unmanaged,
 	}
 }
 
-// StackNew creates a new Buffer object on stack.
+// StackNew creates a new Buffer object on stack, managed.
 // This method is for buffers that is released in the same function.
 func StackNew() Buffer {
 	buf := pool.Get().([]byte)
@@ -81,9 +92,17 @@ func StackNew() Buffer {
 	}
 }
 
+// NewWithSize creates a Buffer with 0 length and capacity with at least the given size, bytespool's.
+func NewWithSize(size int32) *Buffer {
+	return &Buffer{
+		v:         bytespool.Alloc(size),
+		ownership: bytespools,
+	}
+}
+
 // Release recycles the buffer into an internal buffer pool.
 func (b *Buffer) Release() {
-	if b == nil || b.v == nil || b.unmanaged {
+	if b == nil || b.v == nil || b.ownership == unmanaged {
 		return
 	}
 
@@ -91,8 +110,13 @@ func (b *Buffer) Release() {
 	b.v = nil
 	b.Clear()
 
-	if cap(p) == Size {
-		pool.Put(p)
+	switch b.ownership {
+	case managed:
+		if cap(p) == Size {
+			pool.Put(p)
+		}
+	case bytespools:
+		bytespool.Free(p)
 	}
 	b.UDP = nil
 }
@@ -120,7 +144,7 @@ func (b *Buffer) Bytes() []byte {
 }
 
 // Extend increases the buffer size by n bytes, and returns the extended part.
-// It panics if result size is larger than buf.Size.
+// It panics if result size is larger than size of this buffer.
 func (b *Buffer) Extend(n int32) []byte {
 	end := b.end + n
 	if end > int32(len(b.v)) {
@@ -128,6 +152,7 @@ func (b *Buffer) Extend(n int32) []byte {
 	}
 	ext := b.v[b.end:end]
 	b.end = end
+	clear(ext)
 	return ext
 }
 
@@ -176,6 +201,7 @@ func (b *Buffer) Check() {
 
 // Resize cuts the buffer at the given position.
 func (b *Buffer) Resize(from, to int32) {
+	oldEnd := b.end
 	if from < 0 {
 		from += b.Len()
 	}
@@ -188,6 +214,9 @@ func (b *Buffer) Resize(from, to int32) {
 	b.end = b.start + to
 	b.start += from
 	b.Check()
+	if b.end > oldEnd {
+		clear(b.v[oldEnd:b.end])
+	}
 }
 
 // Advance cuts the buffer at the given position.
@@ -215,11 +244,12 @@ func (b *Buffer) Cap() int32 {
 	return int32(len(b.v))
 }
 
-// NewWithSize creates a Buffer with 0 length and capacity with at least the given size.
-func NewWithSize(size int32) *Buffer {
-	return &Buffer{
-		v: bytespool.Alloc(size),
+// Available returns the available capacity of the buffer content.
+func (b *Buffer) Available() int32 {
+	if b == nil {
+		return 0
 	}
+	return int32(len(b.v)) - b.end
 }
 
 // IsEmpty returns true if the buffer is empty.
@@ -236,13 +266,16 @@ func (b *Buffer) IsFull() bool {
 func (b *Buffer) Write(data []byte) (int, error) {
 	nBytes := copy(b.v[b.end:], data)
 	b.end += int32(nBytes)
+	if nBytes < len(data) {
+		return nBytes, ErrBufferFull
+	}
 	return nBytes, nil
 }
 
 // WriteByte writes a single byte into the buffer.
 func (b *Buffer) WriteByte(v byte) error {
 	if b.IsFull() {
-		return errors.New("buffer full")
+		return ErrBufferFull
 	}
 	b.v[b.end] = v
 	b.end++

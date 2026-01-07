@@ -3,9 +3,6 @@ package conf
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +18,7 @@ import (
 
 var (
 	inboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"tunnel":        func() interface{} { return new(DokodemoConfig) },
 		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
 		"http":          func() interface{} { return new(HTTPServerConfig) },
 		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
@@ -33,8 +31,10 @@ var (
 	}, "protocol", "settings")
 
 	outboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"block":       func() interface{} { return new(BlackholeConfig) },
 		"blackhole":   func() interface{} { return new(BlackholeConfig) },
 		"loopback":    func() interface{} { return new(LoopbackConfig) },
+		"direct":      func() interface{} { return new(FreedomConfig) },
 		"freedom":     func() interface{} { return new(FreedomConfig) },
 		"http":        func() interface{} { return new(HTTPClientConfig) },
 		"shadowsocks": func() interface{} { return new(ShadowsocksClientConfig) },
@@ -45,8 +45,6 @@ var (
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
 	}, "protocol", "settings")
-
-	ctllog = log.New(os.Stderr, "xctl> ", 0)
 )
 
 type SniffingConfig struct {
@@ -69,10 +67,8 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 				p = append(p, "tls")
 			case "quic":
 				p = append(p, "quic")
-			case "fakedns":
+			case "fakedns", "fakedns+others":
 				p = append(p, "fakedns")
-			case "fakedns+others":
-				p = append(p, "fakedns+others")
 			default:
 				return nil, errors.New("unknown protocol: ", protocol)
 			}
@@ -119,47 +115,12 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	}, nil
 }
 
-type InboundDetourAllocationConfig struct {
-	Strategy    string  `json:"strategy"`
-	Concurrency *uint32 `json:"concurrency"`
-	RefreshMin  *uint32 `json:"refresh"`
-}
-
-// Build implements Buildable.
-func (c *InboundDetourAllocationConfig) Build() (*proxyman.AllocationStrategy, error) {
-	config := new(proxyman.AllocationStrategy)
-	switch strings.ToLower(c.Strategy) {
-	case "always":
-		config.Type = proxyman.AllocationStrategy_Always
-	case "random":
-		config.Type = proxyman.AllocationStrategy_Random
-	case "external":
-		config.Type = proxyman.AllocationStrategy_External
-	default:
-		return nil, errors.New("unknown allocation strategy: ", c.Strategy)
-	}
-	if c.Concurrency != nil {
-		config.Concurrency = &proxyman.AllocationStrategy_AllocationStrategyConcurrency{
-			Value: *c.Concurrency,
-		}
-	}
-
-	if c.RefreshMin != nil {
-		config.Refresh = &proxyman.AllocationStrategy_AllocationStrategyRefresh{
-			Value: *c.RefreshMin,
-		}
-	}
-
-	return config, nil
-}
-
 type InboundDetourConfig struct {
 	Protocol       string                         `json:"protocol"`
 	PortList       *PortList                      `json:"port"`
 	ListenOn       *Address                       `json:"listen"`
 	Settings       *json.RawMessage               `json:"settings"`
 	Tag            string                         `json:"tag"`
-	Allocation     *InboundDetourAllocationConfig `json:"allocate"`
 	StreamSetting  *StreamConfig                  `json:"streamSettings"`
 	SniffingConfig *SniffingConfig                `json:"sniffing"`
 }
@@ -196,30 +157,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		}
 	}
 
-	if c.Allocation != nil {
-		concurrency := -1
-		if c.Allocation.Concurrency != nil && c.Allocation.Strategy == "random" {
-			concurrency = int(*c.Allocation.Concurrency)
-		}
-		portRange := 0
-
-		for _, pr := range c.PortList.Range {
-			portRange += int(pr.To - pr.From + 1)
-		}
-		if concurrency >= 0 && concurrency >= portRange {
-			var ports strings.Builder
-			for _, pr := range c.PortList.Range {
-				fmt.Fprintf(&ports, "%d-%d ", pr.From, pr.To)
-			}
-			return nil, errors.New("not enough ports. concurrency = ", concurrency, " ports: ", ports.String())
-		}
-
-		as, err := c.Allocation.Build()
-		if err != nil {
-			return nil, err
-		}
-		receiverSettings.AllocationStrategy = as
-	}
 	if c.StreamSetting != nil {
 		ss, err := c.StreamSetting.Build()
 		if err != nil {
@@ -244,7 +181,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		return nil, errors.New("failed to load inbound detour config for protocol ", c.Protocol).Base(err)
 	}
 	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
-		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.Redirect
+		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.FollowRedirect
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
@@ -259,13 +196,14 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
-	Protocol      string           `json:"protocol"`
-	SendThrough   *string          `json:"sendThrough"`
-	Tag           string           `json:"tag"`
-	Settings      *json.RawMessage `json:"settings"`
-	StreamSetting *StreamConfig    `json:"streamSettings"`
-	ProxySettings *ProxyConfig     `json:"proxySettings"`
-	MuxSettings   *MuxConfig       `json:"mux"`
+	Protocol       string           `json:"protocol"`
+	SendThrough    *string          `json:"sendThrough"`
+	Tag            string           `json:"tag"`
+	Settings       *json.RawMessage `json:"settings"`
+	StreamSetting  *StreamConfig    `json:"streamSettings"`
+	ProxySettings  *ProxyConfig     `json:"proxySettings"`
+	MuxSettings    *MuxConfig       `json:"mux"`
+	TargetStrategy string           `json:"targetStrategy"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -281,6 +219,32 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 // Build implements Buildable.
 func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	senderSettings := &proxyman.SenderConfig{}
+	switch strings.ToLower(c.TargetStrategy) {
+	case "asis", "":
+		senderSettings.TargetStrategy = internet.DomainStrategy_AS_IS
+	case "useip":
+		senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP
+	case "useipv4":
+		senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP4
+	case "useipv6":
+		senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP6
+	case "useipv4v6":
+		senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP46
+	case "useipv6v4":
+		senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP64
+	case "forceip":
+		senderSettings.TargetStrategy = internet.DomainStrategy_FORCE_IP
+	case "forceipv4":
+		senderSettings.TargetStrategy = internet.DomainStrategy_FORCE_IP4
+	case "forceipv6":
+		senderSettings.TargetStrategy = internet.DomainStrategy_FORCE_IP6
+	case "forceipv4v6":
+		senderSettings.TargetStrategy = internet.DomainStrategy_FORCE_IP46
+	case "forceipv6v4":
+		senderSettings.TargetStrategy = internet.DomainStrategy_FORCE_IP64
+	default:
+		return nil, errors.New("unsupported target domain strategy: ", c.TargetStrategy)
+	}
 	if err := c.checkChainProxyConfig(); err != nil {
 		return nil, err
 	}
@@ -292,7 +256,8 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 			senderSettings.ViaCidr = strings.Split(*c.SendThrough, "/")[1]
 		} else {
 			if address.Family().IsDomain() {
-				if address.Address.Domain() != "origin" {
+				domain := address.Address.Domain()
+				if domain != "origin" && domain != "srcip" {
 					return nil, errors.New("unable to send through: " + address.String())
 				}
 			}
@@ -381,6 +346,7 @@ type Config struct {
 	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
 	Observatory      *ObservatoryConfig      `json:"observatory"`
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
+	Version          *VersionConfig          `json:"version"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -447,6 +413,10 @@ func (c *Config) Override(o *Config, fn string) {
 
 	if o.BurstObservatory != nil {
 		c.BurstObservatory = o.BurstObservatory
+	}
+
+	if o.Version != nil {
+		c.Version = o.Version
 	}
 
 	// update the Inbound in slice if the only one in override config has same tag
@@ -585,6 +555,14 @@ func (c *Config) Build() (*core.Config, error) {
 		r, err := c.BurstObservatory.Build()
 		if err != nil {
 			return nil, errors.New("failed to build burst observatory configuration").Base(err)
+		}
+		config.App = append(config.App, serial.ToTypedMessage(r))
+	}
+
+	if c.Version != nil {
+		r, err := c.Version.Build()
+		if err != nil {
+			return nil, errors.New("failed to build version configuration").Base(err)
 		}
 		config.App = append(config.App, serial.ToTypedMessage(r))
 	}

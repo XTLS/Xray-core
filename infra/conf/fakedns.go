@@ -20,6 +20,18 @@ type FakeDNSConfig struct {
 	pools []*FakeDNSPoolElementConfig
 }
 
+// MarshalJSON implements encoding/json.Marshaler.MarshalJSON
+func (f *FakeDNSConfig) MarshalJSON() ([]byte, error) {
+	if (f.pool != nil) != (f.pools != nil) {
+		if f.pool != nil {
+			return json.Marshal(f.pool)
+		} else if f.pools != nil {
+			return json.Marshal(f.pools)
+		}
+	}
+	return nil, errors.New("unexpected config state")
+}
+
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (f *FakeDNSConfig) UnmarshalJSON(data []byte) error {
 	var pool FakeDNSPoolElementConfig

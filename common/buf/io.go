@@ -24,7 +24,57 @@ var ErrReadTimeout = errors.New("IO timeout")
 
 // TimeoutReader is a reader that returns error if Read() operation takes longer than the given timeout.
 type TimeoutReader interface {
+	Reader
 	ReadMultiBufferTimeout(time.Duration) (MultiBuffer, error)
+}
+
+type TimeoutWrapperReader struct {
+	Reader
+	stats.Counter
+	mb   MultiBuffer
+	err  error
+	done chan struct{}
+}
+
+func (r *TimeoutWrapperReader) ReadMultiBuffer() (MultiBuffer, error) {
+	if r.done != nil {
+		<-r.done
+		r.done = nil
+		if r.Counter != nil {
+			r.Counter.Add(int64(r.mb.Len()))
+		}
+		return r.mb, r.err
+	}
+	r.mb, r.err = r.Reader.ReadMultiBuffer()
+	if r.Counter != nil {
+		r.Counter.Add(int64(r.mb.Len()))
+	}
+	return r.mb, r.err
+}
+
+func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (MultiBuffer, error) {
+	if r.done == nil {
+		r.done = make(chan struct{})
+		go func() {
+			r.mb, r.err = r.Reader.ReadMultiBuffer()
+			close(r.done)
+		}()
+	}
+	timeout := make(chan struct{})
+	go func() {
+		time.Sleep(duration)
+		close(timeout)
+	}()
+	select {
+	case <-r.done:
+		r.done = nil
+		if r.Counter != nil {
+			r.Counter.Add(int64(r.mb.Len()))
+		}
+		return r.mb, r.err
+	case <-timeout:
+		return nil, nil
+	}
 }
 
 // Writer extends io.Writer with MultiBuffer.

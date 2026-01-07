@@ -22,27 +22,23 @@ import (
 
 // Client is a Socks5 client.
 type Client struct {
-	serverPicker  protocol.ServerPicker
+	server        *protocol.ServerSpec
 	policyManager policy.Manager
 }
 
 // NewClient create a new Socks5 client based on the given config.
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
-	serverList := protocol.NewServerList()
-	for _, rec := range config.Server {
-		s, err := protocol.NewServerSpecFromPB(rec)
-		if err != nil {
-			return nil, errors.New("failed to get server spec").Base(err)
-		}
-		serverList.AddServer(s)
+	if config.Server == nil {
+		return nil, errors.New(`no target server found`)
 	}
-	if serverList.Size() == 0 {
-		return nil, errors.New("0 target server")
+	server, err := protocol.NewServerSpecFromPB(config.Server)
+	if err != nil {
+		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
 	v := core.MustFromContext(ctx)
 	c := &Client{
-		serverPicker:  protocol.NewRoundRobinServerPicker(serverList),
+		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
@@ -62,15 +58,12 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	destination := ob.Target
 
 	// Outbound server.
-	var server *protocol.ServerSpec
-	// Outbound server's destination.
-	var dest net.Destination
+	server := c.server
+	dest := server.Destination
 	// Connection to the outbound server.
 	var conn stat.Connection
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
-		server = c.serverPicker.PickServer()
-		dest = server.Destination()
 		rawConn, err := dialer.Dial(ctx, dest)
 		if err != nil {
 			return err
@@ -101,7 +94,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		request.Command = protocol.RequestCommandUDP
 	}
 
-	user := server.PickUser()
+	user := server.User
 	if user != nil {
 		request.User = user
 		p = c.policyManager.ForLevel(user.Level)

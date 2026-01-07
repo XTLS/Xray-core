@@ -11,21 +11,23 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
 # macOS specific files
-*.DS_Store
+.DS_Store
 
-# IDE specific files
+# IDE/editor specific files
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# Archive files
+# Archives and compressed files
 *.zip
 *.tar.gz
+*.tar
+*.gz
+*.bz2
 
-# Binaries
+# Go build binaries
 xray
 xray_softfloat
 mockgen
@@ -36,11 +38,31 @@ errorgen
 *.dat
 
 # Build assets
-/build_assets
+/build_assets/
 
 # Output from dlv test
 **/debug.*
 
-# Certificates
+# Certificates and keys
 *.crt
 *.key
+
+# Dependency directories (uncomment if needed)
+# vendor/
+
+# Logs
+*.log
+
+# Coverage reports
+coverage.*
+
+# Node modules (in case of frontend assets)
+node_modules/
+
+# System files
+Thumbs.db
+ehthumbs.db
+
+# Other common ignores
+*.bak
+*.tmp

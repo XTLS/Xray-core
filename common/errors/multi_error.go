@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"errors"
 	"strings"
 )
 
@@ -36,12 +37,12 @@ func AllEqual(expected error, actual error) bool {
 			return false
 		}
 		for _, err := range errs {
-			if err != expected {
+			if !errors.Is(err, expected) {
 				return false
 			}
 		}
 		return true
 	default:
-		return errs == expected
+		return errors.Is(errs, expected)
 	}
 }

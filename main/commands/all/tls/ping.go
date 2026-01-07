@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/xtls/xray-core/main/commands/base"
 	. "github.com/xtls/xray-core/transport/internet/tls"
@@ -36,8 +37,15 @@ func executePing(cmd *base.Command, args []string) {
 		base.Fatalf("domain not specified")
 	}
 
-	domain := cmdPing.Flag.Arg(0)
-	fmt.Println("Tls ping: ", domain)
+	domainWithPort := cmdPing.Flag.Arg(0)
+	fmt.Println("TLS ping: ", domainWithPort)
+	TargetPort := 443
+	domain, port, err := net.SplitHostPort(domainWithPort)
+	if err != nil {
+		domain = domainWithPort
+	} else {
+		TargetPort, _ = strconv.Atoi(port)
+	}
 
 	var ip net.IP
 	if len(*pingIPStr) > 0 {
@@ -53,19 +61,19 @@ func executePing(cmd *base.Command, args []string) {
 		}
 		ip = v.IP
 	}
-	fmt.Println("Using IP: ", ip.String())
+	fmt.Println("Using IP: ", ip.String()+":"+strconv.Itoa(TargetPort))
 
 	fmt.Println("-------------------")
 	fmt.Println("Pinging without SNI")
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: 443})
+		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
-			MaxVersion:         gotls.VersionTLS12,
+			NextProtos:         []string{"h2", "http/1.1"},
+			MaxVersion:         gotls.VersionTLS13,
 			MinVersion:         gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
 			// VerifyPeerCertificate: showCert(),
@@ -75,6 +83,7 @@ func executePing(cmd *base.Command, args []string) {
 			fmt.Println("Handshake failure: ", err)
 		} else {
 			fmt.Println("Handshake succeeded")
+			printTLSConnDetail(tlsConn)
 			printCertificates(tlsConn.ConnectionState().PeerCertificates)
 		}
 		tlsConn.Close()
@@ -83,37 +92,65 @@ func executePing(cmd *base.Command, args []string) {
 	fmt.Println("-------------------")
 	fmt.Println("Pinging with SNI")
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: 443})
+		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
 		tlsConn := gotls.Client(tcpConn, &gotls.Config{
 			ServerName: domain,
-			NextProtos: []string{"http/1.1"},
-			MaxVersion: gotls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
+			MaxVersion: gotls.VersionTLS13,
 			MinVersion: gotls.VersionTLS12,
 			// Do not release tool before v5's refactor
 			// VerifyPeerCertificate: showCert(),
 		})
 		err = tlsConn.Handshake()
 		if err != nil {
-			fmt.Println("handshake failure: ", err)
+			fmt.Println("Handshake failure: ", err)
 		} else {
-			fmt.Println("handshake succeeded")
+			fmt.Println("Handshake succeeded")
+			printTLSConnDetail(tlsConn)
 			printCertificates(tlsConn.ConnectionState().PeerCertificates)
 		}
 		tlsConn.Close()
 	}
 
-	fmt.Println("Tls ping finished")
+	fmt.Println("-------------------")
+	fmt.Println("TLS ping finished")
 }
 
 func printCertificates(certs []*x509.Certificate) {
+	var leaf *x509.Certificate
+	var length int
 	for _, cert := range certs {
-		if len(cert.DNSNames) == 0 {
-			continue
+		length += len(cert.Raw)
+		if len(cert.DNSNames) != 0 {
+			leaf = cert
 		}
-		fmt.Println("Allowed domains: ", cert.DNSNames)
+	}
+	fmt.Println("Certificate chain's total length: ", length, "(certs count: "+strconv.Itoa(len(certs))+")")
+	if leaf != nil {
+		fmt.Println("Cert's signature algorithm: ", leaf.SignatureAlgorithm.String())
+		fmt.Println("Cert's publicKey algorithm: ", leaf.PublicKeyAlgorithm.String())
+		fmt.Println("Cert's allowed domains: ", leaf.DNSNames)
+	}
+}
+
+func printTLSConnDetail(tlsConn *gotls.Conn) {
+	connectionState := tlsConn.ConnectionState()
+	var tlsVersion string
+	if connectionState.Version == gotls.VersionTLS13 {
+		tlsVersion = "TLS 1.3"
+	} else if connectionState.Version == gotls.VersionTLS12 {
+		tlsVersion = "TLS 1.2"
+	}
+	fmt.Println("TLS Version: ", tlsVersion)
+	curveID := connectionState.CurveID
+	if curveID != 0 {
+		PostQuantum := (curveID == gotls.X25519MLKEM768)
+		fmt.Println("TLS Post-Quantum key exchange: ", PostQuantum, "("+curveID.String()+")")
+	} else {
+		fmt.Println("TLS Post-Quantum key exchange:  false (RSA Exchange)")
 	}
 }
 

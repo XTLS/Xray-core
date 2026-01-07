@@ -2,6 +2,7 @@ package mux
 
 import (
 	"context"
+	goerrors "errors"
 	"io"
 	"sync"
 	"time"
@@ -154,8 +155,11 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
 		ctx, cancel := context.WithCancel(ctx)
 
-		if err := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); err != nil {
-			errors.LogInfoInner(ctx, err, "failed to handler mux client connection")
+		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {
+			errC := errors.Cause(errP)
+			if !(goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled)) {
+				errors.LogInfoInner(ctx, errP, "failed to handler mux client connection")
+			}
 		}
 		common.Must(c.Close())
 		cancel()
@@ -173,6 +177,7 @@ type ClientWorker struct {
 	sessionManager *SessionManager
 	link           transport.Link
 	done           *done.Instance
+	timer          *time.Ticker
 	strategy       ClientStrategy
 }
 
@@ -187,6 +192,7 @@ func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, er
 		sessionManager: NewSessionManager(),
 		link:           stream,
 		done:           done.New(),
+		timer:          time.NewTicker(time.Second * 16),
 		strategy:       s,
 	}
 
@@ -209,20 +215,28 @@ func (m *ClientWorker) Closed() bool {
 	return m.done.Done()
 }
 
+func (m *ClientWorker) WaitClosed() <-chan struct{} {
+	return m.done.Wait()
+}
+
+func (m *ClientWorker) Close() error {
+	return m.done.Close()
+}
+
 func (m *ClientWorker) monitor() {
-	timer := time.NewTicker(time.Second * 16)
-	defer timer.Stop()
+	defer m.timer.Stop()
 
 	for {
+		checkSize := m.sessionManager.Size()
+		checkCount := m.sessionManager.Count()
 		select {
 		case <-m.done.Wait():
 			m.sessionManager.Close()
-			common.Close(m.link.Writer)
+			common.Interrupt(m.link.Writer)
 			common.Interrupt(m.link.Reader)
 			return
-		case <-timer.C:
-			size := m.sessionManager.Size()
-			if size == 0 && m.sessionManager.CloseIfNoSession() {
+		case <-m.timer.C:
+			if m.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
 				common.Must(m.done.Close())
 			}
 		}
@@ -250,7 +264,11 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 		transferType = protocol.TransferTypePacket
 	}
 	s.transferType = transferType
-	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx))
+	var inbound *session.Inbound
+	if session.IsReverseMuxFromContext(ctx) {
+		inbound = session.InboundFromContext(ctx)
+	}
+	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx), inbound)
 	defer s.Close(false)
 	defer writer.Close()
 
@@ -276,6 +294,8 @@ func (m *ClientWorker) IsClosing() bool {
 	return false
 }
 
+// IsFull returns true if this ClientWorker is unable to accept more connections.
+// it might be because it is closing, or the number of connections has reached the limit.
 func (m *ClientWorker) IsFull() bool {
 	if m.IsClosing() || m.Closed() {
 		return true
@@ -289,18 +309,24 @@ func (m *ClientWorker) IsFull() bool {
 }
 
 func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool {
-	if m.IsFull() || m.Closed() {
+	if m.IsFull() {
 		return false
 	}
 
 	sm := m.sessionManager
-	s := sm.Allocate()
+	s := sm.Allocate(&m.strategy)
 	if s == nil {
 		return false
 	}
 	s.input = link.Reader
 	s.output = link.Writer
 	go fetchInput(ctx, s, m.link.Writer)
+	if _, ok := link.Reader.(*pipe.Reader); !ok {
+		select {
+		case <-ctx.Done():
+		case <-s.done.Wait():
+		}
+	}
 	return true
 }
 
@@ -362,7 +388,7 @@ func (m *ClientWorker) fetchOutput() {
 
 	var meta FrameMetadata
 	for {
-		err := meta.Unmarshal(reader)
+		err := meta.Unmarshal(reader, false)
 		if err != nil {
 			if errors.Cause(err) != io.EOF {
 				errors.LogInfoInner(context.Background(), err, "failed to read metadata")

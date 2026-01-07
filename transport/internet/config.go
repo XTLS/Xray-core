@@ -2,6 +2,7 @@ package internet
 
 import (
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 )
 
@@ -100,30 +101,52 @@ func (m SocketConfig_TProxyMode) IsEnabled() bool {
 	return m != SocketConfig_Off
 }
 
-func (s DomainStrategy) hasStrategy() bool {
+func (s DomainStrategy) HasStrategy() bool {
 	return strategy[s][0] != 0
 }
 
-func (s DomainStrategy) forceIP() bool {
+func (s DomainStrategy) ForceIP() bool {
 	return strategy[s][0] == 2
 }
 
-func (s DomainStrategy) preferIP4() bool {
+func (s DomainStrategy) PreferIP4() bool {
 	return strategy[s][1] == 4 || strategy[s][1] == 0
 }
 
-func (s DomainStrategy) preferIP6() bool {
+func (s DomainStrategy) PreferIP6() bool {
 	return strategy[s][1] == 6 || strategy[s][1] == 0
 }
 
-func (s DomainStrategy) hasFallback() bool {
+func (s DomainStrategy) HasFallback() bool {
 	return strategy[s][2] != 0
 }
 
-func (s DomainStrategy) fallbackIP4() bool {
+func (s DomainStrategy) FallbackIP4() bool {
 	return strategy[s][2] == 4
 }
 
-func (s DomainStrategy) fallbackIP6() bool {
+func (s DomainStrategy) FallbackIP6() bool {
 	return strategy[s][2] == 6
+}
+
+func (s DomainStrategy) GetDynamicStrategy(addrFamily net.AddressFamily) DomainStrategy {
+	if  addrFamily.IsDomain(){
+		return s
+	}
+	switch s {
+	case DomainStrategy_USE_IP:
+		if addrFamily.IsIPv4() {
+			return DomainStrategy_USE_IP46
+		} else if addrFamily.IsIPv6() {
+			return DomainStrategy_USE_IP64
+		}
+	case DomainStrategy_FORCE_IP:
+		if addrFamily.IsIPv4() {
+			return DomainStrategy_FORCE_IP46
+		} else if addrFamily.IsIPv6() {
+			return DomainStrategy_FORCE_IP64
+		}
+	default:
+	}
+	return s
 }

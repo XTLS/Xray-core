@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"encoding/binary"
+	"math"
 	"strings"
 	"time"
 
@@ -13,10 +14,12 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	dns_feature "github.com/xtls/xray-core/features/dns"
+
 	"golang.org/x/net/dns/dnsmessage"
 )
 
 // Fqdn normalizes domain make sure it ends with '.'
+// case-sensitive
 func Fqdn(domain string) string {
 	if len(domain) > 0 && strings.HasSuffix(domain, ".") {
 		return domain
@@ -32,31 +35,28 @@ type record struct {
 // IPRecord is a cacheable item for a resolved domain
 type IPRecord struct {
 	ReqID     uint16
-	IP        []net.Address
+	IP        []net.IP
 	Expire    time.Time
 	RCode     dnsmessage.RCode
 	RawHeader *dnsmessage.Header
 }
 
-func (r *IPRecord) getIPs() ([]net.Address, uint32, error) {
-	if r == nil || r.Expire.Before(time.Now()) {
+func (r *IPRecord) getIPs() ([]net.IP, int32, error) {
+	if r == nil {
 		return nil, 0, errRecordNotFound
 	}
-	if r.RCode != dnsmessage.RCodeSuccess {
-		return nil, 0, dns_feature.RCodeError(r.RCode)
-	}
-	ttl := uint32(time.Until(r.Expire) / time.Second)
-	return r.IP, ttl, nil
-}
 
-func isNewer(baseRec *IPRecord, newRec *IPRecord) bool {
-	if newRec == nil {
-		return false
+	untilExpire := time.Until(r.Expire).Seconds()
+	ttl := int32(math.Ceil(untilExpire))
+
+	if r.RCode != dnsmessage.RCodeSuccess {
+		return nil, ttl, dns_feature.RCodeError(r.RCode)
 	}
-	if baseRec == nil {
-		return true
+	if len(r.IP) == 0 {
+		return nil, ttl, dns_feature.ErrEmptyResponse
 	}
-	return baseRec.Expire.Before(newRec.Expire)
+
+	return r.IP, ttl, nil
 }
 
 var errRecordNotFound = errors.New("record not found")
@@ -193,7 +193,7 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 	ipRecord := &IPRecord{
 		ReqID:     h.ID,
 		RCode:     h.RCode,
-		Expire:    now.Add(time.Second * 600),
+		Expire:    now.Add(time.Second * dns_feature.DefaultTTL),
 		RawHeader: &h,
 	}
 
@@ -209,7 +209,7 @@ L:
 
 		ttl := ah.TTL
 		if ttl == 0 {
-			ttl = 600
+			ttl = 1
 		}
 		expire := now.Add(time.Duration(ttl) * time.Second)
 		if ipRecord.Expire.After(expire) {
@@ -223,14 +223,17 @@ L:
 				errors.LogInfoInner(context.Background(), err, "failed to parse A record for domain: ", ah.Name)
 				break L
 			}
-			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.A[:]))
+			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.A[:]).IP())
 		case dnsmessage.TypeAAAA:
 			ans, err := parser.AAAAResource()
 			if err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to parse AAAA record for domain: ", ah.Name)
 				break L
 			}
-			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.AAAA[:]))
+			newIP := net.IPAddress(ans.AAAA[:]).IP()
+			if len(newIP) == net.IPv6len {
+				ipRecord.IP = append(ipRecord.IP, newIP)
+			}
 		default:
 			if err := parser.SkipAnswer(); err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to skip answer")

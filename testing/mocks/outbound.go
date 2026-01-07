@@ -91,6 +91,20 @@ func (mr *OutboundManagerMockRecorder) GetHandler(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHandler", reflect.TypeOf((*OutboundManager)(nil).GetHandler), arg0)
 }
 
+// ListHandlers mocks base method
+func (m *OutboundManager) ListHandlers(arg0 context.Context) []outbound.Handler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListHandlers", arg0)
+	ret0, _ := ret[0].([]outbound.Handler)
+	return ret0
+}
+
+// ListHandlers indicates an expected call of ListHandlers
+func (mr *OutboundManagerMockRecorder) ListHandlers(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHandlers", reflect.TypeOf((*OutboundManager)(nil).ListHandlers), arg0)
+}
+
 // RemoveHandler mocks base method
 func (m *OutboundManager) RemoveHandler(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()

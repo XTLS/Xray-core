@@ -7,6 +7,7 @@ import (
 	"go/build"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -23,7 +24,9 @@ func Must(err error) {
 }
 
 // Must2 panics if the second parameter is not nil, otherwise returns the first parameter.
-func Must2(v interface{}, err error) interface{} {
+// This is useful when function returned "sth, err" and avoid many "if err != nil"
+// Internal usage only, if user input can cause err, it must be handled
+func Must2[T any](v T, err error) T {
 	Must(err)
 	return v
 }
@@ -150,4 +153,15 @@ func GetModuleName(pathToProjectRoot string) (string, error) {
 		break
 	}
 	return moduleName, fmt.Errorf("no `go.mod` file in every parent directory of `%s`", pathToProjectRoot)
+}
+
+// CloseIfExists call obj.Close() if obj is not nil.
+func CloseIfExists(obj any) error {
+	if obj != nil {
+		v := reflect.ValueOf(obj)
+		if !v.IsNil() {
+			return Close(obj)
+		}
+	}
+	return nil
 }

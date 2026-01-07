@@ -19,8 +19,11 @@ message Fallback {
 
 message Config {
   repeated xray.common.protocol.User clients = 1;
-  // Decryption settings. Only applies to server side, and only accepts "none"
-  // for now.
-  string decryption = 2;
-  repeated Fallback fallbacks = 3;
+  repeated Fallback fallbacks = 2;
+
+  string decryption = 3;
+  uint32 xorMode = 4;
+  int64 seconds_from = 5;
+  int64 seconds_to = 6;
+  string padding = 7;
 }

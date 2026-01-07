@@ -9,9 +9,9 @@ import (
 
 var cmdUUID = &base.Command{
 	UsageLine: `{{.Exec}} uuid [-i "example"]`,
-	Short:     `Generate UUIDv4 or UUIDv5`,
+	Short:     `Generate UUIDv4 or UUIDv5 (VLESS)`,
 	Long: `
-Generate UUIDv4 or UUIDv5.
+Generate UUIDv4 or UUIDv5 (VLESS).
 
 UUIDv4 (random): {{.Exec}} uuid
 

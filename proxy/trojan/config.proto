@@ -23,7 +23,7 @@ message Fallback {
 }
 
 message ClientConfig {
-  repeated xray.common.protocol.ServerEndpoint server = 1;
+  xray.common.protocol.ServerEndpoint server = 1;
 }
 
 message ServerConfig {

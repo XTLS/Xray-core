@@ -93,7 +93,6 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 				"ruleTag" : "%s",
 				"inboundTag": %s,		
 				"outboundTag": "%s",
-				"type": "field",
 				"source": %s
 			  }
 			]
