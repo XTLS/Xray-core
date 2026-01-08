@@ -79,12 +79,13 @@ func TestGeoSiteSerialization(t *testing.T) {
 
 	f, err := os.Create(path)
 	require.NoError(t, err)
-	defer f.Close()
 	_, err = f.Write(buf.Bytes())
 	require.NoError(t, err)
+	f.Close()
 
 	f, err = os.Open(path)
 	require.NoError(t, err)
+	defer f.Close()
 
 	require.NoError(t, err)
 	data, _ := filesystem.ReadFile(path)
