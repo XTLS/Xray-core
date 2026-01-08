@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -181,9 +183,28 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		currentSession = h.upsertSession(sessionId)
 	}
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
-	uplinkHTTPMethodmethod := h.config.GetNormalizedUplinkHTTPMethod()
+	uplinkHTTPMethod := h.config.GetNormalizedUplinkHTTPMethod()
+	isUplinkRequest := false
 
-	if request.Method == uplinkHTTPMethodmethod && sessionId != "" { // stream-up, packet-up
+	if uplinkHTTPMethod != "GET" && request.Method == uplinkHTTPMethod {
+		isUplinkRequest = true
+	}
+
+	uplinkDataPlacement := h.config.GetNormalizedUplinkDataPlacement()
+	uplinkDataKey := h.config.UplinkDataKey
+
+	switch uplinkDataPlacement {
+	case PlacementHeader:
+		if request.Header.Get(uplinkDataKey+"-Upstream") == "1" {
+			isUplinkRequest = true
+		}
+	case PlacementCookie:
+		if c, _ := request.Cookie(uplinkDataKey + "_upstream"); c != nil && c.Value == "1" {
+			isUplinkRequest = true
+		}
+	}
+
+	if isUplinkRequest && sessionId != "" { // stream-up, packet-up
 		if seqStr == "" {
 			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
@@ -233,7 +254,62 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		payload, err := io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
+		var payload []byte
+
+		if uplinkDataPlacement != PlacementBody {
+			var encodedStr string
+			switch uplinkDataPlacement {
+			case PlacementHeader:
+				dataLenStr := request.Header.Get(uplinkDataKey + "-Length")
+
+				if dataLenStr != "" {
+					dataLen, _ := strconv.Atoi(dataLenStr)
+					var chunks []string
+					i := 0
+
+					for {
+						chunk := request.Header.Get(fmt.Sprintf("%s-%d", uplinkDataKey, i))
+						if chunk == "" {
+							break
+						}
+						chunks = append(chunks, chunk)
+						i++
+					}
+
+					encodedStr = strings.Join(chunks, "")
+					if len(encodedStr) != dataLen {
+						encodedStr = ""
+					}
+				}
+			case PlacementCookie:
+				var chunks []string
+				i := 0
+
+				for {
+					cookieName := fmt.Sprintf("%s_%d", uplinkDataKey, i)
+					if c, _ := request.Cookie(cookieName); c != nil {
+						chunks = append(chunks, c.Value)
+						i++
+					} else {
+						break
+					}
+				}
+
+				if len(chunks) > 0 {
+					encodedStr = strings.Join(chunks, "")
+				}
+			}
+
+			if encodedStr != "" {
+				payload, err = base64.RawURLEncoding.DecodeString(encodedStr)
+			} else {
+				errors.LogInfoInner(context.Background(), err, "failed to extract data from key "+uplinkDataKey+" placed in "+uplinkDataPlacement)
+				writer.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		} else {
+			payload, err = io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
+		}
 
 		if len(payload) > scMaxEachPostBytes {
 			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")

@@ -238,6 +238,8 @@ type SplitHTTPConfig struct {
 	SessionKey           string            `json:"sessionKey"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
+	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
+	UplinkDataKey        string            `json:"uplinkDataKey"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -321,13 +323,24 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("unsupported padding method: " + c.XPaddingMethod)
 	}
 
+	switch c.UplinkDataPlacement {
+	case "":
+		c.UplinkDataPlacement = "body"
+	case "cookie", "header":
+		if c.Mode != "packet-up" {
+			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
+		}
+	default:
+		return nil, errors.New("unsupported uplink data placement: " + c.UplinkDataPlacement)
+	}
+
 	if c.UplinkHTTPMethod == "" {
 		c.UplinkHTTPMethod = "POST"
 	}
 	c.UplinkHTTPMethod = strings.ToUpper(c.UplinkHTTPMethod)
 
-	if c.UplinkHTTPMethod == "GET" {
-		return nil, errors.New("uplinkHTTPMethod cannot be GET")
+	if c.UplinkHTTPMethod == "GET" && c.Mode != "packet-up" {
+		return nil, errors.New("uplinkHTTPMethod can be GET only in packet-up mode")
 	}
 
 	switch c.SessionPlacement {
@@ -367,6 +380,15 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.UplinkDataPlacement != "body" && c.UplinkDataKey == "" {
+		switch c.UplinkDataPlacement {
+		case "cookie":
+			c.UplinkDataKey = "x_data"
+		case "header":
+			c.UplinkDataKey = "X-Data"
+		}
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -395,6 +417,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SeqPlacement:         c.SeqPlacement,
 		SessionKey:           c.SessionKey,
 		SeqKey:               c.SeqKey,
+		UplinkDataPlacement:  c.UplinkDataPlacement,
+		UplinkDataKey:        c.UplinkDataKey,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
