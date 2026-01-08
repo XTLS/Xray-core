@@ -17,6 +17,7 @@ const (
 	UseFreedomSplice = "xray.buf.splice"
 	UseVmessPadding  = "xray.vmess.padding"
 	UseCone          = "xray.cone.disabled"
+	UseCachedMatcher = "xray.cached.matcher"
 
 	BufferSize           = "xray.ray.buffer.size"
 	BrowserDialerAddress = "xray.browser.dialer"
