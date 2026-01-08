@@ -106,6 +106,7 @@ func NewMphMatcherGroupFromBuffer(data []byte) (*MphMatcherGroup, error) {
 		}
 	}
 
+	// count in MphMatcherGroup always is 1, may break other this?
 	g.count = uint32(ruleCount) + 1
 
 	return g, nil
