@@ -112,7 +112,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		domains := rr.Domain
 		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
 			var err error
-			domains, err = getDomainList(rr.Domain)
+			domains, err = GetDomainList(rr.Domain)
 			if err != nil {
 				return nil, errors.New("failed to build domains from mmap").Base(err)
 			}
@@ -122,7 +122,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		if err != nil {
 			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
 		}
-		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
+		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(domains), " domain rule(s)")
 		conds.Add(matcher)
 	}
 
@@ -214,7 +214,7 @@ func GetGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
 
 }
 
-func getDomainList(domains []*Domain) ([]*Domain, error) {
+func GetDomainList(domains []*Domain) ([]*Domain, error) {
 	domainList := []*Domain{}
 	for _, domain := range domains {
 		val := strings.Split(domain.Value, "_")

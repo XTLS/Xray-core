@@ -1,20 +1,22 @@
 package router_test
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
+	"github.com/xtls/xray-core/app/router"
 	. "github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
-	"google.golang.org/protobuf/proto"
+	"github.com/xtls/xray-core/infra/conf"
 )
 
 func withBackground() routing.Context {
@@ -300,32 +302,25 @@ func TestRoutingRule(t *testing.T) {
 	}
 }
 
-func loadGeoSite(country string) ([]*Domain, error) {
-	path, err := getAssetPath("geosite.dat")
-	if err != nil {
-		return nil, err
-	}
-	geositeBytes, err := filesystem.ReadFile(path)
+func loadGeoSiteDomains(geo string) ([]*Domain, error) {
+	os.Setenv("XRAY_LOCATION_ASSET", filepath.Join("..", "..", "resources"))
+
+	domains, err := conf.ParseDomainRule(geo)
 	if err != nil {
 		return nil, err
 	}
 
-	var geositeList GeoSiteList
-	if err := proto.Unmarshal(geositeBytes, &geositeList); err != nil {
-		return nil, err
-	}
-
-	for _, site := range geositeList.Entry {
-		if site.CountryCode == country {
-			return site.Domain, nil
+	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
+		domains, err = router.GetDomainList(domains)
+		if err != nil {
+			return nil, err
 		}
 	}
-
-	return nil, errors.New("country not found: " + country)
+	return domains, nil
 }
 
 func TestChinaSites(t *testing.T) {
-	domains, err := loadGeoSite("CN")
+	domains, err := loadGeoSiteDomains("geosite:cn")
 	common.Must(err)
 
 	acMatcher, err := NewMphMatcherGroup(domains)
@@ -366,8 +361,50 @@ func TestChinaSites(t *testing.T) {
 	}
 }
 
+func TestChinaSitesWithAttrs(t *testing.T) {
+	domains, err := loadGeoSiteDomains("geosite:google@cn")
+	common.Must(err)
+
+	acMatcher, err := NewMphMatcherGroup(domains)
+	common.Must(err)
+
+	type TestCase struct {
+		Domain string
+		Output bool
+	}
+	testCases := []TestCase{
+		{
+			Domain: "google.cn",
+			Output: true,
+		},
+		{
+			Domain: "recaptcha.net",
+			Output: true,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+		{
+			Domain: "164.com",
+			Output: false,
+		},
+	}
+
+	for i := 0; i < 1024; i++ {
+		testCases = append(testCases, TestCase{Domain: strconv.Itoa(i) + ".not-exists.com", Output: false})
+	}
+
+	for _, testCase := range testCases {
+		r := acMatcher.ApplyDomain(testCase.Domain)
+		if r != testCase.Output {
+			t.Error("ACDomainMatcher expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r)
+		}
+	}
+}
+
 func BenchmarkMphDomainMatcher(b *testing.B) {
-	domains, err := loadGeoSite("CN")
+	domains, err := loadGeoSiteDomains("geosite:cn")
 	common.Must(err)
 
 	matcher, err := NewMphMatcherGroup(domains)
@@ -412,11 +449,11 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 	var geoips []*GeoIP
 
 	{
-		ips, err := loadGeoIP("CN")
+		ips, err := loadGeoIP("geoip:cn")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "CN",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
@@ -425,25 +462,25 @@ func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "JP",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
 	{
-		ips, err := loadGeoIP("CA")
+		ips, err := loadGeoIP("geoip:ca")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "CA",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 
 	{
-		ips, err := loadGeoIP("US")
+		ips, err := loadGeoIP("geoip:us")
 		common.Must(err)
 		geoips = append(geoips, &GeoIP{
 			CountryCode: "US",
-			Cidr:        ips,
+			Cidr:        ips.Cidr,
 		})
 	}
 

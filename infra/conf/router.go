@@ -291,7 +291,7 @@ func loadGeositeWithAttr(file string, siteWithAttr string) ([]*router.Domain, er
 	return filteredDomains, nil
 }
 
-func parseDomainRule(domain string) ([]*router.Domain, error) {
+func ParseDomainRule(domain string) ([]*router.Domain, error) {
 	if strings.HasPrefix(domain, "geosite:") {
 		country := strings.ToUpper(domain[8:])
 		domains, err := loadGeositeWithAttr("geosite.dat", country)
@@ -489,7 +489,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Domain != nil {
 		for _, domain := range *rawFieldRule.Domain {
-			rules, err := parseDomainRule(domain)
+			rules, err := ParseDomainRule(domain)
 			if err != nil {
 				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
 			}
@@ -499,7 +499,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Domains != nil {
 		for _, domain := range *rawFieldRule.Domains {
-			rules, err := parseDomainRule(domain)
+			rules, err := ParseDomainRule(domain)
 			if err != nil {
 				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
 			}

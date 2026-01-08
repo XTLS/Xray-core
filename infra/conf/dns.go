@@ -89,7 +89,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	var originalRules []*dns.NameServer_OriginalRule
 
 	for _, rule := range c.Domains {
-		parsedDomain, err := parseDomainRule(rule)
+		parsedDomain, err := ParseDomainRule(rule)
 		if err != nil {
 			return nil, errors.New("invalid domain rule: ", rule).Base(err)
 		}
