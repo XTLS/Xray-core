@@ -120,6 +120,13 @@ func (c *Config) GetNormalizedSeqPlacement() string {
 	return c.SeqPlacement
 }
 
+func (c *Config) GetNormalizedUplinkDataPlacement() string {
+	if c.UplinkDataPlacement == "" {
+		return PlacementBody
+	}
+	return c.UplinkDataPlacement
+}
+
 func (c *Config) GetNormalizedSessionKey() string {
 	if c.SessionKey != "" {
 		return c.SessionKey

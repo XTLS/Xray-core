@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,6 +117,19 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
+	var encodedData string
+	dataPlacement := c.transportConfig.GetNormalizedUplinkDataPlacement()
+
+	if dataPlacement != PlacementBody {
+		data, err := io.ReadAll(body)
+		if err != nil {
+			return err
+		}
+		encodedData = base64.RawURLEncoding.EncodeToString(data)
+		body = nil
+		contentLength = 0
+	}
+
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
 	if err != nil {
@@ -123,6 +137,43 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	}
 	req.ContentLength = contentLength
 	req.Header = c.transportConfig.GetRequestHeader()
+
+	if dataPlacement != PlacementBody {
+		key := c.transportConfig.UplinkDataKey
+
+		switch dataPlacement {
+		case PlacementHeader:
+			chunkSize := 4 * 1024 // 4KB
+
+			for i := 0; i < len(encodedData); i += chunkSize {
+				end := i + chunkSize
+				if end > len(encodedData) {
+					end = len(encodedData)
+				}
+				chunk := encodedData[i:end]
+				headerKey := fmt.Sprintf("%s-%d", key, i/chunkSize)
+				req.Header.Set(headerKey, chunk)
+			}
+
+			req.Header.Set(key+"-Length", fmt.Sprintf("%d", len(encodedData)))
+			req.Header.Set(key+"-Upstream", "1")
+		case PlacementCookie:
+			chunkSize := 3 * 1024 // 3KB
+
+			for i := 0; i < len(encodedData); i += chunkSize {
+				end := i + chunkSize
+				if end > len(encodedData) {
+					end = len(encodedData)
+				}
+				chunk := encodedData[i:end]
+				cookieName := fmt.Sprintf("%s_%d", key, i/chunkSize)
+				req.AddCookie(&http.Cookie{Name: cookieName, Value: chunk})
+			}
+
+			req.AddCookie(&http.Cookie{Name: key + "_upstream", Value: "1"})
+		}
+	}
+
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
 	config := XPaddingConfig{Length: length}
 

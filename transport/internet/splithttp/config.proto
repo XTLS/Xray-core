@@ -46,4 +46,6 @@ message Config {
   string sessionKey = 21;
   string seqPlacement = 22;
   string seqKey = 23;
+  string uplinkDataPlacement = 24;
+  string uplinkDataKey = 25;
 }
