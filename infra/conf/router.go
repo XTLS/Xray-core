@@ -1,7 +1,10 @@
 package conf
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -9,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"google.golang.org/protobuf/proto"
@@ -596,4 +600,44 @@ func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		return nil, errors.New("invalid field rule").Base(err)
 	}
 	return fieldrule, nil
+}
+
+func (c *RouterConfig) BuildDomainMatcherCache() error {
+	var geosite []*router.GeoSite
+
+	matcherFilePath := platform.GetAssetLocation("matcher.cache")
+	routerConfig, err := c.Build()
+
+	if len(routerConfig.Rule) == 0 {
+		return fmt.Errorf("no routing")
+	}
+
+	for _, rule := range routerConfig.Rule {
+		domains, err := router.GetDomainList(rule.Domain)
+		if err != nil {
+			return errors.New("failed to build domains from mmap").Base(err)
+		}
+		// write it with ruleTag key
+		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: domains}
+
+		geosite = append(geosite, &simpleGeoSite)
+	}
+
+	f, err := os.Create(matcherFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	println(len(geosite))
+	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
+		return err
+	}
+
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
 }
