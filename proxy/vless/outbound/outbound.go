@@ -295,6 +295,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if newCancel != nil {
 			newCancel()
 		}
+		conn.Close()
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	clientReader := link.Reader // .(*pipe.Reader)
