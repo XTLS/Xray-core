@@ -459,8 +459,8 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 
 	if c.PinnedPeerCertSha256 != "" {
 		config.PinnedPeerCertSha256 = [][]byte{}
-		// Split by pipe separator
-		hashes := strings.Split(c.PinnedPeerCertSha256, "|")
+		// Split by underscore separator
+		hashes := strings.Split(c.PinnedPeerCertSha256, "_")
 		for _, v := range hashes {
 			v = strings.TrimSpace(v)
 			if v == "" {
