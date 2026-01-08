@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -105,9 +107,23 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Domain) > 0 {
-		matcher, err := NewMphMatcherGroup(rr.Domain)
-		if err != nil {
-			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
+		useCachedMatcher := platform.NewEnvFlag(platform.UseCachedMatcher).GetValueAsInt(0)
+
+		var matcher *DomainMatcher
+		var err error
+
+		if useCachedMatcher != 0 {
+			matcher, err = GetDomainMathcerWithRuleTag(rr.RuleTag)
+			if err != nil {
+				return nil, errors.New("failed to build domain condition from cached MphDomainMatcher").Base(err)
+			}
+
+		} else {
+			matcher, err = NewMphMatcherGroup(rr.Domain)
+			if err != nil {
+				return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
+			}
+
 		}
 		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 		conds.Add(matcher)
@@ -171,4 +187,20 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	default:
 		return nil, errors.New("unrecognized balancer type")
 	}
+}
+
+func GetDomainMathcerWithRuleTag(ruleTag string) (*DomainMatcher, error) {
+	file := "matcher.cache"
+	bs, err := filesystem.ReadAsset(file)
+	if err != nil {
+		return nil, errors.New("failed to load file: ", file).Base(err)
+	}
+	g, err := LoadGeoSiteMatcher(bs, ruleTag)
+	if err != nil {
+		return nil, errors.New("failed to load file:", file).Base(err)
+	}
+	return &DomainMatcher{
+		Matchers: g,
+	}, nil
+
 }
