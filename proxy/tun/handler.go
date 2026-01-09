@@ -155,42 +155,100 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			continue
 		}
 
+		payload := b.Bytes()
+		udpLen := header.UDPMinimumSize + len(payload)
+
+		// Build complete packet with IP and UDP headers
+		var pkt *stack.PacketBuffer
+		if w.src.Address.Family().IsIPv4() {
+			// IPv4 packet
+			pkt = stack.NewPacketBuffer(stack.PacketBufferOptions{
+				ReserveHeaderBytes: header.IPv4MinimumSize + header.UDPMinimumSize,
+				Payload:            buffer.MakeWithData(payload),
+			})
+			
+			// Build UDP header
+			udpHdr := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
+			udpHdr.Encode(&header.UDPFields{
+				SrcPort: uint16(srcAddr.Port),
+				DstPort: uint16(w.src.Port),
+				Length:  uint16(udpLen),
+			})
+			
+			// Calculate UDP checksum
+			xsum := header.PseudoHeaderChecksum(
+				header.UDPProtocolNumber,
+				tcpip.AddrFromSlice(srcAddr.Address.IP()),
+				tcpip.AddrFromSlice(w.src.Address.IP()),
+				uint16(udpLen),
+			)
+			udpHdr.SetChecksum(^udpHdr.CalculateChecksum(checksum.Checksum(payload, xsum)))
+			
+			// Build IPv4 header
+			ipHdr := header.IPv4(pkt.NetworkHeader().Push(header.IPv4MinimumSize))
+			ipHdr.Encode(&header.IPv4Fields{
+				TOS:         0,
+				TotalLength: uint16(header.IPv4MinimumSize + udpLen),
+				ID:          0,
+				Flags:       0,
+				FragmentOffset: 0,
+				TTL:         64,
+				Protocol:    uint8(header.UDPProtocolNumber),
+				SrcAddr:     tcpip.AddrFromSlice(srcAddr.Address.IP()),
+				DstAddr:     tcpip.AddrFromSlice(w.src.Address.IP()),
+			})
+			ipHdr.SetChecksum(^ipHdr.CalculateChecksum())
+		} else {
+			// IPv6 packet
+			pkt = stack.NewPacketBuffer(stack.PacketBufferOptions{
+				ReserveHeaderBytes: header.IPv6MinimumSize + header.UDPMinimumSize,
+				Payload:            buffer.MakeWithData(payload),
+			})
+			
+			// Build UDP header
+			udpHdr := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
+			udpHdr.Encode(&header.UDPFields{
+				SrcPort: uint16(srcAddr.Port),
+				DstPort: uint16(w.src.Port),
+				Length:  uint16(udpLen),
+			})
+			
+			// Calculate UDP checksum
+			xsum := header.PseudoHeaderChecksum(
+				header.UDPProtocolNumber,
+				tcpip.AddrFromSlice(srcAddr.Address.IP()),
+				tcpip.AddrFromSlice(w.src.Address.IP()),
+				uint16(udpLen),
+			)
+			udpHdr.SetChecksum(^udpHdr.CalculateChecksum(checksum.Checksum(payload, xsum)))
+			
+			// Build IPv6 header
+			ipHdr := header.IPv6(pkt.NetworkHeader().Push(header.IPv6MinimumSize))
+			ipHdr.Encode(&header.IPv6Fields{
+				TrafficClass:      0,
+				FlowLabel:         0,
+				PayloadLength:     uint16(udpLen),
+				TransportProtocol: header.UDPProtocolNumber,
+				HopLimit:          64,
+				SrcAddr:           tcpip.AddrFromSlice(srcAddr.Address.IP()),
+				DstAddr:           tcpip.AddrFromSlice(w.src.Address.IP()),
+			})
+		}
+
+		// Write raw packet to network stack
 		netProto := header.IPv4ProtocolNumber
 		if !w.src.Address.Family().IsIPv4() {
 			netProto = header.IPv6ProtocolNumber
 		}
-
-		// Build route from actual response source to original client
-		route, err := w.stack.FindRoute(
-			defaultNIC,
-			tcpip.AddrFromSlice(srcAddr.Address.IP()),
-			tcpip.AddrFromSlice(w.src.Address.IP()),
-			netProto,
-			false,
-		)
-		if err != nil {
-			b.Release()
-			continue
+		
+		// Get packet data and write as raw packet
+		views := pkt.AsSlices()
+		var data []byte
+		for _, view := range views {
+			data = append(data, view...)
 		}
-
-		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
-			ReserveHeaderBytes: header.UDPMinimumSize,
-			Payload:            buffer.MakeWithData(b.Bytes()),
-		})
-		udp := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
-		udp.Encode(&header.UDPFields{
-			SrcPort: uint16(srcAddr.Port),
-			DstPort: uint16(w.src.Port),
-			Length:  uint16(pkt.Size()),
-		})
-		xsum := route.PseudoHeaderChecksum(header.UDPProtocolNumber, uint16(pkt.Size()))
-		udp.SetChecksum(^udp.CalculateChecksum(checksum.Checksum(b.Bytes(), xsum)))
-		route.WritePacket(stack.NetworkHeaderParams{
-			Protocol: header.UDPProtocolNumber,
-			TTL:      64,
-		}, pkt)
+		w.stack.WriteRawPacket(defaultNIC, netProto, buffer.MakeWithData(data))
 		pkt.DecRef()
-		route.Release()
 		b.Release()
 	}
 	return nil
