@@ -49,12 +49,22 @@ type Dispatcher struct {
 	callback   ResponseCallback
 	callClose  func() error
 	closed     bool
+	timeout    time.Duration
 }
 
 func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Dispatcher {
 	return &Dispatcher{
 		dispatcher: dispatcher,
 		callback:   callback,
+		timeout:    time.Minute,
+	}
+}
+
+func NewDispatcherWithTimeout(dispatcher routing.Dispatcher, callback ResponseCallback, timeout time.Duration) *Dispatcher {
+	return &Dispatcher{
+		dispatcher: dispatcher,
+		callback:   callback,
+		timeout:    timeout,
 	}
 }
 
@@ -99,7 +109,7 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		cancel: cancel,
 	}
 
-	entry.timer = signal.CancelAfterInactivity(ctx, entry.terminate, time.Minute)
+	entry.timer = signal.CancelAfterInactivity(ctx, entry.terminate, v.timeout)
 	v.conn = entry
 	go handleInput(ctx, entry, dest, v.callback, v.callClose)
 	return entry, nil

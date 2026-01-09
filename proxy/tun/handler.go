@@ -24,6 +24,7 @@ type Handler struct {
 	stack         Stack
 	policyManager policy.Manager
 	dispatcher    routing.Dispatcher
+	cone          bool
 }
 
 // ConnectionHandler interface with the only method that stack is going to push new connections to
@@ -46,6 +47,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
+	t.cone = ctx.Value("cone").(bool)
 
 	tunName := t.config.Name
 	tunOptions := TunOptions{
@@ -106,10 +108,20 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	ctx = session.ContextWithInbound(ctx, &inbound)
 	ctx = session.SubContextFromMuxInbound(ctx)
 
-	link := &transport.Link{
-		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
-		Writer: buf.NewWriter(conn),
+	var link *transport.Link
+	if destination.Network == net.Network_UDP {
+		// For UDP, use PacketReader to preserve packet boundaries
+		link = &transport.Link{
+			Reader: buf.NewPacketReader(conn),
+			Writer: buf.NewWriter(conn),
+		}
+	} else {
+		link = &transport.Link{
+			Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
+			Writer: buf.NewWriter(conn),
+		}
 	}
+	
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 		return
