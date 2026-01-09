@@ -140,8 +140,19 @@ type udpWriter struct {
 
 func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for _, b := range mb {
+		// Validate return packet address matches expected destination
 		if b.UDP != nil {
-			w.src = *b.UDP
+			if b.UDP.Address != w.dest.Address || b.UDP.Port != w.dest.Port {
+				errors.LogWarning(
+					context.Background(),
+					"UDP return packet address mismatch: expected ",
+					w.dest,
+					", got ",
+					b.UDP,
+				)
+				b.Release()
+				continue
+			}
 		}
 
 		netProto := header.IPv4ProtocolNumber
