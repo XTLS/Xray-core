@@ -110,13 +110,15 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 			}()
 
 			inbound := &session.Inbound{
-				Name:   "tun",
-				Source: src,
-				User:   &protocol.MemoryUser{Level: t.config.UserLevel},
+				Name:          "tun",
+				Source:        src,
+				CanSpliceCopy: 1,
+				User:          &protocol.MemoryUser{Level: t.config.UserLevel},
 			}
 			ctx = session.ContextWithInbound(c.ContextWithID(ctx, session.NewID()), inbound)
+			ctx = session.SubContextFromMuxInbound(ctx)
 			link := &transport.Link{
-				Reader: conn.reader,
+				Reader: &buf.TimeoutWrapperReader{Reader: conn.reader},
 				Writer: &udpWriter{stack: ipStack, src: dest, dest: src},
 			}
 			t.dispatcher.DispatchLink(ctx, dest, link)
