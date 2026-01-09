@@ -114,6 +114,8 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 	}
 
 	// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
+	// Use a detached context for the bind to avoid tying all peer connections
+	// to a single request context. This allows multiple peers to work independently.
 	h.bind = &netBindClient{
 		netBind: netBind{
 			dns: h.dns,
@@ -123,7 +125,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 			},
 			workers: int(h.conf.NumWorkers),
 		},
-		ctx:      ctx,
+		ctx:      core.ToBackgroundDetachedContext(ctx),
 		dialer:   dialer,
 		reserved: h.conf.Reserved,
 	}
