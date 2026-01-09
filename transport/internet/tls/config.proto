@@ -101,4 +101,6 @@ message Config {
   string ech_force_query = 20;
 
   SocketConfig ech_socket_settings = 21;
+
+  repeated bytes pinned_peer_cert_sha256 = 22;
 }

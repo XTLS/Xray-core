@@ -395,27 +395,26 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                             bool             `json:"allowInsecure"`
-	Certs                                []*TLSCertConfig `json:"certificates"`
-	ServerName                           string           `json:"serverName"`
-	ALPN                                 *StringList      `json:"alpn"`
-	EnableSessionResumption              bool             `json:"enableSessionResumption"`
-	DisableSystemRoot                    bool             `json:"disableSystemRoot"`
-	MinVersion                           string           `json:"minVersion"`
-	MaxVersion                           string           `json:"maxVersion"`
-	CipherSuites                         string           `json:"cipherSuites"`
-	Fingerprint                          string           `json:"fingerprint"`
-	RejectUnknownSNI                     bool             `json:"rejectUnknownSni"`
-	PinnedPeerCertificateChainSha256     *[]string        `json:"pinnedPeerCertificateChainSha256"`
-	PinnedPeerCertificatePublicKeySha256 *[]string        `json:"pinnedPeerCertificatePublicKeySha256"`
-	CurvePreferences                     *StringList      `json:"curvePreferences"`
-	MasterKeyLog                         string           `json:"masterKeyLog"`
-	ServerNameToVerify                   string           `json:"serverNameToVerify"`
-	VerifyPeerCertInNames                []string         `json:"verifyPeerCertInNames"`
-	ECHServerKeys                        string           `json:"echServerKeys"`
-	ECHConfigList                        string           `json:"echConfigList"`
-	ECHForceQuery                        string           `json:"echForceQuery"`
-	ECHSocketSettings                    *SocketConfig    `json:"echSockopt"`
+	Insecure                bool             `json:"allowInsecure"`
+	Certs                   []*TLSCertConfig `json:"certificates"`
+	ServerName              string           `json:"serverName"`
+	ALPN                    *StringList      `json:"alpn"`
+	EnableSessionResumption bool             `json:"enableSessionResumption"`
+	DisableSystemRoot       bool             `json:"disableSystemRoot"`
+	MinVersion              string           `json:"minVersion"`
+	MaxVersion              string           `json:"maxVersion"`
+	CipherSuites            string           `json:"cipherSuites"`
+	Fingerprint             string           `json:"fingerprint"`
+	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
+	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
+	CurvePreferences        *StringList      `json:"curvePreferences"`
+	MasterKeyLog            string           `json:"masterKeyLog"`
+	ServerNameToVerify      string           `json:"serverNameToVerify"`
+	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
+	ECHServerKeys           string           `json:"echServerKeys"`
+	ECHConfigList           string           `json:"echConfigList"`
+	ECHForceQuery           string           `json:"echForceQuery"`
+	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
 }
 
 // Build implements Buildable.
@@ -458,25 +457,20 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
-	if c.PinnedPeerCertificateChainSha256 != nil {
-		config.PinnedPeerCertificateChainSha256 = [][]byte{}
-		for _, v := range *c.PinnedPeerCertificateChainSha256 {
-			hashValue, err := base64.StdEncoding.DecodeString(v)
+	if c.PinnedPeerCertSha256 != "" {
+		config.PinnedPeerCertSha256 = [][]byte{}
+		// Split by tilde separator
+		hashes := strings.Split(c.PinnedPeerCertSha256, "~")
+		for _, v := range hashes {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			hashValue, err := hex.DecodeString(v)
 			if err != nil {
 				return nil, err
 			}
-			config.PinnedPeerCertificateChainSha256 = append(config.PinnedPeerCertificateChainSha256, hashValue)
-		}
-	}
-
-	if c.PinnedPeerCertificatePublicKeySha256 != nil {
-		config.PinnedPeerCertificatePublicKeySha256 = [][]byte{}
-		for _, v := range *c.PinnedPeerCertificatePublicKeySha256 {
-			hashValue, err := base64.StdEncoding.DecodeString(v)
-			if err != nil {
-				return nil, err
-			}
-			config.PinnedPeerCertificatePublicKeySha256 = append(config.PinnedPeerCertificatePublicKeySha256, hashValue)
+			config.PinnedPeerCertSha256 = append(config.PinnedPeerCertSha256, hashValue)
 		}
 	}
 
