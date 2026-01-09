@@ -225,7 +225,7 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	if serverAuto == "auto" || (c.config.Up == 0 && serverDown == 0) {
+	if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
 		congestion.UseBBR(quicConn)
 	} else {
 		congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
