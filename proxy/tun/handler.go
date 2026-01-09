@@ -121,7 +121,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 			Writer: buf.NewWriter(conn),
 		}
 	}
-	
+
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 		return
