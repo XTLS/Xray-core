@@ -100,13 +100,11 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.WriteResponseHeader(writer)
 	length := int(h.config.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{
-		Length: length,
-	}
+	config := XPaddingConfig{Length: length}
 
 	if h.config.XPaddingObfsMode {
 		config.Placement = XPaddingPlacement{
-			Placement: Placement(h.config.XPaddingPlacement),
+			Placement: h.config.XPaddingPlacement,
 			Key:       h.config.XPaddingKey,
 			Header:    h.config.XPaddingHeader,
 		}
