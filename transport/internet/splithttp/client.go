@@ -61,13 +61,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, body i
 	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
 	req.Header = c.transportConfig.GetRequestHeader()
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{
-		Length: length,
-	}
+	config := XPaddingConfig{Length: length}
 
 	if c.transportConfig.XPaddingObfsMode {
 		config.Placement = XPaddingPlacement{
-			Placement: Placement(c.transportConfig.XPaddingPlacement),
+			Placement: c.transportConfig.XPaddingPlacement,
 			Key:       c.transportConfig.XPaddingKey,
 			Header:    c.transportConfig.XPaddingHeader,
 			RawURL:    url,
@@ -125,13 +123,11 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, body i
 	req.ContentLength = contentLength
 	req.Header = c.transportConfig.GetRequestHeader()
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{
-		Length: length,
-	}
+	config := XPaddingConfig{Length: length}
 
 	if c.transportConfig.XPaddingObfsMode {
 		config.Placement = XPaddingPlacement{
-			Placement: Placement(c.transportConfig.XPaddingPlacement),
+			Placement: c.transportConfig.XPaddingPlacement,
 			Key:       c.transportConfig.XPaddingKey,
 			Header:    c.transportConfig.XPaddingHeader,
 			RawURL:    url,

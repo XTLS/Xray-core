@@ -10,15 +10,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-type Placement string
 type PaddingMethod string
-
-const (
-	PlacementQueryInHeader Placement = "queryInHeader"
-	PlacementCookie        Placement = "cookie"
-	PlacementHeader        Placement = "header"
-	PlacementQuery         Placement = "query"
-)
 
 const (
 	PaddingMethodRepeatX  PaddingMethod = "repeat-x"
@@ -33,7 +25,7 @@ const avgHuffmanBytesPerCharBase62 = 0.8
 const validationTolerance = 2
 
 type XPaddingPlacement struct {
-	Placement Placement
+	Placement string
 	Key       string
 	Header    string
 	RawURL    string
@@ -240,12 +232,12 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 		if referrer != "" {
 			if referrerURL, err := url.Parse(referrer); err == nil {
 				paddingValue := referrerURL.Query().Get("x_padding")
-				paddingPlacement := string(PlacementQueryInHeader) + "=Referer, key=x_padding"
+				paddingPlacement := PlacementQueryInHeader + "=Referer, key=x_padding"
 				return paddingValue, paddingPlacement
 			}
 		} else {
 			paddingValue := req.URL.Query().Get("x_padding")
-			return paddingValue, string(PlacementQuery) + ", key=x_padding"
+			return paddingValue, PlacementQuery + ", key=x_padding"
 		}
 	}
 
@@ -255,7 +247,7 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 	if cookie, err := req.Cookie(key); err == nil {
 		if cookie != nil && cookie.Value != "" {
 			paddingValue := cookie.Value
-			paddingPlacement := string(PlacementCookie) + ", key=" + key
+			paddingPlacement := PlacementCookie + ", key=" + key
 			return paddingValue, paddingPlacement
 		}
 	}
@@ -263,13 +255,13 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 	headerValue := req.Header.Get(header)
 
 	if headerValue != "" {
-		if c.XPaddingPlacement == string(PlacementHeader) {
-			paddingPlacement := string(PlacementHeader) + "=" + header
+		if c.XPaddingPlacement == PlacementHeader {
+			paddingPlacement := PlacementHeader + "=" + header
 			return headerValue, paddingPlacement
 		}
 
 		if parsedURL, err := url.Parse(headerValue); err == nil {
-			paddingPlacement := string(PlacementQueryInHeader) + "=" + header + ", key=" + key
+			paddingPlacement := PlacementQueryInHeader + "=" + header + ", key=" + key
 
 			return parsedURL.Query().Get(key), paddingPlacement
 		}
@@ -278,7 +270,7 @@ func (c *Config) ExtractXPaddingFromRequest(req *http.Request, obfsMode bool) (s
 	queryValue := req.URL.Query().Get(key)
 
 	if queryValue != "" {
-		paddingPlacement := string(PlacementQuery) + ", key=" + key
+		paddingPlacement := PlacementQuery + ", key=" + key
 		return queryValue, paddingPlacement
 	}
 
