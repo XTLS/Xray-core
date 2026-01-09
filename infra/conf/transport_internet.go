@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
+	"github.com/xtls/xray-core/transport/internet/hysteria2"
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
@@ -327,6 +328,152 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {
 			return nil, errors.New(`Failed to build "downloadSettings".`).Base(err)
 		}
+	}
+
+	return config, nil
+}
+
+const (
+	Byte     = 1
+	Kilobyte = 1024 * Byte
+	Megabyte = 1024 * Kilobyte
+	Gigabyte = 1024 * Megabyte
+	Terabyte = 1024 * Gigabyte
+)
+
+type Bandwidth string
+
+func (b Bandwidth) Bps() (uint64, error) {
+	s := strings.TrimSpace(strings.ToLower(string(b)))
+	if s == "" {
+		return 0, nil
+	}
+
+	idx := 0
+	for i, c := range s {
+		if (c < '0' || c > '9') && c != '.' {
+			idx = i
+			break
+		}
+	}
+	if idx == 0 {
+		return 0, errors.New("invalid bandwidth format")
+	}
+
+	numStr := s[:idx]
+	unit := strings.TrimSpace(s[idx:])
+
+	val, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	mul := uint64(1)
+	switch unit {
+	case "", "b", "bps":
+		mul = Byte / 8
+	case "k", "kb", "kbps":
+		mul = Kilobyte / 8
+	case "m", "mb", "mbps":
+		mul = Megabyte / 8
+	case "g", "gb", "gbps":
+		mul = Gigabyte / 8
+	case "t", "tb", "tbps":
+		mul = Terabyte / 8
+	default:
+		return 0, errors.New("unsupported unit: " + unit)
+	}
+
+	return uint64(val * float64(mul)), nil
+}
+
+type Obfs struct {
+	Type     string `json:"type"`
+	Password string `json:"password"`
+}
+
+type Hysteria2Config struct {
+	Udp  bool      `json:"udp"`
+	Auth string    `json:"auth"`
+	Up   Bandwidth `json:"up"`
+	Down Bandwidth `json:"down"`
+	Obfs Obfs      `json:"obfs"`
+
+	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
+	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
+	InitConnectionReceiveWindow uint64 `json:"initConnectionReceiveWindow"`
+	MaxConnectionReceiveWindow  uint64 `json:"maxConnectionReceiveWindow"`
+	MaxIdleTimeout              int64  `json:"maxIdleTimeout"`
+	KeepAlivePeriod             int64  `json:"keepAlivePeriod"`
+	DisablePathMTUDiscovery     bool   `json:"disablePathMTUDiscovery"`
+}
+
+func (c *Hysteria2Config) Build() (proto.Message, error) {
+	up, _ := c.Up.Bps()
+	down, _ := c.Down.Bps()
+
+	switch c.Obfs.Type {
+	case "salamander":
+	default:
+		return nil, errors.New("unsupported obfs type: " + c.Obfs.Type)
+	}
+
+	if up > 0 && up < 65536 {
+		return nil, errors.New("Up must be at least 65536 Bps")
+	}
+	if down > 0 && down < 65536 {
+		return nil, errors.New("Down must be at least 65536 Bps")
+	}
+	if c.InitStreamReceiveWindow > 0 && c.InitStreamReceiveWindow < 16384 {
+		return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
+	}
+	if c.MaxStreamReceiveWindow > 0 && c.MaxStreamReceiveWindow < 16384 {
+		return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
+	}
+	if c.InitConnectionReceiveWindow > 0 && c.InitConnectionReceiveWindow < 16384 {
+		return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
+	}
+	if c.MaxConnectionReceiveWindow > 0 && c.MaxConnectionReceiveWindow < 16384 {
+		return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
+	}
+	if c.MaxIdleTimeout != 0 && (c.MaxIdleTimeout < 4 || c.MaxIdleTimeout > 120) {
+		return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
+	}
+	if c.KeepAlivePeriod != 0 && (c.KeepAlivePeriod < 2 || c.KeepAlivePeriod > 60) {
+		return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
+	}
+
+	config := &hysteria2.Config{}
+	config.Udp = c.Udp
+	config.Auth = c.Auth
+	config.Up = up
+	config.Down = down
+	config.Obfs = c.Obfs.Password
+	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
+	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
+	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow
+	config.MaxConnReceiveWindow = c.MaxConnectionReceiveWindow
+	config.MaxIdleTimeout = c.MaxIdleTimeout
+	config.KeepAlivePeriod = c.KeepAlivePeriod
+	config.DisablePathMtuDiscovery = c.DisablePathMTUDiscovery
+
+	if config.InitStreamReceiveWindow == 0 {
+		config.InitStreamReceiveWindow = 8388608
+	}
+	if config.MaxStreamReceiveWindow == 0 {
+		config.MaxStreamReceiveWindow = 8388608
+	}
+	if config.InitConnReceiveWindow == 0 {
+		config.InitConnReceiveWindow = 8388608 * 5 / 2
+	}
+	if config.MaxConnReceiveWindow == 0 {
+		config.MaxConnReceiveWindow = 8388608 * 5 / 2
+	}
+	if config.MaxIdleTimeout == 0 {
+		config.MaxIdleTimeout = 30
+	}
+	if config.KeepAlivePeriod == 0 {
+		config.KeepAlivePeriod = 10
 	}
 
 	return config, nil
@@ -746,6 +893,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")
 	case "quic":
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
+	case "hysteria2":
+		return "hysteria2", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
@@ -943,6 +1092,7 @@ type StreamConfig struct {
 	GRPCSettings        *GRPCConfig        `json:"grpcSettings"`
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
+	Hysteria2Settings   *Hysteria2Config   `json:"hysteria2Settings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
 
@@ -1058,6 +1208,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
+			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.Hysteria2Settings != nil {
+		hs, err := c.Hysteria2Settings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build Hysteria2 config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "hysteria2",
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
