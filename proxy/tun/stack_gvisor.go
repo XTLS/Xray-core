@@ -100,32 +100,11 @@ func (t *stackGVisor) Start() error {
 	})
 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
-	udpForwarder := udp.NewForwarder(ipStack, func(r *udp.ForwarderRequest) {
-		go func(r *udp.ForwarderRequest) {
-			var wq waiter.Queue
-			var id = r.ID()
-
-			ep, err := r.CreateEndpoint(&wq)
-			if err != nil {
-				errors.LogError(t.ctx, err.String())
-				return
-			}
-
-			options := ep.SocketOptions()
-			options.SetReuseAddress(true)
-			options.SetReusePort(true)
-
-			t.handler.HandleConnection(
-				gonet.NewUDPConn(&wq, ep),
-				// local address on the gVisor side is connection destination
-				net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)),
-			)
-
-			// close the socket
-			ep.Close()
-		}(r)
+	// Use custom UDP packet handler instead of forwarder for FullCone NAT
+	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
+		t.handler.HandleUDPPacket(id, pkt, ipStack)
+		return true
 	})
-	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
 
 	t.stack = ipStack
 	t.endpoint = linkEndpoint
