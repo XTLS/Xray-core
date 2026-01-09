@@ -154,6 +154,8 @@ func (c *client) dial() error {
 		return errors.New("failed to dial to dest").Base(err)
 	}
 
+	remote := raw.RemoteAddr()
+
 	pktConn, ok := raw.(net.PacketConn)
 	if !ok {
 		return errors.New("raw is not PacketConn")
@@ -183,7 +185,7 @@ func (c *client) dial() error {
 			DisablePathManager:             true,
 		},
 		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			qc, err := quic.DialEarly(ctx, pktConn, c.dest.RawNetAddr(), tlsCfg, cfg)
+			qc, err := quic.DialEarly(ctx, pktConn, remote, tlsCfg, cfg)
 			if err != nil {
 				return nil, err
 			}
