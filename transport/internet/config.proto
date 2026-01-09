@@ -56,6 +56,9 @@ message StreamConfig {
   // Transport security settings. They can be either TLS or REALITY.
   repeated xray.common.serial.TypedMessage security_settings = 4;
 
+  string endmask_type = 10;
+  repeated xray.common.serial.TypedMessage endmask_settings = 11;
+
   SocketConfig socket_settings = 6;
 }
 

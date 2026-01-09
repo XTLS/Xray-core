@@ -18,8 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/endmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria2/congestion"
-	"github.com/xtls/xray-core/transport/internet/hysteria2/obfs"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -113,6 +113,7 @@ type client struct {
 	conn         *quic.Conn
 	config       *Config
 	tlsConfig    *go_tls.Config
+	endmask      endmask.Endmask
 	socketConfig *internet.SocketConfig
 	closed       bool
 	udpSM        *udpSessionManger
@@ -161,12 +162,11 @@ func (c *client) dial() error {
 		return errors.New("raw is not PacketConn")
 	}
 
-	if c.config.Obfs != "" {
-		ob, err := obfs.NewSalamanderObfuscator([]byte(c.config.Obfs))
+	if c.endmask != nil {
+		pktConn, err = c.endmask.WrapPacketConn(pktConn)
 		if err != nil {
-			return errors.New("obfs err").Base(err)
+			return errors.New("endmask err").Base(err)
 		}
-		pktConn = obfs.WrapPacketConn(pktConn, ob)
 	}
 
 	var quicConn *quic.Conn
@@ -334,6 +334,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
+	endmask, _ := streamSettings.EndmaskSettings.(endmask.Endmask)
 
 	manger.mutex.Lock()
 	c, ok := manger.m[addr]
@@ -344,6 +345,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			dest:         dest,
 			config:       config,
 			tlsConfig:    tlsConfig.GetTLSConfig(),
+			endmask:      endmask,
 			socketConfig: streamSettings.SocketSettings,
 		}
 		manger.m[addr] = c

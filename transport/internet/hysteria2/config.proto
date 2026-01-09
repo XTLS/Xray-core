@@ -11,14 +11,13 @@ message Config {
   string auth = 2;
   uint64 up = 3;
   uint64 down = 4;
-  string obfs = 5;
 
-  uint64 init_stream_receive_window = 6;
-  uint64 max_stream_receive_window = 7;
-  uint64 init_conn_receive_window = 8;
-  uint64 max_conn_receive_window = 9;
-  int64 max_idle_timeout = 10;
-  int64 keep_alive_period = 11;
-  bool disable_path_mtu_discovery = 12;
+  uint64 init_stream_receive_window = 5;
+  uint64 max_stream_receive_window = 6;
+  uint64 init_conn_receive_window = 7;
+  uint64 max_conn_receive_window = 8;
+  int64 max_idle_timeout = 9;
+  int64 keep_alive_period = 10;
+  bool disable_path_mtu_discovery = 11;
 }
 
