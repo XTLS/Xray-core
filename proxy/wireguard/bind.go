@@ -183,7 +183,8 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 			buf := make([]byte, maxPacketSize)
 			n, err := conn.Read(buf)
 			
-			if n > 3 {
+			// Only process data if we successfully read something
+			if err == nil && n > 3 {
 				// Clear reserved bytes
 				buf[1] = 0
 				buf[2] = 0
