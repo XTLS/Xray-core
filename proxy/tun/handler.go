@@ -101,13 +101,24 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 			ctx, cancel := context.WithCancel(t.ctx)
 			conn.cancel = cancel
 			defer func() {
-				cancel(); t.Lock(); delete(t.udpConns, src); t.Unlock()
-				common.Must(conn.done.Close()); common.Must(common.Close(conn.writer))
+				cancel()
+				t.Lock()
+				delete(t.udpConns, src)
+				t.Unlock()
+				common.Must(conn.done.Close())
+				common.Must(common.Close(conn.writer))
 			}()
 
-			inbound := &session.Inbound{Name: "tun", Source: src, User: &protocol.MemoryUser{Level: t.config.UserLevel}}
+			inbound := &session.Inbound{
+				Name:   "tun",
+				Source: src,
+				User:   &protocol.MemoryUser{Level: t.config.UserLevel},
+			}
 			ctx = session.ContextWithInbound(c.ContextWithID(ctx, session.NewID()), inbound)
-			link := &transport.Link{Reader: conn.reader, Writer: &udpWriter{stack: ipStack, src: dest, dest: src}}
+			link := &transport.Link{
+				Reader: conn.reader,
+				Writer: &udpWriter{stack: ipStack, src: dest, dest: src},
+			}
 			t.dispatcher.DispatchLink(ctx, dest, link)
 		}()
 	} else {
@@ -115,7 +126,9 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 		t.Unlock()
 	}
 
-	b := buf.New(); b.Write(data); b.UDP = &dest
+	b := buf.New()
+	b.Write(data)
+	b.UDP = &dest
 	conn.writer.WriteMultiBuffer(buf.MultiBuffer{b})
 }
 
@@ -136,18 +149,34 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			netProto = header.IPv6ProtocolNumber
 		}
 
-		route, err := w.stack.FindRoute(defaultNIC, tcpip.AddrFromSlice(w.src.Address.IP()), tcpip.AddrFromSlice(w.dest.Address.IP()), netProto, false)
+		route, err := w.stack.FindRoute(
+			defaultNIC,
+			tcpip.AddrFromSlice(w.src.Address.IP()),
+			tcpip.AddrFromSlice(w.dest.Address.IP()),
+			netProto,
+			false,
+		)
 		if err != nil {
 			b.Release()
 			continue
 		}
 
-		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{ReserveHeaderBytes: header.UDPMinimumSize, Payload: buffer.MakeWithData(b.Bytes())})
+		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
+			ReserveHeaderBytes: header.UDPMinimumSize,
+			Payload:            buffer.MakeWithData(b.Bytes()),
+		})
 		udp := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
-		udp.Encode(&header.UDPFields{SrcPort: uint16(w.src.Port), DstPort: uint16(w.dest.Port), Length: uint16(pkt.Size())})
+		udp.Encode(&header.UDPFields{
+			SrcPort: uint16(w.src.Port),
+			DstPort: uint16(w.dest.Port),
+			Length:  uint16(pkt.Size()),
+		})
 		xsum := route.PseudoHeaderChecksum(header.UDPProtocolNumber, uint16(pkt.Size()))
 		udp.SetChecksum(^udp.CalculateChecksum(checksum.Checksum(b.Bytes(), xsum)))
-		route.WritePacket(stack.NetworkHeaderParams{Protocol: header.UDPProtocolNumber, TTL: 64}, pkt)
+		route.WritePacket(stack.NetworkHeaderParams{
+			Protocol: header.UDPProtocolNumber,
+			TTL:      64,
+		}, pkt)
 		pkt.DecRef()
 		route.Release()
 		b.Release()
