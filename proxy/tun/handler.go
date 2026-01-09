@@ -44,7 +44,6 @@ type Handler struct {
 	stack         Stack
 	policyManager policy.Manager
 	dispatcher    routing.Dispatcher
-	cone          bool
 	udpConns      map[net.Destination]*udpConn
 	udpChecker    *task.Periodic
 }
@@ -160,14 +159,14 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			Payload:            buffer.MakeWithData(b.Bytes()),
 		})
 		
-		length := uint16(pkt.Size())
-		udpHeader := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
-		udpHeader.Encode(&header.UDPFields{
+		udp := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
+		udp.Encode(&header.UDPFields{
 			SrcPort: uint16(w.src.Port),
 			DstPort: uint16(w.dest.Port),
-			Length:  length,
+			Length:  uint16(pkt.Size()),
 		})
-		udpHeader.SetChecksum(^udpHeader.CalculateChecksum(checksum.Checksum(b.Bytes(), route.PseudoHeaderChecksum(header.UDPProtocolNumber, length))))
+		xsum := route.PseudoHeaderChecksum(header.UDPProtocolNumber, uint16(pkt.Size()))
+		udp.SetChecksum(^udp.CalculateChecksum(checksum.Checksum(b.Bytes(), xsum)))
 		
 		route.WritePacket(stack.NetworkHeaderParams{Protocol: header.UDPProtocolNumber, TTL: 64}, pkt)
 		pkt.DecRef()
@@ -184,7 +183,6 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
-	t.cone = ctx.Value("cone").(bool)
 	t.udpConns = make(map[net.Destination]*udpConn)
 	t.udpChecker = &task.Periodic{Interval: time.Minute, Execute: t.cleanupUDP}
 
