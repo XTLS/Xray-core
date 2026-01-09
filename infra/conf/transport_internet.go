@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/endmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria2"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -397,7 +398,6 @@ type Hysteria2Config struct {
 	Auth string    `json:"auth"`
 	Up   Bandwidth `json:"up"`
 	Down Bandwidth `json:"down"`
-	Obfs Obfs      `json:"obfs"`
 
 	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
@@ -416,12 +416,6 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	down, err := c.Down.Bps()
 	if err != nil {
 		return nil, err
-	}
-
-	switch c.Obfs.Type {
-	case "salamander":
-	default:
-		return nil, errors.New("unsupported obfs type: " + c.Obfs.Type)
 	}
 
 	if up > 0 && up < 65536 {
@@ -454,7 +448,6 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
-	config.Obfs = c.Obfs.Password
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
 	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow
@@ -875,6 +868,16 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type Salamander struct {
+	Password string `json:"password"`
+}
+
+func (c *Salamander) Build() (proto.Message, error) {
+	config := &salamander.Config{}
+	config.Password = c.Password
+	return config, nil
+}
+
 type TransportProtocol string
 
 // Build implements Buildable.
@@ -1088,6 +1091,8 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
+	Endmask             string             `json:"endmask"`
+	SalamanderSettings  *Salamander        `json:"salamanderSettings"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1150,6 +1155,22 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		return nil, errors.PrintRemovedFeatureError(`Legacy XTLS`, `xtls-rprx-vision with TLS or REALITY`)
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
+	}
+	switch strings.ToLower(c.Endmask) {
+	case "", "none":
+	case "salamander":
+		if c.SalamanderSettings == nil {
+			return nil, errors.New(`salamander: Empty "salamanderSettings".`)
+		}
+		ts, err := c.SalamanderSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build salamander config.").Base(err)
+		}
+		tm := serial.ToTypedMessage(ts)
+		config.EndmaskSettings = append(config.SecuritySettings, tm)
+		config.EndmaskType = tm.Type
+	default:
+		return nil, errors.New(`Unknown endmask "` + c.Endmask + `".`)
 	}
 	if c.RAWSettings != nil {
 		c.TCPSettings = c.RAWSettings

@@ -90,7 +90,20 @@ func (c *StreamConfig) GetEffectiveSecuritySettings() (interface{}, error) {
 }
 
 func (c *StreamConfig) HasSecuritySettings() bool {
-	return len(c.SecurityType) > 0
+	return len(c.SecuritySettings) > 0
+}
+
+func (c *StreamConfig) GetEffectiveEndmaskSettings() (interface{}, error) {
+	for _, settings := range c.EndmaskSettings {
+		if settings.Type == c.EndmaskType {
+			return settings.GetInstance()
+		}
+	}
+	return serial.GetInstance(c.EndmaskType)
+}
+
+func (c *StreamConfig) HasEndmaskSettings() bool {
+	return len(c.EndmaskSettings) > 0
 }
 
 func (c *ProxyConfig) HasTag() bool {
@@ -130,7 +143,7 @@ func (s DomainStrategy) FallbackIP6() bool {
 }
 
 func (s DomainStrategy) GetDynamicStrategy(addrFamily net.AddressFamily) DomainStrategy {
-	if  addrFamily.IsDomain(){
+	if addrFamily.IsDomain() {
 		return s
 	}
 	switch s {

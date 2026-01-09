@@ -9,6 +9,8 @@ type MemoryStreamConfig struct {
 	ProtocolSettings interface{}
 	SecurityType     string
 	SecuritySettings interface{}
+	EndmaskType      string
+	EndmaskSettings  interface{}
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
 }
@@ -43,6 +45,15 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		}
 		mss.SecurityType = s.SecurityType
 		mss.SecuritySettings = ess
+	}
+
+	if s != nil && s.HasEndmaskSettings() {
+		ees, err := s.GetEffectiveEndmaskSettings()
+		if err != nil {
+			return nil, err
+		}
+		mss.EndmaskType = s.EndmaskType
+		mss.EndmaskSettings = ees
 	}
 
 	return mss, nil
