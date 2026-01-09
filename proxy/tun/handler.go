@@ -157,34 +157,52 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
+	var err error
+
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
 	t.udpConns = make(map[net.Destination]*udpConn)
 	t.udpChecker = &task.Periodic{Interval: time.Minute, Execute: t.cleanupUDP}
 
-	tunInterface, err := NewTun(TunOptions{Name: t.config.Name, MTU: t.config.MTU})
+	tunName := t.config.Name
+	tunOptions := TunOptions{
+		Name: tunName,
+		MTU:  t.config.MTU,
+	}
+	tunInterface, err := NewTun(tunOptions)
 	if err != nil {
 		return err
 	}
-	errors.LogInfo(t.ctx, t.config.Name, " created")
 
-	opts := StackOptions{Tun: tunInterface, IdleTimeout: pm.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle}
-	tunStack, err := NewStack(t.ctx, opts, t)
+	errors.LogInfo(t.ctx, tunName, " created")
+
+	tunStackOptions := StackOptions{
+		Tun:         tunInterface,
+		IdleTimeout: pm.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+	}
+	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {
 		_ = tunInterface.Close()
 		return err
 	}
-	if err = tunStack.Start(); err != nil {
-		_ = tunStack.Close(); _ = tunInterface.Close()
+
+	err = tunStack.Start()
+	if err != nil {
+		_ = tunStack.Close()
+		_ = tunInterface.Close()
 		return err
 	}
-	if err = tunInterface.Start(); err != nil {
-		_ = tunStack.Close(); _ = tunInterface.Close()
+
+	err = tunInterface.Start()
+	if err != nil {
+		_ = tunStack.Close()
+		_ = tunInterface.Close()
 		return err
 	}
+
 	t.stack = tunStack
-	errors.LogInfo(t.ctx, t.config.Name, " up")
+	errors.LogInfo(t.ctx, tunName, " up")
 	return nil
 }
 
