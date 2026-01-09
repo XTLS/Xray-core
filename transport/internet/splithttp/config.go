@@ -106,6 +106,73 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 	return *c.ScStreamUpServerSecs
 }
 
+func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr string) {
+	switch c.SessionPlacement {
+	case PlacementPath:
+		req.URL.Path = appendToPath(req.URL.Path, sessionId)
+	case PlacementQuery:
+		q := req.URL.Query()
+		q.Set(c.SessionKey, sessionId)
+		req.URL.RawQuery = q.Encode()
+	case PlacementHeader:
+		req.Header.Set(c.SessionKey, sessionId)
+	case PlacementCookie:
+		req.AddCookie(&http.Cookie{Name: c.SessionKey, Value: sessionId})
+	}
+
+	if seqStr != "" {
+		switch c.SeqPlacement {
+		case PlacementPath:
+			req.URL.Path = appendToPath(req.URL.Path, seqStr)
+		case PlacementQuery:
+			q := req.URL.Query()
+			q.Set(c.SeqKey, seqStr)
+			req.URL.RawQuery = q.Encode()
+		case PlacementHeader:
+			req.Header.Set(c.SeqKey, seqStr)
+		case PlacementCookie:
+			req.AddCookie(&http.Cookie{Name: c.SeqKey, Value: seqStr})
+		}
+	}
+}
+
+func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (sessionId string, seqStr string) {
+	if c.SessionPlacement == PlacementPath {
+		subpath := strings.Split(req.URL.Path[len(path):], "/")
+		if len(subpath) > 0 {
+			sessionId = subpath[0]
+		}
+		if len(subpath) > 1 {
+			seqStr = subpath[1]
+		}
+		return sessionId, seqStr
+	}
+
+	switch c.SessionPlacement {
+	case PlacementQuery:
+		sessionId = req.URL.Query().Get(c.SessionKey)
+	case PlacementHeader:
+		sessionId = req.Header.Get(c.SessionKey)
+	case PlacementCookie:
+		if cookie, e := req.Cookie(c.SessionKey); e == nil {
+			sessionId = cookie.Value
+		}
+	}
+
+	switch c.SeqPlacement {
+	case PlacementQuery:
+		seqStr = req.URL.Query().Get(c.SeqKey)
+	case PlacementHeader:
+		seqStr = req.Header.Get(c.SeqKey)
+	case PlacementCookie:
+		if cookie, e := req.Cookie(c.SeqKey); e == nil {
+			seqStr = cookie.Value
+		}
+	}
+
+	return sessionId, seqStr
+}
+
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() RangeConfig {
 	if m.MaxConcurrency == nil {
 		return RangeConfig{
@@ -169,4 +236,11 @@ func init() {
 
 func (c RangeConfig) rand() int32 {
 	return int32(crypto.RandBetween(int64(c.From), int64(c.To)))
+}
+
+func appendToPath(path, value string) string {
+	if strings.HasSuffix(path, "/") {
+		return path + value
+	}
+	return path + "/" + value
 }

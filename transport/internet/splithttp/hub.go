@@ -135,11 +135,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	sessionId := ""
-	subpath := strings.Split(request.URL.Path[len(h.path):], "/")
-	if len(subpath) > 0 {
-		sessionId = subpath[0]
-	}
+	sessionId, seqStr := h.config.ExtractMetaFromRequest(request, h.path)
 
 	if sessionId == "" && h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
 		errors.LogInfo(context.Background(), "stream-one mode is not allowed")
@@ -188,12 +184,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	uplinkHTTPMethodmethod := h.config.GetNormalizedUplinkHTTPMethod()
 
 	if request.Method == uplinkHTTPMethodmethod && sessionId != "" { // stream-up, packet-up
-		seq := ""
-		if len(subpath) > 1 {
-			seq = subpath[1]
-		}
-
-		if seq == "" {
+		if seqStr == "" {
 			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
 				writer.WriteHeader(http.StatusBadRequest)
@@ -256,7 +247,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		seqInt, err := strconv.ParseUint(seq, 10, 64)
+		seq, err := strconv.ParseUint(seqStr, 10, 64)
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload (ParseUint)")
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -265,7 +256,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		err = currentSession.uploadQueue.Push(Packet{
 			Payload: payload,
-			Seq:     seqInt,
+			Seq:     seq,
 		})
 
 		if err != nil {

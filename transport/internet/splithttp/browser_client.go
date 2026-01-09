@@ -19,7 +19,7 @@ func (c *BrowserDialerClient) IsClosed() bool {
 	panic("not implemented yet")
 }
 
-func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, _ string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
 	if body != nil {
 		return nil, nil, nil, errors.New("bidirectional streaming for browser dialer not implemented yet")
 	}
@@ -56,7 +56,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, body i
 	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
-func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, body io.Reader, contentLength int64) error {
+func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, _ string, _ string, body io.Reader, contentLength int64) error {
 	bytes, err := io.ReadAll(body)
 	if err != nil {
 		return err
