@@ -83,18 +83,26 @@ func (*Server) Network() []net.Network {
 
 // Process implements proxy.Inbound.
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	// Use RWMutex to safely handle concurrent access to routing info
+	// Use double-checked locking to safely handle concurrent access to routing info
 	// Only update if not set or if dispatcher is different
-	s.infoMutex.Lock()
-	if s.info.dispatcher == nil || s.info.dispatcher != dispatcher {
-		s.info = routingInfo{
-			ctx:        ctx,
-			dispatcher: dispatcher,
-			inboundTag: session.InboundFromContext(ctx),
-			contentTag: session.ContentFromContext(ctx),
+	// First check without write lock for better concurrency
+	s.infoMutex.RLock()
+	needsUpdate := s.info.dispatcher == nil || s.info.dispatcher != dispatcher
+	s.infoMutex.RUnlock()
+	
+	if needsUpdate {
+		s.infoMutex.Lock()
+		// Double-check after acquiring write lock
+		if s.info.dispatcher == nil || s.info.dispatcher != dispatcher {
+			s.info = routingInfo{
+				ctx:        ctx,
+				dispatcher: dispatcher,
+				inboundTag: session.InboundFromContext(ctx),
+				contentTag: session.ContentFromContext(ctx),
+			}
 		}
+		s.infoMutex.Unlock()
 	}
-	s.infoMutex.Unlock()
 
 	ep, err := s.bindServer.ParseEndpoint(conn.RemoteAddr().String())
 	if err != nil {
