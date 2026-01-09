@@ -66,7 +66,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 func (c *udpConn) Read(buf []byte) (int, error) {
-	panic("not implemented")
+	return 0, errors.New("Read not supported, use ReadMultiBuffer instead")
 }
 
 // Write implements io.Writer
@@ -174,9 +174,6 @@ func (t *Handler) getUDPConn(source, dest net.Destination, ipStack *stack.Stack)
 		done: done.New(),
 	}
 	
-	if t.udpConns == nil {
-		t.udpConns = make(map[udpConnID]*udpConn)
-	}
 	t.udpConns[id] = conn
 	
 	conn.updateActivity()
@@ -197,7 +194,7 @@ func (t *Handler) cleanupUDPConns() error {
 	defer t.Unlock()
 	
 	if len(t.udpConns) == 0 {
-		return errors.New("no more connections. stopping...")
+		return errors.New("UDP connection cleanup stopped: no active connections remaining")
 	}
 	
 	for id, conn := range t.udpConns {
@@ -208,10 +205,6 @@ func (t *Handler) cleanupUDPConns() error {
 				delete(t.udpConns, id)
 			}
 		}
-	}
-	
-	if len(t.udpConns) == 0 {
-		return errors.New("no more connections. stopping...")
 	}
 	
 	return nil
@@ -340,10 +333,12 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 	conn.writer.WriteMultiBuffer(buf.MultiBuffer{b})
 	
 	if !existing {
-		// Start checker for cleanup
-		if t.udpChecker != nil {
+		// Start checker for cleanup (only once)
+		t.Lock()
+		if t.udpChecker != nil && len(t.udpConns) == 1 {
 			common.Must(t.udpChecker.Start())
 		}
+		t.Unlock()
 		
 		// Start handling this connection
 		go func() {
