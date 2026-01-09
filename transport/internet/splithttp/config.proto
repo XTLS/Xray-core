@@ -42,4 +42,8 @@ message Config {
   string xPaddingPlacement = 17;
   string xPaddingMethod = 18;
   string uplinkHTTPMethod = 19;
+  string sessionPlacement = 20;
+  string sessionKey = 21;
+  string seqPlacement = 22;
+  string seqKey = 23;
 }
