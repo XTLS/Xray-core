@@ -28,6 +28,15 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
+// udpConnEntry holds state for a UDP connection keyed by source 2-tuple (FullCone NAT)
+type udpConnEntry struct {
+	lastActive int64
+	reader     buf.Reader
+	writer     buf.Writer
+	done       *done.Instance
+	cancel     context.CancelFunc
+}
+
 // Handler is managing object that tie together tun interface, ip stack and dispatch connections to the routing
 type Handler struct {
 	sync.Mutex
@@ -36,7 +45,8 @@ type Handler struct {
 	stack         Stack
 	policyManager policy.Manager
 	dispatcher    routing.Dispatcher
-	udpConns      map[net.Destination]*struct{ lastActive int64; reader buf.Reader; writer buf.Writer; done *done.Instance; cancel context.CancelFunc }
+	cone          bool
+	udpConns      map[net.Destination]*udpConnEntry
 	udpChecker    *task.Periodic
 }
 
@@ -60,7 +70,15 @@ func (t *Handler) cleanupUDP() error {
 	}
 	for src, conn := range t.udpConns {
 		if time.Now().Unix()-atomic.LoadInt64(&conn.lastActive) > 300 {
-			conn.cancel(); common.Must(conn.done.Close()); common.Must(common.Close(conn.writer)); delete(t.udpConns, src)
+			conn.cancel()
+			delete(t.udpConns, src)
+			// Tolerant cleanup - don't panic on close errors
+			if err := conn.done.Close(); err != nil {
+				errors.LogDebug(t.ctx, "failed to close done instance: ", err)
+			}
+			if err := common.Close(conn.writer); err != nil {
+				errors.LogDebug(t.ctx, "failed to close writer: ", err)
+			}
 		}
 	}
 	return nil
@@ -73,24 +91,29 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 		conn, found := t.udpConns[src]
 		if !found {
 			reader, writer := pipe.New(pipe.DiscardOverflow(), pipe.WithSizeLimit(16*1024))
-			conn = &struct{ lastActive int64; reader buf.Reader; writer buf.Writer; done *done.Instance; cancel context.CancelFunc }{reader: reader, writer: writer, done: done.New()}
+			// Create cancel function BEFORE spawning goroutine to avoid race condition
+			ctx, cancel := context.WithCancel(context.WithValue(t.ctx, "cone", t.cone))
+			conn = &udpConnEntry{reader: reader, writer: writer, done: done.New(), cancel: cancel}
 			t.udpConns[src] = conn
 			if t.udpChecker != nil && len(t.udpConns) == 1 {
 				common.Must(t.udpChecker.Start())
 			}
 			t.Unlock()
 			go func() {
-				ctx, cancel := context.WithCancel(t.ctx)
-				conn.cancel = cancel
 				defer func() {
 					cancel()
 					t.Lock()
 					delete(t.udpConns, src)
 					t.Unlock()
-					common.Must(conn.done.Close())
-					common.Must(common.Close(conn.writer))
+					// Tolerant cleanup - don't panic on close errors
+					if err := conn.done.Close(); err != nil {
+						errors.LogDebug(ctx, "failed to close done instance: ", err)
+					}
+					if err := common.Close(conn.writer); err != nil {
+						errors.LogDebug(ctx, "failed to close writer: ", err)
+					}
 				}()
-				t.dispatcher.DispatchLink(c.ContextWithID(session.ContextWithInbound(ctx, &session.Inbound{Name: "tun", Source: src, User: &protocol.MemoryUser{Level: t.config.UserLevel}}), session.NewID()), dest, &transport.Link{Reader: conn.reader, Writer: &udpWriter{stack: ipStack, src: dest, dest: src}})
+				t.dispatcher.DispatchLink(c.ContextWithID(session.ContextWithInbound(ctx, &session.Inbound{Name: "tun", Source: src, User: &protocol.MemoryUser{Level: t.config.UserLevel}}), session.NewID()), dest, &transport.Link{Reader: conn.reader, Writer: &udpWriter{ctx: ctx, stack: ipStack, src: dest, dest: src}})
 			}()
 		} else {
 			atomic.StoreInt64(&conn.lastActive, time.Now().Unix())
@@ -103,7 +126,12 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 	}
 }
 
-type udpWriter struct{ stack *stack.Stack; src, dest net.Destination }
+type udpWriter struct {
+	ctx   context.Context
+	stack *stack.Stack
+	src   net.Destination
+	dest  net.Destination
+}
 
 func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for _, b := range mb {
@@ -114,15 +142,22 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if !w.src.Address.Family().IsIPv4() {
 			netProto = header.IPv6ProtocolNumber
 		}
-		if route, err := w.stack.FindRoute(defaultNIC, tcpip.AddrFromSlice(w.src.Address.IP()), tcpip.AddrFromSlice(w.dest.Address.IP()), netProto, false); err == nil {
-			pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{ReserveHeaderBytes: header.UDPMinimumSize, Payload: buffer.MakeWithData(b.Bytes())})
-			udp := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
-			udp.Encode(&header.UDPFields{SrcPort: uint16(w.src.Port), DstPort: uint16(w.dest.Port), Length: uint16(pkt.Size())})
-			udp.SetChecksum(^udp.CalculateChecksum(checksum.Checksum(b.Bytes(), route.PseudoHeaderChecksum(header.UDPProtocolNumber, uint16(pkt.Size())))))
-			route.WritePacket(stack.NetworkHeaderParams{Protocol: header.UDPProtocolNumber, TTL: 64}, pkt)
-			pkt.DecRef()
-			route.Release()
+		route, err := w.stack.FindRoute(defaultNIC, tcpip.AddrFromSlice(w.src.Address.IP()), tcpip.AddrFromSlice(w.dest.Address.IP()), netProto, false)
+		if err != nil {
+			errors.LogDebug(w.ctx, "UDP route not found for ", w.src, " -> ", w.dest, ": ", err)
+			b.Release()
+			continue
 		}
+		// Use defer-style cleanup with anonymous function to ensure resources are released
+		func() {
+			defer route.Release()
+			pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{ReserveHeaderBytes: header.UDPMinimumSize, Payload: buffer.MakeWithData(b.Bytes())})
+			defer pkt.DecRef()
+			udpHdr := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
+			udpHdr.Encode(&header.UDPFields{SrcPort: uint16(w.src.Port), DstPort: uint16(w.dest.Port), Length: uint16(pkt.Size())})
+			udpHdr.SetChecksum(^udpHdr.CalculateChecksum(checksum.Checksum(b.Bytes(), route.PseudoHeaderChecksum(header.UDPProtocolNumber, uint16(pkt.Size())))))
+			route.WritePacket(stack.NetworkHeaderParams{Protocol: header.UDPProtocolNumber, TTL: 64}, pkt)
+		}()
 		b.Release()
 	}
 	return nil
@@ -130,8 +165,14 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
+	// Safe type assertion with default to true for FullCone behavior
+	if cone, ok := ctx.Value("cone").(bool); ok {
+		t.cone = cone
+	} else {
+		t.cone = true
+	}
 	t.ctx, t.policyManager, t.dispatcher = core.ToBackgroundDetachedContext(ctx), pm, dispatcher
-	t.udpConns = make(map[net.Destination]*struct{ lastActive int64; reader buf.Reader; writer buf.Writer; done *done.Instance; cancel context.CancelFunc })
+	t.udpConns = make(map[net.Destination]*udpConnEntry)
 	t.udpChecker = &task.Periodic{Interval: time.Minute, Execute: t.cleanupUDP}
 	tunInterface, err := NewTun(TunOptions{Name: t.config.Name, MTU: t.config.MTU})
 	if err != nil {
