@@ -29,7 +29,7 @@ import (
 )
 
 type udpConn struct {
-	lastActive int64
+	lastActive atomic.Int64
 	reader     buf.Reader
 	writer     buf.Writer
 	done       *done.Instance
@@ -68,7 +68,7 @@ func (t *Handler) cleanupUDP() error {
 	}
 	now := time.Now().Unix()
 	for src, conn := range t.udpConns {
-		if now-atomic.LoadInt64(&conn.lastActive) > 300 {
+		if now-conn.lastActive.Load() > 300 {
 			conn.cancel()
 			common.Must(conn.done.Close())
 			common.Must(common.Close(conn.writer))
@@ -124,7 +124,7 @@ func (t *Handler) HandleUDPPacket(id stack.TransportEndpointID, pkt *stack.Packe
 			t.dispatcher.DispatchLink(ctx, dest, link)
 		}()
 	} else {
-		atomic.StoreInt64(&conn.lastActive, time.Now().Unix())
+		conn.lastActive.Store(time.Now().Unix())
 		t.Unlock()
 	}
 
@@ -145,13 +145,7 @@ func (w *udpWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		// Validate return packet address matches expected destination
 		if b.UDP != nil {
 			if b.UDP.Address != w.dest.Address || b.UDP.Port != w.dest.Port {
-				errors.LogWarning(
-					context.Background(),
-					"UDP return packet address mismatch: expected ",
-					w.dest,
-					", got ",
-					b.UDP,
-				)
+				errors.LogWarning(context.Background(), "UDP return packet address mismatch: expected ", w.dest, ", got ", b.UDP)
 				b.Release()
 				continue
 			}
