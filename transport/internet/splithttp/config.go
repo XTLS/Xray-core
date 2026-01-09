@@ -106,38 +106,92 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 	return *c.ScStreamUpServerSecs
 }
 
-func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr string) {
-	switch c.SessionPlacement {
-	case PlacementPath:
-		req.URL.Path = appendToPath(req.URL.Path, sessionId)
-	case PlacementQuery:
-		q := req.URL.Query()
-		q.Set(c.SessionKey, sessionId)
-		req.URL.RawQuery = q.Encode()
+func (c *Config) GetNormalizedSessionPlacement() string {
+	if c.SessionPlacement == "" {
+		return PlacementPath
+	}
+	return c.SessionPlacement
+}
+
+func (c *Config) GetNormalizedSeqPlacement() string {
+	if c.SeqPlacement == "" {
+		return PlacementPath
+	}
+	return c.SeqPlacement
+}
+
+func (c *Config) GetNormalizedSessionKey() string {
+	if c.SessionKey != "" {
+		return c.SessionKey
+	}
+	switch c.GetNormalizedSessionPlacement() {
 	case PlacementHeader:
-		req.Header.Set(c.SessionKey, sessionId)
-	case PlacementCookie:
-		req.AddCookie(&http.Cookie{Name: c.SessionKey, Value: sessionId})
+		return "X-Session"
+	case PlacementCookie, PlacementQuery:
+		return "x_session"
+	default:
+		return ""
+	}
+}
+
+func (c *Config) GetNormalizedSeqKey() string {
+	if c.SeqKey != "" {
+		return c.SeqKey
+	}
+	switch c.GetNormalizedSeqPlacement() {
+	case PlacementHeader:
+		return "X-Seq"
+	case PlacementCookie, PlacementQuery:
+		return "x_seq"
+	default:
+		return ""
+	}
+}
+
+func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr string) {
+	sessionPlacement := c.GetNormalizedSessionPlacement()
+	seqPlacement := c.GetNormalizedSeqPlacement()
+	sessionKey := c.GetNormalizedSessionKey()
+	seqKey := c.GetNormalizedSeqKey()
+
+	if sessionId != "" {
+		switch sessionPlacement {
+		case PlacementPath:
+			req.URL.Path = appendToPath(req.URL.Path, sessionId)
+		case PlacementQuery:
+			q := req.URL.Query()
+			q.Set(sessionKey, sessionId)
+			req.URL.RawQuery = q.Encode()
+		case PlacementHeader:
+			req.Header.Set(sessionKey, sessionId)
+		case PlacementCookie:
+			req.AddCookie(&http.Cookie{Name: sessionKey, Value: sessionId})
+		}
 	}
 
 	if seqStr != "" {
-		switch c.SeqPlacement {
+		switch seqPlacement {
 		case PlacementPath:
 			req.URL.Path = appendToPath(req.URL.Path, seqStr)
 		case PlacementQuery:
 			q := req.URL.Query()
-			q.Set(c.SeqKey, seqStr)
+			q.Set(seqKey, seqStr)
 			req.URL.RawQuery = q.Encode()
 		case PlacementHeader:
-			req.Header.Set(c.SeqKey, seqStr)
+			req.Header.Set(seqKey, seqStr)
 		case PlacementCookie:
-			req.AddCookie(&http.Cookie{Name: c.SeqKey, Value: seqStr})
+			req.AddCookie(&http.Cookie{Name: seqKey, Value: seqStr})
 		}
 	}
 }
 
 func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (sessionId string, seqStr string) {
-	if c.SessionPlacement == PlacementPath {
+	sessionPlacement := c.GetNormalizedSessionPlacement()
+	seqPlacement := c.GetNormalizedSeqPlacement()
+	sessionKey := c.GetNormalizedSessionKey()
+	seqKey := c.GetNormalizedSeqKey()
+
+	if sessionPlacement == PlacementPath && seqPlacement == PlacementPath {
 		subpath := strings.Split(req.URL.Path[len(path):], "/")
 		if len(subpath) > 0 {
 			sessionId = subpath[0]
@@ -148,24 +202,24 @@ func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (session
 		return sessionId, seqStr
 	}
 
-	switch c.SessionPlacement {
+	switch sessionPlacement {
 	case PlacementQuery:
-		sessionId = req.URL.Query().Get(c.SessionKey)
+		sessionId = req.URL.Query().Get(sessionKey)
 	case PlacementHeader:
-		sessionId = req.Header.Get(c.SessionKey)
+		sessionId = req.Header.Get(sessionKey)
 	case PlacementCookie:
-		if cookie, e := req.Cookie(c.SessionKey); e == nil {
+		if cookie, e := req.Cookie(sessionKey); e == nil {
 			sessionId = cookie.Value
 		}
 	}
 
-	switch c.SeqPlacement {
+	switch seqPlacement {
 	case PlacementQuery:
-		seqStr = req.URL.Query().Get(c.SeqKey)
+		seqStr = req.URL.Query().Get(seqKey)
 	case PlacementHeader:
-		seqStr = req.Header.Get(c.SeqKey)
+		seqStr = req.Header.Get(seqKey)
 	case PlacementCookie:
-		if cookie, e := req.Cookie(c.SeqKey); e == nil {
+		if cookie, e := req.Cookie(seqKey); e == nil {
 			seqStr = cookie.Value
 		}
 	}
