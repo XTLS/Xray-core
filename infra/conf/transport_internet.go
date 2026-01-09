@@ -409,8 +409,14 @@ type Hysteria2Config struct {
 }
 
 func (c *Hysteria2Config) Build() (proto.Message, error) {
-	up, _ := c.Up.Bps()
-	down, _ := c.Down.Bps()
+	up, err := c.Up.Bps()
+	if err != nil {
+		return nil, err
+	}
+	down, err := c.Down.Bps()
+	if err != nil {
+		return nil, err
+	}
 
 	switch c.Obfs.Type {
 	case "salamander":
