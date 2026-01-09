@@ -160,7 +160,7 @@ func (s *ClassicNameServer) getCacheController() *CacheController {
 }
 
 // sendQuery implements CachedNameserver.
-func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, fqdn string, option dns_feature.IPOption) {
+func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
 	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
@@ -171,7 +171,14 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, _ chan<- error, fqdn 
 			ctx:        ctx,
 		}
 		s.addPendingRequest(udpReq)
-		b, _ := dns.PackMessage(req.msg)
+		b, err := dns.PackMessage(req.msg)
+		if err != nil {
+			errors.LogErrorInner(ctx, err, "failed to pack dns query")
+			if noResponseErrCh != nil {
+				noResponseErrCh <- err
+			}
+			return
+		}
 		copyDest := net.UDPDestination(s.address.Address, s.address.Port)
 		b.UDP = &copyDest
 		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
