@@ -406,7 +406,7 @@ type TLSConfig struct {
 	CipherSuites            string           `json:"cipherSuites"`
 	Fingerprint             string           `json:"fingerprint"`
 	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
-	PinnedPeerCertSha256    *[]string        `json:"pinnedPeerCertSha256 "`
+	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
 	CurvePreferences        *StringList      `json:"curvePreferences"`
 	MasterKeyLog            string           `json:"masterKeyLog"`
 	ServerNameToVerify      string           `json:"serverNameToVerify"`
@@ -457,9 +457,15 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 
-	if c.PinnedPeerCertSha256 != nil {
+	if c.PinnedPeerCertSha256 != "" {
 		config.PinnedPeerCertSha256 = [][]byte{}
-		for _, v := range *c.PinnedPeerCertSha256 {
+		// Split by tilde separator
+		hashes := strings.Split(c.PinnedPeerCertSha256, "~")
+		for _, v := range hashes {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
 			hashValue, err := hex.DecodeString(v)
 			if err != nil {
 				return nil, err
