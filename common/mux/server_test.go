@@ -90,7 +90,8 @@ func TestRegressionOutboundLeak(t *testing.T) {
 	}
 
 	{
-		b := buf.FromBytes([]byte("hello"))
+		b := buf.New()
+		b.Write([]byte("hello"))
 		common.Must(muxClientDownlink.Writer.WriteMultiBuffer(buf.MultiBuffer{b}))
 	}
 
@@ -102,7 +103,8 @@ func TestRegressionOutboundLeak(t *testing.T) {
 	}
 
 	{
-		b := buf.FromBytes([]byte("world"))
+		b := buf.New()
+		b.Write([]byte("world"))
 		common.Must(websiteUplink.Writer.WriteMultiBuffer(buf.MultiBuffer{b}))
 	}
 
