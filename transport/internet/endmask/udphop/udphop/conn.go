@@ -18,14 +18,14 @@ const (
 
 type udpHopPacketConn struct {
 	Addr          net.Addr
-	Ports         []uint16
+	Addrs         []net.Addr
 	HopInterval   time.Duration
 	ListenUDPFunc ListenUDPFunc
 
 	connMutex   sync.RWMutex
 	prevConn    net.PacketConn
 	currentConn net.PacketConn
-	portIndex   int
+	addrIndex   int
 
 	readBufferSize  int
 	writeBufferSize int
@@ -52,12 +52,17 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPF
 	} else if hopInterval < 5*time.Second {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
+	// if listenUDPFunc == nil {
+	// 	listenUDPFunc = func() (net.PacketConn, error) {
+	// 		return net.ListenUDP("udp", nil)
+	// 	}
+	// }
 	if listenUDPFunc == nil {
 		return nil, errors.New("nil listenUDPFunc")
 	}
-	ports := addr.ports()
-	if len(ports) == 0 {
-		return nil, errors.New("no ports available")
+	addrs, err := addr.addrs()
+	if err != nil {
+		return nil, err
 	}
 	// curConn, err := listenUDPFunc()
 	// if err != nil {
@@ -65,12 +70,12 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPF
 	// }
 	hConn := &udpHopPacketConn{
 		Addr:          addr,
-		Ports:         ports,
+		Addrs:         addrs,
 		HopInterval:   hopInterval,
 		ListenUDPFunc: listenUDPFunc,
 		prevConn:      nil,
 		currentConn:   pktConn,
-		portIndex:     rand.Intn(len(ports)),
+		addrIndex:     rand.Intn(len(addrs)),
 		recvQueue:     make(chan *udpPacket, packetQueueSize),
 		closeChan:     make(chan struct{}),
 		bufPool: sync.Pool{
@@ -154,8 +159,8 @@ func (u *udpHopPacketConn) hop() {
 		_ = trySetWriteBuffer(u.currentConn, u.writeBufferSize)
 	}
 	go u.recvLoop(newConn)
-	// Update portIndex to a new random value
-	u.portIndex = rand.Intn(len(u.Ports))
+	// Update addrIndex to a new random value
+	u.addrIndex = rand.Intn(len(u.Addrs))
 }
 
 func (u *udpHopPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
@@ -182,36 +187,9 @@ func (u *udpHopPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	if u.closed {
 		return 0, net.ErrClosed
 	}
-	// Extract IP from the upper layer address, but use udphop's port
-	var targetAddr net.Addr
-	if udpAddr, ok := addr.(*net.UDPAddr); ok {
-		targetAddr = &net.UDPAddr{
-			IP:   udpAddr.IP,
-			Port: int(u.Ports[u.portIndex]),
-		}
-	} else if tcpAddr, ok := addr.(*net.TCPAddr); ok {
-		targetAddr = &net.UDPAddr{
-			IP:   tcpAddr.IP,
-			Port: int(u.Ports[u.portIndex]),
-		}
-	} else {
-		// Fallback: try to extract IP from string representation
-		host, _, err := net.SplitHostPort(addr.String())
-		if err == nil {
-			if ip := net.ParseIP(host); ip != nil {
-				targetAddr = &net.UDPAddr{
-					IP:   ip,
-					Port: int(u.Ports[u.portIndex]),
-				}
-			}
-		}
-		if targetAddr == nil {
-			// If we can't extract IP, use the original address but with udphop port
-			// This shouldn't happen in practice, but provides a fallback
-			return 0, errors.New("unable to extract IP from address")
-		}
-	}
-	return u.currentConn.WriteTo(b, targetAddr)
+	// Skip the check for now, always write to the server,
+	// for the same reason as in ReadFrom.
+	return u.currentConn.WriteTo(b, u.Addrs[u.addrIndex])
 }
 
 func (u *udpHopPacketConn) Close() error {
@@ -229,7 +207,7 @@ func (u *udpHopPacketConn) Close() error {
 	err := u.currentConn.Close()
 	close(u.closeChan)
 	u.closed = true
-	u.Ports = nil // For GC
+	u.Addrs = nil // For GC
 	return err
 }
 

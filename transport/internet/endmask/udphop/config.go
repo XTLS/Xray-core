@@ -8,8 +8,9 @@ import (
 	"github.com/xtls/xray-core/transport/internet/endmask/udphop/udphop"
 )
 
-func (c *Config) NewUDPHopPacketConn(listenFunc func() (net.PacketConn, error), raw net.PacketConn) (net.PacketConn, error) {
-	addr, err := udphop.ResolveUDPHopAddr(c.Port)
+func (c *Config) NewUDPHopPacketConn(remote net.Addr, listenFunc func() (net.PacketConn, error), raw net.PacketConn) (net.PacketConn, error) {
+	h, _, _ := net.SplitHostPort(remote.String())
+	addr, err := udphop.ResolveUDPHopAddr(net.JoinHostPort(h, c.Port))
 	if err != nil {
 		return nil, errors.New("udphop err").Base(err)
 	}
