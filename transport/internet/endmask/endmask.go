@@ -1,6 +1,10 @@
 package endmask
 
-import "net"
+import (
+	"net"
+
+	"github.com/xtls/xray-core/transport/internet/endmask/udphop"
+)
 
 type Endmask interface {
 	WrapConnClient(net.Conn) (net.Conn, error)
@@ -14,11 +18,15 @@ type Endmask interface {
 }
 
 type EndmaskManager struct {
+	udphop   *udphop.Config
 	endmasks []Endmask
 }
 
-func NewEndmaskManager(endmasks []Endmask) *EndmaskManager {
-	return &EndmaskManager{endmasks: endmasks}
+func NewEndmaskManager(udphop *udphop.Config, endmasks []Endmask) *EndmaskManager {
+	return &EndmaskManager{
+		udphop:   udphop,
+		endmasks: endmasks,
+	}
 }
 
 func (e *EndmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
@@ -76,4 +84,8 @@ func (e *EndmaskManager) Serialize(b []byte) {
 	if len(e.endmasks) > 0 {
 		e.endmasks[0].Serialize(b)
 	}
+}
+
+func (e *EndmaskManager) GetUdpHop() *udphop.Config {
+	return e.udphop
 }

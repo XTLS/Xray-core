@@ -8,35 +8,14 @@ import (
 	"github.com/xtls/xray-core/transport/internet/endmask/udphop/udphop"
 )
 
-func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
-	return raw, nil
-}
-
-func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	return raw, nil
-}
-
-func (c *Config) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
+func (c *Config) NewUDPHopPacketConn(listenFunc func() (net.PacketConn, error), raw net.PacketConn) (net.PacketConn, error) {
 	addr, err := udphop.ResolveUDPHopAddr(c.Port)
 	if err != nil {
 		return nil, errors.New("udphop err").Base(err)
 	}
-	raw, err = udphop.NewUDPHopPacketConn(addr, time.Duration(c.Interval)*time.Second, func() (net.PacketConn, error) {
-		return raw, nil
-	})
+	raw, err = udphop.NewUDPHopPacketConn(addr, time.Duration(c.Interval)*time.Second, listenFunc, raw)
 	if err != nil {
 		return nil, errors.New("udphop err").Base(err)
 	}
 	return raw, nil
-}
-
-func (c *Config) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
-	return raw, nil
-}
-
-func (c *Config) Size() int32 {
-	return 0
-}
-
-func (c *Config) Serialize([]byte) {
 }

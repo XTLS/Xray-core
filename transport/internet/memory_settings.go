@@ -3,7 +3,9 @@ package internet
 import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/endmask"
+	"github.com/xtls/xray-core/transport/internet/endmask/udphop"
 )
 
 // MemoryStreamConfig is a parsed form of StreamConfig. It is used to reduce the number of Protobuf parses.
@@ -51,19 +53,24 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 	}
 
 	if s != nil && len(s.Endmasks) > 0 {
+		var udphopConfig *udphop.Config
 		var endmasks []endmask.Endmask
 		for _, msg := range s.Endmasks {
 			instance, err := msg.GetInstance()
 			if err != nil {
 				return nil, err
 			}
-			endmask, ok := instance.(endmask.Endmask)
-			if !ok {
-				return nil, errors.New(msg.Type + " is not Endmask")
+			if msg.Type == serial.GetMessageType(&udphop.Config{}) {
+				udphopConfig = instance.(*udphop.Config)
+			} else {
+				endmask, ok := instance.(endmask.Endmask)
+				if !ok {
+					return nil, errors.New(msg.Type + " is not Endmask")
+				}
+				endmasks = append(endmasks, endmask)
 			}
-			endmasks = append(endmasks, endmask)
 		}
-		mss.EndmaskManger = endmask.NewEndmaskManager(endmasks)
+		mss.EndmaskManger = endmask.NewEndmaskManager(udphopConfig, endmasks)
 	}
 
 	return mss, nil
