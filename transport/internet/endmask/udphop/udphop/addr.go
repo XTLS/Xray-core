@@ -34,11 +34,11 @@ func (a *UDPHopAddr) ports() []uint16 {
 	return a.Ports
 }
 
-func ResolveUDPHopAddr(addr string) (*UDPHopAddr, error) {
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
+func ResolveUDPHopAddr(portStr string) (*UDPHopAddr, error) {
+	// _, portStr, err := net.SplitHostPort(addr)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	// IP address is ignored, only port information is kept
 	result := &UDPHopAddr{
 		PortStr: portStr,
