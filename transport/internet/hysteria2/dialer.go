@@ -137,14 +137,6 @@ func (c *client) close() {
 	_ = c.pktConn.Close()
 }
 
-func (c *client) interDial() (net.Conn, error) {
-	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
-	if err != nil {
-		return nil, errors.New("failed to dial to dest").Base(err)
-	}
-	return raw, nil
-}
-
 func (c *client) dial() error {
 	status := c.status()
 	if status == StatusActive {
@@ -158,9 +150,9 @@ func (c *client) dial() error {
 	c.conn = nil
 	c.udpSM = nil
 
-	raw, err := c.interDial()
+	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
 	if err != nil {
-		return err
+		return errors.New("failed to dial to dest").Base(err)
 	}
 
 	remote := raw.RemoteAddr()
@@ -171,24 +163,8 @@ func (c *client) dial() error {
 	}
 
 	if c.endmaskManager != nil {
-		udphopConfig := c.endmaskManager.GetUdpHop()
-		if udphopConfig != nil {
-			pktConn, err = udphopConfig.NewUDPHopPacketConn(remote, func() (net.PacketConn, error) {
-				c.mutex.Lock()
-				defer c.mutex.Unlock()
-
-				raw, err := c.interDial()
-				if err != nil {
-					return nil, err
-				}
-
-				pktConn, ok := raw.(net.PacketConn)
-				if !ok {
-					return nil, errors.New("raw is not PacketConn")
-				}
-
-				return pktConn, nil
-			}, pktConn)
+		if udphopConfig := c.endmaskManager.GetUdpHop(); udphopConfig != nil {
+			pktConn, err = udphopConfig.NewUDPHopPacketConn(remote, c.udphopDialer, pktConn)
 		}
 		pktConn, err = c.endmaskManager.WrapPacketConnClient(pktConn)
 		if err != nil {
@@ -340,6 +316,23 @@ func (c *client) setCtx(ctx context.Context) {
 	defer c.mutex.Unlock()
 
 	c.ctx = ctx
+}
+
+func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	raw, err := internet.DialSystem(c.ctx, net.DestinationFromAddr(addr), c.socketConfig)
+	if err != nil {
+		return nil, errors.New("failed to dial to dest").Base(err)
+	}
+
+	pktConn, ok := raw.(net.PacketConn)
+	if !ok {
+		return nil, errors.New("raw is not PacketConn")
+	}
+
+	return pktConn, nil
 }
 
 type clientManager struct {
