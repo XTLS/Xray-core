@@ -2,9 +2,6 @@ package tun
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -13,8 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -22,24 +17,13 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-type udpConn struct {
-	lastActive atomic.Int64
-	reader     buf.Reader
-	writer     buf.Writer
-	done       *done.Instance
-	cancel     context.CancelFunc
-}
-
 // Handler is managing object that tie together tun interface, ip stack and dispatch connections to the routing
 type Handler struct {
-	sync.Mutex
 	ctx           context.Context
 	config        *Config
 	stack         Stack
 	policyManager policy.Manager
 	dispatcher    routing.Dispatcher
-	udpConns      map[net.Destination]*udpConn
-	udpChecker    *task.Periodic
 }
 
 // ConnectionHandler interface with the only method that stack is going to push new connections to
@@ -54,24 +38,6 @@ func (t *Handler) policy() policy.Session {
 	return t.policyManager.ForLevel(t.config.UserLevel)
 }
 
-func (t *Handler) cleanupUDP() error {
-	t.Lock()
-	defer t.Unlock()
-	if len(t.udpConns) == 0 {
-		return errors.New("no connections")
-	}
-	now := time.Now().Unix()
-	for src, conn := range t.udpConns {
-		if now-conn.lastActive.Load() > 300 {
-			conn.cancel()
-			common.Must(conn.done.Close())
-			common.Must(common.Close(conn.writer))
-			delete(t.udpConns, src)
-		}
-	}
-	return nil
-}
-
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
 	var err error
@@ -79,8 +45,6 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
-	t.udpConns = make(map[net.Destination]*udpConn)
-	t.udpChecker = &task.Periodic{Interval: time.Minute, Execute: t.cleanupUDP}
 
 	tunName := t.config.Name
 	tunOptions := TunOptions{
