@@ -173,7 +173,7 @@ func (c *client) dial() error {
 	if c.endmaskManager != nil {
 		udphopConfig := c.endmaskManager.GetUdpHop()
 		if udphopConfig != nil {
-			pktConn, err = udphopConfig.NewUDPHopPacketConn(func() (net.PacketConn, error) {
+			pktConn, err = udphopConfig.NewUDPHopPacketConn(remote, func() (net.PacketConn, error) {
 				c.mutex.Lock()
 				defer c.mutex.Unlock()
 
