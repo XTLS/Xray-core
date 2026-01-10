@@ -137,6 +137,14 @@ func (c *client) close() {
 	_ = c.pktConn.Close()
 }
 
+func (c *client) interDial() (net.Conn, error) {
+	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
+	if err != nil {
+		return nil, errors.New("failed to dial to dest").Base(err)
+	}
+	return raw, nil
+}
+
 func (c *client) dial() error {
 	status := c.status()
 	if status == StatusActive {
@@ -150,9 +158,9 @@ func (c *client) dial() error {
 	c.conn = nil
 	c.udpSM = nil
 
-	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
+	raw, err := c.interDial()
 	if err != nil {
-		return errors.New("failed to dial to dest").Base(err)
+		return err
 	}
 
 	remote := raw.RemoteAddr()
@@ -163,6 +171,25 @@ func (c *client) dial() error {
 	}
 
 	if c.endmaskManager != nil {
+		udphopConfig := c.endmaskManager.GetUdpHop()
+		if udphopConfig != nil {
+			pktConn, err = udphopConfig.NewUDPHopPacketConn(func() (net.PacketConn, error) {
+				c.mutex.Lock()
+				defer c.mutex.Unlock()
+
+				raw, err := c.interDial()
+				if err != nil {
+					return nil, err
+				}
+
+				pktConn, ok := raw.(net.PacketConn)
+				if !ok {
+					return nil, errors.New("raw is not PacketConn")
+				}
+
+				return pktConn, nil
+			}, pktConn)
+		}
 		pktConn, err = c.endmaskManager.WrapPacketConnClient(pktConn)
 		if err != nil {
 			return errors.New("endmask err").Base(err)
@@ -308,6 +335,13 @@ func (c *client) udp() (stat.Connection, error) {
 	return c.udpSM.udp()
 }
 
+func (c *client) setCtx(ctx context.Context) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.ctx = ctx
+}
+
 type clientManager struct {
 	m     map[string]*client
 	mutex sync.Mutex
@@ -349,6 +383,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		manger.m[addr] = c
 	}
+	c.setCtx(ctx)
 	manger.mutex.Unlock()
 
 	outbounds := session.OutboundsFromContext(ctx)
