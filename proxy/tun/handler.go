@@ -72,8 +72,6 @@ func (t *Handler) cleanupUDP() error {
 	return nil
 }
 
-
-
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
 	var err error
