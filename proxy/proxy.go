@@ -635,7 +635,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 			if end > b.Len() {
 				end = b.Len()
 			}
-			trafficState.RemainingServerHello -= b.Len()
+			trafficState.RemainingServerHello -= end
 			if bytes.Contains(b.BytesTo(end), Tls13SupportedVersions) {
 				v, ok := Tls13CipherSuiteDic[trafficState.Cipher]
 				if !ok {
