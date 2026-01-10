@@ -290,8 +290,10 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 	// directly return success if pinned cert is leaf
 	// or add the CA to RootCAs if pinned cert is CA(and can be used in VerifyPeerCertInNames for Self signed CA)
 	RootCAs := r.RootCAs
+	var verifyResult verifyResult
+	var verifiedCert *x509.Certificate
 	if r.PinnedPeerCertSha256 != nil {
-		verifyResult, verifiedCert := verifyChain(certs, r.PinnedPeerCertSha256)
+		verifyResult, verifiedCert = verifyChain(certs, r.PinnedPeerCertSha256)
 		switch verifyResult {
 		case certNotFound:
 			return errors.New("peer cert is unrecognized")
@@ -305,27 +307,39 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 		}
 	}
 
-	if r.VerifyPeerCertInNames != nil {
-		if len(r.VerifyPeerCertInNames) > 0 {
-			opts := x509.VerifyOptions{
-				Roots:         RootCAs,
-				CurrentTime:   time.Now(),
-				Intermediates: x509.NewCertPool(),
+	if len(r.VerifyPeerCertInNames) > 0 {
+		opts := x509.VerifyOptions{
+			Roots:         RootCAs,
+			CurrentTime:   time.Now(),
+			Intermediates: x509.NewCertPool(),
+		}
+		for _, cert := range certs[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		for _, opts.DNSName = range r.VerifyPeerCertInNames {
+			if _, err := certs[0].Verify(opts); err == nil {
+				return nil
 			}
-			for _, cert := range certs[1:] {
-				opts.Intermediates.AddCert(cert)
-			}
-			for _, opts.DNSName = range r.VerifyPeerCertInNames {
-				if _, err := certs[0].Verify(opts); err == nil {
-					return nil
-				}
-			}
+		}
+	} else if len(verifiedChains) == 0 && verifyResult == foundCA { // if found ca and verifiedChains is empty, we need to verify here
+		opts := x509.VerifyOptions{
+			Roots:         RootCAs,
+			CurrentTime:   time.Now(),
+			Intermediates: x509.NewCertPool(),
+			DNSName:       r.Config.ServerName,
+		}
+		for _, cert := range certs[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		if _, err := certs[0].Verify(opts); err == nil {
+			return nil
 		}
 	}
 	return nil
 }
 
 type RandCarrier struct {
+	Config                *tls.Config
 	RootCAs               *x509.CertPool
 	VerifyPeerCertInNames []string
 	PinnedPeerCertSha256  [][]byte
@@ -366,6 +380,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		SessionTicketsDisabled: !c.EnableSessionResumption,
 		VerifyPeerCertificate:  randCarrier.verifyPeerCert,
 	}
+	randCarrier.Config = config
 	if len(c.VerifyPeerCertInNames) > 0 {
 		config.InsecureSkipVerify = true
 	} else {
