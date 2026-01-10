@@ -185,10 +185,16 @@ func (s *Session) Close(locked bool) error {
 	} else {
 		// Stop existing handle(), then trigger writer.Close().
 		// Note that s.output may be dispatcher.SizeStatWriter.
-		s.input.(*pipe.Reader).ReturnAnError(io.EOF)
-		runtime.Gosched()
-		// If the error set by ReturnAnError still exists, clear it.
-		s.input.(*pipe.Reader).Recover()
+		// Note that s.input may be wrapped by RateLimitedReader or SizeStatReader.
+		if pr, ok := s.input.(*pipe.Reader); ok {
+			pr.ReturnAnError(io.EOF)
+			runtime.Gosched()
+			// If the error set by ReturnAnError still exists, clear it.
+			pr.Recover()
+		} else {
+			// For wrapped readers, just interrupt them
+			common.Interrupt(s.input)
+		}
 		XUDPManager.Lock()
 		if s.XUDP.Status == Active {
 			s.XUDP.Expire = time.Now().Add(time.Minute)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"golang.org/x/time/rate"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/stats"
@@ -11,22 +13,68 @@ import (
 
 // Manager is an implementation of stats.Manager.
 type Manager struct {
-	access    sync.RWMutex
-	counters  map[string]*Counter
-	onlineMap map[string]*OnlineMap
-	channels  map[string]*Channel
-	running   bool
+	access       sync.RWMutex
+	counters     map[string]*Counter
+	onlineMap    map[string]*OnlineMap
+	channels     map[string]*Channel
+	rateLimiters map[string]*rate.Limiter
+	running      bool
 }
 
 // NewManager creates an instance of Statistics Manager.
 func NewManager(ctx context.Context, config *Config) (*Manager, error) {
 	m := &Manager{
-		counters:  make(map[string]*Counter),
-		onlineMap: make(map[string]*OnlineMap),
-		channels:  make(map[string]*Channel),
+		counters:     make(map[string]*Counter),
+		onlineMap:    make(map[string]*OnlineMap),
+		channels:     make(map[string]*Channel),
+		rateLimiters: make(map[string]*rate.Limiter),
 	}
 
 	return m, nil
+}
+
+// GetOrRegisterRateLimiter implements stats.Manager.
+func (m *Manager) GetOrRegisterRateLimiter(name string, limit rate.Limit, burst int) (*rate.Limiter, error) {
+	m.access.Lock()
+	defer m.access.Unlock()
+
+	if r, found := m.rateLimiters[name]; found {
+		if r.Limit() != limit {
+			r.SetLimit(limit)
+		}
+		if r.Burst() != burst {
+			r.SetBurst(burst)
+		}
+		return r, nil
+	}
+
+	errors.LogDebug(context.Background(), "create new rate limiter ", name)
+	r := rate.NewLimiter(limit, burst)
+	m.rateLimiters[name] = r
+	return r, nil
+}
+
+// UnregisterRateLimiter implements stats.Manager.
+func (m *Manager) UnregisterRateLimiter(name string) error {
+	m.access.Lock()
+	defer m.access.Unlock()
+
+	if _, found := m.rateLimiters[name]; found {
+		errors.LogDebug(context.Background(), "remove rate limiter ", name)
+		delete(m.rateLimiters, name)
+	}
+	return nil
+}
+
+// GetRateLimiter implements stats.Manager.
+func (m *Manager) GetRateLimiter(name string) *rate.Limiter {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
+	if r, found := m.rateLimiters[name]; found {
+		return r
+	}
+	return nil
 }
 
 // Type implements common.HasType.
@@ -163,8 +211,8 @@ func (m *Manager) GetChannel(name string) stats.Channel {
 
 // GetAllOnlineUsers implements stats.Manager.
 func (m *Manager) GetAllOnlineUsers() []string {
-	m.access.Lock()
-	defer m.access.Unlock()
+	m.access.RLock()
+	defer m.access.RUnlock()
 
 	usersOnline := make([]string, 0, len(m.onlineMap))
 	for user, onlineMap := range m.onlineMap {

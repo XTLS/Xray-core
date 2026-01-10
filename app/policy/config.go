@@ -74,6 +74,10 @@ func (p *Policy) ToCorePolicy() policy.Session {
 		cp.Stats.UserUplink = p.Stats.UserUplink
 		cp.Stats.UserDownlink = p.Stats.UserDownlink
 		cp.Stats.UserOnline = p.Stats.UserOnline
+		cp.Stats.UplinkSpeedLimit = p.Stats.UplinkSpeedLimit
+		cp.Stats.DownlinkSpeedLimit = p.Stats.DownlinkSpeedLimit
+		cp.Stats.MaxConcurrentIPs = int(p.Stats.MaxConcurrentIps)
+		cp.Stats.BurstSize = p.Stats.BurstSize
 	}
 	if p.Buffer != nil {
 		cp.Buffer.PerConnection = p.Buffer.Connection

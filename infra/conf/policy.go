@@ -5,14 +5,18 @@ import (
 )
 
 type Policy struct {
-	Handshake         *uint32 `json:"handshake"`
-	ConnectionIdle    *uint32 `json:"connIdle"`
-	UplinkOnly        *uint32 `json:"uplinkOnly"`
-	DownlinkOnly      *uint32 `json:"downlinkOnly"`
-	StatsUserUplink   bool    `json:"statsUserUplink"`
-	StatsUserDownlink bool    `json:"statsUserDownlink"`
-	StatsUserOnline   bool    `json:"statsUserOnline"`
-	BufferSize        *int32  `json:"bufferSize"`
+	Handshake          *uint32 `json:"handshake"`
+	ConnectionIdle     *uint32 `json:"connIdle"`
+	UplinkOnly         *uint32 `json:"uplinkOnly"`
+	DownlinkOnly       *uint32 `json:"downlinkOnly"`
+	StatsUserUplink    bool    `json:"statsUserUplink"`
+	StatsUserDownlink  bool    `json:"statsUserDownlink"`
+	StatsUserOnline    bool    `json:"statsUserOnline"`
+	BufferSize         *int32  `json:"bufferSize"`
+	UplinkSpeedLimit   *int64  `json:"uplinkSpeedLimit"`
+	DownlinkSpeedLimit *int64  `json:"downlinkSpeedLimit"`
+	MaxConcurrentIPs   *int32  `json:"maxConcurrentIPs"`
+	BurstSize          *int64  `json:"burstSize"`
 }
 
 func (t *Policy) Build() (*policy.Policy, error) {
@@ -37,6 +41,19 @@ func (t *Policy) Build() (*policy.Policy, error) {
 			UserDownlink: t.StatsUserDownlink,
 			UserOnline:   t.StatsUserOnline,
 		},
+	}
+
+	if t.UplinkSpeedLimit != nil {
+		p.Stats.UplinkSpeedLimit = *t.UplinkSpeedLimit
+	}
+	if t.DownlinkSpeedLimit != nil {
+		p.Stats.DownlinkSpeedLimit = *t.DownlinkSpeedLimit
+	}
+	if t.MaxConcurrentIPs != nil {
+		p.Stats.MaxConcurrentIps = *t.MaxConcurrentIPs
+	}
+	if t.BurstSize != nil {
+		p.Stats.BurstSize = *t.BurstSize
 	}
 
 	if t.BufferSize != nil {

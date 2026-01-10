@@ -23,6 +23,10 @@ message Policy {
     bool user_uplink = 1;
     bool user_downlink = 2;
     bool user_online = 3;
+    int64 uplink_speed_limit = 4;
+    int64 downlink_speed_limit = 5;
+    int32 max_concurrent_ips = 6;
+    int64 burst_size = 7;
   }
 
   message Buffer {

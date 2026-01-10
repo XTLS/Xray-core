@@ -623,7 +623,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		link, rejected := dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter})
+		if rejected {
+			return errors.New("connection rejected by policy")
+		}
+		return r.NewMux(ctx, link)
 	}
 
 	if err := dispatch.DispatchLink(ctx, request.Destination(), &transport.Link{

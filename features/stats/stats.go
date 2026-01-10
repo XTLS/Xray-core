@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features"
+	"golang.org/x/time/rate"
 )
 
 // Counter is the interface for stats counters.
@@ -33,6 +34,10 @@ type OnlineMap interface {
 	List() []string
 	// IpTimeMap return client ips and their last access time.
 	IpTimeMap() map[string]time.Time
+	// TryAddIP atomically checks if an IP can be added and adds it if allowed.
+	TryAddIP(ip string) bool
+	// SetMaxIPs sets the maximum concurrent IPs allowed.
+	SetMaxIPs(max int)
 }
 
 // Channel is the interface for stats channel.
@@ -98,6 +103,12 @@ type Manager interface {
 	UnregisterChannel(string) error
 	// GetChannel returns a channel by its identifier.
 	GetChannel(string) Channel
+	// GetOrRegisterRateLimiter registers a new rate limiter to the manager.
+	GetOrRegisterRateLimiter(string, rate.Limit, int) (*rate.Limiter, error)
+	// GetRateLimiter returns a rate limiter by its identifier.
+	GetRateLimiter(string) *rate.Limiter
+	// UnregisterRateLimiter unregisters a rate limiter from the manager by its identifier.
+	UnregisterRateLimiter(string) error
 
 	// GetAllOnlineUsers returns all online users from all OnlineMaps.
 	GetAllOnlineUsers() []string
@@ -131,6 +142,11 @@ func GetOrRegisterChannel(m Manager, name string) (Channel, error) {
 	}
 
 	return m.RegisterChannel(name)
+}
+
+// GetOrRegisterRateLimiter tries to get the RateLimiter first. If not exist, it then tries to create a new one.
+func GetOrRegisterRateLimiter(m Manager, name string, limit rate.Limit, burst int) (*rate.Limiter, error) {
+	return m.GetOrRegisterRateLimiter(name, limit, burst)
 }
 
 // ManagerType returns the type of Manager interface. Can be used to implement common.HasType.
@@ -190,6 +206,21 @@ func (NoopManager) UnregisterChannel(string) error {
 
 // GetChannel implements Manager.
 func (NoopManager) GetChannel(string) Channel {
+	return nil
+}
+
+// GetOrRegisterRateLimiter implements Manager.
+func (NoopManager) GetOrRegisterRateLimiter(string, rate.Limit, int) (*rate.Limiter, error) {
+	return nil, errors.New("not implemented")
+}
+
+// GetRateLimiter implements Manager.
+func (NoopManager) GetRateLimiter(string) *rate.Limiter {
+	return nil
+}
+
+// UnregisterRateLimiter implements Manager.
+func (NoopManager) UnregisterRateLimiter(string) error {
 	return nil
 }
 

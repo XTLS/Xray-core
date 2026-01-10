@@ -29,6 +29,14 @@ type Stats struct {
 	UserDownlink bool
 	// Whether or not to enable online map for user.
 	UserOnline bool
+	// UplinkSpeedLimit in bytes per second, 0 means no limit.
+	UplinkSpeedLimit int64
+	// DownlinkSpeedLimit in bytes per second, 0 means no limit.
+	DownlinkSpeedLimit int64
+	// MaxConcurrentIPs limits the number of concurrent IPs per user, 0 means no limit.
+	MaxConcurrentIPs int
+	// BurstSize for rate limiter (default: SpeedLimit).
+	BurstSize int64
 }
 
 // Buffer contains settings for internal buffer.

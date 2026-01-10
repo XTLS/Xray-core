@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
+	"golang.org/x/time/rate"
 )
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
@@ -161,34 +162,60 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 	if user != nil && len(user.Email) > 0 {
 		p := d.policy.ForLevel(user.Level)
+		userIP := ""
+		if sessionInbound.Source.Address != nil {
+			userIP = sessionInbound.Source.Address.String()
+		}
+
+		if p.Stats.MaxConcurrentIPs > 0 {
+			name := "user>>>" + user.Email + ">>>online"
+			if om, _ := stats.GetOrRegisterOnlineMap(d.stats, name); om != nil {
+				om.SetMaxIPs(p.Stats.MaxConcurrentIPs)
+				if !om.TryAddIP(userIP) {
+					errors.LogWarning(ctx, "user ", user.Email, " exceeded max concurrent IPs: ", p.Stats.MaxConcurrentIPs, ", current IP: ", userIP)
+					return nil, nil
+				}
+			}
+		}
+		burst := calculateBurst(p.Stats.UplinkSpeedLimit, p.Stats.DownlinkSpeedLimit, p.Stats.BurstSize)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
 			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
-				inboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  inboundLink.Writer,
+				if p.Stats.UplinkSpeedLimit > 0 {
+					limiterName := "user>>>" + user.Email + ">>>limit>>>uplink"
+					limiter, _ := stats.GetOrRegisterRateLimiter(d.stats, limiterName, rate.Limit(p.Stats.UplinkSpeedLimit), int(burst))
+					inboundLink.Writer = NewRateLimitedWriter(inboundLink.Writer, limiter, c)
+				} else {
+					inboundLink.Writer = &SizeStatWriter{Counter: c, Writer: inboundLink.Writer}
 				}
 			}
+		} else if p.Stats.UplinkSpeedLimit > 0 {
+			limiterName := "user>>>" + user.Email + ">>>limit>>>uplink"
+			limiter, _ := stats.GetOrRegisterRateLimiter(d.stats, limiterName, rate.Limit(p.Stats.UplinkSpeedLimit), int(burst))
+			inboundLink.Writer = NewRateLimitedWriter(inboundLink.Writer, limiter, nil)
 		}
+
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
 			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
-				outboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  outboundLink.Writer,
+				if p.Stats.DownlinkSpeedLimit > 0 {
+					limiterName := "user>>>" + user.Email + ">>>limit>>>downlink"
+					limiter, _ := stats.GetOrRegisterRateLimiter(d.stats, limiterName, rate.Limit(p.Stats.DownlinkSpeedLimit), int(burst))
+					inboundLink.Reader = NewRateLimitedReader(inboundLink.Reader, limiter, c)
+				} else {
+					inboundLink.Reader = &SizeStatReader{Counter: c, Reader: inboundLink.Reader}
 				}
 			}
+		} else if p.Stats.DownlinkSpeedLimit > 0 {
+			limiterName := "user>>>" + user.Email + ">>>limit>>>downlink"
+			limiter, _ := stats.GetOrRegisterRateLimiter(d.stats, limiterName, rate.Limit(p.Stats.DownlinkSpeedLimit), int(burst))
+			inboundLink.Reader = NewRateLimitedReader(inboundLink.Reader, limiter, nil)
 		}
 
-		if p.Stats.UserOnline {
+		if p.Stats.UserOnline && p.Stats.MaxConcurrentIPs <= 0 {
 			name := "user>>>" + user.Email + ">>>online"
 			if om, _ := stats.GetOrRegisterOnlineMap(d.stats, name); om != nil {
-				sessionInbounds := session.InboundFromContext(ctx)
-				userIP := sessionInbounds.Source.Address.String()
 				om.AddIP(userIP)
-				// log Online user with ips
-				// errors.LogDebug(ctx, "user>>>" + user.Email + ">>>online", om.Count(), om.List())
-
 			}
 		}
 	}
@@ -196,7 +223,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	return inboundLink, outboundLink
 }
 
-func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) *transport.Link {
+func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) (*transport.Link, bool) {
 	sessionInbound := session.InboundFromContext(ctx)
 	var user *protocol.MemoryUser
 	if sessionInbound != nil {
@@ -207,34 +234,75 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
+		userIP := ""
+		if sessionInbound.Source.Address != nil {
+			userIP = sessionInbound.Source.Address.String()
+		}
+
+		if p.Stats.MaxConcurrentIPs > 0 {
+			name := "user>>>" + user.Email + ">>>online"
+			if om, _ := stats.GetOrRegisterOnlineMap(statsManager, name); om != nil {
+				om.SetMaxIPs(p.Stats.MaxConcurrentIPs)
+				if !om.TryAddIP(userIP) {
+					errors.LogWarning(ctx, "user ", user.Email, " exceeded max concurrent IPs: ", p.Stats.MaxConcurrentIPs, ", current IP: ", userIP)
+					common.Close(link.Writer)
+					common.Interrupt(link.Reader)
+					return link, true // rejected
+				}
+			}
+		} else if p.Stats.UserOnline {
+			name := "user>>>" + user.Email + ">>>online"
+			if om, _ := stats.GetOrRegisterOnlineMap(statsManager, name); om != nil {
+				om.AddIP(userIP)
+			}
+		}
+		burst := calculateBurst(p.Stats.UplinkSpeedLimit, p.Stats.DownlinkSpeedLimit, p.Stats.BurstSize)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
 			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
-				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
+				if p.Stats.UplinkSpeedLimit > 0 {
+					limiterName := "user>>>" + user.Email + ">>>limit>>>uplink"
+					limiter, _ := stats.GetOrRegisterRateLimiter(statsManager, limiterName, rate.Limit(p.Stats.UplinkSpeedLimit), int(burst))
+					link.Reader = NewRateLimitedReader(link.Reader, limiter, c)
+				} else {
+					link.Reader = &SizeStatReader{Counter: c, Reader: link.Reader}
+				}
 			}
+		} else if p.Stats.UplinkSpeedLimit > 0 {
+			limiterName := "user>>>" + user.Email + ">>>limit>>>uplink"
+			limiter, _ := stats.GetOrRegisterRateLimiter(statsManager, limiterName, rate.Limit(p.Stats.UplinkSpeedLimit), int(burst))
+			link.Reader = NewRateLimitedReader(link.Reader, limiter, nil)
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
 			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
-				link.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  link.Writer,
+				if p.Stats.DownlinkSpeedLimit > 0 {
+					limiterName := "user>>>" + user.Email + ">>>limit>>>downlink"
+					limiter, _ := stats.GetOrRegisterRateLimiter(statsManager, limiterName, rate.Limit(p.Stats.DownlinkSpeedLimit), int(burst))
+					link.Writer = NewRateLimitedWriter(
+						link.Writer,
+						limiter,
+						c,
+					)
+				} else {
+					link.Writer = &SizeStatWriter{
+						Counter: c,
+						Writer:  link.Writer,
+					}
 				}
 			}
-		}
-		if p.Stats.UserOnline {
-			name := "user>>>" + user.Email + ">>>online"
-			if om, _ := stats.GetOrRegisterOnlineMap(statsManager, name); om != nil {
-				sessionInbounds := session.InboundFromContext(ctx)
-				userIP := sessionInbounds.Source.Address.String()
-				om.AddIP(userIP)
-				// log Online user with ips
-				// errors.LogDebug(ctx, "user>>>" + user.Email + ">>>online", om.Count(), om.List())
-			}
+		} else if p.Stats.DownlinkSpeedLimit > 0 {
+			limiterName := "user>>>" + user.Email + ">>>limit>>>downlink"
+			limiter, _ := stats.GetOrRegisterRateLimiter(statsManager, limiterName, rate.Limit(p.Stats.DownlinkSpeedLimit), int(burst))
+			link.Writer = NewRateLimitedWriter(
+				link.Writer,
+				limiter,
+				nil,
+			)
 		}
 	}
 
-	return link
+	return link, false
 }
 
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
@@ -303,6 +371,9 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx)
+	if inbound == nil || outbound == nil {
+		return nil, errors.New("connection rejected by policy")
+	}
 	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
@@ -357,7 +428,10 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		content = new(session.Content)
 		ctx = session.ContextWithContent(ctx, content)
 	}
-	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
+	outbound, rejected := WrapLink(ctx, d.policy, d.stats, outbound)
+	if rejected {
+		return errors.New("connection rejected by policy")
+	}
 	sniffingRequest := content.SniffingRequest
 	if !sniffingRequest.Enabled {
 		d.routedDispatch(ctx, outbound, destination)
@@ -520,5 +594,38 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		log.Record(accessMessage)
 	}
 
+	shouldDisableSplice := false
+	if sessionInbound := session.InboundFromContext(ctx); sessionInbound != nil && sessionInbound.User != nil {
+		p := d.policy.ForLevel(sessionInbound.User.Level)
+		needsLimit := (p.Stats.UplinkSpeedLimit > 0 && p.Stats.UserUplink) || (p.Stats.DownlinkSpeedLimit > 0 && p.Stats.UserDownlink)
+		if needsLimit {
+			shouldDisableSplice = true
+		}
+	}
+	if shouldDisableSplice {
+		if inbound := session.InboundFromContext(ctx); inbound != nil {
+			newInbound := *inbound
+			newInbound.Conn = nil
+			ctx = session.ContextWithInbound(ctx, &newInbound)
+		}
+	}
+
 	handler.Dispatch(ctx, link)
+}
+
+func calculateBurst(uplinkLimit int64, downlinkLimit int64, configuredBurst int64) int {
+	const minBurst = 64 * 1024
+	burst := int(configuredBurst)
+	if burst <= 0 {
+		speedLimit := uplinkLimit
+		if downlinkLimit > speedLimit {
+			speedLimit = downlinkLimit
+		}
+		burst = int(speedLimit)
+	}
+
+	if burst < minBurst && (uplinkLimit > 0 || downlinkLimit > 0) {
+		burst = minBurst
+	}
+	return burst
 }
