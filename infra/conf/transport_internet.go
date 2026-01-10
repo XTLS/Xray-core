@@ -1098,6 +1098,9 @@ type UdpHop struct {
 }
 
 func (c *UdpHop) Build() (proto.Message, error) {
+	if c.Port == "" {
+		return nil, errors.New("port is empty")
+	}
 	config := &udphop.Config{}
 	config.Port = c.Port
 	config.Interval = c.Interval
