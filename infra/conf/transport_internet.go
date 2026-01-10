@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/endmask/salamander"
+	"github.com/xtls/xray-core/transport/internet/endmask/udphop"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria2"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -1076,17 +1077,30 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}, nil
 }
 
-var endmaskSettingsLoader = NewJSONConfigLoader(ConfigCreatorCache{
-	"salamander": func() interface{} { return new(SalamanderSettings) },
+var endmasksLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"salamander": func() interface{} { return new(Salamander) },
+	"udphop":     func() interface{} { return new(UdpHop) },
 }, "type", "settings")
 
-type SalamanderSettings struct {
+type Salamander struct {
 	Password string `json:"password"`
 }
 
-func (c *SalamanderSettings) Build() (proto.Message, error) {
+func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
+	return config, nil
+}
+
+type UdpHop struct {
+	Port     string `json:"port"`
+	Interval int64  `json:"interval"`
+}
+
+func (c *UdpHop) Build() (proto.Message, error) {
+	config := &udphop.Config{}
+	config.Port = c.Port
+	config.Interval = c.Interval
 	return config, nil
 }
 
@@ -1100,7 +1114,7 @@ func (c *Endmask) Build() (proto.Message, error) {
 	if c.Settings != nil {
 		settings = ([]byte)(*c.Settings)
 	}
-	rawConfig, err := endmaskSettingsLoader.LoadWithID(settings, c.Type)
+	rawConfig, err := endmasksLoader.LoadWithID(settings, c.Type)
 	if err != nil {
 		return nil, errors.New("failed to load endmask for type ", c.Type).Base(err)
 	}
