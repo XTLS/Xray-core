@@ -868,16 +868,6 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type Salamander struct {
-	Password string `json:"password"`
-}
-
-func (c *Salamander) Build() (proto.Message, error) {
-	config := &salamander.Config{}
-	config.Password = c.Password
-	return config, nil
-}
-
 type TransportProtocol string
 
 // Build implements Buildable.
@@ -1086,13 +1076,47 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}, nil
 }
 
+var endmaskSettingsLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"salamander": func() interface{} { return new(SalamanderSettings) },
+}, "type", "settings")
+
+type SalamanderSettings struct {
+	Password string `json:"password"`
+}
+
+func (c *SalamanderSettings) Build() (proto.Message, error) {
+	config := &salamander.Config{}
+	config.Password = c.Password
+	return config, nil
+}
+
+type Endmask struct {
+	Type     string           `json:"type"`
+	Settings *json.RawMessage `json:"settings"`
+}
+
+func (c *Endmask) Build() (proto.Message, error) {
+	settings := []byte("{}")
+	if c.Settings != nil {
+		settings = ([]byte)(*c.Settings)
+	}
+	rawConfig, err := endmaskSettingsLoader.LoadWithID(settings, c.Type)
+	if err != nil {
+		return nil, errors.New("failed to load endmask for type ", c.Type).Base(err)
+	}
+	ts, err := rawConfig.(Buildable).Build()
+	if err != nil {
+		return nil, errors.New("failed to build endmask for type ", c.Type).Base(err)
+	}
+	return ts, nil
+}
+
 type StreamConfig struct {
 	Address             *Address           `json:"address"`
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Endmask             string             `json:"endmask"`
-	SalamanderSettings  *Salamander        `json:"salamanderSettings"`
+	Endmasks            []*Endmask         `json:"endmasks"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1155,22 +1179,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		return nil, errors.PrintRemovedFeatureError(`Legacy XTLS`, `xtls-rprx-vision with TLS or REALITY`)
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
-	}
-	switch strings.ToLower(c.Endmask) {
-	case "", "none":
-	case "salamander":
-		if c.SalamanderSettings == nil {
-			return nil, errors.New(`salamander: Empty "salamanderSettings".`)
-		}
-		ts, err := c.SalamanderSettings.Build()
-		if err != nil {
-			return nil, errors.New("Failed to build salamander config.").Base(err)
-		}
-		tm := serial.ToTypedMessage(ts)
-		config.EndmaskSettings = append(config.SecuritySettings, tm)
-		config.EndmaskType = tm.Type
-	default:
-		return nil, errors.New(`Unknown endmask "` + c.Endmask + `".`)
 	}
 	if c.RAWSettings != nil {
 		c.TCPSettings = c.RAWSettings
@@ -1255,6 +1263,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.SocketSettings = ss
 	}
+
+	for _, endmask := range c.Endmasks {
+		e, err := endmask.Build()
+		if err != nil {
+			return nil, errors.New("failed to build endmask with type ", endmask.Type).Base(err)
+		}
+		t := serial.ToTypedMessage(e)
+		config.Endmasks = append(config.Endmasks, t)
+	}
+
 	return config, nil
 }
 

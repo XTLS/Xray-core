@@ -24,7 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-type udpSessionManger struct {
+type udpSessionManager struct {
 	conn   *quic.Conn
 	m      map[uint32]*InterUdpConn
 	nextId uint32
@@ -32,7 +32,7 @@ type udpSessionManger struct {
 	mutex  sync.RWMutex
 }
 
-func (m *udpSessionManger) run() {
+func (m *udpSessionManager) run() {
 	for {
 		d, err := m.conn.ReceiveDatagram(context.Background())
 		if err != nil {
@@ -56,7 +56,7 @@ func (m *udpSessionManger) run() {
 	}
 }
 
-func (m *udpSessionManger) close(udpConn *InterUdpConn) {
+func (m *udpSessionManager) close(udpConn *InterUdpConn) {
 	if !udpConn.closed {
 		udpConn.closed = true
 		close(udpConn.ch)
@@ -64,7 +64,7 @@ func (m *udpSessionManger) close(udpConn *InterUdpConn) {
 	}
 }
 
-func (m *udpSessionManger) udp() (*InterUdpConn, error) {
+func (m *udpSessionManager) udp() (*InterUdpConn, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -91,7 +91,7 @@ func (m *udpSessionManger) udp() (*InterUdpConn, error) {
 	return udpConn, nil
 }
 
-func (m *udpSessionManger) feed(sessionId uint32, d []byte) {
+func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -107,17 +107,17 @@ func (m *udpSessionManger) feed(sessionId uint32, d []byte) {
 }
 
 type client struct {
-	ctx          context.Context
-	dest         net.Destination
-	pktConn      net.PacketConn
-	conn         *quic.Conn
-	config       *Config
-	tlsConfig    *go_tls.Config
-	endmask      endmask.Endmask
-	socketConfig *internet.SocketConfig
-	closed       bool
-	udpSM        *udpSessionManger
-	mutex        sync.Mutex
+	ctx            context.Context
+	dest           net.Destination
+	pktConn        net.PacketConn
+	conn           *quic.Conn
+	config         *Config
+	tlsConfig      *go_tls.Config
+	endmaskManager *endmask.EndmaskManager
+	socketConfig   *internet.SocketConfig
+	closed         bool
+	udpSM          *udpSessionManager
+	mutex          sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -162,8 +162,8 @@ func (c *client) dial() error {
 		return errors.New("raw is not PacketConn")
 	}
 
-	if c.endmask != nil {
-		pktConn, err = c.endmask.WrapPacketConn(pktConn)
+	if c.endmaskManager != nil {
+		pktConn, err = c.endmaskManager.WrapPacketConnClient(pktConn)
 		if err != nil {
 			return errors.New("endmask err").Base(err)
 		}
@@ -234,7 +234,7 @@ func (c *client) dial() error {
 	c.pktConn = pktConn
 	c.conn = quicConn
 	if c.config.Udp && serverUdp {
-		c.udpSM = &udpSessionManger{
+		c.udpSM = &udpSessionManager{
 			conn:   quicConn,
 			m:      make(map[uint32]*InterUdpConn),
 			nextId: 1,
@@ -308,12 +308,12 @@ func (c *client) udp() (stat.Connection, error) {
 	return c.udpSM.udp()
 }
 
-type clientManger struct {
+type clientManager struct {
 	m     map[string]*client
 	mutex sync.Mutex
 }
 
-func (m *clientManger) clean() {
+func (m *clientManager) clean() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -324,7 +324,7 @@ func (m *clientManger) clean() {
 	}
 }
 
-var manger *clientManger
+var manger *clientManager
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
@@ -334,19 +334,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
-	endmask, _ := streamSettings.EndmaskSettings.(endmask.Endmask)
 
 	manger.mutex.Lock()
 	c, ok := manger.m[addr]
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
-			ctx:          ctx,
-			dest:         dest,
-			config:       config,
-			tlsConfig:    tlsConfig.GetTLSConfig(),
-			endmask:      endmask,
-			socketConfig: streamSettings.SocketSettings,
+			ctx:            ctx,
+			dest:           dest,
+			config:         config,
+			tlsConfig:      tlsConfig.GetTLSConfig(),
+			endmaskManager: streamSettings.EndmaskManger,
+			socketConfig:   streamSettings.SocketSettings,
 		}
 		manger.m[addr] = c
 	}
@@ -362,7 +361,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 }
 
 func init() {
-	manger = &clientManger{
+	manger = &clientManager{
 		m: make(map[string]*client),
 	}
 	(&task.Periodic{
