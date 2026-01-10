@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.transport.internet.endmask.udphop;
+option csharp_namespace = "Xray.Transport.Internet.Endmask.UdpHop";
+option go_package = "github.com/xtls/xray-core/transport/internet/endmask/udphop";
+option java_package = "com.xray.transport.internet.endmask.udphop";
+option java_multiple_files = true;
+
+message Config {
+  string port = 1;
+  int64 interval = 2;
+}
+
