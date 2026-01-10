@@ -44,7 +44,7 @@ type udpPacket struct {
 	Err  error
 }
 
-type ListenUDPFunc = func() (net.PacketConn, error)
+type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
 func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn) (net.PacketConn, error) {
 	if hopInterval == 0 {
@@ -133,7 +133,9 @@ func (u *udpHopPacketConn) hop() {
 	if u.closed {
 		return
 	}
-	newConn, err := u.ListenUDPFunc()
+	// Update addrIndex to a new random value
+	u.addrIndex = rand.Intn(len(u.Addrs))
+	newConn, err := u.ListenUDPFunc(u.Addrs[u.addrIndex].(*net.UDPAddr))
 	if err != nil {
 		// Could be temporary, just skip this hop
 		return
@@ -159,8 +161,6 @@ func (u *udpHopPacketConn) hop() {
 		_ = trySetWriteBuffer(u.currentConn, u.writeBufferSize)
 	}
 	go u.recvLoop(newConn)
-	// Update addrIndex to a new random value
-	u.addrIndex = rand.Intn(len(u.Addrs))
 }
 
 func (u *udpHopPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
