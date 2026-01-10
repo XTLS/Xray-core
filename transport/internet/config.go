@@ -93,19 +93,6 @@ func (c *StreamConfig) HasSecuritySettings() bool {
 	return len(c.SecuritySettings) > 0
 }
 
-func (c *StreamConfig) GetEffectiveEndmaskSettings() (interface{}, error) {
-	for _, settings := range c.EndmaskSettings {
-		if settings.Type == c.EndmaskType {
-			return settings.GetInstance()
-		}
-	}
-	return serial.GetInstance(c.EndmaskType)
-}
-
-func (c *StreamConfig) HasEndmaskSettings() bool {
-	return len(c.EndmaskSettings) > 0
-}
-
 func (c *ProxyConfig) HasTag() bool {
 	return c != nil && len(c.Tag) > 0
 }

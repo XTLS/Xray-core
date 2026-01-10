@@ -274,8 +274,7 @@ type StreamConfig struct {
 	SecurityType string `protobuf:"bytes,3,opt,name=security_type,json=securityType,proto3" json:"security_type,omitempty"`
 	// Transport security settings. They can be either TLS or REALITY.
 	SecuritySettings []*serial.TypedMessage `protobuf:"bytes,4,rep,name=security_settings,json=securitySettings,proto3" json:"security_settings,omitempty"`
-	EndmaskType      string                 `protobuf:"bytes,10,opt,name=endmask_type,json=endmaskType,proto3" json:"endmask_type,omitempty"`
-	EndmaskSettings  []*serial.TypedMessage `protobuf:"bytes,11,rep,name=endmask_settings,json=endmaskSettings,proto3" json:"endmask_settings,omitempty"`
+	Endmasks         []*serial.TypedMessage `protobuf:"bytes,10,rep,name=endmasks,proto3" json:"endmasks,omitempty"`
 	SocketSettings   *SocketConfig          `protobuf:"bytes,6,opt,name=socket_settings,json=socketSettings,proto3" json:"socket_settings,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -353,16 +352,9 @@ func (x *StreamConfig) GetSecuritySettings() []*serial.TypedMessage {
 	return nil
 }
 
-func (x *StreamConfig) GetEndmaskType() string {
+func (x *StreamConfig) GetEndmasks() []*serial.TypedMessage {
 	if x != nil {
-		return x.EndmaskType
-	}
-	return ""
-}
-
-func (x *StreamConfig) GetEndmaskSettings() []*serial.TypedMessage {
-	if x != nil {
-		return x.EndmaskSettings
+		return x.Endmasks
 	}
 	return nil
 }
@@ -811,17 +803,16 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x1ftransport/internet/config.proto\x12\x17xray.transport.internet\x1a!common/serial/typed_message.proto\x1a\x18common/net/address.proto\"t\n" +
 	"\x0fTransportConfig\x12#\n" +
 	"\rprotocol_name\x18\x03 \x01(\tR\fprotocolName\x12<\n" +
-	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\x8b\x04\n" +
+	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\xd9\x03\n" +
 	"\fStreamConfig\x125\n" +
 	"\aaddress\x18\b \x01(\v2\x1b.xray.common.net.IPOrDomainR\aaddress\x12\x12\n" +
 	"\x04port\x18\t \x01(\rR\x04port\x12#\n" +
 	"\rprotocol_name\x18\x05 \x01(\tR\fprotocolName\x12W\n" +
 	"\x12transport_settings\x18\x02 \x03(\v2(.xray.transport.internet.TransportConfigR\x11transportSettings\x12#\n" +
 	"\rsecurity_type\x18\x03 \x01(\tR\fsecurityType\x12M\n" +
-	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12!\n" +
-	"\fendmask_type\x18\n" +
-	" \x01(\tR\vendmaskType\x12K\n" +
-	"\x10endmask_settings\x18\v \x03(\v2 .xray.common.serial.TypedMessageR\x0fendmaskSettings\x12N\n" +
+	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12<\n" +
+	"\bendmasks\x18\n" +
+	" \x03(\v2 .xray.common.serial.TypedMessageR\bendmasks\x12N\n" +
 	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
@@ -930,7 +921,7 @@ var file_transport_internet_config_proto_depIdxs = []int32{
 	10, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
 	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
 	9,  // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	9,  // 4: xray.transport.internet.StreamConfig.endmask_settings:type_name -> xray.common.serial.TypedMessage
+	9,  // 4: xray.transport.internet.StreamConfig.endmasks:type_name -> xray.common.serial.TypedMessage
 	7,  // 5: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
 	2,  // 6: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
 	0,  // 7: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy

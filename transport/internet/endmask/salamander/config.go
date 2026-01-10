@@ -7,14 +7,26 @@ import (
 	"github.com/xtls/xray-core/transport/internet/endmask/salamander/obfs"
 )
 
-func (c *Config) WrapConn(raw net.Conn) (net.Conn, error) {
-	return nil, errors.New("pkt only")
+func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
+	return raw, nil
 }
 
-func (c *Config) WrapPacketConn(raw net.PacketConn) (net.PacketConn, error) {
+func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
+	return raw, nil
+}
+
+func (c *Config) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
 	ob, err := obfs.NewSalamanderObfuscator([]byte(c.Password))
 	if err != nil {
-		return nil, errors.New("obfs err").Base(err)
+		return nil, errors.New("salamander err").Base(err)
+	}
+	return obfs.WrapPacketConn(raw, ob), nil
+}
+
+func (c *Config) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
+	ob, err := obfs.NewSalamanderObfuscator([]byte(c.Password))
+	if err != nil {
+		return nil, errors.New("salamander err").Base(err)
 	}
 	return obfs.WrapPacketConn(raw, ob), nil
 }
