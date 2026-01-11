@@ -267,7 +267,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		// because those bytes need to be processed by the TLS layer first
 		if w.rawInput != nil && w.rawInput.Len() > 0 {
 			// rawInput has pending data - defer direct copy to next read
-			// Keep *switchToDirectCopy as true so we retry on next read
+			// *switchToDirectCopy remains true (unchanged), so we will retry on the next ReadMultiBuffer call
 			// This ensures we don't mix encrypted bytes with application data
 			return buffer, err
 		}
