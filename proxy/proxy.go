@@ -257,25 +257,16 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 	if *switchToDirectCopy {
 		// XTLS Vision processes TLS-like conn's input and rawInput
-		// Process rawInput first, then input, then current buffer
-		if w.rawInput != nil {
-			if rawInputBuffer, err := buf.ReadFrom(w.rawInput); err == nil && !rawInputBuffer.IsEmpty() {
-				buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
-			}
+		if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
+			buffer, _ = buf.MergeMulti(buffer, inputBuffer)
 		}
-		if w.input != nil {
-			if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
-				buffer, _ = buf.MergeMulti(buffer, inputBuffer)
-			}
+		if rawInputBuffer, err := buf.ReadFrom(w.rawInput); err == nil && !rawInputBuffer.IsEmpty() {
+			buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
 		}
-		if w.input != nil {
-			*w.input = bytes.Reader{} // release memory
-			w.input = nil
-		}
-		if w.rawInput != nil {
-			*w.rawInput = bytes.Buffer{} // release memory
-			w.rawInput = nil
-		}
+		*w.input = bytes.Reader{} // release memory
+		w.input = nil
+		*w.rawInput = bytes.Buffer{} // release memory
+		w.rawInput = nil
 
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil && inbound.Conn != nil {
 			// if w.isUplink && inbound.CanSpliceCopy == 2 { // TODO: enable uplink splice
