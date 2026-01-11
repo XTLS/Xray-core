@@ -389,8 +389,8 @@ func (b Bandwidth) Bps() (uint64, error) {
 }
 
 type UdpHop struct {
-	PortList *PortList `json:"port"`
-	Interval int64     `json:"interval"`
+	PortList json.RawMessage `json:"port"`
+	Interval int64           `json:"interval"`
 }
 
 type Hysteria2Config struct {
@@ -418,6 +418,10 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	var hop *PortList
+	if err := json.Unmarshal(c.UdpHop.PortList, &hop); err != nil {
+		hop = &PortList{}
+	}
 
 	if up > 0 && up < 65536 {
 		return nil, errors.New("Up must be at least 65536 Bps")
@@ -425,6 +429,10 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	if down > 0 && down < 65536 {
 		return nil, errors.New("Down must be at least 65536 Bps")
 	}
+	if c.UdpHop.Interval != 0 && c.UdpHop.Interval < 5 {
+		return nil, errors.New("Interval must be at least 5")
+	}
+
 	if c.InitStreamReceiveWindow > 0 && c.InitStreamReceiveWindow < 16384 {
 		return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
 	}
@@ -449,7 +457,7 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
-	config.PortList = c.UdpHop.PortList.Build()
+	config.Ports = hop.Build().Ports()
 	config.Interval = c.UdpHop.Interval
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
@@ -1079,14 +1087,41 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}, nil
 }
 
-type SalamanderConfig struct {
+var (
+	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"salamander": func() interface{} { return new(Salamander) },
+	}, "type", "settings")
+)
+
+type Salamander struct {
 	Password string `json:"password"`
 }
 
-func (c *SalamanderConfig) Build() (proto.Message, error) {
+func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
+}
+
+type Udpmask struct {
+	Type     string           `json:"type"`
+	Settings *json.RawMessage `json:"settings"`
+}
+
+func (c *Udpmask) Build() (proto.Message, error) {
+	settings := []byte("{}")
+	if c.Settings != nil {
+		settings = ([]byte)(*c.Settings)
+	}
+	rawConfig, err := udpmaskLoader.LoadWithID(settings, c.Type)
+	if err != nil {
+		return nil, errors.New("failed to load udpmask for type ", c.Type).Base(err)
+	}
+	ts, err := rawConfig.(Buildable).Build()
+	if err != nil {
+		return nil, errors.New("failed to build udpmask for type ", c.Type).Base(err)
+	}
+	return ts, nil
 }
 
 type StreamConfig struct {
@@ -1094,8 +1129,7 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Udpmask             string             `json:"udpmask"`
-	SalamanderSettings  *SalamanderConfig  `json:"salamanderSettings"`
+	Udpmask             *Udpmask           `json:"udpmask"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1126,6 +1160,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.ProtocolName = protocol
 	}
+
 	switch strings.ToLower(c.Security) {
 	case "", "none":
 	case "tls":
@@ -1158,18 +1193,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		return nil, errors.PrintRemovedFeatureError(`Legacy XTLS`, `xtls-rprx-vision with TLS or REALITY`)
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
-	}
-
-	switch strings.ToLower(c.Udpmask) {
-	case "", "none":
-	case "salamander":
-		ts, err := c.SalamanderSettings.Build()
-		if err != nil {
-			return nil, errors.New("Failed to build salamander config.").Base(err)
-		}
-		config.Udpmask = serial.ToTypedMessage(ts)
-	default:
-		return nil, errors.New(`Unknown udpmask "` + c.Udpmask + `".`)
 	}
 
 	if c.RAWSettings != nil {
@@ -1255,6 +1278,12 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.SocketSettings = ss
 	}
+
+	u, err := c.Udpmask.Build()
+	if err != nil {
+		return nil, errors.New("failed to build udpmask with type ", c.Udpmask.Type).Base(err)
+	}
+	config.Udpmask = serial.ToTypedMessage(u)
 
 	return config, nil
 }

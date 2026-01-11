@@ -115,7 +115,6 @@ type client struct {
 	conn         *quic.Conn
 	config       *Config
 	tlsConfig    *go_tls.Config
-	ports        []uint16
 	udpmask      udpmask.Udpmask
 	socketConfig *internet.SocketConfig
 	closed       bool
@@ -154,13 +153,9 @@ func (c *client) dial() error {
 	c.udpSM = nil
 
 	var index int
-	if len(c.ports) > 0 {
-		index = rand.Intn(len(c.ports))
-		c.dest = net.Destination{
-			Address: c.dest.Address,
-			Port:    net.Port(c.ports[index]),
-			Network: net.Network_UDP,
-		}
+	if len(c.config.Ports) > 0 {
+		index = rand.Intn(len(c.config.Ports))
+		c.dest.Port = net.Port(c.config.Ports[index])
 	}
 
 	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
@@ -175,10 +170,10 @@ func (c *client) dial() error {
 		return errors.New("raw is not PacketConn")
 	}
 
-	if len(c.ports) > 0 {
+	if len(c.config.Ports) > 0 {
 		addr := &udphop.UDPHopAddr{
 			IP:    remote.(*net.UDPAddr).IP,
-			Ports: c.ports,
+			Ports: c.config.Ports,
 		}
 		pktConn, err = udphop.NewUDPHopPacketConn(addr, time.Duration(c.config.Interval)*time.Second, c.udphopDialer, pktConn, index)
 		if err != nil {
@@ -399,7 +394,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			dest:         dest,
 			config:       config,
 			tlsConfig:    tlsConfig.GetTLSConfig(),
-			ports:        config.PortList.Ports(),
 			udpmask:      streamSettings.Udpmask,
 			socketConfig: streamSettings.SocketSettings,
 		}
