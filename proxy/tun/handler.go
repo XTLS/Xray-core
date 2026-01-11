@@ -108,7 +108,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	inbound := session.Inbound{
 		Name:          "tun",
 		Tag:           t.tag,
-		CanSpliceCopy: 1,
+		CanSpliceCopy: 3,
 		Source:        net.DestinationFromAddr(conn.RemoteAddr()),
 		User: &protocol.MemoryUser{
 			Level: t.config.UserLevel,
@@ -127,7 +127,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 		Status: log.AccessAccepted,
 		Reason: "",
 	})
-	errors.LogInfo(ctx, "processing connection from: ", conn.RemoteAddr())
+	errors.LogInfo(ctx, "processing connection from: ", conn.RemoteAddr(), " to ", destination)
 
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
@@ -135,10 +135,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	}
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
-		return
 	}
-
-	errors.LogInfo(ctx, "connection completed")
 }
 
 // Network implements proxy.Inbound

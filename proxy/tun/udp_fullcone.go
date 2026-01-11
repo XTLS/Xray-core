@@ -117,6 +117,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 				Status: log.AccessAccepted,
 				Reason: "",
 			})
+			errors.LogInfo(ctx, "processing connection from: ", src, " to ", dst)
 			link := &transport.Link{
 				Reader: &buf.TimeoutWrapperReader{Reader: conn.reader},
 				// reverse source and destination, indicating the packets to write are going in the other
