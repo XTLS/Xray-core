@@ -130,7 +130,14 @@ type netBindClient struct {
 	conns     map[*netEndpoint]net.Conn
 	dataChan  chan *receivedData
 	closeChan chan struct{}
+	closeOnce sync.Once
 }
+
+const (
+	// Buffer size for dataChan - allows some buffering of received packets
+	// while dispatcher matches them with read requests
+	dataChannelBufferSize = 100
+)
 
 type receivedData struct {
 	data     []byte
@@ -150,7 +157,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	bind.connMutex.Lock()
 	if bind.conns == nil {
 		bind.conns = make(map[*netEndpoint]net.Conn)
-		bind.dataChan = make(chan *receivedData, 100)
+		bind.dataChan = make(chan *receivedData, dataChannelBufferSize)
 		bind.closeChan = make(chan struct{})
 		
 		// Start unified reader dispatcher
@@ -172,10 +179,16 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 			buf := make([]byte, maxPacketSize)
 			n, err := conn.Read(buf)
 			
+			// Send only the valid data portion to dispatcher
+			dataToSend := buf
+			if n > 0 && n < len(buf) {
+				dataToSend = buf[:n]
+			}
+			
 			// Send received data to dispatcher
 			select {
 			case bind.dataChan <- &receivedData{
-				data:     buf,
+				data:     dataToSend,
 				n:        n,
 				endpoint: endpoint,
 				err:      err,
@@ -202,7 +215,12 @@ func (bind *netBindClient) unifiedReader() {
 	for {
 		select {
 		case data := <-bind.dataChan:
-			// Wait for a read request
+			// Bounds check to prevent panic
+			if data.n > len(data.data) {
+				data.n = len(data.data)
+			}
+			
+			// Wait for a read request with timeout to prevent blocking forever
 			select {
 			case v := <-bind.readQueue:
 				// Copy data to request buffer
@@ -230,12 +248,14 @@ func (bind *netBindClient) unifiedReader() {
 
 // Close implements conn.Bind.Close for netBindClient
 func (bind *netBindClient) Close() error {
-	// Close the channels to stop all goroutines
-	bind.connMutex.Lock()
-	if bind.closeChan != nil {
-		close(bind.closeChan)
-	}
-	bind.connMutex.Unlock()
+	// Use sync.Once to prevent double-close panic
+	bind.closeOnce.Do(func() {
+		bind.connMutex.Lock()
+		if bind.closeChan != nil {
+			close(bind.closeChan)
+		}
+		bind.connMutex.Unlock()
+	})
 	
 	// Call parent Close
 	return bind.netBind.Close()
