@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/endmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria2/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria2/udphop"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -107,17 +108,17 @@ func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
 }
 
 type client struct {
-	ctx            context.Context
-	dest           net.Destination
-	pktConn        net.PacketConn
-	conn           *quic.Conn
-	config         *Config
-	tlsConfig      *go_tls.Config
-	endmaskManager *endmask.EndmaskManager
-	socketConfig   *internet.SocketConfig
-	closed         bool
-	udpSM          *udpSessionManager
-	mutex          sync.Mutex
+	ctx          context.Context
+	dest         net.Destination
+	pktConn      net.PacketConn
+	conn         *quic.Conn
+	config       *Config
+	tlsConfig    *go_tls.Config
+	endmask      endmask.Endmask
+	socketConfig *internet.SocketConfig
+	closed       bool
+	udpSM        *udpSessionManager
+	mutex        sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -162,11 +163,20 @@ func (c *client) dial() error {
 		return errors.New("raw is not PacketConn")
 	}
 
-	if c.endmaskManager != nil {
-		if udphopConfig := c.endmaskManager.GetUdpHop(); udphopConfig != nil {
-			pktConn, err = udphopConfig.NewUDPHopPacketConn(remote, c.udphopDialer, pktConn)
+	if c.config.Port != "" {
+		h, _, _ := net.SplitHostPort(remote.String())
+		addr, err := udphop.ResolveUDPHopAddr(net.JoinHostPort(h, c.config.Port))
+		if err != nil {
+			return errors.New("udphop err").Base(err)
 		}
-		pktConn, err = c.endmaskManager.WrapPacketConnClient(pktConn)
+		pktConn, err = udphop.NewUDPHopPacketConn(addr, time.Duration(c.config.Interval)*time.Second, c.udphopDialer, pktConn)
+		if err != nil {
+			return errors.New("udphop err").Base(err)
+		}
+	}
+
+	if c.endmask != nil {
+		pktConn, err = c.endmask.WrapPacketConnClient(pktConn)
 		if err != nil {
 			return errors.New("endmask err").Base(err)
 		}
@@ -322,14 +332,21 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	if c.status() == StatusInactive {
+		errors.LogDebug(c.ctx, "stop hop on quic inactive waiting to be closed")
+		return nil, errors.New()
+	}
+
 	raw, err := internet.DialSystem(c.ctx, net.DestinationFromAddr(addr), c.socketConfig)
 	if err != nil {
-		return nil, errors.New("failed to dial to dest").Base(err)
+		errors.LogDebug(c.ctx, "failed to dial to dest skip hop")
+		return nil, errors.New()
 	}
 
 	pktConn, ok := raw.(net.PacketConn)
 	if !ok {
-		return nil, errors.New("raw is not PacketConn")
+		errors.LogDebug(c.ctx, "raw is not PacketConn skip hop")
+		return nil, errors.New()
 	}
 
 	return pktConn, nil
@@ -367,12 +384,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
-			ctx:            ctx,
-			dest:           dest,
-			config:         config,
-			tlsConfig:      tlsConfig.GetTLSConfig(),
-			endmaskManager: streamSettings.EndmaskManger,
-			socketConfig:   streamSettings.SocketSettings,
+			ctx:          ctx,
+			dest:         dest,
+			config:       config,
+			tlsConfig:    tlsConfig.GetTLSConfig(),
+			endmask:      streamSettings.Endmask,
+			socketConfig: streamSettings.SocketSettings,
 		}
 		manger.m[addr] = c
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/xtls/xray-core/transport/internet/endmask/udphop/utils"
+	"github.com/xtls/xray-core/transport/internet/hysteria2/utils"
 )
 
 type InvalidPortError struct {

@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/endmask/salamander"
-	"github.com/xtls/xray-core/transport/internet/endmask/udphop"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria2"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -389,16 +388,17 @@ func (b Bandwidth) Bps() (uint64, error) {
 	return uint64(val * float64(mul)), nil
 }
 
-type Obfs struct {
-	Type     string `json:"type"`
-	Password string `json:"password"`
+type UdpHop struct {
+	Port     string `json:"port"`
+	Interval int64  `json:"interval"`
 }
 
 type Hysteria2Config struct {
-	Udp  bool      `json:"udp"`
-	Auth string    `json:"auth"`
-	Up   Bandwidth `json:"up"`
-	Down Bandwidth `json:"down"`
+	Udp    bool      `json:"udp"`
+	Auth   string    `json:"auth"`
+	Up     Bandwidth `json:"up"`
+	Down   Bandwidth `json:"down"`
+	UdpHop UdpHop    `json:"udphop"`
 
 	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
@@ -449,6 +449,8 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
+	config.Port = c.UdpHop.Port
+	config.Interval = c.UdpHop.Interval
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
 	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow
@@ -1077,55 +1079,14 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}, nil
 }
 
-var endmasksLoader = NewJSONConfigLoader(ConfigCreatorCache{
-	"salamander": func() interface{} { return new(Salamander) },
-	"udphop":     func() interface{} { return new(UdpHop) },
-}, "type", "settings")
-
-type Salamander struct {
+type SalamanderConfig struct {
 	Password string `json:"password"`
 }
 
-func (c *Salamander) Build() (proto.Message, error) {
+func (c *SalamanderConfig) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
-}
-
-type UdpHop struct {
-	Port     string `json:"port"`
-	Interval int64  `json:"interval"`
-}
-
-func (c *UdpHop) Build() (proto.Message, error) {
-	if c.Port == "" {
-		return nil, errors.New("port is empty")
-	}
-	config := &udphop.Config{}
-	config.Port = c.Port
-	config.Interval = c.Interval
-	return config, nil
-}
-
-type Endmask struct {
-	Type     string           `json:"type"`
-	Settings *json.RawMessage `json:"settings"`
-}
-
-func (c *Endmask) Build() (proto.Message, error) {
-	settings := []byte("{}")
-	if c.Settings != nil {
-		settings = ([]byte)(*c.Settings)
-	}
-	rawConfig, err := endmasksLoader.LoadWithID(settings, c.Type)
-	if err != nil {
-		return nil, errors.New("failed to load endmask for type ", c.Type).Base(err)
-	}
-	ts, err := rawConfig.(Buildable).Build()
-	if err != nil {
-		return nil, errors.New("failed to build endmask for type ", c.Type).Base(err)
-	}
-	return ts, nil
 }
 
 type StreamConfig struct {
@@ -1133,7 +1094,8 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Endmasks            []*Endmask         `json:"endmasks"`
+	Endmask             string             `json:"endmask"`
+	SalamanderSettings  *SalamanderConfig  `json:"salamanderSettings"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1197,6 +1159,19 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
+
+	switch strings.ToLower(c.Endmask) {
+	case "", "none":
+	case "salamander":
+		ts, err := c.SalamanderSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build salamander config.").Base(err)
+		}
+		config.Endmask = serial.ToTypedMessage(ts)
+	default:
+		return nil, errors.New(`Unknown endmask "` + c.Endmask + `".`)
+	}
+
 	if c.RAWSettings != nil {
 		c.TCPSettings = c.RAWSettings
 	}
@@ -1279,15 +1254,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			return nil, errors.New("Failed to build sockopt.").Base(err)
 		}
 		config.SocketSettings = ss
-	}
-
-	for _, endmask := range c.Endmasks {
-		e, err := endmask.Build()
-		if err != nil {
-			return nil, errors.New("failed to build endmask with type ", endmask.Type).Base(err)
-		}
-		t := serial.ToTypedMessage(e)
-		config.Endmasks = append(config.Endmasks, t)
 	}
 
 	return config, nil
