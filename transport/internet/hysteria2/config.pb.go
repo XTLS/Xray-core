@@ -27,13 +27,15 @@ type Config struct {
 	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
 	Up                      uint64                 `protobuf:"varint,3,opt,name=up,proto3" json:"up,omitempty"`
 	Down                    uint64                 `protobuf:"varint,4,opt,name=down,proto3" json:"down,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,5,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,6,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,7,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,8,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,9,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,10,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,11,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
+	Port                    string                 `protobuf:"bytes,5,opt,name=port,proto3" json:"port,omitempty"`
+	Interval                int64                  `protobuf:"varint,6,opt,name=interval,proto3" json:"interval,omitempty"`
+	InitStreamReceiveWindow uint64                 `protobuf:"varint,7,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
+	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,8,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
+	InitConnReceiveWindow   uint64                 `protobuf:"varint,9,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
+	MaxConnReceiveWindow    uint64                 `protobuf:"varint,10,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
+	MaxIdleTimeout          int64                  `protobuf:"varint,11,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
+	KeepAlivePeriod         int64                  `protobuf:"varint,12,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
+	DisablePathMtuDiscovery bool                   `protobuf:"varint,13,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -96,6 +98,20 @@ func (x *Config) GetDown() uint64 {
 	return 0
 }
 
+func (x *Config) GetPort() string {
+	if x != nil {
+		return x.Port
+	}
+	return ""
+}
+
+func (x *Config) GetInterval() int64 {
+	if x != nil {
+		return x.Interval
+	}
+	return 0
+}
+
 func (x *Config) GetInitStreamReceiveWindow() uint64 {
 	if x != nil {
 		return x.InitStreamReceiveWindow
@@ -149,20 +165,22 @@ var File_transport_internet_hysteria2_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria2_config_proto_rawDesc = "" +
 	"\n" +
-	")transport/internet/hysteria2/config.proto\x12!xray.transport.internet.hysteria2\"\xcd\x03\n" +
+	")transport/internet/hysteria2/config.proto\x12!xray.transport.internet.hysteria2\"\xfd\x03\n" +
 	"\x06Config\x12\x10\n" +
 	"\x03udp\x18\x01 \x01(\bR\x03udp\x12\x12\n" +
 	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x0e\n" +
 	"\x02up\x18\x03 \x01(\x04R\x02up\x12\x12\n" +
-	"\x04down\x18\x04 \x01(\x04R\x04down\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\x05 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\x06 \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\a \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\b \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\t \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\n" +
-	" \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\v \x01(\bR\x17disablePathMtuDiscoveryB\x85\x01\n" +
+	"\x04down\x18\x04 \x01(\x04R\x04down\x12\x12\n" +
+	"\x04port\x18\x05 \x01(\tR\x04port\x12\x1a\n" +
+	"\binterval\x18\x06 \x01(\x03R\binterval\x12;\n" +
+	"\x1ainit_stream_receive_window\x18\a \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
+	"\x19max_stream_receive_window\x18\b \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
+	"\x18init_conn_receive_window\x18\t \x01(\x04R\x15initConnReceiveWindow\x125\n" +
+	"\x17max_conn_receive_window\x18\n" +
+	" \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
+	"\x10max_idle_timeout\x18\v \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
+	"\x11keep_alive_period\x18\f \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
+	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscoveryB\x85\x01\n" +
 	"%com.xray.transport.internet.hysteria2P\x01Z6github.com/xtls/xray-core/transport/internet/hysteria2\xaa\x02!Xray.Transport.Internet.Hysteria2b\x06proto3"
 
 var (
