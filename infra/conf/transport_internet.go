@@ -472,9 +472,9 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	if config.MaxIdleTimeout == 0 {
 		config.MaxIdleTimeout = 30
 	}
-	if config.KeepAlivePeriod == 0 {
-		config.KeepAlivePeriod = 10
-	}
+	// if config.KeepAlivePeriod == 0 {
+	// 	config.KeepAlivePeriod = 10
+	// }
 
 	return config, nil
 }
