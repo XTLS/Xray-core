@@ -165,6 +165,15 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		Reason: "",
 	})
 
+	// Set inbound and content tags from routing info for proper routing
+	// These were commented out in PR #4030 but are needed for domain-based routing
+	if info.inboundTag != nil {
+		ctx = session.ContextWithInbound(ctx, info.inboundTag)
+	}
+	if info.contentTag != nil {
+		ctx = session.ContextWithContent(ctx, info.contentTag)
+	}
+
 	link, err := info.dispatcher.Dispatch(ctx, dest)
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "dispatch connection")
