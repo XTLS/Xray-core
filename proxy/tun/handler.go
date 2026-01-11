@@ -35,7 +35,8 @@ type ConnectionHandler interface {
 var _ ConnectionHandler = (*Handler)(nil)
 
 func (t *Handler) policy() policy.Session {
-	return t.policyManager.ForLevel(t.config.UserLevel)
+	p := t.policyManager.ForLevel(t.config.UserLevel)
+	return p
 }
 
 // Init the Handler instance with necessary parameters
@@ -83,6 +84,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 
 	t.stack = tunStack
+
 	errors.LogInfo(t.ctx, tunName, " up")
 	return nil
 }
