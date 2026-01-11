@@ -80,6 +80,8 @@ type RouterConfig struct {
 	RuleList       []json.RawMessage `json:"rules"`
 	DomainStrategy *string           `json:"domainStrategy"`
 	Balancers      []*BalancingRule  `json:"balancers"`
+
+	DomainMatcherPath *string `json:"domainMatcherPath"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -121,6 +123,14 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 			return nil, err
 		}
 		config.BalancingRule = append(config.BalancingRule, balancer)
+	}
+
+	if c.DomainMatcherPath != nil {
+		path := *c.DomainMatcherPath
+		if val := strings.Split(path, "assets:"); len(val) == 2 {
+			path = platform.GetAssetLocation(val[1])
+		}
+		config.DomainMatcherPath = path
 	}
 	return config, nil
 }
@@ -697,7 +707,7 @@ func (c *RouterConfig) BuildDomainMatcherCache() error {
 	defer f.Close()
 
 	var buf bytes.Buffer
-	println(len(geosite))
+
 	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
 		return err
 	}

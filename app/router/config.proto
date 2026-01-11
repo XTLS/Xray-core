@@ -160,4 +160,6 @@ message Config {
   DomainStrategy domain_strategy = 1;
   repeated RoutingRule rule = 2;
   repeated BalancingRule balancing_rule = 3;
+
+  string domainMatcherPath = 4;
 }

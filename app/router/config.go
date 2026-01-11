@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
@@ -33,7 +32,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition() (Condition, error) {
+func (rr *RoutingRule) BuildCondition(cachedDMPath string) (Condition, error) {
 	conds := NewConditionChan()
 
 	if len(rr.InboundTag) > 0 {
@@ -108,13 +107,11 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Domain) > 0 {
-		useCachedMatcher := platform.NewEnvFlag(platform.UseCachedMatcher).GetValueAsInt(0)
-
 		var matcher *DomainMatcher
 		var err error
 
 		domains := rr.Domain
-		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" && useCachedMatcher == 0 {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" && cachedDMPath == "" {
 			var err error
 			domains, err = GetDomainList(rr.Domain)
 			if err != nil {
@@ -122,8 +119,8 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			}
 		}
 
-		if useCachedMatcher != 0 {
-			matcher, err = GetDomainMathcerWithRuleTag(rr.RuleTag)
+		if cachedDMPath != "" {
+			matcher, err = GetDomainMathcerWithRuleTag(cachedDMPath, rr.RuleTag)
 			if err != nil {
 				return nil, errors.New("failed to build domain condition from cached MphDomainMatcher").Base(err)
 			}
@@ -276,15 +273,14 @@ func GetDomainList(domains []*Domain) ([]*Domain, error) {
 	return domainList, nil
 }
 
-func GetDomainMathcerWithRuleTag(ruleTag string) (*DomainMatcher, error) {
-	file := "matcher.cache"
-	bs, err := filesystem.ReadAsset(file)
+func GetDomainMathcerWithRuleTag(cachedDMPath string, ruleTag string) (*DomainMatcher, error) {
+	bs, err := filesystem.ReadFile(cachedDMPath)
 	if err != nil {
-		return nil, errors.New("failed to load file: ", file).Base(err)
+		return nil, errors.New("failed to load file: ", cachedDMPath).Base(err)
 	}
 	g, err := LoadGeoSiteMatcher(bs, ruleTag)
 	if err != nil {
-		return nil, errors.New("failed to load file:", file).Base(err)
+		return nil, errors.New("failed to load file:", cachedDMPath).Base(err)
 	}
 	return &DomainMatcher{
 		Matchers: g,
