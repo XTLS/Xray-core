@@ -262,7 +262,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			buffer, _ = buf.MergeMulti(buffer, inputBuffer)
 		}
 		// Do not read from rawInput - it contains encrypted outer TLS records that would corrupt the stream
-		// Just clear the buffers to release memory
+		// Clear the buffers to release memory
 		*w.input = bytes.Reader{} // release memory
 		w.input = nil
 		*w.rawInput = bytes.Buffer{} // release memory
