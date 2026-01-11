@@ -7,6 +7,7 @@
 package hysteria2
 
 import (
+	net "github.com/xtls/xray-core/common/net"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -27,7 +28,7 @@ type Config struct {
 	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
 	Up                      uint64                 `protobuf:"varint,3,opt,name=up,proto3" json:"up,omitempty"`
 	Down                    uint64                 `protobuf:"varint,4,opt,name=down,proto3" json:"down,omitempty"`
-	Port                    string                 `protobuf:"bytes,5,opt,name=port,proto3" json:"port,omitempty"`
+	PortList                *net.PortList          `protobuf:"bytes,5,opt,name=port_list,json=portList,proto3" json:"port_list,omitempty"`
 	Interval                int64                  `protobuf:"varint,6,opt,name=interval,proto3" json:"interval,omitempty"`
 	InitStreamReceiveWindow uint64                 `protobuf:"varint,7,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
 	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,8,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
@@ -98,11 +99,11 @@ func (x *Config) GetDown() uint64 {
 	return 0
 }
 
-func (x *Config) GetPort() string {
+func (x *Config) GetPortList() *net.PortList {
 	if x != nil {
-		return x.Port
+		return x.PortList
 	}
-	return ""
+	return nil
 }
 
 func (x *Config) GetInterval() int64 {
@@ -165,13 +166,13 @@ var File_transport_internet_hysteria2_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria2_config_proto_rawDesc = "" +
 	"\n" +
-	")transport/internet/hysteria2/config.proto\x12!xray.transport.internet.hysteria2\"\xfd\x03\n" +
+	")transport/internet/hysteria2/config.proto\x12!xray.transport.internet.hysteria2\x1a\x15common/net/port.proto\"\xa1\x04\n" +
 	"\x06Config\x12\x10\n" +
 	"\x03udp\x18\x01 \x01(\bR\x03udp\x12\x12\n" +
 	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x0e\n" +
 	"\x02up\x18\x03 \x01(\x04R\x02up\x12\x12\n" +
-	"\x04down\x18\x04 \x01(\x04R\x04down\x12\x12\n" +
-	"\x04port\x18\x05 \x01(\tR\x04port\x12\x1a\n" +
+	"\x04down\x18\x04 \x01(\x04R\x04down\x126\n" +
+	"\tport_list\x18\x05 \x01(\v2\x19.xray.common.net.PortListR\bportList\x12\x1a\n" +
 	"\binterval\x18\x06 \x01(\x03R\binterval\x12;\n" +
 	"\x1ainit_stream_receive_window\x18\a \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
 	"\x19max_stream_receive_window\x18\b \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
@@ -197,14 +198,16 @@ func file_transport_internet_hysteria2_config_proto_rawDescGZIP() []byte {
 
 var file_transport_internet_hysteria2_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_transport_internet_hysteria2_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.hysteria2.Config
+	(*Config)(nil),       // 0: xray.transport.internet.hysteria2.Config
+	(*net.PortList)(nil), // 1: xray.common.net.PortList
 }
 var file_transport_internet_hysteria2_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: xray.transport.internet.hysteria2.Config.port_list:type_name -> xray.common.net.PortList
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_hysteria2_config_proto_init() }

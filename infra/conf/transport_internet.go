@@ -389,8 +389,8 @@ func (b Bandwidth) Bps() (uint64, error) {
 }
 
 type UdpHop struct {
-	Port     string `json:"port"`
-	Interval int64  `json:"interval"`
+	PortList *PortList `json:"port"`
+	Interval int64     `json:"interval"`
 }
 
 type Hysteria2Config struct {
@@ -449,7 +449,7 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
-	config.Port = c.UdpHop.Port
+	config.PortList = c.UdpHop.PortList.Build()
 	config.Interval = c.UdpHop.Interval
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow

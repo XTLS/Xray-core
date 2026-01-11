@@ -46,7 +46,7 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn) (net.PacketConn, error) {
+func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
 	if hopInterval == 0 {
 		hopInterval = defaultHopInterval
 	} else if hopInterval < 5*time.Second {
@@ -75,7 +75,7 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPF
 		ListenUDPFunc: listenUDPFunc,
 		prevConn:      nil,
 		currentConn:   pktConn,
-		addrIndex:     rand.Intn(len(addrs)),
+		addrIndex:     index,
 		recvQueue:     make(chan *udpPacket, packetQueueSize),
 		closeChan:     make(chan struct{}),
 		bufPool: sync.Pool{
