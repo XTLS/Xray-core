@@ -256,6 +256,15 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 
 	if *switchToDirectCopy {
+		// Before switching to direct copy, ensure current buffer contains complete TLS records
+		// This prevents corruption when switching mid-record, especially with testpre connections
+		if !buffer.IsEmpty() && w.trafficState.IsTLS && !IsCompleteRecord(buffer) {
+			// Buffer contains incomplete TLS records, cannot safely switch yet
+			// Return the buffer and the switch will be attempted on the next read
+			errors.LogDebug(w.ctx, "Vision: incomplete TLS records in buffer, delaying direct copy switch, len=", buffer.Len())
+			return buffer, err
+		}
+		
 		// XTLS Vision processes TLS-like conn's input and rawInput
 		if w.input != nil {
 			if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
