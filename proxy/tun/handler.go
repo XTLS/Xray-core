@@ -7,6 +7,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
@@ -19,11 +20,13 @@ import (
 
 // Handler is managing object that tie together tun interface, ip stack and dispatch connections to the routing
 type Handler struct {
-	ctx           context.Context
-	config        *Config
-	stack         Stack
-	policyManager policy.Manager
-	dispatcher    routing.Dispatcher
+	ctx             context.Context
+	config          *Config
+	stack           Stack
+	policyManager   policy.Manager
+	dispatcher      routing.Dispatcher
+	tag             string
+	sniffingRequest session.SniffingRequest
 }
 
 // ConnectionHandler interface with the only method that stack is going to push new connections to
@@ -42,6 +45,14 @@ func (t *Handler) policy() policy.Session {
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
 	var err error
+
+	// Retrieve tag and sniffing config from context (set by AlwaysOnInboundHandler)
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		t.tag = inbound.Tag
+	}
+	if content := session.ContentFromContext(ctx); content != nil {
+		t.sniffingRequest = content.SniffingRequest
+	}
 
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
@@ -93,18 +104,30 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	sid := session.NewID()
 	ctx := c.ContextWithID(t.ctx, sid)
-	errors.LogInfo(ctx, "processing connection from: ", conn.RemoteAddr())
 
-	inbound := session.Inbound{}
-	inbound.Name = "tun"
-	inbound.CanSpliceCopy = 1
-	inbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
-	inbound.User = &protocol.MemoryUser{
-		Level: t.config.UserLevel,
+	inbound := session.Inbound{
+		Name:          "tun",
+		Tag:           t.tag,
+		CanSpliceCopy: 1,
+		Source:        net.DestinationFromAddr(conn.RemoteAddr()),
+		User: &protocol.MemoryUser{
+			Level: t.config.UserLevel,
+		},
 	}
 
 	ctx = session.ContextWithInbound(ctx, &inbound)
+	ctx = session.ContextWithContent(ctx, &session.Content{
+		SniffingRequest: t.sniffingRequest,
+	})
 	ctx = session.SubContextFromMuxInbound(ctx)
+
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+		From:   inbound.Source,
+		To:     destination,
+		Status: log.AccessAccepted,
+		Reason: "",
+	})
+	errors.LogInfo(ctx, "processing connection from: ", conn.RemoteAddr())
 
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
