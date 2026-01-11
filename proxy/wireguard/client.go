@@ -114,12 +114,6 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 	}
 
 	// bind := conn.NewStdNetBind() // TODO: conn.Bind wrapper for dialer
-	// Set workers to number of peers if not explicitly configured
-	// This allows concurrent packet reception from multiple peers
-	workers := int(h.conf.NumWorkers)
-	if workers <= 0 && len(h.conf.Peers) > 0 {
-		workers = len(h.conf.Peers)
-	}
 	h.bind = &netBindClient{
 		netBind: netBind{
 			dns: h.dns,
@@ -127,7 +121,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 				IPv4Enable: h.hasIPv4,
 				IPv6Enable: h.hasIPv6,
 			},
-			workers: workers,
+			workers: int(h.conf.NumWorkers),
 		},
 		ctx:      core.ToBackgroundDetachedContext(ctx),
 		dialer:   dialer,
