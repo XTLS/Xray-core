@@ -3,8 +3,6 @@ package udphop
 import (
 	"fmt"
 	"net"
-
-	"github.com/xtls/xray-core/transport/internet/hysteria2/utils"
 )
 
 type InvalidPortError struct {
@@ -18,7 +16,7 @@ func (e InvalidPortError) Error() string {
 // UDPHopAddr contains an IP address and a list of ports.
 type UDPHopAddr struct {
 	IP      net.IP
-	Ports   []uint16
+	Ports   []uint32
 	PortStr string
 }
 
@@ -43,25 +41,25 @@ func (a *UDPHopAddr) addrs() ([]net.Addr, error) {
 	return addrs, nil
 }
 
-func ResolveUDPHopAddr(addr string) (*UDPHopAddr, error) {
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	ip, err := net.ResolveIPAddr("ip", host)
-	if err != nil {
-		return nil, err
-	}
-	result := &UDPHopAddr{
-		IP:      ip.IP,
-		PortStr: portStr,
-	}
+// func ResolveUDPHopAddr(addr string) (*UDPHopAddr, error) {
+// 	host, portStr, err := net.SplitHostPort(addr)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	ip, err := net.ResolveIPAddr("ip", host)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	result := &UDPHopAddr{
+// 		IP:      ip.IP,
+// 		PortStr: portStr,
+// 	}
 
-	pu := utils.ParsePortUnion(portStr)
-	if pu == nil {
-		return nil, InvalidPortError{portStr}
-	}
-	result.Ports = pu.Ports()
+// 	pu := utils.ParsePortUnion(portStr)
+// 	if pu == nil {
+// 		return nil, InvalidPortError{portStr}
+// 	}
+// 	result.Ports = pu.Ports()
 
-	return result, nil
-}
+// 	return result, nil
+// }

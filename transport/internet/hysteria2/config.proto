@@ -6,14 +6,12 @@ option go_package = "github.com/xtls/xray-core/transport/internet/hysteria2";
 option java_package = "com.xray.transport.internet.hysteria2";
 option java_multiple_files = true;
 
-import "common/net/port.proto";
-
 message Config {
   bool udp = 1;
   string auth = 2;
   uint64 up = 3;
   uint64 down = 4;
-  xray.common.net.PortList port_list = 5;
+  repeated uint32 ports = 5;
   int64 interval = 6;
 
   uint64 init_stream_receive_window = 7;

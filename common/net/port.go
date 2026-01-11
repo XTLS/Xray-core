@@ -87,11 +87,11 @@ func PortListFromProto(l *PortList) MemoryPortList {
 	return mpl
 }
 
-func (l *PortList) Ports() []uint16 {
-	var ports []uint16
+func (l *PortList) Ports() []uint32 {
+	var ports []uint32
 	for _, r := range l.Range {
 		for i := uint32(r.From); i <= uint32(r.To); i++ {
-			ports = append(ports, uint16(i))
+			ports = append(ports, i)
 		}
 	}
 	return ports
