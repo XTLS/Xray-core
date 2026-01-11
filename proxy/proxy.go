@@ -264,7 +264,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			errors.LogDebug(w.ctx, "Vision: incomplete TLS records in buffer, delaying direct copy switch, len=", buffer.Len())
 			return buffer, err
 		}
-		
+
 		// XTLS Vision processes TLS-like conn's input and rawInput
 		if w.input != nil {
 			if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
