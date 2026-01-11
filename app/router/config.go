@@ -32,7 +32,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition(cachedDMPath string) (Condition, error) {
+func (rr *RoutingRule) BuildCondition(domainMatcherPath string) (Condition, error) {
 	conds := NewConditionChan()
 
 	if len(rr.InboundTag) > 0 {
@@ -111,7 +111,7 @@ func (rr *RoutingRule) BuildCondition(cachedDMPath string) (Condition, error) {
 		var err error
 
 		domains := rr.Domain
-		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" && cachedDMPath == "" {
+		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" && domainMatcherPath == "" {
 			var err error
 			domains, err = GetDomainList(rr.Domain)
 			if err != nil {
@@ -119,8 +119,8 @@ func (rr *RoutingRule) BuildCondition(cachedDMPath string) (Condition, error) {
 			}
 		}
 
-		if cachedDMPath != "" {
-			matcher, err = GetDomainMathcerWithRuleTag(cachedDMPath, rr.RuleTag)
+		if domainMatcherPath != "" {
+			matcher, err = GetDomainMathcerWithRuleTag(domainMatcherPath, rr.RuleTag)
 			if err != nil {
 				return nil, errors.New("failed to build domain condition from cached MphDomainMatcher").Base(err)
 			}
@@ -273,14 +273,14 @@ func GetDomainList(domains []*Domain) ([]*Domain, error) {
 	return domainList, nil
 }
 
-func GetDomainMathcerWithRuleTag(cachedDMPath string, ruleTag string) (*DomainMatcher, error) {
-	bs, err := filesystem.ReadFile(cachedDMPath)
+func GetDomainMathcerWithRuleTag(domainMatcherPath string, ruleTag string) (*DomainMatcher, error) {
+	bs, err := filesystem.ReadFile(domainMatcherPath)
 	if err != nil {
-		return nil, errors.New("failed to load file: ", cachedDMPath).Base(err)
+		return nil, errors.New("failed to load file: ", domainMatcherPath).Base(err)
 	}
 	g, err := LoadGeoSiteMatcher(bs, ruleTag)
 	if err != nil {
-		return nil, errors.New("failed to load file:", cachedDMPath).Base(err)
+		return nil, errors.New("failed to load file:", domainMatcherPath).Base(err)
 	}
 	return &DomainMatcher{
 		Matchers: g,
