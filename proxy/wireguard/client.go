@@ -129,7 +129,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 			},
 			workers: workers,
 		},
-		ctx:      ctx,
+		ctx:      core.ToBackgroundDetachedContext(ctx),
 		dialer:   dialer,
 		reserved: h.conf.Reserved,
 	}
