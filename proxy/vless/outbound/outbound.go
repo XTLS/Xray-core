@@ -277,19 +277,17 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
 			// For pre-established connections, clear any buffered TLS control messages
 			// to prevent them from corrupting the Vision stream
-			if conn != nil {
-				// Drain input buffer (decrypted but unread application data)
-				if input != nil && input.Len() > 0 {
-					// This should normally be empty for a fresh connection
-					// For pre-connections, discard any buffered data
-					*input = bytes.Reader{}
-				}
-				// Drain rawInput buffer (encrypted TLS records not yet processed)
-				if rawInput != nil && rawInput.Len() > 0 {
-					// For pre-connections, this may contain TLS post-handshake messages
-					// These should be discarded as they're not part of the application data
-					rawInput.Reset()
-				}
+			// Drain input buffer (decrypted but unread application data)
+			if input != nil && input.Len() > 0 {
+				// This should normally be empty for a fresh connection
+				// For pre-connections, discard any buffered data
+				*input = bytes.Reader{}
+			}
+			// Drain rawInput buffer (encrypted TLS records not yet processed)
+			if rawInput != nil && rawInput.Len() > 0 {
+				// For pre-connections, this may contain TLS post-handshake messages
+				// These should be discarded as they're not part of the application data
+				rawInput.Reset()
 			}
 		default:
 			panic("unknown VLESS request command")
