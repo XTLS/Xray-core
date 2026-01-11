@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -100,32 +101,35 @@ func (t *stackGVisor) Start() error {
 	})
 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
-	udpForwarder := udp.NewForwarder(ipStack, func(r *udp.ForwarderRequest) {
-		go func(r *udp.ForwarderRequest) {
-			var wq waiter.Queue
-			var id = r.ID()
+	// Use custom UDP packet handler, instead of strict gVisor forwarder, for FullCone NAT support
+	udpForwarder := newUdpConnectionHandler(t.ctx, t.handler, func(p []byte) {
+		// extract network protocol from the packet
+		var networkProtocol tcpip.NetworkProtocolNumber
+		switch header.IPVersion(p) {
+		case header.IPv4Version:
+			networkProtocol = header.IPv4ProtocolNumber
+		case header.IPv6Version:
+			networkProtocol = header.IPv6ProtocolNumber
+		default:
+			// discard packet with unknown network version
+			return
+		}
 
-			ep, err := r.CreateEndpoint(&wq)
-			if err != nil {
-				errors.LogError(t.ctx, err.String())
-				return
-			}
-
-			options := ep.SocketOptions()
-			options.SetReuseAddress(true)
-			options.SetReusePort(true)
-
-			t.handler.HandleConnection(
-				gonet.NewUDPConn(&wq, ep),
-				// local address on the gVisor side is connection destination
-				net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)),
-			)
-
-			// close the socket
-			ep.Close()
-		}(r)
+		ipStack.WriteRawPacket(defaultNIC, networkProtocol, buffer.MakeWithData(p))
 	})
-	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
+	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
+		data := pkt.Data().AsRange().ToSlice()
+		if len(data) == 0 {
+			return false
+		}
+		// source/destination of the packet we process as incoming, on gVisor side are Remote/Local
+		// in other terms, src is the side behind tun, dst is the side behind gVisor
+		// this function handle packets passing from the tun to the gVisor, therefore the src/dst assignement
+		src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
+		dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
+
+		return udpForwarder.HandlePacket(src, dst, data)
+	})
 
 	t.stack = ipStack
 	t.endpoint = linkEndpoint

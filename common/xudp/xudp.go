@@ -52,7 +52,7 @@ func GetGlobalID(ctx context.Context) (globalID [8]byte) {
 		return
 	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.Network == net.Network_UDP &&
-		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks") {
+		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks" || inbound.Name == "tun") {
 		h := blake3.New(8, BaseKey)
 		h.Write([]byte(inbound.Source.String()))
 		copy(globalID[:], h.Sum(nil))
