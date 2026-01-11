@@ -256,13 +256,13 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 
 	if *switchToDirectCopy {
-		// XTLS Vision processes TLS-like conn's input
-		// Only read from input (decrypted application data), not rawInput (encrypted TLS records)
+		// XTLS Vision processes TLS-like conn's input and rawInput
 		if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
 			buffer, _ = buf.MergeMulti(buffer, inputBuffer)
 		}
-		// Do not read from rawInput - it contains encrypted outer TLS records that would corrupt the stream
-		// Clear the buffers to release memory
+		if rawInputBuffer, err := buf.ReadFrom(w.rawInput); err == nil && !rawInputBuffer.IsEmpty() {
+			buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
+		}
 		*w.input = bytes.Reader{} // release memory
 		w.input = nil
 		*w.rawInput = bytes.Buffer{} // release memory
