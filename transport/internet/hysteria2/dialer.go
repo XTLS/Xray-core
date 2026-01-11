@@ -18,11 +18,11 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/endmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria2/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria2/udphop"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/internet/udpmask"
 )
 
 type udpSessionManager struct {
@@ -114,7 +114,7 @@ type client struct {
 	conn         *quic.Conn
 	config       *Config
 	tlsConfig    *go_tls.Config
-	endmask      endmask.Endmask
+	udpmask      udpmask.Udpmask
 	socketConfig *internet.SocketConfig
 	closed       bool
 	udpSM        *udpSessionManager
@@ -175,10 +175,10 @@ func (c *client) dial() error {
 		}
 	}
 
-	if c.endmask != nil {
-		pktConn, err = c.endmask.WrapPacketConnClient(pktConn)
+	if c.udpmask != nil {
+		pktConn, err = c.udpmask.WrapPacketConnClient(pktConn)
 		if err != nil {
-			return errors.New("endmask err").Base(err)
+			return errors.New("mask err").Base(err)
 		}
 	}
 
@@ -388,7 +388,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			dest:         dest,
 			config:       config,
 			tlsConfig:    tlsConfig.GetTLSConfig(),
-			endmask:      streamSettings.Endmask,
+			udpmask:      streamSettings.Udpmask,
 			socketConfig: streamSettings.SocketSettings,
 		}
 		manger.m[addr] = c

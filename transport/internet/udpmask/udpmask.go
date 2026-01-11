@@ -1,10 +1,10 @@
-package endmask
+package udpmask
 
 import (
 	"net"
 )
 
-type Endmask interface {
+type Udpmask interface {
 	WrapConnClient(net.Conn) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
 

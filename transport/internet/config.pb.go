@@ -274,7 +274,7 @@ type StreamConfig struct {
 	SecurityType string `protobuf:"bytes,3,opt,name=security_type,json=securityType,proto3" json:"security_type,omitempty"`
 	// Transport security settings. They can be either TLS or REALITY.
 	SecuritySettings []*serial.TypedMessage `protobuf:"bytes,4,rep,name=security_settings,json=securitySettings,proto3" json:"security_settings,omitempty"`
-	Endmask          *serial.TypedMessage   `protobuf:"bytes,10,opt,name=endmask,proto3" json:"endmask,omitempty"`
+	Udpmask          *serial.TypedMessage   `protobuf:"bytes,10,opt,name=udpmask,proto3" json:"udpmask,omitempty"`
 	SocketSettings   *SocketConfig          `protobuf:"bytes,6,opt,name=socket_settings,json=socketSettings,proto3" json:"socket_settings,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -352,9 +352,9 @@ func (x *StreamConfig) GetSecuritySettings() []*serial.TypedMessage {
 	return nil
 }
 
-func (x *StreamConfig) GetEndmask() *serial.TypedMessage {
+func (x *StreamConfig) GetUdpmask() *serial.TypedMessage {
 	if x != nil {
-		return x.Endmask
+		return x.Udpmask
 	}
 	return nil
 }
@@ -811,8 +811,8 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x12transport_settings\x18\x02 \x03(\v2(.xray.transport.internet.TransportConfigR\x11transportSettings\x12#\n" +
 	"\rsecurity_type\x18\x03 \x01(\tR\fsecurityType\x12M\n" +
 	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12:\n" +
-	"\aendmask\x18\n" +
-	" \x01(\v2 .xray.common.serial.TypedMessageR\aendmask\x12N\n" +
+	"\audpmask\x18\n" +
+	" \x01(\v2 .xray.common.serial.TypedMessageR\audpmask\x12N\n" +
 	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
@@ -921,7 +921,7 @@ var file_transport_internet_config_proto_depIdxs = []int32{
 	10, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
 	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
 	9,  // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	9,  // 4: xray.transport.internet.StreamConfig.endmask:type_name -> xray.common.serial.TypedMessage
+	9,  // 4: xray.transport.internet.StreamConfig.udpmask:type_name -> xray.common.serial.TypedMessage
 	7,  // 5: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
 	2,  // 6: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
 	0,  // 7: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy

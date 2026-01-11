@@ -16,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/endmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria2"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -24,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/internet/udpmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"google.golang.org/protobuf/proto"
 )
@@ -1094,7 +1094,7 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Endmask             string             `json:"endmask"`
+	Udpmask             string             `json:"udpmask"`
 	SalamanderSettings  *SalamanderConfig  `json:"salamanderSettings"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
@@ -1160,16 +1160,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
 
-	switch strings.ToLower(c.Endmask) {
+	switch strings.ToLower(c.Udpmask) {
 	case "", "none":
 	case "salamander":
 		ts, err := c.SalamanderSettings.Build()
 		if err != nil {
 			return nil, errors.New("Failed to build salamander config.").Base(err)
 		}
-		config.Endmask = serial.ToTypedMessage(ts)
+		config.Udpmask = serial.ToTypedMessage(ts)
 	default:
-		return nil, errors.New(`Unknown endmask "` + c.Endmask + `".`)
+		return nil, errors.New(`Unknown udpmask "` + c.Udpmask + `".`)
 	}
 
 	if c.RAWSettings != nil {
