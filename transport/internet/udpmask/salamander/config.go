@@ -4,7 +4,7 @@ import (
 	"net"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/endmask/salamander/obfs"
+	"github.com/xtls/xray-core/transport/internet/udpmask/salamander/obfs"
 )
 
 func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {

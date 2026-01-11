@@ -2,7 +2,7 @@ package internet
 
 import (
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet/endmask"
+	"github.com/xtls/xray-core/transport/internet/udpmask"
 )
 
 // MemoryStreamConfig is a parsed form of StreamConfig. It is used to reduce the number of Protobuf parses.
@@ -12,7 +12,7 @@ type MemoryStreamConfig struct {
 	ProtocolSettings interface{}
 	SecurityType     string
 	SecuritySettings interface{}
-	Endmask          endmask.Endmask
+	Udpmask          udpmask.Udpmask
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
 }
@@ -49,12 +49,12 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		mss.SecuritySettings = ess
 	}
 
-	if s != nil && s.Endmask != nil {
-		instance, err := s.Endmask.GetInstance()
+	if s != nil && s.Udpmask != nil {
+		instance, err := s.Udpmask.GetInstance()
 		if err != nil {
 			return nil, err
 		}
-		mss.Endmask = instance.(endmask.Endmask)
+		mss.Udpmask = instance.(udpmask.Udpmask)
 	}
 
 	return mss, nil
