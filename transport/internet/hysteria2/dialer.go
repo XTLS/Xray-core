@@ -272,12 +272,9 @@ func (c *client) remove() bool {
 		return true
 	}
 
-	status := c.status()
-	if status != StatusActive {
+	if c.status() == StatusInactive {
 		c.closed = true
-		if status == StatusInactive {
-			c.close()
-		}
+		c.close()
 	}
 	return c.closed
 }
@@ -338,8 +335,8 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.status() == StatusInactive {
-		errors.LogDebug(c.ctx, "stop hop on quic inactive waiting to be closed")
+	if c.status() != StatusActive {
+		errors.LogDebug(c.ctx, "stop hop on disconnected QUIC waiting to be closed")
 		return nil, errors.New()
 	}
 
@@ -352,6 +349,7 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	pktConn, ok := raw.(net.PacketConn)
 	if !ok {
 		errors.LogDebug(c.ctx, "raw is not PacketConn skip hop")
+		raw.Close()
 		return nil, errors.New()
 	}
 
