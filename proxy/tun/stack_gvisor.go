@@ -9,6 +9,7 @@ import (
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/checksum"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
@@ -102,21 +103,7 @@ func (t *stackGVisor) Start() error {
 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
 
 	// Use custom UDP packet handler, instead of strict gVisor forwarder, for FullCone NAT support
-	udpForwarder := newUdpConnectionHandler(t.ctx, t.handler, func(p []byte) {
-		// extract network protocol from the packet
-		var networkProtocol tcpip.NetworkProtocolNumber
-		switch header.IPVersion(p) {
-		case header.IPv4Version:
-			networkProtocol = header.IPv4ProtocolNumber
-		case header.IPv6Version:
-			networkProtocol = header.IPv6ProtocolNumber
-		default:
-			// discard packet with unknown network version
-			return
-		}
-
-		ipStack.WriteRawPacket(defaultNIC, networkProtocol, buffer.MakeWithData(p))
-	})
+	udpForwarder := newUdpConnectionHandler(t.handler.HandleConnection, t.writeRawUDPPacket)
 	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
 		data := pkt.Data().AsRange().ToSlice()
 		if len(data) == 0 {
@@ -133,6 +120,69 @@ func (t *stackGVisor) Start() error {
 
 	t.stack = ipStack
 	t.endpoint = linkEndpoint
+
+	return nil
+}
+
+func (t *stackGVisor) writeRawUDPPacket(payload []byte, src net.Destination, dst net.Destination) error {
+	udpLen := header.UDPMinimumSize + len(payload)
+	srcIP := tcpip.AddrFromSlice(src.Address.IP())
+	dstIP := tcpip.AddrFromSlice(dst.Address.IP())
+
+	// build packet with appropriate IP header size
+	isIPv4 := dst.Address.Family().IsIPv4()
+	ipHdrSize := header.IPv6MinimumSize
+	ipProtocol := header.IPv6ProtocolNumber
+	if isIPv4 {
+		ipHdrSize = header.IPv4MinimumSize
+		ipProtocol = header.IPv4ProtocolNumber
+	}
+
+	pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
+		ReserveHeaderBytes: ipHdrSize + header.UDPMinimumSize,
+		Payload:            buffer.MakeWithData(payload),
+	})
+	defer pkt.DecRef()
+
+	// Build UDP header
+	udpHdr := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
+	udpHdr.Encode(&header.UDPFields{
+		SrcPort: uint16(src.Port),
+		DstPort: uint16(dst.Port),
+		Length:  uint16(udpLen),
+	})
+
+	// Calculate and set UDP checksum
+	xsum := header.PseudoHeaderChecksum(header.UDPProtocolNumber, srcIP, dstIP, uint16(udpLen))
+	udpHdr.SetChecksum(^udpHdr.CalculateChecksum(checksum.Checksum(payload, xsum)))
+
+	// Build IP header
+	if isIPv4 {
+		ipHdr := header.IPv4(pkt.NetworkHeader().Push(header.IPv4MinimumSize))
+		ipHdr.Encode(&header.IPv4Fields{
+			TotalLength: uint16(header.IPv4MinimumSize + udpLen),
+			TTL:         64,
+			Protocol:    uint8(header.UDPProtocolNumber),
+			SrcAddr:     srcIP,
+			DstAddr:     dstIP,
+		})
+		ipHdr.SetChecksum(^ipHdr.CalculateChecksum())
+	} else {
+		ipHdr := header.IPv6(pkt.NetworkHeader().Push(header.IPv6MinimumSize))
+		ipHdr.Encode(&header.IPv6Fields{
+			PayloadLength:     uint16(udpLen),
+			TransportProtocol: header.UDPProtocolNumber,
+			HopLimit:          64,
+			SrcAddr:           srcIP,
+			DstAddr:           dstIP,
+		})
+	}
+
+	// dispatch the packet
+	err := t.stack.WriteRawPacket(defaultNIC, ipProtocol, buffer.MakeWithView(pkt.ToView()))
+	if err != nil {
+		return errors.New("failed to write raw udp packet back to stack", err)
+	}
 
 	return nil
 }
