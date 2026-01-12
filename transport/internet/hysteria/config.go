@@ -1,9 +1,9 @@
-package hysteria2
+package hysteria
 
 import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/hysteria2/padding"
+	"github.com/xtls/xray-core/transport/internet/hysteria/padding"
 )
 
 const (
@@ -38,7 +38,7 @@ const (
 	StatusInactive
 )
 
-const protocolName = "hysteria2"
+const protocolName = "hysteria"
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {

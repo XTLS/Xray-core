@@ -2,17 +2,17 @@ package conf
 
 import (
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/proxy/hysteria2"
+	"github.com/xtls/xray-core/proxy/hysteria"
 	"google.golang.org/protobuf/proto"
 )
 
-type Hysteria2ClientConfig struct {
+type HysteriaClientConfig struct {
 	Address *Address `json:"address"`
 	Port    uint16   `json:"port"`
 }
 
-func (c *Hysteria2ClientConfig) Build() (proto.Message, error) {
-	config := new(hysteria2.ClientConfig)
+func (c *HysteriaClientConfig) Build() (proto.Message, error) {
+	config := new(hysteria.ClientConfig)
 
 	config.Server = &protocol.ServerEndpoint{
 		Address: c.Address.Build(),

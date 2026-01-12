@@ -1,7 +1,7 @@
-package hysteria2
+package hysteria
 
 import (
-	"github.com/xtls/xray-core/transport/internet/hysteria2/padding"
+	"github.com/xtls/xray-core/transport/internet/hysteria/padding"
 )
 
 var (

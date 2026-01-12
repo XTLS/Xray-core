@@ -1,4 +1,4 @@
-package hysteria2
+package hysteria
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/hysteria2"
+	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -51,7 +51,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if !ob.Target.IsValid() {
 		return errors.New("target not specified")
 	}
-	ob.Name = "hysteria2"
+	ob.Name = "hysteria"
 	ob.CanSpliceCopy = 3
 	target := ob.Target
 
@@ -117,9 +117,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	if target.Network == net.Network_UDP {
 		iConn := stat.TryUnwrapStatsConn(conn)
-		_, ok := iConn.(*hysteria2.InterUdpConn)
+		_, ok := iConn.(*hysteria.InterUdpConn)
 		if !ok {
-			return errors.New("udp requires hysteria2 udp transport")
+			return errors.New("udp requires hysteria udp transport")
 		}
 
 		requestDone := func() error {
