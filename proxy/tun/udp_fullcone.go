@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
@@ -100,12 +101,23 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 
 			inbound := &session.Inbound{
 				Name:          "tun",
+				Tag:           u.handler.tag,
 				Source:        src,
-				CanSpliceCopy: 1,
+				CanSpliceCopy: 3,
 				User:          &protocol.MemoryUser{Level: u.handler.config.UserLevel},
 			}
 			ctx = session.ContextWithInbound(c.ContextWithID(ctx, session.NewID()), inbound)
+			ctx = session.ContextWithContent(ctx, &session.Content{
+				SniffingRequest: u.handler.sniffingRequest,
+			})
 			ctx = session.SubContextFromMuxInbound(ctx)
+			ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+				From:   src,
+				To:     dst,
+				Status: log.AccessAccepted,
+				Reason: "",
+			})
+			errors.LogInfo(ctx, "processing UDP from ", src, " to ", dst)
 			link := &transport.Link{
 				Reader: &buf.TimeoutWrapperReader{Reader: conn.reader},
 				// reverse source and destination, indicating the packets to write are going in the other

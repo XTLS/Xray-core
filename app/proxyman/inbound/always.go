@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
@@ -52,6 +53,20 @@ type AlwaysOnInboundHandler struct {
 }
 
 func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *proxyman.ReceiverConfig, proxyConfig interface{}) (*AlwaysOnInboundHandler, error) {
+	// Set tag and sniffing config in context before creating proxy
+	// This allows proxies like TUN to access these settings
+	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: tag})
+	if receiverConfig.SniffingSettings != nil {
+		ctx = session.ContextWithContent(ctx, &session.Content{
+			SniffingRequest: session.SniffingRequest{
+				Enabled:                        receiverConfig.SniffingSettings.Enabled,
+				OverrideDestinationForProtocol: receiverConfig.SniffingSettings.DestinationOverride,
+				ExcludeForDomain:               receiverConfig.SniffingSettings.DomainsExcluded,
+				MetadataOnly:                   receiverConfig.SniffingSettings.MetadataOnly,
+				RouteOnly:                      receiverConfig.SniffingSettings.RouteOnly,
+			},
+		})
+	}
 	rawProxy, err := common.CreateObject(ctx, proxyConfig)
 	if err != nil {
 		return nil, err
