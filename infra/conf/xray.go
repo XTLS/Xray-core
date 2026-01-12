@@ -131,7 +131,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	receiverSettings := &proxyman.ReceiverConfig{}
 
 	// TUN inbound doesn't need port configuration as it uses network interface instead
-	if c.Protocol == "tun" {
+	if strings.ToLower(c.Protocol) == "tun" {
 		// Skip port validation for TUN
 	} else if c.ListenOn == nil {
 		// Listen on anyip, must set PortList
