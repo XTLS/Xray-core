@@ -105,11 +105,12 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	sid := session.NewID()
 	ctx := c.ContextWithID(t.ctx, sid)
 
+	source := net.DestinationFromAddr(conn.RemoteAddr())
 	inbound := session.Inbound{
 		Name:          "tun",
 		Tag:           t.tag,
 		CanSpliceCopy: 3,
-		Source:        net.DestinationFromAddr(conn.RemoteAddr()),
+		Source:        source,
 		User: &protocol.MemoryUser{
 			Level: t.config.UserLevel,
 		},
@@ -127,7 +128,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 		Status: log.AccessAccepted,
 		Reason: "",
 	})
-	errors.LogInfo(ctx, "processing TCP from ", conn.RemoteAddr(), " to ", destination)
+	errors.LogInfo(ctx, "processing from ", source, " to ", destination)
 
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
