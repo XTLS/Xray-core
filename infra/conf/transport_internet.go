@@ -1279,11 +1279,13 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SocketSettings = ss
 	}
 
-	u, err := c.Udpmask.Build()
-	if err != nil {
-		return nil, errors.New("failed to build udpmask with type ", c.Udpmask.Type).Base(err)
+	if c.Udpmask != nil {
+		u, err := c.Udpmask.Build()
+		if err != nil {
+			return nil, errors.New("failed to build udpmask with type ", c.Udpmask.Type).Base(err)
+		}
+		config.Udpmask = serial.ToTypedMessage(u)
 	}
-	config.Udpmask = serial.ToTypedMessage(u)
 
 	return config, nil
 }
