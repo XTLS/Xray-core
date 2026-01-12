@@ -1,6 +1,6 @@
 module github.com/xtls/xray-core
 
-go 1.25
+go 1.25.5
 
 require (
 	github.com/cloudflare/circl v1.6.2
@@ -29,7 +29,7 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
-	gvisor.dev/gvisor v0.0.0-20250428193742-2d800c3129d5
+	gvisor.dev/gvisor v0.0.0-20260109181451-4be7c433dae2
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.4.1
 )
