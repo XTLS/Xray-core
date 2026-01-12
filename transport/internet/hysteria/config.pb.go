@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v6.33.1
-// source: transport/internet/hysteria2/config.proto
+// source: transport/internet/hysteria/config.proto
 
-package hysteria2
+package hysteria
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -42,7 +42,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_hysteria2_config_proto_msgTypes[0]
+	mi := &file_transport_internet_hysteria_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -54,7 +54,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_hysteria2_config_proto_msgTypes[0]
+	mi := &file_transport_internet_hysteria_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -67,7 +67,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_hysteria2_config_proto_rawDescGZIP(), []int{0}
+	return file_transport_internet_hysteria_config_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Config) GetUdp() bool {
@@ -161,11 +161,11 @@ func (x *Config) GetDisablePathMtuDiscovery() bool {
 	return false
 }
 
-var File_transport_internet_hysteria2_config_proto protoreflect.FileDescriptor
+var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
-const file_transport_internet_hysteria2_config_proto_rawDesc = "" +
+const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	")transport/internet/hysteria2/config.proto\x12!xray.transport.internet.hysteria2\"\xff\x03\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xff\x03\n" +
 	"\x06Config\x12\x10\n" +
 	"\x03udp\x18\x01 \x01(\bR\x03udp\x12\x12\n" +
 	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x0e\n" +
@@ -180,26 +180,26 @@ const file_transport_internet_hysteria2_config_proto_rawDesc = "" +
 	" \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
 	"\x10max_idle_timeout\x18\v \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
 	"\x11keep_alive_period\x18\f \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscoveryB\x85\x01\n" +
-	"%com.xray.transport.internet.hysteria2P\x01Z6github.com/xtls/xray-core/transport/internet/hysteria2\xaa\x02!Xray.Transport.Internet.Hysteria2b\x06proto3"
+	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscoveryB\x82\x01\n" +
+	"$com.xray.transport.internet.hysteriaP\x01Z5github.com/xtls/xray-core/transport/internet/hysteria\xaa\x02 Xray.Transport.Internet.Hysteriab\x06proto3"
 
 var (
-	file_transport_internet_hysteria2_config_proto_rawDescOnce sync.Once
-	file_transport_internet_hysteria2_config_proto_rawDescData []byte
+	file_transport_internet_hysteria_config_proto_rawDescOnce sync.Once
+	file_transport_internet_hysteria_config_proto_rawDescData []byte
 )
 
-func file_transport_internet_hysteria2_config_proto_rawDescGZIP() []byte {
-	file_transport_internet_hysteria2_config_proto_rawDescOnce.Do(func() {
-		file_transport_internet_hysteria2_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_transport_internet_hysteria2_config_proto_rawDesc), len(file_transport_internet_hysteria2_config_proto_rawDesc)))
+func file_transport_internet_hysteria_config_proto_rawDescGZIP() []byte {
+	file_transport_internet_hysteria_config_proto_rawDescOnce.Do(func() {
+		file_transport_internet_hysteria_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_transport_internet_hysteria_config_proto_rawDesc), len(file_transport_internet_hysteria_config_proto_rawDesc)))
 	})
-	return file_transport_internet_hysteria2_config_proto_rawDescData
+	return file_transport_internet_hysteria_config_proto_rawDescData
 }
 
-var file_transport_internet_hysteria2_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_transport_internet_hysteria2_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.hysteria2.Config
+var file_transport_internet_hysteria_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_transport_internet_hysteria_config_proto_goTypes = []any{
+	(*Config)(nil), // 0: xray.transport.internet.hysteria.Config
 }
-var file_transport_internet_hysteria2_config_proto_depIdxs = []int32{
+var file_transport_internet_hysteria_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -207,26 +207,26 @@ var file_transport_internet_hysteria2_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_transport_internet_hysteria2_config_proto_init() }
-func file_transport_internet_hysteria2_config_proto_init() {
-	if File_transport_internet_hysteria2_config_proto != nil {
+func init() { file_transport_internet_hysteria_config_proto_init() }
+func file_transport_internet_hysteria_config_proto_init() {
+	if File_transport_internet_hysteria_config_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_hysteria2_config_proto_rawDesc), len(file_transport_internet_hysteria2_config_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_hysteria_config_proto_rawDesc), len(file_transport_internet_hysteria_config_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_transport_internet_hysteria2_config_proto_goTypes,
-		DependencyIndexes: file_transport_internet_hysteria2_config_proto_depIdxs,
-		MessageInfos:      file_transport_internet_hysteria2_config_proto_msgTypes,
+		GoTypes:           file_transport_internet_hysteria_config_proto_goTypes,
+		DependencyIndexes: file_transport_internet_hysteria_config_proto_depIdxs,
+		MessageInfos:      file_transport_internet_hysteria_config_proto_msgTypes,
 	}.Build()
-	File_transport_internet_hysteria2_config_proto = out.File
-	file_transport_internet_hysteria2_config_proto_goTypes = nil
-	file_transport_internet_hysteria2_config_proto_depIdxs = nil
+	File_transport_internet_hysteria_config_proto = out.File
+	file_transport_internet_hysteria_config_proto_goTypes = nil
+	file_transport_internet_hysteria_config_proto_depIdxs = nil
 }

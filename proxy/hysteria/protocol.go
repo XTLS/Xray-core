@@ -1,4 +1,4 @@
-package hysteria2
+package hysteria
 
 import (
 	"bytes"

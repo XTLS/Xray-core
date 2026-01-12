@@ -17,7 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
-	"github.com/xtls/xray-core/transport/internet/hysteria2"
+	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
@@ -393,7 +393,7 @@ type UdpHop struct {
 	Interval int64           `json:"interval"`
 }
 
-type Hysteria2Config struct {
+type HysteriaConfig struct {
 	Udp    bool      `json:"udp"`
 	Auth   string    `json:"auth"`
 	Up     Bandwidth `json:"up"`
@@ -409,7 +409,7 @@ type Hysteria2Config struct {
 	DisablePathMTUDiscovery     bool   `json:"disablePathMTUDiscovery"`
 }
 
-func (c *Hysteria2Config) Build() (proto.Message, error) {
+func (c *HysteriaConfig) Build() (proto.Message, error) {
 	up, err := c.Up.Bps()
 	if err != nil {
 		return nil, err
@@ -452,7 +452,7 @@ func (c *Hysteria2Config) Build() (proto.Message, error) {
 		return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
 	}
 
-	config := &hysteria2.Config{}
+	config := &hysteria.Config{}
 	config.Udp = c.Udp
 	config.Auth = c.Auth
 	config.Up = up
@@ -903,8 +903,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")
 	case "quic":
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
-	case "hysteria2":
-		return "hysteria2", nil
+	case "hysteria":
+		return "hysteria", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
@@ -1140,7 +1140,7 @@ type StreamConfig struct {
 	GRPCSettings        *GRPCConfig        `json:"grpcSettings"`
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
-	Hysteria2Settings   *Hysteria2Config   `json:"hysteria2Settings"`
+	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
 
@@ -1261,13 +1261,13 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
-	if c.Hysteria2Settings != nil {
-		hs, err := c.Hysteria2Settings.Build()
+	if c.HysteriaSettings != nil {
+		hs, err := c.HysteriaSettings.Build()
 		if err != nil {
-			return nil, errors.New("Failed to build Hysteria2 config.").Base(err)
+			return nil, errors.New("Failed to build Hysteria config.").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
-			ProtocolName: "hysteria2",
+			ProtocolName: "hysteria",
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}

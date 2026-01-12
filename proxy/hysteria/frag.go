@@ -1,4 +1,4 @@
-package hysteria2
+package hysteria
 
 func FragUDPMessage(m *UDPMessage, maxSize int) []UDPMessage {
 	if m.Size() <= maxSize {
