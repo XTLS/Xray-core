@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
