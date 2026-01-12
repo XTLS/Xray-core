@@ -117,7 +117,6 @@ type client struct {
 	tlsConfig    *go_tls.Config
 	udpmask      udpmask.Udpmask
 	socketConfig *internet.SocketConfig
-	closed       bool
 	udpSM        *udpSessionManager
 	mutex        sync.Mutex
 }
@@ -137,6 +136,9 @@ func (c *client) status() Status {
 func (c *client) close() {
 	_ = c.conn.CloseWithError(closeErrCodeOK, "")
 	_ = c.pktConn.Close()
+	c.pktConn = nil
+	c.conn = nil
+	c.udpSM = nil
 }
 
 func (c *client) dial() error {
@@ -147,10 +149,6 @@ func (c *client) dial() error {
 	if status == StatusInactive {
 		c.close()
 	}
-
-	c.pktConn = nil
-	c.conn = nil
-	c.udpSM = nil
 
 	var index int
 	if len(c.config.Ports) > 0 {
@@ -265,28 +263,18 @@ func (c *client) dial() error {
 	return nil
 }
 
-func (c *client) remove() bool {
+func (c *client) clean() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.closed {
-		return true
-	}
-
 	if c.status() == StatusInactive {
-		c.closed = true
 		c.close()
 	}
-	return c.closed
 }
 
 func (c *client) tcp() (stat.Connection, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil, errors.New("closed")
-	}
 
 	err := c.dial()
 	if err != nil {
@@ -308,10 +296,6 @@ func (c *client) tcp() (stat.Connection, error) {
 func (c *client) udp() (stat.Connection, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil, errors.New("closed")
-	}
 
 	err := c.dial()
 	if err != nil {
@@ -366,10 +350,8 @@ func (m *clientManager) clean() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	for key, c := range m.m {
-		if c.remove() {
-			delete(m.m, key)
-		}
+	for _, c := range m.m {
+		c.clean()
 	}
 }
 
