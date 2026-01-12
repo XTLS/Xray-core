@@ -128,7 +128,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 		Status: log.AccessAccepted,
 		Reason: "",
 	})
-	errors.LogInfo(ctx, "processing connection from ", source, " to ", destination)
+	errors.LogInfo(ctx, "processing from ", source, " to ", destination)
 
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
