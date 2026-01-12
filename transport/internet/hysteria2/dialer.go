@@ -167,6 +167,7 @@ func (c *client) dial() error {
 
 	pktConn, ok := raw.(net.PacketConn)
 	if !ok {
+		raw.Close()
 		return errors.New("raw is not PacketConn")
 	}
 
