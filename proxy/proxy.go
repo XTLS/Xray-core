@@ -224,7 +224,8 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		switchToDirectCopy = &w.trafficState.Outbound.DownlinkReaderDirectCopy
 	}
 
-	if *switchToDirectCopy {
+	if *switchToDirectCopy && w.input == nil {
+		// Already switched to direct copy mode
 		if w.directReadCounter != nil {
 			w.directReadCounter.Add(int64(buffer.Len()))
 		}
@@ -257,11 +258,18 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 	if *switchToDirectCopy {
 		// XTLS Vision processes TLS-like conn's input and rawInput
+		// input contains decrypted application data - safe to merge
 		if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
 			buffer, _ = buf.MergeMulti(buffer, inputBuffer)
 		}
-		if rawInputBuffer, err := buf.ReadFrom(w.rawInput); err == nil && !rawInputBuffer.IsEmpty() {
-			buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
+		// rawInput may contain encrypted bytes for the next TLS record
+		// If rawInput is not empty, we should NOT switch to direct mode yet
+		// because those bytes need to be processed by the TLS layer first
+		if w.rawInput != nil && w.rawInput.Len() > 0 {
+			// rawInput has pending data - defer direct copy to next read
+			// *switchToDirectCopy remains true (unchanged), so we will retry on the next ReadMultiBuffer call
+			// This ensures we don't mix encrypted bytes with application data
+			return buffer, err
 		}
 		*w.input = bytes.Reader{} // release memory
 		w.input = nil
