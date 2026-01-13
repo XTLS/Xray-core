@@ -23,7 +23,7 @@ const (
 
 type Config struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Udp                     bool                   `protobuf:"varint,1,opt,name=udp,proto3" json:"udp,omitempty"`
+	Version                 int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
 	Up                      uint64                 `protobuf:"varint,3,opt,name=up,proto3" json:"up,omitempty"`
 	Down                    uint64                 `protobuf:"varint,4,opt,name=down,proto3" json:"down,omitempty"`
@@ -70,11 +70,11 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_hysteria_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetUdp() bool {
+func (x *Config) GetVersion() int32 {
 	if x != nil {
-		return x.Udp
+		return x.Version
 	}
-	return false
+	return 0
 }
 
 func (x *Config) GetAuth() string {
@@ -165,9 +165,9 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xff\x03\n" +
-	"\x06Config\x12\x10\n" +
-	"\x03udp\x18\x01 \x01(\bR\x03udp\x12\x12\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\x87\x04\n" +
+	"\x06Config\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
 	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x0e\n" +
 	"\x02up\x18\x03 \x01(\x04R\x02up\x12\x12\n" +
 	"\x04down\x18\x04 \x01(\x04R\x04down\x12\x14\n" +
