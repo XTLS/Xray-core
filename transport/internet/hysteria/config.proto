@@ -7,7 +7,7 @@ option java_package = "com.xray.transport.internet.hysteria";
 option java_multiple_files = true;
 
 message Config {
-  bool udp = 1;
+  int32 version = 1;
   string auth = 2;
   uint64 up = 3;
   uint64 down = 4;

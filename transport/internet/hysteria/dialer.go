@@ -251,7 +251,7 @@ func (c *client) dial() error {
 
 	c.pktConn = pktConn
 	c.conn = quicConn
-	if c.config.Udp && serverUdp {
+	if serverUdp {
 		c.udpSM = &udpSessionManager{
 			conn:   quicConn,
 			m:      make(map[uint32]*InterUdpConn),
@@ -386,7 +386,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	outbounds := session.OutboundsFromContext(ctx)
 	targetUdp := len(outbounds) > 0 && outbounds[len(outbounds)-1].Target.Network == net.Network_UDP
 
-	if config.Udp && targetUdp {
+	if targetUdp {
 		return c.udp()
 	}
 	return c.tcp()
