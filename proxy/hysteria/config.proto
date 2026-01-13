@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.proxy.hysteria;
+option csharp_namespace = "Xray.Proxy.Hysteria";
+option go_package = "github.com/xtls/xray-core/proxy/hysteria";
+option java_package = "com.xray.proxy.hysteria";
+option java_multiple_files = true;
+
+import "common/protocol/server_spec.proto";
+
+message ClientConfig {
+  xray.common.protocol.ServerEndpoint server = 1;
+}
