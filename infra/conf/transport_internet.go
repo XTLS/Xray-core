@@ -1134,7 +1134,7 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Udpmasks            json.RawMessage    `json:"udpmasks"`
+	Udpmasks            []*FinalMask       `json:"udpmasks"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1284,22 +1284,12 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SocketSettings = ss
 	}
 
-	if c.Udpmasks != nil {
-		var ms []*FinalMask
-		var m *FinalMask
-		if err := json.Unmarshal(c.Udpmasks, &ms); err != nil {
-			if err := json.Unmarshal(c.Udpmasks, &m); err != nil {
-				return nil, errors.New("Failed to build udpmasks.").Base(err)
-			}
-			ms = append(ms, m)
+	for _, mask := range c.Udpmasks {
+		u, err := mask.Build(false)
+		if err != nil {
+			return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 		}
-		for _, mask := range ms {
-			u, err := mask.Build(false)
-			if err != nil {
-				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
-			}
-			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
-		}
+		config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
 	}
 
 	return config, nil
