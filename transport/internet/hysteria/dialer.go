@@ -19,9 +19,9 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
-	"github.com/xtls/xray-core/transport/internet/mask/udpmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -115,7 +115,7 @@ type client struct {
 	conn           *quic.Conn
 	config         *Config
 	tlsConfig      *go_tls.Config
-	udpmaskManager *udpmask.UdpmaskManager
+	udpmaskManager *finalmask.UdpmaskManager
 	socketConfig   *internet.SocketConfig
 	udpSM          *udpSessionManager
 	mutex          sync.Mutex

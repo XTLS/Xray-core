@@ -16,10 +16,10 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
-	"github.com/xtls/xray-core/transport/internet/mask/udpmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
@@ -1106,12 +1106,12 @@ func (c *Salamander) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type Mask struct {
+type FinalMask struct {
 	Type     string           `json:"type"`
 	Settings *json.RawMessage `json:"settings"`
 }
 
-func (c *Mask) Build(tcpmaskLoader bool) (proto.Message, error) {
+func (c *FinalMask) Build(tcpmaskLoader bool) (proto.Message, error) {
 	loader := udpmaskLoader
 	if tcpmaskLoader {
 		return nil, errors.New("")
@@ -1132,17 +1132,12 @@ func (c *Mask) Build(tcpmaskLoader bool) (proto.Message, error) {
 	return ts, nil
 }
 
-type Finalmask struct {
-	Tcp []*Mask `json:"tcp"`
-	Udp []*Mask `json:"udp"`
-}
-
 type StreamConfig struct {
 	Address             *Address           `json:"address"`
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Finalmask           *Finalmask         `json:"finalmask"`
+	Udpmasks            json.RawMessage    `json:"udpmasks"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1292,15 +1287,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SocketSettings = ss
 	}
 
-	if c.Finalmask != nil {
-		for _, mask := range c.Finalmask.Tcp {
-			u, err := mask.Build(true)
-			if err != nil {
-				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+	if c.Udpmasks != nil {
+		var ms []*FinalMask
+		var m *FinalMask
+		if err := json.Unmarshal(c.Udpmasks, &ms); err != nil {
+			if err := json.Unmarshal(c.Udpmasks, &m); err != nil {
+				return nil, errors.New("Failed to build udpmasks.").Base(err)
 			}
-			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
+			ms = append(ms, m)
 		}
-		for _, mask := range c.Finalmask.Udp {
+		for _, mask := range ms {
 			u, err := mask.Build(false)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)

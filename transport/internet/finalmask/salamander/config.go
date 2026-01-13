@@ -4,7 +4,7 @@ import (
 	"net"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/mask/udpmask/salamander/obfs"
+	"github.com/xtls/xray-core/transport/internet/finalmask/salamander/obfs"
 )
 
 func (c *Config) UDP() {
