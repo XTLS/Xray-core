@@ -102,6 +102,10 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 
 // HandleConnection pass the connection coming from the ip stack to the routing dispatcher
 func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
+	// when handling is done with any outcome, always signal back to the incoming connection
+	// to close, send completion packets back to the network, and cleanup
+	defer conn.Close()
+
 	sid := session.NewID()
 	ctx := c.ContextWithID(t.ctx, sid)
 
