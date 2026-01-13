@@ -21,9 +21,9 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
+	"github.com/xtls/xray-core/transport/internet/mask/udpmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/udpmask"
 )
 
 type udpSessionManager struct {
@@ -109,16 +109,16 @@ func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
 }
 
 type client struct {
-	ctx          context.Context
-	dest         net.Destination
-	pktConn      net.PacketConn
-	conn         *quic.Conn
-	config       *Config
-	tlsConfig    *go_tls.Config
-	udpmask      udpmask.Udpmask
-	socketConfig *internet.SocketConfig
-	udpSM        *udpSessionManager
-	mutex        sync.Mutex
+	ctx            context.Context
+	dest           net.Destination
+	pktConn        net.PacketConn
+	conn           *quic.Conn
+	config         *Config
+	tlsConfig      *go_tls.Config
+	udpmaskManager *udpmask.UdpmaskManager
+	socketConfig   *internet.SocketConfig
+	udpSM          *udpSessionManager
+	mutex          sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -180,8 +180,8 @@ func (c *client) dial() error {
 		}
 	}
 
-	if c.udpmask != nil {
-		pktConn, err = c.udpmask.WrapPacketConnClient(pktConn)
+	if c.udpmaskManager != nil {
+		pktConn, err = c.udpmaskManager.WrapPacketConnClient(pktConn)
 		if err != nil {
 			return errors.New("mask err").Base(err)
 		}
@@ -371,12 +371,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
-			ctx:          ctx,
-			dest:         dest,
-			config:       config,
-			tlsConfig:    tlsConfig.GetTLSConfig(),
-			udpmask:      streamSettings.Udpmask,
-			socketConfig: streamSettings.SocketSettings,
+			ctx:            ctx,
+			dest:           dest,
+			config:         config,
+			tlsConfig:      tlsConfig.GetTLSConfig(),
+			udpmaskManager: streamSettings.UdpmaskManager,
+			socketConfig:   streamSettings.SocketSettings,
 		}
 		manger.m[addr] = c
 	}
