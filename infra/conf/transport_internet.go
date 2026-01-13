@@ -394,11 +394,11 @@ type UdpHop struct {
 }
 
 type HysteriaConfig struct {
-	Udp    bool      `json:"udp"`
-	Auth   string    `json:"auth"`
-	Up     Bandwidth `json:"up"`
-	Down   Bandwidth `json:"down"`
-	UdpHop UdpHop    `json:"udphop"`
+	EnableDatagram bool      `json:"enableDatagram"`
+	Auth           string    `json:"auth"`
+	Up             Bandwidth `json:"up"`
+	Down           Bandwidth `json:"down"`
+	UdpHop         UdpHop    `json:"udphop"`
 
 	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
@@ -453,7 +453,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	config := &hysteria.Config{}
-	config.Udp = c.Udp
+	config.Udp = c.EnableDatagram
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
