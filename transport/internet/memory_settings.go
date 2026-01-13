@@ -2,7 +2,8 @@ package internet
 
 import (
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet/udpmask"
+	"github.com/xtls/xray-core/transport/internet/mask/tcpmask"
+	"github.com/xtls/xray-core/transport/internet/mask/udpmask"
 )
 
 // MemoryStreamConfig is a parsed form of StreamConfig. It is used to reduce the number of Protobuf parses.
@@ -12,7 +13,8 @@ type MemoryStreamConfig struct {
 	ProtocolSettings interface{}
 	SecurityType     string
 	SecuritySettings interface{}
-	Udpmask          udpmask.Udpmask
+	TcpmaskManager   *tcpmask.TcpmaskManager
+	UdpmaskManager   *udpmask.UdpmaskManager
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
 }
@@ -49,12 +51,28 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		mss.SecuritySettings = ess
 	}
 
-	if s != nil && s.Udpmask != nil {
-		instance, err := s.Udpmask.GetInstance()
-		if err != nil {
-			return nil, err
+	if s != nil && len(s.Tcpmasks) > 0 {
+		var masks []tcpmask.Tcpmask
+		for _, msg := range s.Tcpmasks {
+			instance, err := msg.GetInstance()
+			if err != nil {
+				return nil, err
+			}
+			masks = append(masks, instance.(tcpmask.Tcpmask))
 		}
-		mss.Udpmask = instance.(udpmask.Udpmask)
+		mss.TcpmaskManager = tcpmask.NewTcpmaskManager(masks)
+	}
+
+	if s != nil && len(s.Udpmasks) > 0 {
+		var masks []udpmask.Udpmask
+		for _, msg := range s.Udpmasks {
+			instance, err := msg.GetInstance()
+			if err != nil {
+				return nil, err
+			}
+			masks = append(masks, instance.(udpmask.Udpmask))
+		}
+		mss.UdpmaskManager = udpmask.NewUdpmaskManager(masks)
 	}
 
 	return mss, nil

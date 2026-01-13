@@ -274,7 +274,8 @@ type StreamConfig struct {
 	SecurityType string `protobuf:"bytes,3,opt,name=security_type,json=securityType,proto3" json:"security_type,omitempty"`
 	// Transport security settings. They can be either TLS or REALITY.
 	SecuritySettings []*serial.TypedMessage `protobuf:"bytes,4,rep,name=security_settings,json=securitySettings,proto3" json:"security_settings,omitempty"`
-	Udpmask          *serial.TypedMessage   `protobuf:"bytes,10,opt,name=udpmask,proto3" json:"udpmask,omitempty"`
+	Udpmasks         []*serial.TypedMessage `protobuf:"bytes,10,rep,name=udpmasks,proto3" json:"udpmasks,omitempty"`
+	Tcpmasks         []*serial.TypedMessage `protobuf:"bytes,11,rep,name=tcpmasks,proto3" json:"tcpmasks,omitempty"`
 	SocketSettings   *SocketConfig          `protobuf:"bytes,6,opt,name=socket_settings,json=socketSettings,proto3" json:"socket_settings,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -352,9 +353,16 @@ func (x *StreamConfig) GetSecuritySettings() []*serial.TypedMessage {
 	return nil
 }
 
-func (x *StreamConfig) GetUdpmask() *serial.TypedMessage {
+func (x *StreamConfig) GetUdpmasks() []*serial.TypedMessage {
 	if x != nil {
-		return x.Udpmask
+		return x.Udpmasks
+	}
+	return nil
+}
+
+func (x *StreamConfig) GetTcpmasks() []*serial.TypedMessage {
+	if x != nil {
+		return x.Tcpmasks
 	}
 	return nil
 }
@@ -803,16 +811,17 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x1ftransport/internet/config.proto\x12\x17xray.transport.internet\x1a!common/serial/typed_message.proto\x1a\x18common/net/address.proto\"t\n" +
 	"\x0fTransportConfig\x12#\n" +
 	"\rprotocol_name\x18\x03 \x01(\tR\fprotocolName\x12<\n" +
-	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\xd7\x03\n" +
+	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\x97\x04\n" +
 	"\fStreamConfig\x125\n" +
 	"\aaddress\x18\b \x01(\v2\x1b.xray.common.net.IPOrDomainR\aaddress\x12\x12\n" +
 	"\x04port\x18\t \x01(\rR\x04port\x12#\n" +
 	"\rprotocol_name\x18\x05 \x01(\tR\fprotocolName\x12W\n" +
 	"\x12transport_settings\x18\x02 \x03(\v2(.xray.transport.internet.TransportConfigR\x11transportSettings\x12#\n" +
 	"\rsecurity_type\x18\x03 \x01(\tR\fsecurityType\x12M\n" +
-	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12:\n" +
-	"\audpmask\x18\n" +
-	" \x01(\v2 .xray.common.serial.TypedMessageR\audpmask\x12N\n" +
+	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12<\n" +
+	"\budpmasks\x18\n" +
+	" \x03(\v2 .xray.common.serial.TypedMessageR\budpmasks\x12<\n" +
+	"\btcpmasks\x18\v \x03(\v2 .xray.common.serial.TypedMessageR\btcpmasks\x12N\n" +
 	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
@@ -921,18 +930,19 @@ var file_transport_internet_config_proto_depIdxs = []int32{
 	10, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
 	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
 	9,  // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	9,  // 4: xray.transport.internet.StreamConfig.udpmask:type_name -> xray.common.serial.TypedMessage
-	7,  // 5: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
-	2,  // 6: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
-	0,  // 7: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	6,  // 8: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
-	1,  // 9: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
-	8,  // 10: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	9,  // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
+	9,  // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
+	7,  // 6: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
+	2,  // 7: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
+	0,  // 8: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
+	6,  // 9: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
+	1,  // 10: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
+	8,  // 11: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_config_proto_init() }

@@ -4,8 +4,11 @@ import (
 	"net"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/udpmask/salamander/obfs"
+	"github.com/xtls/xray-core/transport/internet/mask/udpmask/salamander/obfs"
 )
+
+func (c *Config) UDP() {
+}
 
 func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
 	return raw, nil
@@ -31,7 +34,7 @@ func (c *Config) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error
 	return obfs.WrapPacketConn(raw, ob), nil
 }
 
-func (c *Config) Size() int32 {
+func (c *Config) Size() int {
 	return 0
 }
 

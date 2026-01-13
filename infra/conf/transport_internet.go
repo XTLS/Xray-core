@@ -19,11 +19,11 @@ import (
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
+	"github.com/xtls/xray-core/transport/internet/mask/udpmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/internet/udpmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"google.golang.org/protobuf/proto"
 )
@@ -1103,25 +1103,35 @@ func (c *Salamander) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type Udpmask struct {
+type Mask struct {
 	Type     string           `json:"type"`
 	Settings *json.RawMessage `json:"settings"`
 }
 
-func (c *Udpmask) Build() (proto.Message, error) {
+func (c *Mask) Build(tcpmaskLoader bool) (proto.Message, error) {
+	loader := udpmaskLoader
+	if tcpmaskLoader {
+		return nil, errors.New("")
+	}
+
 	settings := []byte("{}")
 	if c.Settings != nil {
 		settings = ([]byte)(*c.Settings)
 	}
-	rawConfig, err := udpmaskLoader.LoadWithID(settings, c.Type)
+	rawConfig, err := loader.LoadWithID(settings, c.Type)
 	if err != nil {
-		return nil, errors.New("failed to load udpmask for type ", c.Type).Base(err)
+		return nil, err
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
-		return nil, errors.New("failed to build udpmask for type ", c.Type).Base(err)
+		return nil, err
 	}
 	return ts, nil
+}
+
+type Finalmask struct {
+	Tcp []*Mask `json:"tcp"`
+	Udp []*Mask `json:"udp"`
 }
 
 type StreamConfig struct {
@@ -1129,7 +1139,7 @@ type StreamConfig struct {
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Udpmask             *Udpmask           `json:"udpmask"`
+	Finalmask           *Finalmask         `json:"finalmask"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1279,12 +1289,21 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SocketSettings = ss
 	}
 
-	if c.Udpmask != nil {
-		u, err := c.Udpmask.Build()
-		if err != nil {
-			return nil, errors.New("failed to build udpmask with type ", c.Udpmask.Type).Base(err)
+	if c.Finalmask != nil {
+		for _, mask := range c.Finalmask.Tcp {
+			u, err := mask.Build(true)
+			if err != nil {
+				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+			}
+			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
 		}
-		config.Udpmask = serial.ToTypedMessage(u)
+		for _, mask := range c.Finalmask.Udp {
+			u, err := mask.Build(false)
+			if err != nil {
+				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+			}
+			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		}
 	}
 
 	return config, nil
