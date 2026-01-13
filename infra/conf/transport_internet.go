@@ -350,15 +350,12 @@ func (b Bandwidth) Bps() (uint64, error) {
 		return 0, nil
 	}
 
-	idx := 0
+	idx := len(s)
 	for i, c := range s {
 		if (c < '0' || c > '9') && c != '.' {
 			idx = i
 			break
 		}
-	}
-	if idx == 0 {
-		return 0, errors.New("invalid bandwidth format")
 	}
 
 	numStr := s[:idx]
@@ -372,20 +369,20 @@ func (b Bandwidth) Bps() (uint64, error) {
 	mul := uint64(1)
 	switch unit {
 	case "", "b", "bps":
-		mul = Byte / 8
+		mul = Byte
 	case "k", "kb", "kbps":
-		mul = Kilobyte / 8
+		mul = Kilobyte
 	case "m", "mb", "mbps":
-		mul = Megabyte / 8
+		mul = Megabyte
 	case "g", "gb", "gbps":
-		mul = Gigabyte / 8
+		mul = Gigabyte
 	case "t", "tb", "tbps":
-		mul = Terabyte / 8
+		mul = Terabyte
 	default:
 		return 0, errors.New("unsupported unit: " + unit)
 	}
 
-	return uint64(val * float64(mul)), nil
+	return uint64(val*float64(mul)) / 8, nil
 }
 
 type UdpHop struct {
