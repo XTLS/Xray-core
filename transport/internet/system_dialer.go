@@ -195,6 +195,14 @@ func (c *PacketConnWrapper) SetWriteDeadline(t time.Time) error {
 	return c.Conn.SetWriteDeadline(t)
 }
 
+func (c *PacketConnWrapper) SyscallConn() (syscall.RawConn, error) {
+	sc, ok := c.Conn.(syscall.Conn)
+	if !ok {
+		return nil, syscall.EINVAL
+	}
+	return sc.SyscallConn()
+}
+
 type SystemDialerAdapter interface {
 	Dial(network string, address string) (net.Conn, error)
 }

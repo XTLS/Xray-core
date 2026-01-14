@@ -453,7 +453,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	config := &hysteria.Config{}
-	config.Version = int32(c.Version)
+	config.Version = c.Version
 	config.Auth = c.Auth
 	config.Up = up
 	config.Down = down
