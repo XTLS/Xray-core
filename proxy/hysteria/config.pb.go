@@ -24,7 +24,8 @@ const (
 
 type ClientConfig struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Server        *protocol.ServerEndpoint `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	Version       int32                    `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Server        *protocol.ServerEndpoint `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -59,6 +60,13 @@ func (*ClientConfig) Descriptor() ([]byte, []int) {
 	return file_proxy_hysteria_config_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *ClientConfig) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 func (x *ClientConfig) GetServer() *protocol.ServerEndpoint {
 	if x != nil {
 		return x.Server
@@ -70,9 +78,10 @@ var File_proxy_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_proxy_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/hysteria/config.proto\x12\x13xray.proxy.hysteria\x1a!common/protocol/server_spec.proto\"L\n" +
-	"\fClientConfig\x12<\n" +
-	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06serverB[\n" +
+	"\x1bproxy/hysteria/config.proto\x12\x13xray.proxy.hysteria\x1a!common/protocol/server_spec.proto\"f\n" +
+	"\fClientConfig\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x05R\aversion\x12<\n" +
+	"\x06server\x18\x02 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06serverB[\n" +
 	"\x17com.xray.proxy.hysteriaP\x01Z(github.com/xtls/xray-core/proxy/hysteria\xaa\x02\x13Xray.Proxy.Hysteriab\x06proto3"
 
 var (
