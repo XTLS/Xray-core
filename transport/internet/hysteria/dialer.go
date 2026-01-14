@@ -163,15 +163,10 @@ func (c *client) dial() error {
 
 	remote := raw.RemoteAddr()
 
-	var pktConn net.PacketConn
-	if conn, ok := raw.(*internet.PacketConnWrapper); ok {
-		pktConn = conn.Conn
-	} else {
-		pktConn, ok = raw.(net.PacketConn)
-		if !ok {
-			raw.Close()
-			return errors.New("raw is not PacketConn")
-		}
+	pktConn, ok := raw.(net.PacketConn)
+	if !ok {
+		raw.Close()
+		return errors.New("raw is not PacketConn")
 	}
 
 	if len(c.config.Ports) > 0 {
@@ -336,16 +331,11 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 		return nil, errors.New()
 	}
 
-	var pktConn net.PacketConn
-	if conn, ok := raw.(*internet.PacketConnWrapper); ok {
-		pktConn = conn.Conn
-	} else {
-		pktConn, ok = raw.(net.PacketConn)
-		if !ok {
-			errors.LogDebug(c.ctx, "raw is not PacketConn skip hop")
-			raw.Close()
-			return nil, errors.New()
-		}
+	pktConn, ok := raw.(net.PacketConn)
+	if !ok {
+		errors.LogDebug(c.ctx, "raw is not PacketConn skip hop")
+		raw.Close()
+		return nil, errors.New()
 	}
 
 	return pktConn, nil
