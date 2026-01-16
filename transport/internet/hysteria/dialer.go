@@ -109,17 +109,16 @@ func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
 }
 
 type client struct {
-	ctx             context.Context
-	requireDatagram bool
-	dest            net.Destination
-	pktConn         net.PacketConn
-	conn            *quic.Conn
-	config          *Config
-	tlsConfig       *go_tls.Config
-	socketConfig    *internet.SocketConfig
-	udpmaskManager  *finalmask.UdpmaskManager
-	udpSM           *udpSessionManager
-	mutex           sync.Mutex
+	ctx            context.Context
+	dest           net.Destination
+	pktConn        net.PacketConn
+	conn           *quic.Conn
+	config         *Config
+	tlsConfig      *go_tls.Config
+	socketConfig   *internet.SocketConfig
+	udpmaskManager *finalmask.UdpmaskManager
+	udpSM          *udpSessionManager
+	mutex          sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -258,7 +257,7 @@ func (c *client) dial() error {
 
 	c.pktConn = pktConn
 	c.conn = quicConn
-	if c.requireDatagram && serverUdp {
+	if serverUdp {
 		c.udpSM = &udpSessionManager{
 			conn:   quicConn,
 			m:      make(map[uint32]*InterUdpConn),
@@ -379,13 +378,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
-			ctx:             ctx,
-			requireDatagram: requireDatagram,
-			dest:            dest,
-			config:          config,
-			tlsConfig:       tlsConfig.GetTLSConfig(),
-			socketConfig:    streamSettings.SocketSettings,
-			udpmaskManager:  streamSettings.UdpmaskManager,
+			ctx:            ctx,
+			dest:           dest,
+			config:         config,
+			tlsConfig:      tlsConfig.GetTLSConfig(),
+			socketConfig:   streamSettings.SocketSettings,
+			udpmaskManager: streamSettings.UdpmaskManager,
 		}
 		manger.m[addr] = c
 	}
