@@ -391,12 +391,12 @@ type UdpHop struct {
 }
 
 type HysteriaConfig struct {
-	Version           int32     `json:"version"`
-	Auth              string    `json:"auth"`
-	DefaultCongestion bool      `json:"defaultCongestion"`
-	Up                Bandwidth `json:"up"`
-	Down              Bandwidth `json:"down"`
-	UdpHop            UdpHop    `json:"udphop"`
+	Version    int32     `json:"version"`
+	Auth       string    `json:"auth"`
+	Congestion string    `json:"congestion"`
+	Up         Bandwidth `json:"up"`
+	Down       Bandwidth `json:"down"`
+	UdpHop     UdpHop    `json:"udphop"`
 
 	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
@@ -456,7 +456,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config := &hysteria.Config{}
 	config.Version = c.Version
 	config.Auth = c.Auth
-	config.DefaultCongestion = c.DefaultCongestion
+	config.DefaultCongestion = c.Congestion == "default"
 	config.Up = up
 	config.Down = down
 	config.Ports = hop.Build().Ports()
