@@ -1,12 +1,15 @@
 package tls
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
 )
 
 func TestCalculateCertHash(t *testing.T) {
@@ -94,4 +97,61 @@ uI6HqHFD3iEct8fBkYfQiwH2e1eu9OwgujiWHsutyK8VvzVB3/YnhQ/TzciRjPqz
 		fingerprint, _ := hex.DecodeString("ae243d668ec9c7f74a0dcd1ad21c6676b4efe30c39728934b362093af886bf77")
 		assert.Equal(t, fingerprint, hash)
 	})
+}
+
+func TestVerifyPeerLeafCert(t *testing.T) {
+	leafCert := cert.MustGenerate(nil, cert.DNSNames("example.com"))
+	leaf := common.Must2(x509.ParseCertificate(leafCert.Certificate))
+
+	caHash := GenerateCertHash(leafCert.Certificate)
+
+	r := &RandCarrier{
+		Config: &tls.Config{
+			ServerName: "example.com",
+		},
+		PinnedPeerCertSha256: [][]byte{caHash},
+	}
+
+	rawCerts := [][]byte{leaf.Raw}
+	err := r.verifyPeerCert(rawCerts, nil)
+	if err != nil {
+		t.Fatal("expected to verify leaf cert signed by pinned CA, but got error:", err)
+	}
+
+	// make the pinned hash incorrect
+	r.PinnedPeerCertSha256[0][0] += 1
+	err = r.verifyPeerCert(rawCerts, nil)
+	if err == nil {
+		t.Fatal("expected to fail verifying leaf cert with incorrect pinned CA hash, but got no error")
+	}
+}
+
+func TestVerifyPeerCACert(t *testing.T) {
+	caCert := cert.MustGenerate(nil, cert.Authority(true), cert.KeyUsage(x509.KeyUsageCertSign))
+	ca := common.Must2(x509.ParseCertificate(caCert.Certificate))
+
+	leafCert := cert.MustGenerate(caCert, cert.DNSNames("example.com"))
+	leaf := common.Must2(x509.ParseCertificate(leafCert.Certificate))
+
+	caHash := GenerateCertHash(ca)
+
+	r := &RandCarrier{
+		Config: &tls.Config{
+			ServerName: "example.com",
+		},
+		PinnedPeerCertSha256: [][]byte{caHash},
+	}
+
+	rawCerts := [][]byte{leaf.Raw, ca.Raw}
+	err := r.verifyPeerCert(rawCerts, nil)
+	if err != nil {
+		t.Fatal("expected to verify leaf cert signed by pinned CA, but got error:", err)
+	}
+
+	// make the pinned hash incorrect
+	r.PinnedPeerCertSha256[0][0] += 1
+	err = r.verifyPeerCert(rawCerts, nil)
+	if err == nil {
+		t.Fatal("expected to fail verifying leaf cert with incorrect pinned CA hash, but got no error")
+	}
 }
