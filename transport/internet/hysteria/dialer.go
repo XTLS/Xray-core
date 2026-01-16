@@ -16,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
 	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
@@ -393,10 +392,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	c.setCtx(ctx)
 	manger.mutex.Unlock()
 
-	outbounds := session.OutboundsFromContext(ctx)
-	targetUdp := len(outbounds) > 0 && outbounds[len(outbounds)-1].Target.Network == net.Network_UDP
-
-	if requireDatagram && targetUdp {
+	if requireDatagram {
 		return c.udp()
 	}
 	return c.tcp()
