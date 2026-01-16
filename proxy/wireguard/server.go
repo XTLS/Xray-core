@@ -101,7 +101,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 
 		for _, payload := range mpayload {
-			data := make([]byte, payload.Len())
+			data := bufferPool.Get().([]byte)
 			n, err := payload.Read(data)
 
 			select {
@@ -112,6 +112,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 				err:      err,
 			}:
 			case <-ctx.Done():
+				bufferPool.Put(data) // Return buffer if not sent
 				return nil
 			}
 			if err != nil && goerrors.Is(err, io.EOF) {

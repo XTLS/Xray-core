@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/netip"
 	"strconv"
+	"sync"
 
 	"golang.zx2c4.com/wireguard/conn"
 
@@ -12,6 +13,14 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
 )
+
+const udpBufferSize = 1700 // max MTU for WireGuard
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		return make([]byte, udpBufferSize)
+	},
+}
 
 // netReadInfo holds the result of a read operation from a specific endpoint
 type netReadInfo struct {
@@ -94,6 +103,8 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 		copy(bufs[0], r.buff[:r.bytes])
 		sizes[0] = r.bytes
 		eps[0] = r.endpoint
+		// Return buffer to pool
+		bufferPool.Put(r.buff)
 		return 1, r.err
 	}
 	workers := bind.workers
@@ -136,7 +147,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 			_ = recover() // gracefully handle send on closed channel
 		}()
 		for {
-			buff := make([]byte, 1700) // max MTU for WireGuard
+			buff := bufferPool.Get().([]byte)
 			i, err := c.Read(buff)
 
 			if i > 3 {
