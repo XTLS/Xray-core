@@ -248,7 +248,7 @@ func (c *client) dial() error {
 			errors.LogDebug(c.ctx, "congestion bbr")
 			congestion.UseBBR(quicConn)
 		} else {
-			errors.LogDebug(c.ctx, "congestion brutal ", min(c.config.Up, serverDown))
+			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.config.Up, serverDown))
 			congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
 		}
 	} else {
