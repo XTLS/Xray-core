@@ -24,6 +24,8 @@ message BridgeConfig {
 message PortalConfig {
   string tag = 1;
   string domain = 2;
+  uint32 heartbeatPeriod = 4;
+  uint32 heartbeatPadding = 5;
 }
 
 message Config {

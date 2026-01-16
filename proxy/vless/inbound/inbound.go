@@ -198,7 +198,13 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
 	if r == nil {
 		picker, _ := reverse.NewStaticMuxPicker()
-		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+		r = &Reverse{
+			tag:              a.Reverse.Tag,
+			heartbeatPeriod:  a.Reverse.HeartbeatPeriod,
+			heartbeatPadding: a.Reverse.HeartbeatPadding,
+			picker:           picker,
+			client:           &mux.ClientManager{Picker: picker},
+		}
 		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
 			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
 		}
@@ -636,9 +642,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 }
 
 type Reverse struct {
-	tag    string
-	picker *reverse.StaticMuxPicker
-	client *mux.ClientManager
+	tag              string
+	heartbeatPeriod  uint32
+	heartbeatPadding uint32
+	picker           *reverse.StaticMuxPicker
+	client           *mux.ClientManager
 }
 
 func (r *Reverse) Tag() string {
@@ -650,7 +658,7 @@ func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
 	if err != nil {
 		return errors.New("failed to create mux client worker").Base(err).AtWarning()
 	}
-	worker, err := reverse.NewPortalWorker(muxClient)
+	worker, err := reverse.NewPortalWorker(muxClient, r.heartbeatPeriod, r.heartbeatPadding)
 	if err != nil {
 		return errors.New("failed to create portal worker").Base(err).AtWarning()
 	}

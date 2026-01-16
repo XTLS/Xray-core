@@ -21,11 +21,13 @@ import (
 )
 
 type Portal struct {
-	ohm    outbound.Manager
-	tag    string
-	domain string
-	picker *StaticMuxPicker
-	client *mux.ClientManager
+	ohm              outbound.Manager
+	tag              string
+	domain           string
+	heartbeatPeriod  uint32
+	heartbeatPadding uint32
+	picker 	         *StaticMuxPicker
+	client           *mux.ClientManager
 }
 
 func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
@@ -43,12 +45,14 @@ func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
 	}
 
 	return &Portal{
-		ohm:    ohm,
-		tag:    config.Tag,
-		domain: config.Domain,
-		picker: picker,
-		client: &mux.ClientManager{
-			Picker: picker,
+		ohm:              ohm,
+		tag:              config.Tag,
+		domain:           config.Domain,
+		heartbeatPeriod:  config.HeartbeatPeriod,
+		heartbeatPadding: config.HeartbeatPadding,
+		picker:           picker,
+		client:           &mux.ClientManager{
+		Picker:           picker,
 		},
 	}, nil
 }
@@ -77,7 +81,7 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 			return errors.New("failed to create mux client worker").Base(err).AtWarning()
 		}
 
-		worker, err := NewPortalWorker(muxClient)
+		worker, err := NewPortalWorker(muxClient, p.heartbeatPeriod, p.heartbeatPadding)
 		if err != nil {
 			return errors.New("failed to create portal worker").Base(err)
 		}
@@ -229,9 +233,11 @@ type PortalWorker struct {
 	draining bool
 	counter  uint32
 	timer    *signal.ActivityTimer
+	period   uint32
+	padding  uint32
 }
 
-func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
+func NewPortalWorker(client *mux.ClientWorker, heartbeatPeriod uint32, heartbeatPadding uint32) (*PortalWorker, error) {
 	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
 	uplinkReader, uplinkWriter := pipe.New(opt...)
 	downlinkReader, downlinkWriter := pipe.New(opt...)
@@ -252,10 +258,12 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 		client.Close()
 	}
 	w := &PortalWorker{
-		client: client,
-		reader: downlinkReader,
-		writer: uplinkWriter,
-		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
+		client:  client,
+		reader:  downlinkReader,
+		writer:  uplinkWriter,
+		timer:   signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
+		period:  heartbeatPeriod / 2, // heartbeat() function runs every 2 seconds
+		padding: heartbeatPadding,
 	}
 	w.control = &task.Periodic{
 		Execute:  w.heartbeat,
@@ -275,7 +283,7 @@ func (w *PortalWorker) heartbeat() error {
 	}
 
 	msg := &Control{}
-	msg.FillInRandom()
+	msg.FillInRandom(w.padding)
 
 	if w.client.TotalConnections() > 256 {
 		w.draining = true
@@ -288,7 +296,7 @@ func (w *PortalWorker) heartbeat() error {
 		}()
 	}
 
-	w.counter = (w.counter + 1) % 5
+	w.counter = (w.counter + 1) % w.period
 	if w.draining || w.counter == 1 {
 		b, err := proto.Marshal(msg)
 		common.Must(err)

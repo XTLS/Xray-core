@@ -8,6 +8,8 @@ option java_multiple_files = true;
 
 message Reverse {
   string tag = 1;
+  uint32 heartbeatPeriod = 2;
+  uint32 heartbeatPadding = 3;
 }
 
 message Account {
