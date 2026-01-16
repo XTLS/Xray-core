@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
+	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
@@ -109,16 +110,17 @@ func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
 }
 
 type client struct {
-	ctx            context.Context
-	dest           net.Destination
-	pktConn        net.PacketConn
-	conn           *quic.Conn
-	config         *Config
-	tlsConfig      *go_tls.Config
-	udpmaskManager *finalmask.UdpmaskManager
-	socketConfig   *internet.SocketConfig
-	udpSM          *udpSessionManager
-	mutex          sync.Mutex
+	ctx             context.Context
+	requireDatagram bool
+	dest            net.Destination
+	pktConn         net.PacketConn
+	conn            *quic.Conn
+	config          *Config
+	tlsConfig       *go_tls.Config
+	socketConfig    *internet.SocketConfig
+	udpmaskManager  *finalmask.UdpmaskManager
+	udpSM           *udpSessionManager
+	mutex           sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -257,7 +259,7 @@ func (c *client) dial() error {
 
 	c.pktConn = pktConn
 	c.conn = quicConn
-	if c.config.EnableDatagram && serverUdp {
+	if c.requireDatagram && serverUdp {
 		c.udpSM = &udpSessionManager{
 			conn:   quicConn,
 			m:      make(map[uint32]*InterUdpConn),
@@ -369,6 +371,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("tls config is nil")
 	}
 
+	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
@@ -377,12 +380,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
-			ctx:            ctx,
-			dest:           dest,
-			config:         config,
-			tlsConfig:      tlsConfig.GetTLSConfig(),
-			udpmaskManager: streamSettings.UdpmaskManager,
-			socketConfig:   streamSettings.SocketSettings,
+			ctx:             ctx,
+			requireDatagram: requireDatagram,
+			dest:            dest,
+			config:          config,
+			tlsConfig:       tlsConfig.GetTLSConfig(),
+			socketConfig:    streamSettings.SocketSettings,
+			udpmaskManager:  streamSettings.UdpmaskManager,
 		}
 		manger.m[addr] = c
 	}
@@ -392,7 +396,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	outbounds := session.OutboundsFromContext(ctx)
 	targetUdp := len(outbounds) > 0 && outbounds[len(outbounds)-1].Target.Network == net.Network_UDP
 
-	if config.EnableDatagram && targetUdp {
+	if requireDatagram && targetUdp {
 		return c.udp()
 	}
 	return c.tcp()

@@ -392,7 +392,6 @@ type UdpHop struct {
 
 type HysteriaConfig struct {
 	Version           int32     `json:"version"`
-	Udp               bool      `json:"udp"`
 	Auth              string    `json:"auth"`
 	DefaultCongestion bool      `json:"defaultCongestion"`
 	Up                Bandwidth `json:"up"`
@@ -456,7 +455,6 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 
 	config := &hysteria.Config{}
 	config.Version = c.Version
-	config.EnableDatagram = c.Udp
 	config.Auth = c.Auth
 	config.DefaultCongestion = c.DefaultCongestion
 	config.Up = up
