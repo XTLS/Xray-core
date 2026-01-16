@@ -243,15 +243,21 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
-		congestion.UseBBR(quicConn)
+	if !c.config.DefaultCongestion {
+		if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
+			errors.LogDebug(c.ctx, "congestion bbr")
+			congestion.UseBBR(quicConn)
+		} else {
+			errors.LogDebug(c.ctx, "congestion brutal ", min(c.config.Up, serverDown))
+			congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+		}
 	} else {
-		congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+		errors.LogDebug(c.ctx, "congestion default")
 	}
 
 	c.pktConn = pktConn
 	c.conn = quicConn
-	if serverUdp {
+	if c.config.EnableDatagram && serverUdp {
 		c.udpSM = &udpSessionManager{
 			conn:   quicConn,
 			m:      make(map[uint32]*InterUdpConn),
@@ -386,7 +392,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	outbounds := session.OutboundsFromContext(ctx)
 	targetUdp := len(outbounds) > 0 && outbounds[len(outbounds)-1].Target.Network == net.Network_UDP
 
-	if targetUdp {
+	if config.EnableDatagram && targetUdp {
 		return c.udp()
 	}
 	return c.tcp()

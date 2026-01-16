@@ -24,18 +24,20 @@ const (
 type Config struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Version                 int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
-	Up                      uint64                 `protobuf:"varint,3,opt,name=up,proto3" json:"up,omitempty"`
-	Down                    uint64                 `protobuf:"varint,4,opt,name=down,proto3" json:"down,omitempty"`
-	Ports                   []uint32               `protobuf:"varint,5,rep,packed,name=ports,proto3" json:"ports,omitempty"`
-	Interval                int64                  `protobuf:"varint,6,opt,name=interval,proto3" json:"interval,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,7,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,8,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,9,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,10,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,11,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,12,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,13,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
+	EnableDatagram          bool                   `protobuf:"varint,2,opt,name=enable_datagram,json=enableDatagram,proto3" json:"enable_datagram,omitempty"`
+	Auth                    string                 `protobuf:"bytes,3,opt,name=auth,proto3" json:"auth,omitempty"`
+	DefaultCongestion       bool                   `protobuf:"varint,4,opt,name=default_congestion,json=defaultCongestion,proto3" json:"default_congestion,omitempty"`
+	Up                      uint64                 `protobuf:"varint,5,opt,name=up,proto3" json:"up,omitempty"`
+	Down                    uint64                 `protobuf:"varint,6,opt,name=down,proto3" json:"down,omitempty"`
+	Ports                   []uint32               `protobuf:"varint,7,rep,packed,name=ports,proto3" json:"ports,omitempty"`
+	Interval                int64                  `protobuf:"varint,8,opt,name=interval,proto3" json:"interval,omitempty"`
+	InitStreamReceiveWindow uint64                 `protobuf:"varint,9,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
+	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,10,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
+	InitConnReceiveWindow   uint64                 `protobuf:"varint,11,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
+	MaxConnReceiveWindow    uint64                 `protobuf:"varint,12,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
+	MaxIdleTimeout          int64                  `protobuf:"varint,13,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
+	KeepAlivePeriod         int64                  `protobuf:"varint,14,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
+	DisablePathMtuDiscovery bool                   `protobuf:"varint,15,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -77,11 +79,25 @@ func (x *Config) GetVersion() int32 {
 	return 0
 }
 
+func (x *Config) GetEnableDatagram() bool {
+	if x != nil {
+		return x.EnableDatagram
+	}
+	return false
+}
+
 func (x *Config) GetAuth() string {
 	if x != nil {
 		return x.Auth
 	}
 	return ""
+}
+
+func (x *Config) GetDefaultCongestion() bool {
+	if x != nil {
+		return x.DefaultCongestion
+	}
+	return false
 }
 
 func (x *Config) GetUp() uint64 {
@@ -165,22 +181,24 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\x87\x04\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xdf\x04\n" +
 	"\x06Config\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
-	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x0e\n" +
-	"\x02up\x18\x03 \x01(\x04R\x02up\x12\x12\n" +
-	"\x04down\x18\x04 \x01(\x04R\x04down\x12\x14\n" +
-	"\x05ports\x18\x05 \x03(\rR\x05ports\x12\x1a\n" +
-	"\binterval\x18\x06 \x01(\x03R\binterval\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\a \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\b \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\t \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\n" +
-	" \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\v \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\f \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscoveryB\x82\x01\n" +
+	"\aversion\x18\x01 \x01(\x05R\aversion\x12'\n" +
+	"\x0fenable_datagram\x18\x02 \x01(\bR\x0eenableDatagram\x12\x12\n" +
+	"\x04auth\x18\x03 \x01(\tR\x04auth\x12-\n" +
+	"\x12default_congestion\x18\x04 \x01(\bR\x11defaultCongestion\x12\x0e\n" +
+	"\x02up\x18\x05 \x01(\x04R\x02up\x12\x12\n" +
+	"\x04down\x18\x06 \x01(\x04R\x04down\x12\x14\n" +
+	"\x05ports\x18\a \x03(\rR\x05ports\x12\x1a\n" +
+	"\binterval\x18\b \x01(\x03R\binterval\x12;\n" +
+	"\x1ainit_stream_receive_window\x18\t \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
+	"\x19max_stream_receive_window\x18\n" +
+	" \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
+	"\x18init_conn_receive_window\x18\v \x01(\x04R\x15initConnReceiveWindow\x125\n" +
+	"\x17max_conn_receive_window\x18\f \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
+	"\x10max_idle_timeout\x18\r \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
+	"\x11keep_alive_period\x18\x0e \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
+	"\x1adisable_path_mtu_discovery\x18\x0f \x01(\bR\x17disablePathMtuDiscoveryB\x82\x01\n" +
 	"$com.xray.transport.internet.hysteriaP\x01Z5github.com/xtls/xray-core/transport/internet/hysteria\xaa\x02 Xray.Transport.Internet.Hysteriab\x06proto3"
 
 var (
