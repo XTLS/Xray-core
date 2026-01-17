@@ -249,7 +249,7 @@ func (c *client) dial() error {
 	case "bbr":
 		errors.LogDebug(c.ctx, "congestion bbr")
 		congestion.UseBBR(quicConn)
-	case "brutal":
+	case "brutal", "":
 		if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
 			errors.LogDebug(c.ctx, "congestion bbr")
 			congestion.UseBBR(quicConn)
