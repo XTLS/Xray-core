@@ -1,4 +1,4 @@
-//go:build !linux && !windows && !android
+//go:build !linux && !windows && !android && !darwin
 
 package tun
 
