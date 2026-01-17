@@ -259,7 +259,7 @@ func (c *client) dial() error {
 		}
 	case "force brutal":
 		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.config.Up)
-		congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+		congestion.UseBrutal(quicConn, c.config.Up)
 	default:
 		errors.LogDebug(c.ctx, "congestion reno")
 	}
