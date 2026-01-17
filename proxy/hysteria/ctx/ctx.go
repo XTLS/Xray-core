@@ -10,7 +10,10 @@ const (
 	requireDatagram key = iota
 )
 
-func ContextWithRequireDatagram(ctx context.Context) context.Context {
+func ContextWithRequireDatagram(ctx context.Context, udp bool) context.Context {
+	if !udp {
+		return ctx
+	}
 	return context.WithValue(ctx, requireDatagram, struct{}{})
 }
 
