@@ -101,22 +101,16 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 
 		for _, payload := range mpayload {
-			buff := make([]byte, payload.Len())
-			i, err := payload.Read(buff)
-
-			r := &netReadInfo{
-				buff:     buff,
-				bytes:    i,
-				endpoint: nep,
-				err:      err,
-			}
-			r.waiter.Add(1)
-			select {
-			case s.bindServer.readQueue <- r:
-				r.waiter.Wait()
-			case <-ctx.Done():
+			v, ok := <-s.bindServer.readQueue
+			if !ok {
 				return nil
 			}
+			i, err := payload.Read(v.buff)
+
+			v.bytes = i
+			v.endpoint = nep
+			v.err = err
+			v.waiter.Done()
 			if err != nil && goerrors.Is(err, io.EOF) {
 				nep.conn = nil
 				return nil
