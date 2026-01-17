@@ -309,48 +309,6 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 	return m.Match(attributes)
 }
 
-// Geo attribute
-type GeoAttributeMatcher interface {
-	Match(*Domain) bool
-}
-
-type GeoBooleanMatcher string
-
-func (m GeoBooleanMatcher) Match(domain *Domain) bool {
-	for _, attr := range domain.Attribute {
-		if attr.Key == string(m) {
-			return true
-		}
-	}
-	return false
-}
-
-type GeoAttributeList struct {
-	Matcher []GeoAttributeMatcher
-}
-
-func (al *GeoAttributeList) Match(domain *Domain) bool {
-	for _, matcher := range al.Matcher {
-		if !matcher.Match(domain) {
-			return false
-		}
-	}
-	return true
-}
-
-func (al *GeoAttributeList) IsEmpty() bool {
-	return len(al.Matcher) == 0
-}
-
-func ParseAttrs(attrs []string) *GeoAttributeList {
-	al := new(GeoAttributeList)
-	for _, attr := range attrs {
-		lc := strings.ToLower(attr)
-		al.Matcher = append(al.Matcher, GeoBooleanMatcher(lc))
-	}
-	return al
-}
-
 type ProcessNameMatcher struct {
 	ProcessNames  []string
 	AbsPaths      []string

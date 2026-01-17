@@ -297,18 +297,3 @@ func ResolveIpOptionOverride(queryStrategy QueryStrategy, ipOption dns.IPOption)
 		return ipOption
 	}
 }
-
-func ToDomainMatchingType(t router.Domain_Type) DomainMatchingType {
-	switch t {
-	case router.Domain_Domain:
-		return DomainMatchingType_Subdomain
-	case router.Domain_Full:
-		return DomainMatchingType_Full
-	case router.Domain_Plain:
-		return DomainMatchingType_Keyword
-	case router.Domain_Regex:
-		return DomainMatchingType_Regex
-	default:
-		panic("unknown domain type")
-	}
-}
