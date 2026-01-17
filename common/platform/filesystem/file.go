@@ -1,12 +1,9 @@
-//go:build !windows && !wasm
-
 package filesystem
 
 import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/platform"
@@ -19,29 +16,6 @@ var NewFileReader FileReaderFunc = func(path string) (io.ReadCloser, error) {
 }
 
 func ReadFile(path string) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	size := stat.Size()
-	if size == 0 {
-		return []byte{}, nil
-	}
-
-	// use mmap to save RAM
-	bs, err := syscall.Mmap(int(file.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err == nil {
-		return bs, nil
-	}
-
-	// fallback
 	reader, err := NewFileReader(path)
 	if err != nil {
 		return nil, err

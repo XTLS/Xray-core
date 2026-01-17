@@ -3,9 +3,7 @@
 
 package platform
 
-import (
-	"path/filepath"
-)
+import "path/filepath"
 
 func LineSeparator() string {
 	return "\r\n"
@@ -14,7 +12,6 @@ func LineSeparator() string {
 // GetAssetLocation searches for `file` in the env dir and the executable dir
 func GetAssetLocation(file string) string {
 	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
-
 	return filepath.Join(assetPath, file)
 }
 

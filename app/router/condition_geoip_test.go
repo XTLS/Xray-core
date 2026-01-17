@@ -1,16 +1,39 @@
 package router_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
+	"google.golang.org/protobuf/proto"
 )
+
+func getAssetPath(file string) (string, error) {
+	path := platform.GetAssetLocation(file)
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		path := filepath.Join("..", "..", "resources", file)
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("can't find %s in standard asset locations or {project_root}/resources", file)
+		}
+		if err != nil {
+			return "", fmt.Errorf("can't stat %s: %v", path, err)
+		}
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("can't stat %s: %v", path, err)
+	}
+
+	return path, nil
+}
 
 func TestGeoIPMatcher(t *testing.T) {
 	cidrList := []*router.CIDR{
@@ -159,11 +182,12 @@ func TestGeoIPReverseMatcher(t *testing.T) {
 }
 
 func TestGeoIPMatcher4CN(t *testing.T) {
-	geo := "geoip:cn"
-	geoip, err := loadGeoIP(geo)
+	ips, err := loadGeoIP("CN")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(geoip)
+	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+		Cidr: ips,
+	})
 	common.Must(err)
 
 	if matcher.Match([]byte{8, 8, 8, 8}) {
@@ -172,11 +196,12 @@ func TestGeoIPMatcher4CN(t *testing.T) {
 }
 
 func TestGeoIPMatcher6US(t *testing.T) {
-	geo := "geoip:us"
-	geoip, err := loadGeoIP(geo)
+	ips, err := loadGeoIP("US")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(geoip)
+	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+		Cidr: ips,
+	})
 	common.Must(err)
 
 	if !matcher.Match(net.ParseAddress("2001:4860:4860::8888").IP()) {
@@ -184,34 +209,37 @@ func TestGeoIPMatcher6US(t *testing.T) {
 	}
 }
 
-func loadGeoIP(geo string) (*router.GeoIP, error) {
-	os.Setenv("XRAY_LOCATION_ASSET", filepath.Join("..", "..", "resources"))
-
-	geoip, err := conf.ToCidrList([]string{geo})
+func loadGeoIP(country string) ([]*router.CIDR, error) {
+	path, err := getAssetPath("geoip.dat")
+	if err != nil {
+		return nil, err
+	}
+	geoipBytes, err := filesystem.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	if runtime.GOOS != "windows" && runtime.GOOS != "wasm" {
-		geoip, err = router.GetGeoIPList(geoip)
-		if err != nil {
-			return nil, err
+	var geoipList router.GeoIPList
+	if err := proto.Unmarshal(geoipBytes, &geoipList); err != nil {
+		return nil, err
+	}
+
+	for _, geoip := range geoipList.Entry {
+		if geoip.CountryCode == country {
+			return geoip.Cidr, nil
 		}
 	}
 
-	if len(geoip) == 0 {
-		panic("country not found: " + geo)
-	}
-
-	return geoip[0], nil
+	panic("country not found: " + country)
 }
 
 func BenchmarkGeoIPMatcher4CN(b *testing.B) {
-	geo := "geoip:cn"
-	geoip, err := loadGeoIP(geo)
+	ips, err := loadGeoIP("CN")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(geoip)
+	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+		Cidr: ips,
+	})
 	common.Must(err)
 
 	b.ResetTimer()
@@ -222,11 +250,12 @@ func BenchmarkGeoIPMatcher4CN(b *testing.B) {
 }
 
 func BenchmarkGeoIPMatcher6US(b *testing.B) {
-	geo := "geoip:us"
-	geoip, err := loadGeoIP(geo)
+	ips, err := loadGeoIP("US")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(geoip)
+	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+		Cidr: ips,
+	})
 	common.Must(err)
 
 	b.ResetTimer()
