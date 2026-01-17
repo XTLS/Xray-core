@@ -422,8 +422,8 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	c.Congestion = strings.ToLower(c.Congestion)
-	if c.Congestion == "force brutal" && up == 0 {
-		return nil, errors.New("force brutal require up")
+	if c.Congestion == "force-brutal" && up == 0 {
+		return nil, errors.New("force-brutal require up")
 	}
 
 	var hop *PortList
