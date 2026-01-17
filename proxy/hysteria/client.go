@@ -57,7 +57,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	target := ob.Target
 
 	if target.Network == net.Network_UDP {
-		hyCtx.ContextWithRequireDatagram(ctx)
+		ctx = hyCtx.ContextWithRequireDatagram(ctx)
 	}
 	conn, err := dialer.Dial(ctx, c.server.Destination)
 	if err != nil {
