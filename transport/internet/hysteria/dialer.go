@@ -16,8 +16,8 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/task"
+	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
@@ -115,8 +115,8 @@ type client struct {
 	conn           *quic.Conn
 	config         *Config
 	tlsConfig      *go_tls.Config
-	udpmaskManager *finalmask.UdpmaskManager
 	socketConfig   *internet.SocketConfig
+	udpmaskManager *finalmask.UdpmaskManager
 	udpSM          *udpSessionManager
 	mutex          sync.Mutex
 }
@@ -243,10 +243,25 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
+	switch c.config.Congestion {
+	case "reno":
+		errors.LogDebug(c.ctx, "congestion reno")
+	case "bbr":
+		errors.LogDebug(c.ctx, "congestion bbr")
 		congestion.UseBBR(quicConn)
-	} else {
-		congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+	case "brutal", "":
+		if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
+			errors.LogDebug(c.ctx, "congestion bbr")
+			congestion.UseBBR(quicConn)
+		} else {
+			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.config.Up, serverDown))
+			congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+		}
+	case "force-brutal":
+		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.config.Up)
+		congestion.UseBrutal(quicConn, c.config.Up)
+	default:
+		errors.LogDebug(c.ctx, "congestion reno")
 	}
 
 	c.pktConn = pktConn
@@ -363,6 +378,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("tls config is nil")
 	}
 
+	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
@@ -375,18 +391,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			dest:           dest,
 			config:         config,
 			tlsConfig:      tlsConfig.GetTLSConfig(),
-			udpmaskManager: streamSettings.UdpmaskManager,
 			socketConfig:   streamSettings.SocketSettings,
+			udpmaskManager: streamSettings.UdpmaskManager,
 		}
 		manger.m[addr] = c
 	}
 	c.setCtx(ctx)
 	manger.mutex.Unlock()
 
-	outbounds := session.OutboundsFromContext(ctx)
-	targetUdp := len(outbounds) > 0 && outbounds[len(outbounds)-1].Target.Network == net.Network_UDP
-
-	if targetUdp {
+	if requireDatagram {
 		return c.udp()
 	}
 	return c.tcp()

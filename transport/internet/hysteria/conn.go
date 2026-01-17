@@ -64,6 +64,9 @@ func (i *InterUdpConn) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	n := copy(p, b)
+	if n != len(b) {
+		return 0, io.ErrShortBuffer
+	}
 	return n, nil
 }
 
