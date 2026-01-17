@@ -101,18 +101,20 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 
 		for _, payload := range mpayload {
-			data := bufferPool.Get().([]byte)
-			n, err := payload.Read(data)
+			buff := make([]byte, payload.Len())
+			i, err := payload.Read(buff)
 
-			select {
-			case s.bindServer.responseRecv <- &netReadInfo{
-				buff:     data,
-				bytes:    n,
+			r := &netReadInfo{
+				buff:     buff,
+				bytes:    i,
 				endpoint: nep,
 				err:      err,
-			}:
+			}
+			r.waiter.Add(1)
+			select {
+			case s.bindServer.readQueue <- r:
+				r.waiter.Wait()
 			case <-ctx.Done():
-				bufferPool.Put(data) // Return buffer if not sent
 				return nil
 			}
 			if err != nil && goerrors.Is(err, io.EOF) {
