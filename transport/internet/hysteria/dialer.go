@@ -243,7 +243,13 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	if !c.config.DefaultCongestion {
+	switch c.config.Congestion {
+	case "reno":
+		errors.LogDebug(c.ctx, "congestion reno")
+	case "bbr":
+		errors.LogDebug(c.ctx, "congestion bbr")
+		congestion.UseBBR(quicConn)
+	case "brutal":
 		if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
 			errors.LogDebug(c.ctx, "congestion bbr")
 			congestion.UseBBR(quicConn)
@@ -251,8 +257,11 @@ func (c *client) dial() error {
 			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.config.Up, serverDown))
 			congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
 		}
-	} else {
-		errors.LogDebug(c.ctx, "congestion default")
+	case "force brutal":
+		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.config.Up)
+		congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+	default:
+		errors.LogDebug(c.ctx, "congestion reno")
 	}
 
 	c.pktConn = pktConn

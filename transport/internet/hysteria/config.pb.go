@@ -25,7 +25,7 @@ type Config struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Version                 int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
-	DefaultCongestion       bool                   `protobuf:"varint,3,opt,name=default_congestion,json=defaultCongestion,proto3" json:"default_congestion,omitempty"`
+	Congestion              string                 `protobuf:"bytes,3,opt,name=congestion,proto3" json:"congestion,omitempty"`
 	Up                      uint64                 `protobuf:"varint,4,opt,name=up,proto3" json:"up,omitempty"`
 	Down                    uint64                 `protobuf:"varint,5,opt,name=down,proto3" json:"down,omitempty"`
 	Ports                   []uint32               `protobuf:"varint,6,rep,packed,name=ports,proto3" json:"ports,omitempty"`
@@ -85,11 +85,11 @@ func (x *Config) GetAuth() string {
 	return ""
 }
 
-func (x *Config) GetDefaultCongestion() bool {
+func (x *Config) GetCongestion() string {
 	if x != nil {
-		return x.DefaultCongestion
+		return x.Congestion
 	}
-	return false
+	return ""
 }
 
 func (x *Config) GetUp() uint64 {
@@ -173,11 +173,13 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xb6\x04\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xa7\x04\n" +
 	"\x06Config\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
-	"\x04auth\x18\x02 \x01(\tR\x04auth\x12-\n" +
-	"\x12default_congestion\x18\x03 \x01(\bR\x11defaultCongestion\x12\x0e\n" +
+	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x1e\n" +
+	"\n" +
+	"congestion\x18\x03 \x01(\tR\n" +
+	"congestion\x12\x0e\n" +
 	"\x02up\x18\x04 \x01(\x04R\x02up\x12\x12\n" +
 	"\x04down\x18\x05 \x01(\x04R\x04down\x12\x14\n" +
 	"\x05ports\x18\x06 \x03(\rR\x05ports\x12\x1a\n" +

@@ -9,7 +9,7 @@ option java_multiple_files = true;
 message Config {
   int32 version = 1;
   string auth = 2;
-  bool default_congestion = 3;
+  string congestion = 3;
   uint64 up = 4;
   uint64 down = 5;
   repeated uint32 ports = 6;
