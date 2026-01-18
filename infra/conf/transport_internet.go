@@ -596,6 +596,9 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	serverName := c.ServerName
 	config.AllowInsecure = c.Insecure
+	if config.AllowInsecure {
+		errors.PrintDeprecatedFeatureWarning("allowInsecure", "pinnedPeerCertSha256")
+	}
 	if len(c.ServerName) > 0 {
 		config.ServerName = serverName
 	}
