@@ -204,7 +204,7 @@ type Connection struct {
 }
 
 // NewConnection create a new KCP connection between local and remote.
-func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, config *Config) *Connection {
+func NewConnection(meta ConnMetadata, writer io.Writer, closer io.Closer, config *Config) *Connection {
 	errors.LogInfo(context.Background(), "#", meta.Conversation, " creating connection to ", meta.RemoteAddr)
 
 	conn := &Connection{
@@ -215,7 +215,7 @@ func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, con
 		dataOutput: signal.NewNotifier(),
 		Config:     config,
 		output:     NewRetryableWriter(NewSegmentWriter(writer)),
-		mss:        config.GetMTUValue() - uint32(writer.Overhead()) - DataSegmentOverhead,
+		mss:        config.GetMTUValue() - DataSegmentOverhead,
 		roundTrip: &RoundTripInfo{
 			rto:    100,
 			minRtt: config.GetTTIValue(),

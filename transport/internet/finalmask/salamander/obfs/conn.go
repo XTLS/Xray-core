@@ -1,27 +1,20 @@
 package obfs
 
 import (
+	"io"
 	"net"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
-const udpBufferSize = 2048 // QUIC packets are at most 1500 bytes long, so 2k should be more than enough
-
-// Obfuscator is the interface that wraps the Obfuscate and Deobfuscate methods.
-// Both methods return the number of bytes written to out.
-// If a packet is not valid, the methods should return 0.
-type Obfuscator interface {
-	Obfuscate(in, out []byte) int
-	Deobfuscate(in, out []byte) int
-}
-
-var _ net.PacketConn = (*obfsPacketConn)(nil)
-
 type obfsPacketConn struct {
-	Conn net.PacketConn
-	Obfs Obfuscator
+	first     bool
+	leaveSize int32
+
+	conn net.PacketConn
+	obfs *SalamanderObfuscator
 
 	readBuf    []byte
 	readMutex  sync.Mutex
@@ -29,93 +22,126 @@ type obfsPacketConn struct {
 	writeMutex sync.Mutex
 }
 
-// obfsPacketConnUDP is a special case of obfsPacketConn that uses a UDPConn
-// as the underlying connection. We pass additional methods to quic-go to
-// enable UDP-specific optimizations.
-type obfsPacketConnUDP struct {
-	*obfsPacketConn
-	UDPConn *net.UDPConn
+func NewConnClient(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+	ob, err := NewSalamanderObfuscator([]byte(password))
+	if err != nil {
+		return nil, errors.New("salamander err").Base(err)
+	}
+
+	conn := &obfsPacketConn{
+		first:     first,
+		leaveSize: leaveSize,
+
+		conn: raw,
+		obfs: ob,
+	}
+
+	if first {
+		conn.readBuf = make([]byte, 8192)
+		conn.writeBuf = make([]byte, 8192)
+	}
+
+	return conn, nil
 }
 
-// WrapPacketConn enables obfuscation on a net.PacketConn.
-// The obfuscation is transparent to the caller - the n bytes returned by
-// ReadFrom and WriteTo are the number of original bytes, not after
-// obfuscation/deobfuscation.
-func WrapPacketConn(conn net.PacketConn, obfs Obfuscator) net.PacketConn {
-	opc := &obfsPacketConn{
-		Conn:     conn,
-		Obfs:     obfs,
-		readBuf:  make([]byte, udpBufferSize),
-		writeBuf: make([]byte, udpBufferSize),
-	}
-	if udpConn, ok := conn.(*net.UDPConn); ok {
-		return &obfsPacketConnUDP{
-			obfsPacketConn: opc,
-			UDPConn:        udpConn,
-		}
-	} else {
-		return opc
-	}
+func NewConnServer(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+	return NewConnClient(password, raw, first, leaveSize)
+}
+
+func (c *obfsPacketConn) Size() int32 {
+	return smSaltLen
 }
 
 func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	for {
+	if c.first {
 		c.readMutex.Lock()
-		n, addr, err = c.Conn.ReadFrom(c.readBuf)
-		if n <= 0 {
+
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
 			c.readMutex.Unlock()
 			return n, addr, err
 		}
-		n = c.Obfs.Deobfuscate(c.readBuf[:n], p)
-		c.readMutex.Unlock()
-		if n > 0 || err != nil {
-			return n, addr, err
+
+		if n < int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
 		}
-		// Invalid packet, try again
+
+		if len(p) < n-int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
+		}
+
+		c.obfs.Deobfuscate(c.readBuf[:n], p)
+
+		c.readMutex.Unlock()
+		return n - int(c.Size()), addr, err
 	}
+
+	n, addr, err = c.conn.ReadFrom(p)
+	if err != nil {
+		return n, addr, err
+	}
+
+	if n < int(c.Size()) {
+		return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
+	}
+
+	c.obfs.Deobfuscate(p[:n], p)
+
+	return n - int(c.Size()), addr, err
 }
 
 func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.writeMutex.Lock()
-	nn := c.Obfs.Obfuscate(p, c.writeBuf)
-	_, err = c.Conn.WriteTo(c.writeBuf[:nn], addr)
-	c.writeMutex.Unlock()
-	if err == nil {
-		n = len(p)
+	if c.first {
+		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+			return 0, errors.New("too many masks")
+		}
+
+		c.writeMutex.Lock()
+
+		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n += int(c.leaveSize) + int(c.Size())
+
+		c.obfs.Obfuscate(c.writeBuf[c.leaveSize+c.Size():n], c.writeBuf[c.leaveSize:n])
+
+		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+
+		if err != nil {
+			c.writeMutex.Unlock()
+			return 0, err
+		}
+
+		if nn != n {
+			c.writeMutex.Unlock()
+			return 0, errors.New("nn != n")
+		}
+
+		c.writeMutex.Unlock()
+		return len(p), nil
 	}
-	return n, err
+
+	c.obfs.Obfuscate(p[c.leaveSize+c.Size():], p[c.leaveSize:])
+
+	return c.conn.WriteTo(p, addr)
 }
 
 func (c *obfsPacketConn) Close() error {
-	return c.Conn.Close()
+	return c.conn.Close()
 }
 
 func (c *obfsPacketConn) LocalAddr() net.Addr {
-	return c.Conn.LocalAddr()
+	return c.conn.LocalAddr()
 }
 
 func (c *obfsPacketConn) SetDeadline(t time.Time) error {
-	return c.Conn.SetDeadline(t)
+	return c.conn.SetDeadline(t)
 }
 
 func (c *obfsPacketConn) SetReadDeadline(t time.Time) error {
-	return c.Conn.SetReadDeadline(t)
+	return c.conn.SetReadDeadline(t)
 }
 
 func (c *obfsPacketConn) SetWriteDeadline(t time.Time) error {
-	return c.Conn.SetWriteDeadline(t)
-}
-
-// UDP-specific methods below
-
-func (c *obfsPacketConnUDP) SetReadBuffer(bytes int) error {
-	return c.UDPConn.SetReadBuffer(bytes)
-}
-
-func (c *obfsPacketConnUDP) SetWriteBuffer(bytes int) error {
-	return c.UDPConn.SetWriteBuffer(bytes)
-}
-
-func (c *obfsPacketConnUDP) SyscallConn() (syscall.RawConn, error) {
-	return c.UDPConn.SyscallConn()
+	return c.conn.SetWriteDeadline(t)
 }
