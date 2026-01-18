@@ -16,6 +16,14 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aesgcm128"
+	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/simple"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
@@ -29,16 +37,6 @@ import (
 )
 
 var (
-	kcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"none":         func() interface{} { return new(NoOpAuthenticator) },
-		"srtp":         func() interface{} { return new(SRTPAuthenticator) },
-		"utp":          func() interface{} { return new(UTPAuthenticator) },
-		"wechat-video": func() interface{} { return new(WechatVideoAuthenticator) },
-		"dtls":         func() interface{} { return new(DTLSAuthenticator) },
-		"wireguard":    func() interface{} { return new(WireguardAuthenticator) },
-		"dns":          func() interface{} { return new(DNSAuthenticator) },
-	}, "type", "")
-
 	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
 		"http": func() interface{} { return new(Authenticator) },
@@ -99,21 +97,6 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		} else {
 			config.WriteBuffer = &kcp.WriteBuffer{Size: 512 * 1024}
 		}
-	}
-	if len(c.HeaderConfig) > 0 {
-		headerConfig, _, err := kcpHeaderLoader.Load(c.HeaderConfig)
-		if err != nil {
-			return nil, errors.New("invalid mKCP header config.").Base(err).AtError()
-		}
-		ts, err := headerConfig.(Buildable).Build()
-		if err != nil {
-			return nil, errors.New("invalid mKCP header config").Base(err).AtError()
-		}
-		config.HeaderConfig = serial.ToTypedMessage(ts)
-	}
-
-	if c.Seed != nil {
-		config.Seed = &kcp.EncryptionSeed{Seed: *c.Seed}
 	}
 
 	return config, nil
@@ -1101,9 +1084,78 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 
 var (
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"dns":        func() interface{} { return new(Dns) },
+		"dtls":       func() interface{} { return new(Dtls) },
+		"srtp":       func() interface{} { return new(Srtp) },
+		"utp":        func() interface{} { return new(Utp) },
+		"wechat":     func() interface{} { return new(Wechat) },
+		"wireguard":  func() interface{} { return new(Wireguard) },
+		"simple":     func() interface{} { return new(Simple) },
+		"aesgcm128":  func() interface{} { return new(AesGcm128) },
 		"salamander": func() interface{} { return new(Salamander) },
 	}, "type", "settings")
 )
+
+type Dns struct {
+	Domain string `json:"domain"`
+}
+
+func (c *Dns) Build() (proto.Message, error) {
+	config := &dns.Config{}
+	config.Domain = "www.baidu.com"
+
+	if len(c.Domain) > 0 {
+		config.Domain = c.Domain
+	}
+
+	return config, nil
+}
+
+type Dtls struct{}
+
+func (c *Dtls) Build() (proto.Message, error) {
+	return &dtls.Config{}, nil
+}
+
+type Srtp struct{}
+
+func (c *Srtp) Build() (proto.Message, error) {
+	return &srtp.Config{}, nil
+}
+
+type Utp struct{}
+
+func (c *Utp) Build() (proto.Message, error) {
+	return &utp.Config{}, nil
+}
+
+type Wechat struct{}
+
+func (c *Wechat) Build() (proto.Message, error) {
+	return &wechat.Config{}, nil
+}
+
+type Wireguard struct{}
+
+func (c *Wireguard) Build() (proto.Message, error) {
+	return &wireguard.Config{}, nil
+}
+
+type Simple struct{}
+
+func (c *Simple) Build() (proto.Message, error) {
+	return &simple.Config{}, nil
+}
+
+type AesGcm128 struct {
+	Seed string `json:"seed"`
+}
+
+func (c *AesGcm128) Build() (proto.Message, error) {
+	return &aesgcm128.Config{
+		Seed: c.Seed,
+	}, nil
+}
 
 type Salamander struct {
 	Password string `json:"password"`
