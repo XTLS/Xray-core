@@ -187,7 +187,7 @@ type ShadowsocksClientConfig struct {
 }
 
 func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("Shadowsocks", "VLESS Encryption")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks", "VLESS Encryption")
 
 	if v.Address != nil {
 		v.Servers = []*ShadowsocksServerTarget{
