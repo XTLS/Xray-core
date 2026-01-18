@@ -39,7 +39,7 @@ type TrojanClientConfig struct {
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("Trojan", "VLESS with flow")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan", "VLESS with flow")
 
 	if c.Address != nil {
 		c.Servers = []*TrojanServerTarget{

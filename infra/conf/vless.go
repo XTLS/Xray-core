@@ -280,7 +280,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 
 			switch account.Flow {
 			case "":
-				errors.PrintDeprecatedFeatureWarning("VLESS without flow", "VLESS with flow")
+				errors.PrintNonRemovalDeprecatedFeatureWarning("VLESS without flow", "VLESS with flow")
 			case vless.XRV, vless.XRV + "-udp443":
 			default:
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
