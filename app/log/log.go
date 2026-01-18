@@ -165,6 +165,8 @@ func (m *MaskedMsgWrapper) String() string {
 	maskedMsg := ipv4Regex.ReplaceAllStringFunc(str, func(ip string) string {
 		parts := strings.Split(ip, ".")
 		switch m.config.MaskAddress {
+		case "network":
+			return fmt.Sprintf("%s.%s.%s.*", parts[0], parts[1], parts[2])
 		case "half":
 			return fmt.Sprintf("%s.%s.*.*", parts[0], parts[1])
 		case "quarter":
@@ -180,6 +182,10 @@ func (m *MaskedMsgWrapper) String() string {
 	maskedMsg = ipv6Regex.ReplaceAllStringFunc(maskedMsg, func(ip string) string {
 		parts := strings.Split(ip, ":")
 		switch m.config.MaskAddress {
+		case "network":
+			if len(parts) >= 3 {
+				return fmt.Sprintf("%s:%s:%s::/48", parts[0], parts[1], parts[2])
+			}
 		case "half":
 			if len(parts) >= 2 {
 				return fmt.Sprintf("%s:%s::/32", parts[0], parts[1])
