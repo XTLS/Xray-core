@@ -56,10 +56,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	ob.CanSpliceCopy = 3
 	target := ob.Target
 
-	if target.Network == net.Network_UDP {
-		hyCtx.ContextWithRequireDatagram(ctx)
-	}
-	conn, err := dialer.Dial(ctx, c.server.Destination)
+	conn, err := dialer.Dial(hyCtx.ContextWithRequireDatagram(ctx, target.Network == net.Network_UDP), c.server.Destination)
 	if err != nil {
 		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
