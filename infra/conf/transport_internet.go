@@ -1148,12 +1148,12 @@ func (c *Simple) Build() (proto.Message, error) {
 }
 
 type AesGcm128 struct {
-	Seed string `json:"seed"`
+	Psk string `json:"psk"`
 }
 
 func (c *AesGcm128) Build() (proto.Message, error) {
 	return &aesgcm128.Config{
-		Seed: c.Seed,
+		Psk: c.Psk,
 	}, nil
 }
 

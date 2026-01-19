@@ -40,12 +40,18 @@ func (h *wechat) Serialize(b []byte) {
 }
 
 type wechatConn struct {
+	first     bool
+	leaveSize int32
+
 	conn   net.PacketConn
 	header *wechat
 }
 
-func NewConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
 	return &wechatConn{
+		first:     first,
+		leaveSize: leaveSize,
+
 		conn: raw,
 		header: &wechat{
 			sn: uint32(dice.RollUint16()),
@@ -53,28 +59,57 @@ func NewConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}, nil
 }
 
+func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+	return NewConnClient(c, raw, first, leaveSize)
+}
+
+func (c *wechatConn) Size() int32 {
+	return c.header.Size()
+}
+
 func (c *wechatConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = c.conn.ReadFrom(p)
+	bufp := p
+	if c.first && (c.leaveSize+c.Size() > 0) && (len(p) != 8192) {
+		b := buf.StackNew()
+		defer b.Release()
+		bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	}
+
+	n, addr, err = c.conn.ReadFrom(bufp)
 	if err != nil {
 		return n, addr, err
 	}
 
-	if len(p) <= int(c.header.Size()) {
-		return 0, addr, errors.New("wechat len(p)")
+	if n < int(c.Size()) {
+		return 0, addr, errors.New("header size error")
 	}
 
-	n = copy(p, p[c.header.Size():n])
-	return n, addr, err
+	nn := copy(p, bufp[c.Size():n])
+	if nn == 0 {
+		return 0, addr, errors.New("nn == 0")
+	}
+
+	return nn, addr, nil
 }
 
 func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	b := buf.StackNew()
-	defer b.Release()
+	bufp := p
+	if c.first && (c.leaveSize+c.Size() > 0) {
+		if len(p) != 8192 {
+			b := buf.StackNew()
+			defer b.Release()
+			bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+		}
+		copy(bufp[c.leaveSize+c.Size():], p)
+	}
 
-	c.header.Serialize(b.Extend(c.header.Size()))
-	b.Write(p)
+	c.header.Serialize(bufp[c.leaveSize : c.leaveSize+c.Size()])
 
-	return c.conn.WriteTo(b.Bytes(), addr)
+	if _, err := c.conn.WriteTo(bufp, addr); err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }
 
 func (c *wechatConn) Close() error {

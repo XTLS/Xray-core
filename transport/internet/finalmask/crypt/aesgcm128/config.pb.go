@@ -23,7 +23,7 @@ const (
 
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seed          string                 `protobuf:"bytes,1,opt,name=seed,proto3" json:"seed,omitempty"`
+	Psk           string                 `protobuf:"bytes,1,opt,name=psk,proto3" json:"psk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -58,9 +58,9 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_crypt_aesgcm128_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetSeed() string {
+func (x *Config) GetPsk() string {
 	if x != nil {
-		return x.Seed
+		return x.Psk
 	}
 	return ""
 }
@@ -69,9 +69,9 @@ var File_transport_internet_finalmask_crypt_aesgcm128_config_proto protoreflect.
 
 const file_transport_internet_finalmask_crypt_aesgcm128_config_proto_rawDesc = "" +
 	"\n" +
-	"9transport/internet/finalmask/crypt/aesgcm128/config.proto\x121xray.transport.internet.finalmask.crypt.aesgcm128\"\x1c\n" +
-	"\x06Config\x12\x12\n" +
-	"\x04seed\x18\x01 \x01(\tR\x04seedB\xb5\x01\n" +
+	"9transport/internet/finalmask/crypt/aesgcm128/config.proto\x121xray.transport.internet.finalmask.crypt.aesgcm128\"\x1a\n" +
+	"\x06Config\x12\x10\n" +
+	"\x03psk\x18\x01 \x01(\tR\x03pskB\xb5\x01\n" +
 	"5com.xray.transport.internet.finalmask.crypt.aesgcm128P\x01ZFgithub.com/xtls/xray-core/transport/internet/finalmask/crypt/aesgcm128\xaa\x021Xray.Transport.Internet.Finalmask.Crypt.AesGcm128b\x06proto3"
 
 var (

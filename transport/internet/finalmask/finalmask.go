@@ -4,11 +4,15 @@ import (
 	"net"
 )
 
+type connSize interface {
+	Size() int32
+}
+
 type Udpmask interface {
 	UDP()
 
-	WrapPacketConnClient(net.PacketConn) (net.PacketConn, error)
-	WrapPacketConnServer(net.PacketConn) (net.PacketConn, error)
+	WrapPacketConnClient(raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error)
+	WrapPacketConnServer(raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error)
 }
 
 type UdpmaskManager struct {
@@ -22,23 +26,27 @@ func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
 }
 
 func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
+	leaveSize := int32(0)
 	var err error
-	for _, mask := range m.udpmasks {
-		raw, err = mask.WrapPacketConnClient(raw)
+	for i, mask := range m.udpmasks {
+		raw, err = mask.WrapPacketConnClient(raw, i == len(m.udpmasks)-1, leaveSize)
 		if err != nil {
 			return nil, err
 		}
+		leaveSize += raw.(connSize).Size()
 	}
 	return raw, nil
 }
 
 func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
+	leaveSize := int32(0)
 	var err error
-	for _, mask := range m.udpmasks {
-		raw, err = mask.WrapPacketConnServer(raw)
+	for i, mask := range m.udpmasks {
+		raw, err = mask.WrapPacketConnServer(raw, i == len(m.udpmasks)-1, leaveSize)
 		if err != nil {
 			return nil, err
 		}
+		leaveSize += raw.(connSize).Size()
 	}
 	return raw, nil
 }
