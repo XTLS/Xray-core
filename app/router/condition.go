@@ -358,6 +358,9 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
 }
 
 func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	if len(ctx.GetSourceIPs()) == 0 {
+		return false
+	}
 	srcPort := ctx.GetSourcePort().String()
 	srcIP := ctx.GetSourceIPs()[0].String()
 	var network string
