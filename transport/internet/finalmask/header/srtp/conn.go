@@ -2,11 +2,11 @@ package srtp
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
-	"sync"
+	sync "sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -16,8 +16,6 @@ const header = 0xB5E8
 type srtp struct {
 	header uint16
 	number uint16
-
-	mutex sync.Mutex
 }
 
 func (*srtp) Size() int32 {
@@ -25,12 +23,9 @@ func (*srtp) Size() int32 {
 }
 
 func (h *srtp) Serialize(b []byte) {
-	h.mutex.Lock()
-	number := h.number
 	h.number++
-	h.mutex.Unlock()
 	binary.BigEndian.PutUint16(b, h.header)
-	binary.BigEndian.PutUint16(b[2:], number)
+	binary.BigEndian.PutUint16(b[2:], h.number)
 }
 
 type srtpConn struct {
@@ -39,10 +34,15 @@ type srtpConn struct {
 
 	conn   net.PacketConn
 	header *srtp
+
+	readBuf    []byte
+	readMutex  sync.Mutex
+	writeBuf   []byte
+	writeMutex sync.Mutex
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return &srtpConn{
+	conn := &srtpConn{
 		first:     first,
 		leaveSize: leaveSize,
 
@@ -51,7 +51,14 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 			header: header,
 			number: dice.RollUint16(),
 		},
-	}, nil
+	}
+
+	if first {
+		conn.readBuf = make([]byte, 8192)
+		conn.writeBuf = make([]byte, 8192)
+	}
+
+	return conn, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -63,44 +70,65 @@ func (c *srtpConn) Size() int32 {
 }
 
 func (c *srtpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) && (len(p) != 8192) {
-		b := buf.StackNew()
-		defer b.Release()
-		bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		c.readMutex.Lock()
+
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			c.readMutex.Unlock()
+			return n, addr, err
+		}
+
+		if n < int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+		}
+
+		copy(p, c.readBuf[c.Size():n])
+
+		c.readMutex.Unlock()
+		return n - int(c.Size()), addr, err
 	}
 
-	n, addr, err = c.conn.ReadFrom(bufp)
+	n, addr, err = c.conn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("header size error")
+		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 	}
 
-	nn := copy(p, bufp[c.Size():n])
-	if nn == 0 {
-		return 0, addr, errors.New("nn == 0")
-	}
+	copy(p, c.readBuf[c.Size():n])
 
-	return nn, addr, nil
+	return n - int(c.Size()), addr, err
 }
 
 func (c *srtpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) {
-		if len(p) != 8192 {
-			b := buf.StackNew()
-			defer b.Release()
-			bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+			return 0, errors.New("too many masks")
 		}
-		copy(bufp[c.leaveSize+c.Size():], p)
+
+		c.writeMutex.Lock()
+
+		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n += int(c.leaveSize) + int(c.Size())
+
+		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
+
+		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+			c.writeMutex.Unlock()
+			return 0, err
+		}
+
+		c.writeMutex.Unlock()
+		return len(p), nil
 	}
 
-	c.header.Serialize(bufp[c.leaveSize : c.leaveSize+c.Size()])
+	c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
 
-	if _, err := c.conn.WriteTo(bufp, addr); err != nil {
+	if _, err := c.conn.WriteTo(p, addr); err != nil {
 		return 0, err
 	}
 

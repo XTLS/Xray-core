@@ -2,10 +2,11 @@ package dns
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
+	sync "sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -95,6 +96,11 @@ type dnsConn struct {
 
 	conn   net.PacketConn
 	header *dns
+
+	readBuf    []byte
+	readMutex  sync.Mutex
+	writeBuf   []byte
+	writeMutex sync.Mutex
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -114,7 +120,7 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 	header = binary.BigEndian.AppendUint16(header, 0x0001) // Type: A
 	header = binary.BigEndian.AppendUint16(header, 0x0001) // Class: IN
 
-	return &dnsConn{
+	conn := &dnsConn{
 		first:     first,
 		leaveSize: leaveSize,
 
@@ -122,7 +128,14 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		header: &dns{
 			header: header,
 		},
-	}, nil
+	}
+
+	if first {
+		conn.readBuf = make([]byte, 8192)
+		conn.writeBuf = make([]byte, 8192)
+	}
+
+	return conn, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -134,44 +147,65 @@ func (c *dnsConn) Size() int32 {
 }
 
 func (c *dnsConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) && (len(p) != 8192) {
-		b := buf.StackNew()
-		defer b.Release()
-		bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		c.readMutex.Lock()
+
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			c.readMutex.Unlock()
+			return n, addr, err
+		}
+
+		if n < int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+		}
+
+		copy(p, c.readBuf[c.Size():n])
+
+		c.readMutex.Unlock()
+		return n - int(c.Size()), addr, err
 	}
 
-	n, addr, err = c.conn.ReadFrom(bufp)
+	n, addr, err = c.conn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("header size error")
+		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 	}
 
-	nn := copy(p, bufp[c.Size():n])
-	if nn == 0 {
-		return 0, addr, errors.New("nn == 0")
-	}
+	copy(p, c.readBuf[c.Size():n])
 
-	return nn, addr, nil
+	return n - int(c.Size()), addr, err
 }
 
 func (c *dnsConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) {
-		if len(p) != 8192 {
-			b := buf.StackNew()
-			defer b.Release()
-			bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+			return 0, errors.New("too many masks")
 		}
-		copy(bufp[c.leaveSize+c.Size():], p)
+
+		c.writeMutex.Lock()
+
+		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n += int(c.leaveSize) + int(c.Size())
+
+		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
+
+		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+			c.writeMutex.Unlock()
+			return 0, err
+		}
+
+		c.writeMutex.Unlock()
+		return len(p), nil
 	}
 
-	c.header.Serialize(bufp[c.leaveSize : c.leaveSize+c.Size()])
+	c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
 
-	if _, err := c.conn.WriteTo(bufp, addr); err != nil {
+	if _, err := c.conn.WriteTo(p, addr); err != nil {
 		return 0, err
 	}
 
