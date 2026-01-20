@@ -90,7 +90,7 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
 		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
-			return 0, errors.New("salamander").Base(io.ErrShortBuffer)
+			return 0, errors.New("too many masks")
 		}
 
 		c.writeMutex.Lock()
@@ -98,7 +98,7 @@ func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
 		n += int(c.leaveSize) + int(c.Size())
 
-		c.obfs.Obfuscate(c.writeBuf[c.leaveSize+c.Size():], c.writeBuf[c.leaveSize:])
+		c.obfs.Obfuscate(c.writeBuf[c.leaveSize+c.Size():n], c.writeBuf[c.leaveSize:n])
 
 		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
 			c.writeMutex.Unlock()

@@ -5,11 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"hash/fnv"
+	"io"
 	"net"
+	sync "sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -67,7 +68,8 @@ func (a *simple) Open(dst, nonce, cipherText, extra []byte) ([]byte, error) {
 		return nil, errors.New("invalid auth")
 	}
 
-	return dst[6:], nil
+	copy(dst, dst[6:])
+	return dst[:length], nil
 }
 
 type simpleConn struct {
@@ -76,16 +78,28 @@ type simpleConn struct {
 
 	conn net.PacketConn
 	aead cipher.AEAD
+
+	readBuf    []byte
+	readMutex  sync.Mutex
+	writeBuf   []byte
+	writeMutex sync.Mutex
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return &simpleConn{
+	conn := &simpleConn{
 		first:     first,
 		leaveSize: leaveSize,
 
 		conn: raw,
 		aead: &simple{},
-	}, nil
+	}
+
+	if first {
+		conn.readBuf = make([]byte, 8192)
+		conn.writeBuf = make([]byte, 8192)
+	}
+
+	return conn, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -97,61 +111,89 @@ func (c *simpleConn) Size() int32 {
 }
 
 func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) && (len(p) != 8192) {
-		b := buf.StackNew()
-		defer b.Release()
-		bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		c.readMutex.Lock()
+
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			c.readMutex.Unlock()
+			return n, addr, err
+		}
+
+		if n < int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		}
+
+		if len(p) < n-int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		}
+
+		nonceSize := c.aead.NonceSize()
+		_, err = c.aead.Open(p[0:0], c.readBuf[:int32(nonceSize)], c.readBuf[int32(nonceSize):n], nil)
+		if err != nil {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("aead open").Base(err)
+		}
+
+		c.readMutex.Unlock()
+		return n - int(c.Size()), addr, nil
 	}
 
-	n, addr, err = c.conn.ReadFrom(bufp)
+	n, addr, err = c.conn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
+	if n < int(c.Size()) {
+		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+	}
+
+	if len(p) < n-int(c.Size()) {
+		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+	}
+
 	nonceSize := c.aead.NonceSize()
-	nonce := bufp[:c.leaveSize+int32(nonceSize)]
-	ciphertext := bufp[int32(nonceSize):n]
-	plaintext, err := c.aead.Open(nil, nonce, ciphertext, nil)
+	_, err = c.aead.Open(p[0:0], p[:int32(nonceSize)], p[int32(nonceSize):n], nil)
 	if err != nil {
 		return 0, addr, errors.New("aead open").Base(err)
 	}
 
-	nn := copy(p, plaintext)
-	if nn != len(plaintext) {
-		return 0, addr, errors.New("nn != len(plaintext)")
-	}
-
-	return nn, addr, nil
+	return n - int(c.Size()), addr, nil
 }
 
 func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	data := p
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) {
-		if len(p) != 8192 {
-			b := buf.StackNew()
-			defer b.Release()
-			bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+			return 0, errors.New("too many masks")
 		}
-		copy(bufp[c.leaveSize+c.Size():], p)
-	} else {
-		data = p[c.leaveSize+c.Size():]
+
+		c.writeMutex.Lock()
+
+		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n += int(c.leaveSize) + int(c.Size())
+
+		nonceSize := c.aead.NonceSize()
+		nonce := c.writeBuf[c.leaveSize : c.leaveSize+int32(nonceSize)]
+		common.Must2(rand.Read(nonce))
+		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, c.writeBuf[c.leaveSize+int32(nonceSize):n], nil)
+
+		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+			c.writeMutex.Unlock()
+			return 0, err
+		}
+
+		c.writeMutex.Unlock()
+		return len(p), nil
 	}
 
 	nonceSize := c.aead.NonceSize()
-	nonce := bufp[c.leaveSize : c.leaveSize+int32(nonceSize)]
+	nonce := p[c.leaveSize : c.leaveSize+int32(nonceSize)]
 	common.Must2(rand.Read(nonce))
-	plaintext := data
-	ciphertext := c.aead.Seal(nil, nonce, plaintext, nil)
+	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, p[c.leaveSize+int32(nonceSize):], nil)
 
-	nn := copy(bufp[c.leaveSize+int32(nonceSize):], ciphertext)
-	if nn != len(ciphertext) {
-		return 0, errors.New("nn != len(ciphertext)")
-	}
-	nn += int(c.leaveSize) + nonceSize
-
-	if _, err := c.conn.WriteTo(bufp[:nn], addr); err != nil {
+	if _, err := c.conn.WriteTo(p, addr); err != nil {
 		return 0, err
 	}
 
