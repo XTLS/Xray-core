@@ -43,3 +43,24 @@ func TestSalamanderObfuscator(t *testing.T) {
 		assert.Equal(t, in, dOut[:n])
 	}
 }
+
+func TestSalamanderInPlace(t *testing.T) {
+	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+
+	in := make([]byte, 1200)
+	out := make([]byte, 2048)
+	_, _ = rand.Read(in)
+	o.Obfuscate(in, out)
+
+	out2 := make([]byte, 2048)
+	copy(out2[smSaltLen:], in)
+	o.Obfuscate(out2[smSaltLen:], out2)
+
+	dOut := make([]byte, 2048)
+	o.Deobfuscate(out, dOut)
+
+	o.Deobfuscate(out2, out2)
+
+	assert.Equal(t, in, dOut[:1200])
+	assert.Equal(t, in, out2[:1200])
+}

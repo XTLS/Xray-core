@@ -1,10 +1,11 @@
 package obfs
 
 import (
+	"io"
 	"net"
+	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -14,6 +15,11 @@ type obfsPacketConn struct {
 
 	conn net.PacketConn
 	obfs *SalamanderObfuscator
+
+	readBuf    []byte
+	readMutex  sync.Mutex
+	writeBuf   []byte
+	writeMutex sync.Mutex
 }
 
 func NewConnClient(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -21,13 +27,21 @@ func NewConnClient(password string, raw net.PacketConn, first bool, leaveSize in
 	if err != nil {
 		return nil, errors.New("salamander err").Base(err)
 	}
-	return &obfsPacketConn{
+
+	conn := &obfsPacketConn{
 		first:     first,
 		leaveSize: leaveSize,
 
 		conn: raw,
 		obfs: ob,
-	}, nil
+	}
+
+	if first {
+		conn.readBuf = make([]byte, 8192)
+		conn.writeBuf = make([]byte, 8192)
+	}
+
+	return conn, nil
 }
 
 func NewConnServer(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
@@ -39,47 +53,65 @@ func (c *obfsPacketConn) Size() int32 {
 }
 
 func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) && (len(p) != 8192) {
-		b := buf.StackNew()
-		defer b.Release()
-		bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		c.readMutex.Lock()
+
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			c.readMutex.Unlock()
+			return n, addr, err
+		}
+
+		if n < int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
+		}
+
+		c.obfs.Deobfuscate(c.readBuf[:n], p)
+
+		c.readMutex.Unlock()
+		return n - int(c.Size()), addr, err
 	}
 
-	n, addr, err = c.conn.ReadFrom(bufp)
+	n, addr, err = c.conn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
-	nn := c.obfs.Deobfuscate(bufp[:n], p)
-	if nn == 0 {
-		return 0, addr, errors.New("nn == 0")
+	if n < int(c.Size()) {
+		return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
 	}
 
-	return nn, addr, err
+	c.obfs.Deobfuscate(p[:n], p)
+
+	return n - int(c.Size()), addr, err
 }
 
 func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	data := p
-	bufp := p
-	if c.first && (c.leaveSize+c.Size() > 0) {
-		if len(p) != 8192 {
-			b := buf.StackNew()
-			defer b.Release()
-			bufp = b.Extend(c.leaveSize + c.Size() + int32(len(p)))
+	if c.first {
+		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+			return 0, errors.New("salamander").Base(io.ErrShortBuffer)
 		}
-		copy(bufp[c.leaveSize+c.Size():], p)
-	} else {
-		data = p[c.leaveSize+c.Size():]
+
+		c.writeMutex.Lock()
+
+		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n += int(c.leaveSize) + int(c.Size())
+
+		c.obfs.Obfuscate(c.writeBuf[c.leaveSize+c.Size():], c.writeBuf[c.leaveSize:])
+
+		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+			c.writeMutex.Unlock()
+			return 0, err
+		}
+
+		c.writeMutex.Unlock()
+		return len(p), nil
 	}
 
-	nn := c.obfs.Obfuscate(data, bufp[c.leaveSize:])
-	if nn == 0 {
-		return 0, errors.New("nn == 0")
-	}
-	nn += int(c.leaveSize)
+	c.obfs.Obfuscate(p[c.leaveSize+c.Size():], p[c.leaveSize:])
 
-	if _, err := c.conn.WriteTo(bufp[:nn], addr); err != nil {
+	if _, err := c.conn.WriteTo(p, addr); err != nil {
 		return 0, err
 	}
 
