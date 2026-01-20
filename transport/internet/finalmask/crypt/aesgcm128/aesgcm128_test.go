@@ -20,15 +20,16 @@ func TestAesGcm128InPlace(t *testing.T) {
 	nonceSize := aead.NonceSize()
 	nonce := encrypted[:nonceSize]
 	rand.Read(nonce)
+	copy(encrypted[nonceSize:], plain)
+	plaintext := encrypted[nonceSize : nonceSize+len(plain)]
 
-	ciphertext := aead.Seal(encrypted[nonceSize:nonceSize], nonce, plain, nil)
+	sealed := aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
-	assert.Equal(t, &ciphertext[0], &encrypted[nonceSize])
-	assert.Equal(t, ciphertext, encrypted[nonceSize:len(ciphertext)+nonceSize])
-	assert.Equal(t, len(ciphertext)+nonceSize, len(plain)+nonceSize+aead.Overhead())
+	assert.Equal(t, &sealed[0], &plaintext[0])
+	assert.Equal(t, sealed, encrypted[nonceSize:nonceSize+aead.Overhead()+len(plain)])
 
-	plaintext, _ := aead.Open(encrypted[0:0], encrypted[:nonceSize], encrypted[nonceSize:len(ciphertext)+nonceSize], nil)
-	assert.Equal(t, plain, plaintext)
-	assert.Equal(t, &plaintext[0], &encrypted[0])
-	assert.Equal(t, plaintext, encrypted[:len(plaintext)])
+	opened, _ := aead.Open(encrypted[0:0], encrypted[:nonceSize], encrypted[nonceSize:nonceSize+aead.Overhead()+len(plain)], nil)
+	assert.Equal(t, plain, opened)
+	assert.Equal(t, &opened[0], &encrypted[0])
+	assert.Equal(t, opened, encrypted[:len(opened)])
 }

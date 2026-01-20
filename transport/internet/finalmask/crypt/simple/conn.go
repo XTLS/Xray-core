@@ -2,7 +2,6 @@ package simple
 
 import (
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/binary"
 	"hash/fnv"
 	"io"
@@ -68,8 +67,7 @@ func (a *simple) Open(dst, nonce, cipherText, extra []byte) ([]byte, error) {
 		return nil, errors.New("invalid auth")
 	}
 
-	copy(dst, dst[6:])
-	return dst[:length], nil
+	return dst[6:], nil
 }
 
 type simpleConn struct {
@@ -130,12 +128,14 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
 		}
 
-		nonceSize := c.aead.NonceSize()
-		_, err = c.aead.Open(p[0:0], c.readBuf[:int32(nonceSize)], c.readBuf[int32(nonceSize):n], nil)
+		ciphertext := c.readBuf[:n]
+		opened, err := c.aead.Open(nil, nil, ciphertext, nil)
 		if err != nil {
 			c.readMutex.Unlock()
 			return 0, addr, errors.New("aead open").Base(err)
 		}
+
+		copy(p, opened)
 
 		c.readMutex.Unlock()
 		return n - int(c.Size()), addr, nil
@@ -150,11 +150,14 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
 	}
 
-	nonceSize := c.aead.NonceSize()
-	_, err = c.aead.Open(p[0:0], p[:int32(nonceSize)], p[int32(nonceSize):n], nil)
+	ciphertext := p[:n]
+	opened, err := c.aead.Open(nil, nil, ciphertext, nil)
 	if err != nil {
+		c.readMutex.Unlock()
 		return 0, addr, errors.New("aead open").Base(err)
 	}
+
+	copy(p, opened)
 
 	return n - int(c.Size()), addr, nil
 }
@@ -170,12 +173,9 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
 		n += int(c.leaveSize) + int(c.Size())
 
-		nonceSize := c.aead.NonceSize()
-		nonce := c.writeBuf[c.leaveSize : c.leaveSize+int32(nonceSize)]
-		common.Must2(rand.Read(nonce))
-		copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
-		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
-		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
+		plaintext := c.writeBuf[c.leaveSize+c.Size() : n]
+		sealed := c.aead.Seal(nil, nil, plaintext, nil)
+		copy(c.writeBuf[c.leaveSize:], sealed)
 
 		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
 
@@ -193,12 +193,9 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return len(p), nil
 	}
 
-	nonceSize := c.aead.NonceSize()
-	nonce := p[c.leaveSize : c.leaveSize+int32(nonceSize)]
-	common.Must2(rand.Read(nonce))
-	copy(p[c.leaveSize+int32(nonceSize):], p[c.leaveSize+c.Size():])
-	plaintext := p[c.leaveSize+int32(nonceSize) : len(p)-c.aead.Overhead()]
-	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
+	plaintext := p[c.leaveSize+c.Size() : n]
+	sealed := c.aead.Seal(nil, nil, plaintext, nil)
+	copy(p[c.leaveSize:], sealed)
 
 	return c.conn.WriteTo(p, addr)
 }
