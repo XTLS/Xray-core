@@ -94,10 +94,6 @@ func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
 	}
 
-	if len(p) < n-int(c.Size()) {
-		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-	}
-
 	nonceSize := c.aead.NonceSize()
 	_, err = c.aead.Open(p[0:0], p[:int32(nonceSize)], p[int32(nonceSize):n], nil)
 	if err != nil {
@@ -123,9 +119,16 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		common.Must2(rand.Read(nonce))
 		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, c.writeBuf[c.leaveSize+int32(nonceSize):n], nil)
 
-		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+
+		if err != nil {
 			c.writeMutex.Unlock()
 			return 0, err
+		}
+
+		if nn != n {
+			c.writeMutex.Unlock()
+			return 0, errors.New("nn != n")
 		}
 
 		c.writeMutex.Unlock()
@@ -137,11 +140,7 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	common.Must2(rand.Read(nonce))
 	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, p[c.leaveSize+int32(nonceSize):], nil)
 
-	if _, err := c.conn.WriteTo(p, addr); err != nil {
-		return 0, err
-	}
-
-	return len(p), nil
+	return c.conn.WriteTo(p, addr)
 }
 
 func (c *aesgcm128Conn) Close() error {

@@ -88,6 +88,11 @@ func (c *wechatConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 		}
 
+		if len(p) < n-int(c.Size()) {
+			c.readMutex.Unlock()
+			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+		}
+
 		copy(p, c.readBuf[c.Size():n])
 
 		c.readMutex.Unlock()
@@ -121,9 +126,16 @@ func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
 
-		if _, err := c.conn.WriteTo(c.writeBuf[:n], addr); err != nil {
+		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+
+		if err != nil {
 			c.writeMutex.Unlock()
 			return 0, err
+		}
+
+		if nn != n {
+			c.writeMutex.Unlock()
+			return 0, errors.New("nn != n")
 		}
 
 		c.writeMutex.Unlock()
@@ -132,11 +144,7 @@ func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
 
-	if _, err := c.conn.WriteTo(p, addr); err != nil {
-		return 0, err
-	}
-
-	return len(p), nil
+	return c.conn.WriteTo(p, addr)
 }
 
 func (c *wechatConn) Close() error {
