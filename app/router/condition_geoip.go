@@ -822,7 +822,8 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
 
 	for _, cidrGroup := range cidrGroups {
-		for _, cidrEntry := range cidrGroup {
+		for i, cidrEntry := range cidrGroup {
+			cidrGroup[i] = nil
 			ipBytes := cidrEntry.GetIp()
 			prefixLen := int(cidrEntry.GetPrefix())
 
@@ -888,7 +889,8 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 	pos := make([]*GeoIP, 0, n)
 	neg := make([]*GeoIP, 0, n/2)
 
-	for _, geoip := range geoips {
+	for i, geoip := range geoips {
+		geoips[i] = nil
 		if geoip == nil {
 			return nil, errors.New("geoip entry is nil")
 		}

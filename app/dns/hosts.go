@@ -24,7 +24,8 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 		matchers: g,
 	}
 
-	for _, mapping := range hosts {
+	for i, mapping := range hosts {
+		hosts[i] = nil
 		matcher, err := toStrMatcher(mapping.Type, mapping.Domain)
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to create domain matcher, ignore domain rule [type: ", mapping.Type, ", domain: ", mapping.Domain, "]")

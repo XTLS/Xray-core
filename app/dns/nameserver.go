@@ -131,7 +131,8 @@ func NewClient(
 		var rules []string
 		ruleCurr := 0
 		ruleIter := 0
-		for _, domain := range ns.PrioritizedDomain {
+		for i, domain := range ns.PrioritizedDomain {
+			ns.PrioritizedDomain[i] = nil
 			domainRule, err := toStrMatcher(domain.Type, domain.Domain)
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to create domain matcher, ignore domain rule [type: ", domain.Type, ", domain: ", domain.Domain, "]")
