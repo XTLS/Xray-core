@@ -75,7 +75,9 @@ func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		}
 
 		nonceSize := c.aead.NonceSize()
-		_, err = c.aead.Open(p[0:0], c.readBuf[:int32(nonceSize)], c.readBuf[int32(nonceSize):n], nil)
+		nonce := c.readBuf[:nonceSize]
+		ciphertext := c.readBuf[nonceSize:n]
+		_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
 		if err != nil {
 			c.readMutex.Unlock()
 			return 0, addr, errors.New("aead open").Base(err)
@@ -95,10 +97,13 @@ func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 
 	nonceSize := c.aead.NonceSize()
-	_, err = c.aead.Open(p[0:0], p[:int32(nonceSize)], p[int32(nonceSize):n], nil)
+	nonce := p[:nonceSize]
+	ciphertext := p[nonceSize:n]
+	_, err = c.aead.Open(ciphertext[:0], nonce, ciphertext, nil)
 	if err != nil {
 		return 0, addr, errors.New("aead open").Base(err)
 	}
+	copy(p, p[nonceSize:n])
 
 	return n - int(c.Size()), addr, nil
 }

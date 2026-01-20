@@ -193,7 +193,7 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return len(p), nil
 	}
 
-	plaintext := p[c.leaveSize+c.Size() : n]
+	plaintext := p[c.leaveSize+c.Size():]
 	sealed := c.aead.Seal(nil, nil, plaintext, nil)
 	copy(p[c.leaveSize:], sealed)
 
