@@ -117,7 +117,9 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		nonceSize := c.aead.NonceSize()
 		nonce := c.writeBuf[c.leaveSize : c.leaveSize+int32(nonceSize)]
 		common.Must2(rand.Read(nonce))
-		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, c.writeBuf[c.leaveSize+int32(nonceSize):n], nil)
+		copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
+		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
+		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
 
 		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
 
@@ -138,7 +140,9 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	nonceSize := c.aead.NonceSize()
 	nonce := p[c.leaveSize : c.leaveSize+int32(nonceSize)]
 	common.Must2(rand.Read(nonce))
-	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, p[c.leaveSize+int32(nonceSize):], nil)
+	copy(p[c.leaveSize+int32(nonceSize):], p[c.leaveSize+c.Size():])
+	plaintext := p[c.leaveSize+int32(nonceSize) : len(p)-c.aead.Overhead()]
+	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
 
 	return c.conn.WriteTo(p, addr)
 }

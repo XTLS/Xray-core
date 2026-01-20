@@ -107,7 +107,7 @@ func (c *utpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 	}
 
-	copy(p, c.readBuf[c.Size():n])
+	copy(p, p[c.Size():n])
 
 	return n - int(c.Size()), addr, err
 }
@@ -141,7 +141,7 @@ func (c *utpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return len(p), nil
 	}
 
-	c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
+	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
 
 	return c.conn.WriteTo(p, addr)
 }
