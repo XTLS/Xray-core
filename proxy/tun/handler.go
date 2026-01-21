@@ -108,8 +108,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
-	sid := session.NewID()
-	ctx = c.ContextWithID(ctx, sid)
+	ctx = c.ContextWithID(ctx, session.NewID())
 
 	source := net.DestinationFromAddr(conn.RemoteAddr())
 	inbound := session.Inbound{
