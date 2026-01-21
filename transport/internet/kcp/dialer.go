@@ -60,9 +60,12 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 		return nil, errors.New("raw is not PacketConnWrapper")
 	}
 
+	raw := wrapper.Conn
+
 	if streamSettings.UdpmaskManager != nil {
-		wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(wrapper.Conn)
+		wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(raw)
 		if err != nil {
+			raw.Close()
 			return nil, errors.New("mask err").Base(err)
 		}
 	}
