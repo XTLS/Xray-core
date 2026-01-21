@@ -103,7 +103,7 @@ func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if err != nil {
 		return 0, addr, errors.New("aead open").Base(err)
 	}
-	copy(p, p[nonceSize:n])
+	copy(p, p[nonceSize:n-c.aead.Overhead()])
 
 	return n - int(c.Size()), addr, nil
 }
