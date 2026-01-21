@@ -11,8 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-const header = 0xB5E8
-
 type srtp struct {
 	header uint16
 	number uint16
@@ -48,7 +46,7 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 
 		conn: raw,
 		header: &srtp{
-			header: header,
+			header: 0xB5E8,
 			number: dice.RollUint16(),
 		},
 	}

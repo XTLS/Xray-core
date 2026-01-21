@@ -11,9 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-const header = 1
-const extension = 0
-
 type utp struct {
 	header       byte
 	extension    byte
@@ -50,8 +47,8 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 
 		conn: raw,
 		header: &utp{
-			header:       header,
-			extension:    extension,
+			header:       1,
+			extension:    0,
 			connectionID: dice.RollUint16(),
 		},
 	}
