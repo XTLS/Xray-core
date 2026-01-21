@@ -9,27 +9,51 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 )
 
-func TestAesGcm128InPlace(t *testing.T) {
+func TestAesGcm128SealInPlace(t *testing.T) {
 	hashedPsk := sha256.Sum256([]byte("psk"))
 	aead := crypto.NewAesGcm(hashedPsk[:16])
 
-	plain := []byte("plain")
-
-	encrypted := make([]byte, 2048)
+	text := []byte("0123456789012")
+	buf := make([]byte, 8192)
 
 	nonceSize := aead.NonceSize()
-	nonce := encrypted[:nonceSize]
+	nonce := buf[:nonceSize]
 	rand.Read(nonce)
-	copy(encrypted[nonceSize:], plain)
-	plaintext := encrypted[nonceSize : nonceSize+len(plain)]
+	copy(buf[nonceSize:], text)
+	plaintext := buf[nonceSize : nonceSize+len(text)]
 
-	sealed := aead.Seal(plaintext[:0], nonce, plaintext, nil)
+	sealed := aead.Seal(nil, nonce, plaintext, nil)
 
-	assert.Equal(t, &sealed[0], &plaintext[0])
-	assert.Equal(t, sealed, encrypted[nonceSize:nonceSize+aead.Overhead()+len(plain)])
+	_ = aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
-	opened, _ := aead.Open(encrypted[0:0], encrypted[:nonceSize], encrypted[nonceSize:nonceSize+aead.Overhead()+len(plain)], nil)
-	assert.Equal(t, plain, opened)
-	assert.Equal(t, &opened[0], &encrypted[0])
-	assert.Equal(t, opened, encrypted[:len(opened)])
+	assert.Equal(t, sealed, buf[nonceSize:nonceSize+aead.Overhead()+len(text)])
+}
+
+func encrypted(plain []byte) ([]byte, []byte) {
+	hashedPsk := sha256.Sum256([]byte("psk"))
+	aead := crypto.NewAesGcm(hashedPsk[:16])
+
+	nonce := make([]byte, 12)
+	rand.Read(nonce)
+
+	return nonce, aead.Seal(nil, nonce, plain, nil)
+}
+
+func TestAesGcm128OpenInPlace(t *testing.T) {
+	a, b := encrypted([]byte("0123456789012"))
+	buf := make([]byte, 8192)
+	copy(buf, a)
+	copy(buf[len(a):], b)
+
+	hashedPsk := sha256.Sum256([]byte("psk"))
+	aead := crypto.NewAesGcm(hashedPsk[:16])
+
+	nonceSize := aead.NonceSize()
+	nonce := buf[:nonceSize]
+	ciphertext := buf[nonceSize : nonceSize+len(b)]
+
+	opened, _ := aead.Open(nil, nonce, ciphertext, nil)
+	_, _ = aead.Open(ciphertext[:0], nonce, ciphertext, nil)
+
+	assert.Equal(t, opened, ciphertext[:len(ciphertext)-aead.Overhead()])
 }

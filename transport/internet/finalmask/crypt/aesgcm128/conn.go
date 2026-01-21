@@ -116,13 +116,14 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 		c.writeMutex.Lock()
 
-		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
+		n = copy(c.writeBuf[c.leaveSize+int32(c.aead.NonceSize()):], p)
+		// n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
 		n += int(c.leaveSize) + int(c.Size())
 
 		nonceSize := c.aead.NonceSize()
 		nonce := c.writeBuf[c.leaveSize : c.leaveSize+int32(nonceSize)]
 		common.Must2(rand.Read(nonce))
-		copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
+		// copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
 		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
 		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
 
