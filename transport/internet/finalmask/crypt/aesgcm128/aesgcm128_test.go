@@ -57,3 +57,14 @@ func TestAesGcm128OpenInPlace(t *testing.T) {
 
 	assert.Equal(t, opened, ciphertext[:len(ciphertext)-aead.Overhead()])
 }
+
+func TestAesGcm128Bounce(t *testing.T) {
+	hashedPsk := sha256.Sum256([]byte("psk"))
+	aead := crypto.NewAesGcm(hashedPsk[:16])
+	buf := make([]byte, aead.NonceSize()+aead.Overhead())
+	for i := 0; i < 1000; i++ {
+		_, _ = rand.Read(buf)
+		_, err := aead.Open(buf[aead.NonceSize():aead.NonceSize()], buf[:aead.NonceSize()], buf[aead.NonceSize():], nil)
+		assert.NotEqual(t, err, nil)
+	}
+}
