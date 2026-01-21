@@ -125,7 +125,7 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		common.Must2(rand.Read(nonce))
 		// copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
 		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
-		_ = c.aead.Seal(c.writeBuf[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
+		_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
 		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
 
@@ -148,7 +148,7 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	common.Must2(rand.Read(nonce))
 	copy(p[c.leaveSize+int32(nonceSize):], p[c.leaveSize+c.Size():])
 	plaintext := p[c.leaveSize+int32(nonceSize) : len(p)-c.aead.Overhead()]
-	_ = c.aead.Seal(p[c.leaveSize+int32(nonceSize):c.leaveSize+int32(nonceSize)], nonce, plaintext, nil)
+	_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
 	return c.conn.WriteTo(p, addr)
 }
