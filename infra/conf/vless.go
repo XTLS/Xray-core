@@ -70,7 +70,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 		if account.Flow == "" {
-			errors.PrintDeprecatedFeatureWarning("VLESS without flow", "VLESS with flow")
+			errors.PrintNonRemovalDeprecatedFeatureWarning("VLESS without flow", "VLESS with flow")
 		}
 
 		if len(account.Testseed) < 4 {

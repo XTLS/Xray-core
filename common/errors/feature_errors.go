@@ -7,7 +7,7 @@ import (
 // PrintNonRemovalDeprecatedFeatureWarning prints a warning of the deprecated feature that won't be removed in the near future.
 // Do not remove this function even there is no reference to it.
 func PrintNonRemovalDeprecatedFeatureWarning(sourceFeature string, targetFeature string) {
-	LogWarning(context.Background(), "The feature "+sourceFeature+" is deprecated and may be removed. Please migrate to "+targetFeature+" as soon as possible.")
+	LogWarning(context.Background(), "The feature "+sourceFeature+" is deprecated, not recommended for using and might be removed. Please migrate to "+targetFeature+" as soon as possible.")
 }
 
 // PrintDeprecatedFeatureWarning prints a warning for deprecated and going to be removed feature.
