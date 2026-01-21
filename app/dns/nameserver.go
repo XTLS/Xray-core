@@ -155,6 +155,7 @@ func NewClient(
 			}
 			updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
 		}
+		ns.PrioritizedDomain = nil
 
 		// Establish expected IPs
 		var expectedMatcher router.GeoIPMatcher

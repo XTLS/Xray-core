@@ -104,6 +104,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		}
 		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 		conds.Add(matcher)
+		rr.Domain = nil
 	}
 
 	if len(rr.Process) > 0 {
