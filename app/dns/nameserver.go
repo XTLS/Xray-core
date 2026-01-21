@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -156,6 +157,7 @@ func NewClient(
 			updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
 		}
 		ns.PrioritizedDomain = nil
+		runtime.GC()
 
 		// Establish expected IPs
 		var expectedMatcher router.GeoIPMatcher
@@ -164,6 +166,8 @@ func NewClient(
 			if err != nil {
 				return errors.New("failed to create expected ip matcher").Base(err).AtWarning()
 			}
+			ns.ExpectedGeoip = nil
+			runtime.GC()
 		}
 
 		// Establish unexpected IPs
@@ -173,6 +177,8 @@ func NewClient(
 			if err != nil {
 				return errors.New("failed to create unexpected ip matcher").Base(err).AtWarning()
 			}
+			ns.UnexpectedGeoip = nil
+			runtime.GC()
 		}
 
 		if len(clientIP) > 0 {

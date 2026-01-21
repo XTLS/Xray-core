@@ -889,8 +889,7 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 	pos := make([]*GeoIP, 0, n)
 	neg := make([]*GeoIP, 0, n/2)
 
-	for i, geoip := range geoips {
-		geoips[i] = nil
+	for _, geoip := range geoips {
 		if geoip == nil {
 			return nil, errors.New("geoip entry is nil")
 		}
