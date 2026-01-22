@@ -15,6 +15,10 @@ import (
 
 type simple struct{}
 
+func NewSimple() *simple {
+	return &simple{}
+}
+
 func (*simple) NonceSize() int {
 	return 0
 }

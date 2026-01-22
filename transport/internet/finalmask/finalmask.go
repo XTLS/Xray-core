@@ -4,7 +4,7 @@ import (
 	"net"
 )
 
-type connSize interface {
+type ConnSize interface {
 	Size() int32
 }
 
@@ -33,7 +33,7 @@ func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketCon
 		if err != nil {
 			return nil, err
 		}
-		leaveSize += raw.(connSize).Size()
+		leaveSize += raw.(ConnSize).Size()
 	}
 	return raw, nil
 }
@@ -46,7 +46,7 @@ func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketCon
 		if err != nil {
 			return nil, err
 		}
-		leaveSize += raw.(connSize).Size()
+		leaveSize += raw.(ConnSize).Size()
 	}
 	return raw, nil
 }

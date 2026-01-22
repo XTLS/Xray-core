@@ -1,4 +1,4 @@
-package aesgcm128
+package aesgcm128_test
 
 import (
 	"crypto/rand"

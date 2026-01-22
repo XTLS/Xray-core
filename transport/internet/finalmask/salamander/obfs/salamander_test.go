@@ -1,14 +1,19 @@
-package obfs
+package obfs_test
 
 import (
 	"crypto/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xtls/xray-core/transport/internet/finalmask/salamander/obfs"
+)
+
+const (
+	smSaltLen = 8
 )
 
 func BenchmarkSalamanderObfuscator_Obfuscate(b *testing.B) {
-	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+	o, _ := obfs.NewSalamanderObfuscator([]byte("average_password"))
 	in := make([]byte, 1200)
 	_, _ = rand.Read(in)
 	out := make([]byte, 2048)
@@ -19,7 +24,7 @@ func BenchmarkSalamanderObfuscator_Obfuscate(b *testing.B) {
 }
 
 func BenchmarkSalamanderObfuscator_Deobfuscate(b *testing.B) {
-	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+	o, _ := obfs.NewSalamanderObfuscator([]byte("average_password"))
 	in := make([]byte, 1200)
 	_, _ = rand.Read(in)
 	out := make([]byte, 2048)
@@ -30,7 +35,7 @@ func BenchmarkSalamanderObfuscator_Deobfuscate(b *testing.B) {
 }
 
 func TestSalamanderObfuscator(t *testing.T) {
-	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+	o, _ := obfs.NewSalamanderObfuscator([]byte("average_password"))
 	in := make([]byte, 1200)
 	oOut := make([]byte, 2048)
 	dOut := make([]byte, 2048)
@@ -45,7 +50,7 @@ func TestSalamanderObfuscator(t *testing.T) {
 }
 
 func TestSalamanderInPlace(t *testing.T) {
-	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+	o, _ := obfs.NewSalamanderObfuscator([]byte("average_password"))
 
 	in := make([]byte, 1200)
 	out := make([]byte, 2048)
@@ -66,7 +71,7 @@ func TestSalamanderInPlace(t *testing.T) {
 }
 
 func TestSalamanderBounce(t *testing.T) {
-	o, _ := NewSalamanderObfuscator([]byte("average_password"))
+	o, _ := obfs.NewSalamanderObfuscator([]byte("average_password"))
 	buf := make([]byte, 8)
 	for i := 0; i < 1000; i++ {
 		_, _ = rand.Read(buf)
