@@ -24,6 +24,7 @@ func (i *interConn) Write(b []byte) (int, error) {
 }
 
 func (i *interConn) Close() error {
+	i.stream.CancelRead(0)
 	return i.stream.Close()
 }
 
