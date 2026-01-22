@@ -114,12 +114,12 @@ func TestPacketConnReadWrite(t *testing.T) {
 			}
 			defer server.Close()
 
-			server, err = mask.WrapPacketConnClient(server, false, 0)
+			server, err = mask.WrapPacketConnServer(server, false, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			server, err = mask.WrapPacketConnClient(server, true, server.(finalmask.ConnSize).Size())
+			server, err = mask.WrapPacketConnServer(server, true, server.(finalmask.ConnSize).Size())
 			if err != nil {
 				t.Fatal(err)
 			}
