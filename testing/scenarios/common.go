@@ -213,27 +213,40 @@ func testTCPConn2(conn net.Conn, payloadSize int, timeout time.Duration) func() 
 				"\tSys =", units.ByteSize(m.Sys).String(),
 				"\tNumGC =", m.NumGC)
 		}()
-		payload := make([]byte, payloadSize)
-		common.Must2(rand.Read(payload))
+		singleWrite := func(length int) error {
+			payload := make([]byte, length)
+			common.Must2(rand.Read(payload))
 
-		nBytes, err := conn.Write(payload)
-		if err != nil {
-			return err
-		}
-		if nBytes != len(payload) {
-			return errors.New("expect ", len(payload), " written, but actually ", nBytes)
-		}
+			nBytes, err := conn.Write(payload)
+			if err != nil {
+				return err
+			}
+			if nBytes != len(payload) {
+				return errors.New("expect ", len(payload), " written, but actually ", nBytes)
+			}
 
-		response, err := readFrom2(conn, timeout, payloadSize)
-		if err != nil {
-			return err
-		}
-		_ = response
+			response, err := readFrom2(conn, timeout, length)
+			if err != nil {
+				return err
+			}
+			_ = response
 
-		if r := bytes.Compare(response, xor(payload)); r != 0 {
-			return errors.New(r)
-		}
+			if r := bytes.Compare(response, xor(payload)); r != 0 {
+				return errors.New(r)
+			}
 
+			return nil
+		}
+		for payloadSize > 0 {
+			sizeToWrite := 1024
+			if payloadSize < 1024 {
+				sizeToWrite = payloadSize
+			}
+			if err := singleWrite(sizeToWrite); err != nil {
+				return err
+			}
+			payloadSize -= sizeToWrite
+		}
 		return nil
 	}
 }

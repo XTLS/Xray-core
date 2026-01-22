@@ -106,8 +106,9 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	// to close, send completion packets back to the network, and cleanup
 	defer conn.Close()
 
-	sid := session.NewID()
-	ctx := c.ContextWithID(t.ctx, sid)
+	ctx, cancel := context.WithCancel(t.ctx)
+	defer cancel()
+	ctx = c.ContextWithID(ctx, session.NewID())
 
 	source := net.DestinationFromAddr(conn.RemoteAddr())
 	inbound := session.Inbound{
