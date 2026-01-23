@@ -10,7 +10,7 @@ var cmdListRules = &base.Command{
 	UsageLine:   "{{.Exec}} api lsrules [--server=127.0.0.1:8080]",
 	Short:       "List routing rules",
 	Long: `
-List rules in Xray.
+List routing rules in Xray.
 
 Arguments:
 
