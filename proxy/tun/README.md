@@ -172,3 +172,25 @@ route add 1.1.1.1 mask 255.0.0.0 0.0.0.0 if 47
 Note on ipv6 support. \
 Despite Windows also giving the adapter autoconfigured ipv6 address, the ipv6 is not possible until the interface has any _routable_ ipv6 address (given link-local address will not accept traffic from external addresses). \
 So everything applicable for ipv4 above also works for ipv6, you only need to give the interface some address manually, e.g. anything private like fc00::a:b:c:d/64 will do just fine
+
+## MAC OS X SUPPORT
+
+Darwin (Mac OS X) support of the same functionality is implemented through utun (userspace tunnel).
+
+Interface name in the configuration must comply to the scheme "utunN", where N is some number. \
+Most running OS'es create some amount of utun interfaces in advance for own needs. Please either check the interfaces you already have occupied by issuing following command:
+```
+ifconfig
+```
+Produced list will have all system interfaces listed, from which you will see how many "utun" ones already exists.
+It's not required to select next available number, e.g. if you have utun1-utun7 interfaces, it's not required to have "utun8" in the config. You can choose any available name, even utun20, to get surely available interface number.
+
+To attach routing to the interface, route command like following can be executed:
+```
+sudo route add -net 1.1.1.0/24 -iface utun10
+```
+```
+sudo route add -inet6 -host 2606:4700:4700::1111 -iface utun10
+sudo route add -inet6 -host 2606:4700:4700::1001 -iface utun10
+```
+Important to remember that everything written above about Linux routing concept, also apply to Mac OS X. If you simply route default route through utun interface, that will result network loop and immediate network failure.

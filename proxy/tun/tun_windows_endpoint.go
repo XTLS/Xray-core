@@ -14,6 +14,10 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
+var ErrUnsupportedNetworkProtocol = errors.New("unsupported ip version")
+
+var ErrQueueEmpty = errors.New("queue is empty")
+
 // WintunEndpoint implements GVisor stack.LinkEndpoint
 var _ stack.LinkEndpoint = (*WintunEndpoint)(nil)
 
@@ -21,8 +25,6 @@ type WintunEndpoint struct {
 	tun              *WindowsTun
 	dispatcherCancel context.CancelFunc
 }
-
-var ErrUnsupportedNetworkProtocol = errors.New("unsupported ip version")
 
 //go:linkname procyield runtime.procyield
 func procyield(cycles uint32)
@@ -120,6 +122,9 @@ func (e *WintunEndpoint) WritePackets(packetBufferList stack.PacketBufferList) (
 
 func (e *WintunEndpoint) readPacket() (tcpip.NetworkProtocolNumber, *stack.PacketBuffer, error) {
 	packet, err := e.tun.session.ReceivePacket()
+	if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
+		return 0, nil, ErrQueueEmpty
+	}
 	if err != nil {
 		return 0, nil, err
 	}
@@ -156,7 +161,7 @@ func (e *WintunEndpoint) dispatchLoop(ctx context.Context, dispatcher stack.Netw
 		default:
 			networkProtocolNumber, packet, err := e.readPacket()
 			// read queue empty, yield slightly, wait for the spinlock, retry
-			if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
+			if errors.Is(err, ErrQueueEmpty) {
 				procyield(1)
 				_, _ = windows.WaitForSingleObject(readWait, windows.INFINITE)
 				continue

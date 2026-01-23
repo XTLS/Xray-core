@@ -4,9 +4,10 @@ package tun
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
+	_ "unsafe"
 
+	"github.com/xtls/xray-core/common/buf"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -18,24 +19,21 @@ const utunHeaderSize = 4
 
 var ErrUnsupportedNetworkProtocol = errors.New("unsupported ip version")
 
+var ErrQueueEmpty = errors.New("queue is empty")
+
 // DarwinEndpoint implements GVisor stack.LinkEndpoint
 var _ stack.LinkEndpoint = (*DarwinEndpoint)(nil)
 
 type DarwinEndpoint struct {
-	tunFd            int
-	mtu              uint32
+	tun              *DarwinTun
 	dispatcherCancel context.CancelFunc
 }
 
-func newDarwinEndpoint(tunFd int, mtu uint32) *DarwinEndpoint {
-	return &DarwinEndpoint{
-		tunFd: tunFd,
-		mtu:   mtu,
-	}
-}
+//go:linkname procyield runtime.procyield
+func procyield(cycles uint32)
 
 func (e *DarwinEndpoint) MTU() uint32 {
-	return e.mtu
+	return e.tun.options.MTU
 }
 
 func (e *DarwinEndpoint) SetMTU(_ uint32) {
@@ -76,6 +74,7 @@ func (e *DarwinEndpoint) IsAttached() bool {
 }
 
 func (e *DarwinEndpoint) Wait() {
+
 }
 
 func (e *DarwinEndpoint) ARPHardwareType() header.ARPHardwareType {
@@ -98,6 +97,7 @@ func (e *DarwinEndpoint) Close() {
 }
 
 func (e *DarwinEndpoint) SetOnCloseAction(_ func()) {
+
 }
 
 func (e *DarwinEndpoint) WritePackets(packetBufferList stack.PacketBufferList) (int, tcpip.Error) {
@@ -108,91 +108,111 @@ func (e *DarwinEndpoint) WritePackets(packetBufferList stack.PacketBufferList) (
 			return n, &tcpip.ErrAborted{}
 		}
 
-		var headerBytes [utunHeaderSize]byte
-		binary.BigEndian.PutUint32(headerBytes[:], family)
+		// request memory to write from reusable buffer pool
+		b := buf.NewWithSize(int32(e.tun.options.MTU) + utunHeaderSize)
 
-		writeSlices := append([][]byte{headerBytes[:]}, packetBuffer.AsSlices()...)
-		if _, err := unix.Writev(e.tunFd, writeSlices); err != nil {
+		// build Darwin specific packet header
+		_, _ = b.Write([]byte{0x0, 0x0, 0x0, byte(family)})
+		// copy the bytes of slices that compose the packet into the allocated buffer
+		for _, packetElement := range packetBuffer.AsSlices() {
+			_, _ = b.Write(packetElement)
+		}
+
+		if _, err := e.tun.tunFile.Write(b.Bytes()); err != nil {
 			if errors.Is(err, unix.EAGAIN) {
 				return n, &tcpip.ErrWouldBlock{}
 			}
 			return n, &tcpip.ErrAborted{}
 		}
+		b.Release()
 		n++
 	}
 	return n, nil
 }
 
-func (e *DarwinEndpoint) dispatchLoop(ctx context.Context, dispatcher stack.NetworkDispatcher) {
-	readSize := int(e.mtu)
-	if readSize <= 0 {
-		readSize = 65535
+func (e *DarwinEndpoint) readPacket() (tcpip.NetworkProtocolNumber, *stack.PacketBuffer, error) {
+	// request memory to write from reusable buffer pool
+	b := buf.NewWithSize(int32(e.tun.options.MTU) + utunHeaderSize)
+
+	// read the bytes to the buffer
+	n, err := b.ReadFrom(e.tun.tunFile)
+	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+		b.Release()
+		return 0, nil, ErrQueueEmpty
 	}
-	readSize += utunHeaderSize
-
-	buf := make([]byte, readSize)
-	for ctx.Err() == nil {
-
-		n, err := unix.Read(e.tunFd, buf)
-		if err != nil {
-			if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
-				continue
-			}
-			e.Attach(nil)
-			return
-		}
-		if n <= utunHeaderSize {
-			continue
-		}
-
-		networkProtocol, packet, err := parseUTunPacket(buf[:n])
-		if errors.Is(err, ErrUnsupportedNetworkProtocol) {
-			continue
-		}
-		if err != nil {
-			e.Attach(nil)
-			return
-		}
-
-		dispatcher.DeliverNetworkPacket(networkProtocol, packet)
-		packet.DecRef()
-	}
-}
-
-func parseUTunPacket(packet []byte) (tcpip.NetworkProtocolNumber, *stack.PacketBuffer, error) {
-	if len(packet) <= utunHeaderSize {
-		return 0, nil, errors.New("packet too short")
+	if err != nil {
+		b.Release()
+		return 0, nil, err
 	}
 
-	family := binary.BigEndian.Uint32(packet[:utunHeaderSize])
+	// discard empty or sub-empty packets
+	if n <= utunHeaderSize {
+		b.Release()
+		return 0, nil, ErrQueueEmpty
+	}
+
 	var networkProtocol tcpip.NetworkProtocolNumber
-	switch family {
-	case uint32(unix.AF_INET):
+	switch b.Byte(3) {
+	case unix.AF_INET:
 		networkProtocol = header.IPv4ProtocolNumber
-	case uint32(unix.AF_INET6):
+	case unix.AF_INET6:
 		networkProtocol = header.IPv6ProtocolNumber
 	default:
+		b.Release()
 		return 0, nil, ErrUnsupportedNetworkProtocol
 	}
 
-	payload := packet[utunHeaderSize:]
-	packetBuffer := buffer.MakeWithData(payload)
+	packetBuffer := buffer.MakeWithData(b.BytesFrom(utunHeaderSize))
 	return networkProtocol, stack.NewPacketBuffer(stack.PacketBufferOptions{
 		Payload:           packetBuffer,
 		IsForwardedPacket: true,
+		OnRelease: func() {
+			b.Release()
+		},
 	}), nil
 }
 
-func ipFamilyFromPacket(packetBuffer *stack.PacketBuffer) (uint32, error) {
+func (e *DarwinEndpoint) dispatchLoop(ctx context.Context, dispatcher stack.NetworkDispatcher) {
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			networkProtocolNumber, packet, err := e.readPacket()
+			// read queue empty, yield slightly, wait for the spinlock, retry
+			if errors.Is(err, ErrQueueEmpty) {
+				procyield(1)
+				continue
+			}
+			// discard unknown network protocol packet
+			if errors.Is(err, ErrUnsupportedNetworkProtocol) {
+				continue
+			}
+			// stop dispatcher loop on any other interface failure
+			if err != nil {
+				e.Attach(nil)
+				return
+			}
+
+			// dispatch the buffer to the stack
+			dispatcher.DeliverNetworkPacket(networkProtocolNumber, packet)
+			// signal the buffer that it can be released
+			packet.DecRef()
+		}
+	}
+}
+
+func ipFamilyFromPacket(packetBuffer *stack.PacketBuffer) (int, error) {
 	for _, slice := range packetBuffer.AsSlices() {
 		if len(slice) == 0 {
 			continue
 		}
 		switch header.IPVersion(slice) {
 		case header.IPv4Version:
-			return uint32(unix.AF_INET), nil
+			return unix.AF_INET, nil
 		case header.IPv6Version:
-			return uint32(unix.AF_INET6), nil
+			return unix.AF_INET6, nil
 		default:
 			return 0, ErrUnsupportedNetworkProtocol
 		}
