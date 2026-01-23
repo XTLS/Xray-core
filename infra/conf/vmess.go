@@ -64,7 +64,7 @@ type VMessInboundConfig struct {
 
 // Build implements Buildable
 func (c *VMessInboundConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("VMess", "VLESS Encryption")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("VMess (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
 	config := &inbound.Config{}
 
@@ -115,7 +115,7 @@ type VMessOutboundConfig struct {
 
 // Build implements Buildable
 func (c *VMessOutboundConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("VMess", "VLESS Encryption")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("VMess (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
 	config := new(outbound.Config)
 	if c.Address != nil {
