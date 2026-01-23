@@ -7,7 +7,7 @@ import (
 
 var cmdListRules = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api lsr [--server=127.0.0.1:8080]",
+	UsageLine:   "{{.Exec}} api lsrules [--server=127.0.0.1:8080]",
 	Short:       "List Rules",
 	Long: `
 List rules in Xray.
