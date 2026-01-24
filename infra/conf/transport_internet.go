@@ -387,7 +387,7 @@ func (b Bandwidth) Bps() (uint64, error) {
 
 type UdpHop struct {
 	PortList json.RawMessage `json:"port"`
-	Interval int64           `json:"interval"`
+	Interval json.RawMessage `json:"interval"`
 }
 
 type HysteriaConfig struct {
@@ -431,14 +431,40 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 		hop = &PortList{}
 	}
 
+	var intervalMin int64
+	var intervalMax int64
+	var intervalStr string
+	if err := json.Unmarshal(c.UdpHop.Interval, &intervalMin); err != nil {
+		if err := json.Unmarshal(c.UdpHop.Interval, &intervalStr); err != nil {
+			return nil, errors.New("hop interval").Base(err)
+		}
+		parts := strings.Split(strings.TrimSpace(intervalStr), "-")
+		if len(parts) != 2 {
+			return nil, errors.New("hop interval len(parts) != 2")
+		}
+		intervalMin, err = strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("hop interval").Base(err)
+		}
+		intervalMax, err = strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("hop interval").Base(err)
+		}
+	} else {
+		intervalMax = intervalMin
+	}
+
 	if up > 0 && up < 65536 {
 		return nil, errors.New("Up must be at least 65536 Bps")
 	}
 	if down > 0 && down < 65536 {
 		return nil, errors.New("Down must be at least 65536 Bps")
 	}
-	if c.UdpHop.Interval != 0 && c.UdpHop.Interval < 5 {
+	if intervalMin != 0 && intervalMin < 5 {
 		return nil, errors.New("Interval must be at least 5")
+	}
+	if intervalMin < 0 || intervalMax < 0 || intervalMin > intervalMax {
+		return nil, errors.New("Invalid interval range")
 	}
 
 	if c.InitStreamReceiveWindow > 0 && c.InitStreamReceiveWindow < 16384 {
@@ -467,7 +493,8 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config.Up = up
 	config.Down = down
 	config.Ports = hop.Build().Ports()
-	config.Interval = c.UdpHop.Interval
+	config.IntervalMin = intervalMin
+	config.IntervalMax = intervalMax
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
 	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow

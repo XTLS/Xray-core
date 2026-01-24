@@ -17,10 +17,11 @@ const (
 )
 
 type udpHopPacketConn struct {
-	Addr          net.Addr
-	Addrs         []net.Addr
-	HopInterval   time.Duration
-	ListenUDPFunc ListenUDPFunc
+	Addr           net.Addr
+	Addrs          []net.Addr
+	HopIntervalMin time.Duration
+	HopIntervalMax time.Duration
+	ListenUDPFunc  ListenUDPFunc
 
 	connMutex   sync.RWMutex
 	prevConn    net.PacketConn
@@ -46,10 +47,11 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
-	if hopInterval == 0 {
-		hopInterval = defaultHopInterval
-	} else if hopInterval < 5*time.Second {
+func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin time.Duration, intervalMax time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
+	if intervalMax == 0 {
+		intervalMin = defaultHopInterval
+		intervalMax = defaultHopInterval
+	} else if intervalMin < 5*time.Second {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
 	// if listenUDPFunc == nil {
@@ -69,15 +71,16 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPF
 	// 	return nil, err
 	// }
 	hConn := &udpHopPacketConn{
-		Addr:          addr,
-		Addrs:         addrs,
-		HopInterval:   hopInterval,
-		ListenUDPFunc: listenUDPFunc,
-		prevConn:      nil,
-		currentConn:   pktConn,
-		addrIndex:     index,
-		recvQueue:     make(chan *udpPacket, packetQueueSize),
-		closeChan:     make(chan struct{}),
+		Addr:           addr,
+		Addrs:          addrs,
+		HopIntervalMin: intervalMin,
+		HopIntervalMax: intervalMax,
+		ListenUDPFunc:  listenUDPFunc,
+		prevConn:       nil,
+		currentConn:    pktConn,
+		addrIndex:      index,
+		recvQueue:      make(chan *udpPacket, packetQueueSize),
+		closeChan:      make(chan struct{}),
 		bufPool: sync.Pool{
 			New: func() interface{} {
 				return make([]byte, udpBufferSize)
@@ -115,12 +118,13 @@ func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
 }
 
 func (u *udpHopPacketConn) hopLoop() {
-	ticker := time.NewTicker(u.HopInterval)
+	ticker := time.NewTicker(randDuration(u.HopIntervalMin, u.HopIntervalMax))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			u.hop()
+			ticker.Reset(randDuration(u.HopIntervalMin, u.HopIntervalMax))
 		case <-u.closeChan:
 			return
 		}
@@ -294,4 +298,11 @@ func trySetWriteBuffer(pc net.PacketConn, bytes int) error {
 		return sc.SetWriteBuffer(bytes)
 	}
 	return nil
+}
+
+func randDuration(min, max time.Duration) time.Duration {
+	if max <= min {
+		return min
+	}
+	return min + time.Duration(rand.Int63n(int64(max-min)))
 }
