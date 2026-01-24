@@ -7,6 +7,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/xtls/xray-core/common/crypto"
 )
 
 const (
@@ -19,8 +21,8 @@ const (
 type udpHopPacketConn struct {
 	Addr           net.Addr
 	Addrs          []net.Addr
-	HopIntervalMin time.Duration
-	HopIntervalMax time.Duration
+	HopIntervalMin int64
+	HopIntervalMax int64
 	ListenUDPFunc  ListenUDPFunc
 
 	connMutex   sync.RWMutex
@@ -47,12 +49,12 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin time.Duration, intervalMax time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
+func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
 	if intervalMax == 0 {
-		intervalMin = defaultHopInterval
-		intervalMax = defaultHopInterval
+		intervalMin = int64(defaultHopInterval)
+		intervalMax = int64(defaultHopInterval)
 	}
-	if intervalMin < 5*time.Second {
+	if intervalMin < 5 {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
 	// if listenUDPFunc == nil {
@@ -119,13 +121,13 @@ func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
 }
 
 func (u *udpHopPacketConn) hopLoop() {
-	ticker := time.NewTicker(randDuration(u.HopIntervalMin, u.HopIntervalMax))
+	ticker := time.NewTicker(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			u.hop()
-			ticker.Reset(randDuration(u.HopIntervalMin, u.HopIntervalMax))
+			ticker.Reset(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
 		case <-u.closeChan:
 			return
 		}
@@ -299,11 +301,4 @@ func trySetWriteBuffer(pc net.PacketConn, bytes int) error {
 		return sc.SetWriteBuffer(bytes)
 	}
 	return nil
-}
-
-func randDuration(min, max time.Duration) time.Duration {
-	if max <= min {
-		return min
-	}
-	return min + time.Duration(rand.Int63n(int64(max-min)))
 }
