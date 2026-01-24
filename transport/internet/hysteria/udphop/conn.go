@@ -51,7 +51,8 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin time.Duration, intervalMa
 	if intervalMax == 0 {
 		intervalMin = defaultHopInterval
 		intervalMax = defaultHopInterval
-	} else if intervalMin < 5*time.Second {
+	}
+	if intervalMin < 5*time.Second {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
 	// if listenUDPFunc == nil {

@@ -433,8 +433,8 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 
 	var intervalMin int64
 	var intervalMax int64
-	var intervalStr string
 	if err := json.Unmarshal(c.UdpHop.Interval, &intervalMin); err != nil {
+		var intervalStr string
 		if err := json.Unmarshal(c.UdpHop.Interval, &intervalStr); err != nil {
 			return nil, errors.New("hop interval").Base(err)
 		}
