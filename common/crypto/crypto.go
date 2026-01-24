@@ -4,6 +4,7 @@ package crypto // import "github.com/xtls/xray-core/common/crypto"
 import (
 	"crypto/rand"
 	"math/big"
+	"time"
 )
 
 func RandBetween(from int64, to int64) int64 {
@@ -15,4 +16,8 @@ func RandBetween(from int64, to int64) int64 {
 	}
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(to-from))
 	return from + bigInt.Int64()
+}
+
+func RandDuration(from int64, to int64, unit time.Duration) time.Duration {
+	return time.Duration(RandBetween(from, to)) * unit
 }

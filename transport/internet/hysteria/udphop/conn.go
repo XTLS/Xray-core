@@ -121,13 +121,13 @@ func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
 }
 
 func (u *udpHopPacketConn) hopLoop() {
-	ticker := time.NewTicker(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
+	ticker := time.NewTicker(crypto.RandDuration(u.HopIntervalMin, u.HopIntervalMax, time.Second))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			u.hop()
-			ticker.Reset(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
+			ticker.Reset(crypto.RandDuration(u.HopIntervalMin, u.HopIntervalMax, time.Second))
 		case <-u.closeChan:
 			return
 		}
