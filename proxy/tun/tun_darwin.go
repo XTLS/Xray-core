@@ -11,7 +11,10 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/xtls/xray-core/common/buf"
 	"golang.org/x/sys/unix"
+	"gvisor.dev/gvisor/pkg/buffer"
+	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
@@ -19,6 +22,7 @@ const (
 	utunControlName = "com.apple.net.utun_control"
 	sysprotoControl = 2
 	gateway         = "169.254.10.1/30"
+	utunHeaderSize  = 4
 )
 
 const (
@@ -28,6 +32,9 @@ const (
 	ND6_INFINITE_LIFETIME = 0xFFFFFFFF // netinet6/nd6.h
 )
 
+//go:linkname procyield runtime.procyield
+func procyield(cycles uint32)
+
 type DarwinTun struct {
 	tunFile *os.File
 	options TunOptions
@@ -35,6 +42,7 @@ type DarwinTun struct {
 
 var _ Tun = (*DarwinTun)(nil)
 var _ GVisorTun = (*DarwinTun)(nil)
+var _ GVisorDevice = (*DarwinTun)(nil)
 
 func NewTun(options TunOptions) (Tun, error) {
 	tunFile, err := open(options.Name)
@@ -62,8 +70,82 @@ func (t *DarwinTun) Close() error {
 	return t.tunFile.Close()
 }
 
+// WritePacket implements GVisorDevice method to write one packet to the tun device
+func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
+	// request memory to write from reusable buffer pool
+	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+	defer b.Release()
+
+	// prepare Darwin specific packet header
+	_, _ = b.Write([]byte{0x0, 0x0, 0x0, 0x0})
+	// copy the bytes of slices that compose the packet into the allocated buffer
+	for _, packetElement := range packet.AsSlices() {
+		_, _ = b.Write(packetElement)
+	}
+	// fill Darwin specific header from the first raw packet byte, that we can access now
+	var family byte
+	switch b.Byte(4) >> 4 {
+	case 4:
+		family = unix.AF_INET
+	case 6:
+		family = unix.AF_INET6
+	default:
+		return &tcpip.ErrAborted{}
+	}
+	b.SetByte(3, family)
+
+	if _, err := t.tunFile.Write(b.Bytes()); err != nil {
+		if errors.Is(err, unix.EAGAIN) {
+			return &tcpip.ErrWouldBlock{}
+		}
+		return &tcpip.ErrAborted{}
+	}
+	return nil
+}
+
+// ReadPacket implements GVisorDevice method to read one packet from the tun device
+// It is expected that the method will not block, rather return ErrQueueEmpty when there is nothing on the line,
+// which will make the stack call Wait which should implement desired push-back
+func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
+	// request memory to write from reusable buffer pool
+	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+
+	// read the bytes to the interface file
+	n, err := b.ReadFrom(t.tunFile)
+	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+		b.Release()
+		return 0, nil, ErrQueueEmpty
+	}
+	if err != nil {
+		b.Release()
+		return 0, nil, err
+	}
+
+	// discard empty or sub-empty packets
+	if n <= utunHeaderSize {
+		b.Release()
+		return 0, nil, ErrQueueEmpty
+	}
+
+	// network protocol version from first byte of the raw packet, the one that follows Darwin specific header
+	version := b.Byte(utunHeaderSize) >> 4
+	packetBuffer := buffer.MakeWithData(b.BytesFrom(utunHeaderSize))
+	return version, stack.NewPacketBuffer(stack.PacketBufferOptions{
+		Payload:           packetBuffer,
+		IsForwardedPacket: true,
+		OnRelease: func() {
+			b.Release()
+		},
+	}), nil
+}
+
+// Wait some cpu cycles
+func (t *DarwinTun) Wait() {
+	procyield(1)
+}
+
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &DarwinEndpoint{tun: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
 }
 
 // open the interface, by creating new utunN if in the system and returning its file descriptor
