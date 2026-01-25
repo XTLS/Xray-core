@@ -174,7 +174,7 @@ func (c *client) dial() error {
 			IP:    remote.(*net.UDPAddr).IP,
 			Ports: c.config.Ports,
 		}
-		pktConn, err = udphop.NewUDPHopPacketConn(addr, time.Duration(c.config.Interval)*time.Second, c.udphopDialer, pktConn, index)
+		pktConn, err = udphop.NewUDPHopPacketConn(addr, c.config.IntervalMin, c.config.IntervalMax, c.udphopDialer, pktConn, index)
 		if err != nil {
 			return errors.New("udphop err").Base(err)
 		}

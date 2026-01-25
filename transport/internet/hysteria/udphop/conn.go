@@ -7,6 +7,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/xtls/xray-core/common/crypto"
 )
 
 const (
@@ -17,10 +19,11 @@ const (
 )
 
 type udpHopPacketConn struct {
-	Addr          net.Addr
-	Addrs         []net.Addr
-	HopInterval   time.Duration
-	ListenUDPFunc ListenUDPFunc
+	Addr           net.Addr
+	Addrs          []net.Addr
+	HopIntervalMin int64
+	HopIntervalMax int64
+	ListenUDPFunc  ListenUDPFunc
 
 	connMutex   sync.RWMutex
 	prevConn    net.PacketConn
@@ -46,10 +49,12 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
-	if hopInterval == 0 {
-		hopInterval = defaultHopInterval
-	} else if hopInterval < 5*time.Second {
+func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
+	if intervalMin == 0 || intervalMax == 0 {
+		intervalMin = int64(defaultHopInterval)
+		intervalMax = int64(defaultHopInterval)
+	}
+	if intervalMin < 5 || intervalMax < 5 {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
 	// if listenUDPFunc == nil {
@@ -69,15 +74,16 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, hopInterval time.Duration, listenUDPF
 	// 	return nil, err
 	// }
 	hConn := &udpHopPacketConn{
-		Addr:          addr,
-		Addrs:         addrs,
-		HopInterval:   hopInterval,
-		ListenUDPFunc: listenUDPFunc,
-		prevConn:      nil,
-		currentConn:   pktConn,
-		addrIndex:     index,
-		recvQueue:     make(chan *udpPacket, packetQueueSize),
-		closeChan:     make(chan struct{}),
+		Addr:           addr,
+		Addrs:          addrs,
+		HopIntervalMin: intervalMin,
+		HopIntervalMax: intervalMax,
+		ListenUDPFunc:  listenUDPFunc,
+		prevConn:       nil,
+		currentConn:    pktConn,
+		addrIndex:      index,
+		recvQueue:      make(chan *udpPacket, packetQueueSize),
+		closeChan:      make(chan struct{}),
 		bufPool: sync.Pool{
 			New: func() interface{} {
 				return make([]byte, udpBufferSize)
@@ -115,12 +121,13 @@ func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
 }
 
 func (u *udpHopPacketConn) hopLoop() {
-	ticker := time.NewTicker(u.HopInterval)
+	ticker := time.NewTicker(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			u.hop()
+			ticker.Reset(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
 		case <-u.closeChan:
 			return
 		}
