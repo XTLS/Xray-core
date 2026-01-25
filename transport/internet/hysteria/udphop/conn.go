@@ -50,11 +50,11 @@ type udpPacket struct {
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
 func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
-	if intervalMax == 0 {
+	if intervalMin == 0 || intervalMax == 0 {
 		intervalMin = int64(defaultHopInterval)
 		intervalMax = int64(defaultHopInterval)
 	}
-	if intervalMin < 5 {
+	if intervalMin < 5 || intervalMax < 5 {
 		return nil, errors.New("hop interval must be at least 5 seconds")
 	}
 	// if listenUDPFunc == nil {
