@@ -92,18 +92,15 @@ func TestPacketConnReadWrite(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			mask := c.mask
 
+			maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{mask, mask})
+
 			client, err := net.ListenPacket("udp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer client.Close()
 
-			client, err = mask.WrapPacketConnClient(client, false, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			client, err = mask.WrapPacketConnClient(client, true, client.(finalmask.ConnSize).Size())
+			client, err = maskManager.WrapPacketConnClient(client)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -114,12 +111,7 @@ func TestPacketConnReadWrite(t *testing.T) {
 			}
 			defer server.Close()
 
-			server, err = mask.WrapPacketConnServer(server, false, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			server, err = mask.WrapPacketConnServer(server, true, server.(finalmask.ConnSize).Size())
+			server, err = maskManager.WrapPacketConnServer(server)
 			if err != nil {
 				t.Fatal(err)
 			}
