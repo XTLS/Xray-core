@@ -25,7 +25,7 @@ const (
 
 var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
-type packetStruct struct {
+type packet struct {
 	p    []byte
 	addr net.Addr
 }
@@ -37,11 +37,11 @@ type dnsttConnClient struct {
 	domain   dns.Name
 	pollChan chan struct{}
 
-	readQueue  chan *packetStruct
-	writeQueue chan *packetStruct
+	readQueue  chan *packet
+	writeQueue chan *packet
 
-	closed    chan struct{}
-	closeOnce sync.Once
+	closed bool
+	mutex  sync.Mutex
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
@@ -61,10 +61,8 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		domain:   domain,
 		pollChan: make(chan struct{}, pollLimit),
 
-		readQueue:  make(chan *packetStruct, 128),
-		writeQueue: make(chan *packetStruct, 128),
-
-		closed: make(chan struct{}),
+		readQueue:  make(chan *packet, 128),
+		writeQueue: make(chan *packet, 128),
 	}
 
 	rand.Read(conn.clientID)
@@ -77,14 +75,16 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 
 func (c *dnsttConnClient) recvLoop() {
 	for {
-		select {
-		case <-c.closed:
-			return
-		default:
-		}
-
 		var buf [4096]byte
+
+		c.mutex.Lock()
+		if c.closed {
+			c.mutex.Unlock()
+			return
+		}
 		n, addr, err := c.conn.ReadFrom(buf[:])
+		c.mutex.Unlock()
+
 		if err != nil {
 			continue
 		}
@@ -108,12 +108,11 @@ func (c *dnsttConnClient) recvLoop() {
 			buf := make([]byte, len(p))
 			copy(buf, p)
 			select {
-			case c.readQueue <- &packetStruct{
+			case c.readQueue <- &packet{
 				p:    buf,
 				addr: addr,
 			}:
 			default:
-				// silent drop
 			}
 		}
 
@@ -127,35 +126,36 @@ func (c *dnsttConnClient) recvLoop() {
 }
 
 func (c *dnsttConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	select {
-	case <-c.closed:
+	packet, ok := <-c.readQueue
+	if !ok {
 		return 0, nil, io.EOF
-
-	case pkt := <-c.readQueue:
-		n := copy(p, pkt.p)
-		if n < len(pkt.p) {
-			return n, nil, io.ErrShortBuffer
-		}
-		return n, pkt.addr, nil
 	}
+	n = copy(p, packet.p)
+	if n != len(packet.p) {
+		return 0, nil, io.ErrShortBuffer
+	}
+	return n, packet.addr, nil
 }
 
 func (c *dnsttConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.closed {
+		return 0, errors.New("closed")
+	}
+
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
 		return 0, err
 	}
 
 	select {
-	case <-c.closed:
-		return 0, errors.New("closed")
-
-	case c.writeQueue <- &packetStruct{
+	case c.writeQueue <- &packet{
 		p:    encoded,
 		addr: addr,
 	}:
 		return len(p), nil
-
 	default:
 		return 0, errors.New("queue full")
 	}
@@ -167,13 +167,11 @@ func (c *dnsttConnClient) sendLoop() {
 	pollDelay := initPollDelay
 	pollTimer := time.NewTimer(pollDelay)
 	for {
-		select {
-		case <-c.closed:
+		if c.closed {
 			return
-		default:
 		}
 
-		var p *packetStruct
+		var p *packet
 		pollTimerExpired := false
 
 		select {
@@ -192,7 +190,7 @@ func (c *dnsttConnClient) sendLoop() {
 			}
 		} else if addr != nil {
 			encoded, _ := encode(nil, c.clientID, c.domain)
-			p = &packetStruct{
+			p = &packet{
 				p:    encoded,
 				addr: addr,
 			}
@@ -218,9 +216,16 @@ func (c *dnsttConnClient) sendLoop() {
 }
 
 func (c *dnsttConnClient) Close() error {
-	c.closeOnce.Do(func() {
-		close(c.closed)
-	})
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	close(c.readQueue)
+	close(c.writeQueue)
+
 	return c.conn.Close()
 }
 
