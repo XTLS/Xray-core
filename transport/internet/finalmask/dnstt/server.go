@@ -132,6 +132,20 @@ func (c *dnsttConnServer) ensureQueue(addr net.Addr) *queue {
 	return q
 }
 
+func (c *dnsttConnServer) stash(queue *queue, p []byte) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.closed {
+		return
+	}
+
+	select {
+	case queue.stash <- p:
+	default:
+	}
+}
+
 func (c *dnsttConnServer) recvLoop() {
 	for {
 		if c.closed {
@@ -252,15 +266,7 @@ func (c *dnsttConnServer) sendLoop() {
 				if payload.Len() == 0 {
 
 				} else if limit < 0 {
-					c.mutex.Lock()
-					if c.closed {
-						return
-					}
-					select {
-					case queue.stash <- p:
-					default:
-					}
-					c.mutex.Unlock()
+					c.stash(queue, p)
 
 					break
 				}
