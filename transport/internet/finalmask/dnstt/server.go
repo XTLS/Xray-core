@@ -82,10 +82,16 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 }
 
 func (c *dnsttConnServer) clean() {
-	for {
-		time.Sleep(idleTimeout / 2)
-		now := time.Now()
+	f := func() bool {
 		c.mutex.Lock()
+		defer c.mutex.Unlock()
+
+		if c.closed {
+			return true
+		}
+
+		now := time.Now()
+
 		for key, q := range c.writeQueueMap {
 			if now.Sub(q.lash) >= idleTimeout {
 				close(q.queue)
@@ -93,13 +99,25 @@ func (c *dnsttConnServer) clean() {
 				delete(c.writeQueueMap, key)
 			}
 		}
-		c.mutex.Unlock()
+
+		return false
+	}
+
+	for {
+		time.Sleep(idleTimeout / 2)
+		if f() {
+			return
+		}
 	}
 }
 
 func (c *dnsttConnServer) ensureQueue(addr net.Addr) *queue {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	if c.closed {
+		return nil
+	}
 
 	q, ok := c.writeQueueMap[addr]
 	if !ok {
@@ -199,8 +217,12 @@ func (c *dnsttConnServer) sendLoop() {
 			limit := maxEncodedPayload
 			timer := time.NewTimer(maxResponseDelay)
 			for {
-				var p []byte
 				queue := c.ensureQueue(ClientID(rec.ClientID))
+				if c.closed {
+					return
+				}
+
+				var p []byte
 
 				select {
 				case p = <-queue.stash:
@@ -280,17 +302,14 @@ func (c *dnsttConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *dnsttConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return 0, errors.New("dnstt closed")
-	}
-
 	buf := make([]byte, len(p))
 	copy(buf, p)
 
 	q := c.ensureQueue(addr)
+	if c.closed {
+		return 0, errors.New("dnstt closed")
+	}
+
 	select {
 	case q.queue <- buf:
 		return len(p), nil
@@ -307,11 +326,11 @@ func (c *dnsttConnServer) Close() error {
 		return nil
 	}
 	c.closed = true
-	for _, q := range c.writeQueueMap {
+	for key, q := range c.writeQueueMap {
 		close(q.queue)
 		close(q.stash)
+		delete(c.writeQueueMap, key)
 	}
-	c.writeQueueMap = nil
 
 	return c.conn.Close()
 }
