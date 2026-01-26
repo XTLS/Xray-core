@@ -62,9 +62,9 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 
 	if c.Mtu != nil {
 		mtu := *c.Mtu
-		if mtu < 576 || mtu > 1460 {
-			return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
-		}
+		// if mtu < 576 || mtu > 1460 {
+		// 	return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
+		// }
 		config.Mtu = &kcp.MTU{Value: mtu}
 	}
 	if c.Tti != nil {
