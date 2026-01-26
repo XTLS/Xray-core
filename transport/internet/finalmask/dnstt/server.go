@@ -255,6 +255,10 @@ func (c *dnsttConnServer) sendLoop() {
 			buf[2] |= 0x02
 		}
 
+		if c.closed {
+			return
+		}
+
 		_, _ = c.conn.WriteTo(buf, rec.Addr)
 	}
 }

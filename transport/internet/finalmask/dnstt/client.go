@@ -131,10 +131,6 @@ func (c *dnsttConnClient) sendLoop() {
 	pollDelay := initPollDelay
 	pollTimer := time.NewTimer(pollDelay)
 	for {
-		if c.closed {
-			return
-		}
-
 		var p *packet
 		pollTimerExpired := false
 
@@ -172,6 +168,10 @@ func (c *dnsttConnClient) sendLoop() {
 			pollDelay = initPollDelay
 		}
 		pollTimer.Reset(pollDelay)
+
+		if c.closed {
+			return
+		}
 
 		if p != nil {
 			_, _ = c.conn.WriteTo(p.p, p.addr)
