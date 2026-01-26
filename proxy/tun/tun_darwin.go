@@ -8,10 +8,12 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"strconv"
 	"syscall"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -38,6 +40,7 @@ func procyield(cycles uint32)
 type DarwinTun struct {
 	tunFile *os.File
 	options TunOptions
+	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 }
 
 var _ Tun = (*DarwinTun)(nil)
@@ -45,6 +48,27 @@ var _ GVisorTun = (*DarwinTun)(nil)
 var _ GVisorDevice = (*DarwinTun)(nil)
 
 func NewTun(options TunOptions) (Tun, error) {
+	// Check if fd is provided via environment (iOS mode)
+	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
+	if fdStr != "" {
+		// iOS: use provided fd from NetworkExtension
+		fd, err := strconv.Atoi(fdStr)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = unix.SetNonblock(fd, true); err != nil {
+			return nil, err
+		}
+
+		return &DarwinTun{
+			tunFile: os.NewFile(uintptr(fd), "utun"),
+			options: options,
+			ownsFd:  false,
+		}, nil
+	}
+
+	// macOS: create our own utun interface
 	tunFile, err := open(options.Name)
 	if err != nil {
 		return nil, err
@@ -59,6 +83,7 @@ func NewTun(options TunOptions) (Tun, error) {
 	return &DarwinTun{
 		tunFile: tunFile,
 		options: options,
+		ownsFd:  true,
 	}, nil
 }
 
@@ -67,7 +92,11 @@ func (t *DarwinTun) Start() error {
 }
 
 func (t *DarwinTun) Close() error {
-	return t.tunFile.Close()
+	if t.ownsFd {
+		return t.tunFile.Close()
+	}
+	// iOS: don't close the fd, it's owned by NetworkExtension
+	return nil
 }
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device
