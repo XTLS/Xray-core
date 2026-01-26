@@ -1,4 +1,4 @@
-package dnstt
+package xdns
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/finalmask/dnstt/dns"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xdns/dns"
 )
 
 const (
@@ -30,7 +30,7 @@ type packet struct {
 	addr net.Addr
 }
 
-type dnsttConnClient struct {
+type xdnsConnClient struct {
 	conn net.PacketConn
 
 	clientID []byte
@@ -46,7 +46,7 @@ type dnsttConnClient struct {
 
 func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
 	if !end {
-		return nil, errors.New("dnstt requires being at the outermost level")
+		return nil, errors.New("xdns requires being at the outermost level")
 	}
 
 	domain, err := dns.ParseName(c.Domain)
@@ -54,7 +54,7 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, err
 	}
 
-	conn := &dnsttConnClient{
+	conn := &xdnsConnClient{
 		conn: raw,
 
 		clientID: make([]byte, 8),
@@ -73,7 +73,7 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	return conn, nil
 }
 
-func (c *dnsttConnClient) recvLoop() {
+func (c *xdnsConnClient) recvLoop() {
 	for {
 		if c.closed {
 			break
@@ -125,7 +125,7 @@ func (c *dnsttConnClient) recvLoop() {
 	close(c.readQueue)
 }
 
-func (c *dnsttConnClient) sendLoop() {
+func (c *xdnsConnClient) sendLoop() {
 	var addr net.Addr
 
 	pollDelay := initPollDelay
@@ -183,11 +183,11 @@ func (c *dnsttConnClient) sendLoop() {
 	}
 }
 
-func (c *dnsttConnClient) Size() int32 {
+func (c *xdnsConnClient) Size() int32 {
 	return 0
 }
 
-func (c *dnsttConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
 		return 0, nil, io.EOF
@@ -199,17 +199,17 @@ func (c *dnsttConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return n, packet.addr, nil
 }
 
-func (c *dnsttConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("dnstt closed")
+		return 0, errors.New("xdns closed")
 	}
 
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
-		return 0, errors.New("dnstt encode").Base(err)
+		return 0, errors.New("xdns encode").Base(err)
 	}
 
 	select {
@@ -219,11 +219,11 @@ func (c *dnsttConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}:
 		return len(p), nil
 	default:
-		return 0, errors.New("dnstt queue full")
+		return 0, errors.New("xdns queue full")
 	}
 }
 
-func (c *dnsttConnClient) Close() error {
+func (c *xdnsConnClient) Close() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -237,19 +237,19 @@ func (c *dnsttConnClient) Close() error {
 	return c.conn.Close()
 }
 
-func (c *dnsttConnClient) LocalAddr() net.Addr {
+func (c *xdnsConnClient) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-func (c *dnsttConnClient) SetDeadline(t time.Time) error {
+func (c *xdnsConnClient) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
-func (c *dnsttConnClient) SetReadDeadline(t time.Time) error {
+func (c *xdnsConnClient) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-func (c *dnsttConnClient) SetWriteDeadline(t time.Time) error {
+func (c *xdnsConnClient) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 

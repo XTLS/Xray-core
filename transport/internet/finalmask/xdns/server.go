@@ -1,4 +1,4 @@
-package dnstt
+package xdns
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/finalmask/dnstt/dns"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xdns/dns"
 )
 
 const (
@@ -41,7 +41,7 @@ type queue struct {
 	stash chan []byte
 }
 
-type dnsttConnServer struct {
+type xdnsConnServer struct {
 	conn net.PacketConn
 
 	domain dns.Name
@@ -56,7 +56,7 @@ type dnsttConnServer struct {
 
 func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
 	if !end {
-		return nil, errors.New("dnstt requires being at the outermost level")
+		return nil, errors.New("xdns requires being at the outermost level")
 	}
 
 	domain, err := dns.ParseName(c.Domain)
@@ -64,7 +64,7 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, err
 	}
 
-	conn := &dnsttConnServer{
+	conn := &xdnsConnServer{
 		conn: raw,
 
 		domain: domain,
@@ -81,7 +81,7 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	return conn, nil
 }
 
-func (c *dnsttConnServer) clean() {
+func (c *xdnsConnServer) clean() {
 	f := func() bool {
 		c.mutex.Lock()
 		defer c.mutex.Unlock()
@@ -111,7 +111,7 @@ func (c *dnsttConnServer) clean() {
 	}
 }
 
-func (c *dnsttConnServer) ensureQueue(addr net.Addr) *queue {
+func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -132,7 +132,7 @@ func (c *dnsttConnServer) ensureQueue(addr net.Addr) *queue {
 	return q
 }
 
-func (c *dnsttConnServer) stash(queue *queue, p []byte) {
+func (c *xdnsConnServer) stash(queue *queue, p []byte) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -146,7 +146,7 @@ func (c *dnsttConnServer) stash(queue *queue, p []byte) {
 	}
 }
 
-func (c *dnsttConnServer) recvLoop() {
+func (c *xdnsConnServer) recvLoop() {
 	for {
 		if c.closed {
 			break
@@ -204,7 +204,7 @@ func (c *dnsttConnServer) recvLoop() {
 	close(c.readQueue)
 }
 
-func (c *dnsttConnServer) sendLoop() {
+func (c *xdnsConnServer) sendLoop() {
 	var nextRec *record
 	for {
 		rec := nextRec
@@ -301,11 +301,11 @@ func (c *dnsttConnServer) sendLoop() {
 	}
 }
 
-func (c *dnsttConnServer) Size() int32 {
+func (c *xdnsConnServer) Size() int32 {
 	return 0
 }
 
-func (c *dnsttConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
 		return 0, nil, io.EOF
@@ -317,17 +317,17 @@ func (c *dnsttConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return n, packet.addr, nil
 }
 
-func (c *dnsttConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	q := c.ensureQueue(addr)
 	if q == nil {
-		return 0, errors.New("dnstt closed")
+		return 0, errors.New("xdns closed")
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("dnstt closed")
+		return 0, errors.New("xdns closed")
 	}
 
 	buf := make([]byte, len(p))
@@ -337,11 +337,11 @@ func (c *dnsttConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		return 0, errors.New("dnstt queue full")
+		return 0, errors.New("xdns queue full")
 	}
 }
 
-func (c *dnsttConnServer) Close() error {
+func (c *xdnsConnServer) Close() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -359,19 +359,19 @@ func (c *dnsttConnServer) Close() error {
 	return c.conn.Close()
 }
 
-func (c *dnsttConnServer) LocalAddr() net.Addr {
+func (c *xdnsConnServer) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-func (c *dnsttConnServer) SetDeadline(t time.Time) error {
+func (c *xdnsConnServer) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
-func (c *dnsttConnServer) SetReadDeadline(t time.Time) error {
+func (c *xdnsConnServer) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-func (c *dnsttConnServer) SetWriteDeadline(t time.Time) error {
+func (c *xdnsConnServer) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 

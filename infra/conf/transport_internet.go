@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -1093,6 +1094,7 @@ var (
 		"simple":     func() interface{} { return new(Simple) },
 		"aesgcm128":  func() interface{} { return new(AesGcm128) },
 		"salamander": func() interface{} { return new(Salamander) },
+		"xdns":       func() interface{} { return new(Xdns) },
 	}, "type", "settings")
 )
 
@@ -1165,6 +1167,20 @@ func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
+}
+
+type Xdns struct {
+	Domain string `json:"domain"`
+}
+
+func (c *Xdns) Build() (proto.Message, error) {
+	if c.Domain == "" {
+		return nil, errors.New("empty domain")
+	}
+
+	return &xdns.Config{
+		Domain: c.Domain,
+	}, nil
 }
 
 type FinalMask struct {

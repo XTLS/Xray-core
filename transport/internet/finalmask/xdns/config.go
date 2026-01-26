@@ -1,4 +1,4 @@
-package dnstt
+package xdns
 
 import (
 	"net"
