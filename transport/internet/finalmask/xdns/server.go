@@ -3,7 +3,6 @@ package xdns
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"io"
 	"net"
 	"sync"
@@ -24,15 +23,22 @@ var (
 	maxEncodedPayload = computeMaxEncodedPayload(maxUDPPayload)
 )
 
-type ClientID [8]byte
+func clientIDToAddr(clientID [8]byte) *net.UDPAddr {
+	ip := make(net.IP, 16)
 
-func (id ClientID) Network() string { return "clientid" }
-func (id ClientID) String() string  { return hex.EncodeToString(id[:]) }
+	copy(ip, []byte{0xfd, 0x00, 0, 0, 0, 0, 0, 0})
+	copy(ip[8:], clientID[:])
+
+	return &net.UDPAddr{
+		IP: ip,
+	}
+}
 
 type record struct {
-	Resp     *dns.Message
-	Addr     net.Addr
-	ClientID [8]byte
+	Resp *dns.Message
+	Addr net.Addr
+	// ClientID [8]byte
+	ClientAddr net.Addr
 }
 
 type queue struct {
@@ -48,7 +54,7 @@ type xdnsConnServer struct {
 
 	ch            chan *record
 	readQueue     chan *packet
-	writeQueueMap map[net.Addr]*queue
+	writeQueueMap map[string]*queue
 
 	closed bool
 	mutex  sync.Mutex
@@ -71,7 +77,7 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 
 		ch:            make(chan *record, 100),
 		readQueue:     make(chan *packet, 128),
-		writeQueueMap: make(map[net.Addr]*queue),
+		writeQueueMap: make(map[string]*queue),
 	}
 
 	go conn.clean()
@@ -119,13 +125,13 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 		return nil
 	}
 
-	q, ok := c.writeQueueMap[addr]
+	q, ok := c.writeQueueMap[addr.String()]
 	if !ok {
 		q = &queue{
 			queue: make(chan []byte, 128),
 			stash: make(chan []byte, 1),
 		}
-		c.writeQueueMap[addr] = q
+		c.writeQueueMap[addr.String()] = q
 	}
 	q.lash = time.Now()
 
@@ -181,7 +187,7 @@ func (c *xdnsConnServer) recvLoop() {
 				select {
 				case c.readQueue <- &packet{
 					p:    buf,
-					addr: ClientID(clientID),
+					addr: clientIDToAddr(clientID),
 				}:
 				default:
 				}
@@ -194,7 +200,7 @@ func (c *xdnsConnServer) recvLoop() {
 
 		if resp != nil {
 			select {
-			case c.ch <- &record{resp, addr, clientID}:
+			case c.ch <- &record{resp, addr, clientIDToAddr(clientID)}:
 			default:
 			}
 		}
@@ -233,7 +239,7 @@ func (c *xdnsConnServer) sendLoop() {
 			limit := maxEncodedPayload
 			timer := time.NewTimer(maxResponseDelay)
 			for {
-				queue := c.ensureQueue(ClientID(rec.ClientID))
+				queue := c.ensureQueue(rec.ClientAddr)
 				if queue == nil {
 					return
 				}
@@ -258,7 +264,7 @@ func (c *xdnsConnServer) sendLoop() {
 
 				timer.Reset(0)
 
-				if p == nil {
+				if len(p) == 0 {
 					break
 				}
 
