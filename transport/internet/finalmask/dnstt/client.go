@@ -136,9 +136,13 @@ func (c *dnsttConnClient) sendLoop() {
 
 		select {
 		case p = <-c.writeQueue:
-		case <-c.pollChan:
-		case <-pollTimer.C:
-			pollTimerExpired = true
+		default:
+			select {
+			case p = <-c.writeQueue:
+			case <-c.pollChan:
+			case <-pollTimer.C:
+				pollTimerExpired = true
+			}
 		}
 
 		if p != nil {

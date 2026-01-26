@@ -227,13 +227,16 @@ func (c *dnsttConnServer) sendLoop() {
 				select {
 				case p = <-queue.stash:
 				default:
-				}
-
-				if p == nil {
 					select {
+					case p = <-queue.stash:
 					case p = <-queue.queue:
-					case <-timer.C:
-					case nextRec = <-c.ch:
+					default:
+						select {
+						case p = <-queue.stash:
+						case p = <-queue.queue:
+						case <-timer.C:
+						case nextRec = <-c.ch:
+						}
 					}
 				}
 
