@@ -218,7 +218,7 @@ func (c *dnsttConnServer) sendLoop() {
 			timer := time.NewTimer(maxResponseDelay)
 			for {
 				queue := c.ensureQueue(ClientID(rec.ClientID))
-				if c.closed {
+				if queue == nil {
 					return
 				}
 
@@ -306,6 +306,13 @@ func (c *dnsttConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 func (c *dnsttConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	q := c.ensureQueue(addr)
+	if q == nil {
+		return 0, errors.New("dnstt closed")
+	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	if c.closed {
 		return 0, errors.New("dnstt closed")
 	}
