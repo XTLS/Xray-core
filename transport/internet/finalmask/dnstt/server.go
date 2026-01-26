@@ -305,13 +305,13 @@ func (c *dnsttConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *dnsttConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	buf := make([]byte, len(p))
-	copy(buf, p)
-
 	q := c.ensureQueue(addr)
 	if c.closed {
 		return 0, errors.New("dnstt closed")
 	}
+
+	buf := make([]byte, len(p))
+	copy(buf, p)
 
 	select {
 	case q.queue <- buf:
@@ -328,6 +328,7 @@ func (c *dnsttConnServer) Close() error {
 	if c.closed {
 		return nil
 	}
+
 	c.closed = true
 	for key, q := range c.writeQueueMap {
 		close(q.queue)

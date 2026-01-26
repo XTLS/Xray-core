@@ -230,6 +230,7 @@ func (c *dnsttConnClient) Close() error {
 	if c.closed {
 		return nil
 	}
+
 	c.closed = true
 	close(c.writeQueue)
 
