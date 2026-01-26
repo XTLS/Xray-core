@@ -162,9 +162,11 @@ func (c *dnsttConnServer) recvLoop() {
 					break
 				}
 
+				buf := make([]byte, len(p))
+				copy(buf, p)
 				select {
 				case c.readQueue <- &packet{
-					p:    p,
+					p:    buf,
 					addr: ClientID(clientID),
 				}:
 				default:
@@ -250,10 +252,15 @@ func (c *dnsttConnServer) sendLoop() {
 				if payload.Len() == 0 {
 
 				} else if limit < 0 {
+					c.mutex.Lock()
+					if c.closed {
+						return
+					}
 					select {
 					case queue.stash <- p:
 					default:
 					}
+					c.mutex.Unlock()
 
 					break
 				}
