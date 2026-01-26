@@ -105,7 +105,7 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 	}
 
 	for _, rawRule := range rawRuleList {
-		rule, err := ParseRule(rawRule)
+		rule, err := parseRule(rawRule)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +128,7 @@ type RouterRule struct {
 	BalancerTag string `json:"balancerTag"`
 }
 
-func ParseIP(s string) (*router.CIDR, error) {
+func parseIP(s string) (*router.CIDR, error) {
 	var addr, mask string
 	i := strings.Index(s, "/")
 	if i < 0 {
@@ -177,13 +177,7 @@ func ParseIP(s string) (*router.CIDR, error) {
 }
 
 func loadFile(file, code string) ([]byte, error) {
-	// {
-	// 	runtime.GC()
-	// 	var m runtime.MemStats
-	// 	runtime.ReadMemStats(&m)
-	// 	fmt.Printf("before %s heap: %d MB | sys: %d MB\n",
-	// 		code, m.HeapAlloc/1024/1024, m.Sys/1024/1024)
-	// }
+	runtime.GC()
 	r, err := filesystem.OpenAsset(file)
 	defer r.Close()
 	if err != nil {
@@ -193,13 +187,6 @@ func loadFile(file, code string) ([]byte, error) {
 	if bs == nil {
 		return nil, errors.New("code not found in ", file, ": ", code)
 	}
-	// {
-	// 	//runtime.GC()
-	// 	var m runtime.MemStats
-	// 	runtime.ReadMemStats(&m)
-	// 	fmt.Printf("after %s, heap: %d MB | sys: %d MB\n",
-	// 		code, m.HeapAlloc/1024/1024, m.Sys/1024/1024)
-	// }
 	return bs, nil
 }
 
@@ -511,7 +498,7 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 			continue
 		}
 
-		ipRule, err := ParseIP(ip)
+		ipRule, err := parseIP(ip)
 		if err != nil {
 			return nil, errors.New("invalid IP: ", ip).Base(err)
 		}
@@ -665,7 +652,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	return rule, nil
 }
 
-func ParseRule(msg json.RawMessage) (*router.RoutingRule, error) {
+func parseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	rawRule := new(RouterRule)
 	err := json.Unmarshal(msg, rawRule)
 	if err != nil {
