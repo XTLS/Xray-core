@@ -140,7 +140,6 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 
 			if matchErr == nil {
 				u = user
-				err = account.CheckIV(iv)
 				return
 			}
 		} else {

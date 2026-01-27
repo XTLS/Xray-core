@@ -13,7 +13,6 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/refraction-networking/utls v1.8.2
-	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3
 	github.com/sagernet/sing v0.5.1
 	github.com/sagernet/sing-shadowsocks v0.2.7
 	github.com/stretchr/testify v1.11.1
