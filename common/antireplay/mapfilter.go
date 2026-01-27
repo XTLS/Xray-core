@@ -6,41 +6,40 @@ import (
 )
 
 // ReplayFilter checks for replay attacks.
-type ReplayFilter struct {
+type ReplayFilter[T comparable] struct {
 	lock      sync.Mutex
-	pool      map[string]struct{}
-	interval  int64
-	lastClean int64
+	poolA     map[T]struct{}
+	poolB     map[T]struct{}
+	interval  time.Duration
+	lastClean time.Time
 }
 
 // NewMapFilter create a new filter with specifying the expiration time interval in seconds.
-func NewMapFilter(interval int64) *ReplayFilter {
-	filter := &ReplayFilter{
-		pool:     make(map[string]struct{}),
-		interval: interval,
+func NewMapFilter[T comparable](interval int64) *ReplayFilter[T] {
+	filter := &ReplayFilter[T]{
+		poolA:    make(map[T]struct{}),
+		poolB:    make(map[T]struct{}),
+		interval: time.Duration(interval) * time.Second,
 	}
 	return filter
 }
 
-// Interval in second for expiration time for duplicate records.
-func (filter *ReplayFilter) Interval() int64 {
-	return filter.interval
-}
-
 // Check determines if there are duplicate records.
-func (filter *ReplayFilter) Check(sum []byte) bool {
+func (filter *ReplayFilter[T]) Check(sum T) bool {
 	filter.lock.Lock()
 	defer filter.lock.Unlock()
 
-	now := time.Now().Unix()
-
-	elapsed := now - filter.lastClean
-	if elapsed >= filter.Interval() {
-		filter.pool = make(map[string]struct{})
+	now := time.Now()
+	if now.Sub(filter.lastClean) >= filter.interval {
+		filter.poolB = filter.poolA
+		filter.poolA = make(map[T]struct{})
 		filter.lastClean = now
 	}
 
-	_, exists := filter.pool[string(sum)]
-	filter.pool[string(sum)] = struct{}{}
-	return !exists
+	_, existsA := filter.poolA[sum]
+	_, existsB := filter.poolB[sum]
+	if !existsA && !existsB {
+		filter.poolA[sum] = struct{}{}
+	}
+	return !(existsA || existsB)
 }
