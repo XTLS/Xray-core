@@ -2,6 +2,7 @@ package xdns
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/binary"
@@ -209,6 +210,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
+		errors.LogDebug(context.Background(), "xdns encode err", err)
 		return 0, errors.New("xdns encode").Base(err)
 	}
 

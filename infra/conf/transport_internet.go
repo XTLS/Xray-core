@@ -1092,16 +1092,16 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 
 var (
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"dns":        func() interface{} { return new(Dns) },
-		"dtls":       func() interface{} { return new(Dtls) },
-		"srtp":       func() interface{} { return new(Srtp) },
-		"utp":        func() interface{} { return new(Utp) },
-		"wechat":     func() interface{} { return new(Wechat) },
-		"wireguard":  func() interface{} { return new(Wireguard) },
-		"simple":     func() interface{} { return new(Simple) },
-		"aesgcm128":  func() interface{} { return new(AesGcm128) },
-		"salamander": func() interface{} { return new(Salamander) },
-		"xdns":       func() interface{} { return new(Xdns) },
+		"header-dns":       func() interface{} { return new(Dns) },
+		"header-dtls":      func() interface{} { return new(Dtls) },
+		"header-srtp":      func() interface{} { return new(Srtp) },
+		"header-utp":       func() interface{} { return new(Utp) },
+		"header-wechat":    func() interface{} { return new(Wechat) },
+		"header-wireguard": func() interface{} { return new(Wireguard) },
+		"crypt-simple":     func() interface{} { return new(Simple) },
+		"crypt-aesgcm128":  func() interface{} { return new(AesGcm128) },
+		"salamander":       func() interface{} { return new(Salamander) },
+		"xdns":             func() interface{} { return new(Xdns) },
 	}, "type", "settings")
 )
 

@@ -2,6 +2,7 @@ package xdns
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -295,6 +296,7 @@ func (c *xdnsConnServer) sendLoop() {
 		}
 
 		if len(buf) > maxUDPPayload {
+			errors.LogDebug(context.Background(), "xdns server truncate ", len(buf))
 			buf = buf[:maxUDPPayload]
 			buf[2] |= 0x02
 		}
