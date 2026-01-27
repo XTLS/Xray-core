@@ -371,7 +371,7 @@ func (b Bandwidth) Bps() (uint64, error) {
 
 type UdpHop struct {
 	PortList json.RawMessage `json:"port"`
-	Interval int64           `json:"interval"`
+	Interval *Int32Range     `json:"interval"`
 }
 
 type HysteriaConfig struct {
@@ -415,13 +415,19 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 		hop = &PortList{}
 	}
 
+	var inertvalMin, inertvalMax int64
+	if c.UdpHop.Interval != nil {
+		inertvalMin = int64(c.UdpHop.Interval.From)
+		inertvalMax = int64(c.UdpHop.Interval.To)
+	}
+
 	if up > 0 && up < 65536 {
 		return nil, errors.New("Up must be at least 65536 Bps")
 	}
 	if down > 0 && down < 65536 {
 		return nil, errors.New("Down must be at least 65536 Bps")
 	}
-	if c.UdpHop.Interval != 0 && c.UdpHop.Interval < 5 {
+	if (inertvalMin != 0 && inertvalMin < 5) || (inertvalMax != 0 && inertvalMax < 5) {
 		return nil, errors.New("Interval must be at least 5")
 	}
 
@@ -451,7 +457,8 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config.Up = up
 	config.Down = down
 	config.Ports = hop.Build().Ports()
-	config.Interval = c.UdpHop.Interval
+	config.IntervalMin = inertvalMin
+	config.IntervalMax = inertvalMax
 	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
 	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
 	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow
@@ -887,13 +894,13 @@ func (p TransportProtocol) Build() (string, error) {
 	case "kcp", "mkcp":
 		return "mkcp", nil
 	case "grpc":
-		errors.PrintDeprecatedFeatureWarning("gRPC transport (with unnecessary costs, etc.)", "XHTTP stream-up H2")
+		errors.PrintNonRemovalDeprecatedFeatureWarning("gRPC transport (with unnecessary costs, etc.)", "XHTTP stream-up H2")
 		return "grpc", nil
 	case "ws", "websocket":
-		errors.PrintDeprecatedFeatureWarning("WebSocket transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
+		errors.PrintNonRemovalDeprecatedFeatureWarning("WebSocket transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
 		return "websocket", nil
 	case "httpupgrade":
-		errors.PrintDeprecatedFeatureWarning("HTTPUpgrade transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
+		errors.PrintNonRemovalDeprecatedFeatureWarning("HTTPUpgrade transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
 		return "httpupgrade", nil
 	case "h2", "h3", "http":
 		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")

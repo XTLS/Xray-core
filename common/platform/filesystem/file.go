@@ -29,6 +29,10 @@ func ReadAsset(file string) ([]byte, error) {
 	return ReadFile(platform.GetAssetLocation(file))
 }
 
+func OpenAsset(file string) (io.ReadCloser, error) {
+	return NewFileReader(platform.GetAssetLocation(file))
+}
+
 func ReadCert(file string) ([]byte, error) {
 	if filepath.IsAbs(file) {
 		return ReadFile(file)

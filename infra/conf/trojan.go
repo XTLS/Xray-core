@@ -39,7 +39,7 @@ type TrojanClientConfig struct {
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("Trojan", "VLESS with flow")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
 	if c.Address != nil {
 		c.Servers = []*TrojanServerTarget{
@@ -117,7 +117,7 @@ type TrojanServerConfig struct {
 
 // Build implements Buildable
 func (c *TrojanServerConfig) Build() (proto.Message, error) {
-	errors.PrintDeprecatedFeatureWarning("Trojan", "VLESS with flow")
+	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
 	config := &trojan.ServerConfig{
 		Users: make([]*protocol.User, len(c.Clients)),

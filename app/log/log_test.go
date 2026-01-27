@@ -2,6 +2,7 @@ package log_test
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -49,4 +50,40 @@ func TestCustomLogHandler(t *testing.T) {
 	}
 
 	common.Must(logger.Close())
+}
+
+func TestMaskAddress(t *testing.T) {
+	m4, m6, err := log.ParseMaskAddress("half")
+	if err != nil {
+		t.Fatal(err)
+	}
+	maskedAddr := log.MaskedMsgWrapper{
+		Mask4: m4,
+		Mask6: m6,
+	}
+	maskedAddr.Message = net.ParseIP("11.45.1.4")
+	if maskedAddr.String() != "11.45.*.*" {
+		t.Fatal("expected '11.45.*.*', but actually ", maskedAddr.String())
+	}
+	maskedAddr.Message = net.ParseIP("11:45:14:19:19:81:0::")
+	if maskedAddr.String() != "11:45::/32" {
+		t.Fatal("expected '11:45::/32', but actually", maskedAddr.String())
+	}
+
+	m4, m6, err = log.ParseMaskAddress("/16+/64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	maskedAddr = log.MaskedMsgWrapper{
+		Mask4: m4,
+		Mask6: m6,
+	}
+	maskedAddr.Message = net.ParseIP("11.45.1.4")
+	if maskedAddr.String() != "11.45.*.*" {
+		t.Fatal("expected '11.45.*.*', but actually ", maskedAddr.String())
+	}
+	maskedAddr.Message = net.ParseIP("11:45:14:19:19:81:0::")
+	if maskedAddr.String() != "11:45:14:19::/64" {
+		t.Fatal("expected '11:45:14:19::/64', but actually", maskedAddr.String())
+	}
 }

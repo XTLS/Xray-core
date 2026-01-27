@@ -4,22 +4,19 @@ import (
 	"context"
 )
 
-// PrintMigrateFeatureInfo prints a notice of the upcoming feature migration.
-// Place it after the source feature related config file pharser code.
-// Important note: Only use this when the target migrating feature is under construction.
-// Important note: Even when the target migrating feature has finished its construction, this notice can still be used yet before announcing deprecation of the old feature.
+// PrintNonRemovalDeprecatedFeatureWarning prints a warning of the deprecated feature that won't be removed in the near future.
 // Do not remove this function even there is no reference to it.
-func PrintMigrateFeatureInfo(sourceFeature string, targetFeature string) {
-	LogInfo(context.Background(), "The feature "+sourceFeature+" will be migrated to "+targetFeature+" in the future.")
+func PrintNonRemovalDeprecatedFeatureWarning(sourceFeature string, targetFeature string) {
+	LogWarning(context.Background(), "The feature "+sourceFeature+" is deprecated, not recommended for using and might be removed. Please migrate to "+targetFeature+" as soon as possible.")
 }
 
 // PrintDeprecatedFeatureWarning prints a warning for deprecated and going to be removed feature.
 // Do not remove this function even there is no reference to it.
 func PrintDeprecatedFeatureWarning(feature string, migrateFeature string) {
 	if len(migrateFeature) > 0 {
-		LogWarning(context.Background(), "This feature "+feature+" is deprecated and being migrated to "+migrateFeature+". Please update your config(s) according to release note and documentation before removal.")
+		LogWarning(context.Background(), "This feature "+feature+" is deprecated, will be removed soon and being migrated to "+migrateFeature+". Please update your config(s) according to release note and documentation before removal.")
 	} else {
-		LogWarning(context.Background(), "This feature "+feature+" is deprecated. Please update your config(s) according to release note and documentation before removal.")
+		LogWarning(context.Background(), "This feature "+feature+" is deprecated and will be removed soon. Please update your config(s) according to release note and documentation before removal.")
 	}
 }
 

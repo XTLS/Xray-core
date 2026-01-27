@@ -4,7 +4,7 @@ TUN interface support bridges the gap between network layer 3 and layer 7, intro
 
 This functionality is targeted to assist applications/end devices that don't have proxy support, or can't run external applications (like Smart TV's). Making it possible to run Xray proxy right on network edge devices (routers) with support to route raw network traffic. \
 Primary targets are Linux based router devices. Like most popular OpenWRT option. \
-Although support for Windows is also implemented (see below).
+Support for Windows, macOS, Android and iOS is also implemented (see below).
 
 ## PLEASE READ FOLLOWING CAREFULLY
 
@@ -172,3 +172,61 @@ route add 1.1.1.1 mask 255.0.0.0 0.0.0.0 if 47
 Note on ipv6 support. \
 Despite Windows also giving the adapter autoconfigured ipv6 address, the ipv6 is not possible until the interface has any _routable_ ipv6 address (given link-local address will not accept traffic from external addresses). \
 So everything applicable for ipv4 above also works for ipv6, you only need to give the interface some address manually, e.g. anything private like fc00::a:b:c:d/64 will do just fine
+
+## MAC OS X SUPPORT
+
+Darwin (Mac OS X) support of the same functionality is implemented through utun (userspace tunnel).
+
+Interface name in the configuration must comply to the scheme "utunN", where N is some number. \
+Most running OS'es create some amount of utun interfaces in advance for own needs. Please either check the interfaces you already have occupied by issuing following command:
+```
+ifconfig
+```
+Produced list will have all system interfaces listed, from which you will see how many "utun" ones already exists.
+It's not required to select next available number, e.g. if you have utun1-utun7 interfaces, it's not required to have "utun8" in the config. You can choose any available name, even utun20, to get surely available interface number.
+
+To attach routing to the interface, route command like following can be executed:
+```
+sudo route add -net 1.1.1.0/24 -iface utun10
+```
+```
+sudo route add -inet6 -host 2606:4700:4700::1111 -iface utun10
+sudo route add -inet6 -host 2606:4700:4700::1001 -iface utun10
+```
+Important to remember that everything written above about Linux routing concept, also apply to Mac OS X. If you simply route default route through utun interface, that will result network loop and immediate network failure.
+
+## ANDROID SUPPORT
+
+Android uses the VpnService API which provides a TUN file descriptor to the application.
+
+Obtain the fd from VpnService:
+```kotlin
+val tunFd = vpnInterface.fd
+```
+
+Set the environment variable `xray.tun.fd` (or `XRAY_TUN_FD`) to the fd number before starting Xray. This can be done from Kotlin/Java or by exposing a Go function via gomobile bindings.
+
+Build using gomobile for Android library integration:
+```
+gomobile bind -target=android
+```
+
+## iOS SUPPORT
+
+iOS uses the same utun packet format as macOS, but the file descriptor is provided by NetworkExtension.
+
+Obtain the fd from NetworkExtension:
+```swift
+var buf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
+let utunPrefix = "utun".utf8CString.dropLast()
+let tunFd = ((0 ... 1024).first { (_ fd: Int32) -> Bool in var len = socklen_t(buf.count)
+    return getsockopt(fd, 2, 2, &buf, &len) == 0 && buf.starts(with: utunPrefix)
+}!
+```
+
+Set the environment variable `xray.tun.fd` (or `XRAY_TUN_FD`) to the fd number before starting Xray. This can be done from Swift/Objective-C or by exposing a Go function via gomobile bindings.
+
+Build using gomobile for iOS framework integration:
+```
+gomobile bind -target=ios
+```

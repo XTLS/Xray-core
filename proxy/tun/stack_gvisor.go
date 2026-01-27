@@ -236,6 +236,10 @@ func createStack(ep stack.LinkEndpoint) (*stack.Stack, error) {
 	mOpt := tcpip.TCPModerateReceiveBufferOption(true)
 	gStack.SetTransportProtocolOption(tcp.ProtocolNumber, &mOpt)
 
+	// Disable RACK/TLP loss recovery to fix connection stalls under high load
+	rOpt := tcpip.TCPRecovery(0)
+	gStack.SetTransportProtocolOption(tcp.ProtocolNumber, &rOpt)
+
 	tcpRXBufOpt := tcpip.TCPReceiveBufferSizeRangeOption{
 		Min:     tcpRXBufMinSize,
 		Default: tcpRXBufDefSize,

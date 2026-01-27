@@ -35,6 +35,7 @@ func init() {
 	if strings.ToLower(platform.NewEnvFlag(platform.XUDPLog).GetValue(func() string { return "" })) == "true" {
 		Show = true
 	}
+	BaseKey = make([]byte, 32)
 	rand.Read(BaseKey)
 	go func() {
 		time.Sleep(100 * time.Millisecond) // this is not nice, but need to give some time for Android to setup ENV

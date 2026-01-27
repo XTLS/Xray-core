@@ -2,7 +2,7 @@ package router
 
 import (
 	"context"
-	sync "sync"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -181,6 +181,21 @@ func (r *Router) RemoveRule(tag string) error {
 	return errors.New("empty tag name!")
 
 }
+
+// ListRule implements routing.Router
+func (r *Router) ListRule() []routing.Route {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ruleList := make([]routing.Route, 0)
+	for _, rule := range r.rules {
+		ruleList = append(ruleList, &Route{
+			outboundTag: rule.Tag,
+			ruleTag:     rule.RuleTag,
+		})
+	}
+	return ruleList
+}
+
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
 	// SkipDNSResolve is set from DNS module.
 	// the DOH remote server maybe a domain name,

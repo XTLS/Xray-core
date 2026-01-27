@@ -4,14 +4,14 @@ go 1.25.6
 
 require (
 	github.com/apernet/quic-go v0.57.2-0.20260111184307-eec823306178
-	github.com/cloudflare/circl v1.6.2
+	github.com/cloudflare/circl v1.6.3
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/miekg/dns v1.1.70
+	github.com/miekg/dns v1.1.72
 	github.com/pelletier/go-toml v1.9.5
-	github.com/pires/go-proxyproto v0.9.0
+	github.com/pires/go-proxyproto v0.9.1
 	github.com/refraction-networking/utls v1.8.2
 	github.com/sagernet/sing v0.5.1
 	github.com/sagernet/sing-shadowsocks v0.2.7

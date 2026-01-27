@@ -57,7 +57,8 @@ type DomainMatcher struct {
 
 func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	g := strmatcher.NewMphMatcherGroup()
-	for _, d := range domains {
+	for i, d := range domains {
+		domains[i] = nil
 		matcherType, f := matcherTypeMap[d.Type]
 		if !f {
 			errors.LogError(context.Background(), "ignore unsupported domain type ", d.Type, " of rule ", d.Value)

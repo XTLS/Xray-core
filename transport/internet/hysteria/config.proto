@@ -13,14 +13,15 @@ message Config {
   uint64 up = 4;
   uint64 down = 5;
   repeated uint32 ports = 6;
-  int64 interval = 7;
+  int64 interval_min = 7;
+  int64 interval_max = 8;
 
-  uint64 init_stream_receive_window = 8;
-  uint64 max_stream_receive_window = 9;
-  uint64 init_conn_receive_window = 10;
-  uint64 max_conn_receive_window = 11;
-  int64 max_idle_timeout = 12;
-  int64 keep_alive_period = 13;
-  bool disable_path_mtu_discovery = 14;
+  uint64 init_stream_receive_window = 9;
+  uint64 max_stream_receive_window = 10;
+  uint64 init_conn_receive_window = 11;
+  uint64 max_conn_receive_window = 12;
+  int64 max_idle_timeout = 13;
+  int64 keep_alive_period = 14;
+  bool disable_path_mtu_discovery = 15;
 }
 

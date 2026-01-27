@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -78,6 +79,8 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			return nil, err
 		}
 		conds.Add(cond)
+		rr.Geoip = nil
+		runtime.GC()
 	}
 
 	if len(rr.SourceGeoip) > 0 {
@@ -86,6 +89,8 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 			return nil, err
 		}
 		conds.Add(cond)
+		rr.SourceGeoip = nil
+		runtime.GC()
 	}
 
 	if len(rr.LocalGeoip) > 0 {
@@ -95,6 +100,8 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		}
 		conds.Add(cond)
 		errors.LogWarning(context.Background(), "Due to some limitations, in UDP connections, localIP is always equal to listen interface IP, so \"localIP\" rule condition does not work properly on UDP inbound connections that listen on all interfaces")
+		rr.LocalGeoip = nil
+		runtime.GC()
 	}
 
 	if len(rr.Domain) > 0 {
@@ -104,6 +111,8 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		}
 		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 		conds.Add(matcher)
+		rr.Domain = nil
+		runtime.GC()
 	}
 
 	if len(rr.Process) > 0 {
