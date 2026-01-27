@@ -17,9 +17,10 @@ type ReplayFilter[T comparable] struct {
 // NewMapFilter create a new filter with specifying the expiration time interval in seconds.
 func NewMapFilter[T comparable](interval int64) *ReplayFilter[T] {
 	filter := &ReplayFilter[T]{
-		poolA:    make(map[T]struct{}),
-		poolB:    make(map[T]struct{}),
-		interval: time.Duration(interval) * time.Second,
+		poolA:     make(map[T]struct{}),
+		poolB:     make(map[T]struct{}),
+		interval:  time.Duration(interval) * time.Second,
+		lastClean: time.Now(),
 	}
 	return filter
 }
