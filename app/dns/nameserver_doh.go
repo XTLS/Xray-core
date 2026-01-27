@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
@@ -20,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/utils"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet"
@@ -214,8 +214,7 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 
 	req.Header.Add("Accept", "application/dns-message")
 	req.Header.Add("Content-Type", "application/dns-message")
-
-	req.Header.Set("X-Padding", strings.Repeat("X", int(crypto.RandBetween(100, 1000))))
+	req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 	hc := s.httpClient
 
