@@ -217,6 +217,12 @@ func loadIP(file, code string) ([]*router.CIDR, error) {
 }
 
 func loadSite(file, code string) ([]*router.Domain, error) {
+
+	// TODO
+	// if os.Getenv("XRAY_CACHED_MATCHER") == "1" {
+	// 	return []*router.Domain{&router.Domain{}}, nil
+	// }
+
 	bs, err := loadFile(file, code)
 	if err != nil {
 		return nil, err
@@ -690,12 +696,8 @@ func (c *RouterConfig) BuildDomainMatcherCache() error {
 	}
 
 	for _, rule := range routerConfig.Rule {
-		domains, err := router.GetDomainList(rule.Domain)
-		if err != nil {
-			return errors.New("failed to build domains from mmap").Base(err)
-		}
 		// write it with ruleTag key
-		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: domains}
+		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: rule.Domain}
 
 		geosite = append(geosite, &simpleGeoSite)
 	}

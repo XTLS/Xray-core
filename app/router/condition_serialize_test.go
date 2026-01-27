@@ -91,7 +91,7 @@ func TestGeoSiteSerialization(t *testing.T) {
 	data, _ := filesystem.ReadFile(path)
 
 	// cn
-	gp, err := router.LoadGeoSiteMatcher(data, "CN")
+	gp, err := router.LoadGeoSiteMatcher(bytes.NewReader(data), "CN")
 	if err != nil {
 		t.Fatalf("LoadGeoSiteMatcher(CN) failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestGeoSiteSerialization(t *testing.T) {
 	}
 
 	// us
-	gp, err = router.LoadGeoSiteMatcher(data, "US")
+	gp, err = router.LoadGeoSiteMatcher(bytes.NewReader(data), "US")
 	if err != nil {
 		t.Fatalf("LoadGeoSiteMatcher(US) failed: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestGeoSiteSerialization(t *testing.T) {
 	}
 
 	// unknown
-	_, err = router.LoadGeoSiteMatcher(data, "unknown")
+	_, err = router.LoadGeoSiteMatcher(bytes.NewReader(data), "unknown")
 	if err == nil {
 		t.Error("LoadGeoSiteMatcher(unknown) should fail")
 	}

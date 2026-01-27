@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -80,47 +81,68 @@ func SerializeGeoSiteList(sites []*GeoSite, w io.Writer) error {
 	return nil
 }
 
-func LoadGeoSiteMatcher(data []byte, countryCode string) (*strmatcher.MphMatcherGroup, error) {
-	if len(data) < 4 {
-		return nil, errors.New("invalid data length")
+func LoadGeoSiteMatcher(r io.Reader, countryCode string) (*strmatcher.MphMatcherGroup, error) {
+	br := bufio.NewReaderSize(r, 64*1024)
+	var count uint32
+	if err := binary.Read(br, binary.LittleEndian, &count); err != nil {
+		return nil, err
 	}
 
-	count := binary.LittleEndian.Uint32(data[0:4])
-
-	offset := 4
 	targetBytes := []byte(countryCode)
+	var dataOffset, dataSize uint64
+	var found bool
 
-	for range count {
-		if offset >= len(data) {
-			return nil, errors.New("index truncated")
+	bytesRead := uint64(4)
+
+	for i := uint32(0); i < count; i++ {
+		codeLen, err := br.ReadByte()
+		if err != nil {
+			return nil, err
 		}
+		bytesRead++
 
-		codeLen := int(data[offset])
-		offset++
-
-		if offset+codeLen > len(data) {
-			return nil, errors.New("index code truncated")
+		code := make([]byte, int(codeLen))
+		if _, err := io.ReadFull(br, code); err != nil {
+			return nil, err
 		}
+		bytesRead += uint64(codeLen)
 
-		code := data[offset : offset+codeLen]
-		offset += codeLen
-
-		if offset+16 > len(data) {
-			return nil, errors.New("index meta truncated")
+		var offsetValue, sizeValue uint64
+		if err := binary.Read(br, binary.LittleEndian, &offsetValue); err != nil {
+			return nil, err
 		}
+		bytesRead += 8
+		if err := binary.Read(br, binary.LittleEndian, &sizeValue); err != nil {
+			return nil, err
+		}
+		bytesRead += 8
 
-		dataOffset := binary.LittleEndian.Uint64(data[offset : offset+8])
-		dataSize := binary.LittleEndian.Uint64(data[offset+8 : offset+16])
-		offset += 16
-
-		// match?
 		if bytes.Equal(code, targetBytes) {
-			if dataOffset+dataSize > uint64(len(data)) {
-				return nil, errors.New("data truncated")
-			}
-			return NewDomainMatcherFromBuffer(data[dataOffset : dataOffset+dataSize])
+			dataOffset = offsetValue
+			dataSize = sizeValue
+			found = true
 		}
 	}
 
-	return nil, errors.New("country code not found")
+	if !found {
+		return nil, errors.New("country code not found")
+	}
+
+	if dataOffset < bytesRead {
+		return nil, errors.New("invalid data offset")
+	}
+
+	toSkip := dataOffset - bytesRead
+	if toSkip > 0 {
+		if _, err := io.CopyN(io.Discard, br, int64(toSkip)); err != nil {
+			return nil, err
+		}
+	}
+
+	data := make([]byte, dataSize)
+	if _, err := io.ReadFull(br, data); err != nil {
+		return nil, err
+	}
+
+	return NewDomainMatcherFromBuffer(data)
 }

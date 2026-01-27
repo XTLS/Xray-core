@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
-	"google.golang.org/protobuf/proto"
 )
 
 type Rule struct {
@@ -109,16 +108,6 @@ func (rr *RoutingRule) BuildCondition(domainMatcherPath string) (Condition, erro
 	if len(rr.Domain) > 0 {
 		var matcher *DomainMatcher
 		var err error
-
-		domains := rr.Domain
-		if runtime.GOOS != "windows" && runtime.GOOS != "wasm" && domainMatcherPath == "" {
-			var err error
-			domains, err = GetDomainList(rr.Domain)
-			if err != nil {
-				return nil, errors.New("failed to build domains from mmap").Base(err)
-			}
-		}
-
 		if domainMatcherPath != "" {
 			matcher, err = GetDomainMathcerWithRuleTag(domainMatcherPath, rr.RuleTag)
 			if err != nil {
@@ -196,89 +185,14 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	}
 }
 
-func GetGeoIPList(ips []*GeoIP) ([]*GeoIP, error) {
-	geoipList := []*GeoIP{}
-	for _, ip := range ips {
-		if ip.CountryCode != "" {
-			val := strings.Split(ip.CountryCode, "_")
-			fileName := "geoip.dat"
-			if len(val) == 2 {
-				fileName = strings.ToLower(val[0])
-			}
-			bs, err := filesystem.ReadAsset(fileName)
-			if err != nil {
-				return nil, errors.New("failed to load file: ", fileName).Base(err)
-			}
-			bs = filesystem.Find(bs, []byte(ip.CountryCode))
-
-			var geoip GeoIP
-
-			if err := proto.Unmarshal(bs, &geoip); err != nil {
-				return nil, errors.New("failed Unmarshal :").Base(err)
-			}
-			geoipList = append(geoipList, &geoip)
-
-		} else {
-			geoipList = append(geoipList, ip)
-		}
-	}
-	return geoipList, nil
-
-}
-
-func GetDomainList(domains []*Domain) ([]*Domain, error) {
-	domainList := []*Domain{}
-	for _, domain := range domains {
-		val := strings.Split(domain.Value, "_")
-
-		if len(val) >= 2 {
-
-			fileName := val[0]
-			code := val[1]
-
-			bs, err := filesystem.ReadAsset(fileName)
-			if err != nil {
-				return nil, errors.New("failed to load file: ", fileName).Base(err)
-			}
-			bs = filesystem.Find(bs, []byte(code))
-			var geosite GeoSite
-
-			if err := proto.Unmarshal(bs, &geosite); err != nil {
-				return nil, errors.New("failed Unmarshal :").Base(err)
-			}
-
-			// parse attr
-			if len(val) == 3 {
-				siteWithAttr := strings.Split(val[2], ",")
-				attrs := ParseAttrs(siteWithAttr)
-
-				if !attrs.IsEmpty() {
-					filteredDomains := make([]*Domain, 0, len(domains))
-					for _, domain := range geosite.Domain {
-						if attrs.Match(domain) {
-							filteredDomains = append(filteredDomains, domain)
-						}
-					}
-					geosite.Domain = filteredDomains
-				}
-
-			}
-
-			domainList = append(domainList, geosite.Domain...)
-
-		} else {
-			domainList = append(domainList, domain)
-		}
-	}
-	return domainList, nil
-}
-
 func GetDomainMathcerWithRuleTag(domainMatcherPath string, ruleTag string) (*DomainMatcher, error) {
-	bs, err := filesystem.ReadFile(domainMatcherPath)
+	f, err := filesystem.NewFileReader(domainMatcherPath)
 	if err != nil {
 		return nil, errors.New("failed to load file: ", domainMatcherPath).Base(err)
 	}
-	g, err := LoadGeoSiteMatcher(bs, ruleTag)
+	defer f.Close()
+
+	g, err := LoadGeoSiteMatcher(f, ruleTag)
 	if err != nil {
 		return nil, errors.New("failed to load file:", domainMatcherPath).Base(err)
 	}
