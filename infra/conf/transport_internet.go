@@ -240,6 +240,7 @@ type SplitHTTPConfig struct {
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
+	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -389,6 +390,17 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.UplinkChunkSize == 0 {
+		switch c.UplinkDataPlacement {
+		case "cookie":
+			c.UplinkChunkSize = 3 * 1024 // 3KB
+		case "header":
+			c.UplinkChunkSize = 4 * 1024 // 4KB
+		}
+	} else if c.UplinkChunkSize < 64 {
+		c.UplinkChunkSize = 64
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -419,6 +431,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SeqKey:               c.SeqKey,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
+		UplinkChunkSize:      c.UplinkChunkSize,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),

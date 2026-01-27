@@ -140,11 +140,10 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 
 	if dataPlacement != PlacementBody {
 		key := c.transportConfig.UplinkDataKey
+		chunkSize := int(c.transportConfig.UplinkChunkSize)
 
 		switch dataPlacement {
 		case PlacementHeader:
-			chunkSize := 4 * 1024 // 4KB
-
 			for i := 0; i < len(encodedData); i += chunkSize {
 				end := i + chunkSize
 				if end > len(encodedData) {
@@ -158,8 +157,6 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			req.Header.Set(key+"-Length", fmt.Sprintf("%d", len(encodedData)))
 			req.Header.Set(key+"-Upstream", "1")
 		case PlacementCookie:
-			chunkSize := 3 * 1024 // 3KB
-
 			for i := 0; i < len(encodedData); i += chunkSize {
 				end := i + chunkSize
 				if end > len(encodedData) {

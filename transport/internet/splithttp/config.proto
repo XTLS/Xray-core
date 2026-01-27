@@ -48,4 +48,5 @@ message Config {
   string seqKey = 23;
   string uplinkDataPlacement = 24;
   string uplinkDataKey = 25;
+  uint32 uplinkChunkSize = 26;
 }
