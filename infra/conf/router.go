@@ -679,10 +679,14 @@ func parseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	return fieldrule, nil
 }
 
-func (c *RouterConfig) BuildDomainMatcherCache() error {
+func (c *RouterConfig) BuildDomainMatcherCache(customMatcherFilePath *string) error {
 	var geosite []*router.GeoSite
-
 	matcherFilePath := platform.GetAssetLocation("matcher.cache")
+
+	if customMatcherFilePath != nil {
+		matcherFilePath = *customMatcherFilePath
+	}
+
 	routerConfig, err := c.Build()
 
 	if len(routerConfig.Rule) == 0 {
