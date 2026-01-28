@@ -217,12 +217,6 @@ func loadIP(file, code string) ([]*router.CIDR, error) {
 }
 
 func loadSite(file, code string) ([]*router.Domain, error) {
-
-	// TODO
-	// if os.Getenv("XRAY_CACHED_MATCHER") == "1" {
-	// 	return []*router.Domain{&router.Domain{}}, nil
-	// }
-
 	bs, err := loadFile(file, code)
 	if err != nil {
 		return nil, err
