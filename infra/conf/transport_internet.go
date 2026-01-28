@@ -16,14 +16,14 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128ctr"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
@@ -98,6 +98,9 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		} else {
 			config.WriteBuffer = &kcp.WriteBuffer{Size: 512 * 1024}
 		}
+	}
+	if c.HeaderConfig != nil || c.Seed != nil {
+		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "udpmasks header-* & mkcp-original & mkcp-aes128gcm")
 	}
 
 	return config, nil
@@ -1098,8 +1101,8 @@ var (
 		"header-utp":       func() interface{} { return new(Utp) },
 		"header-wechat":    func() interface{} { return new(Wechat) },
 		"header-wireguard": func() interface{} { return new(Wireguard) },
-		"crypt-aes128ctr":  func() interface{} { return new(Aes128Ctr) },
-		"crypt-aes128gcm":  func() interface{} { return new(Aes128Gcm) },
+		"mkcp-original":    func() interface{} { return new(Original) },
+		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"xdns":             func() interface{} { return new(Xdns) },
 	}, "type", "settings")
@@ -1150,19 +1153,19 @@ func (c *Wireguard) Build() (proto.Message, error) {
 	return &wireguard.Config{}, nil
 }
 
-type Aes128Ctr struct{}
+type Original struct{}
 
-func (c *Aes128Ctr) Build() (proto.Message, error) {
-	return &aes128ctr.Config{}, nil
+func (c *Original) Build() (proto.Message, error) {
+	return &original.Config{}, nil
 }
 
 type Aes128Gcm struct {
-	Psk string `json:"psk"`
+	Password string `json:"password"`
 }
 
 func (c *Aes128Gcm) Build() (proto.Message, error) {
 	return &aes128gcm.Config{
-		Psk: c.Psk,
+		Password: c.Password,
 	}, nil
 }
 

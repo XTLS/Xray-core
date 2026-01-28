@@ -1,7 +1,7 @@
 //go:build !amd64
 // +build !amd64
 
-package aes128ctr
+package original
 
 // xorfwd performs XOR forwards in words, x[i] ^= x[i-4], i from 0 to len
 func xorfwd(x []byte) {

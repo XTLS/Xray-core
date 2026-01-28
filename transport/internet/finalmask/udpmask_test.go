@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128ctr"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 )
 
@@ -56,11 +56,11 @@ func TestPacketConnReadWrite(t *testing.T) {
 	cases := []layerMask{
 		{
 			name: "aes128gcm",
-			mask: &aes128gcm.Config{Psk: "123"},
+			mask: &aes128gcm.Config{Password: "123"},
 		},
 		{
-			name: "aes128ctr",
-			mask: &aes128ctr.Config{},
+			name: "original",
+			mask: &original.Config{},
 		},
 		{
 			name: "dns",

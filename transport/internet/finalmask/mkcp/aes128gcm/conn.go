@@ -28,7 +28,7 @@ type aes128gcmConn struct {
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	hashedPsk := sha256.Sum256([]byte(c.Psk))
+	hashedPsk := sha256.Sum256([]byte(c.Password))
 
 	conn := &aes128gcmConn{
 		first:     first,
