@@ -1,4 +1,4 @@
-package aesgcm128
+package aes128gcm
 
 import (
 	"net"

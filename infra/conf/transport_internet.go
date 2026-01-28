@@ -16,8 +16,8 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aesgcm128"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/simple"
+	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128ctr"
+	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -1098,8 +1098,8 @@ var (
 		"header-utp":       func() interface{} { return new(Utp) },
 		"header-wechat":    func() interface{} { return new(Wechat) },
 		"header-wireguard": func() interface{} { return new(Wireguard) },
-		"crypt-simple":     func() interface{} { return new(Simple) },
-		"crypt-aesgcm128":  func() interface{} { return new(AesGcm128) },
+		"crypt-aes128ctr":  func() interface{} { return new(Aes128Ctr) },
+		"crypt-aes128gcm":  func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"xdns":             func() interface{} { return new(Xdns) },
 	}, "type", "settings")
@@ -1150,18 +1150,18 @@ func (c *Wireguard) Build() (proto.Message, error) {
 	return &wireguard.Config{}, nil
 }
 
-type Simple struct{}
+type Aes128Ctr struct{}
 
-func (c *Simple) Build() (proto.Message, error) {
-	return &simple.Config{}, nil
+func (c *Aes128Ctr) Build() (proto.Message, error) {
+	return &aes128ctr.Config{}, nil
 }
 
-type AesGcm128 struct {
+type Aes128Gcm struct {
 	Psk string `json:"psk"`
 }
 
-func (c *AesGcm128) Build() (proto.Message, error) {
-	return &aesgcm128.Config{
+func (c *Aes128Gcm) Build() (proto.Message, error) {
+	return &aes128gcm.Config{
 		Psk: c.Psk,
 	}, nil
 }

@@ -1,4 +1,4 @@
-package aesgcm128
+package aes128gcm
 
 import (
 	"crypto/cipher"
@@ -14,7 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-type aesgcm128Conn struct {
+type aes128gcmConn struct {
 	first     bool
 	leaveSize int32
 
@@ -30,7 +30,7 @@ type aesgcm128Conn struct {
 func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
 	hashedPsk := sha256.Sum256([]byte(c.Psk))
 
-	conn := &aesgcm128Conn{
+	conn := &aes128gcmConn{
 		first:     first,
 		leaveSize: leaveSize,
 
@@ -50,11 +50,11 @@ func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 	return NewConnClient(c, raw, first, leaveSize)
 }
 
-func (c *aesgcm128Conn) Size() int32 {
+func (c *aes128gcmConn) Size() int32 {
 	return int32(c.aead.NonceSize()) + int32(c.aead.Overhead())
 }
 
-func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
@@ -108,7 +108,7 @@ func (c *aesgcm128Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return n - int(c.Size()), addr, nil
 }
 
-func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
 		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
 			return 0, errors.New("too many masks")
@@ -153,22 +153,22 @@ func (c *aesgcm128Conn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	return c.conn.WriteTo(p, addr)
 }
 
-func (c *aesgcm128Conn) Close() error {
+func (c *aes128gcmConn) Close() error {
 	return c.conn.Close()
 }
 
-func (c *aesgcm128Conn) LocalAddr() net.Addr {
+func (c *aes128gcmConn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-func (c *aesgcm128Conn) SetDeadline(t time.Time) error {
+func (c *aes128gcmConn) SetDeadline(t time.Time) error {
 	return c.conn.SetDeadline(t)
 }
 
-func (c *aesgcm128Conn) SetReadDeadline(t time.Time) error {
+func (c *aes128gcmConn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-func (c *aesgcm128Conn) SetWriteDeadline(t time.Time) error {
+func (c *aes128gcmConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }

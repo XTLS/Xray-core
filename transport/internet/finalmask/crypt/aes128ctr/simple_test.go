@@ -1,15 +1,15 @@
-package simple_test
+package aes128ctr_test
 
 import (
 	"crypto/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/simple"
+	"github.com/xtls/xray-core/transport/internet/finalmask/crypt/aes128ctr"
 )
 
-func TestSimpleBounce(t *testing.T) {
-	aead := simple.NewSimple()
+func TestAes128CtrBounce(t *testing.T) {
+	aead := aes128ctr.NewSimple()
 	buf := make([]byte, aead.NonceSize()+aead.Overhead())
 	for i := 0; i < 1000; i++ {
 		_, _ = rand.Read(buf)

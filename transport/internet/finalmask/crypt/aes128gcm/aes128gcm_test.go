@@ -1,4 +1,4 @@
-package aesgcm128_test
+package aes128gcm_test
 
 import (
 	"crypto/rand"
@@ -9,7 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 )
 
-func TestAesGcm128SealInPlace(t *testing.T) {
+func TestAes128GcmSealInPlace(t *testing.T) {
 	hashedPsk := sha256.Sum256([]byte("psk"))
 	aead := crypto.NewAesGcm(hashedPsk[:16])
 
@@ -39,7 +39,7 @@ func encrypted(plain []byte) ([]byte, []byte) {
 	return nonce, aead.Seal(nil, nonce, plain, nil)
 }
 
-func TestAesGcm128OpenInPlace(t *testing.T) {
+func TestAes128GcmOpenInPlace(t *testing.T) {
 	a, b := encrypted([]byte("0123456789012"))
 	buf := make([]byte, 8192)
 	copy(buf, a)
@@ -58,7 +58,7 @@ func TestAesGcm128OpenInPlace(t *testing.T) {
 	assert.Equal(t, opened, ciphertext[:len(ciphertext)-aead.Overhead()])
 }
 
-func TestAesGcm128Bounce(t *testing.T) {
+func TestAes128GcmBounce(t *testing.T) {
 	hashedPsk := sha256.Sum256([]byte("psk"))
 	aead := crypto.NewAesGcm(hashedPsk[:16])
 	buf := make([]byte, aead.NonceSize()+aead.Overhead())

@@ -1,4 +1,4 @@
-package simple
+package aes128ctr
 
 //go:noescape
 func xorfwd(x []byte)
