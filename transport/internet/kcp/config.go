@@ -1,8 +1,6 @@
 package kcp
 
 import (
-	"crypto/cipher"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -48,32 +46,12 @@ func (c *Config) GetWriteBufferSize() uint32 {
 }
 
 // GetReadBufferSize returns the size of ReadBuffer in bytes.
-func (c *Config) GetReadBufferSize() uint32 {
-	if c == nil || c.ReadBuffer == nil {
-		return 2 * 1024 * 1024
-	}
-	return c.ReadBuffer.Size
-}
-
-// GetSecurity returns the security settings.
-func (c *Config) GetSecurity() (cipher.AEAD, error) {
-	if c.Seed != nil {
-		return NewAEADAESGCMBasedOnSeed(c.Seed.Seed), nil
-	}
-	return NewSimpleAuthenticator(), nil
-}
-
-func (c *Config) GetPackerHeader() (internet.PacketHeader, error) {
-	if c.HeaderConfig != nil {
-		rawConfig, err := c.HeaderConfig.GetInstance()
-		if err != nil {
-			return nil, err
-		}
-
-		return internet.CreatePacketHeader(rawConfig)
-	}
-	return nil, nil
-}
+// func (c *Config) GetReadBufferSize() uint32 {
+// 	if c == nil || c.ReadBuffer == nil {
+// 		return 2 * 1024 * 1024
+// 	}
+// 	return c.ReadBuffer.Size
+// }
 
 func (c *Config) GetSendingInFlightSize() uint32 {
 	size := c.GetUplinkCapacityValue() * 1024 * 1024 / c.GetMTUValue() / (1000 / c.GetTTIValue())
@@ -95,9 +73,9 @@ func (c *Config) GetReceivingInFlightSize() uint32 {
 	return size
 }
 
-func (c *Config) GetReceivingBufferSize() uint32 {
-	return c.GetReadBufferSize() / c.GetMTUValue()
-}
+// func (c *Config) GetReceivingBufferSize() uint32 {
+// 	return c.GetReadBufferSize() / c.GetMTUValue()
+// }
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {

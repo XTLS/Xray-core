@@ -54,32 +54,32 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
+	wrapper, ok := rawConn.(*internet.PacketConnWrapper)
+	if !ok {
+		rawConn.Close()
+		return nil, errors.New("raw is not PacketConnWrapper")
+	}
+
+	raw := wrapper.Conn
+
+	if streamSettings.UdpmaskManager != nil {
+		wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(raw)
+		if err != nil {
+			raw.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+	}
+
 	kcpSettings := streamSettings.ProtocolSettings.(*Config)
 
-	header, err := kcpSettings.GetPackerHeader()
-	if err != nil {
-		return nil, errors.New("failed to create packet header").Base(err)
-	}
-	security, err := kcpSettings.GetSecurity()
-	if err != nil {
-		return nil, errors.New("failed to create security").Base(err)
-	}
-	reader := &KCPPacketReader{
-		Header:   header,
-		Security: security,
-	}
-	writer := &KCPPacketWriter{
-		Header:   header,
-		Security: security,
-		Writer:   rawConn,
-	}
+	reader := &KCPPacketReader{}
 
 	conv := uint16(atomic.AddUint32(&globalConv, 1))
 	session := NewConnection(ConnMetadata{
 		LocalAddr:    rawConn.LocalAddr(),
 		RemoteAddr:   rawConn.RemoteAddr(),
 		Conversation: conv,
-	}, writer, rawConn, kcpSettings)
+	}, rawConn, rawConn, kcpSettings)
 
 	go fetchInput(ctx, rawConn, reader, session)
 

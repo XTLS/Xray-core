@@ -15,8 +15,6 @@ const (
 	smKeyLen    = blake2b.Size256
 )
 
-var _ Obfuscator = (*SalamanderObfuscator)(nil)
-
 var ErrPSKTooShort = fmt.Errorf("PSK must be at least %d bytes", smPSKMinLen)
 
 // SalamanderObfuscator is an obfuscator that obfuscates each packet with
