@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"google.golang.org/protobuf/proto"
@@ -77,6 +80,8 @@ type RouterConfig struct {
 	RuleList       []json.RawMessage `json:"rules"`
 	DomainStrategy *string           `json:"domainStrategy"`
 	Balancers      []*BalancingRule  `json:"balancers"`
+
+	DomainMatcherPath *string `json:"domainMatcherPath"`
 }
 
 func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
@@ -118,6 +123,14 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 			return nil, err
 		}
 		config.BalancingRule = append(config.BalancingRule, balancer)
+	}
+
+	if c.DomainMatcherPath != nil {
+		path := *c.DomainMatcherPath
+		if val := strings.Split(path, "assets:"); len(val) == 2 {
+			path = platform.GetAssetLocation(val[1])
+		}
+		config.DomainMatcherPath = path
 	}
 	return config, nil
 }
@@ -664,4 +677,44 @@ func parseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		return nil, errors.New("invalid field rule").Base(err)
 	}
 	return fieldrule, nil
+}
+
+func (c *RouterConfig) BuildDomainMatcherCache(customMatcherFilePath *string) error {
+	var geosite []*router.GeoSite
+	matcherFilePath := platform.GetAssetLocation("matcher.cache")
+
+	if customMatcherFilePath != nil {
+		matcherFilePath = *customMatcherFilePath
+	}
+
+	routerConfig, err := c.Build()
+
+	if len(routerConfig.Rule) == 0 {
+		return fmt.Errorf("no routing")
+	}
+
+	for _, rule := range routerConfig.Rule {
+		// write it with ruleTag key
+		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: rule.Domain}
+
+		geosite = append(geosite, &simpleGeoSite)
+	}
+
+	f, err := os.Create(matcherFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+
+	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
+		return err
+	}
+
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
 }
