@@ -41,8 +41,9 @@ func (t Type) New(pattern string) (Matcher, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &regexMatcher{
-			pattern: r,
+		return &RegexMatcher{
+			Pattern: pattern,
+			reg:     r,
 		}, nil
 	default:
 		return nil, errors.New("unk type")
@@ -55,9 +56,9 @@ type IndexMatcher interface {
 	Match(input string) []uint32
 }
 
-type matcherEntry struct {
-	m  Matcher
-	id uint32
+type MatcherEntry struct {
+	M  Matcher
+	Id uint32
 }
 
 // MatcherGroup is an implementation of IndexMatcher.
@@ -66,7 +67,7 @@ type MatcherGroup struct {
 	count         uint32
 	fullMatcher   FullMatcherGroup
 	domainMatcher DomainMatcherGroup
-	otherMatchers []matcherEntry
+	otherMatchers []MatcherEntry
 }
 
 // Add adds a new Matcher into the MatcherGroup, and returns its index. The index will never be 0.
@@ -80,9 +81,9 @@ func (g *MatcherGroup) Add(m Matcher) uint32 {
 	case domainMatcher:
 		g.domainMatcher.addMatcher(tm, c)
 	default:
-		g.otherMatchers = append(g.otherMatchers, matcherEntry{
-			m:  m,
-			id: c,
+		g.otherMatchers = append(g.otherMatchers, MatcherEntry{
+			M:  m,
+			Id: c,
 		})
 	}
 
@@ -95,8 +96,8 @@ func (g *MatcherGroup) Match(pattern string) []uint32 {
 	result = append(result, g.fullMatcher.Match(pattern)...)
 	result = append(result, g.domainMatcher.Match(pattern)...)
 	for _, e := range g.otherMatchers {
-		if e.m.Match(pattern) {
-			result = append(result, e.id)
+		if e.M.Match(pattern) {
+			result = append(result, e.Id)
 		}
 	}
 	return result

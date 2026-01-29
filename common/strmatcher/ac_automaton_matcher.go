@@ -7,8 +7,8 @@ import (
 const validCharCount = 53
 
 type MatchType struct {
-	matchType Type
-	exist     bool
+	Type  Type
+	Exist bool
 }
 
 const (
@@ -17,23 +17,23 @@ const (
 )
 
 type Edge struct {
-	edgeType bool
-	nextNode int
+	Type     bool
+	NextNode int
 }
 
 type ACAutomaton struct {
-	trie   [][validCharCount]Edge
-	fail   []int
-	exists []MatchType
-	count  int
+	Trie   [][validCharCount]Edge
+	Fail   []int
+	Exists []MatchType
+	Count  int
 }
 
 func newNode() [validCharCount]Edge {
 	var s [validCharCount]Edge
 	for i := range s {
 		s[i] = Edge{
-			edgeType: FailEdge,
-			nextNode: 0,
+			Type:     FailEdge,
+			NextNode: 0,
 		}
 	}
 	return s
@@ -123,11 +123,11 @@ var char2Index = []int{
 
 func NewACAutomaton() *ACAutomaton {
 	ac := new(ACAutomaton)
-	ac.trie = append(ac.trie, newNode())
-	ac.fail = append(ac.fail, 0)
-	ac.exists = append(ac.exists, MatchType{
-		matchType: Full,
-		exist:     false,
+	ac.Trie = append(ac.Trie, newNode())
+	ac.Fail = append(ac.Fail, 0)
+	ac.Exists = append(ac.Exists, MatchType{
+		Type:  Full,
+		Exist: false,
 	})
 	return ac
 }
@@ -136,53 +136,53 @@ func (ac *ACAutomaton) Add(domain string, t Type) {
 	node := 0
 	for i := len(domain) - 1; i >= 0; i-- {
 		idx := char2Index[domain[i]]
-		if ac.trie[node][idx].nextNode == 0 {
-			ac.count++
-			if len(ac.trie) < ac.count+1 {
-				ac.trie = append(ac.trie, newNode())
-				ac.fail = append(ac.fail, 0)
-				ac.exists = append(ac.exists, MatchType{
-					matchType: Full,
-					exist:     false,
+		if ac.Trie[node][idx].NextNode == 0 {
+			ac.Count++
+			if len(ac.Trie) < ac.Count+1 {
+				ac.Trie = append(ac.Trie, newNode())
+				ac.Fail = append(ac.Fail, 0)
+				ac.Exists = append(ac.Exists, MatchType{
+					Type:  Full,
+					Exist: false,
 				})
 			}
-			ac.trie[node][idx] = Edge{
-				edgeType: TrieEdge,
-				nextNode: ac.count,
+			ac.Trie[node][idx] = Edge{
+				Type:     TrieEdge,
+				NextNode: ac.Count,
 			}
 		}
-		node = ac.trie[node][idx].nextNode
+		node = ac.Trie[node][idx].NextNode
 	}
-	ac.exists[node] = MatchType{
-		matchType: t,
-		exist:     true,
+	ac.Exists[node] = MatchType{
+		Type:  t,
+		Exist: true,
 	}
 	switch t {
 	case Domain:
-		ac.exists[node] = MatchType{
-			matchType: Full,
-			exist:     true,
+		ac.Exists[node] = MatchType{
+			Type:  Full,
+			Exist: true,
 		}
 		idx := char2Index['.']
-		if ac.trie[node][idx].nextNode == 0 {
-			ac.count++
-			if len(ac.trie) < ac.count+1 {
-				ac.trie = append(ac.trie, newNode())
-				ac.fail = append(ac.fail, 0)
-				ac.exists = append(ac.exists, MatchType{
-					matchType: Full,
-					exist:     false,
+		if ac.Trie[node][idx].NextNode == 0 {
+			ac.Count++
+			if len(ac.Trie) < ac.Count+1 {
+				ac.Trie = append(ac.Trie, newNode())
+				ac.Fail = append(ac.Fail, 0)
+				ac.Exists = append(ac.Exists, MatchType{
+					Type:  Full,
+					Exist: false,
 				})
 			}
-			ac.trie[node][idx] = Edge{
-				edgeType: TrieEdge,
-				nextNode: ac.count,
+			ac.Trie[node][idx] = Edge{
+				Type:     TrieEdge,
+				NextNode: ac.Count,
 			}
 		}
-		node = ac.trie[node][idx].nextNode
-		ac.exists[node] = MatchType{
-			matchType: t,
-			exist:     true,
+		node = ac.Trie[node][idx].NextNode
+		ac.Exists[node] = MatchType{
+			Type:  t,
+			Exist: true,
 		}
 	default:
 		break
@@ -192,8 +192,8 @@ func (ac *ACAutomaton) Add(domain string, t Type) {
 func (ac *ACAutomaton) Build() {
 	queue := list.New()
 	for i := 0; i < validCharCount; i++ {
-		if ac.trie[0][i].nextNode != 0 {
-			queue.PushBack(ac.trie[0][i])
+		if ac.Trie[0][i].NextNode != 0 {
+			queue.PushBack(ac.Trie[0][i])
 		}
 	}
 	for {
@@ -201,16 +201,16 @@ func (ac *ACAutomaton) Build() {
 		if front == nil {
 			break
 		} else {
-			node := front.Value.(Edge).nextNode
+			node := front.Value.(Edge).NextNode
 			queue.Remove(front)
 			for i := 0; i < validCharCount; i++ {
-				if ac.trie[node][i].nextNode != 0 {
-					ac.fail[ac.trie[node][i].nextNode] = ac.trie[ac.fail[node]][i].nextNode
-					queue.PushBack(ac.trie[node][i])
+				if ac.Trie[node][i].NextNode != 0 {
+					ac.Fail[ac.Trie[node][i].NextNode] = ac.Trie[ac.Fail[node]][i].NextNode
+					queue.PushBack(ac.Trie[node][i])
 				} else {
-					ac.trie[node][i] = Edge{
-						edgeType: FailEdge,
-						nextNode: ac.trie[ac.fail[node]][i].nextNode,
+					ac.Trie[node][i] = Edge{
+						Type:     FailEdge,
+						NextNode: ac.Trie[ac.Fail[node]][i].NextNode,
 					}
 				}
 			}
@@ -230,9 +230,9 @@ func (ac *ACAutomaton) Match(s string) bool {
 			return false
 		}
 		idx := char2Index[chr]
-		fullMatch = fullMatch && ac.trie[node][idx].edgeType
-		node = ac.trie[node][idx].nextNode
-		switch ac.exists[node].matchType {
+		fullMatch = fullMatch && ac.Trie[node][idx].Type
+		node = ac.Trie[node][idx].NextNode
+		switch ac.Exists[node].Type {
 		case Substr:
 			return true
 		case Domain:
@@ -243,5 +243,5 @@ func (ac *ACAutomaton) Match(s string) bool {
 			break
 		}
 	}
-	return fullMatch && ac.exists[node].exist
+	return fullMatch && ac.Exists[node].Exist
 }
