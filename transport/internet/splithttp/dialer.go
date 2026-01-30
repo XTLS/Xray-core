@@ -272,8 +272,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL.Host = dest.Address.String()
 	}
 
-	sessionIdUuid := uuid.New()
-	sessionId := sessionIdUuid.String()
+	sessionId := ""
+	if transportConfiguration.Mode != "stream-one" {
+		sessionIdUuid := uuid.New()
+		sessionId = sessionIdUuid.String()
+	}
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
