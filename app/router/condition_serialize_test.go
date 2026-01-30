@@ -138,6 +138,12 @@ func TestGeoSiteSerializationWithDeps(t *testing.T) {
 			},
 		},
 		{
+			CountryCode: "geosite:google@cn",
+			Domain: []*router.Domain{
+				{Type: router.Domain_Domain, Value: "google.cn"},
+			},
+		},
+		{
 			CountryCode: "rule-1",
 			Domain: []*router.Domain{
 				{Type: router.Domain_Domain, Value: "google.com"},
@@ -145,7 +151,7 @@ func TestGeoSiteSerializationWithDeps(t *testing.T) {
 		},
 	}
 	deps := map[string][]string{
-		"rule-1": {"geosite:cn"},
+		"rule-1": {"geosite:cn", "geosite:google@cn"},
 	}
 
 	var buf bytes.Buffer
@@ -157,4 +163,5 @@ func TestGeoSiteSerializationWithDeps(t *testing.T) {
 
 	require.True(t, matcher.Match("google.com") != nil)
 	require.True(t, matcher.Match("baidu.cn") != nil)
+	require.True(t, matcher.Match("google.cn") != nil)
 }
