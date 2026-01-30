@@ -288,7 +288,7 @@ func TestRoutingRule(t *testing.T) {
 	}
 
 	for _, test := range cases {
-		cond, err := test.rule.BuildCondition("")
+		cond, err := test.rule.BuildCondition()
 		common.Must(err)
 
 		for _, subtest := range test.test {

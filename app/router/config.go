@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
@@ -31,7 +32,7 @@ func (r *Rule) Apply(ctx routing.Context) bool {
 	return r.Condition.Apply(ctx)
 }
 
-func (rr *RoutingRule) BuildCondition(domainMatcherPath string) (Condition, error) {
+func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	conds := NewConditionChan()
 
 	if len(rr.InboundTag) > 0 {
@@ -108,6 +109,9 @@ func (rr *RoutingRule) BuildCondition(domainMatcherPath string) (Condition, erro
 	if len(rr.Domain) > 0 {
 		var matcher *DomainMatcher
 		var err error
+		// Check if domain matcher cache is provided via environment
+		domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
+
 		if domainMatcherPath != "" {
 			matcher, err = GetDomainMathcerWithRuleTag(domainMatcherPath, rr.RuleTag)
 			if err != nil {

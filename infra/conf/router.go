@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -217,6 +215,13 @@ func loadIP(file, code string) ([]*router.CIDR, error) {
 }
 
 func loadSite(file, code string) ([]*router.Domain, error) {
+
+	// Check if domain matcher cache is provided via environment
+	domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
+	if domainMatcherPath != "" {
+		return []*router.Domain{{}}, nil
+	}
+
 	bs, err := loadFile(file, code)
 	if err != nil {
 		return nil, err
@@ -677,44 +682,4 @@ func parseRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		return nil, errors.New("invalid field rule").Base(err)
 	}
 	return fieldrule, nil
-}
-
-func (c *RouterConfig) BuildDomainMatcherCache(customMatcherFilePath *string) error {
-	var geosite []*router.GeoSite
-	matcherFilePath := platform.GetAssetLocation("matcher.cache")
-
-	if customMatcherFilePath != nil {
-		matcherFilePath = *customMatcherFilePath
-	}
-
-	routerConfig, err := c.Build()
-
-	if len(routerConfig.Rule) == 0 {
-		return fmt.Errorf("no routing")
-	}
-
-	for _, rule := range routerConfig.Rule {
-		// write it with ruleTag key
-		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: rule.Domain}
-
-		geosite = append(geosite, &simpleGeoSite)
-	}
-
-	f, err := os.Create(matcherFilePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var buf bytes.Buffer
-
-	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
-		return err
-	}
-
-	if _, err := f.Write(buf.Bytes()); err != nil {
-		return err
-	}
-
-	return nil
 }

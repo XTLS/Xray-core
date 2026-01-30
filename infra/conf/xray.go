@@ -1,16 +1,20 @@
 package conf
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -605,6 +609,62 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	return config, nil
+}
+
+func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
+	var geosite []*router.GeoSite
+	matcherFilePath := platform.GetAssetLocation("matcher.cache")
+
+	if customMatcherFilePath != nil {
+		matcherFilePath = *customMatcherFilePath
+	}
+
+	// get routing
+	routerConfig, err := c.RouterConfig.Build()
+
+	for _, rule := range routerConfig.Rule {
+		// write it with ruleTag key
+		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: rule.Domain}
+
+		geosite = append(geosite, &simpleGeoSite)
+	}
+
+	// get dns
+	dnsConfig, err := c.DNSConfig.Build()
+
+	for _, ns := range dnsConfig.NameServer {
+		pureDomains := []*router.Domain{}
+
+		// convert to pure domain
+		for _, pd := range ns.PrioritizedDomain {
+			pureDomains = append(pureDomains, &router.Domain{
+				Type:  router.Domain_Type(pd.Type),
+				Value: pd.Domain,
+			})
+		}
+		// write it with Tag key
+		simpleGeoSite := router.GeoSite{CountryCode: ns.Tag, Domain: pureDomains}
+
+		geosite = append(geosite, &simpleGeoSite)
+	}
+
+	f, err := os.Create(matcherFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+
+	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
+		return err
+	}
+
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Convert string to Address.

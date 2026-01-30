@@ -24,6 +24,8 @@ const (
 	XUDPBaseKey          = "xray.xudp.basekey"
 
 	TunFdKey = "xray.tun.fd"
+
+	MphCachePath = "xray.mph.path"
 )
 
 type EnvFlag struct {
