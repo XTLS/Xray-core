@@ -138,6 +138,8 @@
 - iOS & macOS arm64 & tvOS
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Loon](https://apps.apple.com/us/app/loon/id1373567447)
+  - [Egern](https://apps.apple.com/us/app/egern/id1616105820)
+  - [Quantumult X](https://apps.apple.com/us/app/quantumult-x/id1443988620)
 - Xray Tools
   - [xray-knife](https://github.com/lilendian0x00/xray-knife)
   - [xray-checker](https://github.com/kutovoys/xray-checker)
