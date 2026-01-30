@@ -568,7 +568,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                bool             `json:"allowInsecure"`
+	AllowInsecure           bool             `json:"allowInsecure"`
 	Certs                   []*TLSCertConfig `json:"certificates"`
 	ServerName              string           `json:"serverName"`
 	ALPN                    *StringList      `json:"alpn"`
@@ -579,10 +579,10 @@ type TLSConfig struct {
 	CipherSuites            string           `json:"cipherSuites"`
 	Fingerprint             string           `json:"fingerprint"`
 	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
-	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
 	CurvePreferences        *StringList      `json:"curvePreferences"`
 	MasterKeyLog            string           `json:"masterKeyLog"`
-	ServerNameToVerify      string           `json:"serverNameToVerify"`
+	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
+	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
 	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
@@ -602,10 +602,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		config.Certificate[idx] = cert
 	}
 	serverName := c.ServerName
-	config.AllowInsecure = c.Insecure
-	if config.AllowInsecure {
-		errors.PrintDeprecatedFeatureWarning("allowInsecure", "pinnedPeerCertSha256")
-	}
 	if len(c.ServerName) > 0 {
 		config.ServerName = serverName
 	}
@@ -632,12 +628,13 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		return nil, errors.New(`unknown "fingerprint": `, config.Fingerprint)
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
+	config.MasterKeyLog = c.MasterKeyLog
 
+	if c.AllowInsecure {
+		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"`)
+	}
 	if c.PinnedPeerCertSha256 != "" {
-		config.PinnedPeerCertSha256 = [][]byte{}
-		// Split by tilde separator
-		hashes := strings.Split(c.PinnedPeerCertSha256, "~")
-		for _, v := range hashes {
+		for v := range strings.SplitSeq(c.PinnedPeerCertSha256, ",") {
 			v = strings.TrimSpace(v)
 			if v == "" {
 				continue
@@ -650,12 +647,18 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	config.MasterKeyLog = c.MasterKeyLog
-
-	if c.ServerNameToVerify != "" {
-		return nil, errors.PrintRemovedFeatureError(`"serverNameToVerify"`, `"verifyPeerCertInNames"`)
+	if c.VerifyPeerCertInNames != nil {
+		return nil, errors.PrintRemovedFeatureError(`"verifyPeerCertInNames"`, `"verifyPeerCertByName"`)
 	}
-	config.VerifyPeerCertInNames = c.VerifyPeerCertInNames
+	if c.VerifyPeerCertByName != "" {
+		for v := range strings.SplitSeq(c.VerifyPeerCertByName, ",") {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			config.VerifyPeerCertByName = append(config.VerifyPeerCertByName, v)
+		}
+	}
 
 	if c.ECHServerKeys != "" {
 		EchPrivateKey, err := base64.StdEncoding.DecodeString(c.ECHServerKeys)

@@ -100,16 +100,14 @@ uI6HqHFD3iEct8fBkYfQiwH2e1eu9OwgujiWHsutyK8VvzVB3/YnhQ/TzciRjPqz
 }
 
 func TestVerifyPeerLeafCert(t *testing.T) {
-	leafCert := cert.MustGenerate(nil, cert.DNSNames("example.com"))
+	leafCert, leafHash := cert.MustGenerate(nil, cert.DNSNames("example.com"))
 	leaf := common.Must2(x509.ParseCertificate(leafCert.Certificate))
-
-	caHash := GenerateCertHash(leafCert.Certificate)
 
 	r := &RandCarrier{
 		Config: &tls.Config{
 			ServerName: "example.com",
 		},
-		PinnedPeerCertSha256: [][]byte{caHash},
+		PinnedPeerCertSha256: [][]byte{leafHash[:]},
 	}
 
 	rawCerts := [][]byte{leaf.Raw}
@@ -127,19 +125,17 @@ func TestVerifyPeerLeafCert(t *testing.T) {
 }
 
 func TestVerifyPeerCACert(t *testing.T) {
-	caCert := cert.MustGenerate(nil, cert.Authority(true), cert.KeyUsage(x509.KeyUsageCertSign))
+	caCert, caHash := cert.MustGenerate(nil, cert.Authority(true), cert.KeyUsage(x509.KeyUsageCertSign))
 	ca := common.Must2(x509.ParseCertificate(caCert.Certificate))
 
-	leafCert := cert.MustGenerate(caCert, cert.DNSNames("example.com"))
+	leafCert, _ := cert.MustGenerate(caCert, cert.DNSNames("example.com"))
 	leaf := common.Must2(x509.ParseCertificate(leafCert.Certificate))
-
-	caHash := GenerateCertHash(ca)
 
 	r := &RandCarrier{
 		Config: &tls.Config{
 			ServerName: "example.com",
 		},
-		PinnedPeerCertSha256: [][]byte{caHash},
+		PinnedPeerCertSha256: [][]byte{caHash[:]},
 	}
 
 	rawCerts := [][]byte{leaf.Raw, ca.Raw}

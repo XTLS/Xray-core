@@ -35,23 +35,23 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 
 		isFromMitmVerify := false
-		if r, ok := tlsConfig.Rand.(*tls.RandCarrier); ok && len(r.VerifyPeerCertInNames) > 0 {
-			for i, name := range r.VerifyPeerCertInNames {
+		if r, ok := tlsConfig.Rand.(*tls.RandCarrier); ok && len(r.VerifyPeerCertByName) > 0 {
+			for i, name := range r.VerifyPeerCertByName {
 				if tls.IsFromMitm(name) {
 					isFromMitmVerify = true
-					r.VerifyPeerCertInNames[0], r.VerifyPeerCertInNames[i] = r.VerifyPeerCertInNames[i], r.VerifyPeerCertInNames[0]
-					r.VerifyPeerCertInNames = r.VerifyPeerCertInNames[1:]
+					r.VerifyPeerCertByName[0], r.VerifyPeerCertByName[i] = r.VerifyPeerCertByName[i], r.VerifyPeerCertByName[0]
+					r.VerifyPeerCertByName = r.VerifyPeerCertByName[1:]
 					after := mitmServerName
 					for {
 						if len(after) > 0 {
-							r.VerifyPeerCertInNames = append(r.VerifyPeerCertInNames, after)
+							r.VerifyPeerCertByName = append(r.VerifyPeerCertByName, after)
 						}
 						_, after, _ = strings.Cut(after, ".")
 						if !strings.Contains(after, ".") {
 							break
 						}
 					}
-					slices.Reverse(r.VerifyPeerCertInNames)
+					slices.Reverse(r.VerifyPeerCertByName)
 					break
 				}
 			}

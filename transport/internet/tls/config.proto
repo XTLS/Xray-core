@@ -38,9 +38,6 @@ message Certificate {
 }
 
 message Config {
-  // Whether or not to allow self-signed certificates.
-  bool allow_insecure = 1;
-
   // List of certificates to be served on server.
   repeated Certificate certificate = 2;
 
@@ -70,29 +67,13 @@ message Config {
   string fingerprint = 11;
 
   bool reject_unknown_sni = 12;
-  
-  /* @Document Some certificate chain sha256 hashes.
-     @Document After normal validation or allow_insecure, if the server's cert chain hash does not match any of these values, the connection will be aborted.
-     @Critical
-  */
-  repeated bytes pinned_peer_certificate_chain_sha256 = 13;
-
-  /* @Document Some certificate public key sha256 hashes.
-     @Document After normal validation (required), if one of certs in verified chain matches one of these values, the connection will be eventually accepted.
-     @Critical
-  */
-  repeated bytes pinned_peer_certificate_public_key_sha256 = 14;
 
   string master_key_log = 15;
 
   // Lists of string as CurvePreferences values.
   repeated string curve_preferences = 16;
 
-  /* @Document Replaces server_name to verify the peer cert.
-     @Document After allow_insecure (automatically), if the server's cert can't be verified by any of these names, pinned_peer_certificate_chain_sha256 will be tried.
-     @Critical
-  */
-  repeated string verify_peer_cert_in_names = 17;
+  repeated string verify_peer_cert_by_name = 17;
 
   bytes ech_server_keys = 18;
 
