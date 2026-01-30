@@ -20,7 +20,7 @@ import (
 )
 
 type mphMatcherWrapper struct {
-	m *strmatcher.MphMatcherGroup
+	m strmatcher.IndexMatcher
 }
 
 func (w *mphMatcherWrapper) Match(s string) bool {
@@ -157,7 +157,7 @@ func NewClient(
 				defer f.Close()
 				g, err := router.LoadGeoSiteMatcher(f, ns.Tag)
 				if err == nil {
-					errors.LogDebug(ctx, "MphDomainMatcher is enabled for DNS tag: ", ns.Tag)
+					errors.LogDebug(ctx, "MphDomainMatcher loaded from cache for ", ns.Tag, " dns tag)")
 					updateDomainRule(&mphMatcherWrapper{m: g}, 0, *matcherInfos)
 					rules = append(rules, "[MPH Cache]")
 					mphLoaded = true

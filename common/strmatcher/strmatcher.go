@@ -107,3 +107,16 @@ func (g *MatcherGroup) Match(pattern string) []uint32 {
 func (g *MatcherGroup) Size() uint32 {
 	return g.count
 }
+
+type IndexMatcherGroup struct {
+	Matchers []IndexMatcher
+}
+
+func (g *IndexMatcherGroup) Match(input string) []uint32 {
+	for _, m := range g.Matchers {
+		if res := m.Match(input); len(res) > 0 {
+			return res
+		}
+	}
+	return nil
+}

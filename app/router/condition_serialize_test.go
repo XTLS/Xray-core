@@ -70,7 +70,7 @@ func TestGeoSiteSerialization(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := router.SerializeGeoSiteList(sites, &buf); err != nil {
+	if err := router.SerializeGeoSiteList(sites, nil, &buf); err != nil {
 		t.Fatalf("SerializeGeoSiteList failed: %v", err)
 	}
 
@@ -128,4 +128,33 @@ func TestGeoSiteSerialization(t *testing.T) {
 	if err == nil {
 		t.Error("LoadGeoSiteMatcher(unknown) should fail")
 	}
+}
+func TestGeoSiteSerializationWithDeps(t *testing.T) {
+	sites := []*router.GeoSite{
+		{
+			CountryCode: "geosite:cn",
+			Domain: []*router.Domain{
+				{Type: router.Domain_Domain, Value: "baidu.cn"},
+			},
+		},
+		{
+			CountryCode: "rule-1",
+			Domain: []*router.Domain{
+				{Type: router.Domain_Domain, Value: "google.com"},
+			},
+		},
+	}
+	deps := map[string][]string{
+		"rule-1": {"geosite:cn"},
+	}
+
+	var buf bytes.Buffer
+	err := router.SerializeGeoSiteList(sites, deps, &buf)
+	require.NoError(t, err)
+
+	matcher, err := router.LoadGeoSiteMatcher(bytes.NewReader(buf.Bytes()), "rule-1")
+	require.NoError(t, err)
+
+	require.True(t, matcher.Match("google.com") != nil)
+	require.True(t, matcher.Match("baidu.cn") != nil)
 }

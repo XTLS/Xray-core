@@ -613,39 +613,76 @@ func (c *Config) Build() (*core.Config, error) {
 
 func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 	var geosite []*router.GeoSite
+	deps := make(map[string][]string)
+	uniqueGeosites := make(map[string]bool)
 	matcherFilePath := platform.GetAssetLocation("matcher.cache")
 
 	if customMatcherFilePath != nil {
 		matcherFilePath = *customMatcherFilePath
 	}
 
-	// get routing
-	routerConfig, err := c.RouterConfig.Build()
-
-	for _, rule := range routerConfig.Rule {
-		// write it with ruleTag key
-		simpleGeoSite := router.GeoSite{CountryCode: rule.RuleTag, Domain: rule.Domain}
-
-		geosite = append(geosite, &simpleGeoSite)
+	processDomains := func(tag string, rawDomains []string) {
+		var manualDomains []*router.Domain
+		var dDeps []string
+		for _, dStr := range rawDomains {
+			if strings.HasPrefix(dStr, "geosite:") {
+				country := strings.ToUpper(dStr[8:])
+				depKey := dStr
+				if !uniqueGeosites[country] {
+					ds, err := loadGeositeWithAttr("geosite.dat", country)
+					if err == nil {
+						uniqueGeosites[country] = true
+						geosite = append(geosite, &router.GeoSite{CountryCode: depKey, Domain: ds})
+					}
+				}
+				dDeps = append(dDeps, depKey)
+			} else {
+				ds, err := parseDomainRule(dStr)
+				if err == nil {
+					manualDomains = append(manualDomains, ds...)
+				}
+			}
+		}
+		if len(manualDomains) > 0 {
+			geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualDomains})
+		}
+		if len(dDeps) > 0 {
+			deps[tag] = dDeps
+		}
 	}
 
-	// get dns
-	dnsConfig, err := c.DNSConfig.Build()
-
-	for _, ns := range dnsConfig.NameServer {
-		pureDomains := []*router.Domain{}
-
-		// convert to pure domain
-		for _, pd := range ns.PrioritizedDomain {
-			pureDomains = append(pureDomains, &router.Domain{
-				Type:  router.Domain_Type(pd.Type),
-				Value: pd.Domain,
-			})
+	// proccess rules
+	if c.RouterConfig != nil {
+		for _, rawRule := range c.RouterConfig.RuleList {
+			type SimpleRule struct {
+				RuleTag string      `json:"ruleTag"`
+				Domain  *StringList `json:"domain"`
+				Domains *StringList `json:"domains"`
+			}
+			var sr SimpleRule
+			json.Unmarshal(rawRule, &sr)
+			if sr.RuleTag == "" {
+				continue
+			}
+			var allDomains []string
+			if sr.Domain != nil {
+				allDomains = append(allDomains, *sr.Domain...)
+			}
+			if sr.Domains != nil {
+				allDomains = append(allDomains, *sr.Domains...)
+			}
+			processDomains(sr.RuleTag, allDomains)
 		}
-		// write it with Tag key
-		simpleGeoSite := router.GeoSite{CountryCode: ns.Tag, Domain: pureDomains}
+	}
 
-		geosite = append(geosite, &simpleGeoSite)
+	// proccess dns servers
+	if c.DNSConfig != nil {
+		for _, ns := range c.DNSConfig.Servers {
+			if ns.Tag == "" {
+				continue
+			}
+			processDomains(ns.Tag, ns.Domains)
+		}
 	}
 
 	f, err := os.Create(matcherFilePath)
@@ -656,7 +693,7 @@ func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 
 	var buf bytes.Buffer
 
-	if err := router.SerializeGeoSiteList(geosite, &buf); err != nil {
+	if err := router.SerializeGeoSiteList(geosite, deps, &buf); err != nil {
 		return err
 	}
 

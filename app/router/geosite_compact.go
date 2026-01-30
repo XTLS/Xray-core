@@ -4,17 +4,20 @@ import (
 	"encoding/gob"
 	"errors"
 	"io"
+	"runtime"
 
 	"github.com/xtls/xray-core/common/strmatcher"
 )
 
 type geoSiteListGob struct {
 	Sites map[string][]byte
+	Deps  map[string][]string
 }
 
-func SerializeGeoSiteList(sites []*GeoSite, w io.Writer) error {
+func SerializeGeoSiteList(sites []*GeoSite, deps map[string][]string, w io.Writer) error {
 	data := geoSiteListGob{
 		Sites: make(map[string][]byte),
+		Deps:  deps,
 	}
 
 	for _, site := range sites {
@@ -44,16 +47,45 @@ func (w *bytesWriter) Bytes() []byte {
 	return w.data
 }
 
-func LoadGeoSiteMatcher(r io.Reader, countryCode string) (*strmatcher.MphMatcherGroup, error) {
+func LoadGeoSiteMatcher(r io.Reader, countryCode string) (strmatcher.IndexMatcher, error) {
 	var data geoSiteListGob
 	if err := gob.NewDecoder(r).Decode(&data); err != nil {
 		return nil, err
 	}
 
-	siteData, ok := data.Sites[countryCode]
-	if !ok {
-		return nil, errors.New("country code not found")
+	return loadWithDeps(&data, countryCode, make(map[string]bool))
+}
+
+func loadWithDeps(data *geoSiteListGob, code string, visited map[string]bool) (strmatcher.IndexMatcher, error) {
+	if visited[code] {
+		return nil, errors.New("cyclic dependency")
+	}
+	visited[code] = true
+
+	var matchers []strmatcher.IndexMatcher
+
+	if siteData, ok := data.Sites[code]; ok {
+		m, err := NewDomainMatcherFromBuffer(siteData)
+		if err == nil {
+			matchers = append(matchers, m)
+		}
 	}
 
-	return NewDomainMatcherFromBuffer(siteData)
+	if deps, ok := data.Deps[code]; ok {
+		for _, dep := range deps {
+			m, err := loadWithDeps(data, dep, visited)
+			if err == nil {
+				matchers = append(matchers, m)
+			}
+		}
+	}
+
+	if len(matchers) == 0 {
+		return nil, errors.New("matcher not found for: " + code)
+	}
+	if len(matchers) == 1 {
+		return matchers[0], nil
+	}
+	runtime.GC()
+	return &strmatcher.IndexMatcherGroup{Matchers: matchers}, nil
 }
