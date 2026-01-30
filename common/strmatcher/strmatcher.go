@@ -54,6 +54,8 @@ func (t Type) New(pattern string) (Matcher, error) {
 type IndexMatcher interface {
 	// Match returns the index of a matcher that matches the input. It returns empty array if no such matcher exists.
 	Match(input string) []uint32
+	// Size returns the number of matchers in the group.
+	Size() uint32
 }
 
 type MatcherEntry struct {
@@ -113,10 +115,27 @@ type IndexMatcherGroup struct {
 }
 
 func (g *IndexMatcherGroup) Match(input string) []uint32 {
+	var offset uint32
 	for _, m := range g.Matchers {
 		if res := m.Match(input); len(res) > 0 {
-			return res
+			if offset == 0 {
+				return res
+			}
+			shifted := make([]uint32, len(res))
+			for i, id := range res {
+				shifted[i] = id + offset
+			}
+			return shifted
 		}
+		offset += m.Size()
 	}
 	return nil
+}
+
+func (g *IndexMatcherGroup) Size() uint32 {
+	var count uint32
+	for _, m := range g.Matchers {
+		count += m.Size()
+	}
+	return count
 }

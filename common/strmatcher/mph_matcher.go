@@ -302,3 +302,7 @@ func readUnaligned64(p unsafe.Pointer) uint64 {
 	q := (*[8]byte)(p)
 	return uint64(q[0]) | uint64(q[1])<<8 | uint64(q[2])<<16 | uint64(q[3])<<24 | uint64(q[4])<<32 | uint64(q[5])<<40 | uint64(q[6])<<48 | uint64(q[7])<<56
 }
+
+func (g *MphMatcherGroup) Size() uint32 {
+	return g.Count
+}

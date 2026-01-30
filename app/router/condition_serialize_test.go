@@ -70,7 +70,7 @@ func TestGeoSiteSerialization(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := router.SerializeGeoSiteList(sites, nil, &buf); err != nil {
+	if err := router.SerializeGeoSiteList(sites, nil, nil, &buf); err != nil {
 		t.Fatalf("SerializeGeoSiteList failed: %v", err)
 	}
 
@@ -155,7 +155,7 @@ func TestGeoSiteSerializationWithDeps(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := router.SerializeGeoSiteList(sites, deps, &buf)
+	err := router.SerializeGeoSiteList(sites, deps, nil, &buf)
 	require.NoError(t, err)
 
 	matcher, err := router.LoadGeoSiteMatcher(bytes.NewReader(buf.Bytes()), "rule-1")

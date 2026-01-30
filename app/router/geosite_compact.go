@@ -12,12 +12,14 @@ import (
 type geoSiteListGob struct {
 	Sites map[string][]byte
 	Deps  map[string][]string
+	Hosts map[string][]string
 }
 
-func SerializeGeoSiteList(sites []*GeoSite, deps map[string][]string, w io.Writer) error {
+func SerializeGeoSiteList(sites []*GeoSite, deps map[string][]string, hosts map[string][]string, w io.Writer) error {
 	data := geoSiteListGob{
 		Sites: make(map[string][]byte),
 		Deps:  deps,
+		Hosts: hosts,
 	}
 
 	for _, site := range sites {
@@ -88,4 +90,11 @@ func loadWithDeps(data *geoSiteListGob, code string, visited map[string]bool) (s
 	}
 	runtime.GC()
 	return &strmatcher.IndexMatcherGroup{Matchers: matchers}, nil
+}
+func LoadGeoSiteHosts(r io.Reader) (map[string][]string, error) {
+	var data geoSiteListGob
+	if err := gob.NewDecoder(r).Decode(&data); err != nil {
+		return nil, err
+	}
+	return data.Hosts, nil
 }

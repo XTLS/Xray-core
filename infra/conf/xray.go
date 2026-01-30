@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dispatcher"
@@ -615,27 +616,41 @@ func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 	var geosite []*router.GeoSite
 	deps := make(map[string][]string)
 	uniqueGeosites := make(map[string]bool)
+	uniqueTags := make(map[string]bool)
 	matcherFilePath := platform.GetAssetLocation("matcher.cache")
 
 	if customMatcherFilePath != nil {
 		matcherFilePath = *customMatcherFilePath
 	}
 
+	processGeosite := func(dStr string) bool {
+		prefix := ""
+		if strings.HasPrefix(dStr, "geosite:") {
+			prefix = "geosite:"
+		} else if strings.HasPrefix(dStr, "ext-domain:") {
+			prefix = "ext-domain:"
+		}
+		if prefix == "" {
+			return false
+		}
+		key := strings.ToLower(dStr)
+		country := strings.ToUpper(dStr[len(prefix):])
+		if !uniqueGeosites[country] {
+			ds, err := loadGeositeWithAttr("geosite.dat", country)
+			if err == nil {
+				uniqueGeosites[country] = true
+				geosite = append(geosite, &router.GeoSite{CountryCode: key, Domain: ds})
+			}
+		}
+		return true
+	}
+
 	processDomains := func(tag string, rawDomains []string) {
 		var manualDomains []*router.Domain
 		var dDeps []string
 		for _, dStr := range rawDomains {
-			if strings.HasPrefix(dStr, "geosite:") {
-				country := strings.ToUpper(dStr[8:])
-				depKey := dStr
-				if !uniqueGeosites[country] {
-					ds, err := loadGeositeWithAttr("geosite.dat", country)
-					if err == nil {
-						uniqueGeosites[country] = true
-						geosite = append(geosite, &router.GeoSite{CountryCode: depKey, Domain: ds})
-					}
-				}
-				dDeps = append(dDeps, depKey)
+			if processGeosite(dStr) {
+				dDeps = append(dDeps, strings.ToLower(dStr))
 			} else {
 				ds, err := parseDomainRule(dStr)
 				if err == nil {
@@ -644,10 +659,13 @@ func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 			}
 		}
 		if len(manualDomains) > 0 {
-			geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualDomains})
+			if !uniqueTags[tag] {
+				uniqueTags[tag] = true
+				geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualDomains})
+			}
 		}
 		if len(dDeps) > 0 {
-			deps[tag] = dDeps
+			deps[tag] = append(deps[tag], dDeps...)
 		}
 	}
 
@@ -685,6 +703,77 @@ func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 		}
 	}
 
+	var hostIPs map[string][]string
+	if c.DNSConfig != nil && c.DNSConfig.Hosts != nil {
+		hostIPs = make(map[string][]string)
+		var hostDeps []string
+		var hostPatterns []string
+
+		// use raw map to avoid expanding geosites
+		var domains []string
+		for domain := range c.DNSConfig.Hosts.Hosts {
+			domains = append(domains, domain)
+		}
+		sort.Strings(domains)
+
+		manualHostGroups := make(map[string][]*router.Domain)
+		manualHostIPs := make(map[string][]string)
+		manualHostNames := make(map[string]string)
+
+		for _, domain := range domains {
+			ha := c.DNSConfig.Hosts.Hosts[domain]
+			m := getHostMapping(ha)
+
+			var ips []string
+			if m.ProxiedDomain != "" {
+				ips = append(ips, m.ProxiedDomain)
+			} else {
+				for _, ip := range m.Ip {
+					ips = append(ips, net.IPAddress(ip).String())
+				}
+			}
+
+			if processGeosite(domain) {
+				tag := strings.ToLower(domain)
+				hostDeps = append(hostDeps, tag)
+				hostIPs[tag] = ips
+				hostPatterns = append(hostPatterns, domain)
+			} else {
+				// build manual domains by their destination IPs
+				sort.Strings(ips)
+				ipKey := strings.Join(ips, ",")
+				ds, err := parseDomainRule(domain)
+				if err == nil {
+					manualHostGroups[ipKey] = append(manualHostGroups[ipKey], ds...)
+					manualHostIPs[ipKey] = ips
+					if _, ok := manualHostNames[ipKey]; !ok {
+						manualHostNames[ipKey] = domain
+					}
+				}
+			}
+		}
+
+		// create manual host groups
+		var ipKeys []string
+		for k := range manualHostGroups {
+			ipKeys = append(ipKeys, k)
+		}
+		sort.Strings(ipKeys)
+
+		for _, k := range ipKeys {
+			tag := manualHostNames[k]
+			geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualHostGroups[k]})
+			hostDeps = append(hostDeps, tag)
+			hostIPs[tag] = manualHostIPs[k]
+
+			// record tag _ORDER links the matcher to IP addresses
+			hostPatterns = append(hostPatterns, tag)
+		}
+
+		deps["HOSTS"] = hostDeps
+		hostIPs["_ORDER"] = hostPatterns
+	}
+
 	f, err := os.Create(matcherFilePath)
 	if err != nil {
 		return err
@@ -693,7 +782,7 @@ func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
 
 	var buf bytes.Buffer
 
-	if err := router.SerializeGeoSiteList(geosite, deps, &buf); err != nil {
+	if err := router.SerializeGeoSiteList(geosite, deps, hostIPs, &buf); err != nil {
 		return err
 	}
 
