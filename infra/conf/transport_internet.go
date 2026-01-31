@@ -100,7 +100,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		}
 	}
 	if c.HeaderConfig != nil || c.Seed != nil {
-		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "udpmasks header-* & mkcp-original & mkcp-aes128gcm")
+		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
 	}
 
 	return config, nil
