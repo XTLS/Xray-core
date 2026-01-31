@@ -9,9 +9,14 @@ import (
 	"github.com/sagernet/sing/common/control"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 )
+
+func noRetry(err error) error {
+	return errors.New(err).Base(retry.ErrNoRetry)
+}
 
 var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
 
@@ -70,13 +75,17 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
-			return c.Control(func(fd uintptr) {
+			var sockoptErr error
+			if err := c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, destAddr.String(), fd, sockopt); err != nil {
-						errors.LogInfo(ctx, err, "failed to apply socket options")
+						sockoptErr = noRetry(err)
 					}
 				}
-			})
+			}); err != nil {
+				return err
+			}
+			return sockoptErr
 		}
 		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
 		if err != nil {
@@ -127,18 +136,23 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
-			return c.Control(func(fd uintptr) {
+			var sockoptErr error
+			if err := c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
-						errors.LogInfoInner(ctx, err, "failed to apply socket options")
+						sockoptErr = noRetry(err)
+						return
 					}
 					if dest.Network == net.Network_UDP && hasBindAddr(sockopt) {
 						if err := bindAddr(fd, sockopt.BindAddress, sockopt.BindPort); err != nil {
-							errors.LogInfoInner(ctx, err, "failed to bind source address to ", sockopt.BindAddress)
+							sockoptErr = noRetry(err)
 						}
 					}
 				}
-			})
+			}); err != nil {
+				return err
+			}
+			return sockoptErr
 		}
 	}
 
