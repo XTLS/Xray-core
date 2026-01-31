@@ -272,8 +272,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL.Host = dest.Address.String()
 	}
 
-	sessionIdUuid := uuid.New()
-	requestURL.Path = transportConfiguration.GetNormalizedPath() + sessionIdUuid.String()
+	sessionId := ""
+	if transportConfiguration.Mode != "stream-one" {
+		sessionIdUuid := uuid.New()
+		sessionId = sessionIdUuid.String()
+	}
+	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
 	httpClient, xmuxClient := getHTTPClient(ctx, dest, streamSettings)
@@ -327,7 +331,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if requestURL2.Host == "" {
 			requestURL2.Host = dest2.Address.String()
 		}
-		requestURL2.Path = config2.GetNormalizedPath() + sessionIdUuid.String()
+		requestURL2.Path = config2.GetNormalizedPath()
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
 		httpClient2, xmuxClient2 = getHTTPClient(ctx, dest2, memory2)
 		errors.LogInfo(ctx, fmt.Sprintf("XHTTP is downloading from %s, mode %s, HTTP version %s, host %s", dest2, "stream-down", httpVersion2, requestURL2.Host))
@@ -363,7 +367,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}
-		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient.OpenStream(ctx, requestURL.String(), reader, false)
+		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient.OpenStream(ctx, requestURL.String(), sessionId, reader, false)
 		if err != nil { // browser dialer only
 			return nil, err
 		}
@@ -372,7 +376,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient2 != nil {
 			xmuxClient2.LeftRequests.Add(-1)
 		}
-		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), nil, false)
+		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), sessionId, nil, false)
 		if err != nil { // browser dialer only
 			return nil, err
 		}
@@ -381,7 +385,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}
-		_, _, _, err = httpClient.OpenStream(ctx, requestURL.String(), reader, true)
+		_, _, _, err = httpClient.OpenStream(ctx, requestURL.String(), sessionId, reader, true)
 		if err != nil { // browser dialer only
 			return nil, err
 		}
@@ -423,8 +427,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			// this intentionally makes a shallow-copy of the struct so we
 			// can reassign Path (potentially concurrently)
 			url := requestURL
-			url.Path += "/" + strconv.FormatInt(seq, 10)
-
+			seqStr := strconv.FormatInt(seq, 10)
 			seq += 1
 
 			if scMinPostsIntervalMs.From > 0 {
@@ -450,6 +453,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				err := httpClient.PostPacket(
 					ctx,
 					url.String(),
+					sessionId,
+					seqStr,
 					&buf.MultiBufferContainer{MultiBuffer: chunk},
 					int64(chunk.Len()),
 				)

@@ -228,6 +228,19 @@ type SplitHTTPConfig struct {
 	Mode                 string            `json:"mode"`
 	Headers              map[string]string `json:"headers"`
 	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
+	XPaddingObfsMode     bool              `json:"xPaddingObfsMode"`
+	XPaddingKey          string            `json:"xPaddingKey"`
+	XPaddingHeader       string            `json:"xPaddingHeader"`
+	XPaddingPlacement    string            `json:"xPaddingPlacement"`
+	XPaddingMethod       string            `json:"xPaddingMethod"`
+	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
+	SessionPlacement     string            `json:"sessionPlacement"`
+	SessionKey           string            `json:"sessionKey"`
+	SeqPlacement         string            `json:"seqPlacement"`
+	SeqKey               string            `json:"seqKey"`
+	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
+	UplinkDataKey        string            `json:"uplinkDataKey"`
+	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -287,6 +300,107 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("xPaddingBytes cannot be disabled")
 	}
 
+	if c.XPaddingKey == "" {
+		c.XPaddingKey = "x_padding"
+	}
+
+	if c.XPaddingHeader == "" {
+		c.XPaddingHeader = "X-Padding"
+	}
+
+	switch c.XPaddingPlacement {
+	case "":
+		c.XPaddingPlacement = "queryInHeader"
+	case "cookie", "header", "query", "queryInHeader":
+	default:
+		return nil, errors.New("unsupported padding placement: " + c.XPaddingPlacement)
+	}
+
+	switch c.XPaddingMethod {
+	case "":
+		c.XPaddingMethod = "repeat-x"
+	case "repeat-x", "tokenish":
+	default:
+		return nil, errors.New("unsupported padding method: " + c.XPaddingMethod)
+	}
+
+	switch c.UplinkDataPlacement {
+	case "":
+		c.UplinkDataPlacement = "body"
+	case "cookie", "header":
+		if c.Mode != "packet-up" {
+			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
+		}
+	default:
+		return nil, errors.New("unsupported uplink data placement: " + c.UplinkDataPlacement)
+	}
+
+	if c.UplinkHTTPMethod == "" {
+		c.UplinkHTTPMethod = "POST"
+	}
+	c.UplinkHTTPMethod = strings.ToUpper(c.UplinkHTTPMethod)
+
+	if c.UplinkHTTPMethod == "GET" && c.Mode != "packet-up" {
+		return nil, errors.New("uplinkHTTPMethod can be GET only in packet-up mode")
+	}
+
+	switch c.SessionPlacement {
+	case "":
+		c.SessionPlacement = "path"
+	case "cookie", "header", "query":
+	default:
+		return nil, errors.New("unsupported session placement: " + c.SessionPlacement)
+	}
+
+	switch c.SeqPlacement {
+	case "":
+		c.SeqPlacement = "path"
+	case "cookie", "header", "query":
+		if c.SessionPlacement == "path" {
+			return nil, errors.New("SeqPlacement must be path when SessionPlacement is path")
+		}
+	default:
+		return nil, errors.New("unsupported seq placement: " + c.SeqPlacement)
+	}
+
+	if c.SessionPlacement != "path" && c.SessionKey == "" {
+		switch c.SessionPlacement {
+		case "cookie", "query":
+			c.SessionKey = "x_session"
+		case "header":
+			c.SessionKey = "X-Session"
+		}
+	}
+
+	if c.SeqPlacement != "path" && c.SeqKey == "" {
+		switch c.SeqPlacement {
+		case "cookie", "query":
+			c.SeqKey = "x_seq"
+		case "header":
+			c.SeqKey = "X-Seq"
+		}
+	}
+
+	if c.UplinkDataPlacement != "body" && c.UplinkDataKey == "" {
+		switch c.UplinkDataPlacement {
+		case "cookie":
+			c.UplinkDataKey = "x_data"
+		case "header":
+			c.UplinkDataKey = "X-Data"
+		}
+	}
+
+	if c.UplinkChunkSize == 0 {
+		switch c.UplinkDataPlacement {
+		case "cookie":
+			c.UplinkChunkSize = 3 * 1024 // 3KB
+		case "header":
+			c.UplinkChunkSize = 4 * 1024 // 4KB
+		}
+	} else if c.UplinkChunkSize < 64 {
+		c.UplinkChunkSize = 64
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -305,6 +419,19 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		Mode:                 c.Mode,
 		Headers:              c.Headers,
 		XPaddingBytes:        newRangeConfig(c.XPaddingBytes),
+		XPaddingObfsMode:     c.XPaddingObfsMode,
+		XPaddingKey:          c.XPaddingKey,
+		XPaddingHeader:       c.XPaddingHeader,
+		XPaddingPlacement:    c.XPaddingPlacement,
+		XPaddingMethod:       c.XPaddingMethod,
+		UplinkHTTPMethod:     c.UplinkHTTPMethod,
+		SessionPlacement:     c.SessionPlacement,
+		SeqPlacement:         c.SeqPlacement,
+		SessionKey:           c.SessionKey,
+		SeqKey:               c.SeqKey,
+		UplinkDataPlacement:  c.UplinkDataPlacement,
+		UplinkDataKey:        c.UplinkDataKey,
+		UplinkChunkSize:      c.UplinkChunkSize,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),

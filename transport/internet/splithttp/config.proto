@@ -36,4 +36,17 @@ message Config {
   RangeConfig scStreamUpServerSecs = 11;
   XmuxConfig xmux = 12;
   xray.transport.internet.StreamConfig downloadSettings = 13;
+  bool xPaddingObfsMode = 14;
+  string xPaddingKey = 15;
+  string xPaddingHeader = 16;
+  string xPaddingPlacement = 17;
+  string xPaddingMethod = 18;
+  string uplinkHTTPMethod = 19;
+  string sessionPlacement = 20;
+  string sessionKey = 21;
+  string seqPlacement = 22;
+  string seqKey = 23;
+  string uplinkDataPlacement = 24;
+  string uplinkDataKey = 25;
+  uint32 uplinkChunkSize = 26;
 }
