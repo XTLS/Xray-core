@@ -113,7 +113,7 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
 
 		if domainMatcherPath != "" {
-			matcher, err = GetDomainMathcerWithRuleTag(domainMatcherPath, rr.RuleTag)
+			matcher, err = GetDomainMatcherWithRuleTag(domainMatcherPath, rr.RuleTag)
 			if err != nil {
 				return nil, errors.New("failed to build domain condition from cached MphDomainMatcher").Base(err)
 			}
@@ -189,7 +189,7 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	}
 }
 
-func GetDomainMathcerWithRuleTag(domainMatcherPath string, ruleTag string) (*DomainMatcher, error) {
+func GetDomainMatcherWithRuleTag(domainMatcherPath string, ruleTag string) (*DomainMatcher, error) {
 	f, err := filesystem.NewFileReader(domainMatcherPath)
 	if err != nil {
 		return nil, errors.New("failed to load file: ", domainMatcherPath).Base(err)
