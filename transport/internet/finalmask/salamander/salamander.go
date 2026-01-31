@@ -1,4 +1,4 @@
-package obfs
+package salamander
 
 import (
 	"fmt"

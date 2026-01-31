@@ -1,4 +1,4 @@
-package obfs
+package salamander
 
 import (
 	"io"
@@ -22,8 +22,8 @@ type obfsPacketConn struct {
 	writeMutex sync.Mutex
 }
 
-func NewConnClient(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	ob, err := NewSalamanderObfuscator([]byte(password))
+func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+	ob, err := NewSalamanderObfuscator([]byte(c.Password))
 	if err != nil {
 		return nil, errors.New("salamander err").Base(err)
 	}
@@ -44,8 +44,8 @@ func NewConnClient(password string, raw net.PacketConn, first bool, leaveSize in
 	return conn, nil
 }
 
-func NewConnServer(password string, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return NewConnClient(password, raw, first, leaveSize)
+func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+	return NewConnClient(c, raw, first, leaveSize)
 }
 
 func (c *obfsPacketConn) Size() int32 {
