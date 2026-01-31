@@ -1,4 +1,4 @@
-package salamander
+package wechat
 
 import (
 	"net"

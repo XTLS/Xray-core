@@ -1,4 +1,4 @@
-package salamander
+package srtp
 
 import (
 	"net"

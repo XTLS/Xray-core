@@ -1,4 +1,4 @@
-package salamander
+package utp
 
 import (
 	"net"

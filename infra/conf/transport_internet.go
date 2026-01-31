@@ -16,7 +16,16 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -29,16 +38,6 @@ import (
 )
 
 var (
-	kcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"none":         func() interface{} { return new(NoOpAuthenticator) },
-		"srtp":         func() interface{} { return new(SRTPAuthenticator) },
-		"utp":          func() interface{} { return new(UTPAuthenticator) },
-		"wechat-video": func() interface{} { return new(WechatVideoAuthenticator) },
-		"dtls":         func() interface{} { return new(DTLSAuthenticator) },
-		"wireguard":    func() interface{} { return new(WireguardAuthenticator) },
-		"dns":          func() interface{} { return new(DNSAuthenticator) },
-	}, "type", "")
-
 	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
 		"http": func() interface{} { return new(Authenticator) },
@@ -63,9 +62,9 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 
 	if c.Mtu != nil {
 		mtu := *c.Mtu
-		if mtu < 576 || mtu > 1460 {
-			return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
-		}
+		// if mtu < 576 || mtu > 1460 {
+		// 	return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
+		// }
 		config.Mtu = &kcp.MTU{Value: mtu}
 	}
 	if c.Tti != nil {
@@ -100,20 +99,8 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 			config.WriteBuffer = &kcp.WriteBuffer{Size: 512 * 1024}
 		}
 	}
-	if len(c.HeaderConfig) > 0 {
-		headerConfig, _, err := kcpHeaderLoader.Load(c.HeaderConfig)
-		if err != nil {
-			return nil, errors.New("invalid mKCP header config.").Base(err).AtError()
-		}
-		ts, err := headerConfig.(Buildable).Build()
-		if err != nil {
-			return nil, errors.New("invalid mKCP header config").Base(err).AtError()
-		}
-		config.HeaderConfig = serial.ToTypedMessage(ts)
-	}
-
-	if c.Seed != nil {
-		config.Seed = &kcp.EncryptionSeed{Seed: *c.Seed}
+	if c.HeaderConfig != nil || c.Seed != nil {
+		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
 	}
 
 	return config, nil
@@ -1242,9 +1229,79 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 
 var (
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"salamander": func() interface{} { return new(Salamander) },
+		"header-dns":       func() interface{} { return new(Dns) },
+		"header-dtls":      func() interface{} { return new(Dtls) },
+		"header-srtp":      func() interface{} { return new(Srtp) },
+		"header-utp":       func() interface{} { return new(Utp) },
+		"header-wechat":    func() interface{} { return new(Wechat) },
+		"header-wireguard": func() interface{} { return new(Wireguard) },
+		"mkcp-original":    func() interface{} { return new(Original) },
+		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
+		"salamander":       func() interface{} { return new(Salamander) },
+		"xdns":             func() interface{} { return new(Xdns) },
 	}, "type", "settings")
 )
+
+type Dns struct {
+	Domain string `json:"domain"`
+}
+
+func (c *Dns) Build() (proto.Message, error) {
+	config := &dns.Config{}
+	config.Domain = "www.baidu.com"
+
+	if len(c.Domain) > 0 {
+		config.Domain = c.Domain
+	}
+
+	return config, nil
+}
+
+type Dtls struct{}
+
+func (c *Dtls) Build() (proto.Message, error) {
+	return &dtls.Config{}, nil
+}
+
+type Srtp struct{}
+
+func (c *Srtp) Build() (proto.Message, error) {
+	return &srtp.Config{}, nil
+}
+
+type Utp struct{}
+
+func (c *Utp) Build() (proto.Message, error) {
+	return &utp.Config{}, nil
+}
+
+type Wechat struct{}
+
+func (c *Wechat) Build() (proto.Message, error) {
+	return &wechat.Config{}, nil
+}
+
+type Wireguard struct{}
+
+func (c *Wireguard) Build() (proto.Message, error) {
+	return &wireguard.Config{}, nil
+}
+
+type Original struct{}
+
+func (c *Original) Build() (proto.Message, error) {
+	return &original.Config{}, nil
+}
+
+type Aes128Gcm struct {
+	Password string `json:"password"`
+}
+
+func (c *Aes128Gcm) Build() (proto.Message, error) {
+	return &aes128gcm.Config{
+		Password: c.Password,
+	}, nil
+}
 
 type Salamander struct {
 	Password string `json:"password"`
@@ -1256,14 +1313,28 @@ func (c *Salamander) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type FinalMask struct {
+type Xdns struct {
+	Domain string `json:"domain"`
+}
+
+func (c *Xdns) Build() (proto.Message, error) {
+	if c.Domain == "" {
+		return nil, errors.New("empty domain")
+	}
+
+	return &xdns.Config{
+		Domain: c.Domain,
+	}, nil
+}
+
+type Mask struct {
 	Type     string           `json:"type"`
 	Settings *json.RawMessage `json:"settings"`
 }
 
-func (c *FinalMask) Build(tcpmaskLoader bool) (proto.Message, error) {
+func (c *Mask) Build(tcp bool) (proto.Message, error) {
 	loader := udpmaskLoader
-	if tcpmaskLoader {
+	if tcp {
 		return nil, errors.New("")
 	}
 
@@ -1282,12 +1353,17 @@ func (c *FinalMask) Build(tcpmaskLoader bool) (proto.Message, error) {
 	return ts, nil
 }
 
+type FinalMask struct {
+	Tcp []Mask `json:"tcp"`
+	Udp []Mask `json:"udp"`
+}
+
 type StreamConfig struct {
 	Address             *Address           `json:"address"`
 	Port                uint16             `json:"port"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
-	Udpmasks            []*FinalMask       `json:"udpmasks"`
+	FinalMask           *FinalMask         `json:"finalmask"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -1437,12 +1513,21 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SocketSettings = ss
 	}
 
-	for _, mask := range c.Udpmasks {
-		u, err := mask.Build(false)
-		if err != nil {
-			return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+	if c.FinalMask != nil {
+		for _, mask := range c.FinalMask.Tcp {
+			u, err := mask.Build(true)
+			if err != nil {
+				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+			}
+			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
 		}
-		config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		for _, mask := range c.FinalMask.Udp {
+			u, err := mask.Build(false)
+			if err != nil {
+				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
+			}
+			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		}
 	}
 
 	return config, nil

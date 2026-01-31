@@ -1,4 +1,4 @@
-package salamander
+package aes128gcm
 
 import (
 	"net"

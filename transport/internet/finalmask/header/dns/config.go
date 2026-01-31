@@ -1,4 +1,4 @@
-package salamander
+package dns
 
 import (
 	"net"
