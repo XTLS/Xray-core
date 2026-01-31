@@ -25,40 +25,40 @@ func RollingHash(s string) uint32 {
 // 2. `substr` patterns are matched by ac automaton;
 // 3. `regex` patterns are matched with the regex library.
 type MphMatcherGroup struct {
-	ac            *ACAutomaton
-	otherMatchers []matcherEntry
-	rules         []string
-	level0        []uint32
-	level0Mask    int
-	level1        []uint32
-	level1Mask    int
-	count         uint32
-	ruleMap       *map[string]uint32
+	Ac            *ACAutomaton
+	OtherMatchers []MatcherEntry
+	Rules         []string
+	Level0        []uint32
+	Level0Mask    int
+	Level1        []uint32
+	Level1Mask    int
+	Count         uint32
+	RuleMap       *map[string]uint32
 }
 
 func (g *MphMatcherGroup) AddFullOrDomainPattern(pattern string, t Type) {
 	h := RollingHash(pattern)
 	switch t {
 	case Domain:
-		(*g.ruleMap)["."+pattern] = h*PrimeRK + uint32('.')
+		(*g.RuleMap)["."+pattern] = h*PrimeRK + uint32('.')
 		fallthrough
 	case Full:
-		(*g.ruleMap)[pattern] = h
+		(*g.RuleMap)[pattern] = h
 	default:
 	}
 }
 
 func NewMphMatcherGroup() *MphMatcherGroup {
 	return &MphMatcherGroup{
-		ac:            nil,
-		otherMatchers: nil,
-		rules:         nil,
-		level0:        nil,
-		level0Mask:    0,
-		level1:        nil,
-		level1Mask:    0,
-		count:         1,
-		ruleMap:       &map[string]uint32{},
+		Ac:            nil,
+		OtherMatchers: nil,
+		Rules:         nil,
+		Level0:        nil,
+		Level0Mask:    0,
+		Level1:        nil,
+		Level1Mask:    0,
+		Count:         1,
+		RuleMap:       &map[string]uint32{},
 	}
 }
 
@@ -66,10 +66,10 @@ func NewMphMatcherGroup() *MphMatcherGroup {
 func (g *MphMatcherGroup) AddPattern(pattern string, t Type) (uint32, error) {
 	switch t {
 	case Substr:
-		if g.ac == nil {
-			g.ac = NewACAutomaton()
+		if g.Ac == nil {
+			g.Ac = NewACAutomaton()
 		}
-		g.ac.Add(pattern, t)
+		g.Ac.Add(pattern, t)
 	case Full, Domain:
 		pattern = strings.ToLower(pattern)
 		g.AddFullOrDomainPattern(pattern, t)
@@ -78,39 +78,39 @@ func (g *MphMatcherGroup) AddPattern(pattern string, t Type) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		g.otherMatchers = append(g.otherMatchers, matcherEntry{
-			m:  &regexMatcher{pattern: r},
-			id: g.count,
+		g.OtherMatchers = append(g.OtherMatchers, MatcherEntry{
+			M:  &RegexMatcher{Pattern: pattern, reg: r},
+			Id: g.Count,
 		})
 	default:
 		panic("Unknown type")
 	}
-	return g.count, nil
+	return g.Count, nil
 }
 
 // Build builds a minimal perfect hash table and ac automaton from insert rules
 func (g *MphMatcherGroup) Build() {
-	if g.ac != nil {
-		g.ac.Build()
+	if g.Ac != nil {
+		g.Ac.Build()
 	}
-	keyLen := len(*g.ruleMap)
+	keyLen := len(*g.RuleMap)
 	if keyLen == 0 {
 		keyLen = 1
-		(*g.ruleMap)["empty___"] = RollingHash("empty___")
+		(*g.RuleMap)["empty___"] = RollingHash("empty___")
 	}
-	g.level0 = make([]uint32, nextPow2(keyLen/4))
-	g.level0Mask = len(g.level0) - 1
-	g.level1 = make([]uint32, nextPow2(keyLen))
-	g.level1Mask = len(g.level1) - 1
-	sparseBuckets := make([][]int, len(g.level0))
+	g.Level0 = make([]uint32, nextPow2(keyLen/4))
+	g.Level0Mask = len(g.Level0) - 1
+	g.Level1 = make([]uint32, nextPow2(keyLen))
+	g.Level1Mask = len(g.Level1) - 1
+	sparseBuckets := make([][]int, len(g.Level0))
 	var ruleIdx int
-	for rule, hash := range *g.ruleMap {
-		n := int(hash) & g.level0Mask
-		g.rules = append(g.rules, rule)
+	for rule, hash := range *g.RuleMap {
+		n := int(hash) & g.Level0Mask
+		g.Rules = append(g.Rules, rule)
 		sparseBuckets[n] = append(sparseBuckets[n], ruleIdx)
 		ruleIdx++
 	}
-	g.ruleMap = nil
+	g.RuleMap = nil
 	var buckets []indexBucket
 	for n, vals := range sparseBuckets {
 		if len(vals) > 0 {
@@ -119,7 +119,7 @@ func (g *MphMatcherGroup) Build() {
 	}
 	sort.Sort(bySize(buckets))
 
-	occ := make([]bool, len(g.level1))
+	occ := make([]bool, len(g.Level1))
 	var tmpOcc []int
 	for _, bucket := range buckets {
 		seed := uint32(0)
@@ -127,7 +127,7 @@ func (g *MphMatcherGroup) Build() {
 			findSeed := true
 			tmpOcc = tmpOcc[:0]
 			for _, i := range bucket.vals {
-				n := int(strhashFallback(unsafe.Pointer(&g.rules[i]), uintptr(seed))) & g.level1Mask
+				n := int(strhashFallback(unsafe.Pointer(&g.Rules[i]), uintptr(seed))) & g.Level1Mask
 				if occ[n] {
 					for _, n := range tmpOcc {
 						occ[n] = false
@@ -138,10 +138,10 @@ func (g *MphMatcherGroup) Build() {
 				}
 				occ[n] = true
 				tmpOcc = append(tmpOcc, n)
-				g.level1[n] = uint32(i)
+				g.Level1[n] = uint32(i)
 			}
 			if findSeed {
-				g.level0[bucket.n] = seed
+				g.Level0[bucket.n] = seed
 				break
 			}
 		}
@@ -159,11 +159,11 @@ func nextPow2(v int) int {
 
 // Lookup searches for s in t and returns its index and whether it was found.
 func (g *MphMatcherGroup) Lookup(h uint32, s string) bool {
-	i0 := int(h) & g.level0Mask
-	seed := g.level0[i0]
-	i1 := int(strhashFallback(unsafe.Pointer(&s), uintptr(seed))) & g.level1Mask
-	n := g.level1[i1]
-	return s == g.rules[int(n)]
+	i0 := int(h) & g.Level0Mask
+	seed := g.Level0[i0]
+	i1 := int(strhashFallback(unsafe.Pointer(&s), uintptr(seed))) & g.Level1Mask
+	n := g.Level1[i1]
+	return s == g.Rules[int(n)]
 }
 
 // Match implements IndexMatcher.Match.
@@ -183,13 +183,13 @@ func (g *MphMatcherGroup) Match(pattern string) []uint32 {
 		result = append(result, 1)
 		return result
 	}
-	if g.ac != nil && g.ac.Match(pattern) {
+	if g.Ac != nil && g.Ac.Match(pattern) {
 		result = append(result, 1)
 		return result
 	}
-	for _, e := range g.otherMatchers {
-		if e.m.Match(pattern) {
-			result = append(result, e.id)
+	for _, e := range g.OtherMatchers {
+		if e.M.Match(pattern) {
+			result = append(result, e.Id)
 			return result
 		}
 	}
@@ -301,4 +301,8 @@ func rotl31(x uint64) uint64 {
 func readUnaligned64(p unsafe.Pointer) uint64 {
 	q := (*[8]byte)(p)
 	return uint64(q[0]) | uint64(q[1])<<8 | uint64(q[2])<<16 | uint64(q[3])<<24 | uint64(q[4])<<32 | uint64(q[5])<<40 | uint64(q[6])<<48 | uint64(q[7])<<56
+}
+
+func (g *MphMatcherGroup) Size() uint32 {
+	return g.Count
 }

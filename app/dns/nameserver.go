@@ -10,12 +10,26 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
 )
+
+type mphMatcherWrapper struct {
+	m strmatcher.IndexMatcher
+}
+
+func (w *mphMatcherWrapper) Match(s string) bool {
+	return w.m.Match(s) != nil
+}
+
+func (w *mphMatcherWrapper) String() string {
+	return "mph-matcher"
+}
 
 // Server is the interface for Name Server.
 type Server interface {
@@ -132,29 +146,50 @@ func NewClient(
 		var rules []string
 		ruleCurr := 0
 		ruleIter := 0
-		for i, domain := range ns.PrioritizedDomain {
-			ns.PrioritizedDomain[i] = nil
-			domainRule, err := toStrMatcher(domain.Type, domain.Domain)
-			if err != nil {
-				errors.LogErrorInner(ctx, err, "failed to create domain matcher, ignore domain rule [type: ", domain.Type, ", domain: ", domain.Domain, "]")
-				domainRule, _ = toStrMatcher(DomainMatchingType_Full, "hack.fix.index.for.illegal.domain.rule")
-			}
-			originalRuleIdx := ruleCurr
-			if ruleCurr < len(ns.OriginalRules) {
-				rule := ns.OriginalRules[ruleCurr]
-				if ruleCurr >= len(rules) {
-					rules = append(rules, rule.Rule)
+
+		// Check if domain matcher cache is provided via environment
+		domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
+		var mphLoaded bool
+
+		if domainMatcherPath != "" && ns.Tag != "" {
+			f, err := filesystem.NewFileReader(domainMatcherPath)
+			if err == nil {
+				defer f.Close()
+				g, err := router.LoadGeoSiteMatcher(f, ns.Tag)
+				if err == nil {
+					errors.LogDebug(ctx, "MphDomainMatcher loaded from cache for ", ns.Tag, " dns tag)")
+					updateDomainRule(&mphMatcherWrapper{m: g}, 0, *matcherInfos)
+					rules = append(rules, "[MPH Cache]")
+					mphLoaded = true
 				}
-				ruleIter++
-				if ruleIter >= int(rule.Size) {
-					ruleIter = 0
+			}
+		}
+
+		if !mphLoaded {
+			for i, domain := range ns.PrioritizedDomain {
+				ns.PrioritizedDomain[i] = nil
+				domainRule, err := toStrMatcher(domain.Type, domain.Domain)
+				if err != nil {
+					errors.LogErrorInner(ctx, err, "failed to create domain matcher, ignore domain rule [type: ", domain.Type, ", domain: ", domain.Domain, "]")
+					domainRule, _ = toStrMatcher(DomainMatchingType_Full, "hack.fix.index.for.illegal.domain.rule")
+				}
+				originalRuleIdx := ruleCurr
+				if ruleCurr < len(ns.OriginalRules) {
+					rule := ns.OriginalRules[ruleCurr]
+					if ruleCurr >= len(rules) {
+						rules = append(rules, rule.Rule)
+					}
+					ruleIter++
+					if ruleIter >= int(rule.Size) {
+						ruleIter = 0
+						ruleCurr++
+					}
+				} else { // No original rule, generate one according to current domain matcher (majorly for compatibility with tests)
+					rules = append(rules, domainRule.String())
 					ruleCurr++
 				}
-			} else { // No original rule, generate one according to current domain matcher (majorly for compatibility with tests)
-				rules = append(rules, domainRule.String())
-				ruleCurr++
+				updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
 			}
-			updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
 		}
 		ns.PrioritizedDomain = nil
 		runtime.GC()

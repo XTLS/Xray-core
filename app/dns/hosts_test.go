@@ -1,10 +1,12 @@
 package dns_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	. "github.com/xtls/xray-core/app/dns"
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
@@ -127,6 +129,60 @@ func TestStaticHosts(t *testing.T) {
 		}
 		if diff := cmp.Diff([]byte(ips[0].IP()), []byte(net.LocalHostIPv6.IP())); diff != "" {
 			t.Error(diff)
+		}
+	}
+}
+func TestStaticHostsFromCache(t *testing.T) {
+	sites := []*router.GeoSite{
+		{
+			CountryCode: "cloudflare-dns.com",
+			Domain: []*router.Domain{
+				{Type: router.Domain_Full, Value: "example.com"},
+			},
+		},
+		{
+			CountryCode: "geosite:cn",
+			Domain: []*router.Domain{
+				{Type: router.Domain_Domain, Value: "baidu.cn"},
+			},
+		},
+	}
+	deps := map[string][]string{
+		"HOSTS": {"cloudflare-dns.com", "geosite:cn"},
+	}
+	hostIPs := map[string][]string{
+		"cloudflare-dns.com": {"1.1.1.1"},
+		"geosite:cn":         {"2.2.2.2"},
+		"_ORDER":             {"cloudflare-dns.com", "geosite:cn"},
+	}
+
+	var buf bytes.Buffer
+	err := router.SerializeGeoSiteList(sites, deps, hostIPs, &buf)
+	common.Must(err)
+
+	// Load matcher
+	m, err := router.LoadGeoSiteMatcher(bytes.NewReader(buf.Bytes()), "HOSTS")
+	common.Must(err)
+
+	// Load hostIPs
+	f := bytes.NewReader(buf.Bytes())
+	hips, err := router.LoadGeoSiteHosts(f)
+	common.Must(err)
+
+	hosts, err := NewStaticHostsFromCache(m, hips)
+	common.Must(err)
+
+	{
+		ips, _ := hosts.Lookup("example.com", dns.IPOption{IPv4Enable: true})
+		if len(ips) != 1 || ips[0].String() != "1.1.1.1" {
+			t.Error("failed to lookup example.com from cache")
+		}
+	}
+
+	{
+		ips, _ := hosts.Lookup("baidu.cn", dns.IPOption{IPv4Enable: true})
+		if len(ips) != 1 || ips[0].String() != "2.2.2.2" {
+			t.Error("failed to lookup baidu.cn from cache deps")
 		}
 	}
 }

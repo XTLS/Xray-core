@@ -1,16 +1,21 @@
 package conf
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -605,6 +610,187 @@ func (c *Config) Build() (*core.Config, error) {
 	}
 
 	return config, nil
+}
+
+func (c *Config) BuildMPHCache(customMatcherFilePath *string) error {
+	var geosite []*router.GeoSite
+	deps := make(map[string][]string)
+	uniqueGeosites := make(map[string]bool)
+	uniqueTags := make(map[string]bool)
+	matcherFilePath := platform.GetAssetLocation("matcher.cache")
+
+	if customMatcherFilePath != nil {
+		matcherFilePath = *customMatcherFilePath
+	}
+
+	processGeosite := func(dStr string) bool {
+		prefix := ""
+		if strings.HasPrefix(dStr, "geosite:") {
+			prefix = "geosite:"
+		} else if strings.HasPrefix(dStr, "ext-domain:") {
+			prefix = "ext-domain:"
+		}
+		if prefix == "" {
+			return false
+		}
+		key := strings.ToLower(dStr)
+		country := strings.ToUpper(dStr[len(prefix):])
+		if !uniqueGeosites[country] {
+			ds, err := loadGeositeWithAttr("geosite.dat", country)
+			if err == nil {
+				uniqueGeosites[country] = true
+				geosite = append(geosite, &router.GeoSite{CountryCode: key, Domain: ds})
+			}
+		}
+		return true
+	}
+
+	processDomains := func(tag string, rawDomains []string) {
+		var manualDomains []*router.Domain
+		var dDeps []string
+		for _, dStr := range rawDomains {
+			if processGeosite(dStr) {
+				dDeps = append(dDeps, strings.ToLower(dStr))
+			} else {
+				ds, err := parseDomainRule(dStr)
+				if err == nil {
+					manualDomains = append(manualDomains, ds...)
+				}
+			}
+		}
+		if len(manualDomains) > 0 {
+			if !uniqueTags[tag] {
+				uniqueTags[tag] = true
+				geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualDomains})
+			}
+		}
+		if len(dDeps) > 0 {
+			deps[tag] = append(deps[tag], dDeps...)
+		}
+	}
+
+	// proccess rules
+	if c.RouterConfig != nil {
+		for _, rawRule := range c.RouterConfig.RuleList {
+			type SimpleRule struct {
+				RuleTag string      `json:"ruleTag"`
+				Domain  *StringList `json:"domain"`
+				Domains *StringList `json:"domains"`
+			}
+			var sr SimpleRule
+			json.Unmarshal(rawRule, &sr)
+			if sr.RuleTag == "" {
+				continue
+			}
+			var allDomains []string
+			if sr.Domain != nil {
+				allDomains = append(allDomains, *sr.Domain...)
+			}
+			if sr.Domains != nil {
+				allDomains = append(allDomains, *sr.Domains...)
+			}
+			processDomains(sr.RuleTag, allDomains)
+		}
+	}
+
+	// proccess dns servers
+	if c.DNSConfig != nil {
+		for _, ns := range c.DNSConfig.Servers {
+			if ns.Tag == "" {
+				continue
+			}
+			processDomains(ns.Tag, ns.Domains)
+		}
+	}
+
+	var hostIPs map[string][]string
+	if c.DNSConfig != nil && c.DNSConfig.Hosts != nil {
+		hostIPs = make(map[string][]string)
+		var hostDeps []string
+		var hostPatterns []string
+
+		// use raw map to avoid expanding geosites
+		var domains []string
+		for domain := range c.DNSConfig.Hosts.Hosts {
+			domains = append(domains, domain)
+		}
+		sort.Strings(domains)
+
+		manualHostGroups := make(map[string][]*router.Domain)
+		manualHostIPs := make(map[string][]string)
+		manualHostNames := make(map[string]string)
+
+		for _, domain := range domains {
+			ha := c.DNSConfig.Hosts.Hosts[domain]
+			m := getHostMapping(ha)
+
+			var ips []string
+			if m.ProxiedDomain != "" {
+				ips = append(ips, m.ProxiedDomain)
+			} else {
+				for _, ip := range m.Ip {
+					ips = append(ips, net.IPAddress(ip).String())
+				}
+			}
+
+			if processGeosite(domain) {
+				tag := strings.ToLower(domain)
+				hostDeps = append(hostDeps, tag)
+				hostIPs[tag] = ips
+				hostPatterns = append(hostPatterns, domain)
+			} else {
+				// build manual domains by their destination IPs
+				sort.Strings(ips)
+				ipKey := strings.Join(ips, ",")
+				ds, err := parseDomainRule(domain)
+				if err == nil {
+					manualHostGroups[ipKey] = append(manualHostGroups[ipKey], ds...)
+					manualHostIPs[ipKey] = ips
+					if _, ok := manualHostNames[ipKey]; !ok {
+						manualHostNames[ipKey] = domain
+					}
+				}
+			}
+		}
+
+		// create manual host groups
+		var ipKeys []string
+		for k := range manualHostGroups {
+			ipKeys = append(ipKeys, k)
+		}
+		sort.Strings(ipKeys)
+
+		for _, k := range ipKeys {
+			tag := manualHostNames[k]
+			geosite = append(geosite, &router.GeoSite{CountryCode: tag, Domain: manualHostGroups[k]})
+			hostDeps = append(hostDeps, tag)
+			hostIPs[tag] = manualHostIPs[k]
+
+			// record tag _ORDER links the matcher to IP addresses
+			hostPatterns = append(hostPatterns, tag)
+		}
+
+		deps["HOSTS"] = hostDeps
+		hostIPs["_ORDER"] = hostPatterns
+	}
+
+	f, err := os.Create(matcherFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+
+	if err := router.SerializeGeoSiteList(geosite, deps, hostIPs, &buf); err != nil {
+		return err
+	}
+
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Convert string to Address.

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -105,11 +107,25 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if len(rr.Domain) > 0 {
-		matcher, err := NewMphMatcherGroup(rr.Domain)
-		if err != nil {
-			return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
+		var matcher *DomainMatcher
+		var err error
+		// Check if domain matcher cache is provided via environment
+		domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
+
+		if domainMatcherPath != "" {
+			matcher, err = GetDomainMatcherWithRuleTag(domainMatcherPath, rr.RuleTag)
+			if err != nil {
+				return nil, errors.New("failed to build domain condition from cached MphDomainMatcher").Base(err)
+			}
+			errors.LogDebug(context.Background(), "MphDomainMatcher loaded from cache for ", rr.RuleTag, " rule tag)")
+
+		} else {
+			matcher, err = NewMphMatcherGroup(rr.Domain)
+			if err != nil {
+				return nil, errors.New("failed to build domain condition with MphDomainMatcher").Base(err)
+			}
+			errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 		}
-		errors.LogDebug(context.Background(), "MphDomainMatcher is enabled for ", len(rr.Domain), " domain rule(s)")
 		conds.Add(matcher)
 		rr.Domain = nil
 		runtime.GC()
@@ -171,4 +187,21 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	default:
 		return nil, errors.New("unrecognized balancer type")
 	}
+}
+
+func GetDomainMatcherWithRuleTag(domainMatcherPath string, ruleTag string) (*DomainMatcher, error) {
+	f, err := filesystem.NewFileReader(domainMatcherPath)
+	if err != nil {
+		return nil, errors.New("failed to load file: ", domainMatcherPath).Base(err)
+	}
+	defer f.Close()
+
+	g, err := LoadGeoSiteMatcher(f, ruleTag)
+	if err != nil {
+		return nil, errors.New("failed to load file:", domainMatcherPath).Base(err)
+	}
+	return &DomainMatcher{
+		Matchers: g,
+	}, nil
+
 }

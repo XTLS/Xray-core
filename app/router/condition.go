@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -52,7 +53,34 @@ var matcherTypeMap = map[Domain_Type]strmatcher.Type{
 }
 
 type DomainMatcher struct {
-	matchers strmatcher.IndexMatcher
+	Matchers strmatcher.IndexMatcher
+}
+
+func SerializeDomainMatcher(domains []*Domain, w io.Writer) error {
+
+	g := strmatcher.NewMphMatcherGroup()
+	for _, d := range domains {
+		matcherType, f := matcherTypeMap[d.Type]
+		if !f {
+			continue
+		}
+
+		_, err := g.AddPattern(d.Value, matcherType)
+		if err != nil {
+			return err
+		}
+	}
+	g.Build()
+	// serialize
+	return g.Serialize(w)
+}
+
+func NewDomainMatcherFromBuffer(data []byte) (*strmatcher.MphMatcherGroup, error) {
+	matcher, err := strmatcher.NewMphMatcherGroupFromBuffer(data)
+	if err != nil {
+		return nil, err
+	}
+	return matcher, nil
 }
 
 func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
@@ -72,12 +100,12 @@ func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
 	}
 	g.Build()
 	return &DomainMatcher{
-		matchers: g,
+		Matchers: g,
 	}, nil
 }
 
 func (m *DomainMatcher) ApplyDomain(domain string) bool {
-	return len(m.matchers.Match(strings.ToLower(domain))) > 0
+	return len(m.Matchers.Match(strings.ToLower(domain))) > 0
 }
 
 // Apply implements Condition.

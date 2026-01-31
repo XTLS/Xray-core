@@ -14,7 +14,7 @@ import (
 // StaticHosts represents static domain-ip mapping in DNS server.
 type StaticHosts struct {
 	ips      [][]net.Address
-	matchers *strmatcher.MatcherGroup
+	matchers strmatcher.IndexMatcher
 }
 
 // NewStaticHosts creates a new StaticHosts instance.
@@ -123,4 +123,51 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) (
 // Lookup returns IP addresses or proxied domain for the given domain, if exists in this StaticHosts.
 func (h *StaticHosts) Lookup(domain string, option dns.IPOption) ([]net.Address, error) {
 	return h.lookup(domain, option, 5)
+}
+func NewStaticHostsFromCache(matcher strmatcher.IndexMatcher, hostIPs map[string][]string) (*StaticHosts, error) {
+	sh := &StaticHosts{
+		ips:      make([][]net.Address, matcher.Size()+1),
+		matchers: matcher,
+	}
+
+	order := hostIPs["_ORDER"]
+	var offset uint32
+
+	img, ok := matcher.(*strmatcher.IndexMatcherGroup)
+	if !ok {
+		// Single matcher (e.g. only manual or only one geosite)
+		if len(order) > 0 {
+			pattern := order[0]
+			ips := parseIPs(hostIPs[pattern])
+			for i := uint32(1); i <= matcher.Size(); i++ {
+				sh.ips[i] = ips
+			}
+		}
+		return sh, nil
+	}
+
+	for i, m := range img.Matchers {
+		if i < len(order) {
+			pattern := order[i]
+			ips := parseIPs(hostIPs[pattern])
+			for j := uint32(1); j <= m.Size(); j++ {
+				sh.ips[offset+j] = ips
+			}
+			offset += m.Size()
+		}
+	}
+	return sh, nil
+}
+
+func parseIPs(raw []string) []net.Address {
+	addrs := make([]net.Address, 0, len(raw))
+	for _, s := range raw {
+		if len(s) > 1 && s[0] == '#' {
+			rcode, _ := strconv.Atoi(s[1:])
+			addrs = append(addrs, dns.RCodeError(rcode))
+		} else {
+			addrs = append(addrs, net.ParseAddress(s))
+		}
+	}
+	return addrs
 }
