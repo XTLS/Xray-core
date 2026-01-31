@@ -1,5 +1,5 @@
 // Package dns deals with encoding and decoding DNS wire format.
-package dns
+package xdns
 
 import (
 	"bytes"

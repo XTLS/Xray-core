@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/finalmask/xdns/dns"
 )
 
 const (
@@ -35,7 +34,7 @@ type xdnsConnClient struct {
 	conn net.PacketConn
 
 	clientID []byte
-	domain   dns.Name
+	domain   Name
 
 	pollChan   chan struct{}
 	readQueue  chan *packet
@@ -50,7 +49,7 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, errors.New("xdns requires being at the outermost level")
 	}
 
-	domain, err := dns.ParseName(c.Domain)
+	domain, err := ParseName(c.Domain)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +86,7 @@ func (c *xdnsConnClient) recvLoop() {
 			continue
 		}
 
-		resp, err := dns.MessageFromWireFormat(buf[:n])
+		resp, err := MessageFromWireFormat(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -255,7 +254,7 @@ func (c *xdnsConnClient) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 
-func encode(p []byte, clientID []byte, domain dns.Name) ([]byte, error) {
+func encode(p []byte, clientID []byte, domain Name) ([]byte, error) {
 	var decoded []byte
 	{
 		if len(p) >= 224 {
@@ -281,27 +280,27 @@ func encode(p []byte, clientID []byte, domain dns.Name) ([]byte, error) {
 	encoded = bytes.ToLower(encoded)
 	labels := chunks(encoded, 63)
 	labels = append(labels, domain...)
-	name, err := dns.NewName(labels)
+	name, err := NewName(labels)
 	if err != nil {
 		return nil, err
 	}
 
 	var id uint16
 	_ = binary.Read(rand.Reader, binary.BigEndian, &id)
-	query := &dns.Message{
+	query := &Message{
 		ID:    id,
 		Flags: 0x0100,
-		Question: []dns.Question{
+		Question: []Question{
 			{
 				Name:  name,
-				Type:  dns.RRTypeTXT,
-				Class: dns.ClassIN,
+				Type:  RRTypeTXT,
+				Class: ClassIN,
 			},
 		},
-		Additional: []dns.RR{
+		Additional: []RR{
 			{
-				Name:  dns.Name{},
-				Type:  dns.RRTypeOPT,
+				Name:  Name{},
+				Type:  RRTypeOPT,
 				Class: 4096,
 				TTL:   0,
 				Data:  []byte{},
@@ -344,11 +343,11 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	return p, err
 }
 
-func dnsResponsePayload(resp *dns.Message, domain dns.Name) []byte {
+func dnsResponsePayload(resp *Message, domain Name) []byte {
 	if resp.Flags&0x8000 != 0x8000 {
 		return nil
 	}
-	if resp.Flags&0x000f != dns.RcodeNoError {
+	if resp.Flags&0x000f != RcodeNoError {
 		return nil
 	}
 
@@ -362,10 +361,10 @@ func dnsResponsePayload(resp *dns.Message, domain dns.Name) []byte {
 		return nil
 	}
 
-	if answer.Type != dns.RRTypeTXT {
+	if answer.Type != RRTypeTXT {
 		return nil
 	}
-	payload, err := dns.DecodeRDataTXT(answer.Data)
+	payload, err := DecodeRDataTXT(answer.Data)
 	if err != nil {
 		return nil
 	}

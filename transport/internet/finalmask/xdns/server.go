@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/finalmask/xdns/dns"
 )
 
 const (
@@ -36,7 +35,7 @@ func clientIDToAddr(clientID [8]byte) *net.UDPAddr {
 }
 
 type record struct {
-	Resp *dns.Message
+	Resp *Message
 	Addr net.Addr
 	// ClientID [8]byte
 	ClientAddr net.Addr
@@ -51,7 +50,7 @@ type queue struct {
 type xdnsConnServer struct {
 	conn net.PacketConn
 
-	domain dns.Name
+	domain Name
 
 	ch            chan *record
 	readQueue     chan *packet
@@ -66,7 +65,7 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, errors.New("xdns requires being at the outermost level")
 	}
 
-	domain, err := dns.ParseName(c.Domain)
+	domain, err := ParseName(c.Domain)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +164,7 @@ func (c *xdnsConnServer) recvLoop() {
 			continue
 		}
 
-		query, err := dns.MessageFromWireFormat(buf[:n])
+		query, err := MessageFromWireFormat(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -194,8 +193,8 @@ func (c *xdnsConnServer) recvLoop() {
 				}
 			}
 		} else {
-			if resp != nil && resp.Rcode() == dns.RcodeNoError {
-				resp.Flags |= dns.RcodeNameError
+			if resp != nil && resp.Rcode() == RcodeNoError {
+				resp.Flags |= RcodeNameError
 			}
 		}
 
@@ -225,8 +224,8 @@ func (c *xdnsConnServer) sendLoop() {
 			}
 		}
 
-		if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
-			rec.Resp.Answer = []dns.RR{
+		if rec.Resp.Rcode() == RcodeNoError && len(rec.Resp.Question) == 1 {
+			rec.Resp.Answer = []RR{
 				{
 					Name:  rec.Resp.Question[0].Name,
 					Type:  rec.Resp.Question[0].Type,
@@ -287,7 +286,7 @@ func (c *xdnsConnServer) sendLoop() {
 			}
 			timer.Stop()
 
-			rec.Resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
+			rec.Resp.Answer[0].Data = EncodeRDataTXT(payload.Bytes())
 		}
 
 		buf, err := rec.Resp.WireFormat()
@@ -410,8 +409,8 @@ func nextPacketServer(r *bytes.Reader) ([]byte, error) {
 	}
 }
 
-func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
-	resp := &dns.Message{
+func responseFor(query *Message, domain Name) (*Message, []byte) {
+	resp := &Message{
 		ID:       query.ID,
 		Flags:    0x8000,
 		Question: query.Question,
@@ -423,16 +422,16 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 
 	payloadSize := 0
 	for _, rr := range query.Additional {
-		if rr.Type != dns.RRTypeOPT {
+		if rr.Type != RRTypeOPT {
 			continue
 		}
 		if len(resp.Additional) != 0 {
-			resp.Flags |= dns.RcodeFormatError
+			resp.Flags |= RcodeFormatError
 			return resp, nil
 		}
-		resp.Additional = append(resp.Additional, dns.RR{
-			Name:  dns.Name{},
-			Type:  dns.RRTypeOPT,
+		resp.Additional = append(resp.Additional, RR{
+			Name:  Name{},
+			Type:  RRTypeOPT,
 			Class: 4096,
 			TTL:   0,
 			Data:  []byte{},
@@ -441,8 +440,8 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 
 		version := (rr.TTL >> 16) & 0xff
 		if version != 0 {
-			resp.Flags |= dns.ExtendedRcodeBadVers & 0xf
-			additional.TTL = (dns.ExtendedRcodeBadVers >> 4) << 24
+			resp.Flags |= ExtendedRcodeBadVers & 0xf
+			additional.TTL = (ExtendedRcodeBadVers >> 4) << 24
 			return resp, nil
 		}
 
@@ -453,25 +452,25 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 	}
 
 	if len(query.Question) != 1 {
-		resp.Flags |= dns.RcodeFormatError
+		resp.Flags |= RcodeFormatError
 		return resp, nil
 	}
 	question := query.Question[0]
 
 	prefix, ok := question.Name.TrimSuffix(domain)
 	if !ok {
-		resp.Flags |= dns.RcodeNameError
+		resp.Flags |= RcodeNameError
 		return resp, nil
 	}
 	resp.Flags |= 0x0400
 
 	if query.Opcode() != 0 {
-		resp.Flags |= dns.RcodeNotImplemented
+		resp.Flags |= RcodeNotImplemented
 		return resp, nil
 	}
 
-	if question.Type != dns.RRTypeTXT {
-		resp.Flags |= dns.RcodeNameError
+	if question.Type != RRTypeTXT {
+		resp.Flags |= RcodeNameError
 		return resp, nil
 	}
 
@@ -479,13 +478,13 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 	payload := make([]byte, base32Encoding.DecodedLen(len(encoded)))
 	n, err := base32Encoding.Decode(payload, encoded)
 	if err != nil {
-		resp.Flags |= dns.RcodeNameError
+		resp.Flags |= RcodeNameError
 		return resp, nil
 	}
 	payload = payload[:n]
 
 	if payloadSize < maxUDPPayload {
-		resp.Flags |= dns.RcodeFormatError
+		resp.Flags |= RcodeFormatError
 		return resp, nil
 	}
 
@@ -493,7 +492,7 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 }
 
 func computeMaxEncodedPayload(limit int) int {
-	maxLengthName, err := dns.NewName([][]byte{
+	maxLengthName, err := NewName([][]byte{
 		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
 		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
 		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
@@ -517,19 +516,19 @@ func computeMaxEncodedPayload(limit int) int {
 	if int(queryLimit) != limit {
 		queryLimit = 0xffff
 	}
-	query := &dns.Message{
-		Question: []dns.Question{
+	query := &Message{
+		Question: []Question{
 			{
 				Name:  maxLengthName,
-				Type:  dns.RRTypeTXT,
-				Class: dns.RRTypeTXT,
+				Type:  RRTypeTXT,
+				Class: RRTypeTXT,
 			},
 		},
 
-		Additional: []dns.RR{
+		Additional: []RR{
 			{
-				Name:  dns.Name{},
-				Type:  dns.RRTypeOPT,
+				Name:  Name{},
+				Type:  RRTypeOPT,
 				Class: queryLimit,
 				TTL:   0,
 				Data:  []byte{},
@@ -538,7 +537,7 @@ func computeMaxEncodedPayload(limit int) int {
 	}
 	resp, _ := responseFor(query, [][]byte{})
 
-	resp.Answer = []dns.RR{
+	resp.Answer = []RR{
 		{
 			Name:  query.Question[0].Name,
 			Type:  query.Question[0].Type,
@@ -552,7 +551,7 @@ func computeMaxEncodedPayload(limit int) int {
 	high := 32768
 	for low+1 < high {
 		mid := (low + high) / 2
-		resp.Answer[0].Data = dns.EncodeRDataTXT(make([]byte, mid))
+		resp.Answer[0].Data = EncodeRDataTXT(make([]byte, mid))
 		buf, err := resp.WireFormat()
 		if err != nil {
 			panic(err)
