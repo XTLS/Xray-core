@@ -639,9 +639,13 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			if v == "" {
 				continue
 			}
-			hashValue, err := hex.DecodeString(v)
+			// remove colons for OpenSSL format
+			hashValue, err := hex.DecodeString(strings.ReplaceAll(v, ":", ""))
 			if err != nil {
 				return nil, err
+			}
+			if len(hashValue) != 32 {
+				return nil, errors.New("incorrect pinnedPeerCertSha256 length: ", v)
 			}
 			config.PinnedPeerCertSha256 = append(config.PinnedPeerCertSha256, hashValue)
 		}
