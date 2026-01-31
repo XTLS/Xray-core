@@ -129,7 +129,7 @@ func printCertificates(certs []*x509.Certificate) {
 		fmt.Println("Cert's signature algorithm: ", leaf.SignatureAlgorithm.String())
 		fmt.Println("Cert's publicKey algorithm: ", leaf.PublicKeyAlgorithm.String())
 		fmt.Println("Cert's allowed domains: ", leaf.DNSNames)
-		fmt.Println("Cert's leaf hash: ", hex.EncodeToString(GenerateCertHash(leaf)))
+		fmt.Println("Cert's leaf SHA256: ", hex.EncodeToString(GenerateCertHash(leaf)))
 	}
 }
 
