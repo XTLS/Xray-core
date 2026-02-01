@@ -33,8 +33,8 @@ type xicmpConnClient struct {
 	icmpConn *icmp.PacketConn
 
 	typ   icmp.Type
-	id    int
-	seq   int
+	id    uint16
+	seq   uint16
 	proto int
 
 	pollChan   chan struct{}
@@ -64,9 +64,9 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, errors.New("xicmp listen err").Base(err)
 	}
 
-	id := int(c.Id)
+	id := uint16(c.Id)
 	if id == 0 {
-		id = rand.Int()
+		id = uint16(rand.Int())
 	}
 
 	conn := &xicmpConnClient{
@@ -97,8 +97,8 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		Type: c.typ,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   c.id,
-			Seq:  c.seq,
+			ID:   int(c.id),
+			Seq:  int(c.seq),
 			Data: p,
 		},
 	}
@@ -150,12 +150,12 @@ func (c *xicmpConnClient) recvLoop() {
 			continue
 		}
 
-		if len(echo.Data) > 4 {
-			if binary.BigEndian.Uint32(echo.Data) == uint32(c.id) {
+		if len(echo.Data) > 2 {
+			if binary.BigEndian.Uint16(echo.Data) == c.id {
 				seqMap[echo.Seq] = struct{}{}
 
-				buf := make([]byte, len(echo.Data)-4)
-				copy(buf, echo.Data[4:])
+				buf := make([]byte, len(echo.Data)-2)
+				copy(buf, echo.Data[2:])
 				select {
 				case c.readQueue <- &packet{
 					p:    buf,

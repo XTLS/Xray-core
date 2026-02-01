@@ -1,6 +1,7 @@
 package xicmp_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -14,8 +15,8 @@ func TestICMPEchoMarshal(t *testing.T) {
 		Type: ipv4.ICMPTypeEcho,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   0,
-			Seq:  1,
+			ID:   65535,
+			Seq:  65537,
 			Data: nil,
 		},
 	}
@@ -26,8 +27,8 @@ func TestICMPEchoMarshal(t *testing.T) {
 		Type: ipv4.ICMPTypeEchoReply,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   0,
-			Seq:  1,
+			ID:   65535,
+			Seq:  65537,
 			Data: nil,
 		},
 	}
@@ -38,8 +39,8 @@ func TestICMPEchoMarshal(t *testing.T) {
 		Type: ipv6.ICMPTypeEchoRequest,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   0,
-			Seq:  1,
+			ID:   65535,
+			Seq:  65537,
 			Data: nil,
 		},
 	}
@@ -50,24 +51,24 @@ func TestICMPEchoMarshal(t *testing.T) {
 		Type: ipv6.ICMPTypeEchoReply,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   0,
-			Seq:  1,
+			ID:   65535,
+			Seq:  65537,
 			Data: nil,
 		},
 	}
 	V6ICMPTypeEchoReply, _ := msg.Marshal(nil)
 	fmt.Println("V6ICMPTypeEchoReply", len(V6ICMPTypeEchoReply), V6ICMPTypeEchoReply)
 
-	if len(ICMPTypeEcho) != 8 {
-		t.Fatalf("ICMPTypeEcho len=%d", len(ICMPTypeEcho))
+	if !bytes.Equal(ICMPTypeEcho[0:2], []byte{8, 0}) || !bytes.Equal(ICMPTypeEcho[4:], []byte{255, 255, 0, 1}) {
+		t.Fatalf("ICMPTypeEcho Type/Code or ID/Seq mismatch: %v", ICMPTypeEcho)
 	}
-	if len(ICMPTypeEchoReply) != 8 {
-		t.Fatalf("ICMPTypeEchoReply len=%d", len(ICMPTypeEchoReply))
+	if !bytes.Equal(ICMPTypeEchoReply[0:2], []byte{0, 0}) || !bytes.Equal(ICMPTypeEchoReply[4:], []byte{255, 255, 0, 1}) {
+		t.Fatalf("ICMPTypeEchoReply Type/Code or ID/Seq mismatch: %v", ICMPTypeEchoReply)
 	}
-	if len(ICMPTypeEchoRequest) != 8 {
-		t.Fatalf("ICMPTypeEchoRequest len=%d", len(ICMPTypeEchoRequest))
+	if !bytes.Equal(ICMPTypeEchoRequest[0:2], []byte{128, 0}) || !bytes.Equal(ICMPTypeEchoRequest[4:], []byte{255, 255, 0, 1}) {
+		t.Fatalf("ICMPTypeEchoRequest Type/Code or ID/Seq mismatch: %v", ICMPTypeEchoRequest)
 	}
-	if len(V6ICMPTypeEchoReply) != 8 {
-		t.Fatalf("V6ICMPTypeEchoReply len=%d", len(V6ICMPTypeEchoReply))
+	if !bytes.Equal(V6ICMPTypeEchoReply[0:2], []byte{129, 0}) || !bytes.Equal(V6ICMPTypeEchoReply[4:], []byte{255, 255, 0, 1}) {
+		t.Fatalf("V6ICMPTypeEchoReply Type/Code or ID/Seq mismatch: %v", V6ICMPTypeEchoReply)
 	}
 }

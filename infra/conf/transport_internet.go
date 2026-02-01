@@ -1331,7 +1331,7 @@ func (c *Xdns) Build() (proto.Message, error) {
 
 type Xicmp struct {
 	ListenIp string `json:"listenIp"`
-	Id       int    `json:"id"`
+	Id       uint16 `json:"id"`
 }
 
 func (c *Xicmp) Build() (proto.Message, error) {

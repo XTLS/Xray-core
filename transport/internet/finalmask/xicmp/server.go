@@ -21,8 +21,8 @@ const (
 )
 
 type record struct {
-	id   int
-	seq  int
+	id   uint16
+	seq  uint16
 	addr net.Addr
 }
 
@@ -135,17 +135,17 @@ func (c *xicmpConnServer) ensureQueue(addr net.Addr) *queue {
 	return q
 }
 
-func (c *xicmpConnServer) encode(p []byte, id int, seq int) ([]byte, error) {
-	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, uint32(id))
+func (c *xicmpConnServer) encode(p []byte, id uint16, seq uint16) ([]byte, error) {
+	data := make([]byte, 2)
+	binary.BigEndian.PutUint16(data, id)
 	data = append(data, p...)
 
 	msg := icmp.Message{
 		Type: c.typ,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   id,
-			Seq:  seq,
+			ID:   int(id),
+			Seq:  int(seq),
 			Data: data,
 		},
 	}
@@ -207,8 +207,8 @@ func (c *xicmpConnServer) recvLoop() {
 
 		select {
 		case c.ch <- &record{
-			id:   echo.ID,
-			seq:  echo.Seq,
+			id:   uint16(echo.ID),
+			seq:  uint16(echo.Seq),
 			addr: addr,
 		}:
 		default:
