@@ -272,11 +272,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		requestURL.Host = dest.Address.String()
 	}
 
-	sessionId := ""
-	if transportConfiguration.Mode != "stream-one" {
-		sessionIdUuid := uuid.New()
-		sessionId = sessionIdUuid.String()
-	}
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
@@ -291,6 +286,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				mode = "stream-up"
 			}
 		}
+	}
+
+	sessionId := ""
+	if mode != "stream-one" {
+		sessionIdUuid := uuid.New()
+		sessionId = sessionIdUuid.String()
 	}
 
 	errors.LogInfo(ctx, fmt.Sprintf("XHTTP is dialing to %s, mode %s, HTTP version %s, host %s", dest, mode, httpVersion, requestURL.Host))
