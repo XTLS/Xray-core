@@ -6,6 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/socks"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,11 +29,11 @@ const (
 )
 
 type SocksServerConfig struct {
-	AuthMethod string          `json:"auth"`
-	Accounts   []*SocksAccount `json:"accounts"`
-	UDP        bool            `json:"udp"`
-	Host       *Address        `json:"ip"`
-	UserLevel  uint32          `json:"userLevel"`
+	AuthMethod string                        `json:"auth"`
+	Accounts   types.Listable[*SocksAccount] `json:"accounts"`
+	UDP        bool                          `json:"udp"`
+	Host       *Address                      `json:"ip"`
+	UserLevel  uint32                        `json:"userLevel"`
 }
 
 func (v *SocksServerConfig) Build() (proto.Message, error) {
@@ -64,19 +65,19 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 }
 
 type SocksRemoteConfig struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address                        `json:"address"`
+	Port    uint16                          `json:"port"`
+	Users   types.Listable[json.RawMessage] `json:"users"`
 }
 
 type SocksClientConfig struct {
-	Address  *Address             `json:"address"`
-	Port     uint16               `json:"port"`
-	Level    uint32               `json:"level"`
-	Email    string               `json:"email"`
-	Username string               `json:"user"`
-	Password string               `json:"pass"`
-	Servers  []*SocksRemoteConfig `json:"servers"`
+	Address  *Address                           `json:"address"`
+	Port     uint16                             `json:"port"`
+	Level    uint32                             `json:"level"`
+	Email    string                             `json:"email"`
+	Username string                             `json:"user"`
+	Password string                             `json:"pass"`
+	Servers  types.Listable[*SocksRemoteConfig] `json:"servers"`
 }
 
 func (v *SocksClientConfig) Build() (proto.Message, error) {

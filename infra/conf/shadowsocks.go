@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 	"google.golang.org/protobuf/proto"
@@ -40,12 +41,12 @@ type ShadowsocksUserConfig struct {
 }
 
 type ShadowsocksServerConfig struct {
-	Cipher      string                   `json:"method"`
-	Password    string                   `json:"password"`
-	Level       byte                     `json:"level"`
-	Email       string                   `json:"email"`
-	Users       []*ShadowsocksUserConfig `json:"clients"`
-	NetworkList *NetworkList             `json:"network"`
+	Cipher      string                                 `json:"method"`
+	Password    string                                 `json:"password"`
+	Level       byte                                   `json:"level"`
+	Email       string                                 `json:"email"`
+	Users       types.Listable[*ShadowsocksUserConfig] `json:"clients"`
+	NetworkList *NetworkList                           `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -170,15 +171,15 @@ type ShadowsocksServerTarget struct {
 }
 
 type ShadowsocksClientConfig struct {
-	Address    *Address                   `json:"address"`
-	Port       uint16                     `json:"port"`
-	Level      byte                       `json:"level"`
-	Email      string                     `json:"email"`
-	Cipher     string                     `json:"method"`
-	Password   string                     `json:"password"`
-	UoT        bool                       `json:"uot"`
-	UoTVersion int                        `json:"uotVersion"`
-	Servers    []*ShadowsocksServerTarget `json:"servers"`
+	Address    *Address                                 `json:"address"`
+	Port       uint16                                   `json:"port"`
+	Level      byte                                     `json:"level"`
+	Email      string                                   `json:"email"`
+	Cipher     string                                   `json:"method"`
+	Password   string                                   `json:"password"`
+	UoT        bool                                     `json:"uot"`
+	UoTVersion int                                      `json:"uotVersion"`
+	Servers    types.Listable[*ShadowsocksServerTarget] `json:"servers"`
 }
 
 func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {

@@ -13,24 +13,25 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 )
 
 type NameServerConfig struct {
-	Address         *Address   `json:"address"`
-	ClientIP        *Address   `json:"clientIp"`
-	Port            uint16     `json:"port"`
-	SkipFallback    bool       `json:"skipFallback"`
-	Domains         []string   `json:"domains"`
-	ExpectedIPs     StringList `json:"expectedIPs"`
-	ExpectIPs       StringList `json:"expectIPs"`
-	QueryStrategy   string     `json:"queryStrategy"`
-	Tag             string     `json:"tag"`
-	TimeoutMs       uint64     `json:"timeoutMs"`
-	DisableCache    *bool      `json:"disableCache"`
-	ServeStale      *bool      `json:"serveStale"`
-	ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
-	FinalQuery      bool       `json:"finalQuery"`
-	UnexpectedIPs   StringList `json:"unexpectedIPs"`
+	Address         *Address               `json:"address"`
+	ClientIP        *Address               `json:"clientIp"`
+	Port            uint16                 `json:"port"`
+	SkipFallback    bool                   `json:"skipFallback"`
+	Domains         types.Listable[string] `json:"domains"`
+	ExpectedIPs     StringList             `json:"expectedIPs"`
+	ExpectIPs       StringList             `json:"expectIPs"`
+	QueryStrategy   string                 `json:"queryStrategy"`
+	Tag             string                 `json:"tag"`
+	TimeoutMs       uint64                 `json:"timeoutMs"`
+	DisableCache    *bool                  `json:"disableCache"`
+	ServeStale      *bool                  `json:"serveStale"`
+	ServeExpiredTTL *uint32                `json:"serveExpiredTTL"`
+	FinalQuery      bool                   `json:"finalQuery"`
+	UnexpectedIPs   StringList             `json:"unexpectedIPs"`
 }
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
@@ -42,21 +43,21 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
-		Address         *Address   `json:"address"`
-		ClientIP        *Address   `json:"clientIp"`
-		Port            uint16     `json:"port"`
-		SkipFallback    bool       `json:"skipFallback"`
-		Domains         []string   `json:"domains"`
-		ExpectedIPs     StringList `json:"expectedIPs"`
-		ExpectIPs       StringList `json:"expectIPs"`
-		QueryStrategy   string     `json:"queryStrategy"`
-		Tag             string     `json:"tag"`
-		TimeoutMs       uint64     `json:"timeoutMs"`
-		DisableCache    *bool      `json:"disableCache"`
-		ServeStale      *bool      `json:"serveStale"`
-		ServeExpiredTTL *uint32    `json:"serveExpiredTTL"`
-		FinalQuery      bool       `json:"finalQuery"`
-		UnexpectedIPs   StringList `json:"unexpectedIPs"`
+		Address         *Address               `json:"address"`
+		ClientIP        *Address               `json:"clientIp"`
+		Port            uint16                 `json:"port"`
+		SkipFallback    bool                   `json:"skipFallback"`
+		Domains         types.Listable[string] `json:"domains"`
+		ExpectedIPs     StringList             `json:"expectedIPs"`
+		ExpectIPs       StringList             `json:"expectIPs"`
+		QueryStrategy   string                 `json:"queryStrategy"`
+		Tag             string                 `json:"tag"`
+		TimeoutMs       uint64                 `json:"timeoutMs"`
+		DisableCache    *bool                  `json:"disableCache"`
+		ServeStale      *bool                  `json:"serveStale"`
+		ServeExpiredTTL *uint32                `json:"serveExpiredTTL"`
+		FinalQuery      bool                   `json:"finalQuery"`
+		UnexpectedIPs   StringList             `json:"unexpectedIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
 		c.Address = advanced.Address
@@ -196,18 +197,18 @@ var typeMap = map[router.Domain_Type]dns.DomainMatchingType{
 
 // DNSConfig is a JSON serializable object for dns.Config.
 type DNSConfig struct {
-	Servers                []*NameServerConfig `json:"servers"`
-	Hosts                  *HostsWrapper       `json:"hosts"`
-	ClientIP               *Address            `json:"clientIp"`
-	Tag                    string              `json:"tag"`
-	QueryStrategy          string              `json:"queryStrategy"`
-	DisableCache           bool                `json:"disableCache"`
-	ServeStale             bool                `json:"serveStale"`
-	ServeExpiredTTL        uint32              `json:"serveExpiredTTL"`
-	DisableFallback        bool                `json:"disableFallback"`
-	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
-	EnableParallelQuery    bool                `json:"enableParallelQuery"`
-	UseSystemHosts         bool                `json:"useSystemHosts"`
+	Servers                types.Listable[*NameServerConfig] `json:"servers"`
+	Hosts                  *HostsWrapper                     `json:"hosts"`
+	ClientIP               *Address                          `json:"clientIp"`
+	Tag                    string                            `json:"tag"`
+	QueryStrategy          string                            `json:"queryStrategy"`
+	DisableCache           bool                              `json:"disableCache"`
+	ServeStale             bool                              `json:"serveStale"`
+	ServeExpiredTTL        uint32                            `json:"serveExpiredTTL"`
+	DisableFallback        bool                              `json:"disableFallback"`
+	DisableFallbackIfMatch bool                              `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    bool                              `json:"enableParallelQuery"`
+	UseSystemHosts         bool                              `json:"useSystemHosts"`
 }
 
 type HostAddress struct {

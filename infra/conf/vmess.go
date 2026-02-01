@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
@@ -58,8 +59,8 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 }
 
 type VMessInboundConfig struct {
-	Users    []json.RawMessage   `json:"clients"`
-	Defaults *VMessDefaultConfig `json:"default"`
+	Users    types.Listable[json.RawMessage] `json:"clients"`
+	Defaults *VMessDefaultConfig             `json:"default"`
 }
 
 // Build implements Buildable
@@ -97,20 +98,20 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VMessOutboundTarget struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address                        `json:"address"`
+	Port    uint16                          `json:"port"`
+	Users   types.Listable[json.RawMessage] `json:"users"`
 }
 
 type VMessOutboundConfig struct {
-	Address     *Address               `json:"address"`
-	Port        uint16                 `json:"port"`
-	Level       uint32                 `json:"level"`
-	Email       string                 `json:"email"`
-	ID          string                 `json:"id"`
-	Security    string                 `json:"security"`
-	Experiments string                 `json:"experiments"`
-	Receivers   []*VMessOutboundTarget `json:"vnext"`
+	Address     *Address                             `json:"address"`
+	Port        uint16                               `json:"port"`
+	Level       uint32                               `json:"level"`
+	Email       string                               `json:"email"`
+	ID          string                               `json:"id"`
+	Security    string                               `json:"security"`
+	Experiments string                               `json:"experiments"`
+	Receivers   types.Listable[*VMessOutboundTarget] `json:"vnext"`
 }
 
 // Build implements Buildable

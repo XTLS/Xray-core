@@ -1,19 +1,18 @@
 package conf
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type ObservatoryConfig struct {
-	SubjectSelector   []string       `json:"subjectSelector"`
-	ProbeURL          string         `json:"probeURL"`
-	ProbeInterval     types.Duration `json:"probeInterval"`
-	EnableConcurrency bool           `json:"enableConcurrency"`
+	SubjectSelector   types.Listable[string] `json:"subjectSelector"`
+	ProbeURL          string                 `json:"probeURL"`
+	ProbeInterval     types.Duration         `json:"probeInterval"`
+	EnableConcurrency bool                   `json:"enableConcurrency"`
 }
 
 func (o *ObservatoryConfig) Build() (proto.Message, error) {
@@ -21,7 +20,7 @@ func (o *ObservatoryConfig) Build() (proto.Message, error) {
 }
 
 type BurstObservatoryConfig struct {
-	SubjectSelector []string `json:"subjectSelector"`
+	SubjectSelector types.Listable[string] `json:"subjectSelector"`
 	// health check settings
 	HealthCheck *healthCheckSettings `json:"pingConfig,omitempty"`
 }

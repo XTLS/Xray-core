@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"google.golang.org/protobuf/proto"
 )
 
 type WireGuardPeerConfig struct {
-	PublicKey    string   `json:"publicKey"`
-	PreSharedKey string   `json:"preSharedKey"`
-	Endpoint     string   `json:"endpoint"`
-	KeepAlive    uint32   `json:"keepAlive"`
-	AllowedIPs   []string `json:"allowedIPs,omitempty"`
+	PublicKey    string                 `json:"publicKey"`
+	PreSharedKey string                 `json:"preSharedKey"`
+	Endpoint     string                 `json:"endpoint"`
+	KeepAlive    uint32                 `json:"keepAlive"`
+	AllowedIPs   types.Listable[string] `json:"allowedIPs,omitempty"`
 }
 
 func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
@@ -51,14 +52,14 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 type WireGuardConfig struct {
 	IsClient bool `json:""`
 
-	NoKernelTun    bool                   `json:"noKernelTun"`
-	SecretKey      string                 `json:"secretKey"`
-	Address        []string               `json:"address"`
-	Peers          []*WireGuardPeerConfig `json:"peers"`
-	MTU            int32                  `json:"mtu"`
-	NumWorkers     int32                  `json:"workers"`
-	Reserved       []byte                 `json:"reserved"`
-	DomainStrategy string                 `json:"domainStrategy"`
+	NoKernelTun    bool                                 `json:"noKernelTun"`
+	SecretKey      string                               `json:"secretKey"`
+	Address        types.Listable[string]               `json:"address"`
+	Peers          types.Listable[*WireGuardPeerConfig] `json:"peers"`
+	MTU            int32                                `json:"mtu"`
+	NumWorkers     int32                                `json:"workers"`
+	Reserved       []byte                               `json:"reserved"`
+	DomainStrategy string                               `json:"domainStrategy"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {

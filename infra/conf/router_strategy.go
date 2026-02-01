@@ -3,11 +3,10 @@ package conf
 import (
 	"strings"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -35,9 +34,9 @@ func (v *strategyEmptyConfig) Build() (proto.Message, error) {
 
 type strategyLeastLoadConfig struct {
 	// weight settings
-	Costs []*router.StrategyWeight `json:"costs,omitempty"`
+	Costs types.Listable[*router.StrategyWeight] `json:"costs,omitempty"`
 	// ping rtt baselines
-	Baselines []types.Duration `json:"baselines,omitempty"`
+	Baselines types.Listable[types.Duration] `json:"baselines,omitempty"`
 	// expected nodes count to select
 	Expected int32 `json:"expected,omitempty"`
 	// max acceptable rtt, filter away high delay nodes. default 0

@@ -11,12 +11,13 @@ import (
 	statsservice "github.com/xtls/xray-core/app/stats/command"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 )
 
 type APIConfig struct {
-	Tag      string   `json:"tag"`
-	Listen   string   `json:"listen"`
-	Services []string `json:"services"`
+	Tag      string                 `json:"tag"`
+	Listen   string                 `json:"listen"`
+	Services types.Listable[string] `json:"services"`
 }
 
 func (c *APIConfig) Build() (*commander.Config, error) {

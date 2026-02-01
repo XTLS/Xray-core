@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/trojan"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,13 +29,13 @@ type TrojanServerTarget struct {
 
 // TrojanClientConfig is configuration of trojan servers
 type TrojanClientConfig struct {
-	Address  *Address              `json:"address"`
-	Port     uint16                `json:"port"`
-	Level    byte                  `json:"level"`
-	Email    string                `json:"email"`
-	Password string                `json:"password"`
-	Flow     string                `json:"flow"`
-	Servers  []*TrojanServerTarget `json:"servers"`
+	Address  *Address                            `json:"address"`
+	Port     uint16                              `json:"port"`
+	Level    byte                                `json:"level"`
+	Email    string                              `json:"email"`
+	Password string                              `json:"password"`
+	Flow     string                              `json:"flow"`
+	Servers  types.Listable[*TrojanServerTarget] `json:"servers"`
 }
 
 // Build implements Buildable
@@ -111,8 +112,8 @@ type TrojanUserConfig struct {
 
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
-	Clients   []*TrojanUserConfig      `json:"clients"`
-	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
+	Clients   types.Listable[*TrojanUserConfig]      `json:"clients"`
+	Fallbacks types.Listable[*TrojanInboundFallback] `json:"fallbacks"`
 }
 
 // Build implements Buildable

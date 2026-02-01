@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -338,20 +339,20 @@ type Config struct {
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
-	LogConfig        *LogConfig              `json:"log"`
-	RouterConfig     *RouterConfig           `json:"routing"`
-	DNSConfig        *DNSConfig              `json:"dns"`
-	InboundConfigs   []InboundDetourConfig   `json:"inbounds"`
-	OutboundConfigs  []OutboundDetourConfig  `json:"outbounds"`
-	Policy           *PolicyConfig           `json:"policy"`
-	API              *APIConfig              `json:"api"`
-	Metrics          *MetricsConfig          `json:"metrics"`
-	Stats            *StatsConfig            `json:"stats"`
-	Reverse          *ReverseConfig          `json:"reverse"`
-	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
-	Observatory      *ObservatoryConfig      `json:"observatory"`
-	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
-	Version          *VersionConfig          `json:"version"`
+	LogConfig        *LogConfig                           `json:"log"`
+	RouterConfig     *RouterConfig                        `json:"routing"`
+	DNSConfig        *DNSConfig                           `json:"dns"`
+	InboundConfigs   types.Listable[InboundDetourConfig]  `json:"inbounds"`
+	OutboundConfigs  types.Listable[OutboundDetourConfig] `json:"outbounds"`
+	Policy           *PolicyConfig                        `json:"policy"`
+	API              *APIConfig                           `json:"api"`
+	Metrics          *MetricsConfig                       `json:"metrics"`
+	Stats            *StatsConfig                         `json:"stats"`
+	Reverse          *ReverseConfig                       `json:"reverse"`
+	FakeDNS          *FakeDNSConfig                       `json:"fakeDns"`
+	Observatory      *ObservatoryConfig                   `json:"observatory"`
+	BurstObservatory *BurstObservatoryConfig              `json:"burstObservatory"`
+	Version          *VersionConfig                       `json:"version"`
 }
 
 func (c *Config) findInboundTag(tag string) int {

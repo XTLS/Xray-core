@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
@@ -516,14 +517,14 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 }
 
 type TLSCertConfig struct {
-	CertFile       string   `json:"certificateFile"`
-	CertStr        []string `json:"certificate"`
-	KeyFile        string   `json:"keyFile"`
-	KeyStr         []string `json:"key"`
-	Usage          string   `json:"usage"`
-	OcspStapling   uint64   `json:"ocspStapling"`
-	OneTimeLoading bool     `json:"oneTimeLoading"`
-	BuildChain     bool     `json:"buildChain"`
+	CertFile       string                 `json:"certificateFile"`
+	CertStr        types.Listable[string] `json:"certificate"`
+	KeyFile        string                 `json:"keyFile"`
+	KeyStr         types.Listable[string] `json:"key"`
+	Usage          string                 `json:"usage"`
+	OcspStapling   uint64                 `json:"ocspStapling"`
+	OneTimeLoading bool                   `json:"oneTimeLoading"`
+	BuildChain     bool                   `json:"buildChain"`
 }
 
 // Build implements Buildable.
@@ -568,26 +569,26 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	AllowInsecure           bool             `json:"allowInsecure"`
-	Certs                   []*TLSCertConfig `json:"certificates"`
-	ServerName              string           `json:"serverName"`
-	ALPN                    *StringList      `json:"alpn"`
-	EnableSessionResumption bool             `json:"enableSessionResumption"`
-	DisableSystemRoot       bool             `json:"disableSystemRoot"`
-	MinVersion              string           `json:"minVersion"`
-	MaxVersion              string           `json:"maxVersion"`
-	CipherSuites            string           `json:"cipherSuites"`
-	Fingerprint             string           `json:"fingerprint"`
-	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
-	CurvePreferences        *StringList      `json:"curvePreferences"`
-	MasterKeyLog            string           `json:"masterKeyLog"`
-	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
-	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
-	ECHServerKeys           string           `json:"echServerKeys"`
-	ECHConfigList           string           `json:"echConfigList"`
-	ECHForceQuery           string           `json:"echForceQuery"`
-	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
+	AllowInsecure           bool                           `json:"allowInsecure"`
+	Certs                   types.Listable[*TLSCertConfig] `json:"certificates"`
+	ServerName              string                         `json:"serverName"`
+	ALPN                    *StringList                    `json:"alpn"`
+	EnableSessionResumption bool                           `json:"enableSessionResumption"`
+	DisableSystemRoot       bool                           `json:"disableSystemRoot"`
+	MinVersion              string                         `json:"minVersion"`
+	MaxVersion              string                         `json:"maxVersion"`
+	CipherSuites            string                         `json:"cipherSuites"`
+	Fingerprint             string                         `json:"fingerprint"`
+	RejectUnknownSNI        bool                           `json:"rejectUnknownSni"`
+	CurvePreferences        *StringList                    `json:"curvePreferences"`
+	MasterKeyLog            string                         `json:"masterKeyLog"`
+	PinnedPeerCertSha256    string                         `json:"pinnedPeerCertSha256"`
+	VerifyPeerCertByName    string                         `json:"verifyPeerCertByName"`
+	VerifyPeerCertInNames   types.Listable[string]         `json:"verifyPeerCertInNames"`
+	ECHServerKeys           string                         `json:"echServerKeys"`
+	ECHConfigList           string                         `json:"echConfigList"`
+	ECHForceQuery           string                         `json:"echForceQuery"`
+	ECHSocketSettings       *SocketConfig                  `json:"echSockopt"`
 }
 
 // Build implements Buildable.
@@ -693,19 +694,19 @@ type LimitFallback struct {
 }
 
 type REALITYConfig struct {
-	MasterKeyLog string          `json:"masterKeyLog"`
-	Show         bool            `json:"show"`
-	Target       json.RawMessage `json:"target"`
-	Dest         json.RawMessage `json:"dest"`
-	Type         string          `json:"type"`
-	Xver         uint64          `json:"xver"`
-	ServerNames  []string        `json:"serverNames"`
-	PrivateKey   string          `json:"privateKey"`
-	MinClientVer string          `json:"minClientVer"`
-	MaxClientVer string          `json:"maxClientVer"`
-	MaxTimeDiff  uint64          `json:"maxTimeDiff"`
-	ShortIds     []string        `json:"shortIds"`
-	Mldsa65Seed  string          `json:"mldsa65Seed"`
+	MasterKeyLog string                 `json:"masterKeyLog"`
+	Show         bool                   `json:"show"`
+	Target       json.RawMessage        `json:"target"`
+	Dest         json.RawMessage        `json:"dest"`
+	Type         string                 `json:"type"`
+	Xver         uint64                 `json:"xver"`
+	ServerNames  types.Listable[string] `json:"serverNames"`
+	PrivateKey   string                 `json:"privateKey"`
+	MinClientVer string                 `json:"minClientVer"`
+	MaxClientVer string                 `json:"maxClientVer"`
+	MaxTimeDiff  uint64                 `json:"maxTimeDiff"`
+	ShortIds     types.Listable[string] `json:"shortIds"`
+	Mldsa65Seed  string                 `json:"mldsa65Seed"`
 
 	LimitFallbackUpload   LimitFallback `json:"limitFallbackUpload"`
 	LimitFallbackDownload LimitFallback `json:"limitFallbackDownload"`
@@ -966,26 +967,26 @@ func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 }
 
 type SocketConfig struct {
-	Mark                  int32                  `json:"mark"`
-	TFO                   interface{}            `json:"tcpFastOpen"`
-	TProxy                string                 `json:"tproxy"`
-	AcceptProxyProtocol   bool                   `json:"acceptProxyProtocol"`
-	DomainStrategy        string                 `json:"domainStrategy"`
-	DialerProxy           string                 `json:"dialerProxy"`
-	TCPKeepAliveInterval  int32                  `json:"tcpKeepAliveInterval"`
-	TCPKeepAliveIdle      int32                  `json:"tcpKeepAliveIdle"`
-	TCPCongestion         string                 `json:"tcpCongestion"`
-	TCPWindowClamp        int32                  `json:"tcpWindowClamp"`
-	TCPMaxSeg             int32                  `json:"tcpMaxSeg"`
-	Penetrate             bool                   `json:"penetrate"`
-	TCPUserTimeout        int32                  `json:"tcpUserTimeout"`
-	V6only                bool                   `json:"v6only"`
-	Interface             string                 `json:"interface"`
-	TcpMptcp              bool                   `json:"tcpMptcp"`
-	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
-	AddressPortStrategy   string                 `json:"addressPortStrategy"`
-	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
-	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
+	Mark                  int32                                `json:"mark"`
+	TFO                   interface{}                          `json:"tcpFastOpen"`
+	TProxy                string                               `json:"tproxy"`
+	AcceptProxyProtocol   bool                                 `json:"acceptProxyProtocol"`
+	DomainStrategy        string                               `json:"domainStrategy"`
+	DialerProxy           string                               `json:"dialerProxy"`
+	TCPKeepAliveInterval  int32                                `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle      int32                                `json:"tcpKeepAliveIdle"`
+	TCPCongestion         string                               `json:"tcpCongestion"`
+	TCPWindowClamp        int32                                `json:"tcpWindowClamp"`
+	TCPMaxSeg             int32                                `json:"tcpMaxSeg"`
+	Penetrate             bool                                 `json:"penetrate"`
+	TCPUserTimeout        int32                                `json:"tcpUserTimeout"`
+	V6only                bool                                 `json:"v6only"`
+	Interface             string                               `json:"interface"`
+	TcpMptcp              bool                                 `json:"tcpMptcp"`
+	CustomSockopt         types.Listable[*CustomSockoptConfig] `json:"customSockopt"`
+	AddressPortStrategy   string                               `json:"addressPortStrategy"`
+	HappyEyeballsSettings *HappyEyeballsConfig                 `json:"happyEyeballs"`
+	TrustedXForwardedFor  types.Listable[string]               `json:"trustedXForwardedFor"`
 }
 
 // Build implements Buildable.
@@ -1152,23 +1153,23 @@ func (c *FinalMask) Build(tcpmaskLoader bool) (proto.Message, error) {
 }
 
 type StreamConfig struct {
-	Address             *Address           `json:"address"`
-	Port                uint16             `json:"port"`
-	Network             *TransportProtocol `json:"network"`
-	Security            string             `json:"security"`
-	Udpmasks            []*FinalMask       `json:"udpmasks"`
-	TLSSettings         *TLSConfig         `json:"tlsSettings"`
-	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
-	RAWSettings         *TCPConfig         `json:"rawSettings"`
-	TCPSettings         *TCPConfig         `json:"tcpSettings"`
-	XHTTPSettings       *SplitHTTPConfig   `json:"xhttpSettings"`
-	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
-	KCPSettings         *KCPConfig         `json:"kcpSettings"`
-	GRPCSettings        *GRPCConfig        `json:"grpcSettings"`
-	WSSettings          *WebSocketConfig   `json:"wsSettings"`
-	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
-	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
-	SocketSettings      *SocketConfig      `json:"sockopt"`
+	Address             *Address                   `json:"address"`
+	Port                uint16                     `json:"port"`
+	Network             *TransportProtocol         `json:"network"`
+	Security            string                     `json:"security"`
+	Udpmasks            types.Listable[*FinalMask] `json:"udpmasks"`
+	TLSSettings         *TLSConfig                 `json:"tlsSettings"`
+	REALITYSettings     *REALITYConfig             `json:"realitySettings"`
+	RAWSettings         *TCPConfig                 `json:"rawSettings"`
+	TCPSettings         *TCPConfig                 `json:"tcpSettings"`
+	XHTTPSettings       *SplitHTTPConfig           `json:"xhttpSettings"`
+	SplitHTTPSettings   *SplitHTTPConfig           `json:"splithttpSettings"`
+	KCPSettings         *KCPConfig                 `json:"kcpSettings"`
+	GRPCSettings        *GRPCConfig                `json:"grpcSettings"`
+	WSSettings          *WebSocketConfig           `json:"wsSettings"`
+	HTTPUPGRADESettings *HttpUpgradeConfig         `json:"httpupgradeSettings"`
+	HysteriaSettings    *HysteriaConfig            `json:"hysteriaSettings"`
+	SocketSettings      *SocketConfig              `json:"sockopt"`
 }
 
 // Build implements Buildable.

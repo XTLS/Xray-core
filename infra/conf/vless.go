@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/inbound"
 	"github.com/xtls/xray-core/proxy/vless/outbound"
@@ -30,11 +31,11 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
-	Flow       string                  `json:"flow"`
-	Testseed   []uint32                `json:"testseed"`
+	Clients    types.Listable[json.RawMessage]       `json:"clients"`
+	Decryption string                                `json:"decryption"`
+	Fallbacks  types.Listable[*VLessInboundFallback] `json:"fallbacks"`
+	Flow       string                                `json:"flow"`
+	Testseed   types.Listable[uint32]                `json:"testseed"`
 }
 
 // Build implements Buildable
@@ -201,24 +202,24 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 }
 
 type VLessOutboundVnext struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address                        `json:"address"`
+	Port    uint16                          `json:"port"`
+	Users   types.Listable[json.RawMessage] `json:"users"`
 }
 
 type VLessOutboundConfig struct {
-	Address    *Address              `json:"address"`
-	Port       uint16                `json:"port"`
-	Level      uint32                `json:"level"`
-	Email      string                `json:"email"`
-	Id         string                `json:"id"`
-	Flow       string                `json:"flow"`
-	Seed       string                `json:"seed"`
-	Encryption string                `json:"encryption"`
-	Reverse    *vless.Reverse        `json:"reverse"`
-	Testpre    uint32                `json:"testpre"`
-	Testseed   []uint32              `json:"testseed"`
-	Vnext      []*VLessOutboundVnext `json:"vnext"`
+	Address    *Address                            `json:"address"`
+	Port       uint16                              `json:"port"`
+	Level      uint32                              `json:"level"`
+	Email      string                              `json:"email"`
+	Id         string                              `json:"id"`
+	Flow       string                              `json:"flow"`
+	Seed       string                              `json:"seed"`
+	Encryption string                              `json:"encryption"`
+	Reverse    *vless.Reverse                      `json:"reverse"`
+	Testpre    uint32                              `json:"testpre"`
+	Testseed   types.Listable[uint32]              `json:"testseed"`
+	Vnext      types.Listable[*VLessOutboundVnext] `json:"vnext"`
 }
 
 // Build implements Buildable

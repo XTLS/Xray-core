@@ -6,6 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/http"
 	"google.golang.org/protobuf/proto"
 )
@@ -23,9 +24,9 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
-	Accounts    []*HTTPAccount `json:"accounts"`
-	Transparent bool           `json:"allowTransparent"`
-	UserLevel   uint32         `json:"userLevel"`
+	Accounts    types.Listable[*HTTPAccount] `json:"accounts"`
+	Transparent bool                         `json:"allowTransparent"`
+	UserLevel   uint32                       `json:"userLevel"`
 }
 
 func (c *HTTPServerConfig) Build() (proto.Message, error) {
@@ -45,20 +46,20 @@ func (c *HTTPServerConfig) Build() (proto.Message, error) {
 }
 
 type HTTPRemoteConfig struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
+	Address *Address                        `json:"address"`
+	Port    uint16                          `json:"port"`
+	Users   types.Listable[json.RawMessage] `json:"users"`
 }
 
 type HTTPClientConfig struct {
-	Address  *Address          	 `json:"address"`
-	Port     uint16            	 `json:"port"`
-	Level    uint32              `json:"level"`
-	Email    string              `json:"email"`
-	Username string              `json:"user"`
-	Password string              `json:"pass"`
-	Servers  []*HTTPRemoteConfig `json:"servers"`
-	Headers  map[string]string   `json:"headers"`
+	Address  *Address                          `json:"address"`
+	Port     uint16                            `json:"port"`
+	Level    uint32                            `json:"level"`
+	Email    string                            `json:"email"`
+	Username string                            `json:"user"`
+	Password string                            `json:"pass"`
+	Servers  types.Listable[*HTTPRemoteConfig] `json:"servers"`
+	Headers  map[string]string                 `json:"headers"`
 }
 
 func (v *HTTPClientConfig) Build() (proto.Message, error) {

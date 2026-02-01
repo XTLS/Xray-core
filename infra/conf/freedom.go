@@ -9,20 +9,21 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/freedom"
-	"google.golang.org/protobuf/proto"
 	"github.com/xtls/xray-core/transport/internet"
+	"google.golang.org/protobuf/proto"
 )
 
 type FreedomConfig struct {
-	TargetStrategy string    `json:"targetStrategy"`
-	DomainStrategy string    `json:"domainStrategy"`
-	Redirect       string    `json:"redirect"`
-	UserLevel      uint32    `json:"userLevel"`
-	Fragment       *Fragment `json:"fragment"`
-	Noise          *Noise    `json:"noise"`
-	Noises         []*Noise  `json:"noises"`
-	ProxyProtocol  uint32    `json:"proxyProtocol"`
+	TargetStrategy string                 `json:"targetStrategy"`
+	DomainStrategy string                 `json:"domainStrategy"`
+	Redirect       string                 `json:"redirect"`
+	UserLevel      uint32                 `json:"userLevel"`
+	Fragment       *Fragment              `json:"fragment"`
+	Noise          *Noise                 `json:"noise"`
+	Noises         types.Listable[*Noise] `json:"noises"`
+	ProxyProtocol  uint32                 `json:"proxyProtocol"`
 }
 
 type Fragment struct {

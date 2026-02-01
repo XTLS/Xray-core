@@ -3,17 +3,18 @@ package conf
 import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"github.com/xtls/xray-core/proxy/dns"
 	"google.golang.org/protobuf/proto"
 )
 
 type DNSOutboundConfig struct {
-	Network    Network  `json:"network"`
-	Address    *Address `json:"address"`
-	Port       uint16   `json:"port"`
-	UserLevel  uint32   `json:"userLevel"`
-	NonIPQuery string   `json:"nonIPQuery"`
-	BlockTypes []int32  `json:"blockTypes"`
+	Network    Network               `json:"network"`
+	Address    *Address              `json:"address"`
+	Port       uint16                `json:"port"`
+	UserLevel  uint32                `json:"userLevel"`
+	NonIPQuery string                `json:"nonIPQuery"`
+	BlockTypes types.Listable[int32] `json:"blockTypes"`
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {

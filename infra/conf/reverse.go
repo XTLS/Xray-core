@@ -2,6 +2,7 @@ package conf
 
 import (
 	"github.com/xtls/xray-core/app/reverse"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -30,8 +31,8 @@ func (c *PortalConfig) Build() (*reverse.PortalConfig, error) {
 }
 
 type ReverseConfig struct {
-	Bridges []BridgeConfig `json:"bridges"`
-	Portals []PortalConfig `json:"portals"`
+	Bridges types.Listable[BridgeConfig] `json:"bridges"`
+	Portals types.Listable[PortalConfig] `json:"portals"`
 }
 
 func (c *ReverseConfig) Build() (proto.Message, error) {
