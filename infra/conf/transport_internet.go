@@ -334,7 +334,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.SessionPlacement {
 	case "":
 		c.SessionPlacement = "path"
-	case "cookie", "header", "query":
+	case "path", "cookie", "header", "query":
 	default:
 		return nil, errors.New("unsupported session placement: " + c.SessionPlacement)
 	}
@@ -342,7 +342,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.SeqPlacement {
 	case "":
 		c.SeqPlacement = "path"
-	case "cookie", "header", "query":
+	case "path", "cookie", "header", "query":
 		if c.SessionPlacement == "path" {
 			return nil, errors.New("SeqPlacement must be path when SessionPlacement is path")
 		}
