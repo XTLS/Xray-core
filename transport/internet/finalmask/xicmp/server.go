@@ -217,16 +217,16 @@ func (c *xicmpConnServer) recvLoop() {
 			}:
 			default:
 			}
-		}
 
-		select {
-		case c.ch <- &record{
-			id:      echo.ID,
-			seq:     echo.Seq,
-			seqByte: seqByte,
-			addr:    addr,
-		}:
-		default:
+			select {
+			case c.ch <- &record{
+				id:      echo.ID,
+				seq:     echo.Seq,
+				seqByte: seqByte,
+				addr:    addr,
+			}:
+			default:
+			}
 		}
 	}
 
