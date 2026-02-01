@@ -2,13 +2,13 @@ package xicmp
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"net"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -21,9 +21,10 @@ const (
 )
 
 type record struct {
-	id   uint16
-	seq  uint16
-	addr net.Addr
+	id      int
+	seq     int
+	seqByte byte
+	addr    net.Addr
 }
 
 type queue struct {
@@ -135,18 +136,16 @@ func (c *xicmpConnServer) ensureQueue(addr net.Addr) *queue {
 	return q
 }
 
-func (c *xicmpConnServer) encode(p []byte, id uint16, seq uint16) ([]byte, error) {
-	data := make([]byte, 2)
-	binary.BigEndian.PutUint16(data, id)
-	data = append(data, p...)
+func (c *xicmpConnServer) encode(p []byte, id int, seq int, seqByte byte) ([]byte, error) {
+	b2 := c.randUntil(seqByte)
 
 	msg := icmp.Message{
 		Type: c.typ,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   int(id),
-			Seq:  int(seq),
-			Data: data,
+			ID:   id,
+			Seq:  seq,
+			Data: append([]byte{b2}, p...),
 		},
 	}
 
@@ -160,6 +159,16 @@ func (c *xicmpConnServer) encode(p []byte, id uint16, seq uint16) ([]byte, error
 	}
 
 	return buf, nil
+}
+
+func (c *xicmpConnServer) randUntil(b1 byte) byte {
+	b2 := byte(crypto.RandBetween(0, 255))
+	for {
+		if b2 != b1 {
+			return b2
+		}
+		b2 = byte(crypto.RandBetween(0, 255))
+	}
 }
 
 func (c *xicmpConnServer) recvLoop() {
@@ -193,7 +202,12 @@ func (c *xicmpConnServer) recvLoop() {
 			continue
 		}
 
-		if len(echo.Data) > 0 {
+		var seqByte byte
+
+		if len(echo.Data) > 1 {
+			seqByte = echo.Data[0]
+			echo.Data = echo.Data[1:]
+
 			buf := make([]byte, len(echo.Data))
 			copy(buf, echo.Data)
 			select {
@@ -207,9 +221,10 @@ func (c *xicmpConnServer) recvLoop() {
 
 		select {
 		case c.ch <- &record{
-			id:   uint16(echo.ID),
-			seq:  uint16(echo.Seq),
-			addr: addr,
+			id:      echo.ID,
+			seq:     echo.Seq,
+			seqByte: seqByte,
+			addr:    addr,
 		}:
 		default:
 		}
@@ -258,7 +273,7 @@ func (c *xicmpConnServer) sendLoop() {
 			continue
 		}
 
-		buf, err := c.encode(p, rec.id, rec.seq)
+		buf, err := c.encode(p, rec.id, rec.seq, rec.seqByte)
 		if err != nil {
 			continue
 		}

@@ -2,14 +2,13 @@ package xicmp
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -32,10 +31,11 @@ type xicmpConnClient struct {
 	conn     net.PacketConn
 	icmpConn *icmp.PacketConn
 
-	typ   icmp.Type
-	id    uint16
-	seq   uint16
-	proto int
+	typ     icmp.Type
+	id      int
+	seq     int
+	proto   int
+	seqByte map[int]byte
 
 	pollChan   chan struct{}
 	readQueue  chan *packet
@@ -64,19 +64,19 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		return nil, errors.New("xicmp listen err").Base(err)
 	}
 
-	id := uint16(c.Id)
-	if id == 0 {
-		id = uint16(rand.Int())
+	if c.Id == 0 {
+		c.Id = int32(crypto.RandBetween(0, 65535))
 	}
 
 	conn := &xicmpConnClient{
 		conn:     raw,
 		icmpConn: icmpConn,
 
-		typ:   typ,
-		id:    id,
-		seq:   1,
-		proto: proto,
+		typ:     typ,
+		id:      int(c.Id),
+		seq:     1,
+		proto:   proto,
+		seqByte: make(map[int]byte),
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
@@ -93,13 +93,15 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	seqByte := byte(crypto.RandBetween(0, 255))
+
 	msg := icmp.Message{
 		Type: c.typ,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   int(c.id),
-			Seq:  int(c.seq),
-			Data: p,
+			ID:   c.id,
+			Seq:  c.seq,
+			Data: append([]byte{seqByte}, p...),
 		},
 	}
 
@@ -111,6 +113,8 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 	if len(buf) > 8192 {
 		return nil, errors.New("xicmp len(buf) > 8192")
 	}
+
+	c.seqByte[c.seq] = seqByte
 
 	c.seq++
 
@@ -150,24 +154,31 @@ func (c *xicmpConnClient) recvLoop() {
 			continue
 		}
 
-		if len(echo.Data) > 2 {
-			if binary.BigEndian.Uint16(echo.Data) == c.id {
-				seqMap[echo.Seq] = struct{}{}
+		if _, ok := c.seqByte[echo.Seq]; !ok {
+			continue
+		}
 
-				buf := make([]byte, len(echo.Data)-2)
-				copy(buf, echo.Data[2:])
-				select {
-				case c.readQueue <- &packet{
-					p:    buf,
-					addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
-				}:
-				default:
-				}
+		if len(echo.Data) > 1 {
+			if echo.Data[0] == c.seqByte[echo.Seq] {
+				continue
+			}
+			echo.Data = echo.Data[1:]
 
-				select {
-				case c.pollChan <- struct{}{}:
-				default:
-				}
+			seqMap[echo.Seq] = struct{}{}
+
+			buf := make([]byte, len(echo.Data))
+			copy(buf, echo.Data)
+			select {
+			case c.readQueue <- &packet{
+				p:    buf,
+				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
+			}:
+			default:
+			}
+
+			select {
+			case c.pollChan <- struct{}{}:
+			default:
 			}
 		}
 	}
