@@ -314,7 +314,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.UplinkDataPlacement {
 	case "":
 		c.UplinkDataPlacement = "body"
-	case "body", "cookie", "header":
+	case "body":
+	case "cookie", "header":
 		if c.Mode != "packet-up" {
 			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
 		}
