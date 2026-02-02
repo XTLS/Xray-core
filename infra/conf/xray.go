@@ -259,9 +259,9 @@ func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, s
 	}
 
 	// Hysteria, unlikely
-	if _, ok := rawConfig.(*HysteriaClientConfig); ok {
-		return errors.New("hysteria2 without TLS is prohibited")
-	}
+	// if _, ok := rawConfig.(*HysteriaClientConfig); ok {
+	// 	return errors.New("hysteria2 without TLS is prohibited")
+	// }
 
 	return nil
 }
