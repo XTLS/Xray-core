@@ -27,15 +27,21 @@ type packet struct {
 	addr net.Addr
 }
 
+type seqStatus struct {
+	needSeqByte bool
+	seqByte     byte
+	received    bool
+}
+
 type xicmpConnClient struct {
 	conn     net.PacketConn
 	icmpConn *icmp.PacketConn
 
-	typ     icmp.Type
-	id      int
-	seq     int
-	proto   int
-	seqByte map[int]byte
+	typ       icmp.Type
+	id        int
+	seq       int
+	proto     int
+	seqStatus map[int]*seqStatus
 
 	pollChan   chan struct{}
 	readQueue  chan *packet
@@ -72,11 +78,11 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		conn:     raw,
 		icmpConn: icmpConn,
 
-		typ:     typ,
-		id:      int(c.Id),
-		seq:     1,
-		proto:   proto,
-		seqByte: make(map[int]byte),
+		typ:       typ,
+		id:        int(c.Id),
+		seq:       1,
+		proto:     proto,
+		seqStatus: make(map[int]*seqStatus),
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
@@ -93,7 +99,14 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	seqByte := byte(crypto.RandBetween(0, 255))
+	needSeqByte := false
+	var seqByte byte
+	data := p
+	if len(p) > 0 {
+		needSeqByte = true
+		seqByte = byte(crypto.RandBetween(0, 255))
+		data = append([]byte{seqByte}, p...)
+	}
 
 	msg := icmp.Message{
 		Type: c.typ,
@@ -101,7 +114,7 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		Body: &icmp.Echo{
 			ID:   c.id,
 			Seq:  c.seq,
-			Data: append([]byte{seqByte}, p...),
+			Data: data,
 		},
 	}
 
@@ -114,7 +127,11 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		return nil, errors.New("xicmp len(buf) > 8192")
 	}
 
-	c.seqByte[c.seq] = seqByte
+	c.seqStatus[c.seq] = &seqStatus{
+		needSeqByte: needSeqByte,
+		seqByte:     seqByte,
+		received:    false,
+	}
 
 	c.seq++
 
@@ -122,8 +139,6 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 }
 
 func (c *xicmpConnClient) recvLoop() {
-	seqMap := make(map[int]struct{})
-
 	for {
 		if c.closed {
 			break
@@ -150,21 +165,28 @@ func (c *xicmpConnClient) recvLoop() {
 			continue
 		}
 
-		if _, ok := seqMap[echo.Seq]; ok {
+		seqStatus, ok := c.seqStatus[echo.Seq]
+
+		if !ok {
 			continue
 		}
 
-		if _, ok := c.seqByte[echo.Seq]; !ok {
+		if seqStatus.received {
 			continue
 		}
 
-		if len(echo.Data) > 1 {
-			if echo.Data[0] == c.seqByte[echo.Seq] {
+		if seqStatus.needSeqByte {
+			if len(echo.Data) <= 1 {
+				continue
+			}
+			if echo.Data[0] == seqStatus.seqByte {
 				continue
 			}
 			echo.Data = echo.Data[1:]
+		}
 
-			seqMap[echo.Seq] = struct{}{}
+		if len(echo.Data) > 0 {
+			seqStatus.received = true
 
 			buf := make([]byte, len(echo.Data))
 			copy(buf, echo.Data)

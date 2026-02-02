@@ -21,10 +21,11 @@ const (
 )
 
 type record struct {
-	id      int
-	seq     int
-	seqByte byte
-	addr    net.Addr
+	id          int
+	seq         int
+	needSeqByte bool
+	seqByte     byte
+	addr        net.Addr
 }
 
 type queue struct {
@@ -136,8 +137,12 @@ func (c *xicmpConnServer) ensureQueue(addr net.Addr) *queue {
 	return q
 }
 
-func (c *xicmpConnServer) encode(p []byte, id int, seq int, seqByte byte) ([]byte, error) {
-	b2 := c.randUntil(seqByte)
+func (c *xicmpConnServer) encode(p []byte, id int, seq int, needSeqByte bool, seqByte byte) ([]byte, error) {
+	data := p
+	if needSeqByte {
+		b2 := c.randUntil(seqByte)
+		data = append([]byte{b2}, p...)
+	}
 
 	msg := icmp.Message{
 		Type: c.typ,
@@ -145,7 +150,7 @@ func (c *xicmpConnServer) encode(p []byte, id int, seq int, seqByte byte) ([]byt
 		Body: &icmp.Echo{
 			ID:   id,
 			Seq:  seq,
-			Data: append([]byte{b2}, p...),
+			Data: data,
 		},
 	}
 
@@ -202,9 +207,11 @@ func (c *xicmpConnServer) recvLoop() {
 			continue
 		}
 
+		needSeqByte := false
 		var seqByte byte
 
 		if len(echo.Data) >= 1 {
+			needSeqByte = true
 			seqByte = echo.Data[0]
 			echo.Data = echo.Data[1:]
 
@@ -219,16 +226,17 @@ func (c *xicmpConnServer) recvLoop() {
 				default:
 				}
 			}
+		}
 
-			select {
-			case c.ch <- &record{
-				id:      echo.ID,
-				seq:     echo.Seq,
-				seqByte: seqByte,
-				addr:    addr,
-			}:
-			default:
-			}
+		select {
+		case c.ch <- &record{
+			id:          echo.ID,
+			seq:         echo.Seq,
+			needSeqByte: needSeqByte,
+			seqByte:     seqByte,
+			addr:        addr,
+		}:
+		default:
 		}
 	}
 
@@ -275,7 +283,7 @@ func (c *xicmpConnServer) sendLoop() {
 			continue
 		}
 
-		buf, err := c.encode(p, rec.id, rec.seq, rec.seqByte)
+		buf, err := c.encode(p, rec.id, rec.seq, rec.needSeqByte, rec.seqByte)
 		if err != nil {
 			continue
 		}
