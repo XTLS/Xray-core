@@ -210,21 +210,18 @@ func (c *xicmpConnServer) recvLoop() {
 		needSeqByte := false
 		var seqByte byte
 
-		if len(echo.Data) >= 1 {
+		if len(echo.Data) > 0 {
 			needSeqByte = true
 			seqByte = echo.Data[0]
-			echo.Data = echo.Data[1:]
 
-			if len(echo.Data) > 0 {
-				buf := make([]byte, len(echo.Data))
-				copy(buf, echo.Data)
-				select {
-				case c.readQueue <- &packet{
-					p:    buf,
-					addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
-				}:
-				default:
-				}
+			buf := make([]byte, len(echo.Data))
+			copy(buf, echo.Data)
+			select {
+			case c.readQueue <- &packet{
+				p:    buf,
+				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
+			}:
+			default:
 			}
 		}
 

@@ -104,8 +104,7 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 	data := p
 	if len(p) > 0 {
 		needSeqByte = true
-		seqByte = byte(crypto.RandBetween(0, 255))
-		data = append([]byte{seqByte}, p...)
+		seqByte = p[0]
 	}
 
 	msg := icmp.Message{
