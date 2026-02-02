@@ -319,6 +319,27 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
+
+	// Do not allow VMess outbound with Security == none and no TLS config in streamSettings
+	if vmCfg, ok := rawConfig.(*VMessOutboundConfig); ok {
+		sec := ""
+		if vmCfg.Address != nil {
+			sec = vmCfg.Security
+		} else if len(vmCfg.Receivers) > 0 {
+			rec := vmCfg.Receivers[0]
+			if len(rec.Users) > 0 {
+				acct := new(VMessAccount)
+				if err := json.Unmarshal(rec.Users[0], acct); err == nil {
+					sec = strings.ToLower(acct.Security)
+				}
+			}
+		}
+		if sec == "none" || sec == "auto" || sec == "" {
+			if senderSettings.StreamSettings == nil || senderSettings.StreamSettings.GetSecurityType() == "" {
+				return nil, errors.New("vmess with 'none' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
+			}
+		}
+	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
