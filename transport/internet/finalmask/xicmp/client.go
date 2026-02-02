@@ -135,6 +135,10 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 
 	c.seq++
 
+	if c.seq == 65536 {
+		c.seq = 1
+	}
+
 	return buf, nil
 }
 
