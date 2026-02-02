@@ -335,8 +335,16 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 			}
 		}
 		if sec == "none" || sec == "auto" || sec == "" {
+			// Unlikely
 			if senderSettings.StreamSettings == nil || senderSettings.StreamSettings.GetSecurityType() == "" {
-				return nil, errors.New("vmess with 'none' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
+				// Unlikely
+				if vmCfg.Address != nil {
+					toServer := vmCfg.Address.IP()
+					// Unlikely
+					if toServer != nil && !toServer.IsPrivate() && !toServer.IsLoopback() && !toServer.IsMulticast() && !toServer.IsLinkLocalUnicast() {
+						return nil, errors.New("vmess with 'none' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
+					}
+				}
 			}
 		}
 	}
