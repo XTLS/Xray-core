@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -1240,6 +1241,7 @@ var (
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"xdns":             func() interface{} { return new(Xdns) },
+		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
 )
 
@@ -1326,6 +1328,24 @@ func (c *Xdns) Build() (proto.Message, error) {
 	return &xdns.Config{
 		Domain: c.Domain,
 	}, nil
+}
+
+type Xicmp struct {
+	ListenIp string `json:"listenIp"`
+	Id       uint16 `json:"id"`
+}
+
+func (c *Xicmp) Build() (proto.Message, error) {
+	config := &xicmp.Config{
+		Ip: c.ListenIp,
+		Id: int32(c.Id),
+	}
+
+	if config.Ip == "" {
+		config.Ip = "0.0.0.0"
+	}
+
+	return config, nil
 }
 
 type Mask struct {
