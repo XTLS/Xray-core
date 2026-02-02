@@ -218,8 +218,11 @@ func (c *xicmpConnServer) recvLoop() {
 			copy(buf, echo.Data)
 			select {
 			case c.readQueue <- &packet{
-				p:    buf,
-				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
+				p: buf,
+				addr: &net.UDPAddr{
+					IP:   addr.(*net.IPAddr).IP,
+					Port: echo.ID,
+				},
 			}:
 			default:
 			}
@@ -231,7 +234,10 @@ func (c *xicmpConnServer) recvLoop() {
 			seq:         echo.Seq,
 			needSeqByte: needSeqByte,
 			seqByte:     seqByte,
-			addr:        addr,
+			addr: &net.UDPAddr{
+				IP:   addr.(*net.IPAddr).IP,
+				Port: echo.ID,
+			},
 		}:
 		default:
 		}
@@ -289,7 +295,7 @@ func (c *xicmpConnServer) sendLoop() {
 			return
 		}
 
-		_, err = c.icmpConn.WriteTo(buf, rec.addr)
+		_, err = c.icmpConn.WriteTo(buf, &net.IPAddr{IP: rec.addr.(*net.UDPAddr).IP})
 		if err != nil {
 			errors.LogDebug(context.Background(), "xicmp writeto err ", err)
 		}
@@ -313,7 +319,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	q := c.ensureQueue(&net.IPAddr{IP: addr.(*net.UDPAddr).IP})
+	q := c.ensureQueue(addr)
 	if q == nil {
 		return 0, errors.New("xicmp closed")
 	}

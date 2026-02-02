@@ -329,7 +329,10 @@ func (c *xicmpConnClient) Close() error {
 }
 
 func (c *xicmpConnClient) LocalAddr() net.Addr {
-	return &net.UDPAddr{IP: c.icmpConn.LocalAddr().(*net.IPAddr).IP}
+	return &net.UDPAddr{
+		IP:   c.icmpConn.LocalAddr().(*net.IPAddr).IP,
+		Port: c.id,
+	}
 }
 
 func (c *xicmpConnClient) SetDeadline(t time.Time) error {
