@@ -22,7 +22,7 @@ func init() {
 				return nil, err
 			}
 
-			if streamSettings.UdpmaskManager != nil {
+			if streamSettings != nil && streamSettings.UdpmaskManager != nil {
 				wrapper, ok := conn.(*internet.PacketConnWrapper)
 				if !ok {
 					conn.Close()
