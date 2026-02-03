@@ -54,15 +54,15 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
-	wrapper, ok := rawConn.(*internet.PacketConnWrapper)
-	if !ok {
-		rawConn.Close()
-		return nil, errors.New("raw is not PacketConnWrapper")
-	}
-
-	raw := wrapper.Conn
-
 	if streamSettings.UdpmaskManager != nil {
+		wrapper, ok := rawConn.(*internet.PacketConnWrapper)
+		if !ok {
+			rawConn.Close()
+			return nil, errors.New("raw is not PacketConnWrapper")
+		}
+
+		raw := wrapper.Conn
+
 		wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(raw)
 		if err != nil {
 			raw.Close()

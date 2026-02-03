@@ -22,15 +22,15 @@ func init() {
 				return nil, err
 			}
 
-			wrapper, ok := conn.(*internet.PacketConnWrapper)
-			if !ok {
-				conn.Close()
-				return nil, errors.New("conn is not PacketConnWrapper")
-			}
-
-			raw := wrapper.Conn
-
 			if streamSettings.UdpmaskManager != nil {
+				wrapper, ok := conn.(*internet.PacketConnWrapper)
+				if !ok {
+					conn.Close()
+					return nil, errors.New("conn is not PacketConnWrapper")
+				}
+
+				raw := wrapper.Conn
+
 				wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(raw)
 				if err != nil {
 					raw.Close()
