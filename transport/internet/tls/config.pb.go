@@ -177,7 +177,8 @@ func (x *Certificate) GetBuildChain() bool {
 }
 
 type Config struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AllowInsecure bool                   `protobuf:"varint,1,opt,name=allow_insecure,json=allowInsecure,proto3" json:"allow_insecure,omitempty"`
 	// List of certificates to be served on server.
 	Certificate []*Certificate `protobuf:"bytes,2,rep,name=certificate,proto3" json:"certificate,omitempty"`
 	// Override server name.
@@ -239,6 +240,13 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_tls_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Config) GetAllowInsecure() bool {
+	if x != nil {
+		return x.AllowInsecure
+	}
+	return false
 }
 
 func (x *Config) GetCertificate() []*Certificate {
@@ -385,8 +393,9 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x05Usage\x12\x10\n" +
 	"\fENCIPHERMENT\x10\x00\x12\x14\n" +
 	"\x10AUTHORITY_VERIFY\x10\x01\x12\x13\n" +
-	"\x0fAUTHORITY_ISSUE\x10\x02\"\xce\x06\n" +
-	"\x06Config\x12J\n" +
+	"\x0fAUTHORITY_ISSUE\x10\x02\"\xf5\x06\n" +
+	"\x06Config\x12%\n" +
+	"\x0eallow_insecure\x18\x01 \x01(\bR\rallowInsecure\x12J\n" +
 	"\vcertificate\x18\x02 \x03(\v2(.xray.transport.internet.tls.CertificateR\vcertificate\x12\x1f\n" +
 	"\vserver_name\x18\x03 \x01(\tR\n" +
 	"serverName\x12#\n" +

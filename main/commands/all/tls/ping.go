@@ -6,8 +6,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
+	"text/tabwriter"
 
+	utls "github.com/refraction-networking/utls"
+
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/main/commands/base"
 	. "github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -46,6 +51,7 @@ func executePing(cmd *base.Command, args []string) {
 	} else {
 		TargetPort, _ = strconv.Atoi(port)
 	}
+	tabWriter := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	var ip net.IP
 	if len(*pingIPStr) > 0 {
@@ -70,7 +76,7 @@ func executePing(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
-		tlsConn := gotls.Client(tcpConn, &gotls.Config{
+		tlsConn := GeneraticUClient(tcpConn, &gotls.Config{
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"h2", "http/1.1"},
 			MaxVersion:         gotls.VersionTLS13,
@@ -81,8 +87,9 @@ func executePing(cmd *base.Command, args []string) {
 			fmt.Println("Handshake failure: ", err)
 		} else {
 			fmt.Println("Handshake succeeded")
-			printTLSConnDetail(tlsConn)
-			printCertificates(tlsConn.ConnectionState().PeerCertificates)
+			printTLSConnDetail(tabWriter, tlsConn)
+			printCertificates(tabWriter, tlsConn.ConnectionState().PeerCertificates)
+			tabWriter.Flush()
 		}
 		tlsConn.Close()
 	}
@@ -94,7 +101,7 @@ func executePing(cmd *base.Command, args []string) {
 		if err != nil {
 			base.Fatalf("Failed to dial tcp: %s", err)
 		}
-		tlsConn := gotls.Client(tcpConn, &gotls.Config{
+		tlsConn := GeneraticUClient(tcpConn, &gotls.Config{
 			ServerName: domain,
 			NextProtos: []string{"h2", "http/1.1"},
 			MaxVersion: gotls.VersionTLS13,
@@ -105,8 +112,9 @@ func executePing(cmd *base.Command, args []string) {
 			fmt.Println("Handshake failure: ", err)
 		} else {
 			fmt.Println("Handshake succeeded")
-			printTLSConnDetail(tlsConn)
-			printCertificates(tlsConn.ConnectionState().PeerCertificates)
+			printTLSConnDetail(tabWriter, tlsConn)
+			printCertificates(tabWriter, tlsConn.ConnectionState().PeerCertificates)
+			tabWriter.Flush()
 		}
 		tlsConn.Close()
 	}
@@ -115,38 +123,45 @@ func executePing(cmd *base.Command, args []string) {
 	fmt.Println("TLS ping finished")
 }
 
-func printCertificates(certs []*x509.Certificate) {
+func printCertificates(tabWriter *tabwriter.Writer, certs []*x509.Certificate) {
 	var leaf *x509.Certificate
+	var CAs []*x509.Certificate
 	var length int
 	for _, cert := range certs {
 		length += len(cert.Raw)
 		if len(cert.DNSNames) != 0 {
 			leaf = cert
+		} else {
+			CAs = append(CAs, cert)
 		}
 	}
-	fmt.Println("Certificate chain's total length: ", length, "(certs count: "+strconv.Itoa(len(certs))+")")
+	fmt.Fprintf(tabWriter, "Certificate chain's total length: \t %d (certs count: %s)\n", length, strconv.Itoa(len(certs)))
 	if leaf != nil {
-		fmt.Println("Cert's signature algorithm: ", leaf.SignatureAlgorithm.String())
-		fmt.Println("Cert's publicKey algorithm: ", leaf.PublicKeyAlgorithm.String())
-		fmt.Println("Cert's allowed domains: ", leaf.DNSNames)
-		fmt.Println("Cert's leaf SHA256: ", hex.EncodeToString(GenerateCertHash(leaf)))
+		fmt.Fprintf(tabWriter, "Cert's signature algorithm: \t %s\n", leaf.SignatureAlgorithm.String())
+		fmt.Fprintf(tabWriter, "Cert's publicKey algorithm: \t %s\n", leaf.PublicKeyAlgorithm.String())
+		fmt.Fprintf(tabWriter, "Cert's leaf SHA256: \t %s\n", hex.EncodeToString(GenerateCertHash(leaf)))
+		for _, ca := range CAs {
+			fmt.Fprintf(tabWriter, "Cert's CA: %s SHA256: \t %s\n", ca.Subject.CommonName, hex.EncodeToString(GenerateCertHash(ca)))
+		}
+		fmt.Fprintf(tabWriter, "Cert's allowed domains: \t %v\n", leaf.DNSNames)
 	}
 }
 
-func printTLSConnDetail(tlsConn *gotls.Conn) {
+func printTLSConnDetail(tabWriter *tabwriter.Writer, tlsConn *utls.UConn) {
 	connectionState := tlsConn.ConnectionState()
 	var tlsVersion string
-	if connectionState.Version == gotls.VersionTLS13 {
+	switch connectionState.Version {
+	case gotls.VersionTLS13:
 		tlsVersion = "TLS 1.3"
-	} else if connectionState.Version == gotls.VersionTLS12 {
+	case gotls.VersionTLS12:
 		tlsVersion = "TLS 1.2"
 	}
-	fmt.Println("TLS Version: ", tlsVersion)
-	curveID := connectionState.CurveID
-	if curveID != 0 {
-		PostQuantum := (curveID == gotls.X25519MLKEM768)
-		fmt.Println("TLS Post-Quantum key exchange: ", PostQuantum, "("+curveID.String()+")")
+	fmt.Fprintf(tabWriter, "TLS Version: \t %s\n", tlsVersion)
+	curveID := utils.AccessField[utls.CurveID](tlsConn.Conn, "curveID")
+	if curveID != nil {
+		PostQuantum := (*curveID == utls.X25519MLKEM768)
+		fmt.Fprintf(tabWriter, "TLS Post-Quantum key exchange: \t %t (%s)\n", PostQuantum, curveID.String())
 	} else {
-		fmt.Println("TLS Post-Quantum key exchange:  false (RSA Exchange)")
+		fmt.Fprintf(tabWriter, "TLS Post-Quantum key exchange:  false (RSA Exchange)\n")
 	}
 }
