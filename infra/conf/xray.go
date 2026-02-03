@@ -246,16 +246,19 @@ func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, s
 		return c.checkVMessTLSConflict(vmCfg)
 	}
 
-	// VLESS should always with TLS
+	// VLESS should always with encryption
 	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
 		if !isInternalOrInvalidAddress(vlessCfg.Address) {
-			return errors.New("vless without TLS or reality is prohibited")
+			// When the encryption present, GetSecurityType() => should not be empty
+			return errors.New("vless without TLS or other encryption is prohibited")
 		}
 	}
 
 	// Trojan，unlikely
-	if _, ok := rawConfig.(*TrojanClientConfig); ok {
-		return errors.New("trojan without TLS is prohibited")
+	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
+		if !isInternalOrInvalidAddress(tjCfg.Address) {
+			return errors.New("trojan without TLS is prohibited")
+		}
 	}
 
 	// Hysteria, unlikely
@@ -279,9 +282,9 @@ func (c *OutboundDetourConfig) checkVMessTLSConflict(vmCfg *VMessOutboundConfig)
 		}
 	}
 
-	if sec == "none" || sec == "auto" || sec == "" {
+	if sec == "none" || sec == "auto" || sec == "" || sec == "zero" {
 		if !isInternalOrInvalidAddress(vmCfg.Address) {
-			return errors.New("vmess with 'none' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
+			return errors.New("vmess with 'none' or 'zero' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
 		}
 	}
 	return nil
