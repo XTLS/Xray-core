@@ -38,6 +38,8 @@ message Certificate {
 }
 
 message Config {
+  bool allow_insecure = 1;
+
   // List of certificates to be served on server.
   repeated Certificate certificate = 2;
 
