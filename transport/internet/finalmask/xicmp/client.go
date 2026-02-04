@@ -20,6 +20,7 @@ const (
 	maxPollDelay        = 10 * time.Second
 	pollDelayMultiplier = 2.0
 	pollLimit           = 16
+	skipCount           = 1000
 )
 
 type packet struct {
@@ -30,7 +31,6 @@ type packet struct {
 type seqStatus struct {
 	needSeqByte bool
 	seqByte     byte
-	received    bool
 }
 
 type xicmpConnClient struct {
@@ -129,8 +129,9 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 	c.seqStatus[c.seq] = &seqStatus{
 		needSeqByte: needSeqByte,
 		seqByte:     seqByte,
-		received:    false,
 	}
+
+	delete(c.seqStatus, int(uint16(c.seq-skipCount)))
 
 	c.seq++
 
@@ -168,13 +169,11 @@ func (c *xicmpConnClient) recvLoop() {
 			continue
 		}
 
+		c.mutex.Lock()
 		seqStatus, ok := c.seqStatus[echo.Seq]
+		c.mutex.Unlock()
 
 		if !ok {
-			continue
-		}
-
-		if seqStatus.received {
 			continue
 		}
 
@@ -189,7 +188,7 @@ func (c *xicmpConnClient) recvLoop() {
 		}
 
 		if len(echo.Data) > 0 {
-			seqStatus.received = true
+			delete(c.seqStatus, echo.Seq)
 
 			buf := make([]byte, len(echo.Data))
 			copy(buf, echo.Data)
