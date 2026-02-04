@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -148,7 +148,7 @@ func ParseFileName(name string) (sessionID string, direction string, seq int64, 
 	sessionID = strings.Join(parts[:5], "-")
 
 	// Validate it's a UUID
-	if _, err := uuid.Parse(sessionID); err != nil {
+	if _, err := uuid.ParseString(sessionID); err != nil {
 		return "", "", 0, false
 	}
 
@@ -397,7 +397,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	// Generate a new session ID for this connection
-	sessionID := uuid.New().String()
+	newUUID := uuid.New()
+	sessionID := newUUID.String()
 
 	errors.LogInfo(ctx, fmt.Sprintf("XDRIVE client dialing with session %s to folder %s", sessionID, config.RemoteFolder))
 
