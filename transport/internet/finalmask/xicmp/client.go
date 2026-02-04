@@ -20,7 +20,7 @@ const (
 	maxPollDelay        = 10 * time.Second
 	pollDelayMultiplier = 2.0
 	pollLimit           = 16
-	skipCount           = 1000
+	windowSize          = 1000
 )
 
 type packet struct {
@@ -131,9 +131,9 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		seqByte:     seqByte,
 	}
 
-	delete(c.seqStatus, int(uint16(c.seq-skipCount)))
-
 	c.seq++
+
+	delete(c.seqStatus, int(uint16(c.seq-windowSize)))
 
 	if c.seq == 65536 {
 		c.seq = 1
