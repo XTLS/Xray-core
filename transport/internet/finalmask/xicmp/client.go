@@ -189,7 +189,9 @@ func (c *xicmpConnClient) recvLoop() {
 		}
 
 		if len(echo.Data) > 0 {
+			c.mutex.Lock()
 			delete(c.seqStatus, echo.Seq)
+			c.mutex.Unlock()
 
 			buf := make([]byte, len(echo.Data))
 			copy(buf, echo.Data)
