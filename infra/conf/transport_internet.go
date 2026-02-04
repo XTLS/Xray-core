@@ -452,6 +452,31 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type XDriveConfig struct {
+	RemoteFolder string   `json:"remoteFolder"`
+	Service      string   `json:"service"`
+	Secrets      []string `json:"secrets"`
+}
+
+// Build implements Buildable.
+func (c *XDriveConfig) Build() (proto.Message, error) {
+	switch c.Service {
+	case "local":
+	case "Google Drive":
+		if len(c.Secrets) != 3 {
+			return nil, errors.New("Google Drive needs 3 secrets in order of ClientID, ClientSecret, RefreshToken")
+		}
+	default:
+		return nil, errors.New("unsupported service")
+	}
+	config := &xdrive.Config{
+		RemoteFolder: c.RemoteFolder,
+		Service:      c.Service,
+		Secrets:      c.Secrets,
+	}
+	return config, nil
+}
+
 const (
 	Byte     = 1
 	Kilobyte = 1024 * Byte
