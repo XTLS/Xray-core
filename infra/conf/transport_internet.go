@@ -37,6 +37,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/websocket"
+	"github.com/xtls/xray-core/transport/internet/xdrive"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -449,6 +450,31 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	return config, nil
+}
+
+type XDriveConfig struct {
+	RemoteFolder string   `json:"remoteFolder"`
+	Service      string   `json:"service"`
+	Secrets      []string `json:"secrets"`
+}
+
+// Build implements Buildable.
+func (c *XDriveConfig) Build() (proto.Message, error) {
+	switch c.Service {
+	case "local":
+	case "Google Drive":
+		if len(c.Secrets) != 3 {
+			return nil, errors.New("Google Drive needs 3 secrets in order of ClientID, ClientSecret, RefreshToken")
+		}
+	default:
+		return nil, errors.New("unsupported service")
+	}
+	config := &xdrive.Config{
+		RemoteFolder: c.RemoteFolder,
+		Service:      c.Service,
+		Secrets:      c.Secrets,
+	}
 	return config, nil
 }
 
@@ -1054,6 +1080,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
 	case "hysteria":
 		return "hysteria", nil
+	case "xdrive":
+		return "xdrive", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
@@ -1403,6 +1431,7 @@ type StreamConfig struct {
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
+	XDriveSettings      *XDriveConfig      `json:"xdriveSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
 
@@ -1531,6 +1560,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "hysteria",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.XDriveSettings != nil {
+		xs, err := c.XDriveSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build XDrive config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "xdrive",
+			Settings:     serial.ToTypedMessage(xs),
 		})
 	}
 	if c.SocketSettings != nil {

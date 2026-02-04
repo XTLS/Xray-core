@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package xray.transport.internet.xdrive;
+option go_package = "github.com/xtls/xray-core/transport/internet/xdrive";
+
+message Config {
+  string remote_folder = 1;
+  string service = 2;
+  repeated string secrets = 3;
+}
