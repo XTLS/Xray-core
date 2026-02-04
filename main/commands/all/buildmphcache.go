@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf/serial"
 	"github.com/xtls/xray-core/main/commands/base"
 )
@@ -41,7 +42,12 @@ func executeBuildMphCache(cmd *base.Command, args []string) {
 		defer os.Setenv("XRAY_MPH_CACHE", domainMatcherPath)
 	}
 
-	config, err := serial.DecodeJSONConfig(cf)
+	c, ok := serial.ReaderDecoderByFormat[core.GetFormat(*configPath)]
+	if !ok {
+		base.Fatalf("unknow config file format")
+	}
+
+	config, err := c(cf)
 	if err != nil {
 		base.Fatalf("failed to decode config file: %v", err)
 	}
