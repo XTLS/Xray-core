@@ -131,11 +131,12 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		seqByte:     seqByte,
 	}
 
-	c.seq++
-
 	delete(c.seqStatus, int(uint16(c.seq-windowSize)))
 
+	c.seq++
+
 	if c.seq == 65536 {
+		delete(c.seqStatus, int(uint16(c.seq-windowSize)))
 		c.seq = 1
 	}
 
