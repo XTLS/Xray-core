@@ -23,6 +23,20 @@ import (
 
 const protocolName = "xdrive"
 
+// Configuration constants
+const (
+	// ReadPollInterval is the interval for polling when reading data
+	ReadPollInterval = 100 * time.Millisecond
+	// ServerPollInterval is the interval for polling new connections on server
+	ServerPollInterval = 500 * time.Millisecond
+	// ReadTimeout is the timeout for read operations
+	ReadTimeout = 10 * time.Second
+	// RetentionWindow is how long files are kept before cleanup
+	RetentionWindow = 10 * time.Second
+	// CleanupInterval is how often the cleanup routine runs
+	CleanupInterval = 5 * time.Second
+)
+
 // DriveService defines the interface for remote storage services
 type DriveService interface {
 	// Login authenticates with the service (no-op for local)
@@ -224,9 +238,7 @@ func (c *XdriveConnection) Read(b []byte) (int, error) {
 	prefix := fmt.Sprintf("%s-%s-", c.sessionID, readDirection)
 
 	// Poll for the expected file with timeout
-	pollInterval := 100 * time.Millisecond
-	timeout := 10 * time.Second
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(ReadTimeout)
 
 	for time.Now().Before(deadline) {
 		select {
@@ -238,7 +250,7 @@ func (c *XdriveConnection) Read(b []byte) (int, error) {
 		}
 
 		// List files within retention window
-		files, err := c.service.List(c.ctx, prefix, 10*time.Second)
+		files, err := c.service.List(c.ctx, prefix, RetentionWindow)
 		if err != nil {
 			return 0, err
 		}
@@ -281,7 +293,7 @@ func (c *XdriveConnection) Read(b []byte) (int, error) {
 			}
 		}
 
-		time.Sleep(pollInterval)
+		time.Sleep(ReadPollInterval)
 	}
 
 	return 0, errors.New("read timeout")
@@ -471,8 +483,7 @@ func Serve(ctx context.Context, address net.Address, port net.Port, streamSettin
 
 // pollForConnections polls the folder for new upload files indicating new connections
 func (s *Server) pollForConnections() {
-	pollInterval := 500 * time.Millisecond
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(ServerPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -490,7 +501,7 @@ func (s *Server) pollForConnections() {
 // checkForNewConnections checks for files from new client sessions
 func (s *Server) checkForNewConnections() {
 	// List all files within the retention window
-	files, err := s.service.List(s.ctx, "", 10*time.Second)
+	files, err := s.service.List(s.ctx, "", RetentionWindow)
 	if err != nil {
 		errors.LogWarning(s.ctx, "failed to list files: ", err)
 		return
@@ -533,9 +544,7 @@ func (s *Server) checkForNewConnections() {
 
 // cleanupOldFiles removes files older than the retention window
 func (s *Server) cleanupOldFiles() {
-	cleanupInterval := 5 * time.Second
-	retentionWindow := 10 * time.Second
-	ticker := time.NewTicker(cleanupInterval)
+	ticker := time.NewTicker(CleanupInterval)
 	defer ticker.Stop()
 
 	for {
@@ -545,7 +554,7 @@ func (s *Server) cleanupOldFiles() {
 		case <-s.closeDone.Wait():
 			return
 		case <-ticker.C:
-			s.doCleanup(retentionWindow)
+			s.doCleanup(RetentionWindow)
 		}
 	}
 }

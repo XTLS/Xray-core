@@ -453,6 +453,11 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+// XDriveConfig represents the configuration for the XDRIVE transport.
+// For the "local" service, secrets[0] should be "client" for client-side
+// or "server" for server-side.
+// For "Google Drive" service, secrets should contain [role, ClientID, ClientSecret, RefreshToken]
+// where role is "client" or "server".
 type XDriveConfig struct {
 	RemoteFolder string   `json:"remoteFolder"`
 	Service      string   `json:"service"`
@@ -463,9 +468,14 @@ type XDriveConfig struct {
 func (c *XDriveConfig) Build() (proto.Message, error) {
 	switch c.Service {
 	case "local":
+		// For local service, secrets[0] must be "client" or "server"
+		if len(c.Secrets) < 1 {
+			return nil, errors.New("local service needs secrets[0] set to 'client' or 'server'")
+		}
 	case "Google Drive":
-		if len(c.Secrets) != 3 {
-			return nil, errors.New("Google Drive needs 3 secrets in order of ClientID, ClientSecret, RefreshToken")
+		// For Google Drive, secrets should be [role, ClientID, ClientSecret, RefreshToken]
+		if len(c.Secrets) != 4 {
+			return nil, errors.New("Google Drive needs 4 secrets: role ('client' or 'server'), ClientID, ClientSecret, RefreshToken")
 		}
 	default:
 		return nil, errors.New("unsupported service")
