@@ -21,7 +21,7 @@ func (c *Config) GetNormalizedPath() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
-for k, v := range c.Header {
+	for k, v := range c.Header {
 		header.Add(k, v)
 	}
 	if header.Get("User-Agent") == "" {

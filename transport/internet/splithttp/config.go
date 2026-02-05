@@ -45,7 +45,7 @@ func (c *Config) GetNormalizedQuery() string {
 
 func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
-for k, v := range c.Headers {
+	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
 	if header.Get("User-Agent") == "" {

@@ -1,17 +1,17 @@
 package utils
 
 import (
-"strconv"
-"time"
+	"strconv"
+	"time"
 )
 
 func browserVersion() int {
-now := time.Now()
-ver := 143 + (now.Year()-2026)*12 + int(now.Month()) - 1
-if ver < 143 {
-ver = 143
-}
-return ver
+	now := time.Now()
+	ver := 143 + (now.Year()-2026)*12 + int(now.Month()) - 1
+	if ver < 143 {
+		ver = 143
+	}
+	return ver
 }
 
 // ChromeUA provides default browser User-Agent. Version 143 = Jan 2026, +1 per month.
