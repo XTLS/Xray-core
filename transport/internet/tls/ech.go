@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/reality/hpke"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 	"golang.org/x/crypto/cryptobyte"
@@ -257,6 +258,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		}
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("User-Agent", http_proto.ChromeUA())
 		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 		resp, err := client.Do(req)
