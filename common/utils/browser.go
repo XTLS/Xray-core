@@ -13,13 +13,10 @@ func ChromeVersion() int {
 	if ver < 143 {
 		ver = 143
 	}
-	// Add variation based on core version to reduce statistical fingerprinting
-	if (core.Version_x+core.Version_y+core.Version_z)%2 == 1 {
-		if now.Day() < 15 {
-			ver--
-		} else {
-			ver++
-		}
+	// Distribute version transition across days 15-30 based on core version
+	transitionDay := 15 + int(core.Version_x+core.Version_y+core.Version_z)%16
+	if now.Day() >= transitionDay {
+		ver++
 	}
 	return ver
 }
