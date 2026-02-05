@@ -229,7 +229,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 
 	// Prevent UA from being set to golang's default ones
 	if request.Header.Get("User-Agent") == "" {
-		request.Header.Set("User-Agent", http_proto.ChromeUA())
+		request.Header.Set("User-Agent", "")
 	}
 
 	content := &session.Content{

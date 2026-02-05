@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	http_proto "github.com/xtls/xray-core/common/protocol/http"
+	"github.com/xtls/xray-core/common/utils"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
@@ -63,7 +63,7 @@ func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if err != nil {
 		return rttFailed, err
 	}
-	req.Header.Set("User-Agent", http_proto.ChromeUA())
+	req.Header.Set("User-Agent", utils.ChromeUA)
 
 	start := time.Now()
 	resp, err := s.httpClient.Do(req)

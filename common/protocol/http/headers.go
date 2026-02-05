@@ -4,23 +4,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/xtls/xray-core/common/net"
 )
-
-// ChromeUA generates a Chrome browser User-Agent string.
-// The version number changes monthly, starting from 143 in January 2026.
-func ChromeUA() string {
-	t := time.Now()
-	majorVersion := 143 + (t.Year()-2026)*12 + int(t.Month()) - 1
-	// Ensure minimum version of 143 for dates before January 2026
-	if majorVersion < 143 {
-		majorVersion = 143
-	}
-	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" +
-		strconv.Itoa(majorVersion) + ".0.0.0 Safari/537.36"
-}
 
 // ParseXForwardedFor parses X-Forwarded-For header in http headers, and return the IP list in it.
 func ParseXForwardedFor(header http.Header) []net.Address {

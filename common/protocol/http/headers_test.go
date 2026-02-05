@@ -115,20 +115,3 @@ func TestParseHost(t *testing.T) {
 		}
 	}
 }
-
-func TestChromeUA(t *testing.T) {
-	ua := ChromeUA()
-	if !strings.Contains(ua, "Chrome/") {
-		t.Error("ChromeUA should contain Chrome/ identifier")
-	}
-	if !strings.Contains(ua, "Mozilla/5.0") {
-		t.Error("ChromeUA should contain Mozilla/5.0 prefix")
-	}
-	if !strings.HasSuffix(ua, "Safari/537.36") {
-		t.Error("ChromeUA should end with Safari/537.36")
-	}
-	// Verify version is at least the minimum (143)
-	if !strings.Contains(ua, "Chrome/1") {
-		t.Error("ChromeUA should have a Chrome version starting with 1")
-	}
-}

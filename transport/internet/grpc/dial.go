@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/utils"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -167,8 +168,12 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions = append(dialOptions, grpc.WithInitialWindowSize(grpcSettings.InitialWindowsSize))
 	}
 
-	if grpcSettings.UserAgent != "" {
-		dialOptions = append(dialOptions, grpc.WithUserAgent(grpcSettings.UserAgent))
+	userAgent := grpcSettings.UserAgent
+	if userAgent == "" {
+		userAgent = utils.ChromeUA
+	}
+	if userAgent != "" {
+		dialOptions = append(dialOptions, grpc.WithUserAgent(userAgent))
 	}
 
 	var grpcDestHost string

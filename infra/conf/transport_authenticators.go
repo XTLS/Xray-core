@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/xtls/xray-core/common/errors"
-	http_proto "github.com/xtls/xray-core/common/protocol/http"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet/headers/http"
 	"github.com/xtls/xray-core/transport/internet/headers/noop"
 	"google.golang.org/protobuf/proto"
@@ -42,7 +42,7 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 			},
 			{
 				Name:  "User-Agent",
-				Value: []string{http_proto.ChromeUA()},
+				Value: []string{utils.ChromeUA},
 			},
 			{
 				Name:  "Accept-Encoding",
