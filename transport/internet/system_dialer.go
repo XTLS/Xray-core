@@ -237,3 +237,10 @@ func (c *FakePacketConn) LocalAddr() net.Addr {
 		Port: 0,
 	}
 }
+
+func (c *FakePacketConn) RemoteAddr() net.Addr {
+	return &net.UDPAddr{
+		IP:   []byte{0, 0, 0, 0},
+		Port: 0,
+	}
+}

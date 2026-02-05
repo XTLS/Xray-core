@@ -26,6 +26,7 @@ type Listener struct {
 	config        *Config
 	addConn       internet.ConnHandler
 
+	isTcp          bool
 	tcpMaskManager *finalmask.TcpmaskManager
 }
 
@@ -67,6 +68,7 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			return nil, errors.New("failed to listen TCP on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP on ", address, ":", port)
+		l.isTcp = true
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
@@ -114,7 +116,7 @@ func (v *Listener) keepAccepting() {
 			continue
 		}
 
-		if v.tcpMaskManager != nil {
+		if v.isTcp && v.tcpMaskManager != nil {
 			newConn, err := v.tcpMaskManager.WrapConnClient(conn)
 			if err != nil {
 				errors.LogError(context.Background(), errors.New("mask err").Base(err))
