@@ -13,8 +13,10 @@ func ChromeVersion() int {
 	if ver < 143 {
 		ver = 143
 	}
-	// Distribute version transition across days 15-30 based on core version
-	transitionDay := 15 + int(core.Version_x+core.Version_y+core.Version_z)%16
+	// Distribute version transition across days 15 to end of month based on core version
+	lastDay := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, time.Local).Day()
+	daysRange := lastDay - 14 // days from 15 to lastDay
+	transitionDay := 15 + int(core.Version_x+core.Version_y+core.Version_z)%daysRange
 	if now.Day() >= transitionDay {
 		ver++
 	}
