@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/klauspost/cpuid/v2"
 	"github.com/xtls/xray-core/core"
 )
 
@@ -13,13 +14,14 @@ func ChromeVersion() int {
 	if ver < 143 {
 		ver = 143
 	}
-	versionSum := int(core.Version_x + core.Version_y + core.Version_z)
+	// Combine core version with CPU ID for machine-specific distribution
+	seed := int(core.Version_x+core.Version_y+core.Version_z) + cpuid.CPU.Family + cpuid.CPU.Model
 	day := now.Day()
 	// Boundary between -1 and +1 zones is distributed between days 15-20
-	boundary := 15 + versionSum%6
+	boundary := 15 + seed%6
 	if day < boundary {
 		// Before boundary: distribute -1 transition uniformly from day 1 to boundary-1
-		transitionDay := 1 + versionSum%(boundary-1)
+		transitionDay := 1 + seed%(boundary-1)
 		if day >= transitionDay {
 			ver--
 		}
@@ -27,7 +29,7 @@ func ChromeVersion() int {
 		// From boundary to end of month: distribute +1 transition uniformly
 		lastDay := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, time.Local).Day()
 		daysRange := lastDay - boundary + 1
-		transitionDay := boundary + versionSum%daysRange
+		transitionDay := boundary + seed%daysRange
 		if day >= transitionDay {
 			ver++
 		}
