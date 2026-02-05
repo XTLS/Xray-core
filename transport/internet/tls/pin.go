@@ -5,25 +5,27 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 func CalculatePEMLeafCertSHA256Hash(certContent []byte) (string, error) {
-	var leafCert *x509.Certificate
 	for {
-		var err error
 		block, remain := pem.Decode(certContent)
 		if block == nil {
-			break
+			return "", errors.New("Unable to decode cert")
 		}
-		leafCert, err = x509.ParseCertificate(block.Bytes)
+		Cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
 			return "", err
 		}
+		if !Cert.IsCA {
+			certHash := GenerateCertHash(Cert)
+			certHashHex := hex.EncodeToString(certHash)
+			return certHashHex, nil
+		}
 		certContent = remain
 	}
-	certHash := GenerateCertHash(leafCert)
-	certHashHex := hex.EncodeToString(certHash)
-	return certHashHex, nil
 }
 
 // []byte must be ASN.1 DER content
