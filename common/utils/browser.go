@@ -10,10 +10,11 @@ import (
 
 func ChromeVersion() int {
 	now := time.Now()
-	ver := 143 + (now.Year()-2026)*12 + int(now.Month()) - 1
-	if ver < 143 {
-		ver = 143
+	baseVer := 143 + (now.Year()-2026)*12 + int(now.Month()) - 1
+	if baseVer < 143 {
+		baseVer = 143
 	}
+	ver := baseVer
 	// Use CPU features + Xray version as seed (version changes ensure occasional different "upgrade strategies")
 	seed := cpuid.CPU.Family + cpuid.CPU.Model + cpuid.CPU.PhysicalCores + cpuid.CPU.LogicalCores + cpuid.CPU.CacheLine + int(core.Version_x) + int(core.Version_y) + int(core.Version_z)
 	// Boundary day uniformly distributed between 15-20 based on seed
@@ -32,7 +33,8 @@ func ChromeVersion() int {
 			ver++
 		}
 	}
-	return ver
+	// Subtract base version mod 2 to avoid month-end upgrade followed by month-start downgrade
+	return ver - baseVer%2
 }
 
 // ChromeUA provides default browser User-Agent. Version 143 = Jan 2026, +1 per month.
