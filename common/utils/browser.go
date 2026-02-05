@@ -15,17 +15,19 @@ func ChromeVersion() int {
 	}
 	versionSum := int(core.Version_x + core.Version_y + core.Version_z)
 	day := now.Day()
-	if day < 15 {
-		// Days 1-14: distribute -1 transition uniformly
-		transitionDay := 1 + versionSum%14
+	// Boundary between -1 and +1 zones is distributed between days 15-20
+	boundary := 15 + versionSum%6
+	if day < boundary {
+		// Before boundary: distribute -1 transition uniformly from day 1 to boundary-1
+		transitionDay := 1 + versionSum%(boundary-1)
 		if day >= transitionDay {
 			ver--
 		}
 	} else {
-		// Days 15 to end of month: distribute +1 transition uniformly
+		// From boundary to end of month: distribute +1 transition uniformly
 		lastDay := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, time.Local).Day()
-		daysRange := lastDay - 14
-		transitionDay := 15 + versionSum%daysRange
+		daysRange := lastDay - boundary + 1
+		transitionDay := boundary + versionSum%daysRange
 		if day >= transitionDay {
 			ver++
 		}
