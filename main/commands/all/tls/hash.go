@@ -13,23 +13,23 @@ import (
 	. "github.com/xtls/xray-core/transport/internet/tls"
 )
 
-var cmdCertHash = &base.Command{
-	UsageLine: "{{.Exec}} tls certHash",
+var cmdHash = &base.Command{
+	UsageLine: "{{.Exec}} tls hash",
 	Short:     "Calculate TLS certificate hash.",
 	Long: `
-	xray tls certHash --cert <cert.pem>
+	xray tls hash --cert <cert.pem>
 	Calculate TLS certificate hash.
 	`,
 }
 
 func init() {
-	cmdCertHash.Run = executeCertHash // break init loop
+	cmdHash.Run = executeHash // break init loop
 }
 
-var input = cmdCertHash.Flag.String("cert", "fullchain.pem", "The file path of the certificate")
+var input = cmdHash.Flag.String("cert", "fullchain.pem", "The file path of the certificate")
 
-func executeCertHash(cmd *base.Command, args []string) {
-	fs := flag.NewFlagSet("certHash", flag.ContinueOnError)
+func executeHash(cmd *base.Command, args []string) {
+	fs := flag.NewFlagSet("hash", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		fmt.Println(err)
 		return
