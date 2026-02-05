@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -1237,6 +1238,10 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 var (
+	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+	}, "type", "settings")
+
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-dns":       func() interface{} { return new(Dns) },
 		"header-dtls":      func() interface{} { return new(Dtls) },
@@ -1244,6 +1249,7 @@ var (
 		"header-utp":       func() interface{} { return new(Utp) },
 		"header-wechat":    func() interface{} { return new(Wechat) },
 		"header-wireguard": func() interface{} { return new(Wireguard) },
+		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
@@ -1251,6 +1257,20 @@ var (
 		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
 )
+
+type HeaderCustomTCP struct {
+	Clients            [][]uint8 `json:"clients"`
+	Servers            [][]uint8 `json:"servers"`
+	OnCloseHeaderError []uint8   `json:"onCloseHeaderError"`
+}
+
+func (c *HeaderCustomTCP) Build() (proto.Message, error) {
+	return &custom.TCPConfig{
+		Clients:            c.Clients,
+		Servers:            c.Servers,
+		OnCloseHeaderError: c.OnCloseHeaderError,
+	}, nil
+}
 
 type Dns struct {
 	Domain string `json:"domain"`
@@ -1295,6 +1315,18 @@ type Wireguard struct{}
 
 func (c *Wireguard) Build() (proto.Message, error) {
 	return &wireguard.Config{}, nil
+}
+
+type HeaderCustomUDP struct {
+	Client []uint8 `json:"client"`
+	Server []uint8 `json:"server"`
+}
+
+func (c *HeaderCustomUDP) Build() (proto.Message, error) {
+	return &custom.UDPConfig{
+		Client: c.Client,
+		Server: c.Server,
+	}, nil
 }
 
 type Original struct{}
@@ -1363,7 +1395,7 @@ type Mask struct {
 func (c *Mask) Build(tcp bool) (proto.Message, error) {
 	loader := udpmaskLoader
 	if tcp {
-		return nil, errors.New("")
+		loader = tcpmaskLoader
 	}
 
 	settings := []byte("{}")

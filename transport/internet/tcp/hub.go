@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -24,12 +25,16 @@ type Listener struct {
 	authConfig    internet.ConnectionAuthenticator
 	config        *Config
 	addConn       internet.ConnHandler
+
+	tcpMaskManager *finalmask.TcpmaskManager
 }
 
 // ListenTCP creates a new Listener based on configurations.
 func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	l := &Listener{
 		addConn: handler,
+
+		tcpMaskManager: streamSettings.TcpmaskManager,
 	}
 	tcpSettings := streamSettings.ProtocolSettings.(*Config)
 	l.config = tcpSettings
@@ -108,6 +113,16 @@ func (v *Listener) keepAccepting() {
 			}
 			continue
 		}
+
+		if v.tcpMaskManager != nil {
+			newConn, err := v.tcpMaskManager.WrapConnClient(conn)
+			if err != nil {
+				errors.LogError(context.Background(), errors.New("mask err").Base(err))
+				continue
+			}
+			conn = newConn
+		}
+
 		go func() {
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)

@@ -3,6 +3,7 @@ package kcp
 import (
 	"context"
 	"io"
+	reflect "reflect"
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
@@ -10,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -49,24 +51,49 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 	dest.Network = net.Network_UDP
 	errors.LogInfo(ctx, "dialing mKCP to ", dest)
 
-	rawConn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+	conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
 		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
 	if streamSettings.UdpmaskManager != nil {
-		wrapper, ok := rawConn.(*internet.PacketConnWrapper)
-		if !ok {
-			rawConn.Close()
-			return nil, errors.New("raw is not PacketConnWrapper")
-		}
-
-		raw := wrapper.Conn
-
-		wrapper.Conn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(raw)
-		if err != nil {
-			raw.Close()
-			return nil, errors.New("mask err").Base(err)
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(c.PacketConn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			c.PacketConn = pktConn
+		case *net.UDPConn:
+			pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(c)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = &internet.PacketConnWrapper{
+				PacketConn: pktConn,
+				Dest: &net.UDPAddr{
+					IP:   []byte{0, 0, 0, 0},
+					Port: 0,
+				},
+			}
+		case *cnc.Connection:
+			fakeConn := &internet.FakePacketConn{Conn: c}
+			pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(fakeConn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = &internet.PacketConnWrapper{
+				PacketConn: pktConn,
+				Dest: &net.UDPAddr{
+					IP:   []byte{0, 0, 0, 0},
+					Port: 0,
+				},
+			}
+		default:
+			return nil, errors.New("unknown conn ", reflect.TypeOf(c))
 		}
 	}
 
@@ -76,12 +103,12 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	conv := uint16(atomic.AddUint32(&globalConv, 1))
 	session := NewConnection(ConnMetadata{
-		LocalAddr:    rawConn.LocalAddr(),
-		RemoteAddr:   rawConn.RemoteAddr(),
+		LocalAddr:    conn.LocalAddr(),
+		RemoteAddr:   conn.RemoteAddr(),
 		Conversation: conv,
-	}, rawConn, rawConn, kcpSettings)
+	}, conn, conn, kcpSettings)
 
-	go fetchInput(ctx, rawConn, reader, session)
+	go fetchInput(ctx, conn, reader, session)
 
 	var iConn stat.Connection = session
 
