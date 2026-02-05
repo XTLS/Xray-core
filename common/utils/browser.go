@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/klauspost/cpuid/v2"
+	"github.com/xtls/xray-core/core"
 )
 
 func ChromeVersion() int {
@@ -13,8 +14,8 @@ func ChromeVersion() int {
 	if ver < 143 {
 		ver = 143
 	}
-	// Use CPU features as machine-specific seed
-	seed := cpuid.CPU.Family + cpuid.CPU.Model + cpuid.CPU.PhysicalCores + cpuid.CPU.LogicalCores + cpuid.CPU.CacheLine
+	// Use CPU features + Xray version as seed (version changes ensure occasional different "upgrade strategies")
+	seed := cpuid.CPU.Family + cpuid.CPU.Model + cpuid.CPU.PhysicalCores + cpuid.CPU.LogicalCores + cpuid.CPU.CacheLine + int(core.Version_x) + int(core.Version_y) + int(core.Version_z)
 	// Boundary day uniformly distributed between 15-20 based on seed
 	boundary := 15 + seed%6
 	day := now.Day()
@@ -24,22 +25,12 @@ func ChromeVersion() int {
 			ver--
 		}
 	} else {
-		// After boundary: avoid downgrade
-		// If seed % 3 == 0, it would have gotten -1 before boundary, so allow -1/0/+1
-		// Otherwise, it didn't get -1 before, so only allow 0/+1
-		if seed%3 == 0 {
-			// Was -1 before boundary, can be -1/0/+1 after
-			switch seed % 3 {
-			case 0:
-				ver--
-			case 2:
-				ver++
-			}
-		} else {
-			// Was not -1 before boundary, can only be 0/+1 after
-			if seed%2 == 1 {
-				ver++
-			}
+		// After boundary: 1/3 probability each for -1/0/+1
+		switch seed % 3 {
+		case 0:
+			ver--
+		case 2:
+			ver++
 		}
 	}
 	return ver
