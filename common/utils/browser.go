@@ -3,6 +3,8 @@ package utils
 import (
 	"strconv"
 	"time"
+
+	"github.com/xtls/xray-core/core"
 )
 
 func ChromeVersion() int {
@@ -10,6 +12,14 @@ func ChromeVersion() int {
 	ver := 143 + (now.Year()-2026)*12 + int(now.Month()) - 1
 	if ver < 143 {
 		ver = 143
+	}
+	// Add variation based on core version to reduce statistical fingerprinting
+	if (core.Version_x+core.Version_y+core.Version_z)%2 == 1 {
+		if now.Day() < 15 {
+			ver--
+		} else {
+			ver++
+		}
 	}
 	return ver
 }
