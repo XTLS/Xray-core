@@ -16,12 +16,22 @@ func ChromeVersion() int {
 	}
 	// Combine core version with CPU ID for machine-specific seed
 	seed := int(core.Version_x+core.Version_y+core.Version_z) + cpuid.CPU.Family + cpuid.CPU.Model
-	// 1/3 probability each for -1, 0, +1 based on seed % 3
-	switch seed % 3 {
-	case 0:
-		ver--
-	case 2:
-		ver++
+	// Boundary day uniformly distributed between 15-20 based on seed
+	boundary := 15 + seed%6
+	day := now.Day()
+	if day < boundary {
+		// Before boundary: uniformly distributed -1 within days 1 to boundary-1
+		if seed%(boundary-1) < day {
+			ver--
+		}
+	} else {
+		// After boundary: 1/3 probability each for -1, 0, +1
+		switch seed % 3 {
+		case 0:
+			ver--
+		case 2:
+			ver++
+		}
 	}
 	return ver
 }
