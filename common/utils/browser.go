@@ -25,10 +25,8 @@ func ChromeVersion() int {
 			ver--
 		}
 	} else {
-		// After boundary: uniformly distributed whether +1
-		lastDay := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, now.Location()).Day()
-		daysAfter := lastDay - boundary + 1
-		if seed%daysAfter < day-boundary+1 {
+		// After boundary: 50% chance to +1 based on seed
+		if seed%2 == 1 {
 			ver++
 		}
 	}
