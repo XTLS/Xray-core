@@ -10,28 +10,25 @@ import (
 
 func ChromeVersion() int {
 	now := time.Now()
-	// Assume Chrome releases on 15th each month, with Jan 2026 being version 144
-	// Calculate the latest Chrome version based on current date
+	// Chrome releases on 15th each month: 2026.1.15 = 144
+	// Calculate the latest Chrome version at the 15th of current month
 	latestVer := 144 + (now.Year()-2026)*12 + int(now.Month()) - 1
-	daysSinceRelease := now.Day() - 15
-	if daysSinceRelease < 0 {
-		latestVer-- // Before 15th, the new version hasn't released yet
-		// Days since previous month's release (15th)
-		lastDay := time.Date(now.Year(), now.Month(), 0, 0, 0, 0, 0, time.UTC).Day()
-		daysSinceRelease = now.Day() + (lastDay - 15)
-	}
-	if latestVer < 144 {
-		latestVer = 144
-	}
-	// Use CPU features + Xray version as seed
+	// Use CPU features + Xray version as seed for upgrade delay (1-30 days)
 	seed := cpuid.CPU.Family + cpuid.CPU.Model + cpuid.CPU.PhysicalCores + cpuid.CPU.LogicalCores + cpuid.CPU.CacheLine + int(core.Version_x) + int(core.Version_y) + int(core.Version_z)
-	// User upgrade delay: 1-30 days uniformly distributed based on seed
 	upgradeDelay := seed%30 + 1
-	// If user's delay > days since release, they haven't upgraded yet
-	if upgradeDelay > daysSinceRelease {
-		return latestVer - 1
+	// Subtract upgrade delay from current date to get user's Chrome version date
+	userDate := now.AddDate(0, 0, -upgradeDelay)
+	userVer := 144 + (userDate.Year()-2026)*12 + int(userDate.Month()) - 1
+	if userDate.Day() < 15 {
+		userVer--
 	}
-	return latestVer
+	if userVer < 144 {
+		userVer = 144
+	}
+	if userVer > latestVer {
+		userVer = latestVer
+	}
+	return userVer
 }
 
 // ChromeUA provides default browser User-Agent. Chrome 144 = Jan 15, 2026, +1 per month.
