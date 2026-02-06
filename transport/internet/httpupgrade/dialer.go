@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -85,6 +86,9 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	}
 	for key, value := range transportConfiguration.Header {
 		AddHeader(req.Header, key, value)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", utils.ChromeUA)
 	}
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")

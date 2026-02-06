@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -167,9 +168,11 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions = append(dialOptions, grpc.WithInitialWindowSize(grpcSettings.InitialWindowsSize))
 	}
 
-	if grpcSettings.UserAgent != "" {
-		dialOptions = append(dialOptions, grpc.WithUserAgent(grpcSettings.UserAgent))
+	userAgent := grpcSettings.UserAgent
+	if userAgent == "" {
+		userAgent = utils.ChromeUA
 	}
+	dialOptions = append(dialOptions, grpc.WithUserAgent(userAgent))
 
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {

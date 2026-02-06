@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/crypto/hkdf"
@@ -222,7 +223,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 				if req == nil {
 					return
 				}
-				req.Header.Set("User-Agent", fingerprint.Client) // TODO: User-Agent map
+				req.Header.Set("User-Agent", utils.ChromeUA)
 				if first && config.Show {
 					fmt.Printf("REALITY localAddr: %v\treq.UserAgent(): %v\n", localAddr, req.UserAgent())
 				}

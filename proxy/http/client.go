@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
@@ -218,6 +219,9 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 
 	for _, h := range header {
 		req.Header.Set(h.Key, h.Value)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", utils.ChromeUA)
 	}
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
