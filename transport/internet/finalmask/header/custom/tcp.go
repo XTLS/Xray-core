@@ -42,6 +42,14 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	return conn, nil
 }
 
+func (c *tcpCustomClientConn) TcpMaskConn() {}
+
+func (c *tcpCustomClientConn) RawConn() net.Conn {
+	c.wg.Wait()
+
+	return c.Conn
+}
+
 func (c *tcpCustomClientConn) Read(p []byte) (n int, err error) {
 	c.wg.Wait()
 
@@ -115,9 +123,10 @@ type tcpCustomServerConn struct {
 	net.Conn
 	header *tcpCustomServer
 
-	auth bool
-	wg   sync.WaitGroup
-	once sync.Once
+	auth      bool
+	wg        sync.WaitGroup
+	once      sync.Once
+	closeOnce sync.Once
 }
 
 func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
@@ -137,6 +146,14 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	conn.wg.Add(1)
 
 	return conn, nil
+}
+
+func (c *tcpCustomServerConn) TcpMaskConn() {}
+
+func (c *tcpCustomServerConn) RawConn() net.Conn {
+	c.wg.Wait()
+
+	return c.Conn
 }
 
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
@@ -198,9 +215,11 @@ func (c *tcpCustomServerConn) Write(p []byte) (n int, err error) {
 }
 
 func (c *tcpCustomServerConn) Close() error {
-	if !c.auth && len(c.header.onCloseHeaderError) > 0 {
-		c.Conn.Write(c.header.onCloseHeaderError)
-	}
+	c.closeOnce.Do(func() {
+		if !c.auth && len(c.header.onCloseHeaderError) > 0 {
+			c.Conn.Write(c.header.onCloseHeaderError)
+		}
+	})
 
 	return c.Conn.Close()
 }

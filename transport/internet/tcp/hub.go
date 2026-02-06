@@ -117,9 +117,10 @@ func (v *Listener) keepAccepting() {
 		}
 
 		if v.isTcp && v.tcpMaskManager != nil {
-			newConn, err := v.tcpMaskManager.WrapConnClient(conn)
+			newConn, err := v.tcpMaskManager.WrapConnServer(conn)
 			if err != nil {
-				errors.LogError(context.Background(), errors.New("mask err").Base(err))
+				errors.LogDebug(context.Background(), errors.New("mask err").Base(err))
+				conn.Close()
 				continue
 			}
 			conn = newConn

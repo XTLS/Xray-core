@@ -89,3 +89,18 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	}
 	return raw, nil
 }
+
+type TcpMaskConn interface {
+	TcpMaskConn()
+	RawConn() net.Conn
+}
+
+func UnwrapTcpMask(conn net.Conn) net.Conn {
+	for {
+		if v, ok := conn.(TcpMaskConn); ok {
+			conn = v.RawConn()
+		} else {
+			return conn
+		}
+	}
+}
