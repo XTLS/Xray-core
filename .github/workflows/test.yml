@@ -34,6 +34,22 @@ jobs:
         if: steps.check-assets.outputs.missing == 'true'
         run: sleep 90
 
+  check-proto:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v6
+      - name: Check Proto Version Header
+        run: |
+          head -n 4 core/config.pb.go > ref.txt
+          find . -name "*.pb.go" ! -name "*_grpc.pb.go" -print0 | while IFS= read -r -d '' file; do
+            if ! cmp -s ref.txt <(head -n 4 "$file"); then
+              echo "Error: Header mismatch in $file"
+              head -n 4 "$file"
+              exit 1
+            fi
+          done
+
   test:
     needs: check-assets
     permissions:
