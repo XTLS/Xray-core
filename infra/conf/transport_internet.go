@@ -1265,6 +1265,20 @@ type HeaderCustomTCP struct {
 }
 
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
+	for _, value := range c.Clients {
+		if len(value) > 8192 {
+			return nil, errors.New("len > 8192")
+		}
+	}
+	for _, value := range c.Servers {
+		if len(value) > 8192 {
+			return nil, errors.New("len > 8192")
+		}
+	}
+	if len(c.OnCloseHeaderError) > 8192 {
+		return nil, errors.New("len > 8192")
+	}
+
 	return &custom.TCPConfig{
 		Clients:            c.Clients,
 		Servers:            c.Servers,
