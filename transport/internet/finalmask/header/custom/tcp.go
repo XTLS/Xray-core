@@ -2,6 +2,7 @@ package custom
 
 import (
 	"hash/crc32"
+	"io"
 	"net"
 	"sync"
 
@@ -64,7 +65,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 				return
 			}
 			if j < len(c.header.checksums) {
-				n, err = c.Conn.Read(buf[:])
+				n, err := io.ReadFull(c.Conn, buf[:len(c.header.servers[j])])
 				if err != nil {
 					c.wg.Done()
 					return
@@ -78,7 +79,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 		}
 
 		for j < len(c.header.checksums) {
-			n, err = c.Conn.Read(buf[:])
+			n, err := io.ReadFull(c.Conn, buf[:len(c.header.servers[j])])
 			if err != nil {
 				c.wg.Done()
 				return
@@ -145,7 +146,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 		i := 0
 		j := 0
 		for i = range c.header.checksums {
-			n, err = c.Conn.Read(buf[:])
+			n, err := io.ReadFull(c.Conn, buf[:len(c.header.clients[i])])
 			if err != nil {
 				c.wg.Done()
 				return
