@@ -289,9 +289,6 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 	if len(certs) == 0 {
 		return errors.New("unexpected certs")
 	}
-	if certs[0].IsCA {
-		slices.Reverse(certs)
-	}
 
 	// directly return success if pinned cert is leaf
 	// or replace RootCAs if pinned cert is CA (and can be used in VerifyPeerCertByName)
@@ -558,14 +555,19 @@ const (
 )
 
 func verifyChain(certs []*x509.Certificate, pinnedPeerCertSha256 [][]byte) (verifyResult, *x509.Certificate) {
+	leafHash := GenerateCertHash(certs[0])
+	for _, c := range pinnedPeerCertSha256 {
+		if hmac.Equal(leafHash, c) {
+			return foundLeaf, nil
+		}
+	}
+	certs = certs[1:] // skip leaf
 	for _, cert := range certs {
 		certHash := GenerateCertHash(cert)
 		for _, c := range pinnedPeerCertSha256 {
 			if hmac.Equal(certHash, c) {
 				if cert.IsCA {
 					return foundCA, cert
-				} else {
-					return foundLeaf, cert
 				}
 			}
 		}

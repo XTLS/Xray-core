@@ -13,7 +13,7 @@ var CmdTLS = &base.Command{
 	Commands: []*base.Command{
 		cmdCert,
 		cmdPing,
-		cmdLeafCertHash,
+		cmdHash,
 		cmdECH,
 	},
 }
