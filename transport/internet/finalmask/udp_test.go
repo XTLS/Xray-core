@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
@@ -83,6 +84,13 @@ func TestPacketConnReadWrite(t *testing.T) {
 			mask: &wireguard.Config{},
 		},
 		{
+			name: "custom",
+			mask: &custom.UDPConfig{
+				Client: []byte{1, 1, 1},
+				Server: []byte{},
+			},
+		},
+		{
 			name: "salamander",
 			mask: &salamander.Config{Password: "1234"},
 		},
@@ -98,7 +106,6 @@ func TestPacketConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
 
 			client, err = maskManager.WrapPacketConnClient(client)
 			if err != nil {
@@ -109,7 +116,6 @@ func TestPacketConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer server.Close()
 
 			server, err = maskManager.WrapPacketConnServer(server)
 			if err != nil {

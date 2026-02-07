@@ -10,6 +10,8 @@ import (
 
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -52,7 +54,9 @@ type xicmpConnClient struct {
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
+	_, ok1 := raw.(*internet.FakePacketConn)
+	_, ok2 := raw.(*udphop.UdpHopPacketConn)
+	if !end || ok1 || ok2 {
 		return nil, errors.New("xicmp requires being at the outermost level")
 	}
 

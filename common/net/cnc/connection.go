@@ -10,46 +10,46 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 )
 
-type ConnectionOption func(*connection)
+type ConnectionOption func(*Connection)
 
 func ConnectionLocalAddr(a net.Addr) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.local = a
 	}
 }
 
 func ConnectionRemoteAddr(a net.Addr) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.remote = a
 	}
 }
 
 func ConnectionInput(writer io.Writer) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.writer = buf.NewWriter(writer)
 	}
 }
 
 func ConnectionInputMulti(writer buf.Writer) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.writer = writer
 	}
 }
 
 func ConnectionOutput(reader io.Reader) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.reader = &buf.BufferedReader{Reader: buf.NewReader(reader)}
 	}
 }
 
 func ConnectionOutputMulti(reader buf.Reader) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.reader = &buf.BufferedReader{Reader: reader}
 	}
 }
 
 func ConnectionOutputMultiUDP(reader buf.Reader) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.reader = &buf.BufferedReader{
 			Reader:   reader,
 			Splitter: buf.SplitFirstBytes,
@@ -58,13 +58,13 @@ func ConnectionOutputMultiUDP(reader buf.Reader) ConnectionOption {
 }
 
 func ConnectionOnClose(n io.Closer) ConnectionOption {
-	return func(c *connection) {
+	return func(c *Connection) {
 		c.onClose = n
 	}
 }
 
 func NewConnection(opts ...ConnectionOption) net.Conn {
-	c := &connection{
+	c := &Connection{
 		done: done.New(),
 		local: &net.TCPAddr{
 			IP:   []byte{0, 0, 0, 0},
@@ -83,7 +83,7 @@ func NewConnection(opts ...ConnectionOption) net.Conn {
 	return c
 }
 
-type connection struct {
+type Connection struct {
 	reader  *buf.BufferedReader
 	writer  buf.Writer
 	done    *done.Instance
@@ -92,17 +92,17 @@ type connection struct {
 	remote  net.Addr
 }
 
-func (c *connection) Read(b []byte) (int, error) {
+func (c *Connection) Read(b []byte) (int, error) {
 	return c.reader.Read(b)
 }
 
 // ReadMultiBuffer implements buf.Reader.
-func (c *connection) ReadMultiBuffer() (buf.MultiBuffer, error) {
+func (c *Connection) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return c.reader.ReadMultiBuffer()
 }
 
 // Write implements net.Conn.Write().
-func (c *connection) Write(b []byte) (int, error) {
+func (c *Connection) Write(b []byte) (int, error) {
 	if c.done.Done() {
 		return 0, io.ErrClosedPipe
 	}
@@ -113,7 +113,7 @@ func (c *connection) Write(b []byte) (int, error) {
 	return l, c.writer.WriteMultiBuffer(mb)
 }
 
-func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
+func (c *Connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if c.done.Done() {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
@@ -123,7 +123,7 @@ func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 // Close implements net.Conn.Close().
-func (c *connection) Close() error {
+func (c *Connection) Close() error {
 	common.Must(c.done.Close())
 	common.Interrupt(c.reader)
 	common.Close(c.writer)
@@ -135,26 +135,26 @@ func (c *connection) Close() error {
 }
 
 // LocalAddr implements net.Conn.LocalAddr().
-func (c *connection) LocalAddr() net.Addr {
+func (c *Connection) LocalAddr() net.Addr {
 	return c.local
 }
 
 // RemoteAddr implements net.Conn.RemoteAddr().
-func (c *connection) RemoteAddr() net.Addr {
+func (c *Connection) RemoteAddr() net.Addr {
 	return c.remote
 }
 
 // SetDeadline implements net.Conn.SetDeadline().
-func (c *connection) SetDeadline(t time.Time) error {
+func (c *Connection) SetDeadline(t time.Time) error {
 	return nil
 }
 
 // SetReadDeadline implements net.Conn.SetReadDeadline().
-func (c *connection) SetReadDeadline(t time.Time) error {
+func (c *Connection) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
 // SetWriteDeadline implements net.Conn.SetWriteDeadline().
-func (c *connection) SetWriteDeadline(t time.Time) error {
+func (c *Connection) SetWriteDeadline(t time.Time) error {
 	return nil
 }
