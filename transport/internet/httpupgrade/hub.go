@@ -99,12 +99,14 @@ func (s *server) keepAccepting() {
 		if err != nil {
 			return
 		}
-		handledConn, err := s.Handle(conn)
-		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to handle request")
-			continue
-		}
-		s.addConn(handledConn)
+		go func() {
+			handledConn, err := s.Handle(conn)
+			if err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to handle request")
+				return
+			}
+			s.addConn(handledConn)
+		}()
 	}
 }
 
