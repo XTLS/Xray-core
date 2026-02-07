@@ -27,6 +27,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if streamSettings.TcpmaskManager != nil {
 		newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
 		if err != nil {
+			conn.Close()
 			return nil, errors.New("mask err").Base(err)
 		}
 		conn = newConn
