@@ -61,6 +61,7 @@ func init() {
 						},
 					}
 				default:
+					conn.Close()
 					return nil, errors.New("unknown conn ", reflect.TypeOf(c))
 				}
 			}

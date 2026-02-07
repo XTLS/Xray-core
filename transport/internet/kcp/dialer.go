@@ -93,6 +93,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 				},
 			}
 		default:
+			conn.Close()
 			return nil, errors.New("unknown conn ", reflect.TypeOf(c))
 		}
 	}

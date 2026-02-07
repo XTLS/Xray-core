@@ -179,9 +179,11 @@ func (c *client) dial() error {
 		remote = fakeConn.RemoteAddr().(*net.UDPAddr)
 
 		if len(c.config.Ports) > 0 {
+			raw.Close()
 			return errors.New("udphop requires being at the outermost level")
 		}
 	default:
+		raw.Close()
 		return errors.New("unknown conn ", reflect.TypeOf(conn))
 	}
 

@@ -45,6 +45,9 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 			client:   c.Client,
 			server:   c.Server,
 			checksum: crc32.ChecksumIEEE(c.Server),
+
+			clientSize: int32(len(c.Client)),
+			serverSize: int32(len(c.Server)),
 		},
 	}
 
@@ -179,6 +182,9 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 			client:   c.Client,
 			server:   c.Server,
 			checksum: crc32.ChecksumIEEE(c.Client),
+
+			clientSize: int32(len(c.Client)),
+			serverSize: int32(len(c.Server)),
 		},
 	}
 
