@@ -73,10 +73,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 			}
 			conn = &internet.PacketConnWrapper{
 				PacketConn: pktConn,
-				Dest: &net.UDPAddr{
-					IP:   []byte{0, 0, 0, 0},
-					Port: 0,
-				},
+				Dest:       c.RemoteAddr().(*net.UDPAddr),
 			}
 		case *cnc.Connection:
 			fakeConn := &internet.FakePacketConn{Conn: c}
