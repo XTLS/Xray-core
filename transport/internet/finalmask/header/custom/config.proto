@@ -9,7 +9,7 @@ option java_multiple_files = true;
 message TCPConfig {
     repeated bytes clients = 1;
     repeated bytes servers = 2;
-    repeated bytes serversError = 3;
+    repeated bytes errors = 3;
 }
 
 message UDPConfig {

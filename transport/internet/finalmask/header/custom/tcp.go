@@ -134,7 +134,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		header: &tcpCustomServer{
 			clients:      c.Clients,
 			servers:      c.Servers,
-			serversError: c.ServersError,
+			serversError: c.Errors,
 		},
 	}
 
