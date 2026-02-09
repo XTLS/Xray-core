@@ -1259,9 +1259,9 @@ var (
 )
 
 type HeaderCustomTCP struct {
-	Clients            [][]uint8 `json:"clients"`
-	Servers            [][]uint8 `json:"servers"`
-	OnCloseHeaderError []uint8   `json:"onCloseHeaderError"`
+	Clients      [][]uint8 `json:"clients"`
+	Servers      [][]uint8 `json:"servers"`
+	ServersError [][]uint8 `json:"serversError"`
 }
 
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
@@ -1275,14 +1275,16 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 			return nil, errors.New("len > 8192")
 		}
 	}
-	if len(c.OnCloseHeaderError) > 8192 {
-		return nil, errors.New("len > 8192")
+	for _, value := range c.ServersError {
+		if len(value) > 8192 {
+			return nil, errors.New("len > 8192")
+		}
 	}
 
 	return &custom.TCPConfig{
-		Clients:            c.Clients,
-		Servers:            c.Servers,
-		OnCloseHeaderError: c.OnCloseHeaderError,
+		Clients:      c.Clients,
+		Servers:      c.Servers,
+		ServersError: c.ServersError,
 	}, nil
 }
 

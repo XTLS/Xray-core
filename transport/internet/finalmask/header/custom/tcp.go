@@ -113,29 +113,28 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 }
 
 type tcpCustomServer struct {
-	clients            [][]byte
-	servers            [][]byte
-	checksums          []uint32
-	onCloseHeaderError []byte
+	clients      [][]byte
+	servers      [][]byte
+	serversError [][]byte
+	checksums    []uint32
 }
 
 type tcpCustomServerConn struct {
 	net.Conn
 	header *tcpCustomServer
 
-	auth      bool
-	wg        sync.WaitGroup
-	once      sync.Once
-	closeOnce sync.Once
+	auth bool
+	wg   sync.WaitGroup
+	once sync.Once
 }
 
 func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	conn := &tcpCustomServerConn{
 		Conn: raw,
 		header: &tcpCustomServer{
-			clients:            c.Clients,
-			servers:            c.Servers,
-			onCloseHeaderError: c.OnCloseHeaderError,
+			clients:      c.Clients,
+			servers:      c.Servers,
+			serversError: c.ServersError,
 		},
 	}
 
@@ -169,6 +168,9 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				return
 			}
 			if c.header.checksums[i] != crc32.ChecksumIEEE(buf[:n]) {
+				if j < len(c.header.serversError) {
+					c.Conn.Write(c.header.serversError[j])
+				}
 				c.wg.Done()
 				return
 			}
@@ -212,14 +214,4 @@ func (c *tcpCustomServerConn) Write(p []byte) (n int, err error) {
 	}
 
 	return c.Conn.Write(p)
-}
-
-func (c *tcpCustomServerConn) Close() error {
-	c.closeOnce.Do(func() {
-		if !c.auth && len(c.header.onCloseHeaderError) > 0 {
-			c.Conn.Write(c.header.onCloseHeaderError)
-		}
-	})
-
-	return c.Conn.Close()
 }

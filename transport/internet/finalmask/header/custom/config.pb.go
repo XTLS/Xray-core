@@ -22,12 +22,12 @@ const (
 )
 
 type TCPConfig struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Clients            [][]byte               `protobuf:"bytes,1,rep,name=clients,proto3" json:"clients,omitempty"`
-	Servers            [][]byte               `protobuf:"bytes,2,rep,name=servers,proto3" json:"servers,omitempty"`
-	OnCloseHeaderError []byte                 `protobuf:"bytes,3,opt,name=on_close_header_error,json=onCloseHeaderError,proto3" json:"on_close_header_error,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Clients       [][]byte               `protobuf:"bytes,1,rep,name=clients,proto3" json:"clients,omitempty"`
+	Servers       [][]byte               `protobuf:"bytes,2,rep,name=servers,proto3" json:"servers,omitempty"`
+	ServersError  [][]byte               `protobuf:"bytes,3,rep,name=serversError,proto3" json:"serversError,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TCPConfig) Reset() {
@@ -74,9 +74,9 @@ func (x *TCPConfig) GetServers() [][]byte {
 	return nil
 }
 
-func (x *TCPConfig) GetOnCloseHeaderError() []byte {
+func (x *TCPConfig) GetServersError() [][]byte {
 	if x != nil {
-		return x.OnCloseHeaderError
+		return x.ServersError
 	}
 	return nil
 }
@@ -137,11 +137,11 @@ var File_transport_internet_finalmask_header_custom_config_proto protoreflect.Fi
 
 const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" +
 	"\n" +
-	"7transport/internet/finalmask/header/custom/config.proto\x12/xray.transport.internet.finalmask.header.custom\"r\n" +
+	"7transport/internet/finalmask/header/custom/config.proto\x12/xray.transport.internet.finalmask.header.custom\"c\n" +
 	"\tTCPConfig\x12\x18\n" +
 	"\aclients\x18\x01 \x03(\fR\aclients\x12\x18\n" +
-	"\aservers\x18\x02 \x03(\fR\aservers\x121\n" +
-	"\x15on_close_header_error\x18\x03 \x01(\fR\x12onCloseHeaderError\";\n" +
+	"\aservers\x18\x02 \x03(\fR\aservers\x12\"\n" +
+	"\fserversError\x18\x03 \x03(\fR\fserversError\";\n" +
 	"\tUDPConfig\x12\x16\n" +
 	"\x06client\x18\x01 \x01(\fR\x06client\x12\x16\n" +
 	"\x06server\x18\x02 \x01(\fR\x06serverB\xaf\x01\n" +
