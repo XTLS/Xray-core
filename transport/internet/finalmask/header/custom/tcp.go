@@ -1,7 +1,7 @@
 package custom
 
 import (
-	"hash/crc32"
+	"bytes"
 	"io"
 	"net"
 	"sync"
@@ -10,9 +10,8 @@ import (
 )
 
 type tcpCustomClient struct {
-	clients   [][]byte
-	servers   [][]byte
-	checksums []uint32
+	clients [][]byte
+	servers [][]byte
 }
 
 type tcpCustomClientConn struct {
@@ -31,10 +30,6 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 			clients: c.Clients,
 			servers: c.Servers,
 		},
-	}
-
-	for i := range c.Servers {
-		conn.header.checksums = append(conn.header.checksums, crc32.ChecksumIEEE(c.Servers[i]))
 	}
 
 	conn.wg.Add(1)
@@ -72,13 +67,13 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 				c.wg.Done()
 				return
 			}
-			if j < len(c.header.checksums) {
+			if j < len(c.header.servers) {
 				n, err := io.ReadFull(c.Conn, buf[:len(c.header.servers[j])])
 				if err != nil {
 					c.wg.Done()
 					return
 				}
-				if c.header.checksums[j] != crc32.ChecksumIEEE(buf[:n]) {
+				if !bytes.Equal(c.header.servers[j], buf[:n]) {
 					c.wg.Done()
 					return
 				}
@@ -86,13 +81,13 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 			}
 		}
 
-		for j < len(c.header.checksums) {
+		for j < len(c.header.servers) {
 			n, err := io.ReadFull(c.Conn, buf[:len(c.header.servers[j])])
 			if err != nil {
 				c.wg.Done()
 				return
 			}
-			if c.header.checksums[j] != crc32.ChecksumIEEE(buf[:n]) {
+			if !bytes.Equal(c.header.servers[j], buf[:n]) {
 				c.wg.Done()
 				return
 			}
@@ -116,7 +111,6 @@ type tcpCustomServer struct {
 	clients      [][]byte
 	servers      [][]byte
 	serversError [][]byte
-	checksums    []uint32
 }
 
 type tcpCustomServerConn struct {
@@ -138,10 +132,6 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		},
 	}
 
-	for i := range c.Clients {
-		conn.header.checksums = append(conn.header.checksums, crc32.ChecksumIEEE(c.Clients[i]))
-	}
-
 	conn.wg.Add(1)
 
 	return conn, nil
@@ -161,13 +151,13 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 
 		i := 0
 		j := 0
-		for i = range c.header.checksums {
+		for i = range c.header.clients {
 			n, err := io.ReadFull(c.Conn, buf[:len(c.header.clients[i])])
 			if err != nil {
 				c.wg.Done()
 				return
 			}
-			if c.header.checksums[i] != crc32.ChecksumIEEE(buf[:n]) {
+			if !bytes.Equal(c.header.clients[i], buf[:n]) {
 				if j < len(c.header.serversError) {
 					c.Conn.Write(c.header.serversError[j])
 				}

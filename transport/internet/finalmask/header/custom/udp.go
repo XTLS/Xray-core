@@ -1,7 +1,7 @@
 package custom
 
 import (
-	"hash/crc32"
+	"bytes"
 	"io"
 	"net"
 	sync "sync"
@@ -10,9 +10,8 @@ import (
 )
 
 type udpCustomClient struct {
-	client   []byte
-	server   []byte
-	checksum uint32
+	client []byte
+	server []byte
 
 	clientSize int32
 	serverSize int32
@@ -42,9 +41,8 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 
 		PacketConn: raw,
 		header: &udpCustomClient{
-			client:   c.Client,
-			server:   c.Server,
-			checksum: crc32.ChecksumIEEE(c.Server),
+			client: c.Client,
+			server: c.Server,
 
 			clientSize: int32(len(c.Client)),
 			serverSize: int32(len(c.Server)),
@@ -83,9 +81,9 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 		}
 
-		if c.header.checksum != crc32.ChecksumIEEE(c.readBuf[:c.header.serverSize]) {
+		if !bytes.Equal(c.header.server, c.readBuf[:c.header.serverSize]) {
 			c.readMutex.Unlock()
-			return 0, addr, errors.New("checksum mismatch")
+			return 0, addr, errors.New("header mismatch")
 		}
 
 		copy(p, c.readBuf[c.header.serverSize:n])
@@ -103,8 +101,8 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 	}
 
-	if c.header.checksum != crc32.ChecksumIEEE(p[:c.header.serverSize]) {
-		return 0, addr, errors.New("checksum mismatch")
+	if !bytes.Equal(c.header.server, p[:c.header.serverSize]) {
+		return 0, addr, errors.New("header mismatch")
 	}
 
 	copy(p, p[c.header.serverSize:n])
@@ -147,9 +145,8 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 }
 
 type udpCustomServer struct {
-	client   []byte
-	server   []byte
-	checksum uint32
+	client []byte
+	server []byte
 
 	clientSize int32
 	serverSize int32
@@ -179,9 +176,8 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 
 		PacketConn: raw,
 		header: &udpCustomServer{
-			client:   c.Client,
-			server:   c.Server,
-			checksum: crc32.ChecksumIEEE(c.Client),
+			client: c.Client,
+			server: c.Server,
 
 			clientSize: int32(len(c.Client)),
 			serverSize: int32(len(c.Server)),
@@ -220,7 +216,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 		}
 
-		if c.header.checksum != crc32.ChecksumIEEE(c.readBuf[:c.header.clientSize]) {
+		if !bytes.Equal(c.header.client, c.readBuf[:c.header.clientSize]) {
 			c.readMutex.Unlock()
 			return 0, addr, errors.New("checksum mismatch")
 		}
@@ -240,7 +236,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 	}
 
-	if c.header.checksum != crc32.ChecksumIEEE(p[:c.header.clientSize]) {
+	if !bytes.Equal(c.header.client, p[:c.header.clientSize]) {
 		return 0, addr, errors.New("checksum mismatch")
 	}
 
