@@ -86,10 +86,10 @@ func (m *udpSessionManagerServer) run() {
 		m.feed(id, d)
 	}
 
+	close(m.stopCh)
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	close(m.stopCh)
 
 	for _, udpConn := range m.m {
 		m.close(udpConn)
