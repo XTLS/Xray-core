@@ -24,7 +24,6 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
-	cone          bool
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -45,7 +44,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	return s, nil
@@ -143,7 +141,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	} else {
 		sessionPolicy := s.policyManager.ForLevel(userlevel)
 		common.Must(conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)))
-
 		addr, err := ReadTCPRequest(conn)
 		if err != nil {
 			log.Record(&log.AccessMessage{
@@ -153,6 +150,16 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 				Reason: err,
 			})
 			return errors.New("failed to create request from: ", conn.RemoteAddr()).Base(err)
+		}
+		common.Must(conn.SetReadDeadline(time.Time{}))
+
+		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+		err = WriteTCPResponse(bufferedWriter, true, "")
+		if err != nil {
+			return errors.New("failed to write response").Base(err)
+		}
+		if err := bufferedWriter.SetBuffered(false); err != nil {
+			return err
 		}
 
 		dest := common.Must2(net.ParseDestination("tcp:" + addr))
@@ -164,17 +171,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			Email:  useremail,
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
-
-		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		err = WriteTCPResponse(bufferedWriter, true, "")
-		if err != nil {
-			return errors.New("failed to write response").Base(err)
-		}
-		if err := bufferedWriter.SetBuffered(false); err != nil {
-			return err
-		}
-
-		common.Must(conn.SetReadDeadline(time.Time{}))
 
 		return dispatcher.DispatchLink(ctx, dest, &transport.Link{
 			Reader: buf.NewReader(conn),

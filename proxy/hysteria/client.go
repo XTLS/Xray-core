@@ -195,8 +195,9 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			break
 		}
 
+		addr := w.addr
 		if b.UDP != nil {
-			w.addr = b.UDP.NetAddr()
+			addr = b.UDP.NetAddr()
 		}
 
 		msg := &UDPMessage{
@@ -204,7 +205,7 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			PacketID:  0,
 			FragID:    0,
 			FragCount: 1,
-			Addr:      w.addr,
+			Addr:      addr,
 			Data:      b.Bytes(),
 		}
 
