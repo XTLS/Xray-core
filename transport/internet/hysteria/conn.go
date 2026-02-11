@@ -39,7 +39,10 @@ func (i *interConn) Write(b []byte) (int, error) {
 			buf := make([]byte, 0, quicvarint.Len(FrameTypeTCPRequest)+len(b))
 			buf = quicvarint.Append(buf, FrameTypeTCPRequest)
 			buf = append(buf, b...)
-			i.stream.Write(buf)
+			_, err := i.stream.Write(buf)
+			if err != nil {
+				return 0, err
+			}
 			return len(b), nil
 		}
 		i.mutex.Unlock()
@@ -133,9 +136,7 @@ func (i *InterUdpConn) Write(p []byte) (int, error) {
 }
 
 func (i *InterUdpConn) Close() error {
-	if i.closeFunc != nil {
-		i.closeFunc()
-	}
+	i.closeFunc()
 	return nil
 }
 

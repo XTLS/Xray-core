@@ -31,9 +31,17 @@ type udpSessionManagerServer struct {
 	addConn        internet.ConnHandler
 	stopCh         chan struct{}
 	udpIdleTimeout time.Duration
-	mutex          sync.Mutex
+	mutex          sync.RWMutex
 
 	user *protocol.MemoryUser
+}
+
+func (m *udpSessionManagerServer) close(udpConn *InterUdpConn) {
+	if !udpConn.closed {
+		udpConn.closed = true
+		close(udpConn.ch)
+		delete(m.m, udpConn.id)
+	}
 }
 
 func (m *udpSessionManagerServer) clean() {
@@ -42,13 +50,19 @@ func (m *udpSessionManagerServer) clean() {
 	for {
 		select {
 		case <-ticker.C:
-			m.mutex.Lock()
+			m.mutex.RLock()
 			now := time.Now()
-			for key, udpConn := range m.m {
+			timeoutConn := make([]*InterUdpConn, 0, len(m.m))
+			for _, udpConn := range m.m {
 				if now.Sub(udpConn.GetLast()) > m.udpIdleTimeout {
-					close(udpConn.ch)
-					delete(m.m, key)
+					timeoutConn = append(timeoutConn, udpConn)
 				}
+			}
+			m.mutex.RUnlock()
+
+			m.mutex.Lock()
+			for _, udpConn := range timeoutConn {
+				m.close(udpConn)
 			}
 			m.mutex.Unlock()
 		case <-m.stopCh:
@@ -77,9 +91,8 @@ func (m *udpSessionManagerServer) run() {
 
 	close(m.stopCh)
 
-	for key, udpConn := range m.m {
-		close(udpConn.ch)
-		delete(m.m, key)
+	for _, udpConn := range m.m {
+		m.close(udpConn)
 	}
 }
 
@@ -99,6 +112,11 @@ func (m *udpSessionManagerServer) feed(id uint32, d []byte) {
 			last: time.Now(),
 
 			user: m.user,
+		}
+		udpConn.closeFunc = func() {
+			m.mutex.Lock()
+			defer m.mutex.Unlock()
+			m.close(udpConn)
 		}
 		m.m[id] = udpConn
 		m.addConn(udpConn)
