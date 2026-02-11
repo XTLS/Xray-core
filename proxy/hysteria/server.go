@@ -11,6 +11,8 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -140,6 +142,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		})
 	} else {
 		sessionPolicy := s.policyManager.ForLevel(userlevel)
+
 		common.Must(conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)))
 		addr, err := ReadTCPRequest(conn)
 		if err != nil {
@@ -153,15 +156,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 		common.Must(conn.SetReadDeadline(time.Time{}))
 
-		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		err = WriteTCPResponse(bufferedWriter, true, "")
-		if err != nil {
-			return errors.New("failed to write response").Base(err)
-		}
-		if err := bufferedWriter.SetBuffered(false); err != nil {
-			return err
-		}
-
 		dest := common.Must2(net.ParseDestination("tcp:" + addr))
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   conn.RemoteAddr(),
@@ -172,10 +166,53 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
 
-		return dispatcher.DispatchLink(ctx, dest, &transport.Link{
-			Reader: buf.NewReader(conn),
-			Writer: bufferedWriter,
-		})
+		ctx, cancel := context.WithCancel(ctx)
+		timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+
+		ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+		link, err := dispatcher.Dispatch(ctx, dest)
+		if err != nil {
+			return err
+		}
+
+		responseDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+
+			bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+			err = WriteTCPResponse(bufferedWriter, true, "")
+			if err != nil {
+				return errors.New("failed to write response").Base(err)
+			}
+
+			if err := bufferedWriter.SetBuffered(false); err != nil {
+				return err
+			}
+
+			if err := buf.Copy(link.Reader, bufferedWriter, buf.UpdateActivity(timer)); err != nil {
+				return errors.New("failed to transport all TCP response").Base(err)
+			}
+
+			return nil
+		}
+
+		requestDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+
+			if err := buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer)); err != nil {
+				return errors.New("failed to transport all TCP request").Base(err)
+			}
+
+			return nil
+		}
+
+		requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
+		if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
+			common.Interrupt(link.Reader)
+			common.Interrupt(link.Writer)
+			return errors.New("connection ends").Base(err)
+		}
+
+		return nil
 	}
 }
 
