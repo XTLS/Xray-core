@@ -90,13 +90,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
 
-	var email string
+	var useremail string
 	var userlevel uint32
 	type User interface{ User() *protocol.MemoryUser }
 	if v, ok := conn.(User); ok {
 		inbound.User = v.User()
 		if inbound.User != nil {
-			email = inbound.User.Email
+			useremail = inbound.User.Email
 			userlevel = inbound.User.Level
 		}
 	}
@@ -174,7 +174,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 					To:     dfMsg.Addr,
 					Status: log.AccessAccepted,
 					Reason: "",
-					Email:  email,
+					Email:  useremail,
 				})
 			}
 			errors.LogInfo(ctx, "tunnelling request to ", dfMsg.Addr)
@@ -216,7 +216,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			To:     dest,
 			Status: log.AccessAccepted,
 			Reason: "",
-			Email:  email,
+			Email:  useremail,
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
 

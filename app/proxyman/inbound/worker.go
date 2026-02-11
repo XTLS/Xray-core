@@ -144,7 +144,7 @@ func (w *tcpWorker) Start() error {
 	type HysteriaInboundValidator interface{ HysteriaInboundValidator() *account.Validator }
 	if v, ok := w.proxy.(HysteriaInboundValidator); ok {
 		ctx = hyCtx.ContextWithRequireDatagram(ctx, true)
-		ctx = hyCtx.ContextWithRequireValidator(ctx, v.HysteriaInboundValidator())
+		ctx = hyCtx.ContextWithValidator(ctx, v.HysteriaInboundValidator())
 	}
 
 	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn stat.Connection) {

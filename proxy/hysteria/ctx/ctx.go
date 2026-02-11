@@ -25,7 +25,7 @@ func RequireDatagramFromContext(ctx context.Context) bool {
 	return ok
 }
 
-func ContextWithRequireValidator(ctx context.Context, v *account.Validator) context.Context {
+func ContextWithValidator(ctx context.Context, v *account.Validator) context.Context {
 	return context.WithValue(ctx, validator, v)
 }
 
