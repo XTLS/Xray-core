@@ -18,7 +18,7 @@ type interConn struct {
 	remote net.Addr
 
 	client bool
-	once   sync.Once
+	mutex  sync.Mutex
 
 	user *protocol.MemoryUser
 }
@@ -33,9 +33,16 @@ func (i *interConn) Read(b []byte) (int, error) {
 
 func (i *interConn) Write(b []byte) (int, error) {
 	if i.client {
-		i.once.Do(func() {
-			i.stream.Write(quicvarint.Append(nil, FrameTypeTCPRequest))
-		})
+		i.mutex.Lock()
+		if i.client {
+			i.client = false
+			buf := make([]byte, 0, quicvarint.Len(FrameTypeTCPRequest)+len(b))
+			buf = quicvarint.Append(buf, FrameTypeTCPRequest)
+			buf = append(buf, b...)
+			i.stream.Write(buf)
+			return len(b), nil
+		}
+		i.mutex.Unlock()
 	}
 
 	return i.stream.Write(b)
