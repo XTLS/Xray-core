@@ -27,6 +27,7 @@ import (
 type Client struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
+	udpraw        bool
 }
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
@@ -42,6 +43,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	client := &Client{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		udpraw:        config.Udpraw,
 	}
 	return client, nil
 }
@@ -56,12 +58,16 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	ob.CanSpliceCopy = 3
 	target := ob.Target
 
-	conn, err := dialer.Dial(hyCtx.ContextWithRequireDatagram(ctx, target.Network == net.Network_UDP), c.server.Destination)
+	dest := c.server.Destination
+	if c.udpraw {
+		dest.Network = target.Network
+	}
+	conn, err := dialer.Dial(hyCtx.ContextWithRequireDatagram(ctx, target.Network == net.Network_UDP), dest)
 	if err != nil {
 		return errors.New("failed to find an available destination").AtWarning().Base(err)
 	}
 	defer conn.Close()
-	errors.LogInfo(ctx, "tunneling request to ", target, " via ", target.Network, ":", c.server.Destination.NetAddr())
+	errors.LogInfo(ctx, "tunneling request to ", target, " via ", target.Network, ":", dest.NetAddr())
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
@@ -119,7 +125,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if target.Network == net.Network_UDP {
 		iConn := stat.TryUnwrapStatsConn(conn)
 		_, ok := iConn.(*hysteria.InterUdpConn)
-		if !ok {
+		if !ok && !c.udpraw {
 			return errors.New("udp requires hysteria udp transport")
 		}
 

@@ -2,6 +2,7 @@ package hysteria
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -26,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
+	udpraw        bool
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -46,6 +48,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		udpraw:        config.Udpraw,
 	}
 
 	return s, nil
@@ -76,6 +79,9 @@ func (s *Server) GetUsersCount(context.Context) int64 {
 }
 
 func (s *Server) Network() []net.Network {
+	if s.udpraw {
+		return []net.Network{net.Network_TCP, net.Network_UDP}
+	}
 	return []net.Network{net.Network_TCP}
 }
 
@@ -96,18 +102,28 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
-	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
-		buf := make([]byte, MaxUDPSize)
+	if _, ok := iConn.(*hysteria.InterUdpConn); ok || network == net.Network_UDP {
+		var r io.Reader
+		b := make([]byte, MaxUDPSize)
 		df := &Defragger{}
 		var firstMsg *UDPMessage
 
+		r = io.Reader(conn)
+
+		if network == net.Network_UDP {
+			r = io.Reader(&buf.BufferedReader{
+				Reader:   buf.NewPacketReader(conn),
+				Splitter: buf.SplitFirstBytes,
+			})
+		}
+
 		for {
-			n, err := conn.Read(buf)
+			n, err := r.Read(b)
 			if err != nil {
 				break
 			}
 
-			msg, err := ParseUDPMessage(buf[:n])
+			msg, err := ParseUDPMessage(b[:n])
 			if err != nil {
 				continue
 			}
@@ -122,8 +138,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 
 		reader := &UDPReader{
-			Reader:   conn,
-			buf:      buf,
+			Reader:   r,
+			buf:      b,
 			df:       df,
 			firstMsg: firstMsg,
 		}
