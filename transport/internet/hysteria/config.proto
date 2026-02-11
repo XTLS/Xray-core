@@ -23,5 +23,15 @@ message Config {
   int64 max_idle_timeout = 13;
   int64 keep_alive_period = 14;
   bool disable_path_mtu_discovery = 15;
-}
+  int64 max_incoming_streams = 16;
 
+  int64 udp_idle_timeout = 17;
+  string masq_type = 18;
+  string masq_file = 19;
+  string masq_url = 20;
+  bool masq_url_rewrite_host = 21;
+  bool masq_url_insecure = 22;
+  string masq_string = 23;
+  map<string, string> masq_string_headers = 24;
+  int32 masq_string_status_code = 25;
+}
