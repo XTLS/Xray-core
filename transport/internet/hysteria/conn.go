@@ -78,14 +78,14 @@ type InterUdpConn struct {
 	local  net.Addr
 	remote net.Addr
 
-	id    uint32
-	ch    chan []byte
-	mutex sync.Mutex
+	id uint32
+	ch chan []byte
 
 	closed    bool
 	closeFunc func()
 
-	last time.Time
+	last  time.Time
+	mutex sync.Mutex
 
 	user *protocol.MemoryUser
 }
@@ -94,11 +94,11 @@ func (i *InterUdpConn) User() *protocol.MemoryUser {
 	return i.user
 }
 
-func (i *InterUdpConn) SetLast(now time.Time) {
+func (i *InterUdpConn) SetLast() {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	i.last = now
+	i.last = time.Now()
 }
 
 func (i *InterUdpConn) GetLast() time.Time {
@@ -118,12 +118,12 @@ func (i *InterUdpConn) Read(p []byte) (int, error) {
 		return 0, io.ErrShortBuffer
 	}
 
-	i.SetLast(time.Now())
+	i.SetLast()
 	return n, nil
 }
 
 func (i *InterUdpConn) Write(p []byte) (int, error) {
-	i.SetLast(time.Now())
+	i.SetLast()
 
 	binary.BigEndian.PutUint32(p, i.id)
 	if err := i.conn.SendDatagram(p); err != nil {
