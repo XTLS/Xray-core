@@ -123,8 +123,8 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 		reader := &UDPReader{
 			Reader:   conn,
-			buf:      make([]byte, MaxUDPSize),
-			df:       &Defragger{},
+			buf:      buf,
+			df:       df,
 			firstMsg: firstMsg,
 		}
 

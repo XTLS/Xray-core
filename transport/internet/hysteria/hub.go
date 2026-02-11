@@ -60,11 +60,11 @@ func (m *udpSessionManagerServer) clean() {
 			}
 			m.mutex.RUnlock()
 
-			m.mutex.Lock()
 			for _, udpConn := range timeoutConn {
+				m.mutex.Lock()
 				m.close(udpConn)
+				m.mutex.Unlock()
 			}
-			m.mutex.Unlock()
 		case <-m.stopCh:
 			return
 		}
@@ -88,11 +88,10 @@ func (m *udpSessionManagerServer) run() {
 
 	close(m.stopCh)
 
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
 	for _, udpConn := range m.m {
+		m.mutex.Lock()
 		m.close(udpConn)
+		m.mutex.Unlock()
 	}
 }
 

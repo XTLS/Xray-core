@@ -50,11 +50,13 @@ func (m *udpSessionManagerClient) run() {
 	}
 
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
 	m.closed = true
+	m.mutex.Unlock()
+
 	for _, udpConn := range m.m {
+		m.mutex.Lock()
 		m.close(udpConn)
+		m.mutex.Unlock()
 	}
 }
 
