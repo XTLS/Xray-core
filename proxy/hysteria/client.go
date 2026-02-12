@@ -135,6 +135,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
 				return errors.New("failed to transport all UDP request").Base(err)
 			}
+
 			return nil
 		}
 
@@ -143,12 +144,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 			reader := &UDPReader{
 				Reader: conn,
+				buf:    make([]byte, MaxUDPSize),
 				df:     &Defragger{},
 			}
 
 			if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 				return errors.New("failed to transport all UDP response").Base(err)
 			}
+
 			return nil
 		}
 
@@ -178,7 +181,6 @@ type UDPWriter struct {
 func (w *UDPWriter) sendMsg(msg *UDPMessage) error {
 	msgN := msg.Serialize(w.buf)
 	if msgN < 0 {
-		// Message larger than buffer, silent drop
 		return nil
 	}
 	_, err := w.Writer.Write(w.buf[:msgN])
@@ -192,10 +194,12 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if b == nil {
 			break
 		}
+
 		addr := w.addr
 		if b.UDP != nil {
 			addr = b.UDP.NetAddr()
 		}
+
 		msg := &UDPMessage{
 			SessionID: 0,
 			PacketID:  0,
@@ -204,47 +208,58 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			Addr:      addr,
 			Data:      b.Bytes(),
 		}
-		if err := w.sendMsg(msg); err != nil {
-			var errTooLarge *quic.DatagramTooLargeError
-			if go_errors.As(err, &errTooLarge) {
-				msg.PacketID = uint16(rand.Intn(0xFFFF)) + 1
-				fMsgs := FragUDPMessage(msg, int(errTooLarge.MaxDatagramPayloadSize))
-				for _, fMsg := range fMsgs {
-					err := w.sendMsg(&fMsg)
-					if err != nil {
-						b.Release()
-						buf.ReleaseMulti(mb)
-						return err
-					}
+
+		err := w.sendMsg(msg)
+		var errTooLarge *quic.DatagramTooLargeError
+		if go_errors.As(err, &errTooLarge) {
+			msg.PacketID = uint16(rand.Intn(0xFFFF)) + 1
+			fMsgs := FragUDPMessage(msg, int(errTooLarge.MaxDatagramPayloadSize))
+			for _, fMsg := range fMsgs {
+				err := w.sendMsg(&fMsg)
+				if err != nil {
+					b.Release()
+					buf.ReleaseMulti(mb)
+					return err
 				}
-			} else {
-				b.Release()
-				buf.ReleaseMulti(mb)
-				return err
 			}
+		} else if err != nil {
+			b.Release()
+			buf.ReleaseMulti(mb)
+			return err
 		}
+
 		b.Release()
 	}
+
 	return nil
 }
 
 type UDPReader struct {
-	Reader io.Reader
-	df     *Defragger
+	Reader    io.Reader
+	buf       []byte
+	df        *Defragger
+	firstMsg  *UDPMessage
+	firstDest *net.Destination
 }
 
 func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if r.firstMsg != nil {
+		buffer := buf.New()
+		buffer.Write(r.firstMsg.Data)
+		buffer.UDP = r.firstDest
+
+		r.firstMsg = nil
+
+		return buf.MultiBuffer{buffer}, nil
+	}
 	for {
-		b := buf.New()
-		_, err := b.ReadFrom(r.Reader)
+		n, err := r.Reader.Read(r.buf)
 		if err != nil {
-			b.Release()
 			return nil, err
 		}
 
-		msg, err := ParseUDPMessage(b.Bytes())
+		msg, err := ParseUDPMessage(r.buf[:n])
 		if err != nil {
-			b.Release()
 			continue
 		}
 
@@ -253,7 +268,11 @@ func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			continue
 		}
 
-		dest, _ := net.ParseDestination("udp:" + dfMsg.Addr)
+		dest, err := net.ParseDestination("udp:" + dfMsg.Addr)
+		if err != nil {
+			errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
+			continue
+		}
 
 		buffer := buf.New()
 		buffer.Write(dfMsg.Data)

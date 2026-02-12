@@ -26,15 +26,23 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-type udpSessionManager struct {
+type udpSessionManagerClient struct {
 	conn   *quic.Conn
 	m      map[uint32]*InterUdpConn
-	nextId uint32
+	next   uint32
 	closed bool
 	mutex  sync.RWMutex
 }
 
-func (m *udpSessionManager) run() {
+func (m *udpSessionManagerClient) close(udpConn *InterUdpConn) {
+	if !udpConn.closed {
+		udpConn.closed = true
+		close(udpConn.ch)
+		delete(m.m, udpConn.id)
+	}
+}
+
+func (m *udpSessionManagerClient) run() {
 	for {
 		d, err := m.conn.ReceiveDatagram(context.Background())
 		if err != nil {
@@ -44,29 +52,22 @@ func (m *udpSessionManager) run() {
 		if len(d) < 4 {
 			continue
 		}
-		sessionId := binary.BigEndian.Uint32(d[:4])
+		id := binary.BigEndian.Uint32(d[:4])
 
-		m.feed(sessionId, d)
+		m.feed(id, d)
 	}
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	m.closed = true
+
 	for _, udpConn := range m.m {
 		m.close(udpConn)
 	}
 }
 
-func (m *udpSessionManager) close(udpConn *InterUdpConn) {
-	if !udpConn.closed {
-		udpConn.closed = true
-		close(udpConn.ch)
-		delete(m.m, udpConn.id)
-	}
-}
-
-func (m *udpSessionManager) udp() (*InterUdpConn, error) {
+func (m *udpSessionManagerClient) udp() (*InterUdpConn, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -79,7 +80,7 @@ func (m *udpSessionManager) udp() (*InterUdpConn, error) {
 		local:  m.conn.LocalAddr(),
 		remote: m.conn.RemoteAddr(),
 
-		id: m.nextId,
+		id: m.next,
 		ch: make(chan []byte, udpMessageChanSize),
 	}
 	udpConn.closeFunc = func() {
@@ -87,17 +88,17 @@ func (m *udpSessionManager) udp() (*InterUdpConn, error) {
 		defer m.mutex.Unlock()
 		m.close(udpConn)
 	}
-	m.m[m.nextId] = udpConn
-	m.nextId++
+	m.m[m.next] = udpConn
+	m.next++
 
 	return udpConn, nil
 }
 
-func (m *udpSessionManager) feed(sessionId uint32, d []byte) {
+func (m *udpSessionManagerClient) feed(id uint32, d []byte) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	udpConn, ok := m.m[sessionId]
+	udpConn, ok := m.m[id]
 	if !ok {
 		return
 	}
@@ -117,7 +118,7 @@ type client struct {
 	tlsConfig      *go_tls.Config
 	socketConfig   *internet.SocketConfig
 	udpmaskManager *finalmask.UdpmaskManager
-	udpSM          *udpSessionManager
+	udpSM          *udpSessionManagerClient
 	mutex          sync.Mutex
 }
 
@@ -269,10 +270,10 @@ func (c *client) dial() error {
 	c.pktConn = pktConn
 	c.conn = quicConn
 	if serverUdp {
-		c.udpSM = &udpSessionManager{
-			conn:   quicConn,
-			m:      make(map[uint32]*InterUdpConn),
-			nextId: 1,
+		c.udpSM = &udpSessionManagerClient{
+			conn: quicConn,
+			m:    make(map[uint32]*InterUdpConn),
+			next: 1,
 		}
 		go c.udpSM.run()
 	}
@@ -307,6 +308,8 @@ func (c *client) tcp() (stat.Connection, error) {
 		stream: stream,
 		local:  c.conn.LocalAddr(),
 		remote: c.conn.RemoteAddr(),
+
+		client: true,
 	}, nil
 }
 
