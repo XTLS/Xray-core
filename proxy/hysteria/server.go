@@ -105,6 +105,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		b := make([]byte, MaxUDPSize)
 		df := &Defragger{}
 		var firstMsg *UDPMessage
+		var firstDest net.Destination
 
 		r = io.Reader(conn)
 
@@ -132,14 +133,20 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			}
 
 			firstMsg = dfMsg
+			firstDest, err = net.ParseDestination("udp:" + firstMsg.Addr)
+			if err != nil {
+				continue
+			}
+
 			break
 		}
 
 		reader := &UDPReader{
-			Reader:   r,
-			buf:      b,
-			df:       df,
-			firstMsg: firstMsg,
+			Reader:    r,
+			buf:       b,
+			df:        df,
+			firstMsg:  firstMsg,
+			firstDest: &firstDest,
 		}
 
 		writer := &UDPWriter{
@@ -148,9 +155,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			addr:   firstMsg.Addr,
 		}
 
-		dest := common.Must2(net.ParseDestination("udp:" + firstMsg.Addr))
-
-		return dispatcher.DispatchLink(ctx, dest, &transport.Link{
+		return dispatcher.DispatchLink(ctx, firstDest, &transport.Link{
 			Reader: reader,
 			Writer: writer,
 		})
@@ -170,7 +175,10 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 		common.Must(conn.SetReadDeadline(time.Time{}))
 
-		dest := common.Must2(net.ParseDestination("tcp:" + addr))
+		dest, err := net.ParseDestination("tcp:" + addr)
+		if err != nil {
+			return err
+		}
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   conn.RemoteAddr(),
 			To:     dest,

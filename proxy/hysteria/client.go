@@ -235,19 +235,18 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 type UDPReader struct {
-	Reader   io.Reader
-	buf      []byte
-	df       *Defragger
-	firstMsg *UDPMessage
+	Reader    io.Reader
+	buf       []byte
+	df        *Defragger
+	firstMsg  *UDPMessage
+	firstDest *net.Destination
 }
 
 func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if r.firstMsg != nil {
-		dest := common.Must2(net.ParseDestination("udp:" + r.firstMsg.Addr))
-
 		buffer := buf.New()
 		buffer.Write(r.firstMsg.Data)
-		buffer.UDP = &dest
+		buffer.UDP = r.firstDest
 
 		r.firstMsg = nil
 
@@ -269,7 +268,10 @@ func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			continue
 		}
 
-		dest := common.Must2(net.ParseDestination("udp:" + dfMsg.Addr))
+		dest, err := net.ParseDestination("udp:" + dfMsg.Addr)
+		if err != nil {
+			continue
+		}
 
 		buffer := buf.New()
 		buffer.Write(dfMsg.Data)
