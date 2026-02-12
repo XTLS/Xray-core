@@ -135,6 +135,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			firstMsg = dfMsg
 			firstDest, err = net.ParseDestination("udp:" + firstMsg.Addr)
 			if err != nil {
+				errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
 				continue
 			}
 

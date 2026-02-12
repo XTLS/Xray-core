@@ -270,6 +270,7 @@ func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 		dest, err := net.ParseDestination("udp:" + dfMsg.Addr)
 		if err != nil {
+			errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
 			continue
 		}
 
