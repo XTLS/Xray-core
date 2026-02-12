@@ -2,6 +2,7 @@ package finalmask_test
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
+	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 )
 
 func mustSendRecv(
@@ -48,51 +50,84 @@ func mustSendRecv(
 }
 
 type layerMask struct {
-	name string
-	mask finalmask.Udpmask
+	name   string
+	mask   finalmask.Udpmask
+	layers int
 }
 
 func TestPacketConnReadWrite(t *testing.T) {
 	cases := []layerMask{
 		{
-			name: "aes128gcm",
-			mask: &aes128gcm.Config{Password: "123"},
+			name:   "aes128gcm",
+			mask:   &aes128gcm.Config{Password: "123"},
+			layers: 2,
 		},
 		{
-			name: "original",
-			mask: &original.Config{},
+			name:   "original",
+			mask:   &original.Config{},
+			layers: 2,
 		},
 		{
-			name: "dns",
-			mask: &dns.Config{Domain: "www.baidu.com"},
+			name:   "dns",
+			mask:   &dns.Config{Domain: "www.baidu.com"},
+			layers: 2,
 		},
 		{
-			name: "srtp",
-			mask: &srtp.Config{},
+			name:   "srtp",
+			mask:   &srtp.Config{},
+			layers: 2,
 		},
 		{
-			name: "utp",
-			mask: &utp.Config{},
+			name:   "utp",
+			mask:   &utp.Config{},
+			layers: 2,
 		},
 		{
-			name: "wechat",
-			mask: &wechat.Config{},
+			name:   "wechat",
+			mask:   &wechat.Config{},
+			layers: 2,
 		},
 		{
-			name: "wireguard",
-			mask: &wireguard.Config{},
+			name:   "wireguard",
+			mask:   &wireguard.Config{},
+			layers: 2,
 		},
 		{
-			name: "salamander",
-			mask: &salamander.Config{Password: "1234"},
+			name:   "salamander",
+			mask:   &salamander.Config{Password: "1234"},
+			layers: 2,
+		},
+		{
+			name: "sudoku-prefer-ascii",
+			mask: &sudoku.Config{
+				Password: "sudoku-mask",
+				Ascii:    "prefer_ascii",
+			},
+			layers: 1,
+		},
+		{
+			name: "sudoku-custom-table",
+			mask: &sudoku.Config{
+				Password:    "sudoku-mask",
+				Ascii:       "prefer_entropy",
+				CustomTable: "xpxvvpvv",
+			},
+			layers: 1,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			mask := c.mask
-
-			maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{mask, mask})
+			layers := c.layers
+			if layers <= 0 {
+				layers = 1
+			}
+			masks := make([]finalmask.Udpmask, 0, layers)
+			for i := 0; i < layers; i++ {
+				masks = append(masks, mask)
+			}
+			maskManager := finalmask.NewUdpmaskManager(masks)
 
 			client, err := net.ListenPacket("udp", "127.0.0.1:0")
 			if err != nil {
@@ -126,4 +161,58 @@ func TestPacketConnReadWrite(t *testing.T) {
 			mustSendRecv(t, server, client, []byte{})
 		})
 	}
+}
+
+func TestSudokuBDD(t *testing.T) {
+	t.Run("GivenSudokuTCPMask_WhenRoundTripWithAsciiPreference_ThenPayloadMatches", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password: "sudoku-tcp",
+			Ascii:    "prefer_ascii",
+		}
+
+		clientRaw, serverRaw := net.Pipe()
+		defer clientRaw.Close()
+		defer serverRaw.Close()
+
+		clientConn, err := cfg.WrapConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverConn, err := cfg.WrapConnServer(serverRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		send := bytes.Repeat([]byte("client->server"), 1024)
+		recv := make([]byte, len(send))
+
+		writeErr := make(chan error, 1)
+		go func() {
+			_, wErr := clientConn.Write(send)
+			writeErr <- wErr
+		}()
+
+		if _, err := io.ReadFull(serverConn, recv); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-writeErr; err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(send, recv) {
+			t.Fatal("tcp sudoku payload mismatch")
+		}
+	})
+
+	t.Run("GivenSudokuUDPMask_WhenNotInnermost_ThenWrapFails", func(t *testing.T) {
+		cfg := &sudoku.Config{Password: "sudoku-udp"}
+		raw, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer raw.Close()
+
+		if _, err := cfg.WrapPacketConnClient(raw, true, 0, false); err == nil {
+			t.Fatal("expected innermost check failure")
+		}
+	})
 }
