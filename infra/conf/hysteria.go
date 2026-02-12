@@ -13,7 +13,6 @@ type HysteriaClientConfig struct {
 	Version int32    `json:"version"`
 	Address *Address `json:"address"`
 	Port    uint16   `json:"port"`
-	Udpraw  bool     `json:"udpraw"`
 }
 
 func (c *HysteriaClientConfig) Build() (proto.Message, error) {
@@ -27,7 +26,6 @@ func (c *HysteriaClientConfig) Build() (proto.Message, error) {
 		Address: c.Address.Build(),
 		Port:    uint32(c.Port),
 	}
-	config.Udpraw = c.Udpraw
 
 	return config, nil
 }
@@ -41,7 +39,6 @@ type HysteriaUserConfig struct {
 type HysteriaServerConfig struct {
 	Version int32                 `json:"version"`
 	Users   []*HysteriaUserConfig `json:"clients"`
-	Udpraw  bool                  `json:"udpraw"`
 }
 
 func (c *HysteriaServerConfig) Build() (proto.Message, error) {
@@ -59,8 +56,6 @@ func (c *HysteriaServerConfig) Build() (proto.Message, error) {
 			})
 		}
 	}
-
-	config.Udpraw = c.Udpraw
 
 	return config, nil
 }
