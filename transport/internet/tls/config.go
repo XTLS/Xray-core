@@ -524,11 +524,13 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 
 func ParseCurveName(curveNames []string) []tls.CurveID {
 	curveMap := map[string]tls.CurveID{
-		"curvep256":      tls.CurveP256,
-		"curvep384":      tls.CurveP384,
-		"curvep521":      tls.CurveP521,
-		"x25519":         tls.X25519,
-		"x25519mlkem768": tls.X25519MLKEM768,
+		"curvep256":          tls.CurveP256,
+		"curvep384":          tls.CurveP384,
+		"curvep521":          tls.CurveP521,
+		"x25519":             tls.X25519,
+		"x25519mlkem768":     tls.X25519MLKEM768,
+		"secp256r1mlkem768":  tls.SecP256r1MLKEM768,
+		"secp384r1mlkem1024": tls.SecP384r1MLKEM1024,
 	}
 
 	var curveIDs []tls.CurveID

@@ -1,11 +1,14 @@
 package tls
 
 import (
+	"crypto/ecdh"
+	"crypto/hpke"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/pem"
+	"io"
 	"os"
 
-	"github.com/xtls/reality/hpke"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/main/commands/base"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -40,15 +43,15 @@ func executeECH(cmd *base.Command, args []string) {
 	// if *input_pqSignatureSchemesEnabled {
 	// 	kem = 0x30 // hpke.KEM_X25519_KYBER768_DRAFT00
 	// } else {
-	kem = hpke.DHKEM_X25519_HKDF_SHA256
+	kem = hpke.DHKEM(ecdh.X25519()).ID()
 	// }
 
-	echConfig, priv, err := tls.GenerateECHKeySet(0, *input_serverName, kem)
+	echConfig, priv, err := generateECHKeySet(0, *input_serverName, kem)
 	common.Must(err)
 
 	var configBuffer, keyBuffer []byte
 	if *input_echServerKeys == "" {
-		configBytes, _ := tls.MarshalBinary(echConfig)
+		configBytes, _ := marshalBinary(echConfig)
 		var b cryptobyte.Builder
 		b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
 			child.AddBytes(configBytes)
@@ -90,4 +93,87 @@ func executeECH(cmd *base.Command, args []string) {
 		os.Stdout.WriteString("ECH config list: \n" + base64.StdEncoding.EncodeToString(configBuffer) + "\n")
 		os.Stdout.WriteString("ECH server keys: \n" + base64.StdEncoding.EncodeToString(keyBuffer) + "\n")
 	}
+}
+
+type EchConfig struct {
+	Version              uint16
+	ConfigID             uint8
+	KemID                uint16
+	PublicKey            []byte
+	SymmetricCipherSuite []EchCipher
+	MaxNameLength        uint8
+	PublicName           []byte
+	Extensions           []Extension
+}
+
+type EchCipher struct {
+	KDFID  uint16
+	AEADID uint16
+}
+
+type Extension struct {
+	Type uint16
+	Data []byte
+}
+
+// reference github.com/OmarTariq612/goech
+func marshalBinary(ech EchConfig) ([]byte, error) {
+	var b cryptobyte.Builder
+	b.AddUint16(ech.Version)
+	b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
+		child.AddUint8(ech.ConfigID)
+		child.AddUint16(ech.KemID)
+		child.AddUint16(uint16(len(ech.PublicKey)))
+		child.AddBytes(ech.PublicKey)
+		child.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
+			for _, cipherSuite := range ech.SymmetricCipherSuite {
+				child.AddUint16(cipherSuite.KDFID)
+				child.AddUint16(cipherSuite.AEADID)
+			}
+		})
+		child.AddUint8(ech.MaxNameLength)
+		child.AddUint8(uint8(len(ech.PublicName)))
+		child.AddBytes(ech.PublicName)
+		child.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
+			for _, extention := range ech.Extensions {
+				child.AddUint16(extention.Type)
+				child.AddBytes(extention.Data)
+			}
+		})
+	})
+	return b.Bytes()
+}
+
+const ExtensionEncryptedClientHello = 0xfe0d
+
+func generateECHKeySet(configID uint8, domain string, kem uint16) (EchConfig, []byte, error) {
+	config := EchConfig{
+		Version:    ExtensionEncryptedClientHello,
+		ConfigID:   configID,
+		PublicName: []byte(domain),
+		KemID:      kem,
+		SymmetricCipherSuite: []EchCipher{
+			{KDFID: hpke.HKDFSHA256().ID(), AEADID: hpke.AES128GCM().ID()},
+			{KDFID: hpke.HKDFSHA256().ID(), AEADID: hpke.AES256GCM().ID()},
+			{KDFID: hpke.HKDFSHA256().ID(), AEADID: hpke.ChaCha20Poly1305().ID()},
+			{KDFID: hpke.HKDFSHA384().ID(), AEADID: hpke.AES128GCM().ID()},
+			{KDFID: hpke.HKDFSHA384().ID(), AEADID: hpke.AES256GCM().ID()},
+			{KDFID: hpke.HKDFSHA384().ID(), AEADID: hpke.ChaCha20Poly1305().ID()},
+			{KDFID: hpke.HKDFSHA512().ID(), AEADID: hpke.AES128GCM().ID()},
+			{KDFID: hpke.HKDFSHA512().ID(), AEADID: hpke.AES256GCM().ID()},
+			{KDFID: hpke.HKDFSHA512().ID(), AEADID: hpke.ChaCha20Poly1305().ID()},
+		},
+		MaxNameLength: 0,
+		Extensions:    nil,
+	}
+	// if kem == hpke.DHKEM_X25519_HKDF_SHA256 {
+	curve := ecdh.X25519()
+	priv := make([]byte, 32)
+	_, err := io.ReadFull(rand.Reader, priv)
+	if err != nil {
+		return config, nil, err
+	}
+	privKey, _ := curve.NewPrivateKey(priv)
+	config.PublicKey = privKey.PublicKey().Bytes()
+	return config, priv, nil
 }
