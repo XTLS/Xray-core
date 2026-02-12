@@ -119,7 +119,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		for {
 			n, err := r.Read(b)
 			if err != nil {
-				break
+				return err
 			}
 
 			msg, err := ParseUDPMessage(b[:n])
