@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -213,6 +214,30 @@ func TestSudokuBDD(t *testing.T) {
 
 		if _, err := cfg.WrapPacketConnClient(raw, true, 0, false); err == nil {
 			t.Fatal("expected innermost check failure")
+		}
+	})
+
+	t.Run("GivenSudokuTCPMask_WhenProxyUnwrapRawConn_ThenUnderlyingConnIsExposed", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password: "sudoku-unwrap",
+			Ascii:    "prefer_entropy",
+		}
+
+		clientRaw, serverRaw := net.Pipe()
+		defer clientRaw.Close()
+		defer serverRaw.Close()
+
+		clientConn, err := cfg.WrapConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		unwrapped, readCounter, writeCounter := proxy.UnwrapRawConn(clientConn)
+		if readCounter != nil || writeCounter != nil {
+			t.Fatal("unexpected stat counters while unwrapping sudoku conn")
+		}
+		if unwrapped != clientRaw {
+			t.Fatalf("unexpected unwrapped conn type: %T", unwrapped)
 		}
 	})
 }

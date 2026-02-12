@@ -43,6 +43,10 @@ func NewTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
 	}, nil
 }
 
+func (c *tcpConn) UnwrapConn() net.Conn {
+	return c.Conn
+}
+
 func (c *tcpConn) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
