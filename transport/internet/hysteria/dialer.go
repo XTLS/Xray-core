@@ -34,6 +34,14 @@ type udpSessionManagerClient struct {
 	mutex  sync.RWMutex
 }
 
+func (m *udpSessionManagerClient) close(udpConn *InterUdpConn) {
+	if !udpConn.closed {
+		udpConn.closed = true
+		close(udpConn.ch)
+		delete(m.m, udpConn.id)
+	}
+}
+
 func (m *udpSessionManagerClient) run() {
 	for {
 		d, err := m.conn.ReceiveDatagram(context.Background())
@@ -50,21 +58,12 @@ func (m *udpSessionManagerClient) run() {
 	}
 
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	m.closed = true
-	m.mutex.Unlock()
 
 	for _, udpConn := range m.m {
-		m.mutex.Lock()
 		m.close(udpConn)
-		m.mutex.Unlock()
-	}
-}
-
-func (m *udpSessionManagerClient) close(udpConn *InterUdpConn) {
-	if !udpConn.closed {
-		udpConn.closed = true
-		close(udpConn.ch)
-		delete(m.m, udpConn.id)
 	}
 }
 

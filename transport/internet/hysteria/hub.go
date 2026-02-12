@@ -86,39 +86,45 @@ func (m *udpSessionManagerServer) run() {
 		m.feed(id, d)
 	}
 
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	close(m.stopCh)
 
 	for _, udpConn := range m.m {
-		m.mutex.Lock()
 		m.close(udpConn)
-		m.mutex.Unlock()
 	}
 }
 
 func (m *udpSessionManagerServer) feed(id uint32, d []byte) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
+	m.mutex.RLock()
 	udpConn, ok := m.m[id]
+	m.mutex.RUnlock()
+
 	if !ok {
-		udpConn = &InterUdpConn{
-			conn:   m.conn,
-			local:  m.conn.LocalAddr(),
-			remote: m.conn.RemoteAddr(),
+		m.mutex.Lock()
+		udpConn, ok = m.m[id]
+		if !ok {
+			udpConn = &InterUdpConn{
+				conn:   m.conn,
+				local:  m.conn.LocalAddr(),
+				remote: m.conn.RemoteAddr(),
 
-			id:   id,
-			ch:   make(chan []byte, udpMessageChanSize),
-			last: time.Now(),
+				id:   id,
+				ch:   make(chan []byte, udpMessageChanSize),
+				last: time.Now(),
 
-			user: m.user,
+				user: m.user,
+			}
+			udpConn.closeFunc = func() {
+				m.mutex.Lock()
+				defer m.mutex.Unlock()
+				m.close(udpConn)
+			}
+			m.m[id] = udpConn
+			m.addConn(udpConn)
 		}
-		udpConn.closeFunc = func() {
-			m.mutex.Lock()
-			defer m.mutex.Unlock()
-			m.close(udpConn)
-		}
-		m.m[id] = udpConn
-		m.addConn(udpConn)
+		m.mutex.Unlock()
 	}
 
 	select {
