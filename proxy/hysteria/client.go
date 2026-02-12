@@ -217,9 +217,15 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			for _, fMsg := range fMsgs {
 				err := w.sendMsg(&fMsg)
 				if err != nil {
-					break
+					b.Release()
+					buf.ReleaseMulti(mb)
+					return err
 				}
 			}
+		} else if err != nil {
+			b.Release()
+			buf.ReleaseMulti(mb)
+			return err
 		}
 
 		b.Release()
