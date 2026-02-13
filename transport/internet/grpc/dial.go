@@ -182,12 +182,13 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		grpcDestHost = dest.Address.IP().String()
 	}
 
-	conn, err := grpc.Dial(
-		net.JoinHostPort(grpcDestHost, dest.Port.String()),
+	conn, err := grpc.NewClient(
+		"passthrough:///"+net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
 	if err == nil {
 		setUserAgent(conn, userAgent)
+		conn.Connect()
 	}
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
 	return conn, err
