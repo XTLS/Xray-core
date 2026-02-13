@@ -1332,7 +1332,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	clients := make([]*custom.TCPSequence, len(c.Clients))
 	for i, value := range c.Clients {
 		for _, item := range value {
-			clients[i].Items = append(clients[i].Items, &custom.TCPItem{
+			clients[i].Sequence = append(clients[i].Sequence, &custom.TCPItem{
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
 				Rand:     item.Rand,
@@ -1344,7 +1344,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	servers := make([]*custom.TCPSequence, len(c.Servers))
 	for i, value := range c.Servers {
 		for _, item := range value {
-			servers[i].Items = append(servers[i].Items, &custom.TCPItem{
+			servers[i].Sequence = append(servers[i].Sequence, &custom.TCPItem{
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
 				Rand:     item.Rand,

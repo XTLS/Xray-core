@@ -51,11 +51,23 @@ func TestConnReadWrite(t *testing.T) {
 		{
 			name: "custom",
 			mask: &custom.TCPConfig{
-				Clients: [][]byte{
-					{1},
+				Clients: []*custom.TCPSequence{
+					{
+						Sequence: []*custom.TCPItem{
+							{
+								Packet: []byte{1},
+							},
+						},
+					},
 				},
-				Servers: [][]byte{
-					{2},
+				Servers: []*custom.TCPSequence{
+					{
+						Sequence: []*custom.TCPItem{
+							{
+								Packet: []byte{2},
+							},
+						},
+					},
 				},
 			},
 		},

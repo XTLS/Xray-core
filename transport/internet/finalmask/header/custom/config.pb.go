@@ -91,7 +91,7 @@ func (x *TCPItem) GetPacket() []byte {
 
 type TCPSequence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*TCPItem             `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Sequence      []*TCPItem             `protobuf:"bytes,1,rep,name=sequence,proto3" json:"sequence,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -126,9 +126,9 @@ func (*TCPSequence) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *TCPSequence) GetItems() []*TCPItem {
+func (x *TCPSequence) GetSequence() []*TCPItem {
 	if x != nil {
-		return x.Items
+		return x.Sequence
 	}
 	return nil
 }
@@ -254,9 +254,9 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\tdelay_min\x18\x01 \x01(\x03R\bdelayMin\x12\x1b\n" +
 	"\tdelay_max\x18\x02 \x01(\x03R\bdelayMax\x12\x12\n" +
 	"\x04rand\x18\x03 \x01(\x05R\x04rand\x12\x16\n" +
-	"\x06packet\x18\x04 \x01(\fR\x06packet\"]\n" +
-	"\vTCPSequence\x12N\n" +
-	"\x05items\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\x05items\"\xd6\x01\n" +
+	"\x06packet\x18\x04 \x01(\fR\x06packet\"c\n" +
+	"\vTCPSequence\x12T\n" +
+	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\xd6\x01\n" +
 	"\tTCPConfig\x12V\n" +
 	"\aclients\x18\x01 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aclients\x12V\n" +
 	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12\x19\n" +
@@ -286,7 +286,7 @@ var file_transport_internet_finalmask_header_custom_config_proto_goTypes = []any
 	(*UDPConfig)(nil),   // 3: xray.transport.internet.finalmask.header.custom.UDPConfig
 }
 var file_transport_internet_finalmask_header_custom_config_proto_depIdxs = []int32{
-	0, // 0: xray.transport.internet.finalmask.header.custom.TCPSequence.items:type_name -> xray.transport.internet.finalmask.header.custom.TCPItem
+	0, // 0: xray.transport.internet.finalmask.header.custom.TCPSequence.sequence:type_name -> xray.transport.internet.finalmask.header.custom.TCPItem
 	1, // 1: xray.transport.internet.finalmask.header.custom.TCPConfig.clients:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
 	1, // 2: xray.transport.internet.finalmask.header.custom.TCPConfig.servers:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
 	3, // [3:3] is the sub-list for method output_type

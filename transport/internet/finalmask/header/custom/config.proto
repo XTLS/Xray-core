@@ -14,7 +14,7 @@ message TCPItem {
 }
 
 message TCPSequence {
-    repeated TCPItem items = 1;
+    repeated TCPItem sequence = 1;
 }
 
 message TCPConfig {

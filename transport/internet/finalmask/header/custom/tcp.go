@@ -36,16 +36,16 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		},
 	}
 
-	for _, sequence := range conn.header.clients {
-		for _, item := range sequence.Items {
+	for _, client := range conn.header.clients {
+		for _, item := range client.Sequence {
 			if item.Rand > 0 {
 				item.Packet = make([]byte, 0, item.Rand)
 			}
 		}
 	}
 
-	for _, sequence := range conn.header.servers {
-		for _, item := range sequence.Items {
+	for _, server := range conn.header.servers {
+		for _, item := range server.Sequence {
 			if item.Rand > 0 {
 				item.Packet = make([]byte, 0, item.Rand)
 			}
@@ -82,7 +82,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 		i := 0
 		j := 0
 		for i = range c.header.clients {
-			for _, item := range c.header.clients[i].Items {
+			for _, item := range c.header.clients[i].Sequence {
 				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 				if item.Rand > 0 {
 					common.Must2(rand.Read(item.Packet))
@@ -94,7 +94,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 				}
 			}
 			if j < len(c.header.servers) {
-				for _, item := range c.header.servers[j].Items {
+				for _, item := range c.header.servers[j].Sequence {
 					n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
 					if err != nil {
 						c.wg.Done()
@@ -115,7 +115,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 		}
 
 		for j < len(c.header.servers) {
-			for _, item := range c.header.servers[j].Items {
+			for _, item := range c.header.servers[j].Sequence {
 				n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
 				if err != nil {
 					c.wg.Done()
@@ -172,16 +172,16 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		},
 	}
 
-	for _, sequence := range conn.header.clients {
-		for _, item := range sequence.Items {
+	for _, client := range conn.header.clients {
+		for _, item := range client.Sequence {
 			if item.Rand > 0 {
 				item.Packet = make([]byte, 0, item.Rand)
 			}
 		}
 	}
 
-	for _, sequence := range conn.header.servers {
-		for _, item := range sequence.Items {
+	for _, server := range conn.header.servers {
+		for _, item := range server.Sequence {
 			if item.Rand > 0 {
 				item.Packet = make([]byte, 0, item.Rand)
 			}
@@ -208,7 +208,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 		i := 0
 		j := 0
 		for i = range c.header.clients {
-			for _, item := range c.header.clients[i].Items {
+			for _, item := range c.header.clients[i].Sequence {
 				n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
 				if err != nil {
 					c.wg.Done()
@@ -228,7 +228,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				}
 			}
 			if j < len(c.header.servers) {
-				for _, item := range c.header.servers[i].Items {
+				for _, item := range c.header.servers[i].Sequence {
 					time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 					if item.Rand > 0 {
 						common.Must2(rand.Read(item.Packet))
@@ -244,7 +244,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 		}
 
 		for j < len(c.header.servers) {
-			for _, item := range c.header.servers[i].Items {
+			for _, item := range c.header.servers[i].Sequence {
 				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 				if item.Rand > 0 {
 					common.Must2(rand.Read(item.Packet))
