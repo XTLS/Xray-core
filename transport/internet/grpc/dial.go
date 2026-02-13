@@ -194,18 +194,28 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 // withExactUserAgent creates a grpc.DialOption that sets the user-agent to
 // exactly the given string, preventing grpc-go from appending its version.
 func withExactUserAgent(ua string) grpc.DialOption {
-	opt := grpc.WithUserAgent("")
+	opt := grpc.WithUserAgent(ua)
 	v := reflect.ValueOf(opt).Elem()
 	fField := v.FieldByName("f")
+	if !fField.IsValid() {
+		return opt
+	}
 	fType := fField.Type()
 
 	newF := reflect.MakeFunc(fType, func(args []reflect.Value) []reflect.Value {
 		copts := args[0].Elem().FieldByName("copts")
+		if !copts.IsValid() {
+			return nil
+		}
 		uaField := copts.FieldByName("UserAgent")
+		if !uaField.IsValid() || !uaField.CanAddr() {
+			return nil
+		}
 		*(*string)(unsafe.Pointer(uaField.UnsafeAddr())) = ua
 		return nil
 	})
 
-	reflect.NewAt(fType, unsafe.Pointer(fField.UnsafeAddr())).Elem().Set(newF)
+	fAddr := unsafe.Pointer(fField.UnsafeAddr())
+	reflect.NewAt(fType, fAddr).Elem().Set(newF)
 	return opt
 }
