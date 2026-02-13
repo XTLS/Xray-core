@@ -1372,6 +1372,7 @@ func (c *Salamander) Build() (proto.Message, error) {
 type Sudoku struct {
 	Password string `json:"password"`
 	ASCII    string `json:"ascii"`
+	Packed   bool   `json:"packed"`
 
 	CustomTable       string `json:"customTable"`
 	LegacyCustomTable string `json:"custom_table"`
@@ -1400,6 +1401,7 @@ func (c *Sudoku) Build() (proto.Message, error) {
 	return &finalsudoku.Config{
 		Password:    c.Password,
 		Ascii:       c.ASCII,
+		Packed:      c.Packed,
 		CustomTable: customTable,
 		PaddingMin:  paddingMin,
 		PaddingMax:  paddingMax,

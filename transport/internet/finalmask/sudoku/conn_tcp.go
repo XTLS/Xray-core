@@ -9,92 +9,156 @@ import (
 
 const ioBufferSize = 32 * 1024
 
-type tcpConn struct {
-	net.Conn
-
-	table *table
-	codec *codec
-
-	reader *bufio.Reader
-	rawBuf []byte
-
-	pending []byte
-	hintBuf []byte
-
-	readMu  sync.Mutex
-	writeMu sync.Mutex
+type streamDecoder interface {
+	decodeChunk(in []byte, pending []byte) ([]byte, error)
+	reset()
 }
 
-func NewTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
-	t, err := getTable(config)
-	if err != nil {
-		return nil, err
-	}
+type streamReader struct {
+	reader  *bufio.Reader
+	rawBuf  []byte
+	pending []byte
+	decode  streamDecoder
+	mu      sync.Mutex
+}
 
-	pMin, pMax := normalizedPadding(config)
-	return &tcpConn{
-		Conn:    raw,
-		table:   t,
-		codec:   newCodec(t, pMin, pMax),
+func newStreamReader(raw net.Conn, decode streamDecoder) io.Reader {
+	return &streamReader{
 		reader:  bufio.NewReaderSize(raw, ioBufferSize),
 		rawBuf:  make([]byte, ioBufferSize),
-		hintBuf: make([]byte, 0, 4),
 		pending: make([]byte, 0, 4096),
-	}, nil
+		decode:  decode,
+	}
 }
 
-func (c *tcpConn) UnwrapConn() net.Conn {
-	return c.Conn
-}
+func (r *streamReader) Read(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-func (c *tcpConn) Write(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-
-	encoded, err := c.codec.encode(p)
-	if err != nil {
-		return 0, err
-	}
-
-	if err := writeAll(c.Conn, encoded); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-func (c *tcpConn) Read(p []byte) (int, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-
-	if n, ok := drainPending(p, &c.pending); ok {
+	if n, ok := drainPending(p, &r.pending); ok {
 		return n, nil
 	}
 
-	for len(c.pending) == 0 {
-		nr, rErr := c.reader.Read(c.rawBuf)
+	for len(r.pending) == 0 {
+		nr, rErr := r.reader.Read(r.rawBuf)
 		if nr > 0 {
 			var dErr error
-			c.hintBuf, c.pending, dErr = decodeBytes(c.table, c.rawBuf[:nr], c.hintBuf, c.pending)
+			r.pending, dErr = r.decode.decodeChunk(r.rawBuf[:nr], r.pending)
 			if dErr != nil {
 				return 0, dErr
 			}
 		}
 
 		if rErr != nil {
-			if rErr == io.EOF && len(c.pending) > 0 {
-				break
+			if rErr == io.EOF {
+				r.decode.reset()
+				if len(r.pending) > 0 {
+					break
+				}
 			}
 			return 0, rErr
 		}
 	}
 
-	n, _ := drainPending(p, &c.pending)
+	n, _ := drainPending(p, &r.pending)
 	return n, nil
 }
+
+type streamWriter struct {
+	conn   net.Conn
+	encode func([]byte) ([]byte, error)
+	mu     sync.Mutex
+}
+
+func newStreamWriter(raw net.Conn, encode func([]byte) ([]byte, error)) io.Writer {
+	return &streamWriter{
+		conn:   raw,
+		encode: encode,
+	}
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	encoded, err := w.encode(p)
+	if err != nil {
+		return 0, err
+	}
+	if err := writeAll(w.conn, encoded); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+type wrappedConn struct {
+	net.Conn
+	reader io.Reader
+	writer io.Writer
+}
+
+func newWrappedConn(raw net.Conn, reader io.Reader, writer io.Writer) net.Conn {
+	return &wrappedConn{
+		Conn:   raw,
+		reader: reader,
+		writer: writer,
+	}
+}
+
+func (c *wrappedConn) Read(p []byte) (int, error) {
+	return c.reader.Read(p)
+}
+
+func (c *wrappedConn) Write(p []byte) (int, error) {
+	return c.writer.Write(p)
+}
+
+func (c *wrappedConn) UnwrapConn() net.Conn {
+	return c.Conn
+}
+
+func NewTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
+	reader, writer, err := newPureReaderWriter(raw, config)
+	if err != nil {
+		return nil, err
+	}
+	return newWrappedConn(raw, reader, writer), nil
+}
+
+func newPureReaderWriter(raw net.Conn, config *Config) (io.Reader, io.Writer, error) {
+	t, err := getTable(config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pMin, pMax := normalizedPadding(config)
+	c := newCodec(t, pMin, pMax)
+	return newStreamReader(raw, newHintStreamDecoder(t)), newStreamWriter(raw, c.encode), nil
+}
+
+type hintStreamDecoder struct {
+	table   *table
+	hintBuf []byte
+}
+
+func newHintStreamDecoder(t *table) *hintStreamDecoder {
+	return &hintStreamDecoder{
+		table:   t,
+		hintBuf: make([]byte, 0, 4),
+	}
+}
+
+func (d *hintStreamDecoder) decodeChunk(in []byte, pending []byte) ([]byte, error) {
+	var err error
+	d.hintBuf, pending, err = decodeBytes(d.table, in, d.hintBuf, pending)
+	return pending, err
+}
+
+func (d *hintStreamDecoder) reset() {}
 
 func drainPending(p []byte, pending *[]byte) (int, bool) {
 	if len(*pending) == 0 {

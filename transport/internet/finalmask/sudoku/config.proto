@@ -12,4 +12,5 @@ message Config {
   string custom_table = 3;
   uint32 padding_min = 4;
   uint32 padding_max = 5;
+  bool packed = 6;
 }

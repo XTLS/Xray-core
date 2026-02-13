@@ -13,11 +13,37 @@ func (c *Config) UDP() {
 }
 
 func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
+	if c.GetPacked() {
+		return newPackedDirectionalConn(raw, c, true)
+	}
 	return NewTCPConn(raw, c)
 }
 
 func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
+	if c.GetPacked() {
+		return newPackedDirectionalConn(raw, c, false)
+	}
 	return NewTCPConn(raw, c)
+}
+
+func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (net.Conn, error) {
+	pureReader, pureWriter, err := newPureReaderWriter(raw, config)
+	if err != nil {
+		return nil, err
+	}
+	packedReader, packedWriter, err := newPackedReaderWriter(raw, config)
+	if err != nil {
+		return nil, err
+	}
+
+	reader, writer := pureReader, pureWriter
+	if readPacked {
+		reader = packedReader
+	} else {
+		writer = packedWriter
+	}
+
+	return newWrappedConn(raw, reader, writer), nil
 }
 
 func (c *Config) WrapPacketConnClient(raw net.PacketConn, first bool, leaveSize int32, end bool) (net.PacketConn, error) {

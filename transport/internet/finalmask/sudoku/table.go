@@ -36,8 +36,11 @@ var (
 type byteLayout struct {
 	hintMask    byte
 	hintValue   byte
+	padMarker   byte
 	paddingPool []byte
 	encodeHint  func(group byte) byte
+	encodeGroup func(group byte) byte
+	decodeGroup func(b byte) (byte, bool)
 }
 
 func (l *byteLayout) isHint(b byte) bool {
@@ -165,16 +168,29 @@ func asciiLayout() *byteLayout {
 		padding = append(padding, byte(0x20+i))
 	}
 
+	encodeGroup := func(group byte) byte {
+		b := byte(0x40 | (group & 0x3f))
+		if b == 0x7f {
+			return '\n'
+		}
+		return b
+	}
+
 	return &byteLayout{
 		hintMask:    0x40,
 		hintValue:   0x40,
+		padMarker:   0x3f,
 		paddingPool: padding,
-		encodeHint: func(group byte) byte {
-			b := byte(0x40 | (group & 0x3f))
-			if b == 0x7f {
-				return '\n'
+		encodeHint:  encodeGroup,
+		encodeGroup: encodeGroup,
+		decodeGroup: func(b byte) (byte, bool) {
+			if b == '\n' {
+				return 0x3f, true
 			}
-			return b
+			if (b & 0x40) == 0 {
+				return 0, false
+			}
+			return b & 0x3f, true
 		},
 	}
 }
@@ -185,13 +201,23 @@ func entropyLayout() *byteLayout {
 		padding = append(padding, byte(0x80+i), byte(0x10+i))
 	}
 
+	encodeGroup := func(group byte) byte {
+		v := group & 0x3f
+		return ((v & 0x30) << 1) | (v & 0x0f)
+	}
+
 	return &byteLayout{
 		hintMask:    0x90,
 		hintValue:   0x00,
+		padMarker:   0x80,
 		paddingPool: padding,
-		encodeHint: func(group byte) byte {
-			v := group & 0x3f
-			return ((v & 0x30) << 1) | (v & 0x0f)
+		encodeHint:  encodeGroup,
+		encodeGroup: encodeGroup,
+		decodeGroup: func(b byte) (byte, bool) {
+			if (b & 0x90) != 0 {
+				return 0, false
+			}
+			return ((b >> 1) & 0x30) | (b & 0x0f), true
 		},
 	}
 }
@@ -220,7 +246,7 @@ func customLayout(pattern string) (*byteLayout, error) {
 		xMask |= 1 << bit
 	}
 
-	encodeHint := func(group byte, dropX int) byte {
+	encodeGroupWithDropX := func(group byte, dropX int) byte {
 		out := xMask
 		if dropX >= 0 {
 			out &^= 1 << xBits[dropX]
@@ -250,7 +276,7 @@ func customLayout(pattern string) (*byteLayout, error) {
 		for val := byte(0); val < 4; val++ {
 			for pos := byte(0); pos < 16; pos++ {
 				group := (val << 4) | pos
-				b := encodeHint(group, drop)
+				b := encodeGroupWithDropX(group, drop)
 				if bits.OnesCount8(b) >= 5 {
 					if _, exists := paddingSet[b]; !exists {
 						paddingSet[b] = struct{}{}
@@ -265,13 +291,38 @@ func customLayout(pattern string) (*byteLayout, error) {
 		return nil, fmt.Errorf("customTable produced empty padding pool")
 	}
 
+	decodeGroup := func(b byte) (byte, bool) {
+		if (b & xMask) != xMask {
+			return 0, false
+		}
+
+		var val, pos byte
+		if b&(1<<pBits[0]) != 0 {
+			val |= 0x02
+		}
+		if b&(1<<pBits[1]) != 0 {
+			val |= 0x01
+		}
+		for i, bit := range vBits {
+			if b&(1<<bit) != 0 {
+				pos |= 1 << (3 - uint8(i))
+			}
+		}
+
+		return ((val & 0x03) << 4) | (pos & 0x0f), true
+	}
+	encodeGroup := func(group byte) byte {
+		return encodeGroupWithDropX(group, -1)
+	}
+
 	return &byteLayout{
 		hintMask:    xMask,
 		hintValue:   xMask,
+		padMarker:   padding[0],
 		paddingPool: padding,
-		encodeHint: func(group byte) byte {
-			return encodeHint(group, -1)
-		},
+		encodeHint:  encodeGroup,
+		encodeGroup: encodeGroup,
+		decodeGroup: decodeGroup,
 	}, nil
 }
 
