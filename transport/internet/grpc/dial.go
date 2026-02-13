@@ -169,12 +169,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions = append(dialOptions, grpc.WithInitialWindowSize(grpcSettings.InitialWindowsSize))
 	}
 
-	userAgent := grpcSettings.UserAgent
-	if userAgent == "" {
-		userAgent = utils.ChromeUA
-	}
-	dialOptions = append(dialOptions, grpc.WithUserAgent(userAgent))
-
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {
 		grpcDestHost = dest.Address.Domain()
@@ -187,6 +181,10 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		dialOptions...,
 	)
 	if err == nil {
+		userAgent := grpcSettings.UserAgent
+		if userAgent == "" {
+			userAgent = utils.ChromeUA
+		}
 		setUserAgent(conn, userAgent)
 		conn.Connect()
 	}
