@@ -84,7 +84,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 			for to < len(c.header.merged[i]) {
 				item := c.header.clients[i].Sequence[index]
 				if item.DelayMax > 0 {
-					if to-from > 0 {
+					if to > from {
 						_, err := c.Conn.Write(c.header.merged[i][from:to])
 						if err != nil {
 							c.wg.Done()
@@ -101,7 +101,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 				to += length
 				index++
 			}
-			if to-from > 0 {
+			if to > from {
 				_, err := c.Conn.Write(c.header.merged[i][from:to])
 				if err != nil {
 					c.wg.Done()
@@ -254,7 +254,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				for to < len(c.header.merged[j]) {
 					item := c.header.servers[j].Sequence[index]
 					if item.DelayMax > 0 {
-						if to-from > 0 {
+						if to > from {
 							_, err := c.Conn.Write(c.header.merged[j][from:to])
 							if err != nil {
 								c.wg.Done()
@@ -271,7 +271,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 					to += length
 					index++
 				}
-				if to-from > 0 {
+				if to > from {
 					_, err := c.Conn.Write(c.header.merged[j][from:to])
 					if err != nil {
 						c.wg.Done()
@@ -290,7 +290,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 			for to < len(c.header.merged[j]) {
 				item := c.header.servers[j].Sequence[index]
 				if item.DelayMax > 0 {
-					if to-from > 0 {
+					if to > from {
 						_, err := c.Conn.Write(c.header.merged[j][from:to])
 						if err != nil {
 							c.wg.Done()
@@ -307,7 +307,7 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				to += length
 				index++
 			}
-			if to-from > 0 {
+			if to > from {
 				_, err := c.Conn.Write(c.header.merged[j][from:to])
 				if err != nil {
 					c.wg.Done()
