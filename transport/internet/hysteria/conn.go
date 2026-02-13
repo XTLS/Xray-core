@@ -3,16 +3,28 @@ package hysteria
 import (
 	"encoding/binary"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/apernet/quic-go"
+	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 )
 
 type interConn struct {
 	stream *quic.Stream
 	local  net.Addr
 	remote net.Addr
+
+	client bool
+	mutex  sync.Mutex
+
+	user *protocol.MemoryUser
+}
+
+func (i *interConn) User() *protocol.MemoryUser {
+	return i.user
 }
 
 func (i *interConn) Read(b []byte) (int, error) {
@@ -20,6 +32,22 @@ func (i *interConn) Read(b []byte) (int, error) {
 }
 
 func (i *interConn) Write(b []byte) (int, error) {
+	if i.client {
+		i.mutex.Lock()
+		if i.client {
+			buf := make([]byte, 0, quicvarint.Len(FrameTypeTCPRequest)+len(b))
+			buf = quicvarint.Append(buf, FrameTypeTCPRequest)
+			buf = append(buf, b...)
+			_, err := i.stream.Write(buf)
+			if err != nil {
+				return 0, err
+			}
+			i.client = false
+			return len(b), nil
+		}
+		i.mutex.Unlock()
+	}
+
 	return i.stream.Write(b)
 }
 
@@ -53,10 +81,34 @@ type InterUdpConn struct {
 	local  net.Addr
 	remote net.Addr
 
-	id        uint32
-	ch        chan []byte
+	id uint32
+	ch chan []byte
+
 	closed    bool
 	closeFunc func()
+
+	last  time.Time
+	mutex sync.Mutex
+
+	user *protocol.MemoryUser
+}
+
+func (i *InterUdpConn) User() *protocol.MemoryUser {
+	return i.user
+}
+
+func (i *InterUdpConn) SetLast() {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	i.last = time.Now()
+}
+
+func (i *InterUdpConn) GetLast() time.Time {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	return i.last
 }
 
 func (i *InterUdpConn) Read(p []byte) (int, error) {
@@ -68,10 +120,14 @@ func (i *InterUdpConn) Read(p []byte) (int, error) {
 	if n != len(b) {
 		return 0, io.ErrShortBuffer
 	}
+
+	i.SetLast()
 	return n, nil
 }
 
 func (i *InterUdpConn) Write(p []byte) (int, error) {
+	i.SetLast()
+
 	binary.BigEndian.PutUint32(p, i.id)
 	if err := i.conn.SendDatagram(p); err != nil {
 		return 0, err

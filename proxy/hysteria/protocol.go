@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	FrameTypeTCPRequest = 0x401
-
 	// Max length values are for preventing DoS attacks
 
 	MaxAddressLength = 2048
@@ -28,22 +26,49 @@ const (
 )
 
 // TCPRequest format:
-// 0x401 (QUIC varint)
 // Address length (QUIC varint)
 // Address (bytes)
 // Padding length (QUIC varint)
 // Padding (bytes)
 
+func ReadTCPRequest(r io.Reader) (string, error) {
+	bReader := quicvarint.NewReader(r)
+	addrLen, err := quicvarint.Read(bReader)
+	if err != nil {
+		return "", err
+	}
+	if addrLen == 0 || addrLen > MaxAddressLength {
+		return "", errors.New("invalid address length")
+	}
+	addrBuf := make([]byte, addrLen)
+	_, err = io.ReadFull(r, addrBuf)
+	if err != nil {
+		return "", err
+	}
+	paddingLen, err := quicvarint.Read(bReader)
+	if err != nil {
+		return "", err
+	}
+	if paddingLen > MaxPaddingLength {
+		return "", errors.New("invalid padding length")
+	}
+	if paddingLen > 0 {
+		_, err = io.CopyN(io.Discard, r, int64(paddingLen))
+		if err != nil {
+			return "", err
+		}
+	}
+	return string(addrBuf), nil
+}
+
 func WriteTCPRequest(w io.Writer, addr string) error {
 	padding := tcpRequestPadding.String()
 	paddingLen := len(padding)
 	addrLen := len(addr)
-	sz := int(quicvarint.Len(FrameTypeTCPRequest)) +
-		int(quicvarint.Len(uint64(addrLen))) + addrLen +
+	sz := int(quicvarint.Len(uint64(addrLen))) + addrLen +
 		int(quicvarint.Len(uint64(paddingLen))) + paddingLen
 	buf := make([]byte, sz)
-	i := varintPut(buf, FrameTypeTCPRequest)
-	i += varintPut(buf[i:], uint64(addrLen))
+	i := varintPut(buf, uint64(addrLen))
 	i += copy(buf[i:], addr)
 	i += varintPut(buf[i:], uint64(paddingLen))
 	copy(buf[i:], padding)
@@ -94,6 +119,26 @@ func ReadTCPResponse(r io.Reader) (bool, string, error) {
 		}
 	}
 	return status[0] == 0, string(msgBuf), nil
+}
+
+func WriteTCPResponse(w io.Writer, ok bool, msg string) error {
+	padding := tcpResponsePadding.String()
+	paddingLen := len(padding)
+	msgLen := len(msg)
+	sz := 1 + int(quicvarint.Len(uint64(msgLen))) + msgLen +
+		int(quicvarint.Len(uint64(paddingLen))) + paddingLen
+	buf := make([]byte, sz)
+	if ok {
+		buf[0] = 0
+	} else {
+		buf[0] = 1
+	}
+	i := varintPut(buf[1:], uint64(msgLen))
+	i += copy(buf[1+i:], msg)
+	i += varintPut(buf[1+i:], uint64(paddingLen))
+	copy(buf[1+i:], padding)
+	_, err := w.Write(buf)
+	return err
 }
 
 // UDPMessage format:
