@@ -1413,8 +1413,9 @@ type NoiseItem struct {
 }
 
 type Noise struct {
-	Reset Int32Range  `json:"reset"`
-	Noise []NoiseItem `json:"noise"`
+	Reset   Int32Range  `json:"reset"`
+	ApplyTo string      `json:"applyTo"`
+	Noise   []NoiseItem `json:"noise"`
 }
 
 func (c *Noise) Build() (proto.Message, error) {
@@ -1432,6 +1433,7 @@ func (c *Noise) Build() (proto.Message, error) {
 	return &noise.Config{
 		ResetMin: int64(c.Reset.From),
 		ResetMax: int64(c.Reset.To),
+		ApplyTo:  strings.ToLower(c.ApplyTo),
 		Items:    noiseSlice,
 	}, nil
 }
