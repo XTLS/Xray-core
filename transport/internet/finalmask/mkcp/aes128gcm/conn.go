@@ -1,6 +1,7 @@
 package aes128gcm
 
 import (
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -17,6 +18,7 @@ import (
 type aes128gcmConn struct {
 	first     bool
 	leaveSize int32
+	closed    bool
 
 	conn net.PacketConn
 	aead cipher.AEAD
@@ -58,33 +60,40 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
-			c.readMutex.Unlock()
-			return n, addr, err
-		}
+		for {
+			if c.closed {
+				c.readMutex.Unlock()
+				return 0, nil, io.EOF
+			}
 
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
+			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err ", err)
+				continue
+			}
 
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), "mask read err short lenth")
+				continue
+			}
 
-		nonceSize := c.aead.NonceSize()
-		nonce := c.readBuf[:nonceSize]
-		ciphertext := c.readBuf[nonceSize:n]
-		_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
-		if err != nil {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead open").Base(err)
-		}
+			if len(p) < n-int(c.Size()) {
+				c.readMutex.Unlock()
+				return 0, nil, io.ErrShortBuffer
+			}
 
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, nil
+			nonceSize := c.aead.NonceSize()
+			nonce := c.readBuf[:nonceSize]
+			ciphertext := c.readBuf[nonceSize:n]
+			_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err aead open ", err)
+				continue
+			}
+
+			c.readMutex.Unlock()
+			return n - int(c.Size()), addr, nil
+		}
 	}
 
 	n, addr, err = c.conn.ReadFrom(p)
@@ -93,7 +102,7 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	nonceSize := c.aead.NonceSize()
@@ -154,6 +163,7 @@ func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *aes128gcmConn) Close() error {
+	c.closed = true
 	return c.conn.Close()
 }
 

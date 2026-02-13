@@ -1,6 +1,7 @@
 package original
 
 import (
+	"context"
 	"crypto/cipher"
 	"encoding/binary"
 	"hash/fnv"
@@ -77,6 +78,7 @@ func (a *simple) Open(dst, nonce, cipherText, extra []byte) ([]byte, error) {
 type simpleConn struct {
 	first     bool
 	leaveSize int32
+	closed    bool
 
 	conn net.PacketConn
 	aead cipher.AEAD
@@ -116,33 +118,40 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
+		for {
+			if c.closed {
+				c.readMutex.Unlock()
+				return 0, nil, io.EOF
+			}
+
+			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err ", err)
+				continue
+			}
+
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), "mask read err short lenth")
+				continue
+			}
+
+			if len(p) < n-int(c.Size()) {
+				c.readMutex.Unlock()
+				return 0, nil, io.ErrShortBuffer
+			}
+
+			ciphertext := c.readBuf[:n]
+			opened, err := c.aead.Open(nil, nil, ciphertext, nil)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err aead open ", err)
+				continue
+			}
+
+			copy(p, opened)
+
 			c.readMutex.Unlock()
-			return n, addr, err
+			return n - int(c.Size()), addr, nil
 		}
-
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
-
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
-
-		ciphertext := c.readBuf[:n]
-		opened, err := c.aead.Open(nil, nil, ciphertext, nil)
-		if err != nil {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead open").Base(err)
-		}
-
-		copy(p, opened)
-
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, nil
 	}
 
 	n, addr, err = c.conn.ReadFrom(p)
@@ -151,7 +160,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	ciphertext := p[:n]
@@ -205,6 +214,7 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *simpleConn) Close() error {
+	c.closed = true
 	return c.conn.Close()
 }
 

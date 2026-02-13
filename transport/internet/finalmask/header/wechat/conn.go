@@ -1,6 +1,7 @@
 package wechat
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -36,6 +37,7 @@ func (h *wechat) Serialize(b []byte) {
 type wechatConn struct {
 	first     bool
 	leaveSize int32
+	closed    bool
 
 	conn   net.PacketConn
 	header *wechat
@@ -77,26 +79,33 @@ func (c *wechatConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
+		for {
+			if c.closed {
+				c.readMutex.Unlock()
+				return 0, nil, io.EOF
+			}
+
+			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err ", err)
+				continue
+			}
+
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), "mask read err short lenth")
+				continue
+			}
+
+			if len(p) < n-int(c.Size()) {
+				c.readMutex.Unlock()
+				return 0, nil, io.ErrShortBuffer
+			}
+
+			copy(p, c.readBuf[c.Size():n])
+
 			c.readMutex.Unlock()
-			return n, addr, err
+			return n - int(c.Size()), addr, nil
 		}
-
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		copy(p, c.readBuf[c.Size():n])
-
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, err
 	}
 
 	n, addr, err = c.conn.ReadFrom(p)
@@ -105,12 +114,12 @@ func (c *wechatConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	copy(p, p[c.Size():n])
 
-	return n - int(c.Size()), addr, err
+	return n - int(c.Size()), addr, nil
 }
 
 func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -148,6 +157,7 @@ func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *wechatConn) Close() error {
+	c.closed = true
 	return c.conn.Close()
 }
 

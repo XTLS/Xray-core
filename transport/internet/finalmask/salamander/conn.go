@@ -1,6 +1,7 @@
 package salamander
 
 import (
+	"context"
 	"io"
 	"net"
 	"sync"
@@ -12,6 +13,7 @@ import (
 type obfsPacketConn struct {
 	first     bool
 	leaveSize int32
+	closed    bool
 
 	conn net.PacketConn
 	obfs *SalamanderObfuscator
@@ -56,26 +58,33 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
+		for {
+			if c.closed {
+				c.readMutex.Unlock()
+				return 0, nil, io.EOF
+			}
+
+			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			if err != nil {
+				errors.LogDebug(context.Background(), "mask read err ", err)
+				continue
+			}
+
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), "mask read err short lenth")
+				continue
+			}
+
+			if len(p) < n-int(c.Size()) {
+				c.readMutex.Unlock()
+				return 0, nil, io.ErrShortBuffer
+			}
+
+			c.obfs.Deobfuscate(c.readBuf[:n], p)
+
 			c.readMutex.Unlock()
-			return n, addr, err
+			return n - int(c.Size()), addr, nil
 		}
-
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
-		}
-
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
-		}
-
-		c.obfs.Deobfuscate(c.readBuf[:n], p)
-
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, err
 	}
 
 	n, addr, err = c.conn.ReadFrom(p)
@@ -84,7 +93,7 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("salamander").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	c.obfs.Deobfuscate(p[:n], p)
@@ -127,6 +136,7 @@ func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *obfsPacketConn) Close() error {
+	c.closed = true
 	return c.conn.Close()
 }
 
