@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type noiseConn struct {
@@ -81,15 +82,15 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	switch c.config.ApplyTo {
 	case "", "udp":
-		if !udp(addr) {
+		if !finalmask.Udp(addr) {
 			ready = true
 		}
 	case "v4udp":
-		if !v4udp(addr) {
+		if !finalmask.Udp(addr) || finalmask.Udp(addr) && finalmask.V6udp(addr) {
 			ready = true
 		}
 	case "v6udp":
-		if !v6udp(addr) {
+		if !finalmask.V6udp(addr) {
 			ready = true
 		}
 	default:
@@ -121,23 +122,4 @@ func (c *noiseConn) Close() error {
 		close(c.stop)
 	})
 	return c.PacketConn.Close()
-}
-
-func udp(addr net.Addr) bool {
-	_, ok := addr.(*net.UDPAddr)
-	return ok
-}
-
-func v4udp(addr net.Addr) bool {
-	if v, ok := addr.(*net.UDPAddr); ok {
-		return v.IP.To4() != nil
-	}
-	return false
-}
-
-func v6udp(addr net.Addr) bool {
-	if v, ok := addr.(*net.UDPAddr); ok {
-		return v.IP.To16() != nil && v.IP.To4() == nil
-	}
-	return false
 }

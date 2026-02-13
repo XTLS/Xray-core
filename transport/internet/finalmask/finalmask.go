@@ -104,3 +104,15 @@ func UnwrapTcpMask(conn net.Conn) net.Conn {
 		}
 	}
 }
+
+func Udp(addr net.Addr) bool {
+	_, ok := addr.(*net.UDPAddr)
+	return ok
+}
+
+func V6udp(addr net.Addr) bool {
+	if v, ok := addr.(*net.UDPAddr); ok {
+		return v.IP.To16() != nil && len(v.IP.To4()) == 0
+	}
+	return false
+}
