@@ -1298,33 +1298,65 @@ var (
 	}, "type", "settings")
 )
 
+type TCPItem struct {
+	Delay  Int32Range `json:"delay"`
+	Rand   int32      `json:"rand"`
+	Packet []byte     `json:"packet"`
+}
+
 type HeaderCustomTCP struct {
-	Clients [][]uint8 `json:"clients"`
-	Servers [][]uint8 `json:"servers"`
-	Errors  [][]uint8 `json:"errors"`
+	Clients [][]TCPItem `json:"clients"`
+	Servers [][]TCPItem `json:"servers"`
+	OnError []uint8     `json:"onError"`
 }
 
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for _, value := range c.Clients {
-		if len(value) > 8192 {
-			return nil, errors.New("len > 8192")
+		for _, item := range value {
+			if len(item.Packet) > 8192 {
+				return nil, errors.New("len > 8192")
+			}
 		}
 	}
 	for _, value := range c.Servers {
-		if len(value) > 8192 {
-			return nil, errors.New("len > 8192")
+		for _, item := range value {
+			if len(item.Packet) > 8192 {
+				return nil, errors.New("len > 8192")
+			}
 		}
 	}
-	for _, value := range c.Errors {
-		if len(value) > 8192 {
-			return nil, errors.New("len > 8192")
+	if len(c.OnError) > 8192 {
+		return nil, errors.New("len > 8192")
+	}
+
+	clients := make([]*custom.TCPSequence, len(c.Clients))
+	for i, value := range c.Clients {
+		for _, item := range value {
+			clients[i].Items = append(clients[i].Items, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	servers := make([]*custom.TCPSequence, len(c.Servers))
+	for i, value := range c.Servers {
+		for _, item := range value {
+			servers[i].Items = append(servers[i].Items, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
 		}
 	}
 
 	return &custom.TCPConfig{
-		Clients: c.Clients,
-		Servers: c.Servers,
-		Errors:  c.Errors,
+		Clients: clients,
+		Servers: servers,
+		OnError: c.OnError,
 	}, nil
 }
 
