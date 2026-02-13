@@ -14,7 +14,7 @@ import (
 type noiseConn struct {
 	net.PacketConn
 	config *Config
-	m      map[string]struct{}
+	m      map[string]time.Time
 	stop   chan struct{}
 	once   sync.Once
 	mutex  sync.RWMutex
@@ -28,7 +28,7 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	conn := &noiseConn{
 		PacketConn: raw,
 		config:     c,
-		m:          make(map[string]struct{}),
+		m:          make(map[string]time.Time),
 		stop:       make(chan struct{}),
 	}
 
@@ -44,15 +44,26 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 }
 
 func (c *noiseConn) reset() {
-	ticker := time.NewTicker(time.Duration(crypto.RandBetween(c.config.ResetMin, c.config.ResetMax)) * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			c.mutex.Lock()
-			c.m = make(map[string]struct{})
-			c.mutex.Unlock()
-			ticker.Reset(time.Duration(crypto.RandBetween(c.config.ResetMin, c.config.ResetMax)) * time.Second)
+			c.mutex.RLock()
+			now := time.Now()
+			timeOut := make([]string, 0, len(c.m))
+			for key, last := range c.m {
+				if now.After(last) {
+					timeOut = append(timeOut, key)
+				}
+			}
+			c.mutex.RUnlock()
+
+			for _, key := range timeOut {
+				c.mutex.Lock()
+				delete(c.m, key)
+				c.mutex.Unlock()
+			}
 		case <-c.stop:
 			return
 		}
@@ -97,7 +108,7 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 				c.PacketConn.WriteTo(item.Packet, addr)
 				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 			}
-			c.m[addr.String()] = struct{}{}
+			c.m[addr.String()] = time.Now().Add(time.Duration(crypto.RandBetween(c.config.ResetMin, c.config.ResetMax)) * time.Second)
 		}
 		c.mutex.Unlock()
 	}
