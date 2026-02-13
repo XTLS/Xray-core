@@ -1,8 +1,6 @@
 package conf
 
 import (
-	"encoding/base64"
-	"encoding/hex"
 	"net"
 	"strings"
 
@@ -10,8 +8,8 @@ import (
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
-	"google.golang.org/protobuf/proto"
 	"github.com/xtls/xray-core/transport/internet"
+	"google.golang.org/protobuf/proto"
 )
 
 type FreedomConfig struct {
@@ -32,12 +30,12 @@ type Fragment struct {
 	MaxSplit *Int32Range `json:"maxSplit"`
 }
 
-type Noise struct {
-	Type    string      `json:"type"`
-	Packet  string      `json:"packet"`
-	Delay   *Int32Range `json:"delay"`
-	ApplyTo string      `json:"applyTo"`
-}
+// type Noise struct {
+// 	Type    string      `json:"type"`
+// 	Packet  string      `json:"packet"`
+// 	Delay   *Int32Range `json:"delay"`
+// 	ApplyTo string      `json:"applyTo"`
+// }
 
 // Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
@@ -126,17 +124,18 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noise != nil {
-		return nil, errors.PrintRemovedFeatureError("noise = { ... }", "noises = [ { ... } ]")
+		return nil, errors.PrintRemovedFeatureError("noise", "finalmask/udp noise")
 	}
 
 	if c.Noises != nil {
-		for _, n := range c.Noises {
-			NConfig, err := ParseNoise(n)
-			if err != nil {
-				return nil, err
-			}
-			config.Noises = append(config.Noises, NConfig)
-		}
+		// for _, n := range c.Noises {
+		// 	NConfig, err := ParseNoise(n)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// 	config.Noises = append(config.Noises, NConfig)
+		// }
+		return nil, errors.PrintRemovedFeatureError("noise", "finalmask/udp noise")
 	}
 
 	config.UserLevel = c.UserLevel
@@ -165,58 +164,58 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-func ParseNoise(noise *Noise) (*freedom.Noise, error) {
-	var err error
-	NConfig := new(freedom.Noise)
-	noise.Packet = strings.TrimSpace(noise.Packet)
+// func ParseNoise(noise *Noise) (*freedom.Noise, error) {
+// 	var err error
+// 	NConfig := new(freedom.Noise)
+// 	noise.Packet = strings.TrimSpace(noise.Packet)
 
-	switch noise.Type {
-	case "rand":
-		min, max, err := ParseRangeString(noise.Packet)
-		if err != nil {
-			return nil, errors.New("invalid value for rand Length").Base(err)
-		}
-		NConfig.LengthMin = uint64(min)
-		NConfig.LengthMax = uint64(max)
-		if NConfig.LengthMin == 0 {
-			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
-		}
+// 	switch noise.Type {
+// 	case "rand":
+// 		min, max, err := ParseRangeString(noise.Packet)
+// 		if err != nil {
+// 			return nil, errors.New("invalid value for rand Length").Base(err)
+// 		}
+// 		NConfig.LengthMin = uint64(min)
+// 		NConfig.LengthMax = uint64(max)
+// 		if NConfig.LengthMin == 0 {
+// 			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
+// 		}
 
-	case "str":
-		// user input string
-		NConfig.Packet = []byte(noise.Packet)
+// 	case "str":
+// 		// user input string
+// 		NConfig.Packet = []byte(noise.Packet)
 
-	case "hex":
-		// user input hex
-		NConfig.Packet, err = hex.DecodeString(noise.Packet)
-		if err != nil {
-			return nil, errors.New("Invalid hex string").Base(err)
-		}
+// 	case "hex":
+// 		// user input hex
+// 		NConfig.Packet, err = hex.DecodeString(noise.Packet)
+// 		if err != nil {
+// 			return nil, errors.New("Invalid hex string").Base(err)
+// 		}
 
-	case "base64":
-		// user input base64
-		NConfig.Packet, err = base64.RawURLEncoding.DecodeString(strings.NewReplacer("+", "-", "/", "_", "=", "").Replace(noise.Packet))
-		if err != nil {
-			return nil, errors.New("Invalid base64 string").Base(err)
-		}
+// 	case "base64":
+// 		// user input base64
+// 		NConfig.Packet, err = base64.RawURLEncoding.DecodeString(strings.NewReplacer("+", "-", "/", "_", "=", "").Replace(noise.Packet))
+// 		if err != nil {
+// 			return nil, errors.New("Invalid base64 string").Base(err)
+// 		}
 
-	default:
-		return nil, errors.New("Invalid packet, only rand/str/hex/base64 are supported")
-	}
+// 	default:
+// 		return nil, errors.New("Invalid packet, only rand/str/hex/base64 are supported")
+// 	}
 
-	if noise.Delay != nil {
-		NConfig.DelayMin = uint64(noise.Delay.From)
-		NConfig.DelayMax = uint64(noise.Delay.To)
-	}
-	switch strings.ToLower(noise.ApplyTo) {
-	case "", "ip", "all":
-		NConfig.ApplyTo = "ip"
-	case "ipv4":
-		NConfig.ApplyTo = "ipv4"
-	case "ipv6":
-		NConfig.ApplyTo = "ipv6"
-	default:
-		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
-	}
-	return NConfig, nil
-}
+// 	if noise.Delay != nil {
+// 		NConfig.DelayMin = uint64(noise.Delay.From)
+// 		NConfig.DelayMax = uint64(noise.Delay.To)
+// 	}
+// 	switch strings.ToLower(noise.ApplyTo) {
+// 	case "", "ip", "all":
+// 		NConfig.ApplyTo = "ip"
+// 	case "ipv4":
+// 		NConfig.ApplyTo = "ipv4"
+// 	case "ipv6":
+// 		NConfig.ApplyTo = "ipv6"
+// 	default:
+// 		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
+// 	}
+// 	return NConfig, nil
+// }

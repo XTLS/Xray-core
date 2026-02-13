@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
+	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
@@ -1313,14 +1314,14 @@ type HeaderCustomTCP struct {
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for _, value := range c.Clients {
 		for _, item := range value {
-			if len(item.Packet) > 8192 {
+			if len(item.Packet) > 8192 || item.Rand > 8192 {
 				return nil, errors.New("len > 8192")
 			}
 		}
 	}
 	for _, value := range c.Servers {
 		for _, item := range value {
-			if len(item.Packet) > 8192 {
+			if len(item.Packet) > 8192 || item.Rand > 8192 {
 				return nil, errors.New("len > 8192")
 			}
 		}
@@ -1360,6 +1361,36 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	}, nil
 }
 
+type NoiseItem struct {
+	Rand   Int32Range `json:"rand"`
+	Packet []byte     `json:"packet"`
+	Delay  Int32Range `json:"delay"`
+}
+
+type Noise struct {
+	Reset Int32Range  `json:"reset"`
+	Noise []NoiseItem `json:"noise"`
+}
+
+func (c *Noise) Build() (proto.Message, error) {
+	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
+	for _, item := range c.Noise {
+		noiseSlice = append(noiseSlice, &noise.Item{
+			RandMin:  int64(item.Rand.From),
+			RandMax:  int64(item.Rand.To),
+			Packet:   item.Packet,
+			DelayMin: int64(item.Delay.From),
+			DelayMax: int64(item.Delay.To),
+		})
+	}
+
+	return &noise.Config{
+		ResetMin: int64(c.Reset.From),
+		ResetMax: int64(c.Reset.To),
+		Items:    noiseSlice,
+	}, nil
+}
+
 type UDPItem struct {
 	Rand   int32  `json:"rand"`
 	Packet []byte `json:"packet"`
@@ -1371,7 +1402,7 @@ type HeaderCustomUDP struct {
 }
 
 func (c *HeaderCustomUDP) Build() (proto.Message, error) {
-	client := make([]*custom.UDPItem, len(c.Client))
+	client := make([]*custom.UDPItem, 0, len(c.Client))
 	for _, item := range c.Client {
 		client = append(client, &custom.UDPItem{
 			Rand:   item.Rand,
@@ -1379,7 +1410,7 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 		})
 	}
 
-	server := make([]*custom.UDPItem, len(c.Server))
+	server := make([]*custom.UDPItem, 0, len(c.Server))
 	for _, item := range c.Server {
 		server = append(server, &custom.UDPItem{
 			Rand:   item.Rand,
