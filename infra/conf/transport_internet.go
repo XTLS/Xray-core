@@ -1307,7 +1307,7 @@ type TCPItem struct {
 type HeaderCustomTCP struct {
 	Clients [][]TCPItem `json:"clients"`
 	Servers [][]TCPItem `json:"servers"`
-	OnError []uint8     `json:"onError"`
+	OnError []byte      `json:"onError"`
 }
 
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
