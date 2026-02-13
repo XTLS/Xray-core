@@ -195,6 +195,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
+				if streamSettings.UdpmaskManager != nil {
+					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
+					if err != nil {
+						udpConn.Close()
+						return nil, errors.New("mask err").Base(err)
+					}
+					udpConn = pktConn
+				}
+
 				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
 			},
 		}
