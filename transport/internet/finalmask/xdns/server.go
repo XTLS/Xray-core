@@ -42,7 +42,7 @@ type record struct {
 }
 
 type queue struct {
-	lash  time.Time
+	last  time.Time
 	queue chan []byte
 	stash chan []byte
 }
@@ -99,7 +99,7 @@ func (c *xdnsConnServer) clean() {
 		now := time.Now()
 
 		for key, q := range c.writeQueueMap {
-			if now.Sub(q.lash) >= idleTimeout {
+			if now.Sub(q.last) >= idleTimeout {
 				close(q.queue)
 				close(q.stash)
 				delete(c.writeQueueMap, key)
@@ -133,7 +133,7 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 		}
 		c.writeQueueMap[addr.String()] = q
 	}
-	q.lash = time.Now()
+	q.last = time.Now()
 
 	return q
 }

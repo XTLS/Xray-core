@@ -16,6 +16,7 @@ import (
 type tcpCustomClient struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
+	merged  [][]byte
 }
 
 type tcpCustomClientConn struct {
@@ -36,18 +37,13 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		},
 	}
 
-	for _, client := range conn.header.clients {
+	conn.header.merged = make([][]byte, len(conn.header.clients))
+	for index, client := range conn.header.clients {
 		for _, item := range client.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, item.Rand)
-			}
-		}
-	}
-
-	for _, server := range conn.header.servers {
-		for _, item := range server.Sequence {
-			if item.Rand > 0 {
-				item.Packet = make([]byte, item.Rand)
+				conn.header.merged[index] = append(conn.header.merged[index], make([]byte, item.Rand)...)
+			} else {
+				conn.header.merged[index] = append(conn.header.merged[index], item.Packet...)
 			}
 		}
 	}
@@ -82,26 +78,48 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 		i := 0
 		j := 0
 		for i = range c.header.clients {
-			for _, item := range c.header.clients[i].Sequence {
-				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
-				if item.Rand > 0 {
-					common.Must2(rand.Read(item.Packet))
+			index := 0
+			from := 0
+			to := 0
+			for to < len(c.header.merged[i]) {
+				item := c.header.clients[i].Sequence[index]
+				if item.DelayMax > 0 {
+					if to-from > 0 {
+						_, err := c.Conn.Write(c.header.merged[i][from:to])
+						if err != nil {
+							c.wg.Done()
+							return
+						}
+						from = to
+					}
+					time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 				}
-				n, err = c.Conn.Write(item.Packet)
+				length := max(int(item.Rand), len(item.Packet))
+				if item.Rand > 0 {
+					common.Must2(rand.Read(c.header.merged[i][to : to+length]))
+				}
+				to += length
+				index++
+			}
+			if to-from > 0 {
+				_, err := c.Conn.Write(c.header.merged[i][from:to])
 				if err != nil {
 					c.wg.Done()
 					return
 				}
+				from = to
 			}
+
 			if j < len(c.header.servers) {
 				for _, item := range c.header.servers[j].Sequence {
-					n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
+					length := max(int(item.Rand), len(item.Packet))
+					n, err := io.ReadFull(c.Conn, buf[:length])
 					if err != nil {
 						c.wg.Done()
 						return
 					}
 					if item.Rand > 0 {
-						if n != len(item.Packet) {
+						if n != length {
 							c.wg.Done()
 							return
 						}
@@ -116,13 +134,14 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 
 		for j < len(c.header.servers) {
 			for _, item := range c.header.servers[j].Sequence {
-				n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
+				length := max(int(item.Rand), len(item.Packet))
+				n, err := io.ReadFull(c.Conn, buf[:length])
 				if err != nil {
 					c.wg.Done()
 					return
 				}
 				if item.Rand > 0 {
-					if n != len(item.Packet) {
+					if n != length {
 						c.wg.Done()
 						return
 					}
@@ -151,6 +170,7 @@ type tcpCustomServer struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
 	onError []byte
+	merged  [][]byte
 }
 
 type tcpCustomServerConn struct {
@@ -172,18 +192,13 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		},
 	}
 
-	for _, client := range conn.header.clients {
+	conn.header.merged = make([][]byte, len(conn.header.servers))
+	for index, client := range conn.header.servers {
 		for _, item := range client.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, item.Rand)
-			}
-		}
-	}
-
-	for _, server := range conn.header.servers {
-		for _, item := range server.Sequence {
-			if item.Rand > 0 {
-				item.Packet = make([]byte, item.Rand)
+				conn.header.merged[index] = append(conn.header.merged[index], make([]byte, item.Rand)...)
+			} else {
+				conn.header.merged[index] = append(conn.header.merged[index], item.Packet...)
 			}
 		}
 	}
@@ -209,13 +224,14 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 		j := 0
 		for i = range c.header.clients {
 			for _, item := range c.header.clients[i].Sequence {
-				n, err := io.ReadFull(c.Conn, buf[:len(item.Packet)])
+				length := max(int(item.Rand), len(item.Packet))
+				n, err := io.ReadFull(c.Conn, buf[:length])
 				if err != nil {
 					c.wg.Done()
 					return
 				}
 				if item.Rand > 0 {
-					if n != len(item.Packet) {
+					if n != length {
 						if len(c.header.onError) > 0 {
 							c.Conn.Write(c.header.onError)
 						}
@@ -230,33 +246,74 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 					return
 				}
 			}
+
 			if j < len(c.header.servers) {
-				for _, item := range c.header.servers[i].Sequence {
-					time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
-					if item.Rand > 0 {
-						common.Must2(rand.Read(item.Packet))
+				index := 0
+				from := 0
+				to := 0
+				for to < len(c.header.merged[j]) {
+					item := c.header.servers[j].Sequence[index]
+					if item.DelayMax > 0 {
+						if to-from > 0 {
+							_, err := c.Conn.Write(c.header.merged[j][from:to])
+							if err != nil {
+								c.wg.Done()
+								return
+							}
+							from = to
+						}
+						time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 					}
-					n, err = c.Conn.Write(item.Packet)
+					length := max(int(item.Rand), len(item.Packet))
+					if item.Rand > 0 {
+						common.Must2(rand.Read(c.header.merged[j][to : to+length]))
+					}
+					to += length
+					index++
+				}
+				if to-from > 0 {
+					_, err := c.Conn.Write(c.header.merged[j][from:to])
 					if err != nil {
 						c.wg.Done()
 						return
 					}
+					from = to
 				}
 				j++
 			}
 		}
 
 		for j < len(c.header.servers) {
-			for _, item := range c.header.servers[i].Sequence {
-				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
-				if item.Rand > 0 {
-					common.Must2(rand.Read(item.Packet))
+			index := 0
+			from := 0
+			to := 0
+			for to < len(c.header.merged[j]) {
+				item := c.header.servers[j].Sequence[index]
+				if item.DelayMax > 0 {
+					if to-from > 0 {
+						_, err := c.Conn.Write(c.header.merged[j][from:to])
+						if err != nil {
+							c.wg.Done()
+							return
+						}
+						from = to
+					}
+					time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 				}
-				n, err = c.Conn.Write(item.Packet)
+				length := max(int(item.Rand), len(item.Packet))
+				if item.Rand > 0 {
+					common.Must2(rand.Read(c.header.merged[j][to : to+length]))
+				}
+				to += length
+				index++
+			}
+			if to-from > 0 {
+				_, err := c.Conn.Write(c.header.merged[j][from:to])
 				if err != nil {
 					c.wg.Done()
 					return
 				}
+				from = to
 			}
 			j++
 		}

@@ -37,7 +37,7 @@ func mustSendRecvTcp(
 	}
 
 	if !bytes.Equal(buf[:n], msg) {
-		t.Fatalf("unexpected data")
+		t.Fatalf("unexpected data %q", buf[:n])
 	}
 }
 
@@ -57,6 +57,9 @@ func TestConnReadWrite(t *testing.T) {
 							{
 								Packet: []byte{1},
 							},
+							{
+								Rand: 1,
+							},
 						},
 					},
 				},
@@ -65,6 +68,9 @@ func TestConnReadWrite(t *testing.T) {
 						Sequence: []*custom.TCPItem{
 							{
 								Packet: []byte{2},
+							},
+							{
+								Rand: 1,
 							},
 						},
 					},
