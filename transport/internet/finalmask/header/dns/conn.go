@@ -160,12 +160,12 @@ func (c *dnsConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 			n, addr, err = c.conn.ReadFrom(c.readBuf)
 			if err != nil {
-				errors.LogDebug(context.Background(), "mask read err ", err)
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
 
 			if n < int(c.Size()) {
-				errors.LogDebug(context.Background(), "mask read err short lenth")
+				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
 				continue
 			}
 

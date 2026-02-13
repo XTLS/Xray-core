@@ -92,7 +92,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
-				errors.LogDebug(context.Background(), "mask read err ", err)
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
 
@@ -112,7 +112,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			}
 
 			if mismatch {
-				errors.LogDebug(context.Background(), "mask read err header mismatch")
+				errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
 				continue
 			}
 
@@ -269,7 +269,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
-				errors.LogDebug(context.Background(), "mask read err ", err)
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
 
@@ -289,7 +289,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			}
 
 			if mismatch {
-				errors.LogDebug(context.Background(), "mask read err header mismatch")
+				errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
 				continue
 			}
 

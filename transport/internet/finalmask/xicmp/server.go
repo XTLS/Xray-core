@@ -313,7 +313,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 	n = copy(p, packet.p)
 	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+		return 0, addr, io.ErrShortBuffer
 	}
 	return n, packet.addr, nil
 }

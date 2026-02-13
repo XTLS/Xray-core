@@ -126,12 +126,12 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 			n, addr, err = c.conn.ReadFrom(c.readBuf)
 			if err != nil {
-				errors.LogDebug(context.Background(), "mask read err ", err)
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
 
 			if n < int(c.Size()) {
-				errors.LogDebug(context.Background(), "mask read err short lenth")
+				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
 				continue
 			}
 
@@ -143,7 +143,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			ciphertext := c.readBuf[:n]
 			opened, err := c.aead.Open(nil, nil, ciphertext, nil)
 			if err != nil {
-				errors.LogDebug(context.Background(), "mask read err aead open ", err)
+				errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
 				continue
 			}
 
