@@ -69,14 +69,20 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mutex.RUnlock()
 
 	switch c.config.ApplyTo {
-	case "ipv4":
-		if v6udp(addr) {
+	case "", "udp":
+		if !udp(addr) {
 			ready = true
 		}
-	case "ipv6":
-		if v4udp(addr) {
+	case "v4udp":
+		if !v4udp(addr) {
 			ready = true
 		}
+	case "v6udp":
+		if !v6udp(addr) {
+			ready = true
+		}
+	default:
+		ready = true
 	}
 
 	if !ready {
@@ -104,6 +110,11 @@ func (c *noiseConn) Close() error {
 		close(c.stop)
 	})
 	return c.PacketConn.Close()
+}
+
+func udp(addr net.Addr) bool {
+	_, ok := addr.(*net.UDPAddr)
+	return ok
 }
 
 func v4udp(addr net.Addr) bool {
