@@ -2,8 +2,10 @@ package grpc
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/xtls/xray-core/common"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -172,7 +174,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if userAgent == "" {
 		userAgent = utils.ChromeUA
 	}
-	dialOptions = append(dialOptions, grpc.WithUserAgent(userAgent))
+	dialOptions = append(dialOptions, withExactUserAgent(userAgent))
 
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {
@@ -187,4 +189,23 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	)
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
 	return conn, err
+}
+
+// withExactUserAgent creates a grpc.DialOption that sets the user-agent to
+// exactly the given string, preventing grpc-go from appending its version.
+func withExactUserAgent(ua string) grpc.DialOption {
+	opt := grpc.WithUserAgent("")
+	v := reflect.ValueOf(opt).Elem()
+	fField := v.FieldByName("f")
+	fType := fField.Type()
+
+	newF := reflect.MakeFunc(fType, func(args []reflect.Value) []reflect.Value {
+		copts := args[0].Elem().FieldByName("copts")
+		uaField := copts.FieldByName("UserAgent")
+		*(*string)(unsafe.Pointer(uaField.UnsafeAddr())) = ua
+		return nil
+	})
+
+	reflect.NewAt(fType, unsafe.Pointer(fField.UnsafeAddr())).Elem().Set(newF)
+	return opt
 }
