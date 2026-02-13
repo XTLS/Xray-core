@@ -23,7 +23,12 @@ message TCPConfig {
     bytes on_error = 3;
 }
 
+message UDPItem {
+    int32 rand = 1;
+    bytes packet = 2;
+}
+
 message UDPConfig {
-    bytes client = 1;
-    bytes server = 2;
+    repeated UDPItem client = 1;
+    repeated UDPItem server = 2;
 }

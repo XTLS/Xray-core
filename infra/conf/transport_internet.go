@@ -1283,13 +1283,13 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
 		"header-dns":       func() interface{} { return new(Dns) },
 		"header-dtls":      func() interface{} { return new(Dtls) },
 		"header-srtp":      func() interface{} { return new(Srtp) },
 		"header-utp":       func() interface{} { return new(Utp) },
 		"header-wechat":    func() interface{} { return new(Wechat) },
 		"header-wireguard": func() interface{} { return new(Wireguard) },
-		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
@@ -1360,6 +1360,39 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	}, nil
 }
 
+type UDPItem struct {
+	Rand   int32  `json:"rand"`
+	Packet []byte `json:"packet"`
+}
+
+type HeaderCustomUDP struct {
+	Client []UDPItem `json:"client"`
+	Server []UDPItem `json:"server"`
+}
+
+func (c *HeaderCustomUDP) Build() (proto.Message, error) {
+	client := make([]*custom.UDPItem, len(c.Client))
+	for _, item := range c.Client {
+		client = append(client, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	server := make([]*custom.UDPItem, len(c.Server))
+	for _, item := range c.Server {
+		server = append(server, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	return &custom.UDPConfig{
+		Client: client,
+		Server: server,
+	}, nil
+}
+
 type Dns struct {
 	Domain string `json:"domain"`
 }
@@ -1403,18 +1436,6 @@ type Wireguard struct{}
 
 func (c *Wireguard) Build() (proto.Message, error) {
 	return &wireguard.Config{}, nil
-}
-
-type HeaderCustomUDP struct {
-	Client []uint8 `json:"client"`
-	Server []uint8 `json:"server"`
-}
-
-func (c *HeaderCustomUDP) Build() (proto.Message, error) {
-	return &custom.UDPConfig{
-		Client: c.Client,
-		Server: c.Server,
-	}, nil
 }
 
 type Original struct{}

@@ -193,17 +193,69 @@ func (x *TCPConfig) GetOnError() []byte {
 	return nil
 }
 
+type UDPItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rand          int32                  `protobuf:"varint,1,opt,name=rand,proto3" json:"rand,omitempty"`
+	Packet        []byte                 `protobuf:"bytes,2,opt,name=packet,proto3" json:"packet,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UDPItem) Reset() {
+	*x = UDPItem{}
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UDPItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UDPItem) ProtoMessage() {}
+
+func (x *UDPItem) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UDPItem.ProtoReflect.Descriptor instead.
+func (*UDPItem) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UDPItem) GetRand() int32 {
+	if x != nil {
+		return x.Rand
+	}
+	return 0
+}
+
+func (x *UDPItem) GetPacket() []byte {
+	if x != nil {
+		return x.Packet
+	}
+	return nil
+}
+
 type UDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Client        []byte                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	Server        []byte                 `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
+	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
+	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UDPConfig) Reset() {
 	*x = UDPConfig{}
-	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[3]
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -215,7 +267,7 @@ func (x *UDPConfig) String() string {
 func (*UDPConfig) ProtoMessage() {}
 
 func (x *UDPConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[3]
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -228,17 +280,17 @@ func (x *UDPConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UDPConfig.ProtoReflect.Descriptor instead.
 func (*UDPConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP(), []int{3}
+	return file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *UDPConfig) GetClient() []byte {
+func (x *UDPConfig) GetClient() []*UDPItem {
 	if x != nil {
 		return x.Client
 	}
 	return nil
 }
 
-func (x *UDPConfig) GetServer() []byte {
+func (x *UDPConfig) GetServer() []*UDPItem {
 	if x != nil {
 		return x.Server
 	}
@@ -260,10 +312,13 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\tTCPConfig\x12V\n" +
 	"\aclients\x18\x01 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aclients\x12V\n" +
 	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12\x19\n" +
-	"\bon_error\x18\x03 \x01(\fR\aonError\";\n" +
-	"\tUDPConfig\x12\x16\n" +
-	"\x06client\x18\x01 \x01(\fR\x06client\x12\x16\n" +
-	"\x06server\x18\x02 \x01(\fR\x06serverB\xaf\x01\n" +
+	"\bon_error\x18\x03 \x01(\fR\aonError\"5\n" +
+	"\aUDPItem\x12\x12\n" +
+	"\x04rand\x18\x01 \x01(\x05R\x04rand\x12\x16\n" +
+	"\x06packet\x18\x02 \x01(\fR\x06packet\"\xaf\x01\n" +
+	"\tUDPConfig\x12P\n" +
+	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06serverB\xaf\x01\n" +
 	"3com.xray.transport.internet.finalmask.header.customP\x01ZDgithub.com/xtls/xray-core/transport/internet/finalmask/header/custom\xaa\x02/Xray.Transport.Internet.Finalmask.Header.Customb\x06proto3"
 
 var (
@@ -278,22 +333,25 @@ func file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP() 
 	return file_transport_internet_finalmask_header_custom_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_header_custom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_transport_internet_finalmask_header_custom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_transport_internet_finalmask_header_custom_config_proto_goTypes = []any{
 	(*TCPItem)(nil),     // 0: xray.transport.internet.finalmask.header.custom.TCPItem
 	(*TCPSequence)(nil), // 1: xray.transport.internet.finalmask.header.custom.TCPSequence
 	(*TCPConfig)(nil),   // 2: xray.transport.internet.finalmask.header.custom.TCPConfig
-	(*UDPConfig)(nil),   // 3: xray.transport.internet.finalmask.header.custom.UDPConfig
+	(*UDPItem)(nil),     // 3: xray.transport.internet.finalmask.header.custom.UDPItem
+	(*UDPConfig)(nil),   // 4: xray.transport.internet.finalmask.header.custom.UDPConfig
 }
 var file_transport_internet_finalmask_header_custom_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.finalmask.header.custom.TCPSequence.sequence:type_name -> xray.transport.internet.finalmask.header.custom.TCPItem
 	1, // 1: xray.transport.internet.finalmask.header.custom.TCPConfig.clients:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
 	1, // 2: xray.transport.internet.finalmask.header.custom.TCPConfig.servers:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 3: xray.transport.internet.finalmask.header.custom.UDPConfig.client:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	3, // 4: xray.transport.internet.finalmask.header.custom.UDPConfig.server:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_header_custom_config_proto_init() }
@@ -307,7 +365,7 @@ func file_transport_internet_finalmask_header_custom_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_header_custom_config_proto_rawDesc), len(file_transport_internet_finalmask_header_custom_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

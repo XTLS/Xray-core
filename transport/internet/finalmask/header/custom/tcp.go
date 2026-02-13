@@ -39,7 +39,7 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	for _, client := range conn.header.clients {
 		for _, item := range client.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, 0, item.Rand)
+				item.Packet = make([]byte, item.Rand)
 			}
 		}
 	}
@@ -47,7 +47,7 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	for _, server := range conn.header.servers {
 		for _, item := range server.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, 0, item.Rand)
+				item.Packet = make([]byte, item.Rand)
 			}
 		}
 	}
@@ -175,7 +175,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	for _, client := range conn.header.clients {
 		for _, item := range client.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, 0, item.Rand)
+				item.Packet = make([]byte, item.Rand)
 			}
 		}
 	}
@@ -183,7 +183,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	for _, server := range conn.header.servers {
 		for _, item := range server.Sequence {
 			if item.Rand > 0 {
-				item.Packet = make([]byte, 0, item.Rand)
+				item.Packet = make([]byte, item.Rand)
 			}
 		}
 	}
@@ -216,6 +216,9 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				}
 				if item.Rand > 0 {
 					if n != len(item.Packet) {
+						if len(c.header.onError) > 0 {
+							c.Conn.Write(c.header.onError)
+						}
 						c.wg.Done()
 						return
 					}

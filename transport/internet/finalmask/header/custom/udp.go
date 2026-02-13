@@ -2,23 +2,32 @@ package custom
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"net"
 	sync "sync"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 )
 
 type udpCustomClient struct {
-	client []byte
-	server []byte
-
-	clientSize int32
-	serverSize int32
+	client []*UDPItem
+	server []*UDPItem
+	merged []byte
 }
 
 func (h *udpCustomClient) Serialize(b []byte) {
-	copy(b, h.client)
+	index := 0
+	for _, item := range h.client {
+		if item.Rand > 0 {
+			common.Must2(rand.Read(h.merged[index : index+int(item.Rand)]))
+			index += int(item.Rand)
+		} else {
+			index += len(item.Packet)
+		}
+	}
+	copy(b, h.merged)
 }
 
 type udpCustomClientConn struct {
@@ -43,9 +52,6 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 		header: &udpCustomClient{
 			client: c.Client,
 			server: c.Server,
-
-			clientSize: int32(len(c.Client)),
-			serverSize: int32(len(c.Server)),
 		},
 	}
 
@@ -54,11 +60,22 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 		conn.writeBuf = make([]byte, 8192)
 	}
 
+	index := 0
+	for _, item := range conn.header.client {
+		if item.Rand > 0 {
+			conn.header.merged = append(conn.header.merged, make([]byte, item.Rand)...)
+			index += int(item.Rand)
+		} else {
+			conn.header.merged = append(conn.header.merged, item.Packet...)
+			index += len(item.Packet)
+		}
+	}
+
 	return conn, nil
 }
 
 func (c *udpCustomClientConn) Size() int32 {
-	return c.header.clientSize
+	return int32(len(c.header.merged))
 }
 
 func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
@@ -71,25 +88,29 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return n, addr, err
 		}
 
-		if n < int(c.header.serverSize) {
+		index := 0
+		for _, item := range c.header.server {
+			length := max(int(item.Rand), len(item.Packet))
+			if index+length > n {
+				c.readMutex.Unlock()
+				return 0, addr, errors.New("header mismatch")
+			}
+			if len(item.Packet) > 0 && !bytes.Equal(item.Packet, c.readBuf[index:index+length]) {
+				c.readMutex.Unlock()
+				return 0, addr, errors.New("header mismatch")
+			}
+			index += length
+		}
+
+		if len(p) < n-index {
 			c.readMutex.Unlock()
 			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 		}
 
-		if len(p) < n-int(c.header.serverSize) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		if !bytes.Equal(c.header.server, c.readBuf[:c.header.serverSize]) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header mismatch")
-		}
-
-		copy(p, c.readBuf[c.header.serverSize:n])
+		copy(p, c.readBuf[index:n])
 
 		c.readMutex.Unlock()
-		return n - int(c.header.serverSize), addr, err
+		return n - index, addr, err
 	}
 
 	n, addr, err = c.PacketConn.ReadFrom(p)
@@ -97,17 +118,21 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return n, addr, err
 	}
 
-	if n < int(c.header.serverSize) {
-		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+	index := 0
+	for _, item := range c.header.server {
+		length := max(int(item.Rand), len(item.Packet))
+		if index+length > n {
+			return 0, addr, errors.New("header mismatch")
+		}
+		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, p[index:index+length]) {
+			return 0, addr, errors.New("header mismatch")
+		}
+		index += length
 	}
 
-	if !bytes.Equal(c.header.server, p[:c.header.serverSize]) {
-		return 0, addr, errors.New("header mismatch")
-	}
+	copy(p, p[index:n])
 
-	copy(p, p[c.header.serverSize:n])
-
-	return n - int(c.header.serverSize), addr, err
+	return n - index, addr, err
 }
 
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -145,15 +170,22 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 }
 
 type udpCustomServer struct {
-	client []byte
-	server []byte
-
-	clientSize int32
-	serverSize int32
+	client []*UDPItem
+	server []*UDPItem
+	merged []byte
 }
 
 func (h *udpCustomServer) Serialize(b []byte) {
-	copy(b, h.server)
+	index := 0
+	for _, item := range h.server {
+		if item.Rand > 0 {
+			common.Must2(rand.Read(h.merged[index : index+int(item.Rand)]))
+			index += int(item.Rand)
+		} else {
+			index += len(item.Packet)
+		}
+	}
+	copy(b, h.merged)
 }
 
 type udpCustomServerConn struct {
@@ -178,9 +210,6 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 		header: &udpCustomServer{
 			client: c.Client,
 			server: c.Server,
-
-			clientSize: int32(len(c.Client)),
-			serverSize: int32(len(c.Server)),
 		},
 	}
 
@@ -189,11 +218,22 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 		conn.writeBuf = make([]byte, 8192)
 	}
 
+	index := 0
+	for _, item := range conn.header.server {
+		if item.Rand > 0 {
+			conn.header.merged = append(conn.header.merged, make([]byte, item.Rand)...)
+			index += int(item.Rand)
+		} else {
+			conn.header.merged = append(conn.header.merged, item.Packet...)
+			index += len(item.Packet)
+		}
+	}
+
 	return conn, nil
 }
 
 func (c *udpCustomServerConn) Size() int32 {
-	return c.header.serverSize
+	return int32(len(c.header.merged))
 }
 
 func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
@@ -206,25 +246,29 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return n, addr, err
 		}
 
-		if n < int(c.header.clientSize) {
+		index := 0
+		for _, item := range c.header.client {
+			length := max(int(item.Rand), len(item.Packet))
+			if index+length > n {
+				c.readMutex.Unlock()
+				return 0, addr, errors.New("header mismatch")
+			}
+			if len(item.Packet) > 0 && !bytes.Equal(item.Packet, c.readBuf[index:index+length]) {
+				c.readMutex.Unlock()
+				return 0, addr, errors.New("header mismatch")
+			}
+			index += length
+		}
+
+		if len(p) < n-index {
 			c.readMutex.Unlock()
 			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
 		}
 
-		if len(p) < n-int(c.header.clientSize) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		if !bytes.Equal(c.header.client, c.readBuf[:c.header.clientSize]) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("checksum mismatch")
-		}
-
-		copy(p, c.readBuf[c.header.clientSize:n])
+		copy(p, c.readBuf[index:n])
 
 		c.readMutex.Unlock()
-		return n - int(c.header.clientSize), addr, err
+		return n - index, addr, err
 	}
 
 	n, addr, err = c.PacketConn.ReadFrom(p)
@@ -232,17 +276,21 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return n, addr, err
 	}
 
-	if n < int(c.header.clientSize) {
-		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+	index := 0
+	for _, item := range c.header.client {
+		length := max(int(item.Rand), len(item.Packet))
+		if index+length > n {
+			return 0, addr, errors.New("header mismatch")
+		}
+		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, p[index:index+length]) {
+			return 0, addr, errors.New("header mismatch")
+		}
+		index += length
 	}
 
-	if !bytes.Equal(c.header.client, p[:c.header.clientSize]) {
-		return 0, addr, errors.New("checksum mismatch")
-	}
+	copy(p, p[index:n])
 
-	copy(p, p[c.header.clientSize:n])
-
-	return n - int(c.header.clientSize), addr, err
+	return n - index, addr, err
 }
 
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {

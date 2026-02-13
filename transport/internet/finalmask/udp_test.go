@@ -86,8 +86,22 @@ func TestPacketConnReadWrite(t *testing.T) {
 		{
 			name: "custom",
 			mask: &custom.UDPConfig{
-				Client: []byte{1, 1, 1},
-				Server: []byte{},
+				Client: []*custom.UDPItem{
+					{
+						Packet: []byte{1},
+					},
+					{
+						Rand: 1,
+					},
+				},
+				Server: []*custom.UDPItem{
+					{
+						Packet: []byte{1},
+					},
+					{
+						Rand: 1,
+					},
+				},
 			},
 		},
 		{
