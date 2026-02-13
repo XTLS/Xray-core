@@ -23,21 +23,6 @@ type FreedomConfig struct {
 	ProxyProtocol  uint32    `json:"proxyProtocol"`
 }
 
-type Fragment struct {
-	Packets  string      `json:"packets"`
-	Length   *Int32Range `json:"length"`
-	Interval *Int32Range `json:"interval"`
-	MaxSplit *Int32Range `json:"maxSplit"`
-}
-
-// type Noise struct {
-// 	Type    string      `json:"type"`
-// 	Packet  string      `json:"packet"`
-// 	Delay   *Int32Range `json:"delay"`
-// 	ApplyTo string      `json:"applyTo"`
-// }
-
-// Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
 	config := new(freedom.Config)
 	targetStrategy := c.TargetStrategy
@@ -72,55 +57,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fragment != nil {
-		config.Fragment = new(freedom.Fragment)
-
-		switch strings.ToLower(c.Fragment.Packets) {
-		case "tlshello":
-			// TLS Hello Fragmentation (into multiple handshake messages)
-			config.Fragment.PacketsFrom = 0
-			config.Fragment.PacketsTo = 1
-		case "":
-			// TCP Segmentation (all packets)
-			config.Fragment.PacketsFrom = 0
-			config.Fragment.PacketsTo = 0
-		default:
-			// TCP Segmentation (range)
-			from, to, err := ParseRangeString(c.Fragment.Packets)
-			if err != nil {
-				return nil, errors.New("Invalid PacketsFrom").Base(err)
-			}
-			config.Fragment.PacketsFrom = uint64(from)
-			config.Fragment.PacketsTo = uint64(to)
-			if config.Fragment.PacketsFrom == 0 {
-				return nil, errors.New("PacketsFrom can't be 0")
-			}
-		}
-
-		{
-			if c.Fragment.Length == nil {
-				return nil, errors.New("Length can't be empty")
-			}
-			config.Fragment.LengthMin = uint64(c.Fragment.Length.From)
-			config.Fragment.LengthMax = uint64(c.Fragment.Length.To)
-			if config.Fragment.LengthMin == 0 {
-				return nil, errors.New("LengthMin can't be 0")
-			}
-		}
-
-		{
-			if c.Fragment.Interval == nil {
-				return nil, errors.New("Interval can't be empty")
-			}
-			config.Fragment.IntervalMin = uint64(c.Fragment.Interval.From)
-			config.Fragment.IntervalMax = uint64(c.Fragment.Interval.To)
-		}
-
-		{
-			if c.Fragment.MaxSplit != nil {
-				config.Fragment.MaxSplitMin = uint64(c.Fragment.MaxSplit.From)
-				config.Fragment.MaxSplitMax = uint64(c.Fragment.MaxSplit.To)
-			}
-		}
+		return nil, errors.PrintRemovedFeatureError("fragment", "finalmask/tcp fragment")
 	}
 
 	if c.Noise != nil {
@@ -128,13 +65,6 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noises != nil {
-		// for _, n := range c.Noises {
-		// 	NConfig, err := ParseNoise(n)
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
-		// 	config.Noises = append(config.Noises, NConfig)
-		// }
 		return nil, errors.PrintRemovedFeatureError("noise", "finalmask/udp noise")
 	}
 
@@ -163,59 +93,3 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 	return config, nil
 }
-
-// func ParseNoise(noise *Noise) (*freedom.Noise, error) {
-// 	var err error
-// 	NConfig := new(freedom.Noise)
-// 	noise.Packet = strings.TrimSpace(noise.Packet)
-
-// 	switch noise.Type {
-// 	case "rand":
-// 		min, max, err := ParseRangeString(noise.Packet)
-// 		if err != nil {
-// 			return nil, errors.New("invalid value for rand Length").Base(err)
-// 		}
-// 		NConfig.LengthMin = uint64(min)
-// 		NConfig.LengthMax = uint64(max)
-// 		if NConfig.LengthMin == 0 {
-// 			return nil, errors.New("rand lengthMin or lengthMax cannot be 0")
-// 		}
-
-// 	case "str":
-// 		// user input string
-// 		NConfig.Packet = []byte(noise.Packet)
-
-// 	case "hex":
-// 		// user input hex
-// 		NConfig.Packet, err = hex.DecodeString(noise.Packet)
-// 		if err != nil {
-// 			return nil, errors.New("Invalid hex string").Base(err)
-// 		}
-
-// 	case "base64":
-// 		// user input base64
-// 		NConfig.Packet, err = base64.RawURLEncoding.DecodeString(strings.NewReplacer("+", "-", "/", "_", "=", "").Replace(noise.Packet))
-// 		if err != nil {
-// 			return nil, errors.New("Invalid base64 string").Base(err)
-// 		}
-
-// 	default:
-// 		return nil, errors.New("Invalid packet, only rand/str/hex/base64 are supported")
-// 	}
-
-// 	if noise.Delay != nil {
-// 		NConfig.DelayMin = uint64(noise.Delay.From)
-// 		NConfig.DelayMax = uint64(noise.Delay.To)
-// 	}
-// 	switch strings.ToLower(noise.ApplyTo) {
-// 	case "", "ip", "all":
-// 		NConfig.ApplyTo = "ip"
-// 	case "ipv4":
-// 		NConfig.ApplyTo = "ipv4"
-// 	case "ipv6":
-// 		NConfig.ApplyTo = "ipv6"
-// 	default:
-// 		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
-// 	}
-// 	return NConfig, nil
-// }

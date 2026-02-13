@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
@@ -1359,6 +1360,50 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		Servers: servers,
 		OnError: c.OnError,
 	}, nil
+}
+
+type Fragment struct {
+	Packets  string     `json:"packets"`
+	Length   Int32Range `json:"length"`
+	Delay    Int32Range `json:"delay"`
+	MaxSplit Int32Range `json:"maxSplit"`
+}
+
+func (c *Fragment) Build() (proto.Message, error) {
+	config := &fragment.Config{}
+
+	switch strings.ToLower(c.Packets) {
+	case "tlshello":
+		config.PacketsFrom = 0
+		config.PacketsTo = 1
+	case "":
+		config.PacketsFrom = 0
+		config.PacketsTo = 0
+	default:
+		from, to, err := ParseRangeString(c.Packets)
+		if err != nil {
+			return nil, errors.New("Invalid PacketsFrom").Base(err)
+		}
+		config.PacketsFrom = int64(from)
+		config.PacketsTo = int64(to)
+		if config.PacketsFrom == 0 {
+			return nil, errors.New("PacketsFrom can't be 0")
+		}
+	}
+
+	config.LengthMin = int64(c.Length.From)
+	config.LengthMax = int64(c.Length.To)
+	if config.LengthMin == 0 {
+		return nil, errors.New("LengthMin can't be 0")
+	}
+
+	config.DelayMin = int64(c.Delay.From)
+	config.DelayMax = int64(c.Delay.To)
+
+	config.MaxSplitMin = int64(c.MaxSplit.From)
+	config.MaxSplitMax = int64(c.MaxSplit.To)
+
+	return config, nil
 }
 
 type NoiseItem struct {

@@ -2,14 +2,10 @@ package freedom
 
 import (
 	"context"
-	"crypto/rand"
-	"io"
-	"time"
 
 	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -178,28 +174,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
-			if h.config.Fragment != nil {
-				errors.LogDebug(ctx, "FRAGMENT", h.config.Fragment.PacketsFrom, h.config.Fragment.PacketsTo, h.config.Fragment.LengthMin, h.config.Fragment.LengthMax,
-					h.config.Fragment.IntervalMin, h.config.Fragment.IntervalMax, h.config.Fragment.MaxSplitMin, h.config.Fragment.MaxSplitMax)
-				writer = buf.NewWriter(&FragmentWriter{
-					fragment: h.config.Fragment,
-					writer:   conn,
-				})
-			} else {
-				writer = buf.NewWriter(conn)
-			}
+			writer = buf.NewWriter(conn)
 		} else {
 			writer = NewPacketWriter(conn, h, UDPOverride, destination)
-			if h.config.Noises != nil {
-				errors.LogDebug(ctx, "NOISE", h.config.Noises)
-				writer = &NoisePacketWriter{
-					Writer:      writer,
-					noises:      h.config.Noises,
-					firstWrite:  true,
-					UDPOverride: UDPOverride,
-					remoteAddr:  net.DestinationFromAddr(conn.RemoteAddr()).Address,
-				}
-			}
 		}
 
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
@@ -418,162 +395,4 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	return nil
-}
-
-type NoisePacketWriter struct {
-	buf.Writer
-	noises      []*Noise
-	firstWrite  bool
-	UDPOverride net.Destination
-	remoteAddr  net.Address
-}
-
-// MultiBuffer writer with Noise before first packet
-func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	if w.firstWrite {
-		w.firstWrite = false
-		//Do not send Noise for dns requests(just to be safe)
-		if w.UDPOverride.Port == 53 {
-			return w.Writer.WriteMultiBuffer(mb)
-		}
-		var noise []byte
-		var err error
-		if w.remoteAddr.Family().IsDomain() {
-			panic("impossible, remoteAddr is always IP")
-		}
-		for _, n := range w.noises {
-			switch n.ApplyTo {
-			case "ipv4":
-				if w.remoteAddr.Family().IsIPv6() {
-					continue
-				}
-			case "ipv6":
-				if w.remoteAddr.Family().IsIPv4() {
-					continue
-				}
-			case "ip":
-			default:
-				panic("unreachable, applyTo is ip/ipv4/ipv6")
-			}
-			//User input string or base64 encoded string or hex string
-			if n.Packet != nil {
-				noise = n.Packet
-			} else {
-				//Random noise
-				noise, err = GenerateRandomBytes(crypto.RandBetween(int64(n.LengthMin),
-					int64(n.LengthMax)))
-			}
-			if err != nil {
-				return err
-			}
-			err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
-			if err != nil {
-				return err
-			}
-
-			if n.DelayMin != 0 || n.DelayMax != 0 {
-				time.Sleep(time.Duration(crypto.RandBetween(int64(n.DelayMin), int64(n.DelayMax))) * time.Millisecond)
-			}
-		}
-
-	}
-	return w.Writer.WriteMultiBuffer(mb)
-}
-
-type FragmentWriter struct {
-	fragment *Fragment
-	writer   io.Writer
-	count    uint64
-}
-
-func (f *FragmentWriter) Write(b []byte) (int, error) {
-	f.count++
-
-	if f.fragment.PacketsFrom == 0 && f.fragment.PacketsTo == 1 {
-		if f.count != 1 || len(b) <= 5 || b[0] != 22 {
-			return f.writer.Write(b)
-		}
-		recordLen := 5 + ((int(b[3]) << 8) | int(b[4]))
-		if len(b) < recordLen { // maybe already fragmented somehow
-			return f.writer.Write(b)
-		}
-		data := b[5:recordLen]
-		buff := make([]byte, 2048)
-		var hello []byte
-		maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
-		var splitNum int64
-		for from := 0; ; {
-			to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-			splitNum++
-			if to > len(data) || (maxSplit > 0 && splitNum >= maxSplit) {
-				to = len(data)
-			}
-			l := to - from
-			if 5+l > len(buff) {
-				buff = make([]byte, 5+l)
-			}
-			copy(buff[:3], b)
-			copy(buff[5:], data[from:to])
-			from = to
-			buff[3] = byte(l >> 8)
-			buff[4] = byte(l)
-			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
-				hello = append(hello, buff[:5+l]...)
-			} else {
-				_, err := f.writer.Write(buff[:5+l])
-				time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
-				if err != nil {
-					return 0, err
-				}
-			}
-			if from == len(data) {
-				if len(hello) > 0 {
-					_, err := f.writer.Write(hello)
-					if err != nil {
-						return 0, err
-					}
-				}
-				if len(b) > recordLen {
-					n, err := f.writer.Write(b[recordLen:])
-					if err != nil {
-						return recordLen + n, err
-					}
-				}
-				return len(b), nil
-			}
-		}
-	}
-
-	if f.fragment.PacketsFrom != 0 && (f.count < f.fragment.PacketsFrom || f.count > f.fragment.PacketsTo) {
-		return f.writer.Write(b)
-	}
-	maxSplit := crypto.RandBetween(int64(f.fragment.MaxSplitMin), int64(f.fragment.MaxSplitMax))
-	var splitNum int64
-	for from := 0; ; {
-		to := from + int(crypto.RandBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
-		splitNum++
-		if to > len(b) || (maxSplit > 0 && splitNum >= maxSplit) {
-			to = len(b)
-		}
-		n, err := f.writer.Write(b[from:to])
-		from += n
-		if err != nil {
-			return from, err
-		}
-		time.Sleep(time.Duration(crypto.RandBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
-		if from >= len(b) {
-			return from, nil
-		}
-	}
-}
-
-func GenerateRandomBytes(n int64) ([]byte, error) {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	// Note that err == nil only if we read len(b) bytes.
-	if err != nil {
-		return nil, err
-	}
-
-	return b, nil
 }
