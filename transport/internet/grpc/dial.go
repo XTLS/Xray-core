@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/xtls/xray-core/common"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -174,7 +173,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	if userAgent == "" {
 		userAgent = utils.ChromeUA
 	}
-	dialOptions = append(dialOptions, withExactUserAgent(userAgent))
+	dialOptions = append(dialOptions, grpc.WithUserAgent(userAgent))
 
 	var grpcDestHost string
 	if dest.Address.Family().IsDomain() {
@@ -187,35 +186,17 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
+	if err == nil {
+		setUserAgent(conn, userAgent)
+	}
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
 	return conn, err
 }
 
-// withExactUserAgent creates a grpc.DialOption that sets the user-agent to
-// exactly the given string, preventing grpc-go from appending its version.
-func withExactUserAgent(ua string) grpc.DialOption {
-	opt := grpc.WithUserAgent(ua)
-	v := reflect.ValueOf(opt).Elem()
-	fField := v.FieldByName("f")
-	if !fField.IsValid() {
-		return opt
+// setUserAgent overrides the user-agent on a ClientConn to remove the
+// "grpc-go/version" suffix that grpc.WithUserAgent unconditionally appends.
+func setUserAgent(conn *grpc.ClientConn, ua string) {
+	if f := reflect.ValueOf(conn).Elem().FieldByName("dopts").FieldByName("copts").FieldByName("UserAgent"); f.IsValid() {
+		*(*string)(f.Addr().UnsafePointer()) = ua
 	}
-	fType := fField.Type()
-
-	newF := reflect.MakeFunc(fType, func(args []reflect.Value) []reflect.Value {
-		copts := args[0].Elem().FieldByName("copts")
-		if !copts.IsValid() {
-			return nil
-		}
-		uaField := copts.FieldByName("UserAgent")
-		if !uaField.IsValid() || !uaField.CanAddr() {
-			return nil
-		}
-		*(*string)(unsafe.Pointer(uaField.UnsafeAddr())) = ua
-		return nil
-	})
-
-	fAddr := unsafe.Pointer(fField.UnsafeAddr())
-	reflect.NewAt(fType, fAddr).Elem().Set(newF)
-	return opt
 }

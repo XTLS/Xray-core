@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,20 +119,11 @@ func TestConfig_GetTunMultiStreamName(t *testing.T) {
 	}
 }
 
-func TestWithExactUserAgent(t *testing.T) {
-	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
-
-	conn, err := grpc.NewClient("localhost:50051",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		withExactUserAgent(ua),
-	)
+func TestSetUserAgent(t *testing.T) {
+	ua := "Test/1.0"
+	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUserAgent(ua))
 	assert.NoError(t, err)
 	defer conn.Close()
-
-	v := reflect.ValueOf(conn).Elem()
-	dopts := v.FieldByName("dopts")
-	copts := dopts.FieldByName("copts")
-	uaField := copts.FieldByName("UserAgent")
-	assert.Equal(t, ua, uaField.String())
-	assert.False(t, strings.Contains(uaField.String(), "grpc-go"))
+	setUserAgent(conn, ua)
+	assert.Equal(t, ua, reflect.ValueOf(conn).Elem().FieldByName("dopts").FieldByName("copts").FieldByName("UserAgent").String())
 }
