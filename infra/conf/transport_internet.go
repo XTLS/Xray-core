@@ -1318,12 +1318,18 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 			if len(item.Packet) > 8192 || item.Rand > 8192 {
 				return nil, errors.New("len > 8192")
 			}
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 &&  item.Rand > 0")
+			}
 		}
 	}
 	for _, value := range c.Servers {
 		for _, item := range value {
 			if len(item.Packet) > 8192 || item.Rand > 8192 {
 				return nil, errors.New("len > 8192")
+			}
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 &&  item.Rand > 0")
 			}
 		}
 	}
@@ -1421,6 +1427,12 @@ type Noise struct {
 }
 
 func (c *Noise) Build() (proto.Message, error) {
+	for _, item := range c.Noise {
+		if len(item.Packet) > 0 && item.Rand.To > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
+		}
+	}
+
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
 		noiseSlice = append(noiseSlice, &noise.Item{
@@ -1451,6 +1463,17 @@ type HeaderCustomUDP struct {
 }
 
 func (c *HeaderCustomUDP) Build() (proto.Message, error) {
+	for _, item := range c.Client {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+	for _, item := range c.Server {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+
 	client := make([]*custom.UDPItem, 0, len(c.Client))
 	for _, item := range c.Client {
 		client = append(client, &custom.UDPItem{
