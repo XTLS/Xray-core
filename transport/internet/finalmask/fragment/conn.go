@@ -11,28 +11,38 @@ type fragmentConn struct {
 	net.Conn
 	config *Config
 	count  uint64
+
+	server bool
 }
 
-func NewConnClient(c *Config, raw net.Conn) (net.Conn, error) {
+func NewConnClient(c *Config, raw net.Conn, server bool) (net.Conn, error) {
 	conn := &fragmentConn{
 		Conn:   raw,
 		config: c,
+
+		server: server,
 	}
 
 	return conn, nil
 }
 
-func NewConnServer(c *Config, raw net.Conn) (net.Conn, error) {
-	return NewConnClient(c, raw)
+func NewConnServer(c *Config, raw net.Conn, server bool) (net.Conn, error) {
+	return NewConnClient(c, raw, server)
 }
 
 func (c *fragmentConn) TcpMaskConn() {}
 
 func (c *fragmentConn) RawConn() net.Conn {
+	if c.server {
+		return c
+	}
 	return c.Conn
 }
 
 func (c *fragmentConn) Splice() bool {
+	if c.server {
+		return false
+	}
 	return true
 }
 
