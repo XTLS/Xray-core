@@ -62,10 +62,6 @@ func (c *tcpCustomClientConn) RawConn() net.Conn {
 }
 
 func (c *tcpCustomClientConn) Splice() bool {
-	type Splice interface{ Splice() bool }
-	if v, ok := c.Conn.(Splice); ok {
-		return true && v.Splice()
-	}
 	return true
 }
 
@@ -225,10 +221,6 @@ func (c *tcpCustomServerConn) RawConn() net.Conn {
 }
 
 func (c *tcpCustomServerConn) Splice() bool {
-	type Splice interface{ Splice() bool }
-	if v, ok := c.Conn.(Splice); ok {
-		return true && v.Splice()
-	}
 	return true
 }
 

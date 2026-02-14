@@ -33,10 +33,6 @@ func (c *fragmentConn) RawConn() net.Conn {
 }
 
 func (c *fragmentConn) Splice() bool {
-	type Splice interface{ Splice() bool }
-	if v, ok := c.Conn.(Splice); ok {
-		return true && v.Splice()
-	}
 	return true
 }
 

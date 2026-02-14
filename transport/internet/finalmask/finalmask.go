@@ -96,9 +96,25 @@ type TcpMaskConn interface {
 	Splice() bool
 }
 
+func SpliceAble(conn net.Conn) bool {
+	for {
+		if v, ok := conn.(TcpMaskConn); ok {
+			if !v.Splice() {
+				return false
+			}
+			conn = v.RawConn()
+		} else {
+			return true
+		}
+	}
+}
+
 func UnwrapTcpMask(conn net.Conn) net.Conn {
 	for {
 		if v, ok := conn.(TcpMaskConn); ok {
+			if !v.Splice() {
+				return conn
+			}
 			conn = v.RawConn()
 		} else {
 			return conn
