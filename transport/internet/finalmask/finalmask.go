@@ -93,6 +93,7 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 type TcpMaskConn interface {
 	TcpMaskConn()
 	RawConn() net.Conn
+	Splice() bool
 }
 
 func UnwrapTcpMask(conn net.Conn) net.Conn {

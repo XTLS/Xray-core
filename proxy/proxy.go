@@ -793,6 +793,9 @@ func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
 	_, ok1 := iConn.(*proxyproto.Conn)
 	_, ok2 := iConn.(*net.TCPConn)
 	_, ok3 := iConn.(*internet.UnixConnWrapper)
-	_, ok4 := iConn.(finalmask.TcpMaskConn)
+	var ok4 bool
+	if v, ok := iConn.(finalmask.TcpMaskConn); ok {
+		ok4 = v.Splice()
+	}
 	return ok1 || ok2 || ok3 || ok4
 }

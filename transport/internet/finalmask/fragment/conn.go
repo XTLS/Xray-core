@@ -32,6 +32,14 @@ func (c *fragmentConn) RawConn() net.Conn {
 	return c.Conn
 }
 
+func (c *fragmentConn) Splice() bool {
+	type Splice interface{ Splice() bool }
+	if v, ok := c.Conn.(Splice); ok {
+		return true && v.Splice()
+	}
+	return true
+}
+
 func (c *fragmentConn) Write(p []byte) (n int, err error) {
 	c.count++
 

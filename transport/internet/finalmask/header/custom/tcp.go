@@ -61,6 +61,14 @@ func (c *tcpCustomClientConn) RawConn() net.Conn {
 	return c.Conn
 }
 
+func (c *tcpCustomClientConn) Splice() bool {
+	type Splice interface{ Splice() bool }
+	if v, ok := c.Conn.(Splice); ok {
+		return true && v.Splice()
+	}
+	return true
+}
+
 func (c *tcpCustomClientConn) Read(p []byte) (n int, err error) {
 	c.wg.Wait()
 
@@ -214,6 +222,14 @@ func (c *tcpCustomServerConn) RawConn() net.Conn {
 	c.wg.Wait()
 
 	return c.Conn
+}
+
+func (c *tcpCustomServerConn) Splice() bool {
+	type Splice interface{ Splice() bool }
+	if v, ok := c.Conn.(Splice); ok {
+		return true && v.Splice()
+	}
+	return true
 }
 
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
