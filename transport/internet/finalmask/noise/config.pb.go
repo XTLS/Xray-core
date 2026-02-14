@@ -101,8 +101,7 @@ type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResetMin      int64                  `protobuf:"varint,1,opt,name=reset_min,json=resetMin,proto3" json:"reset_min,omitempty"`
 	ResetMax      int64                  `protobuf:"varint,2,opt,name=reset_max,json=resetMax,proto3" json:"reset_max,omitempty"`
-	ApplyTo       string                 `protobuf:"bytes,3,opt,name=apply_to,json=applyTo,proto3" json:"apply_to,omitempty"`
-	Items         []*Item                `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
+	Items         []*Item                `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,13 +150,6 @@ func (x *Config) GetResetMax() int64 {
 	return 0
 }
 
-func (x *Config) GetApplyTo() string {
-	if x != nil {
-		return x.ApplyTo
-	}
-	return ""
-}
-
 func (x *Config) GetItems() []*Item {
 	if x != nil {
 		return x.Items
@@ -175,12 +167,11 @@ const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
 	"\brand_max\x18\x02 \x01(\x03R\arandMax\x12\x16\n" +
 	"\x06packet\x18\x03 \x01(\fR\x06packet\x12\x1b\n" +
 	"\tdelay_min\x18\x04 \x01(\x03R\bdelayMin\x12\x1b\n" +
-	"\tdelay_max\x18\x05 \x01(\x03R\bdelayMax\"\xa2\x01\n" +
+	"\tdelay_max\x18\x05 \x01(\x03R\bdelayMax\"\x87\x01\n" +
 	"\x06Config\x12\x1b\n" +
 	"\treset_min\x18\x01 \x01(\x03R\bresetMin\x12\x1b\n" +
-	"\treset_max\x18\x02 \x01(\x03R\bresetMax\x12\x19\n" +
-	"\bapply_to\x18\x03 \x01(\tR\aapplyTo\x12C\n" +
-	"\x05items\x18\x04 \x03(\v2-.xray.transport.internet.finalmask.noise.ItemR\x05itemsB\x97\x01\n" +
+	"\treset_max\x18\x02 \x01(\x03R\bresetMax\x12C\n" +
+	"\x05items\x18\x03 \x03(\v2-.xray.transport.internet.finalmask.noise.ItemR\x05itemsB\x97\x01\n" +
 	"+com.xray.transport.internet.finalmask.noiseP\x01Z<github.com/xtls/xray-core/transport/internet/finalmask/noise\xaa\x02'Xray.Transport.Internet.Finalmask.Noiseb\x06proto3"
 
 var (

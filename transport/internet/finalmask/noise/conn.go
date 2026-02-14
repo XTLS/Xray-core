@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type noiseConn struct {
@@ -79,23 +78,6 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mutex.RLock()
 	_, ready := c.m[addr.String()]
 	c.mutex.RUnlock()
-
-	switch c.config.ApplyTo {
-	case "", "udp":
-		if !finalmask.Udp(addr) {
-			ready = true
-		}
-	case "v4udp":
-		if !finalmask.Udp(addr) || finalmask.Udp(addr) && finalmask.V6udp(addr) {
-			ready = true
-		}
-	case "v6udp":
-		if !finalmask.V6udp(addr) {
-			ready = true
-		}
-	default:
-		ready = true
-	}
 
 	if !ready {
 		c.mutex.Lock()
