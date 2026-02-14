@@ -1282,6 +1282,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+		"fragment":      func() interface{} { return new(FragmentMask) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -1294,6 +1295,7 @@ var (
 		"header-wireguard": func() interface{} { return new(Wireguard) },
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
+		"noise":            func() interface{} { return new(NoiseMask) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
@@ -1370,14 +1372,14 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	}, nil
 }
 
-type Fragment struct {
+type FragmentMask struct {
 	Packets  string     `json:"packets"`
 	Length   Int32Range `json:"length"`
 	Delay    Int32Range `json:"delay"`
 	MaxSplit Int32Range `json:"maxSplit"`
 }
 
-func (c *Fragment) Build() (proto.Message, error) {
+func (c *FragmentMask) Build() (proto.Message, error) {
 	config := &fragment.Config{}
 
 	switch strings.ToLower(c.Packets) {
@@ -1420,12 +1422,12 @@ type NoiseItem struct {
 	Delay  Int32Range `json:"delay"`
 }
 
-type Noise struct {
+type NoiseMask struct {
 	Reset Int32Range  `json:"reset"`
 	Noise []NoiseItem `json:"noise"`
 }
 
-func (c *Noise) Build() (proto.Message, error) {
+func (c *NoiseMask) Build() (proto.Message, error) {
 	for _, item := range c.Noise {
 		if len(item.Packet) > 0 && item.Rand.To > 0 {
 			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
