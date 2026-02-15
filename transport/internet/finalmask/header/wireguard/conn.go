@@ -2,10 +2,10 @@ package wireguard
 
 import (
 	"context"
+	go_errors "errors"
 	"io"
 	"net"
-	sync "sync"
-	"time"
+	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -26,9 +26,8 @@ func (h *wireguare) Serialize(b []byte) {
 type wireguareConn struct {
 	first     bool
 	leaveSize int32
-	closed    bool
 
-	conn   net.PacketConn
+	net.PacketConn
 	header *wireguare
 
 	readBuf    []byte
@@ -42,8 +41,8 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		first:     first,
 		leaveSize: leaveSize,
 
-		conn:   raw,
-		header: &wireguare{},
+		PacketConn: raw,
+		header:     &wireguare{},
 	}
 
 	if first {
@@ -67,13 +66,13 @@ func (c *wireguareConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		c.readMutex.Lock()
 
 		for {
-			if c.closed {
-				c.readMutex.Unlock()
-				return 0, nil, io.EOF
-			}
-
-			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
 				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
@@ -95,7 +94,7 @@ func (c *wireguareConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		}
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
+	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
@@ -122,7 +121,7 @@ func (c *wireguareConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
 
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
 
 		if err != nil {
 			c.writeMutex.Unlock()
@@ -140,26 +139,5 @@ func (c *wireguareConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
 
-	return c.conn.WriteTo(p, addr)
-}
-
-func (c *wireguareConn) Close() error {
-	c.closed = true
-	return c.conn.Close()
-}
-
-func (c *wireguareConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *wireguareConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *wireguareConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *wireguareConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.WriteTo(p, addr)
 }

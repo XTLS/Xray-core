@@ -2,10 +2,10 @@ package salamander
 
 import (
 	"context"
+	go_errors "errors"
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -13,9 +13,8 @@ import (
 type obfsPacketConn struct {
 	first     bool
 	leaveSize int32
-	closed    bool
 
-	conn net.PacketConn
+	net.PacketConn
 	obfs *SalamanderObfuscator
 
 	readBuf    []byte
@@ -34,8 +33,8 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		first:     first,
 		leaveSize: leaveSize,
 
-		conn: raw,
-		obfs: ob,
+		PacketConn: raw,
+		obfs:       ob,
 	}
 
 	if first {
@@ -59,13 +58,13 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		c.readMutex.Lock()
 
 		for {
-			if c.closed {
-				c.readMutex.Unlock()
-				return 0, nil, io.EOF
-			}
-
-			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
 				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
@@ -87,7 +86,7 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		}
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
+	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
@@ -114,7 +113,7 @@ func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 		c.obfs.Obfuscate(c.writeBuf[c.leaveSize+c.Size():n], c.writeBuf[c.leaveSize:n])
 
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
 
 		if err != nil {
 			c.writeMutex.Unlock()
@@ -132,26 +131,5 @@ func (c *obfsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	c.obfs.Obfuscate(p[c.leaveSize+c.Size():], p[c.leaveSize:])
 
-	return c.conn.WriteTo(p, addr)
-}
-
-func (c *obfsPacketConn) Close() error {
-	c.closed = true
-	return c.conn.Close()
-}
-
-func (c *obfsPacketConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *obfsPacketConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *obfsPacketConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *obfsPacketConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.WriteTo(p, addr)
 }

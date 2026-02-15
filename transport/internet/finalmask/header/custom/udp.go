@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	go_errors "errors"
 	"io"
 	"net"
-	sync "sync"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -34,7 +35,6 @@ func (h *udpCustomClient) Serialize(b []byte) {
 type udpCustomClientConn struct {
 	first     bool
 	leaveSize int32
-	closed    bool
 
 	net.PacketConn
 	header *udpCustomClient
@@ -85,13 +85,13 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		c.readMutex.Lock()
 
 		for {
-			if c.closed {
-				c.readMutex.Unlock()
-				return 0, nil, io.EOF
-			}
-
 			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
 				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
@@ -184,11 +184,6 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	return c.PacketConn.WriteTo(p, addr)
 }
 
-func (c *udpCustomClientConn) Close() error {
-	c.closed = true
-	return c.PacketConn.Close()
-}
-
 type udpCustomServer struct {
 	client []*UDPItem
 	server []*UDPItem
@@ -211,7 +206,6 @@ func (h *udpCustomServer) Serialize(b []byte) {
 type udpCustomServerConn struct {
 	first     bool
 	leaveSize int32
-	closed    bool
 
 	net.PacketConn
 	header *udpCustomServer
@@ -262,13 +256,13 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		c.readMutex.Lock()
 
 		for {
-			if c.closed {
-				c.readMutex.Unlock()
-				return 0, nil, io.EOF
-			}
-
 			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
 				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
@@ -359,9 +353,4 @@ func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
 
 	return c.PacketConn.WriteTo(p, addr)
-}
-
-func (c *udpCustomServerConn) Close() error {
-	c.closed = true
-	return c.PacketConn.Close()
 }

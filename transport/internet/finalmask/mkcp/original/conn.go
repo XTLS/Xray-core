@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
+	go_errors "errors"
 	"hash/fnv"
 	"io"
 	"net"
-	sync "sync"
-	"time"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -78,9 +78,8 @@ func (a *simple) Open(dst, nonce, cipherText, extra []byte) ([]byte, error) {
 type simpleConn struct {
 	first     bool
 	leaveSize int32
-	closed    bool
 
-	conn net.PacketConn
+	net.PacketConn
 	aead cipher.AEAD
 
 	readBuf    []byte
@@ -94,8 +93,8 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		first:     first,
 		leaveSize: leaveSize,
 
-		conn: raw,
-		aead: &simple{},
+		PacketConn: raw,
+		aead:       &simple{},
 	}
 
 	if first {
@@ -119,13 +118,13 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		c.readMutex.Lock()
 
 		for {
-			if c.closed {
-				c.readMutex.Unlock()
-				return 0, nil, io.EOF
-			}
-
-			n, addr, err = c.conn.ReadFrom(c.readBuf)
+			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
 			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
 				errors.LogDebug(context.Background(), addr, " mask read err ", err)
 				continue
 			}
@@ -154,7 +153,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		}
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
+	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
@@ -190,7 +189,7 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		sealed := c.aead.Seal(nil, nil, plaintext, nil)
 		copy(c.writeBuf[c.leaveSize:], sealed)
 
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
 
 		if err != nil {
 			c.writeMutex.Unlock()
@@ -210,26 +209,5 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sealed := c.aead.Seal(nil, nil, plaintext, nil)
 	copy(p[c.leaveSize:], sealed)
 
-	return c.conn.WriteTo(p, addr)
-}
-
-func (c *simpleConn) Close() error {
-	c.closed = true
-	return c.conn.Close()
-}
-
-func (c *simpleConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *simpleConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *simpleConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *simpleConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.WriteTo(p, addr)
 }
