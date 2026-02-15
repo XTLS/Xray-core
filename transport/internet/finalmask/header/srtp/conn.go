@@ -6,7 +6,7 @@ import (
 	go_errors "errors"
 	"io"
 	"net"
-	sync "sync"
+	"sync"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"

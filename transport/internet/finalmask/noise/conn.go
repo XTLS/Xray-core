@@ -3,7 +3,7 @@ package noise
 import (
 	"crypto/rand"
 	"net"
-	sync "sync"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
