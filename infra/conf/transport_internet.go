@@ -18,6 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -26,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
+	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
@@ -1277,7 +1280,13 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 var (
+	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+		"fragment":      func() interface{} { return new(FragmentMask) },
+	}, "type", "settings")
+
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
 		"header-dns":       func() interface{} { return new(Dns) },
 		"header-dtls":      func() interface{} { return new(Dtls) },
 		"header-srtp":      func() interface{} { return new(Srtp) },
@@ -1286,11 +1295,206 @@ var (
 		"header-wireguard": func() interface{} { return new(Wireguard) },
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
+		"noise":            func() interface{} { return new(NoiseMask) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
 )
+
+type TCPItem struct {
+	Delay  Int32Range `json:"delay"`
+	Rand   int32      `json:"rand"`
+	Packet []byte     `json:"packet"`
+}
+
+type HeaderCustomTCP struct {
+	Clients [][]TCPItem `json:"clients"`
+	Servers [][]TCPItem `json:"servers"`
+	OnError []byte      `json:"onError"`
+}
+
+func (c *HeaderCustomTCP) Build() (proto.Message, error) {
+	for _, value := range c.Clients {
+		for _, item := range value {
+			if len(item.Packet) > 8192 || item.Rand > 8192 {
+				return nil, errors.New("len > 8192")
+			}
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			}
+		}
+	}
+	for _, value := range c.Servers {
+		for _, item := range value {
+			if len(item.Packet) > 8192 || item.Rand > 8192 {
+				return nil, errors.New("len > 8192")
+			}
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			}
+		}
+	}
+	if len(c.OnError) > 8192 {
+		return nil, errors.New("len > 8192")
+	}
+
+	clients := make([]*custom.TCPSequence, len(c.Clients))
+	for i, value := range c.Clients {
+		clients[i] = &custom.TCPSequence{}
+		for _, item := range value {
+			clients[i].Sequence = append(clients[i].Sequence, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	servers := make([]*custom.TCPSequence, len(c.Servers))
+	for i, value := range c.Servers {
+		servers[i] = &custom.TCPSequence{}
+		for _, item := range value {
+			servers[i].Sequence = append(servers[i].Sequence, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	return &custom.TCPConfig{
+		Clients: clients,
+		Servers: servers,
+		OnError: c.OnError,
+	}, nil
+}
+
+type FragmentMask struct {
+	Packets  string     `json:"packets"`
+	Length   Int32Range `json:"length"`
+	Delay    Int32Range `json:"delay"`
+	MaxSplit Int32Range `json:"maxSplit"`
+}
+
+func (c *FragmentMask) Build() (proto.Message, error) {
+	config := &fragment.Config{}
+
+	switch strings.ToLower(c.Packets) {
+	case "tlshello":
+		config.PacketsFrom = 0
+		config.PacketsTo = 1
+	case "":
+		config.PacketsFrom = 0
+		config.PacketsTo = 0
+	default:
+		from, to, err := ParseRangeString(c.Packets)
+		if err != nil {
+			return nil, errors.New("Invalid PacketsFrom").Base(err)
+		}
+		config.PacketsFrom = int64(from)
+		config.PacketsTo = int64(to)
+		if config.PacketsFrom == 0 {
+			return nil, errors.New("PacketsFrom can't be 0")
+		}
+	}
+
+	config.LengthMin = int64(c.Length.From)
+	config.LengthMax = int64(c.Length.To)
+	if config.LengthMin == 0 {
+		return nil, errors.New("LengthMin can't be 0")
+	}
+
+	config.DelayMin = int64(c.Delay.From)
+	config.DelayMax = int64(c.Delay.To)
+
+	config.MaxSplitMin = int64(c.MaxSplit.From)
+	config.MaxSplitMax = int64(c.MaxSplit.To)
+
+	return config, nil
+}
+
+type NoiseItem struct {
+	Rand   Int32Range `json:"rand"`
+	Packet []byte     `json:"packet"`
+	Delay  Int32Range `json:"delay"`
+}
+
+type NoiseMask struct {
+	Reset Int32Range  `json:"reset"`
+	Noise []NoiseItem `json:"noise"`
+}
+
+func (c *NoiseMask) Build() (proto.Message, error) {
+	for _, item := range c.Noise {
+		if len(item.Packet) > 0 && item.Rand.To > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
+		}
+	}
+
+	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
+	for _, item := range c.Noise {
+		noiseSlice = append(noiseSlice, &noise.Item{
+			RandMin:  int64(item.Rand.From),
+			RandMax:  int64(item.Rand.To),
+			Packet:   item.Packet,
+			DelayMin: int64(item.Delay.From),
+			DelayMax: int64(item.Delay.To),
+		})
+	}
+
+	return &noise.Config{
+		ResetMin: int64(c.Reset.From),
+		ResetMax: int64(c.Reset.To),
+		Items:    noiseSlice,
+	}, nil
+}
+
+type UDPItem struct {
+	Rand   int32  `json:"rand"`
+	Packet []byte `json:"packet"`
+}
+
+type HeaderCustomUDP struct {
+	Client []UDPItem `json:"client"`
+	Server []UDPItem `json:"server"`
+}
+
+func (c *HeaderCustomUDP) Build() (proto.Message, error) {
+	for _, item := range c.Client {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+	for _, item := range c.Server {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+
+	client := make([]*custom.UDPItem, 0, len(c.Client))
+	for _, item := range c.Client {
+		client = append(client, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	server := make([]*custom.UDPItem, 0, len(c.Server))
+	for _, item := range c.Server {
+		server = append(server, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	return &custom.UDPConfig{
+		Client: client,
+		Server: server,
+	}, nil
+}
 
 type Dns struct {
 	Domain string `json:"domain"`
@@ -1403,7 +1607,7 @@ type Mask struct {
 func (c *Mask) Build(tcp bool) (proto.Message, error) {
 	loader := udpmaskLoader
 	if tcp {
-		return nil, errors.New("")
+		loader = tcpmaskLoader
 	}
 
 	settings := []byte("{}")

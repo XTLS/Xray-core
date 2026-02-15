@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	go_errors "errors"
 	"io"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
@@ -42,13 +44,13 @@ type record struct {
 }
 
 type queue struct {
-	lash  time.Time
+	last  time.Time
 	queue chan []byte
 	stash chan []byte
 }
 
 type xdnsConnServer struct {
-	conn net.PacketConn
+	net.PacketConn
 
 	domain Name
 
@@ -71,7 +73,7 @@ func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	}
 
 	conn := &xdnsConnServer{
-		conn: raw,
+		PacketConn: raw,
 
 		domain: domain,
 
@@ -99,7 +101,7 @@ func (c *xdnsConnServer) clean() {
 		now := time.Now()
 
 		for key, q := range c.writeQueueMap {
-			if now.Sub(q.lash) >= idleTimeout {
+			if now.Sub(q.last) >= idleTimeout {
 				close(q.queue)
 				close(q.stash)
 				delete(c.writeQueueMap, key)
@@ -133,7 +135,7 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 		}
 		c.writeQueueMap[addr.String()] = q
 	}
-	q.lash = time.Now()
+	q.last = time.Now()
 
 	return q
 }
@@ -153,14 +155,14 @@ func (c *xdnsConnServer) stash(queue *queue, p []byte) {
 }
 
 func (c *xdnsConnServer) recvLoop() {
-	for {
-		if c.closed {
-			break
-		}
+	var buf [finalmask.UDPSize]byte
 
-		var buf [4096]byte
-		n, addr, err := c.conn.ReadFrom(buf[:])
+	for {
+		n, addr, err := c.PacketConn.ReadFrom(buf[:])
 		if err != nil {
+			if go_errors.Is(err, net.ErrClosed) {
+				break
+			}
 			continue
 		}
 
@@ -208,6 +210,16 @@ func (c *xdnsConnServer) recvLoop() {
 
 	close(c.ch)
 	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	for key, q := range c.writeQueueMap {
+		close(q.queue)
+		close(q.stash)
+		delete(c.writeQueueMap, key)
+	}
 }
 
 func (c *xdnsConnServer) sendLoop() {
@@ -304,7 +316,7 @@ func (c *xdnsConnServer) sendLoop() {
 			return
 		}
 
-		_, _ = c.conn.WriteTo(buf, rec.Addr)
+		_, _ = c.PacketConn.WriteTo(buf, rec.Addr)
 	}
 }
 
@@ -315,11 +327,12 @@ func (c *xdnsConnServer) Size() int32 {
 func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
 	n = copy(p, packet.p)
 	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
+		return n, packet.addr, io.ErrShortBuffer
 	}
 	return n, packet.addr, nil
 }
@@ -346,40 +359,6 @@ func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	default:
 		return 0, errors.New("xdns queue full")
 	}
-}
-
-func (c *xdnsConnServer) Close() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil
-	}
-
-	c.closed = true
-	for key, q := range c.writeQueueMap {
-		close(q.queue)
-		close(q.stash)
-		delete(c.writeQueueMap, key)
-	}
-
-	return c.conn.Close()
-}
-
-func (c *xdnsConnServer) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *xdnsConnServer) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *xdnsConnServer) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *xdnsConnServer) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
 }
 
 func nextPacketServer(r *bytes.Reader) ([]byte, error) {

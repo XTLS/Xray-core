@@ -10,6 +10,9 @@ import (
 
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
+	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -52,7 +55,9 @@ type xicmpConnClient struct {
 }
 
 func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
+	_, ok1 := raw.(*internet.FakePacketConn)
+	_, ok2 := raw.(*udphop.UdpHopPacketConn)
+	if !end || ok1 || ok2 {
 		return nil, errors.New("xicmp requires being at the outermost level")
 	}
 
@@ -122,8 +127,8 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if len(buf) > 8192 {
-		return nil, errors.New("xicmp len(buf) > 8192")
+	if len(buf) > finalmask.UDPSize {
+		return nil, errors.New("xicmp len(buf) > finalmask.UDPSize")
 	}
 
 	c.seqStatus[c.seq] = &seqStatus{
@@ -149,7 +154,7 @@ func (c *xicmpConnClient) recvLoop() {
 			break
 		}
 
-		var buf [8192]byte
+		var buf [finalmask.UDPSize]byte
 
 		n, addr, err := c.icmpConn.ReadFrom(buf[:])
 		if err != nil {
@@ -282,11 +287,12 @@ func (c *xicmpConnClient) Size() int32 {
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
 	n = copy(p, packet.p)
 	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
+		return n, packet.addr, io.ErrShortBuffer
 	}
 	return n, packet.addr, nil
 }

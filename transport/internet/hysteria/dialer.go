@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/task"
 	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
@@ -162,17 +164,33 @@ func (c *client) dial() error {
 		return errors.New("failed to dial to dest").Base(err)
 	}
 
-	remote := raw.RemoteAddr()
+	var pktConn net.PacketConn
+	var remote *net.UDPAddr
 
-	pktConn, ok := raw.(net.PacketConn)
-	if !ok {
+	switch conn := raw.(type) {
+	case *internet.PacketConnWrapper:
+		pktConn = conn.PacketConn
+		remote = conn.RemoteAddr().(*net.UDPAddr)
+	case *net.UDPConn:
+		pktConn = conn
+		remote = conn.RemoteAddr().(*net.UDPAddr)
+	case *cnc.Connection:
+		fakeConn := &internet.FakePacketConn{Conn: conn}
+		pktConn = fakeConn
+		remote = fakeConn.RemoteAddr().(*net.UDPAddr)
+
+		if len(c.config.Ports) > 0 {
+			raw.Close()
+			return errors.New("udphop requires being at the outermost level")
+		}
+	default:
 		raw.Close()
-		return errors.New("raw is not PacketConn")
+		return errors.New("unknown conn ", reflect.TypeOf(conn))
 	}
 
 	if len(c.config.Ports) > 0 {
 		addr := &udphop.UDPHopAddr{
-			IP:    remote.(*net.UDPAddr).IP,
+			IP:    remote.IP,
 			Ports: c.config.Ports,
 		}
 		pktConn, err = udphop.NewUDPHopPacketConn(addr, c.config.IntervalMin, c.config.IntervalMax, c.udphopDialer, pktConn, index)
@@ -341,20 +359,28 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	defer c.mutex.Unlock()
 
 	if c.status() != StatusActive {
-		errors.LogDebug(c.ctx, "stop hop on disconnected QUIC waiting to be closed")
+		errors.LogDebug(c.ctx, "skip hop: disconnected QUIC")
 		return nil, errors.New()
 	}
 
-	raw, err := internet.DialSystem(c.ctx, net.DestinationFromAddr(addr), c.socketConfig)
+	raw, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
-		errors.LogDebug(c.ctx, "failed to dial to dest skip hop")
+		errors.LogDebug(c.ctx, "skip hop: failed to dial to dest")
 		return nil, errors.New()
 	}
 
-	pktConn, ok := raw.(net.PacketConn)
-	if !ok {
-		errors.LogDebug(c.ctx, "raw is not PacketConn skip hop")
-		raw.Close()
+	var pktConn net.PacketConn
+
+	switch conn := raw.(type) {
+	case *internet.PacketConnWrapper:
+		pktConn = conn.PacketConn
+	case *net.UDPConn:
+		pktConn = conn
+	case *cnc.Connection:
+		errors.LogDebug(c.ctx, "skip hop: udphop requires being at the outermost level")
+		return nil, errors.New()
+	default:
+		errors.LogDebug(c.ctx, "skip hop: unknown conn ", reflect.TypeOf(conn))
 		return nil, errors.New()
 	}
 

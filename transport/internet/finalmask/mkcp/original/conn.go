@@ -1,16 +1,17 @@
 package original
 
 import (
+	"context"
 	"crypto/cipher"
 	"encoding/binary"
+	go_errors "errors"
 	"hash/fnv"
-	"io"
 	"net"
-	sync "sync"
-	"time"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type simple struct{}
@@ -78,7 +79,7 @@ type simpleConn struct {
 	first     bool
 	leaveSize int32
 
-	conn net.PacketConn
+	net.PacketConn
 	aead cipher.AEAD
 
 	readBuf    []byte
@@ -92,13 +93,13 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		first:     first,
 		leaveSize: leaveSize,
 
-		conn: raw,
-		aead: &simple{},
+		PacketConn: raw,
+		aead:       &simple{},
 	}
 
 	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
+		conn.readBuf = make([]byte, finalmask.UDPSize)
+		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	return conn, nil
@@ -116,42 +117,49 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
+		for {
+			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
+			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
+				continue
+			}
+
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
+				continue
+			}
+
+			if len(p) < n-int(c.Size()) {
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
+			}
+
+			ciphertext := c.readBuf[:n]
+			opened, err := c.aead.Open(nil, nil, ciphertext, nil)
+			if err != nil {
+				errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
+				continue
+			}
+
+			copy(p, opened)
+
 			c.readMutex.Unlock()
-			return n, addr, err
+			return n - int(c.Size()), addr, nil
 		}
-
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
-
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
-
-		ciphertext := c.readBuf[:n]
-		opened, err := c.aead.Open(nil, nil, ciphertext, nil)
-		if err != nil {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead open").Base(err)
-		}
-
-		copy(p, opened)
-
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, nil
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
+	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	ciphertext := p[:n]
@@ -168,7 +176,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
 			return 0, errors.New("too many masks")
 		}
 
@@ -181,7 +189,7 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		sealed := c.aead.Seal(nil, nil, plaintext, nil)
 		copy(c.writeBuf[c.leaveSize:], sealed)
 
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
 
 		if err != nil {
 			c.writeMutex.Unlock()
@@ -201,25 +209,5 @@ func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sealed := c.aead.Seal(nil, nil, plaintext, nil)
 	copy(p[c.leaveSize:], sealed)
 
-	return c.conn.WriteTo(p, addr)
-}
-
-func (c *simpleConn) Close() error {
-	return c.conn.Close()
-}
-
-func (c *simpleConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *simpleConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *simpleConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *simpleConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.WriteTo(p, addr)
 }

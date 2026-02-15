@@ -1,24 +1,25 @@
 package aes128gcm
 
 import (
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"io"
+	go_errors "errors"
 	"net"
-	sync "sync"
-	"time"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type aes128gcmConn struct {
 	first     bool
 	leaveSize int32
 
-	conn net.PacketConn
+	net.PacketConn
 	aead cipher.AEAD
 
 	readBuf    []byte
@@ -34,13 +35,13 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 		first:     first,
 		leaveSize: leaveSize,
 
-		conn: raw,
-		aead: crypto.NewAesGcm(hashedPsk[:16]),
+		PacketConn: raw,
+		aead:       crypto.NewAesGcm(hashedPsk[:16]),
 	}
 
 	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
+		conn.readBuf = make([]byte, finalmask.UDPSize)
+		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	return conn, nil
@@ -58,42 +59,49 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if c.first {
 		c.readMutex.Lock()
 
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
-			c.readMutex.Unlock()
-			return n, addr, err
-		}
+		for {
+			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
+			if err != nil {
+				var ne net.Error
+				if go_errors.As(err, &ne) {
+					c.readMutex.Unlock()
+					return n, addr, err
+				}
+				errors.LogDebug(context.Background(), addr, " mask read err ", err)
+				continue
+			}
 
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
+			if n < int(c.Size()) {
+				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
+				continue
+			}
 
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
-		}
+			if len(p) < n-int(c.Size()) {
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
+			}
 
-		nonceSize := c.aead.NonceSize()
-		nonce := c.readBuf[:nonceSize]
-		ciphertext := c.readBuf[nonceSize:n]
-		_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
-		if err != nil {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("aead open").Base(err)
-		}
+			nonceSize := c.aead.NonceSize()
+			nonce := c.readBuf[:nonceSize]
+			ciphertext := c.readBuf[nonceSize:n]
+			_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
+			if err != nil {
+				errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
+				continue
+			}
 
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, nil
+			c.readMutex.Unlock()
+			return n - int(c.Size()), addr, nil
+		}
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
+	n, addr, err = c.PacketConn.ReadFrom(p)
 	if err != nil {
 		return n, addr, err
 	}
 
 	if n < int(c.Size()) {
-		return 0, addr, errors.New("aead").Base(io.ErrShortBuffer)
+		return 0, addr, errors.New("short lenth")
 	}
 
 	nonceSize := c.aead.NonceSize()
@@ -110,7 +118,7 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
 			return 0, errors.New("too many masks")
 		}
 
@@ -127,7 +135,7 @@ func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
 		_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
+		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
 
 		if err != nil {
 			c.writeMutex.Unlock()
@@ -150,25 +158,5 @@ func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	plaintext := p[c.leaveSize+int32(nonceSize) : len(p)-c.aead.Overhead()]
 	_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
 
-	return c.conn.WriteTo(p, addr)
-}
-
-func (c *aes128gcmConn) Close() error {
-	return c.conn.Close()
-}
-
-func (c *aes128gcmConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *aes128gcmConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *aes128gcmConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *aes128gcmConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.WriteTo(p, addr)
 }

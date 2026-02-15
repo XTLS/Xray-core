@@ -6,12 +6,14 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/binary"
+	go_errors "errors"
 	"io"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
@@ -31,7 +33,7 @@ type packet struct {
 }
 
 type xdnsConnClient struct {
-	conn net.PacketConn
+	net.PacketConn
 
 	clientID []byte
 	domain   Name
@@ -55,7 +57,7 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	}
 
 	conn := &xdnsConnClient{
-		conn: raw,
+		PacketConn: raw,
 
 		clientID: make([]byte, 8),
 		domain:   domain,
@@ -74,15 +76,14 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 }
 
 func (c *xdnsConnClient) recvLoop() {
+	var buf [finalmask.UDPSize]byte
+
 	for {
-		if c.closed {
-			break
-		}
-
-		var buf [4096]byte
-
-		n, addr, err := c.conn.ReadFrom(buf[:])
+		n, addr, err := c.PacketConn.ReadFrom(buf[:])
 		if err != nil {
+			if go_errors.Is(err, net.ErrClosed) {
+				break
+			}
 			continue
 		}
 
@@ -123,6 +124,12 @@ func (c *xdnsConnClient) recvLoop() {
 
 	close(c.pollChan)
 	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	close(c.writeQueue)
 }
 
 func (c *xdnsConnClient) sendLoop() {
@@ -178,7 +185,7 @@ func (c *xdnsConnClient) sendLoop() {
 		}
 
 		if p != nil {
-			_, _ = c.conn.WriteTo(p.p, p.addr)
+			_, _ = c.PacketConn.WriteTo(p.p, p.addr)
 		}
 	}
 }
@@ -190,11 +197,12 @@ func (c *xdnsConnClient) Size() int32 {
 func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
 	n = copy(p, packet.p)
 	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
+		return n, packet.addr, io.ErrShortBuffer
 	}
 	return n, packet.addr, nil
 }
@@ -222,36 +230,6 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	default:
 		return 0, errors.New("xdns queue full")
 	}
-}
-
-func (c *xdnsConnClient) Close() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil
-	}
-
-	c.closed = true
-	close(c.writeQueue)
-
-	return c.conn.Close()
-}
-
-func (c *xdnsConnClient) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *xdnsConnClient) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *xdnsConnClient) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *xdnsConnClient) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
 }
 
 func encode(p []byte, clientID []byte, domain Name) ([]byte, error) {

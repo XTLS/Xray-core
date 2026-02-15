@@ -4,6 +4,10 @@ import (
 	"net"
 )
 
+const (
+	UDPSize = 4096
+)
+
 type ConnSize interface {
 	Size() int32
 }
@@ -88,4 +92,39 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 		}
 	}
 	return raw, nil
+}
+
+type TcpMaskConn interface {
+	TcpMaskConn()
+	RawConn() net.Conn
+	Splice() bool
+}
+
+func SpliceAble(conn net.Conn) bool {
+	if _, ok := conn.(TcpMaskConn); !ok {
+		return false
+	}
+	for {
+		if v, ok := conn.(TcpMaskConn); ok {
+			if !v.Splice() {
+				return false
+			}
+			conn = v.RawConn()
+		} else {
+			return true
+		}
+	}
+}
+
+func UnwrapTcpMask(conn net.Conn) net.Conn {
+	for {
+		if v, ok := conn.(TcpMaskConn); ok {
+			if !v.Splice() {
+				return conn
+			}
+			conn = v.RawConn()
+		} else {
+			return conn
+		}
+	}
 }
