@@ -4,6 +4,10 @@ import (
 	"net"
 )
 
+const (
+	UDPSize = 4096
+)
+
 type ConnSize interface {
 	Size() int32
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type udpCustomClient struct {
@@ -57,8 +58,8 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 	}
 
 	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
+		conn.readBuf = make([]byte, finalmask.UDPSize)
+		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	index := 0
@@ -151,7 +152,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
 			return 0, errors.New("too many masks")
 		}
 
@@ -228,8 +229,8 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 	}
 
 	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
+		conn.readBuf = make([]byte, finalmask.UDPSize)
+		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	index := 0
@@ -322,7 +323,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
 			return 0, errors.New("too many masks")
 		}
 

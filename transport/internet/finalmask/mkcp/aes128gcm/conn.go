@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type aes128gcmConn struct {
@@ -39,8 +40,8 @@ func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (
 	}
 
 	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
+		conn.readBuf = make([]byte, finalmask.UDPSize)
+		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	return conn, nil
@@ -117,7 +118,7 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
+		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
 			return 0, errors.New("too many masks")
 		}
 

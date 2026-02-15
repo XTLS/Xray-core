@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
@@ -158,7 +159,7 @@ func (c *xdnsConnServer) recvLoop() {
 			break
 		}
 
-		var buf [4096]byte
+		var buf [finalmask.UDPSize]byte
 		n, addr, err := c.conn.ReadFrom(buf[:])
 		if err != nil {
 			continue
