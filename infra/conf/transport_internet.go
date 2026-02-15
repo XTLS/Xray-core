@@ -1321,7 +1321,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				return nil, errors.New("len > 8192")
 			}
 			if len(item.Packet) > 0 && item.Rand > 0 {
-				return nil, errors.New("len(item.Packet) > 0 &&  item.Rand > 0")
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
 			}
 		}
 	}
@@ -1331,7 +1331,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				return nil, errors.New("len > 8192")
 			}
 			if len(item.Packet) > 0 && item.Rand > 0 {
-				return nil, errors.New("len(item.Packet) > 0 &&  item.Rand > 0")
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
 			}
 		}
 	}
