@@ -116,12 +116,12 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 				continue
 			}
 
+			copy(p, c.readBuf[index:n])
+
 			if len(p) < n-index {
 				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				return len(p), addr, io.ErrShortBuffer
 			}
-
-			copy(p, c.readBuf[index:n])
 
 			c.readMutex.Unlock()
 			return n - index, addr, nil
@@ -287,12 +287,12 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 				continue
 			}
 
+			copy(p, c.readBuf[index:n])
+
 			if len(p) < n-index {
 				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				return len(p), addr, io.ErrShortBuffer
 			}
-
-			copy(p, c.readBuf[index:n])
 
 			c.readMutex.Unlock()
 			return n - index, addr, nil

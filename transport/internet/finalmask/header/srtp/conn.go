@@ -89,12 +89,12 @@ func (c *srtpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 				continue
 			}
 
+			copy(p, c.readBuf[c.Size():n])
+
 			if len(p) < n-int(c.Size()) {
 				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				return len(p), addr, io.ErrShortBuffer
 			}
-
-			copy(p, c.readBuf[c.Size():n])
 
 			c.readMutex.Unlock()
 			return n - int(c.Size()), addr, nil
