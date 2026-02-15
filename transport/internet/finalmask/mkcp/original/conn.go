@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	go_errors "errors"
 	"hash/fnv"
-	"io"
 	"net"
 	"sync"
 
@@ -135,8 +134,8 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			}
 
 			if len(p) < n-int(c.Size()) {
-				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
 			}
 
 			ciphertext := c.readBuf[:n]

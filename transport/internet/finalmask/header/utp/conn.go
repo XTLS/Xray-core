@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	go_errors "errors"
-	"io"
 	"net"
 	"sync"
 
@@ -94,8 +93,8 @@ func (c *utpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			copy(p, c.readBuf[c.Size():n])
 
 			if len(p) < n-int(c.Size()) {
-				c.readMutex.Unlock()
-				return len(p), addr, io.ErrShortBuffer
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
 			}
 
 			c.readMutex.Unlock()

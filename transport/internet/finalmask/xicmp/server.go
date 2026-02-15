@@ -313,6 +313,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 	n = copy(p, packet.p)
 	if n != len(packet.p) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
 		return n, packet.addr, io.ErrShortBuffer
 	}
 	return n, packet.addr, nil

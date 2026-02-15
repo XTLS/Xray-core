@@ -3,7 +3,6 @@ package salamander
 import (
 	"context"
 	go_errors "errors"
-	"io"
 	"net"
 	"sync"
 
@@ -75,8 +74,8 @@ func (c *obfsPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			}
 
 			if len(p) < n-int(c.Size()) {
-				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
 			}
 
 			c.obfs.Deobfuscate(c.readBuf[:n], p)

@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	go_errors "errors"
-	"io"
 	"net"
 	"sync"
 
@@ -77,8 +76,8 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			}
 
 			if len(p) < n-int(c.Size()) {
-				c.readMutex.Unlock()
-				return 0, nil, io.ErrShortBuffer
+				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
+				continue
 			}
 
 			nonceSize := c.aead.NonceSize()
