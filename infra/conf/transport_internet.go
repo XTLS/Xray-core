@@ -933,7 +933,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`empty "privateKey"`)
 		}
 		if config.PrivateKey, err = base64.RawURLEncoding.DecodeString(c.PrivateKey); err != nil || len(config.PrivateKey) != 32 {
-			return nil, errors.New(`invalid "privateKey": `, c.PrivateKey)
+			return nil, errors.New(`invalid "privateKey": decode error or incorrect length`)
 		}
 		if c.MinClientVer != "" {
 			config.MinClientVer = make([]byte, 3)
@@ -984,10 +984,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 
 		if c.Mldsa65Seed != "" {
 			if c.Mldsa65Seed == c.PrivateKey {
-				return nil, errors.New(`"mldsa65Seed" and "privateKey" can not be the same value: `, c.Mldsa65Seed)
+				return nil, errors.New(`"mldsa65Seed" and "privateKey" can not be the same value`)
 			}
 			if config.Mldsa65Seed, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Seed); err != nil || len(config.Mldsa65Seed) != 32 {
-				return nil, errors.New(`invalid "mldsa65Seed": `, c.Mldsa65Seed)
+				return nil, errors.New(`invalid "mldsa65Seed": decode error or incorrect length`)
 			}
 		}
 
@@ -1017,7 +1017,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`empty "password"`)
 		}
 		if config.PublicKey, err = base64.RawURLEncoding.DecodeString(c.PublicKey); err != nil || len(config.PublicKey) != 32 {
-			return nil, errors.New(`invalid "password": `, c.PublicKey)
+			return nil, errors.New(`invalid "password": decode error or incorrect length`)
 		}
 		if len(c.ShortIds) != 0 {
 			return nil, errors.New(`non-empty "shortIds", please use "shortId" instead`)
@@ -1031,7 +1031,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 		if c.Mldsa65Verify != "" {
 			if config.Mldsa65Verify, err = base64.RawURLEncoding.DecodeString(c.Mldsa65Verify); err != nil || len(config.Mldsa65Verify) != 1952 {
-				return nil, errors.New(`invalid "mldsa65Verify": `, c.Mldsa65Verify)
+				return nil, errors.New(`invalid "mldsa65Verify": decode error or incorrect length`)
 			}
 		}
 		if c.SpiderX == "" {
