@@ -83,11 +83,16 @@ func (h *uploadQueue) Close() error {
 }
 
 func (h *uploadQueue) Read(b []byte) (int, error) {
-	if h.reader != nil {
-		return h.reader.Read(b)
+	h.writeCloseMutex.Lock()
+	reader := h.reader
+	closed := h.closed
+	h.writeCloseMutex.Unlock()
+
+	if reader != nil {
+		return reader.Read(b)
 	}
 
-	if h.closed {
+	if closed {
 		return 0, io.EOF
 	}
 
@@ -97,8 +102,10 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		if packet.Reader != nil {
+			h.writeCloseMutex.Lock()
 			h.reader = packet.Reader
-			return h.reader.Read(b)
+			h.writeCloseMutex.Unlock()
+			return packet.Reader.Read(b)
 		}
 		heap.Push(&h.heap, packet)
 	}

@@ -88,7 +88,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		req.Header.Set("Content-Type", "application/grpc")
 	}
 
-	wrc = &WaitReadCloser{Wait: make(chan struct{})}
+	wrc = &WaitReadCloser{wait: make(chan struct{})}
 	go func() {
 		resp, err := c.client.Do(req)
 		if err != nil {
@@ -266,38 +266,37 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 }
 
 type WaitReadCloser struct {
-	Wait chan struct{}
-	io.ReadCloser
+	wait chan struct{}
+	mu   sync.Mutex
+	rc   io.ReadCloser
+	once sync.Once
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
-	w.ReadCloser = rc
-	defer func() {
-		if recover() != nil {
-			rc.Close()
-		}
-	}()
-	close(w.Wait)
+	w.mu.Lock()
+	w.rc = rc
+	w.mu.Unlock()
+	w.once.Do(func() { close(w.wait) })
 }
 
 func (w *WaitReadCloser) Read(b []byte) (int, error) {
-	if w.ReadCloser == nil {
-		if <-w.Wait; w.ReadCloser == nil {
-			return 0, io.ErrClosedPipe
-		}
+	<-w.wait
+	w.mu.Lock()
+	rc := w.rc
+	w.mu.Unlock()
+	if rc == nil {
+		return 0, io.ErrClosedPipe
 	}
-	return w.ReadCloser.Read(b)
+	return rc.Read(b)
 }
 
 func (w *WaitReadCloser) Close() error {
-	if w.ReadCloser != nil {
-		return w.ReadCloser.Close()
+	w.once.Do(func() { close(w.wait) })
+	w.mu.Lock()
+	rc := w.rc
+	w.mu.Unlock()
+	if rc != nil {
+		return rc.Close()
 	}
-	defer func() {
-		if recover() != nil && w.ReadCloser != nil {
-			w.ReadCloser.Close()
-		}
-	}()
-	close(w.Wait)
 	return nil
 }
