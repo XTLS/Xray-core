@@ -157,7 +157,7 @@ func (w *ServerWorker) Close() error {
 
 func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.BufferedReader) error {
 	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 	if err != nil {
 		if meta.Option.Has(OptionData) {
-			buf.Copy(NewStreamReader(reader), buf.Discard)
+			CopyChunk(reader, buf.Discard)
 		}
 		return errors.New("failed to dispatch request.").Base(err)
 	}
@@ -285,6 +285,15 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	go handle(ctx, s, w.link.Writer)
 	if !meta.Option.Has(OptionData) {
 		return nil
+	}
+
+	if s.transferType == protocol.TransferTypeStream {
+		err = CopyChunk(reader, s.output)
+		if err != nil && buf.IsWriteError(err) {
+			s.Close(false)
+			return err
+		}
+		return err
 	}
 
 	rr := s.NewReader(reader, &meta.Target)
@@ -308,7 +317,19 @@ func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 		closingWriter := NewResponseWriter(meta.SessionID, w.link.Writer, protocol.TransferTypeStream)
 		closingWriter.Close()
 
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
+	}
+
+	if s.transferType == protocol.TransferTypeStream {
+		err := CopyChunk(reader, s.output)
+		if err != nil && buf.IsWriteError(err) {
+			errors.LogInfoInner(context.Background(), err, "failed to write to downstream writer. closing session ", s.ID)
+			s.Close(false)
+			// down stream can have a write err but don't return the err to terminate the whole mux connection
+			// because it's still available for other sessions
+			return nil
+		}
+		return err
 	}
 
 	rr := s.NewReader(reader, &meta.Target)
@@ -328,7 +349,7 @@ func (w *ServerWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.Buffered
 		s.Close(false)
 	}
 	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
 	}
 	return nil
 }
