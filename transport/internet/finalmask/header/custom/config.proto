@@ -20,7 +20,7 @@ message TCPSequence {
 message TCPConfig {
     repeated TCPSequence clients = 1;
     repeated TCPSequence servers = 2;
-    bytes on_error = 3;
+    repeated TCPSequence errors = 3;
 }
 
 message UDPItem {

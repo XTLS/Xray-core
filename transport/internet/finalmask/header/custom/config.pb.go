@@ -137,7 +137,7 @@ type TCPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Clients       []*TCPSequence         `protobuf:"bytes,1,rep,name=clients,proto3" json:"clients,omitempty"`
 	Servers       []*TCPSequence         `protobuf:"bytes,2,rep,name=servers,proto3" json:"servers,omitempty"`
-	OnError       []byte                 `protobuf:"bytes,3,opt,name=on_error,json=onError,proto3" json:"on_error,omitempty"`
+	Errors        []*TCPSequence         `protobuf:"bytes,3,rep,name=errors,proto3" json:"errors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,9 +186,9 @@ func (x *TCPConfig) GetServers() []*TCPSequence {
 	return nil
 }
 
-func (x *TCPConfig) GetOnError() []byte {
+func (x *TCPConfig) GetErrors() []*TCPSequence {
 	if x != nil {
-		return x.OnError
+		return x.Errors
 	}
 	return nil
 }
@@ -308,11 +308,11 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\x04rand\x18\x03 \x01(\x05R\x04rand\x12\x16\n" +
 	"\x06packet\x18\x04 \x01(\fR\x06packet\"c\n" +
 	"\vTCPSequence\x12T\n" +
-	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\xd6\x01\n" +
+	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\x91\x02\n" +
 	"\tTCPConfig\x12V\n" +
 	"\aclients\x18\x01 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aclients\x12V\n" +
-	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12\x19\n" +
-	"\bon_error\x18\x03 \x01(\fR\aonError\"5\n" +
+	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12T\n" +
+	"\x06errors\x18\x03 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\x06errors\"5\n" +
 	"\aUDPItem\x12\x12\n" +
 	"\x04rand\x18\x01 \x01(\x05R\x04rand\x12\x16\n" +
 	"\x06packet\x18\x02 \x01(\fR\x06packet\"\xaf\x01\n" +
@@ -345,13 +345,14 @@ var file_transport_internet_finalmask_header_custom_config_proto_depIdxs = []int
 	0, // 0: xray.transport.internet.finalmask.header.custom.TCPSequence.sequence:type_name -> xray.transport.internet.finalmask.header.custom.TCPItem
 	1, // 1: xray.transport.internet.finalmask.header.custom.TCPConfig.clients:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
 	1, // 2: xray.transport.internet.finalmask.header.custom.TCPConfig.servers:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
-	3, // 3: xray.transport.internet.finalmask.header.custom.UDPConfig.client:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
-	3, // 4: xray.transport.internet.finalmask.header.custom.UDPConfig.server:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	1, // 3: xray.transport.internet.finalmask.header.custom.TCPConfig.errors:type_name -> xray.transport.internet.finalmask.header.custom.TCPSequence
+	3, // 4: xray.transport.internet.finalmask.header.custom.UDPConfig.client:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	3, // 5: xray.transport.internet.finalmask.header.custom.UDPConfig.server:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_header_custom_config_proto_init() }

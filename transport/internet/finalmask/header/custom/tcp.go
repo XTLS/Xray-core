@@ -173,7 +173,7 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 type tcpCustomServer struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
-	onError []byte
+	errors  []*TCPSequence
 	merged  [][]byte
 }
 
@@ -192,7 +192,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		header: &tcpCustomServer{
 			clients: c.Clients,
 			servers: c.Servers,
-			onError: c.OnError,
+			errors:  c.Errors,
 		},
 	}
 
@@ -224,6 +224,31 @@ func (c *tcpCustomServerConn) Splice() bool {
 	return true
 }
 
+func (c *tcpCustomServerConn) sendError(index int) {
+	var merged []byte
+	if len(c.header.errors) > index {
+		for _, item := range c.header.errors[index].Sequence {
+			if item.DelayMax > 0 {
+				if len(merged) > 0 {
+					_, _ = c.Conn.Write(merged)
+					merged = nil
+				}
+				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
+			}
+			if item.Rand > 0 {
+				merged = append(merged, make([]byte, item.Rand)...)
+				common.Must2(rand.Read(merged[len(merged)-int(item.Rand):]))
+			} else {
+				merged = append(merged, item.Packet...)
+			}
+		}
+		if len(merged) > 0 {
+			_, _ = c.Conn.Write(merged)
+			merged = nil
+		}
+	}
+}
+
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 	c.once.Do(func() {
 		var buf [8192]byte
@@ -240,16 +265,12 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 				}
 				if item.Rand > 0 {
 					if n != length {
-						if len(c.header.onError) > 0 {
-							c.Conn.Write(c.header.onError)
-						}
+						c.sendError(i)
 						c.wg.Done()
 						return
 					}
 				} else if !bytes.Equal(item.Packet, buf[:n]) {
-					if len(c.header.onError) > 0 {
-						c.Conn.Write(c.header.onError)
-					}
+					c.sendError(i)
 					c.wg.Done()
 					return
 				}
