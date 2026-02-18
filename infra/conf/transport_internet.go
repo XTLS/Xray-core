@@ -1282,6 +1282,9 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 func PraseByteSlice(data json.RawMessage, typ string) ([]byte, error) {
 	switch strings.ToLower(typ) {
 	case "", "array":
+		if len(data) == 0 {
+			return []byte{}, nil
+		}
 		var packet []byte
 		if err := json.Unmarshal(data, &packet); err != nil {
 			return nil, err
