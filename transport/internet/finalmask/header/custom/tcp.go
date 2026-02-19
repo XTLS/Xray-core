@@ -230,8 +230,9 @@ func writeSequence(w io.Writer, sequence *TCPSequence) bool {
 			time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 		}
 		if item.Rand > 0 {
-			merged = append(merged, make([]byte, item.Rand)...)
-			common.Must2(rand.Read(merged[len(merged)-int(item.Rand):]))
+			buf := make([]byte, item.Rand)
+			common.Must2(rand.Read(buf))
+			merged = append(merged, buf...)
 		} else {
 			merged = append(merged, item.Packet...)
 		}
