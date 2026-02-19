@@ -1352,9 +1352,6 @@ type HeaderCustomTCP struct {
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for _, value := range c.Clients {
 		for _, item := range value {
-			if len(item.Packet) > 8192 || item.Rand > 8192 {
-				return nil, errors.New("len > 8192")
-			}
 			if len(item.Packet) > 0 && item.Rand > 0 {
 				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
 			}
@@ -1362,9 +1359,6 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	}
 	for _, value := range c.Servers {
 		for _, item := range value {
-			if len(item.Packet) > 8192 || item.Rand > 8192 {
-				return nil, errors.New("len > 8192")
-			}
 			if len(item.Packet) > 0 && item.Rand > 0 {
 				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
 			}
@@ -1372,9 +1366,6 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	}
 	for _, value := range c.Errors {
 		for _, item := range value {
-			if len(item.Packet) > 8192 || item.Rand > 8192 {
-				return nil, errors.New("len > 8192")
-			}
 			if len(item.Packet) > 0 && item.Rand > 0 {
 				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
 			}
