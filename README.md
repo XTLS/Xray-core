@@ -72,6 +72,7 @@
 - Magisk
   - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
+  - [NetProxy](https://github.com/Fanju6/NetProxy-Magisk)
 - Homebrew
   - `brew install xray`
 
