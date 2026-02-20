@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -152,11 +153,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		quicConfig := &quic.Config{
 			MaxIdleTimeout: net.ConnIdleTimeout,
 
-			// these two are defaults of quic-go/http3. the default of quic-go (no
-			// http3) is different, so it is hardcoded here for clarity.
+			// MaxIncomingStreams and KeepAlivePeriod are defaults of quic-go/http3.
+			// The default of quic-go (no http3) is different, so they are hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
-			MaxIncomingStreams: -1,
-			KeepAlivePeriod:    keepAlivePeriod,
+			MaxIncomingStreams:              -1,
+			KeepAlivePeriod:                keepAlivePeriod,
+			InitialStreamReceiveWindow:     2 * 1024 * 1024,  // 2 MB
+			MaxStreamReceiveWindow:         16 * 1024 * 1024,  // 16 MB
+			InitialConnectionReceiveWindow: 5 * 1024 * 1024,   // 5 MB
+			MaxConnectionReceiveWindow:     32 * 1024 * 1024,  // 32 MB
 		}
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,
@@ -195,7 +200,19 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
-				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				if err != nil {
+					return nil, err
+				}
+				switch transportConfig.GetCongestion() {
+				case "bbr", "":
+					congestion.UseBBR(quicConn)
+				case "reno":
+					// quic-go default, do nothing
+				default:
+					errors.LogWarning(ctx, "unknown congestion control: ", transportConfig.GetCongestion(), ", falling back to reno")
+				}
+				return quicConn, nil
 			},
 		}
 	} else if httpVersion == "2" {

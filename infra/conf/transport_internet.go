@@ -231,6 +231,7 @@ type SplitHTTPConfig struct {
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
 	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
+	Congestion           string            `json:"congestion"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -404,6 +405,13 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}
 
+	switch c.Congestion {
+	case "", "bbr", "reno":
+		// valid
+	default:
+		return nil, errors.New("unknown congestion control: ", c.Congestion, ", valid values: bbr, reno")
+	}
+
 	config := &splithttp.Config{
 		Host:                 c.Host,
 		Path:                 c.Path,
@@ -423,6 +431,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
 		UplinkChunkSize:      c.UplinkChunkSize,
+		Congestion:           c.Congestion,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
