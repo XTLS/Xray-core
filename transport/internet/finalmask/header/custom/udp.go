@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common"
@@ -99,7 +98,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 	if len(p) < n-len(c.header.merged) {
 		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-len(c.header.merged))
-		return 0, addr, io.ErrShortBuffer
+		return 0, addr, nil
 	}
 
 	copy(p, buf[len(c.header.merged):n])
@@ -110,7 +109,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if len(c.header.merged)+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
-		return 0, io.ErrShortWrite
+		return 0, nil
 	}
 
 	var buf []byte
@@ -218,7 +217,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 
 	if len(p) < n-len(c.header.merged) {
 		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-len(c.header.merged))
-		return 0, addr, io.ErrShortBuffer
+		return 0, addr, nil
 	}
 
 	copy(p, buf[len(c.header.merged):n])
@@ -229,7 +228,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if len(c.header.merged)+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
-		return 0, io.ErrShortWrite
+		return 0, nil
 	}
 
 	var buf []byte

@@ -154,9 +154,13 @@ func (c *xdnsConnServer) recvLoop() {
 	var buf [finalmask.UDPSize]byte
 
 	for {
+		if c.closed {
+			break
+		}
+
 		n, addr, err := c.PacketConn.ReadFrom(buf[:])
 		if err != nil {
-			if go_errors.Is(err, net.ErrClosed) {
+			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
 				break
 			}
 			continue
@@ -319,27 +323,27 @@ func (c *xdnsConnServer) sendLoop() {
 func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, net.ErrClosed
+		return 0, nil, io.EOF
 	}
-	n = copy(p, packet.p)
-	if n != len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
-		return n, packet.addr, io.ErrShortBuffer
+	if len(p) < len(packet.p) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		return 0, packet.addr, nil
 	}
-	return n, packet.addr, nil
+	copy(p, packet.p)
+	return len(packet.p), packet.addr, nil
 }
 
 func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	q := c.ensureQueue(addr)
 	if q == nil {
-		return 0, errors.New("xdns closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("xdns closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	buf := make([]byte, len(p))
@@ -349,8 +353,14 @@ func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		return 0, errors.New("xdns queue full")
+		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		return 0, nil
 	}
+}
+
+func (c *xdnsConnServer) Close() error {
+	c.closed = true
+	return c.PacketConn.Close()
 }
 
 func nextPacketServer(r *bytes.Reader) ([]byte, error) {

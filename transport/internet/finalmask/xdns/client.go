@@ -75,9 +75,13 @@ func (c *xdnsConnClient) recvLoop() {
 	var buf [finalmask.UDPSize]byte
 
 	for {
+		if c.closed {
+			break
+		}
+
 		n, addr, err := c.PacketConn.ReadFrom(buf[:])
 		if err != nil {
-			if go_errors.Is(err, net.ErrClosed) {
+			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
 				break
 			}
 			continue
@@ -189,14 +193,14 @@ func (c *xdnsConnClient) sendLoop() {
 func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, net.ErrClosed
+		return 0, nil, io.EOF
 	}
-	n = copy(p, packet.p)
-	if n != len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
-		return n, packet.addr, io.ErrShortBuffer
+	if len(p) < len(packet.p) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		return 0, packet.addr, nil
 	}
-	return n, packet.addr, nil
+	copy(p, packet.p)
+	return len(packet.p), packet.addr, nil
 }
 
 func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -204,13 +208,13 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("xdns closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
-		errors.LogDebug(context.Background(), "xdns encode err ", err)
-		return 0, errors.New("xdns encode").Base(err)
+		errors.LogDebug(context.Background(), addr, " mask write err ", err)
+		return 0, nil
 	}
 
 	select {
@@ -220,8 +224,14 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}:
 		return len(p), nil
 	default:
-		return 0, errors.New("xdns queue full")
+		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		return 0, nil
 	}
+}
+
+func (c *xdnsConnClient) Close() error {
+	c.closed = true
+	return c.PacketConn.Close()
 }
 
 func encode(p []byte, clientID []byte, domain Name) ([]byte, error) {

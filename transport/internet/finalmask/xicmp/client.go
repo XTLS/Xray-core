@@ -149,12 +149,12 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 }
 
 func (c *xicmpConnClient) recvLoop() {
+	var buf [finalmask.UDPSize]byte
+
 	for {
 		if c.closed {
 			break
 		}
-
-		var buf [finalmask.UDPSize]byte
 
 		n, addr, err := c.icmpConn.ReadFrom(buf[:])
 		if err != nil {
@@ -217,6 +217,12 @@ func (c *xicmpConnClient) recvLoop() {
 
 	close(c.pollChan)
 	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	close(c.writeQueue)
 }
 
 func (c *xicmpConnClient) sendLoop() {
@@ -283,27 +289,28 @@ func (c *xicmpConnClient) sendLoop() {
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, net.ErrClosed
+		return 0, nil, io.EOF
 	}
-	n = copy(p, packet.p)
-	if n != len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", n, " ", len(packet.p))
-		return n, packet.addr, io.ErrShortBuffer
+	if len(p) < len(packet.p) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		return 0, packet.addr, nil
 	}
-	return n, packet.addr, nil
+	copy(p, packet.p)
+	return len(packet.p), packet.addr, nil
 }
 
 func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	encoded, err := c.encode(p)
 	if err != nil {
-		return 0, errors.New("xicmp encode").Base(err)
+		errors.LogDebug(context.Background(), addr, " mask write err ", err)
+		return 0, nil
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("xicmp closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	select {
@@ -313,21 +320,13 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}:
 		return len(p), nil
 	default:
-		return 0, errors.New("xicmp queue full")
+		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		return 0, nil
 	}
 }
 
 func (c *xicmpConnClient) Close() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil
-	}
-
 	c.closed = true
-	close(c.writeQueue)
-
 	_ = c.icmpConn.Close()
 	return c.conn.Close()
 }

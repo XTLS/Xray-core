@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"hash/fnv"
-	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common"
@@ -117,7 +116,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 	if len(opened) > len(p) {
 		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(opened))
-		return 0, addr, io.ErrShortBuffer
+		return 0, addr, nil
 	}
 
 	copy(p, opened)
@@ -128,7 +127,7 @@ func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.aead.Overhead()+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.aead.Overhead()+len(p), " ", finalmask.UDPSize)
-		return 0, io.ErrShortWrite
+		return 0, nil
 	}
 
 	var buf []byte
