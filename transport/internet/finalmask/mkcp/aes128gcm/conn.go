@@ -5,9 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	go_errors "errors"
+	"io"
 	"net"
-	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
@@ -16,92 +15,64 @@ import (
 )
 
 type aes128gcmConn struct {
-	first     bool
-	leaveSize int32
-
 	net.PacketConn
 	aead cipher.AEAD
-
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	hashedPsk := sha256.Sum256([]byte(c.Password))
 
 	conn := &aes128gcmConn{
-		first:     first,
-		leaveSize: leaveSize,
-
 		PacketConn: raw,
 		aead:       crypto.NewAesGcm(hashedPsk[:16]),
-	}
-
-	if first {
-		conn.readBuf = make([]byte, finalmask.UDPSize)
-		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	return conn, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return NewConnClient(c, raw, first, leaveSize)
-}
-
-func (c *aes128gcmConn) Size() int32 {
-	return int32(c.aead.NonceSize()) + int32(c.aead.Overhead())
+func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+	return NewConnClient(c, raw)
 }
 
 func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if c.first {
-		c.readMutex.Lock()
+	if len(p) < finalmask.UDPSize {
+		buf := make([]byte, finalmask.UDPSize)
 
-		for {
-			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
-			if err != nil {
-				var ne net.Error
-				if go_errors.As(err, &ne) {
-					c.readMutex.Unlock()
-					return n, addr, err
-				}
-				errors.LogDebug(context.Background(), addr, " mask read err ", err)
-				continue
-			}
-
-			if n < int(c.Size()) {
-				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
-				continue
-			}
-
-			if len(p) < n-int(c.Size()) {
-				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
-				continue
-			}
-
-			nonceSize := c.aead.NonceSize()
-			nonce := c.readBuf[:nonceSize]
-			ciphertext := c.readBuf[nonceSize:n]
-			_, err = c.aead.Open(p[:0], nonce, ciphertext, nil)
-			if err != nil {
-				errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
-				continue
-			}
-
-			c.readMutex.Unlock()
-			return n - int(c.Size()), addr, nil
+		n, addr, err = c.PacketConn.ReadFrom(buf)
+		if err != nil || n == 0 {
+			return n, addr, err
 		}
+
+		if n < c.aead.NonceSize()+c.aead.Overhead() {
+			errors.LogDebug(context.Background(), addr, " mask read err aead short lenth ", n)
+			return 0, addr, nil
+		}
+
+		nonceSize := c.aead.NonceSize()
+		nonce := buf[:nonceSize]
+		ciphertext := buf[nonceSize:n]
+		plaintext, err := c.aead.Open(p[:0], nonce, ciphertext, nil)
+		if err != nil {
+			errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
+			return 0, addr, nil
+		}
+
+		if len(plaintext) > len(p) {
+			errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(plaintext))
+			return 0, addr, io.ErrShortBuffer
+		}
+
+		return n - c.aead.NonceSize() - c.aead.Overhead(), addr, nil
 	}
 
 	n, addr, err = c.PacketConn.ReadFrom(p)
-	if err != nil {
+	if err != nil || n == 0 {
 		return n, addr, err
 	}
 
-	if n < int(c.Size()) {
-		return 0, addr, errors.New("short lenth")
+	if n < c.aead.NonceSize()+c.aead.Overhead() {
+		errors.LogDebug(context.Background(), addr, " mask read err aead short lenth ", n)
+		return 0, addr, nil
 	}
 
 	nonceSize := c.aead.NonceSize()
@@ -109,54 +80,40 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	ciphertext := p[nonceSize:n]
 	_, err = c.aead.Open(ciphertext[:0], nonce, ciphertext, nil)
 	if err != nil {
-		return 0, addr, errors.New("aead open").Base(err)
+		errors.LogDebug(context.Background(), addr, " mask read err aead open ", err)
+		return 0, addr, nil
 	}
+
 	copy(p, p[nonceSize:n-c.aead.Overhead()])
 
-	return n - int(c.Size()), addr, nil
+	return n - c.aead.NonceSize() - c.aead.Overhead(), addr, nil
 }
 
 func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
-			return 0, errors.New("too many masks")
-		}
+	if c.aead.NonceSize()+c.aead.Overhead()+len(p) > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.aead.NonceSize()+c.aead.Overhead()+len(p), " ", finalmask.UDPSize)
+		return 0, io.ErrShortWrite
+	}
 
-		c.writeMutex.Lock()
-
-		n = copy(c.writeBuf[c.leaveSize+int32(c.aead.NonceSize()):], p)
-		// n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
-		n += int(c.leaveSize) + int(c.Size())
-
-		nonceSize := c.aead.NonceSize()
-		nonce := c.writeBuf[c.leaveSize : c.leaveSize+int32(nonceSize)]
-		common.Must2(rand.Read(nonce))
-		// copy(c.writeBuf[c.leaveSize+int32(nonceSize):], c.writeBuf[c.leaveSize+c.Size():n])
-		plaintext := c.writeBuf[c.leaveSize+int32(nonceSize) : n-c.aead.Overhead()]
-		_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
-
-		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
-
-		if err != nil {
-			c.writeMutex.Unlock()
-			return 0, err
-		}
-
-		if nn != n {
-			c.writeMutex.Unlock()
-			return 0, errors.New("nn != n")
-		}
-
-		c.writeMutex.Unlock()
-		return len(p), nil
+	var buf []byte
+	if cap(p) != finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
+	} else {
+		buf = p[:c.aead.NonceSize()+c.aead.Overhead()+len(p)]
+		copy(buf[c.aead.NonceSize():], p)
+		p = buf[c.aead.NonceSize() : c.aead.NonceSize()+len(p)]
 	}
 
 	nonceSize := c.aead.NonceSize()
-	nonce := p[c.leaveSize : c.leaveSize+int32(nonceSize)]
+	nonce := buf[:nonceSize]
 	common.Must2(rand.Read(nonce))
-	copy(p[c.leaveSize+int32(nonceSize):], p[c.leaveSize+c.Size():])
-	plaintext := p[c.leaveSize+int32(nonceSize) : len(p)-c.aead.Overhead()]
-	_ = c.aead.Seal(plaintext[:0], nonce, plaintext, nil)
+	ciphertext := buf[nonceSize : c.aead.NonceSize()+c.aead.Overhead()+len(p)]
+	_ = c.aead.Seal(ciphertext[:0], nonce, p, nil)
 
-	return c.PacketConn.WriteTo(p, addr)
+	_, err = c.PacketConn.WriteTo(buf[:c.aead.NonceSize()+c.aead.Overhead()+len(p)], addr)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }

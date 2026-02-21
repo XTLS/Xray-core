@@ -8,7 +8,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/errors"
 )
 
 type noiseConn struct {
@@ -20,11 +19,7 @@ type noiseConn struct {
 	mutex  sync.RWMutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
-		return nil, errors.New("noise requires being at the outermost level")
-	}
-
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	conn := &noiseConn{
 		PacketConn: raw,
 		config:     c,
@@ -39,8 +34,8 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 	return conn, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	return NewConnClient(c, raw, end)
+func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+	return NewConnClient(c, raw)
 }
 
 func (c *noiseConn) reset() {
@@ -68,10 +63,6 @@ func (c *noiseConn) reset() {
 			return
 		}
 	}
-}
-
-func (c *noiseConn) Size() int32 {
-	return 0
 }
 
 func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {

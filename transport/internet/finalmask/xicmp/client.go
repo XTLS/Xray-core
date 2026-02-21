@@ -54,10 +54,10 @@ type xicmpConnClient struct {
 	mutex  sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw net.PacketConn, level int) (net.PacketConn, error) {
 	_, ok1 := raw.(*internet.FakePacketConn)
 	_, ok2 := raw.(*udphop.UdpHopPacketConn)
-	if !end || ok1 || ok2 {
+	if level != 0 || ok1 || ok2 {
 		return nil, errors.New("xicmp requires being at the outermost level")
 	}
 
@@ -278,10 +278,6 @@ func (c *xicmpConnClient) sendLoop() {
 			}
 		}
 	}
-}
-
-func (c *xicmpConnClient) Size() int32 {
-	return 0
 }
 
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {

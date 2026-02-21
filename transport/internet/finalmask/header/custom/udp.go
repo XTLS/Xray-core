@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	go_errors "errors"
+	"io"
 	"net"
-	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -32,34 +31,40 @@ func (h *udpCustomClient) Serialize(b []byte) {
 	copy(b, h.merged)
 }
 
-type udpCustomClientConn struct {
-	first     bool
-	leaveSize int32
+func (h *udpCustomClient) Match(b []byte) bool {
+	if len(b) < len(h.merged) {
+		return false
+	}
 
-	net.PacketConn
-	header *udpCustomClient
+	data := b
+	match := true
 
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
+	for _, item := range h.server {
+		length := max(int(item.Rand), len(item.Packet))
+
+		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, data[:length]) {
+			match = false
+			break
+		}
+
+		data = data[length:]
+	}
+
+	return match
 }
 
-func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	conn := &udpCustomClientConn{
-		first:     first,
-		leaveSize: leaveSize,
+type udpCustomClientConn struct {
+	net.PacketConn
+	header *udpCustomClient
+}
 
+func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	conn := &udpCustomClientConn{
 		PacketConn: raw,
 		header: &udpCustomClient{
 			client: c.Client,
 			server: c.Server,
 		},
-	}
-
-	if first {
-		conn.readBuf = make([]byte, finalmask.UDPSize)
-		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	index := 0
@@ -76,112 +81,54 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 	return conn, nil
 }
 
-func (c *udpCustomClientConn) Size() int32 {
-	return int32(len(c.header.merged))
-}
-
 func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if c.first {
-		c.readMutex.Lock()
-
-		for {
-			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
-			if err != nil {
-				var ne net.Error
-				if go_errors.As(err, &ne) {
-					c.readMutex.Unlock()
-					return n, addr, err
-				}
-				errors.LogDebug(context.Background(), addr, " mask read err ", err)
-				continue
-			}
-
-			index := 0
-			mismatch := false
-			for _, item := range c.header.server {
-				length := max(int(item.Rand), len(item.Packet))
-				if index+length > n {
-					mismatch = true
-					break
-				}
-				if len(item.Packet) > 0 && !bytes.Equal(item.Packet, c.readBuf[index:index+length]) {
-					mismatch = true
-					break
-				}
-				index += length
-			}
-
-			if mismatch {
-				errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
-				continue
-			}
-
-			copy(p, c.readBuf[index:n])
-
-			if len(p) < n-index {
-				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-index)
-				continue
-			}
-
-			c.readMutex.Unlock()
-			return n - index, addr, nil
-		}
+	buf := p
+	if len(p) < finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
 	}
 
-	n, addr, err = c.PacketConn.ReadFrom(p)
-	if err != nil {
+	n, addr, err = c.PacketConn.ReadFrom(buf)
+	if err != nil || n == 0 {
 		return n, addr, err
 	}
 
-	index := 0
-	for _, item := range c.header.server {
-		length := max(int(item.Rand), len(item.Packet))
-		if index+length > n {
-			return 0, addr, errors.New("header mismatch")
-		}
-		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, p[index:index+length]) {
-			return 0, addr, errors.New("header mismatch")
-		}
-		index += length
+	if !c.header.Match(buf[:n]) {
+		errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
+		return 0, addr, nil
 	}
 
-	copy(p, p[index:n])
+	if len(p) < n-len(c.header.merged) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-len(c.header.merged))
+		return 0, addr, io.ErrShortBuffer
+	}
 
-	return n - index, addr, nil
+	copy(p, buf[len(c.header.merged):n])
+
+	return n - len(c.header.merged), addr, nil
 }
 
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
-			return 0, errors.New("too many masks")
-		}
-
-		c.writeMutex.Lock()
-
-		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
-		n += int(c.leaveSize) + int(c.Size())
-
-		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
-
-		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
-
-		if err != nil {
-			c.writeMutex.Unlock()
-			return 0, err
-		}
-
-		if nn != n {
-			c.writeMutex.Unlock()
-			return 0, errors.New("nn != n")
-		}
-
-		c.writeMutex.Unlock()
-		return len(p), nil
+	if len(c.header.merged)+len(p) > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
+		return 0, io.ErrShortWrite
 	}
 
-	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
+	var buf []byte
+	if cap(p) != finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
+	} else {
+		buf = p[:len(c.header.merged)+len(p)]
+	}
 
-	return c.PacketConn.WriteTo(p, addr)
+	copy(buf[len(c.header.merged):], p)
+	c.header.Serialize(buf)
+
+	_, err = c.PacketConn.WriteTo(buf[:len(c.header.merged)+len(p)], addr)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }
 
 type udpCustomServer struct {
@@ -203,34 +150,40 @@ func (h *udpCustomServer) Serialize(b []byte) {
 	copy(b, h.merged)
 }
 
-type udpCustomServerConn struct {
-	first     bool
-	leaveSize int32
+func (h *udpCustomServer) Match(b []byte) bool {
+	if len(b) < len(h.merged) {
+		return false
+	}
 
-	net.PacketConn
-	header *udpCustomServer
+	data := b
+	match := true
 
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
+	for _, item := range h.client {
+		length := max(int(item.Rand), len(item.Packet))
+
+		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, data[:length]) {
+			match = false
+			break
+		}
+
+		data = data[length:]
+	}
+
+	return match
 }
 
-func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	conn := &udpCustomServerConn{
-		first:     first,
-		leaveSize: leaveSize,
+type udpCustomServerConn struct {
+	net.PacketConn
+	header *udpCustomServer
+}
 
+func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	conn := &udpCustomServerConn{
 		PacketConn: raw,
 		header: &udpCustomServer{
 			client: c.Client,
 			server: c.Server,
 		},
-	}
-
-	if first {
-		conn.readBuf = make([]byte, finalmask.UDPSize)
-		conn.writeBuf = make([]byte, finalmask.UDPSize)
 	}
 
 	index := 0
@@ -247,110 +200,52 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn, first bool, leaveSize in
 	return conn, nil
 }
 
-func (c *udpCustomServerConn) Size() int32 {
-	return int32(len(c.header.merged))
-}
-
 func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if c.first {
-		c.readMutex.Lock()
-
-		for {
-			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
-			if err != nil {
-				var ne net.Error
-				if go_errors.As(err, &ne) {
-					c.readMutex.Unlock()
-					return n, addr, err
-				}
-				errors.LogDebug(context.Background(), addr, " mask read err ", err)
-				continue
-			}
-
-			index := 0
-			mismatch := false
-			for _, item := range c.header.client {
-				length := max(int(item.Rand), len(item.Packet))
-				if index+length > n {
-					mismatch = true
-					break
-				}
-				if len(item.Packet) > 0 && !bytes.Equal(item.Packet, c.readBuf[index:index+length]) {
-					mismatch = true
-					break
-				}
-				index += length
-			}
-
-			if mismatch {
-				errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
-				continue
-			}
-
-			copy(p, c.readBuf[index:n])
-
-			if len(p) < n-index {
-				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-index)
-				continue
-			}
-
-			c.readMutex.Unlock()
-			return n - index, addr, nil
-		}
+	buf := p
+	if len(p) < finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
 	}
 
-	n, addr, err = c.PacketConn.ReadFrom(p)
-	if err != nil {
+	n, addr, err = c.PacketConn.ReadFrom(buf)
+	if err != nil || n == 0 {
 		return n, addr, err
 	}
 
-	index := 0
-	for _, item := range c.header.client {
-		length := max(int(item.Rand), len(item.Packet))
-		if index+length > n {
-			return 0, addr, errors.New("header mismatch")
-		}
-		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, p[index:index+length]) {
-			return 0, addr, errors.New("header mismatch")
-		}
-		index += length
+	if !c.header.Match(buf[:n]) {
+		errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
+		return 0, addr, nil
 	}
 
-	copy(p, p[index:n])
+	if len(p) < n-len(c.header.merged) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-len(c.header.merged))
+		return 0, addr, io.ErrShortBuffer
+	}
 
-	return n - index, addr, nil
+	copy(p, buf[len(c.header.merged):n])
+
+	return n - len(c.header.merged), addr, nil
 }
 
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
-			return 0, errors.New("too many masks")
-		}
-
-		c.writeMutex.Lock()
-
-		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
-		n += int(c.leaveSize) + int(c.Size())
-
-		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
-
-		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
-
-		if err != nil {
-			c.writeMutex.Unlock()
-			return 0, err
-		}
-
-		if nn != n {
-			c.writeMutex.Unlock()
-			return 0, errors.New("nn != n")
-		}
-
-		c.writeMutex.Unlock()
-		return len(p), nil
+	if len(c.header.merged)+len(p) > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
+		return 0, io.ErrShortWrite
 	}
 
-	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
+	var buf []byte
+	if cap(p) != finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
+	} else {
+		buf = p[:len(c.header.merged)+len(p)]
+	}
 
-	return c.PacketConn.WriteTo(p, addr)
+	copy(buf[len(c.header.merged):], p)
+	c.header.Serialize(buf)
+
+	_, err = c.PacketConn.WriteTo(buf[:len(c.header.merged)+len(p)], addr)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }

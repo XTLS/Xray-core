@@ -3,9 +3,8 @@ package wechat
 import (
 	"context"
 	"encoding/binary"
-	go_errors "errors"
+	"io"
 	"net"
-	"sync"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
@@ -16,7 +15,7 @@ type wechat struct {
 	sn uint32
 }
 
-func (*wechat) Size() int32 {
+func (*wechat) Size() int {
 	return 13
 }
 
@@ -35,122 +34,71 @@ func (h *wechat) Serialize(b []byte) {
 }
 
 type wechatConn struct {
-	first     bool
-	leaveSize int32
-
 	net.PacketConn
 	header *wechat
-
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	conn := &wechatConn{
-		first:     first,
-		leaveSize: leaveSize,
-
 		PacketConn: raw,
 		header: &wechat{
 			sn: uint32(dice.RollUint16()),
 		},
 	}
 
-	if first {
-		conn.readBuf = make([]byte, finalmask.UDPSize)
-		conn.writeBuf = make([]byte, finalmask.UDPSize)
-	}
-
 	return conn, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return NewConnClient(c, raw, first, leaveSize)
-}
-
-func (c *wechatConn) Size() int32 {
-	return c.header.Size()
+func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+	return NewConnClient(c, raw)
 }
 
 func (c *wechatConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if c.first {
-		c.readMutex.Lock()
-
-		for {
-			n, addr, err = c.PacketConn.ReadFrom(c.readBuf)
-			if err != nil {
-				var ne net.Error
-				if go_errors.As(err, &ne) {
-					c.readMutex.Unlock()
-					return n, addr, err
-				}
-				errors.LogDebug(context.Background(), addr, " mask read err ", err)
-				continue
-			}
-
-			if n < int(c.Size()) {
-				errors.LogDebug(context.Background(), addr, " mask read err short lenth")
-				continue
-			}
-
-			copy(p, c.readBuf[c.Size():n])
-
-			if len(p) < n-int(c.Size()) {
-				errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-int(c.Size()))
-				continue
-			}
-
-			c.readMutex.Unlock()
-			return n - int(c.Size()), addr, nil
-		}
+	buf := p
+	if len(p) < finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
 	}
 
-	n, addr, err = c.PacketConn.ReadFrom(p)
-	if err != nil {
+	n, addr, err = c.PacketConn.ReadFrom(buf)
+	if err != nil || n == 0 {
 		return n, addr, err
 	}
 
-	if n < int(c.Size()) {
-		return 0, addr, errors.New("short lenth")
+	if n < c.header.Size() {
+		errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
+		return 0, addr, nil
 	}
 
-	copy(p, p[c.Size():n])
+	if len(p) < n-c.header.Size() {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-c.header.Size())
+		return 0, addr, io.ErrShortBuffer
+	}
 
-	return n - int(c.Size()), addr, nil
+	copy(p, buf[c.header.Size():n])
+
+	return n - c.header.Size(), addr, nil
 }
 
 func (c *wechatConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > finalmask.UDPSize {
-			return 0, errors.New("too many masks")
-		}
-
-		c.writeMutex.Lock()
-
-		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
-		n += int(c.leaveSize) + int(c.Size())
-
-		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
-
-		nn, err := c.PacketConn.WriteTo(c.writeBuf[:n], addr)
-
-		if err != nil {
-			c.writeMutex.Unlock()
-			return 0, err
-		}
-
-		if nn != n {
-			c.writeMutex.Unlock()
-			return 0, errors.New("nn != n")
-		}
-
-		c.writeMutex.Unlock()
-		return len(p), nil
+	if c.header.Size()+len(p) > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.header.Size()+len(p), " ", finalmask.UDPSize)
+		return 0, io.ErrShortWrite
 	}
 
-	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
+	var buf []byte
+	if cap(p) != finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
+	} else {
+		buf = p[:c.header.Size()+len(p)]
+	}
 
-	return c.PacketConn.WriteTo(p, addr)
+	copy(buf[c.header.Size():], p)
+	c.header.Serialize(buf)
+
+	_, err = c.PacketConn.WriteTo(buf[:c.header.Size()+len(p)], addr)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }

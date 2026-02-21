@@ -46,11 +46,7 @@ type xdnsConnClient struct {
 	mutex  sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
-		return nil, errors.New("xdns requires being at the outermost level")
-	}
-
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	domain, err := ParseName(c.Domain)
 	if err != nil {
 		return nil, err
@@ -188,10 +184,6 @@ func (c *xdnsConnClient) sendLoop() {
 			_, _ = c.PacketConn.WriteTo(p.p, p.addr)
 		}
 	}
-}
-
-func (c *xdnsConnClient) Size() int32 {
-	return 0
 }
 
 func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
