@@ -56,6 +56,9 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 
 // Network implements proxy.Inbound.
 func (d *DokodemoDoor) Network() []net.Network {
+	if d.config.Networks[0] == net.Network_TCP && len(d.config.Networks) == 1 {
+		return append(d.config.Networks, net.Network_UNIX)
+	}
 	return d.config.Networks
 }
 
