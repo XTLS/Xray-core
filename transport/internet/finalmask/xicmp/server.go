@@ -302,10 +302,6 @@ func (c *xicmpConnServer) sendLoop() {
 	}
 }
 
-func (c *xicmpConnServer) Size() int32 {
-	return 0
-}
-
 func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
