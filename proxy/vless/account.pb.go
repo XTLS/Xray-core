@@ -24,6 +24,7 @@ const (
 type Reverse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tag           string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	AllowForward  bool                   `protobuf:"varint,2,opt,name=allowForward,proto3" json:"allowForward,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -63,6 +64,13 @@ func (x *Reverse) GetTag() string {
 		return x.Tag
 	}
 	return ""
+}
+
+func (x *Reverse) GetAllowForward() bool {
+	if x != nil {
+		return x.AllowForward
+	}
+	return false
 }
 
 type Account struct {
@@ -179,9 +187,10 @@ var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\"\x1b\n" +
+	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\"?\n" +
 	"\aReverse\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\"\x86\x02\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\"\n" +
+	"\fallowForward\x18\x02 \x01(\bR\fallowForward\"\x86\x02\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x1e\n" +

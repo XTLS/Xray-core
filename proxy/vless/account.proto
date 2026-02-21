@@ -8,6 +8,7 @@ option java_multiple_files = true;
 
 message Reverse {
   string tag = 1;
+  bool allowForward = 2;
 }
 
 message Account {
