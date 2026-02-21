@@ -113,6 +113,7 @@
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
+  - [NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
