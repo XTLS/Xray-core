@@ -153,15 +153,11 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		quicConfig := &quic.Config{
 			MaxIdleTimeout: net.ConnIdleTimeout,
 
-			// MaxIncomingStreams and KeepAlivePeriod are defaults of quic-go/http3.
-			// The default of quic-go (no http3) is different, so they are hardcoded here for clarity.
+			// these two are defaults of quic-go/http3. the default of quic-go (no
+			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
-			MaxIncomingStreams:              -1,
-			KeepAlivePeriod:                keepAlivePeriod,
-			InitialStreamReceiveWindow:     2 * 1024 * 1024,  // 2 MB
-			MaxStreamReceiveWindow:         16 * 1024 * 1024,  // 16 MB
-			InitialConnectionReceiveWindow: 5 * 1024 * 1024,   // 5 MB
-			MaxConnectionReceiveWindow:     32 * 1024 * 1024,  // 32 MB
+			MaxIncomingStreams: -1,
+			KeepAlivePeriod:    keepAlivePeriod,
 		}
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,

@@ -473,12 +473,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, &quic.Config{
-			InitialStreamReceiveWindow:     2 * 1024 * 1024,  // 2 MB
-			MaxStreamReceiveWindow:         16 * 1024 * 1024,  // 16 MB
-			InitialConnectionReceiveWindow: 5 * 1024 * 1024,   // 5 MB
-			MaxConnectionReceiveWindow:     32 * 1024 * 1024,  // 32 MB
-		})
+		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
