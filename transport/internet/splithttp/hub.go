@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
@@ -472,7 +473,12 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, nil)
+		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, &quic.Config{
+			InitialStreamReceiveWindow:     2 * 1024 * 1024,  // 2 MB
+			MaxStreamReceiveWindow:         16 * 1024 * 1024,  // 16 MB
+			InitialConnectionReceiveWindow: 5 * 1024 * 1024,   // 5 MB
+			MaxConnectionReceiveWindow:     32 * 1024 * 1024,  // 32 MB
+		})
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
@@ -484,8 +490,25 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Handler: handler,
 		}
 		go func() {
-			if err := l.h3server.ServeListener(l.h3listener); err != nil {
-				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
+			for {
+				conn, err := l.h3listener.Accept(context.Background())
+				if err != nil {
+					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
+					return
+				}
+				switch l.config.GetCongestion() {
+				case "bbr", "":
+					congestion.UseBBR(conn)
+				case "reno":
+					// quic-go default, do nothing
+				default:
+					errors.LogWarning(ctx, "unknown congestion control: ", l.config.GetCongestion(), ", falling back to reno")
+				}
+				go func() {
+					if err := l.h3server.ServeQUICConn(conn); err != nil {
+						errors.LogDebugInner(ctx, err, "XHTTP/3 connection ended")
+					}
+				}()
 			}
 		}()
 	} else { // tcp
@@ -549,6 +572,7 @@ func (ln *Listener) Close() error {
 		if err := ln.h3server.Close(); err != nil {
 			return err
 		}
+		return ln.h3listener.Close()
 	} else if ln.listener != nil {
 		return ln.listener.Close()
 	}
