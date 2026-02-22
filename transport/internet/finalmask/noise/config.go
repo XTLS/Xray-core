@@ -1,8 +1,6 @@
-package dtls
+package noise
 
-import (
-	"net"
-)
+import "net"
 
 func (c *Config) UDP() {
 }

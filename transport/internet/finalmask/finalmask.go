@@ -4,15 +4,15 @@ import (
 	"net"
 )
 
-type ConnSize interface {
-	Size() int32
-}
+const (
+	UDPSize = 4096 + 123
+)
 
 type Udpmask interface {
 	UDP()
 
-	WrapPacketConnClient(raw net.PacketConn, first bool, leaveSize int32, end bool) (net.PacketConn, error)
-	WrapPacketConnServer(raw net.PacketConn, first bool, leaveSize int32, end bool) (net.PacketConn, error)
+	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
+	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 }
 
 type UdpmaskManager struct {
@@ -26,27 +26,23 @@ func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
 }
 
 func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
-	leaveSize := int32(0)
 	var err error
 	for i, mask := range m.udpmasks {
-		raw, err = mask.WrapPacketConnClient(raw, i == len(m.udpmasks)-1, leaveSize, i == 0)
+		raw, err = mask.WrapPacketConnClient(raw, i, len(m.udpmasks)-1)
 		if err != nil {
 			return nil, err
 		}
-		leaveSize += raw.(ConnSize).Size()
 	}
 	return raw, nil
 }
 
 func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
-	leaveSize := int32(0)
 	var err error
 	for i, mask := range m.udpmasks {
-		raw, err = mask.WrapPacketConnServer(raw, i == len(m.udpmasks)-1, leaveSize, i == 0)
+		raw, err = mask.WrapPacketConnServer(raw, i, len(m.udpmasks)-1)
 		if err != nil {
 			return nil, err
 		}
-		leaveSize += raw.(ConnSize).Size()
 	}
 	return raw, nil
 }
@@ -88,4 +84,28 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 		}
 	}
 	return raw, nil
+}
+
+type TcpMaskConn interface {
+	TcpMaskConn()
+	RawConn() net.Conn
+	Splice() bool
+}
+
+func SpliceAble(conn net.Conn) bool {
+	_, ok := UnwrapTcpMask(conn).(*net.TCPConn)
+	return ok
+}
+
+func UnwrapTcpMask(conn net.Conn) net.Conn {
+	for {
+		if v, ok := conn.(TcpMaskConn); ok {
+			if !v.Splice() {
+				return conn
+			}
+			conn = v.RawConn()
+		} else {
+			return conn
+		}
+	}
 }
