@@ -6,14 +6,14 @@ import (
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 )
 
 type ObservatoryConfig struct {
-	SubjectSelector   []string          `json:"subjectSelector"`
-	ProbeURL          string            `json:"probeURL"`
-	ProbeInterval     duration.Duration `json:"probeInterval"`
-	EnableConcurrency bool              `json:"enableConcurrency"`
+	SubjectSelector   []string       `json:"subjectSelector"`
+	ProbeURL          string         `json:"probeURL"`
+	ProbeInterval     types.Duration `json:"probeInterval"`
+	EnableConcurrency bool           `json:"enableConcurrency"`
 }
 
 func (o *ObservatoryConfig) Build() (proto.Message, error) {
