@@ -159,7 +159,7 @@ func (c *xdnsConnServer) recvLoop() {
 		}
 
 		n, addr, err := c.PacketConn.ReadFrom(buf[:])
-		if err != nil {
+		if err != nil || n == 0 {
 			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
 				break
 			}
