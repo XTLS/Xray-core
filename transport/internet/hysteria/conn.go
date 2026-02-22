@@ -40,9 +40,11 @@ func (i *interConn) Write(b []byte) (int, error) {
 			buf = append(buf, b...)
 			_, err := i.stream.Write(buf)
 			if err != nil {
+				i.mutex.Unlock()
 				return 0, err
 			}
 			i.client = false
+			i.mutex.Unlock()
 			return len(b), nil
 		}
 		i.mutex.Unlock()
