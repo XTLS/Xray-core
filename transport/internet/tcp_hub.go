@@ -42,6 +42,7 @@ func ListenUnix(ctx context.Context, address net.Address, settings *MemoryStream
 	if listenFunc == nil {
 		return nil, errors.New(protocol, " unix listener not registered.").AtError()
 	}
+	handler = wrapTcpmaskHandler(ctx, settings, handler)
 	listener, err := listenFunc(ctx, address, net.Port(0), settings, handler)
 	if err != nil {
 		return nil, errors.New("failed to listen on unix address: ", address).Base(err)
@@ -71,11 +72,29 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, settings
 	if listenFunc == nil {
 		return nil, errors.New(protocol, " listener not registered.").AtError()
 	}
+	handler = wrapTcpmaskHandler(ctx, settings, handler)
 	listener, err := listenFunc(ctx, address, port, settings, handler)
 	if err != nil {
 		return nil, errors.New("failed to listen on address: ", address, ":", port).Base(err)
 	}
 	return listener, nil
+}
+
+func wrapTcpmaskHandler(ctx context.Context, settings *MemoryStreamConfig, next ConnHandler) ConnHandler {
+	if settings == nil || settings.TcpmaskManager == nil {
+		return next
+	}
+
+	manager := settings.TcpmaskManager
+	return func(conn stat.Connection) {
+		wrapped, err := manager.WrapConnServer(conn)
+		if err != nil {
+			errors.LogInfoInner(ctx, err, "failed to apply tcp mask on inbound connection")
+			_ = conn.Close()
+			return
+		}
+		next(wrapped)
+	}
 }
 
 // ListenSystem listens on a local address for incoming TCP connections.
