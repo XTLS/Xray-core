@@ -33,6 +33,7 @@ import (
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
+	"github.com/xtls/xray-core/transport/internet/gametunnel"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
@@ -516,6 +517,57 @@ type Masquerade struct {
 	Content    string            `json:"content"`
 	Headers    map[string]string `json:"headers"`
 	StatusCode int32             `json:"statusCode"`
+}
+
+type GameTunnelConfig struct {
+	Obfuscation        string `json:"obfuscation"`
+	Priority           string `json:"priority"`
+	MTU                uint32 `json:"mtu"`
+	MaxStreams          uint32 `json:"maxStreams"`
+	ConnectionIdLength uint32 `json:"connectionIdLength"`
+	EnablePadding      bool   `json:"enablePadding"`
+	PaddingMinSize     uint32 `json:"paddingMinSize"`
+	PaddingMaxSize     uint32 `json:"paddingMaxSize"`
+	HandshakeTimeout   uint32 `json:"handshakeTimeout"`
+	KeepAliveInterval  uint32 `json:"keepAliveInterval"`
+	Key                string `json:"key"`
+}
+
+func (c *GameTunnelConfig) Build() (*gametunnel.Config, error) {
+	config := gametunnel.DefaultConfig()
+	if c.Obfuscation != "" {
+		config.Obfuscation = gametunnel.ObfuscationModeFromString(c.Obfuscation)
+	}
+	if c.Priority != "" {
+		config.Priority = gametunnel.PriorityModeFromString(c.Priority)
+	}
+	if c.MTU > 0 {
+		config.MTU = c.MTU
+	}
+	if c.MaxStreams > 0 {
+		config.MaxStreams = c.MaxStreams
+	}
+	if c.ConnectionIdLength > 0 {
+		config.ConnectionIdLength = c.ConnectionIdLength
+	}
+	config.EnablePadding = c.EnablePadding
+	if c.PaddingMinSize > 0 {
+		config.PaddingMinSize = c.PaddingMinSize
+	}
+	if c.PaddingMaxSize > 0 {
+		config.PaddingMaxSize = c.PaddingMaxSize
+	}
+	if c.HandshakeTimeout > 0 {
+		config.HandshakeTimeout = c.HandshakeTimeout
+	}
+	if c.KeepAliveInterval > 0 {
+		config.KeepAliveInterval = c.KeepAliveInterval
+	}
+	if c.Key != "" {
+		config.Key = c.Key
+	}
+	config.Validate()
+	return config, nil
 }
 
 type HysteriaConfig struct {
@@ -1095,6 +1147,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
 	case "hysteria":
 		return "hysteria", nil
+	case "gametunnel", "gt":
+		return "gametunnel", nil	
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
@@ -1764,6 +1818,7 @@ type StreamConfig struct {
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
+	GameTunnelSettings  *GameTunnelConfig  `json:"gametunnelSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
 
@@ -1892,6 +1947,15 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "hysteria",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.GameTunnelSettings != nil {
+		gs, err := c.GameTunnelSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build GameTunnel config.").Base(err)
+		}
+		internet.RegisterProtocolConfigCreator("gametunnel", func() interface{} {
+			return gs
 		})
 	}
 	if c.SocketSettings != nil {
