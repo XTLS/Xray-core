@@ -186,6 +186,7 @@ type Config struct {
 	UplinkDataPlacement  string                 `protobuf:"bytes,24,opt,name=uplinkDataPlacement,proto3" json:"uplinkDataPlacement,omitempty"`
 	UplinkDataKey        string                 `protobuf:"bytes,25,opt,name=uplinkDataKey,proto3" json:"uplinkDataKey,omitempty"`
 	UplinkChunkSize      uint32                 `protobuf:"varint,26,opt,name=uplinkChunkSize,proto3" json:"uplinkChunkSize,omitempty"`
+	ServerMaxHeaderBytes int32                  `protobuf:"varint,27,opt,name=serverMaxHeaderBytes,proto3" json:"serverMaxHeaderBytes,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -402,6 +403,13 @@ func (x *Config) GetUplinkChunkSize() uint32 {
 	return 0
 }
 
+func (x *Config) GetServerMaxHeaderBytes() int32 {
+	if x != nil {
+		return x.ServerMaxHeaderBytes
+	}
+	return 0
+}
+
 var File_transport_internet_splithttp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_splithttp_config_proto_rawDesc = "" +
@@ -417,8 +425,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xde\n" +
-	"\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\x92\v\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -448,7 +455,8 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x06seqKey\x18\x17 \x01(\tR\x06seqKey\x120\n" +
 	"\x13uplinkDataPlacement\x18\x18 \x01(\tR\x13uplinkDataPlacement\x12$\n" +
 	"\ruplinkDataKey\x18\x19 \x01(\tR\ruplinkDataKey\x12(\n" +
-	"\x0fuplinkChunkSize\x18\x1a \x01(\rR\x0fuplinkChunkSize\x1a:\n" +
+	"\x0fuplinkChunkSize\x18\x1a \x01(\rR\x0fuplinkChunkSize\x122\n" +
+	"\x14serverMaxHeaderBytes\x18\x1b \x01(\x05R\x14serverMaxHeaderBytes\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +

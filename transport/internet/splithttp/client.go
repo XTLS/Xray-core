@@ -3,7 +3,6 @@ package splithttp
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -117,17 +116,27 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
-	var encodedData string
+	var header http.Header
+	var cookies []*http.Cookie
+
 	dataPlacement := c.transportConfig.GetNormalizedUplinkDataPlacement()
 
-	if dataPlacement != PlacementBody {
+	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
+		header = c.transportConfig.GetRequestHeader()
+	} else {
 		data, err := io.ReadAll(body)
 		if err != nil {
 			return err
 		}
-		encodedData = base64.RawURLEncoding.EncodeToString(data)
 		body = nil
 		contentLength = 0
+		switch dataPlacement {
+		case PlacementHeader:
+			header = c.transportConfig.GetRequestHeaderWithPayload(data)
+		case PlacementCookie:
+			header = c.transportConfig.GetRequestHeader()
+			cookies = c.transportConfig.GetRequestCookiesWithPayload(data)
+		}
 	}
 
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
@@ -136,39 +145,9 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		return err
 	}
 	req.ContentLength = contentLength
-	req.Header = c.transportConfig.GetRequestHeader()
-
-	if dataPlacement != PlacementBody {
-		key := c.transportConfig.UplinkDataKey
-		chunkSize := int(c.transportConfig.UplinkChunkSize)
-
-		switch dataPlacement {
-		case PlacementHeader:
-			for i := 0; i < len(encodedData); i += chunkSize {
-				end := i + chunkSize
-				if end > len(encodedData) {
-					end = len(encodedData)
-				}
-				chunk := encodedData[i:end]
-				headerKey := fmt.Sprintf("%s-%d", key, i/chunkSize)
-				req.Header.Set(headerKey, chunk)
-			}
-
-			req.Header.Set(key+"-Length", fmt.Sprintf("%d", len(encodedData)))
-			req.Header.Set(key+"-Upstream", "1")
-		case PlacementCookie:
-			for i := 0; i < len(encodedData); i += chunkSize {
-				end := i + chunkSize
-				if end > len(encodedData) {
-					end = len(encodedData)
-				}
-				chunk := encodedData[i:end]
-				cookieName := fmt.Sprintf("%s_%d", key, i/chunkSize)
-				req.AddCookie(&http.Cookie{Name: cookieName, Value: chunk})
-			}
-
-			req.AddCookie(&http.Cookie{Name: key + "_upstream", Value: "1"})
-		}
+	req.Header = header
+	for _, c := range cookies {
+		req.AddCookie(c)
 	}
 
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())

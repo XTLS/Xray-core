@@ -237,6 +237,7 @@ type SplitHTTPConfig struct {
 	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
+	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -316,9 +317,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	switch c.UplinkDataPlacement {
 	case "":
-		c.UplinkDataPlacement = "body"
-	case "body":
-	case "cookie", "header":
+		c.UplinkDataPlacement = splithttp.PlacementAuto
+	case splithttp.PlacementAuto, splithttp.PlacementBody:
+	case splithttp.PlacementCookie, splithttp.PlacementHeader:
 		if c.Mode != "packet-up" {
 			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
 		}
@@ -347,9 +348,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	case "":
 		c.SeqPlacement = "path"
 	case "path", "cookie", "header", "query":
-		if c.SessionPlacement == "path" {
-			return nil, errors.New("SeqPlacement must be path when SessionPlacement is path")
-		}
 	default:
 		return nil, errors.New("unsupported seq placement: " + c.SeqPlacement)
 	}
@@ -372,24 +370,28 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.UplinkDataPlacement != "body" && c.UplinkDataKey == "" {
+	if c.UplinkDataPlacement != splithttp.PlacementBody && c.UplinkDataKey == "" {
 		switch c.UplinkDataPlacement {
-		case "cookie":
+		case splithttp.PlacementCookie:
 			c.UplinkDataKey = "x_data"
-		case "header":
+		case splithttp.PlacementAuto, splithttp.PlacementHeader:
 			c.UplinkDataKey = "X-Data"
 		}
 	}
 
 	if c.UplinkChunkSize == 0 {
 		switch c.UplinkDataPlacement {
-		case "cookie":
-			c.UplinkChunkSize = 3 * 1024 // 3KB
-		case "header":
-			c.UplinkChunkSize = 4 * 1024 // 4KB
+		case splithttp.PlacementCookie:
+			c.UplinkChunkSize = 3 * 1024 // 3KiB
+		case splithttp.PlacementHeader:
+			c.UplinkChunkSize = 4 * 1000 // 4KB
 		}
 	} else if c.UplinkChunkSize < 64 {
 		c.UplinkChunkSize = 64
+	}
+
+	if c.ServerMaxHeaderBytes < 0 {
+		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
 
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
@@ -429,6 +431,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMinPostsIntervalMs: newRangeConfig(c.ScMinPostsIntervalMs),
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
+		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),

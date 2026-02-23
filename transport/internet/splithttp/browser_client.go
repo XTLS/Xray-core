@@ -3,6 +3,7 @@ package splithttp
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -19,12 +20,17 @@ func (c *BrowserDialerClient) IsClosed() bool {
 	panic("not implemented yet")
 }
 
-func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, _ string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
 	if body != nil {
 		return nil, nil, nil, errors.New("bidirectional streaming for browser dialer not implemented yet")
 	}
 
-	header := c.transportConfig.GetRequestHeader()
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	request.Header = c.transportConfig.GetRequestHeader()
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
 	config := XPaddingConfig{Length: length}
 
@@ -45,9 +51,10 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, _ stri
 		}
 	}
 
-	c.transportConfig.ApplyXPaddingToHeader(header, config)
+	c.transportConfig.ApplyXPaddingToRequest(request, config)
+	c.transportConfig.ApplyMetaToRequest(request, sessionId, "")
 
-	conn, err := browser_dialer.DialGet(url, header)
+	conn, err := browser_dialer.DialGet(request.URL.String(), request.Header, request.Cookies())
 	dummyAddr := &net.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
@@ -56,13 +63,36 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, _ stri
 	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
-func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, _ string, _ string, body io.Reader, contentLength int64) error {
+func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
 	bytes, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}
 
-	header := c.transportConfig.GetRequestHeader()
+	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
+	request, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return err
+	}
+
+	dataPlacement := c.transportConfig.GetNormalizedUplinkDataPlacement()
+
+	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
+		request.Header = c.transportConfig.GetRequestHeader()
+	} else {
+		switch dataPlacement {
+		case PlacementHeader:
+			request.Header = c.transportConfig.GetRequestHeaderWithPayload(bytes)
+		case PlacementCookie:
+			request.Header = c.transportConfig.GetRequestHeader()
+			for _, cookie := range c.transportConfig.GetRequestCookiesWithPayload(bytes) {
+				request.AddCookie(cookie)
+			}
+		}
+		bytes = nil
+	}
+
+
 	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
 	config := XPaddingConfig{Length: length}
 
@@ -83,9 +113,10 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, _ stri
 		}
 	}
 
-	c.transportConfig.ApplyXPaddingToHeader(header, config)
+	c.transportConfig.ApplyXPaddingToRequest(request, config)
+	c.transportConfig.ApplyMetaToRequest(request, sessionId, seqStr)
 
-	err = browser_dialer.DialPost(url, header, bytes)
+	err = browser_dialer.DialPacket(method, request.URL.String(), request.Header, request.Cookies(), bytes)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,8 @@
 package splithttp
 
 import (
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -54,11 +56,64 @@ func (c *Config) GetRequestHeader() http.Header {
 	return header
 }
 
-func (c *Config) WriteResponseHeader(writer http.ResponseWriter) {
+
+func (c *Config) GetRequestHeaderWithPayload(payload []byte) http.Header {
+	header := c.GetRequestHeader()
+
+	key := c.UplinkDataKey
+	chunkSize := int(c.UplinkChunkSize)
+	encodedData := base64.RawURLEncoding.EncodeToString(payload)
+
+	for i := 0; i < len(encodedData); i += chunkSize {
+		end := i + chunkSize
+		if end > len(encodedData) {
+			end = len(encodedData)
+		}
+		chunk := encodedData[i:end]
+		headerKey := fmt.Sprintf("%s-%d", key, i/chunkSize)
+		header.Set(headerKey, chunk)
+	}
+
+	return header
+}
+
+func (c *Config) GetRequestCookiesWithPayload(payload []byte) []*http.Cookie {
+	cookies := []*http.Cookie{}
+
+	key := c.UplinkDataKey
+	chunkSize := int(c.UplinkChunkSize)
+	encodedData := base64.RawURLEncoding.EncodeToString(payload)
+
+	for i := 0; i < len(encodedData); i += chunkSize {
+		end := i + chunkSize
+		if end > len(encodedData) {
+			end = len(encodedData)
+		}
+		chunk := encodedData[i:end]
+		cookieName := fmt.Sprintf("%s_%d", key, i/chunkSize)
+		cookies = append(cookies, &http.Cookie{Name: cookieName, Value: chunk})
+	}
+
+	return cookies
+}
+
+func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestHeader http.Header) {
 	// CORS headers for the browser dialer
-	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	if origin := requestHeader.Get("Origin"); origin == "" {
+		writer.Header().Set("Access-Control-Allow-Origin", "*")
+	} else {
+		// Chrome says: The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'.
+		writer.Header().Set("Access-Control-Allow-Origin", origin)
+	}
 	writer.Header().Set("Access-Control-Allow-Methods", "*")
-	// writer.Header().Set("X-Version", core.Version())
+	writer.Header().Set("Access-Control-Allow-Headers", "*")
+
+	if c.GetNormalizedSessionPlacement() == PlacementCookie ||
+	   c.GetNormalizedSeqPlacement() == PlacementCookie ||
+	   c.XPaddingPlacement == PlacementCookie ||
+	   c.GetNormalizedUplinkDataPlacement() == PlacementCookie {
+		writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
 }
 
 func (c *Config) GetNormalizedUplinkHTTPMethod() string {
@@ -108,6 +163,14 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 	}
 
 	return *c.ScStreamUpServerSecs
+}
+
+func (c *Config) GetNormalizedServerMaxHeaderBytes() int {
+	if c.ServerMaxHeaderBytes <= 0 {
+		return 8192
+	} else {
+		return int(c.ServerMaxHeaderBytes)
+	}
 }
 
 func (c *Config) GetNormalizedSessionPlacement() string {
@@ -202,18 +265,18 @@ func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (session
 	sessionKey := c.GetNormalizedSessionKey()
 	seqKey := c.GetNormalizedSeqKey()
 
-	if sessionPlacement == PlacementPath && seqPlacement == PlacementPath {
-		subpath := strings.Split(req.URL.Path[len(path):], "/")
-		if len(subpath) > 0 {
-			sessionId = subpath[0]
-		}
-		if len(subpath) > 1 {
-			seqStr = subpath[1]
-		}
-		return sessionId, seqStr
+	var subpath []string
+	pathPart := 0
+	if sessionPlacement == PlacementPath || seqPlacement == PlacementPath {
+		subpath = strings.Split(req.URL.Path[len(path):], "/")
 	}
 
 	switch sessionPlacement {
+	case PlacementPath:
+		if len(subpath) > pathPart {
+			sessionId = subpath[pathPart]
+			pathPart += 1
+		}
 	case PlacementQuery:
 		sessionId = req.URL.Query().Get(sessionKey)
 	case PlacementHeader:
@@ -225,6 +288,11 @@ func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (session
 	}
 
 	switch seqPlacement {
+	case PlacementPath:
+		if len(subpath) > pathPart {
+			seqStr = subpath[pathPart]
+			pathPart += 1
+		}
 	case PlacementQuery:
 		seqStr = req.URL.Query().Get(seqKey)
 	case PlacementHeader:
