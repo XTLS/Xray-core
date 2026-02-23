@@ -103,7 +103,7 @@ Client                                 Server
 ### 1. Клонируем форк
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gametunnel-core.git
+git clone https://github.com/it2konst/gametunnel-core.git
 cd gametunnel-core
 ```
 
