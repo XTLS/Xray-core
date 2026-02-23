@@ -74,4 +74,6 @@ import (
 
 	// Commands
 	_ "github.com/xtls/xray-core/main/commands/all"
+
+	_ "github.com/xtls/xray-core/transport/internet/gametunnel"
 )
