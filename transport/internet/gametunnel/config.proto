@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package xray.transport.internet.gametunnel;
+option go_package = "github.com/xtls/xray-core/transport/internet/gametunnel";
+
+// GameTunnel Transport Configuration
+// 
+// Пример использования в xray-core JSON конфиге:
+//
+//   {
+//     "inbounds": [{
+//       "protocol": "vless",
+//       "settings": { ... },
+//       "streamSettings": {
+//         "network": "gametunnel",
+//         "gametunnelSettings": {
+//           "obfuscation": "quic",
+//           "priority": "gaming",
+//           "mtu": 1400,
+//           "key": "my-secret-key"
+//         }
+//       }
+//     }]
+//   }
+
+message Config {
+    // Режим обфускации трафика
+    // "quic" - маскировка под QUIC v1 (по умолчанию)
+    // "webrtc" - маскировка под DTLS/WebRTC
+    // "raw" - без обфускации
+    string obfuscation = 1;
+    
+    // Режим приоритизации
+    // "gaming" - приоритет маленьким пакетам
+    // "streaming" - приоритет медиа-потокам
+    // "none" - без приоритизации
+    string priority = 2;
+    
+    // MTU - максимальный размер пакета (576-1500)
+    uint32 mtu = 3;
+    
+    // Максимальное количество мультиплексированных потоков (1-256)
+    uint32 max_streams = 4;
+    
+    // Длина Connection ID в байтах (4-20)
+    uint32 connection_id_length = 5;
+    
+    // Включить padding для маскировки размера пакетов
+    bool enable_padding = 6;
+    
+    // Минимальный размер padding (байт)
+    uint32 padding_min_size = 7;
+    
+    // Максимальный размер padding (байт)
+    uint32 padding_max_size = 8;
+    
+    // Таймаут хэндшейка (секунды)
+    uint32 handshake_timeout = 9;
+    
+    // Интервал keep-alive (секунды, 0 = отключить)
+    uint32 keep_alive_interval = 10;
+    
+    // Pre-shared key для дополнительной аутентификации
+    string key = 11;
+}
