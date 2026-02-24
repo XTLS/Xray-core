@@ -59,33 +59,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
 	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
-	req.Header = c.transportConfig.GetRequestHeader()
-	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{Length: length}
-
-	if c.transportConfig.XPaddingObfsMode {
-		config.Placement = XPaddingPlacement{
-			Placement: c.transportConfig.XPaddingPlacement,
-			Key:       c.transportConfig.XPaddingKey,
-			Header:    c.transportConfig.XPaddingHeader,
-			RawURL:    url,
-		}
-		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
-	} else {
-		config.Placement = XPaddingPlacement{
-			Placement: PlacementQueryInHeader,
-			Key:       "x_padding",
-			Header:    "Referer",
-			RawURL:    url,
-		}
-	}
-
-	c.transportConfig.ApplyXPaddingToRequest(req, config)
-	c.transportConfig.ApplyMetaToRequest(req, sessionId, "")
-
-	if method == c.transportConfig.GetNormalizedUplinkHTTPMethod() && !c.transportConfig.NoGRPCHeader {
-		req.Header.Set("Content-Type", "application/grpc")
-	}
+	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
 	wrc = &WaitReadCloser{Wait: make(chan struct{})}
 	go func() {
@@ -116,62 +90,13 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
-	var header http.Header
-	var cookies []*http.Cookie
-
-	dataPlacement := c.transportConfig.GetNormalizedUplinkDataPlacement()
-
-	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
-		header = c.transportConfig.GetRequestHeader()
-	} else {
-		data, err := io.ReadAll(body)
-		if err != nil {
-			return err
-		}
-		body = nil
-		contentLength = 0
-		switch dataPlacement {
-		case PlacementHeader:
-			header = c.transportConfig.GetRequestHeaderWithPayload(data)
-		case PlacementCookie:
-			header = c.transportConfig.GetRequestHeader()
-			cookies = c.transportConfig.GetRequestCookiesWithPayload(data)
-		}
-	}
-
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
 	if err != nil {
 		return err
 	}
 	req.ContentLength = contentLength
-	req.Header = header
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-
-	length := int(c.transportConfig.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{Length: length}
-
-	if c.transportConfig.XPaddingObfsMode {
-		config.Placement = XPaddingPlacement{
-			Placement: c.transportConfig.XPaddingPlacement,
-			Key:       c.transportConfig.XPaddingKey,
-			Header:    c.transportConfig.XPaddingHeader,
-			RawURL:    url,
-		}
-		config.Method = PaddingMethod(c.transportConfig.XPaddingMethod)
-	} else {
-		config.Placement = XPaddingPlacement{
-			Placement: PlacementQueryInHeader,
-			Key:       "x_padding",
-			Header:    "Referer",
-			RawURL:    url,
-		}
-	}
-
-	c.transportConfig.ApplyXPaddingToRequest(req, config)
-	c.transportConfig.ApplyMetaToRequest(req, sessionId, seqStr)
+	c.transportConfig.FillPacketRequest(req, sessionId, seqStr)
 
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)

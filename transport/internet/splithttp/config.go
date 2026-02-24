@@ -3,6 +3,7 @@ package splithttp
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -257,6 +258,89 @@ func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr 
 			req.AddCookie(&http.Cookie{Name: seqKey, Value: seqStr})
 		}
 	}
+}
+
+func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqStr string) {
+	request.Header = c.GetRequestHeader()
+	length := int(c.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{Length: length}
+
+	if c.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: c.XPaddingPlacement,
+			Key:       c.XPaddingKey,
+			Header:    c.XPaddingHeader,
+			RawURL:    request.URL.String(),
+		}
+		config.Method = PaddingMethod(c.XPaddingMethod)
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    request.URL.String(),
+		}
+	}
+
+	c.ApplyXPaddingToRequest(request, config)
+	c.ApplyMetaToRequest(request, sessionId, "")
+
+	if request.Body != nil && !c.NoGRPCHeader { // stream-up/one
+		request.Header.Set("Content-Type", "application/grpc")
+	}
+}
+
+func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqStr string) error {
+	dataPlacement := c.GetNormalizedUplinkDataPlacement()
+
+	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
+		request.Header = c.GetRequestHeader()
+	} else {
+		var data []byte
+		var err error
+		if request.Body != nil {
+			data, err = io.ReadAll(request.Body)
+			if err != nil {
+				return err
+			}
+		}
+		request.Body = nil
+		request.ContentLength = 0
+		switch dataPlacement {
+		case PlacementHeader:
+			request.Header = c.GetRequestHeaderWithPayload(data)
+		case PlacementCookie:
+			request.Header = c.GetRequestHeader()
+			for _, cookie := range c.GetRequestCookiesWithPayload(data) {
+				request.AddCookie(cookie)
+			}
+		}
+	}
+
+	length := int(c.GetNormalizedXPaddingBytes().rand())
+	config := XPaddingConfig{Length: length}
+
+	if c.XPaddingObfsMode {
+		config.Placement = XPaddingPlacement{
+			Placement: c.XPaddingPlacement,
+			Key:       c.XPaddingKey,
+			Header:    c.XPaddingHeader,
+			RawURL:    request.URL.String(),
+		}
+		config.Method = PaddingMethod(c.XPaddingMethod)
+	} else {
+		config.Placement = XPaddingPlacement{
+			Placement: PlacementQueryInHeader,
+			Key:       "x_padding",
+			Header:    "Referer",
+			RawURL:    request.URL.String(),
+		}
+	}
+
+	c.ApplyXPaddingToRequest(request, config)
+	c.ApplyMetaToRequest(request, sessionId, seqStr)
+
+	return nil
 }
 
 func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (sessionId string, seqStr string) {

@@ -254,13 +254,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		var headerPayload []byte
 		if dataPlacement == PlacementAuto || dataPlacement == PlacementHeader {
 			var headerPayloadChunks [] string
-			for i := 0; true; {
+			for i := 0; true; i++ {
 				chunk := request.Header.Get(fmt.Sprintf("%s-%d", uplinkDataKey, i))
 				if chunk == "" {
 					break
 				}
 				headerPayloadChunks = append(headerPayloadChunks, chunk)
-				i++
 			}
 			headerPayloadEncoded := strings.Join(headerPayloadChunks, "")
 			headerPayload, err = base64.RawURLEncoding.DecodeString(headerPayloadEncoded)
@@ -274,11 +273,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		var cookiePayload []byte
 		if dataPlacement == PlacementAuto || dataPlacement == PlacementCookie {
 			var cookiePayloadChunks []string
-			for i := 0; true; {
+			for i := 0; true; i++ {
 				cookieName := fmt.Sprintf("%s_%d", uplinkDataKey, i)
 				if c, _ := request.Cookie(cookieName); c != nil {
 					cookiePayloadChunks = append(cookiePayloadChunks, c.Value)
-					i++
 				} else {
 					break
 				}
