@@ -203,6 +203,8 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				switch transportConfig.GetCongestion() {
 				case "bbr", "":
 					congestion.UseBBR(quicConn)
+				case "force-brutal":
+					congestion.UseBrutal(quicConn, transportConfig.Up)
 				case "reno":
 					// quic-go default, do nothing
 				default:

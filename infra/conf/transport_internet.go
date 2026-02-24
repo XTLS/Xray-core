@@ -232,6 +232,7 @@ type SplitHTTPConfig struct {
 	UplinkDataKey        string            `json:"uplinkDataKey"`
 	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
 	Congestion           string            `json:"congestion"`
+	Up                   Bandwidth         `json:"up"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -405,11 +406,23 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}
 
+	up, err := c.Up.Bps()
+	if err != nil {
+		return nil, err
+	}
+	if up > 0 && up < 65536 {
+		return nil, errors.New("Up must be at least 65536 bytes per second")
+	}
+
 	switch c.Congestion {
 	case "", "bbr", "reno":
 		// valid
+	case "force-brutal":
+		if up == 0 {
+			return nil, errors.New("force-brutal requires up")
+		}
 	default:
-		return nil, errors.New("unknown congestion control: ", c.Congestion, ", valid values: bbr, reno")
+		return nil, errors.New("unknown congestion control: ", c.Congestion, ", valid values: bbr, reno, force-brutal")
 	}
 
 	config := &splithttp.Config{
@@ -432,6 +445,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		UplinkDataKey:        c.UplinkDataKey,
 		UplinkChunkSize:      c.UplinkChunkSize,
 		Congestion:           c.Congestion,
+		Up:                   up,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),

@@ -494,6 +494,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 				switch l.config.GetCongestion() {
 				case "bbr", "":
 					congestion.UseBBR(conn)
+				case "force-brutal":
+					congestion.UseBrutal(conn, l.config.Up)
 				case "reno":
 					// quic-go default, do nothing
 				default:
