@@ -228,8 +228,8 @@ func (p *Packet) Marshal(config *Config) ([]byte, error) {
 	}
 
 	// Проверяем, что не превышаем MTU
-	if totalSize > int(config.MTU) {
-		return nil, fmt.Errorf("packet size %d exceeds MTU %d", totalSize, config.MTU)
+	if totalSize > MaxPacketSize {
+		return nil, fmt.Errorf("packet size %d exceeds max %d", totalSize, MaxPacketSize)
 	}
 
 	buf := make([]byte, totalSize)
