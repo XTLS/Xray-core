@@ -230,7 +230,7 @@ type SplitHTTPConfig struct {
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
-	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
+	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -379,17 +379,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.UplinkChunkSize == 0 {
-		switch c.UplinkDataPlacement {
-		case splithttp.PlacementCookie:
-			c.UplinkChunkSize = 3 * 1024 // 3KiB
-		case splithttp.PlacementHeader:
-			c.UplinkChunkSize = 4 * 1000 // 4KB
-		}
-	} else if c.UplinkChunkSize < 64 {
-		c.UplinkChunkSize = 64
-	}
-
 	if c.ServerMaxHeaderBytes < 0 {
 		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
@@ -424,7 +413,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SeqKey:               c.SeqKey,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
-		UplinkChunkSize:      c.UplinkChunkSize,
+		UplinkChunkSize:      newRangeConfig(c.UplinkChunkSize),
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),

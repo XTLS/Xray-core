@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -62,16 +63,13 @@ func (c *Config) GetRequestHeaderWithPayload(payload []byte) http.Header {
 	header := c.GetRequestHeader()
 
 	key := c.UplinkDataKey
-	chunkSize := int(c.UplinkChunkSize)
 	encodedData := base64.RawURLEncoding.EncodeToString(payload)
 
-	for i := 0; i < len(encodedData); i += chunkSize {
-		end := i + chunkSize
-		if end > len(encodedData) {
-			end = len(encodedData)
-		}
-		chunk := encodedData[i:end]
-		headerKey := fmt.Sprintf("%s-%d", key, i/chunkSize)
+	for i := 0; len(encodedData) > 0; i++ {
+		chunkSize := min(int(c.GetNormalizedUplinkChunkSize().rand()), len(encodedData))
+		chunk := encodedData[:chunkSize]
+		encodedData = encodedData[chunkSize:]
+		headerKey := fmt.Sprintf("%s-%d", key, i)
 		header.Set(headerKey, chunk)
 	}
 
@@ -82,16 +80,13 @@ func (c *Config) GetRequestCookiesWithPayload(payload []byte) []*http.Cookie {
 	cookies := []*http.Cookie{}
 
 	key := c.UplinkDataKey
-	chunkSize := int(c.UplinkChunkSize)
 	encodedData := base64.RawURLEncoding.EncodeToString(payload)
 
-	for i := 0; i < len(encodedData); i += chunkSize {
-		end := i + chunkSize
-		if end > len(encodedData) {
-			end = len(encodedData)
-		}
-		chunk := encodedData[i:end]
-		cookieName := fmt.Sprintf("%s_%d", key, i/chunkSize)
+	for i := 0; len(encodedData) > 0; i++ {
+		chunkSize := min(int(c.GetNormalizedUplinkChunkSize().rand()), len(encodedData))
+		chunk := encodedData[:chunkSize]
+		encodedData = encodedData[chunkSize:]
+		cookieName := fmt.Sprintf("%s_%d", key, i)
 		cookies = append(cookies, &http.Cookie{Name: cookieName, Value: chunk})
 	}
 
@@ -164,6 +159,32 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() RangeConfig {
 	}
 
 	return *c.ScStreamUpServerSecs
+}
+
+func (c *Config) GetNormalizedUplinkChunkSize() RangeConfig {
+	if c.UplinkChunkSize == nil || c.UplinkChunkSize.To == 0 {
+		switch c.UplinkDataPlacement {
+		case PlacementCookie:
+			return RangeConfig{
+				From: 2 * 1024, // 2 KiB
+				To:   3 * 1024, // 3 KiB
+			}
+		case PlacementHeader:
+			return RangeConfig{
+				From: 3 * 1000, // 3 KB
+				To:   4 * 1000, // 4 KB
+			}
+		default:
+			return c.GetNormalizedScMaxEachPostBytes()
+		}
+	} else if c.UplinkChunkSize.From < 64 {
+		return RangeConfig{
+			From: 64,
+			To:   max(64, c.UplinkChunkSize.To),
+		}
+	}
+
+	return *c.UplinkChunkSize
 }
 
 func (c *Config) GetNormalizedServerMaxHeaderBytes() int {
@@ -314,6 +335,14 @@ func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqS
 			for _, cookie := range c.GetRequestCookiesWithPayload(data) {
 				request.AddCookie(cookie)
 			}
+		}
+	}
+
+	switch request.Method {
+	case "POST", "PUT", "PATCH":
+	default:
+		if request.Body != nil {
+			return errors.New("Can't make " + request.Method + " with body")
 		}
 	}
 
