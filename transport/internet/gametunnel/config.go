@@ -159,17 +159,17 @@ func (c *Config) Validate() error {
 // GetMaxPayloadSize возвращает максимальный размер полезной нагрузки
 // с учётом заголовков GameTunnel и обфускации
 func (c *Config) GetMaxPayloadSize() uint32 {
-	// Заголовок GameTunnel: flags(1) + version(4) + connID(var) + pktNum(4) + payloadLen(2)
 	headerSize := uint32(1 + 4 + c.ConnectionIdLength + 4 + 2)
-	// Auth tag: Poly1305 = 16 байт
 	authTagSize := uint32(16)
-	// Максимальный padding (учитываем worst case)
 	maxPaddingOverhead := uint32(0)
 	if c.EnablePadding {
-		maxPaddingOverhead = 2 // 2 байта на длину padding
+		maxPaddingOverhead = c.PaddingMaxSize + 2
 	}
-
-	return c.MTU - headerSize - authTagSize - maxPaddingOverhead
+	maxTotal := c.MTU - headerSize - authTagSize - maxPaddingOverhead
+	if maxTotal > 1200 {
+		maxTotal = 1200
+	}
+	return maxTotal
 }
 
 // ObfuscationModeFromString парсит строковое значение режима обфускации
