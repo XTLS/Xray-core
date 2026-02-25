@@ -257,38 +257,28 @@ func (c *GameTunnelClientConn) handlePacket(data []byte) {
 		return
 	}
 
-	// Пробуем обработать как DATA пакет в любом случае
+	// Обрабатываем все пакеты как DATA
 	c.handleDataPacket(data)
 }
 
 // handleDataPacket расшифровывает и передаёт данные
 func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
-	fmt.Printf("[GT-DEBUG] raw packet: len=%d, first16bytes=%x\n", len(data), data[:min(16, len(data))])
-
 	pkt, err := Unmarshal(data, int(c.config.ConnectionIdLength))
 	if err != nil {
-		fmt.Printf("[GT-DEBUG] Unmarshal error: %v\n", err)
 		return
 	}
-
-	fmt.Printf("[GT-DEBUG] Unmarshal OK: type=%d pktNum=%d payloadLen=%d hasPadding=%v connID=%x\n",
-		pkt.Type, pkt.PacketNumber, len(pkt.Payload), pkt.HasPadding, pkt.ConnectionID)
 
 	connIDLen := int(c.config.ConnectionIdLength)
 	adLen := FlagsSize + VersionSize + connIDLen
 	if len(data) < adLen {
-		fmt.Printf("[GT-DEBUG] data too short for AD\n")
 		return
 	}
 	additionalData := data[:adLen]
 
 	plaintext, err := c.session.Keys.Decrypt(pkt.Payload, pkt.PacketNumber, additionalData)
 	if err != nil {
-		fmt.Printf("[GT-DEBUG] Decrypt error: %v (pktNum=%d, payloadLen=%d)\n", err, pkt.PacketNumber, len(pkt.Payload))
 		return
 	}
-
-	fmt.Printf("[GT-DEBUG] Decrypt OK: %d bytes\n", len(plaintext))
 
 	atomic.StoreUint32(&c.session.RecvPacketNum, pkt.PacketNumber)
 
@@ -296,13 +286,6 @@ func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
 	case c.session.inbound <- plaintext:
 	default:
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // handleControlPacket обрабатывает управляющий пакет
