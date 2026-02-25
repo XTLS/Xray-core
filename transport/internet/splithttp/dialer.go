@@ -200,15 +200,17 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if err != nil {
 					return nil, err
 				}
-				switch transportConfig.GetCongestion() {
-				case "bbr", "":
+				if tlsConfig != nil && tlsConfig.Quic != nil {
+					switch tlsConfig.Quic.Congestion {
+					case "force-brutal":
+						congestion.UseBrutal(quicConn, tlsConfig.Quic.Up)
+					case "reno":
+						// quic-go default, do nothing
+					default:
+						congestion.UseBBR(quicConn)
+					}
+				} else {
 					congestion.UseBBR(quicConn)
-				case "force-brutal":
-					congestion.UseBrutal(quicConn, transportConfig.Up)
-				case "reno":
-					// quic-go default, do nothing
-				default:
-					errors.LogWarning(ctx, "unknown congestion control: ", transportConfig.GetCongestion(), ", falling back to reno")
 				}
 				return quicConn, nil
 			},

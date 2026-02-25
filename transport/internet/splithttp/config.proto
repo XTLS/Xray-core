@@ -49,6 +49,4 @@ message Config {
   string uplinkDataPlacement = 24;
   string uplinkDataKey = 25;
   uint32 uplinkChunkSize = 26;
-  string congestion = 27;
-  uint64 up = 28;
 }

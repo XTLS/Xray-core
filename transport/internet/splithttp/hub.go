@@ -481,6 +481,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		handler.localAddr = l.h3listener.Addr()
 
+		xrayTlsConfig := tls.ConfigFromStreamSettings(streamSettings)
+
 		l.h3server = &http3.Server{
 			Handler: handler,
 		}
@@ -491,15 +493,17 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
 					return
 				}
-				switch l.config.GetCongestion() {
-				case "bbr", "":
+				if xrayTlsConfig != nil && xrayTlsConfig.Quic != nil {
+					switch xrayTlsConfig.Quic.Congestion {
+					case "force-brutal":
+						congestion.UseBrutal(conn, xrayTlsConfig.Quic.Up)
+					case "reno":
+						// quic-go default, do nothing
+					default:
+						congestion.UseBBR(conn)
+					}
+				} else {
 					congestion.UseBBR(conn)
-				case "force-brutal":
-					congestion.UseBrutal(conn, l.config.Up)
-				case "reno":
-					// quic-go default, do nothing
-				default:
-					errors.LogWarning(ctx, "unknown congestion control: ", l.config.GetCongestion(), ", falling back to reno")
 				}
 				go func() {
 					if err := l.h3server.ServeQUICConn(conn); err != nil {

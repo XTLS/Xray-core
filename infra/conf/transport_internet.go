@@ -231,8 +231,6 @@ type SplitHTTPConfig struct {
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
 	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
-	Congestion           string            `json:"congestion"`
-	Up                   Bandwidth         `json:"up"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
@@ -406,25 +404,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}
 
-	up, err := c.Up.Bps()
-	if err != nil {
-		return nil, err
-	}
-	if up > 0 && up < 65536 {
-		return nil, errors.New("Up must be at least 65536 bytes per second")
-	}
-
-	switch c.Congestion {
-	case "", "bbr", "reno":
-		// valid
-	case "force-brutal":
-		if up == 0 {
-			return nil, errors.New("force-brutal requires up")
-		}
-	default:
-		return nil, errors.New("unknown congestion control: ", c.Congestion, ", valid values: bbr, reno, force-brutal")
-	}
-
 	config := &splithttp.Config{
 		Host:                 c.Host,
 		Path:                 c.Path,
@@ -444,8 +423,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
 		UplinkChunkSize:      c.UplinkChunkSize,
-		Congestion:           c.Congestion,
-		Up:                   up,
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
@@ -748,6 +725,11 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	return certificate, nil
 }
 
+type QuicConfig struct {
+	Congestion string    `json:"congestion"`
+	Up         Bandwidth `json:"up"`
+}
+
 type TLSConfig struct {
 	AllowInsecure           bool             `json:"allowInsecure"`
 	Certs                   []*TLSCertConfig `json:"certificates"`
@@ -769,6 +751,7 @@ type TLSConfig struct {
 	ECHConfigList           string           `json:"echConfigList"`
 	ECHForceQuery           string           `json:"echForceQuery"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
+	Quic                    *QuicConfig      `json:"quic"`
 }
 
 // Build implements Buildable.
@@ -871,6 +854,29 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			return nil, errors.New("Failed to build ech sockopt.").Base(err)
 		}
 		config.EchSocketSettings = ss
+	}
+
+	if c.Quic != nil {
+		up, err := c.Quic.Up.Bps()
+		if err != nil {
+			return nil, err
+		}
+		if up > 0 && up < 65536 {
+			return nil, errors.New("Up must be at least 65536 bytes per second")
+		}
+		switch c.Quic.Congestion {
+		case "", "bbr", "reno":
+		case "force-brutal":
+			if up == 0 {
+				return nil, errors.New("force-brutal requires up")
+			}
+		default:
+			return nil, errors.New("unknown congestion control: ", c.Quic.Congestion, ", valid values: bbr, reno, force-brutal")
+		}
+		config.Quic = &tls.QuicConfig{
+			Congestion: c.Quic.Congestion,
+			Up:         up,
+		}
 	}
 
 	return config, nil

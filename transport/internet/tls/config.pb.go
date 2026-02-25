@@ -208,6 +208,7 @@ type Config struct {
 	EchForceQuery        string                 `protobuf:"bytes,20,opt,name=ech_force_query,json=echForceQuery,proto3" json:"ech_force_query,omitempty"`
 	EchSocketSettings    *internet.SocketConfig `protobuf:"bytes,21,opt,name=ech_socket_settings,json=echSocketSettings,proto3" json:"ech_socket_settings,omitempty"`
 	PinnedPeerCertSha256 [][]byte               `protobuf:"bytes,22,rep,name=pinned_peer_cert_sha256,json=pinnedPeerCertSha256,proto3" json:"pinned_peer_cert_sha256,omitempty"`
+	Quic                 *QuicConfig            `protobuf:"bytes,23,opt,name=quic,proto3" json:"quic,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -375,6 +376,65 @@ func (x *Config) GetPinnedPeerCertSha256() [][]byte {
 	return nil
 }
 
+func (x *Config) GetQuic() *QuicConfig {
+	if x != nil {
+		return x.Quic
+	}
+	return nil
+}
+
+type QuicConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Congestion    string                 `protobuf:"bytes,1,opt,name=congestion,proto3" json:"congestion,omitempty"`
+	Up            uint64                 `protobuf:"varint,2,opt,name=up,proto3" json:"up,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuicConfig) Reset() {
+	*x = QuicConfig{}
+	mi := &file_transport_internet_tls_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuicConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuicConfig) ProtoMessage() {}
+
+func (x *QuicConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_tls_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuicConfig.ProtoReflect.Descriptor instead.
+func (*QuicConfig) Descriptor() ([]byte, []int) {
+	return file_transport_internet_tls_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *QuicConfig) GetCongestion() string {
+	if x != nil {
+		return x.Congestion
+	}
+	return ""
+}
+
+func (x *QuicConfig) GetUp() uint64 {
+	if x != nil {
+		return x.Up
+	}
+	return 0
+}
+
 var File_transport_internet_tls_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_tls_config_proto_rawDesc = "" +
@@ -393,7 +453,7 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x05Usage\x12\x10\n" +
 	"\fENCIPHERMENT\x10\x00\x12\x14\n" +
 	"\x10AUTHORITY_VERIFY\x10\x01\x12\x13\n" +
-	"\x0fAUTHORITY_ISSUE\x10\x02\"\xf5\x06\n" +
+	"\x0fAUTHORITY_ISSUE\x10\x02\"\xb2\a\n" +
 	"\x06Config\x12%\n" +
 	"\x0eallow_insecure\x18\x01 \x01(\bR\rallowInsecure\x12J\n" +
 	"\vcertificate\x18\x02 \x03(\v2(.xray.transport.internet.tls.CertificateR\vcertificate\x12\x1f\n" +
@@ -416,7 +476,14 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x0fech_config_list\x18\x13 \x01(\tR\rechConfigList\x12&\n" +
 	"\x0fech_force_query\x18\x14 \x01(\tR\rechForceQuery\x12U\n" +
 	"\x13ech_socket_settings\x18\x15 \x01(\v2%.xray.transport.internet.SocketConfigR\x11echSocketSettings\x125\n" +
-	"\x17pinned_peer_cert_sha256\x18\x16 \x03(\fR\x14pinnedPeerCertSha256Bs\n" +
+	"\x17pinned_peer_cert_sha256\x18\x16 \x03(\fR\x14pinnedPeerCertSha256\x12;\n" +
+	"\x04quic\x18\x17 \x01(\v2'.xray.transport.internet.tls.QuicConfigR\x04quic\"<\n" +
+	"\n" +
+	"QuicConfig\x12\x1e\n" +
+	"\n" +
+	"congestion\x18\x01 \x01(\tR\n" +
+	"congestion\x12\x0e\n" +
+	"\x02up\x18\x02 \x01(\x04R\x02upBs\n" +
 	"\x1fcom.xray.transport.internet.tlsP\x01Z0github.com/xtls/xray-core/transport/internet/tls\xaa\x02\x1bXray.Transport.Internet.Tlsb\x06proto3"
 
 var (
@@ -432,22 +499,24 @@ func file_transport_internet_tls_config_proto_rawDescGZIP() []byte {
 }
 
 var file_transport_internet_tls_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_transport_internet_tls_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_transport_internet_tls_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_tls_config_proto_goTypes = []any{
 	(Certificate_Usage)(0),        // 0: xray.transport.internet.tls.Certificate.Usage
 	(*Certificate)(nil),           // 1: xray.transport.internet.tls.Certificate
 	(*Config)(nil),                // 2: xray.transport.internet.tls.Config
-	(*internet.SocketConfig)(nil), // 3: xray.transport.internet.SocketConfig
+	(*QuicConfig)(nil),            // 3: xray.transport.internet.tls.QuicConfig
+	(*internet.SocketConfig)(nil), // 4: xray.transport.internet.SocketConfig
 }
 var file_transport_internet_tls_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.tls.Certificate.usage:type_name -> xray.transport.internet.tls.Certificate.Usage
 	1, // 1: xray.transport.internet.tls.Config.certificate:type_name -> xray.transport.internet.tls.Certificate
-	3, // 2: xray.transport.internet.tls.Config.ech_socket_settings:type_name -> xray.transport.internet.SocketConfig
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 2: xray.transport.internet.tls.Config.ech_socket_settings:type_name -> xray.transport.internet.SocketConfig
+	3, // 3: xray.transport.internet.tls.Config.quic:type_name -> xray.transport.internet.tls.QuicConfig
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_tls_config_proto_init() }
@@ -461,7 +530,7 @@ func file_transport_internet_tls_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_tls_config_proto_rawDesc), len(file_transport_internet_tls_config_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
