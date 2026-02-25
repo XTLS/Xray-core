@@ -112,6 +112,8 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 type TCPConfig struct {
 	HeaderConfig        json.RawMessage `json:"header"`
 	AcceptProxyProtocol bool            `json:"acceptProxyProtocol"`
+	Rate                uint64          `json:"rate"`
+	Cwnd                uint32          `json:"cwnd"`
 }
 
 // Build implements Buildable.
@@ -131,6 +133,8 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 	if c.AcceptProxyProtocol {
 		config.AcceptProxyProtocol = c.AcceptProxyProtocol
 	}
+	config.Rate = c.Rate
+	config.Cwnd = c.Cwnd
 	return config, nil
 }
 

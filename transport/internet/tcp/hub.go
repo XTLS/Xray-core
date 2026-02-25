@@ -108,6 +108,12 @@ func (v *Listener) keepAccepting() {
 			}
 			continue
 		}
+		if v.config.Rate > 0 {
+			err := SetBrutalRate(conn, v.config.Rate, v.config.Cwnd)
+			if err != nil {
+				errors.LogDebugInner(context.Background(), err, "failed to apply socket options to incoming connection")
+			}
+		}
 		go func() {
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)

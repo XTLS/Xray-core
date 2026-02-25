@@ -12,4 +12,6 @@ message Config {
   reserved 1;
   xray.common.serial.TypedMessage header_settings = 2;
   bool accept_proxy_protocol = 3;
+  uint64 rate = 4;
+  uint32 cwnd = 5;
 }

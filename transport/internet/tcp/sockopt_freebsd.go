@@ -24,3 +24,7 @@ func GetOriginalDestination(conn stat.Connection) (net.Destination, error) {
 	}
 	return dest, nil
 }
+
+func SetBrutalRate(conn stat.Connection, rate uint64, cwnd uint32) error {
+	return nil
+}

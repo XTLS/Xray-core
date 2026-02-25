@@ -26,6 +26,8 @@ type Config struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	HeaderSettings      *serial.TypedMessage   `protobuf:"bytes,2,opt,name=header_settings,json=headerSettings,proto3" json:"header_settings,omitempty"`
 	AcceptProxyProtocol bool                   `protobuf:"varint,3,opt,name=accept_proxy_protocol,json=acceptProxyProtocol,proto3" json:"accept_proxy_protocol,omitempty"`
+	Rate                uint64                 `protobuf:"varint,4,opt,name=rate,proto3" json:"rate,omitempty"`
+	Cwnd                uint32                 `protobuf:"varint,5,opt,name=cwnd,proto3" json:"cwnd,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -74,14 +76,30 @@ func (x *Config) GetAcceptProxyProtocol() bool {
 	return false
 }
 
+func (x *Config) GetRate() uint64 {
+	if x != nil {
+		return x.Rate
+	}
+	return 0
+}
+
+func (x *Config) GetCwnd() uint32 {
+	if x != nil {
+		return x.Cwnd
+	}
+	return 0
+}
+
 var File_transport_internet_tcp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_tcp_config_proto_rawDesc = "" +
 	"\n" +
-	"#transport/internet/tcp/config.proto\x12\x1bxray.transport.internet.tcp\x1a!common/serial/typed_message.proto\"\x8d\x01\n" +
+	"#transport/internet/tcp/config.proto\x12\x1bxray.transport.internet.tcp\x1a!common/serial/typed_message.proto\"\xb5\x01\n" +
 	"\x06Config\x12I\n" +
 	"\x0fheader_settings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\x0eheaderSettings\x122\n" +
-	"\x15accept_proxy_protocol\x18\x03 \x01(\bR\x13acceptProxyProtocolJ\x04\b\x01\x10\x02Bs\n" +
+	"\x15accept_proxy_protocol\x18\x03 \x01(\bR\x13acceptProxyProtocol\x12\x12\n" +
+	"\x04rate\x18\x04 \x01(\x04R\x04rate\x12\x12\n" +
+	"\x04cwnd\x18\x05 \x01(\rR\x04cwndJ\x04\b\x01\x10\x02Bs\n" +
 	"\x1fcom.xray.transport.internet.tcpP\x01Z0github.com/xtls/xray-core/transport/internet/tcp\xaa\x02\x1bXray.Transport.Internet.Tcpb\x06proto3"
 
 var (

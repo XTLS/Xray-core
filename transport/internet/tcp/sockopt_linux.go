@@ -5,6 +5,7 @@ package tcp
 
 import (
 	"context"
+	"encoding/binary"
 	"syscall"
 	"unsafe"
 
@@ -49,4 +50,37 @@ func GetOriginalDestination(conn stat.Connection) (net.Destination, error) {
 		return net.Destination{}, errors.New("failed to call getsockopt")
 	}
 	return dest, nil
+}
+
+func SetBrutalRate(conn stat.Connection, rate uint64, cwnd uint32) error {
+	sys, ok := conn.(syscall.Conn)
+	if !ok {
+		return errors.New("unable to get syscall.Conn")
+	}
+	sysConn, err := sys.SyscallConn()
+	if err != nil {
+		return errors.New("failed to get sys fd").Base(err)
+	}
+	err = sysConn.Control(func(fd uintptr) {
+		if err := syscall.SetsockoptString(int(fd), syscall.IPPROTO_TCP, syscall.TCP_CONGESTION, "brutal"); err != nil {
+			errors.LogDebugInner(context.Background(), err, "failed to set CustomSockoptString ", syscall.TCP_CONGESTION, " ", "brutal")
+			return
+		}
+
+		if cwnd == 0 {
+			cwnd = 15
+		}
+
+		buf := make([]byte, 16)
+		binary.LittleEndian.PutUint64(buf[0:], rate)
+		binary.LittleEndian.PutUint32(buf[8:], cwnd)
+		if err := syscall.SetsockoptString(int(fd), syscall.IPPROTO_TCP, 23301, string(buf)); err != nil {
+			errors.LogDebugInner(context.Background(), err, "failed to set CustomSockoptString 23301 ", buf)
+			return
+		}
+	})
+	if err != nil {
+		return errors.New("failed to control connection").Base(err)
+	}
+	return nil
 }
