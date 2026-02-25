@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common"
@@ -109,7 +110,7 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if len(c.header.merged)+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	var buf []byte
@@ -228,7 +229,7 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if len(c.header.merged)+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(c.header.merged)+len(p), " ", finalmask.UDPSize)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	var buf []byte

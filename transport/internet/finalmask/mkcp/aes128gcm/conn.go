@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common"
@@ -91,7 +92,7 @@ func (c *aes128gcmConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *aes128gcmConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.aead.NonceSize()+c.aead.Overhead()+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.aead.NonceSize()+c.aead.Overhead()+len(p), " ", finalmask.UDPSize)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	var buf []byte

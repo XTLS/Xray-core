@@ -193,7 +193,7 @@ func (c *xdnsConnClient) sendLoop() {
 func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
 	if len(p) < len(packet.p) {
 		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
@@ -214,7 +214,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
 		errors.LogDebug(context.Background(), addr, " mask write err ", err)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	select {
@@ -225,7 +225,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return len(p), nil
 	default:
 		errors.LogDebug(context.Background(), addr, " mask write err queue full")
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 }
 

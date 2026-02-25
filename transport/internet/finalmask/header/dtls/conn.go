@@ -2,6 +2,7 @@ package dtls
 
 import (
 	"context"
+	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common/dice"
@@ -91,7 +92,7 @@ func (c *dtlsConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *dtlsConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.header.Size()+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.header.Size()+len(p), " ", finalmask.UDPSize)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	var buf []byte

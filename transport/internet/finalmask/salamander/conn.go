@@ -2,6 +2,7 @@ package salamander
 
 import (
 	"context"
+	"io"
 	"net"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -60,7 +61,7 @@ func (c *salamanderConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *salamanderConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if smSaltLen+len(p) > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err short write ", smSaltLen+len(p), " ", finalmask.UDPSize)
-		return 0, nil
+		return 0, io.ErrShortWrite
 	}
 
 	var buf []byte
