@@ -93,7 +93,7 @@ func (c *Config) GetRequestCookiesWithPayload(payload []byte) []*http.Cookie {
 	return cookies
 }
 
-func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestHeader http.Header) {
+func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestMethod string, requestHeader http.Header) {
 	// CORS headers for the browser dialer
 	if origin := requestHeader.Get("Origin"); origin == "" {
 		writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -101,8 +101,22 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestHeader h
 		// Chrome says: The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'.
 		writer.Header().Set("Access-Control-Allow-Origin", origin)
 	}
-	writer.Header().Set("Access-Control-Allow-Methods", "*")
-	writer.Header().Set("Access-Control-Allow-Headers", "*")
+
+	requestedMethod := requestHeader.Get("Access-Control-Request-Method")
+	if requestedMethod != "" {
+		writer.Header().Set("Access-Control-Allow-Methods", requestedMethod)
+	} else if requestMethod != "" && requestMethod != "OPTIONS" {
+		writer.Header().Set("Access-Control-Allow-Methods", requestMethod)
+	} else {
+		writer.Header().Set("Access-Control-Allow-Methods", "*")
+	}
+
+	requestedHeaders := requestHeader.Get("Access-Control-Request-Headers")
+	if requestedHeaders == "" {
+		writer.Header().Set("Access-Control-Allow-Headers", "*")
+	} else {
+		writer.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
+	}
 
 	if c.GetNormalizedSessionPlacement() == PlacementCookie ||
 	   c.GetNormalizedSeqPlacement() == PlacementCookie ||

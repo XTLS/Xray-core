@@ -101,7 +101,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	h.config.WriteResponseHeader(writer, request.Header)
+	h.config.WriteResponseHeader(writer, request.Method, request.Header)
 	length := int(h.config.GetNormalizedXPaddingBytes().rand())
 	config := XPaddingConfig{Length: length}
 
