@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
@@ -31,7 +30,6 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	g := &Instance{
 		config: config,
 		active: false,
@@ -94,7 +92,6 @@ func (g *Instance) startInternal() error {
 	if err := g.initErrorLogger(); err != nil {
 		return errors.New("failed to initialize error logger").Base(err).AtWarning()
 	}
-
 	return nil
 }
 
