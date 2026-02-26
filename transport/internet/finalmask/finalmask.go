@@ -89,12 +89,23 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	return raw, nil
 }
 
-type Listener struct {
+func (m *TcpmaskManager) WrapListener(l net.Listener) (net.Listener, error) {
+	return NewTcpListener(m, l)
+}
+
+type tcpListener struct {
 	m *TcpmaskManager
 	net.Listener
 }
 
-func (l *Listener) Accept() (net.Conn, error) {
+func NewTcpListener(m *TcpmaskManager, l net.Listener) (net.Listener, error) {
+	return &tcpListener{
+		m:        m,
+		Listener: l,
+	}, nil
+}
+
+func (l *tcpListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		return nil, err
@@ -109,13 +120,6 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 	conn = newConn
 	return conn, nil
-}
-
-func (m *TcpmaskManager) WrapConnListener(listener net.Listener) (net.Listener, error) {
-	return &Listener{
-		m:        m,
-		Listener: listener,
-	}, nil
 }
 
 type TcpMaskConn interface {

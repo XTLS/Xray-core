@@ -121,7 +121,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 		}
 
 		if settings.TcpmaskManager != nil {
-			streamListener, _ = settings.TcpmaskManager.WrapConnListener(streamListener)
+			streamListener, _ = settings.TcpmaskManager.WrapListener(streamListener)
 		}
 
 		errors.LogDebug(ctx, "gRPC listen for service name `"+grpcSettings.getServiceName()+"` tun `"+grpcSettings.getTunStreamName()+"` multi tun `"+grpcSettings.getTunMultiStreamName()+"`")

@@ -510,7 +510,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 
 	if !l.isH3 && streamSettings.TcpmaskManager != nil {
-		l.listener, _ = streamSettings.TcpmaskManager.WrapConnListener(l.listener)
+		l.listener, _ = streamSettings.TcpmaskManager.WrapListener(l.listener)
 	}
 
 	// tcp/unix (h1/h2)

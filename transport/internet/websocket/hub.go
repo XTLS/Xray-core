@@ -130,7 +130,7 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 
 	if streamSettings.TcpmaskManager != nil {
-		listener, _ = streamSettings.TcpmaskManager.WrapConnListener(listener)
+		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
