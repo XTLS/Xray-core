@@ -688,6 +688,9 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 				conn = realityUConn.NetConn()
 			}
 		}
+
+		conn = finalmask.UnwrapTcpMask(conn)
+
 		if pc, ok := conn.(*proxyproto.Conn); ok {
 			conn = pc.Raw()
 			// 8192 > 4096, there is no need to process pc's bufReader
@@ -695,7 +698,6 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 		if uc, ok := conn.(*internet.UnixConnWrapper); ok {
 			conn = uc.UnixConn
 		}
-		conn = finalmask.UnwrapTcpMask(conn)
 	}
 	return conn, readCounter, writerCounter
 }
