@@ -787,6 +787,9 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	config.RejectUnknownSni = c.RejectUnknownSNI
 	config.MasterKeyLog = c.MasterKeyLog
+	if c.MasterKeyLog != "" && c.MasterKeyLog != "none" {
+		errors.LogWarning(context.Background(), "SECURITY: \"masterKeyLog\" is set in TLS config — TLS pre-master secrets will be written to disk at \""+c.MasterKeyLog+"\". This should ONLY be used for temporary debugging. Disable in production!")
+	}
 
 	if c.AllowInsecure {
 		if time.Now().After(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
@@ -889,6 +892,9 @@ type REALITYConfig struct {
 func (c *REALITYConfig) Build() (proto.Message, error) {
 	config := new(reality.Config)
 	config.MasterKeyLog = c.MasterKeyLog
+	if c.MasterKeyLog != "" && c.MasterKeyLog != "none" {
+		errors.LogWarning(context.Background(), "SECURITY: \"masterKeyLog\" is set in REALITY config — TLS pre-master secrets will be written to disk at \""+c.MasterKeyLog+"\". This should ONLY be used for temporary debugging. Disable in production!")
+	}
 	config.Show = c.Show
 	var err error
 	if c.Target != nil {

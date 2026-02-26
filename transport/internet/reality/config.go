@@ -63,9 +63,14 @@ func KeyLogWriterFromConfig(c *Config) io.Writer {
 		return nil
 	}
 
-	writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	errors.LogWarning(context.Background(), "MasterKeyLog enabled — TLS secrets written to disk!")
+	writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "failed to open ", c.MasterKeyLog, " as master key log")
+		return nil
+	}
+	if chmodErr := os.Chmod(c.MasterKeyLog, 0o600); chmodErr != nil {
+		errors.LogWarningInner(context.Background(), chmodErr, "failed to enforce permissions on ", c.MasterKeyLog)
 	}
 
 	return writer
