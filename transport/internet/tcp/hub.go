@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -25,17 +24,12 @@ type Listener struct {
 	authConfig    internet.ConnectionAuthenticator
 	config        *Config
 	addConn       internet.ConnHandler
-
-	isTcp          bool
-	tcpMaskManager *finalmask.TcpmaskManager
 }
 
 // ListenTCP creates a new Listener based on configurations.
 func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	l := &Listener{
 		addConn: handler,
-
-		tcpMaskManager: streamSettings.TcpmaskManager,
 	}
 	tcpSettings := streamSettings.ProtocolSettings.(*Config)
 	l.config = tcpSettings
@@ -68,7 +62,10 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			return nil, errors.New("failed to listen TCP on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP on ", address, ":", port)
-		l.isTcp = true
+	}
+
+	if streamSettings.TcpmaskManager != nil {
+		listener, _ = streamSettings.TcpmaskManager.WrapConnListener(listener)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
@@ -114,16 +111,6 @@ func (v *Listener) keepAccepting() {
 				time.Sleep(time.Millisecond * 500)
 			}
 			continue
-		}
-
-		if v.isTcp && v.tcpMaskManager != nil {
-			newConn, err := v.tcpMaskManager.WrapConnServer(conn)
-			if err != nil {
-				errors.LogDebug(context.Background(), errors.New("mask err").Base(err))
-				conn.Close()
-				continue
-			}
-			conn = newConn
 		}
 
 		go func() {

@@ -790,9 +790,9 @@ func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer sign
 
 func IsRAWTransportWithoutSecurity(conn stat.Connection) bool {
 	iConn := stat.TryUnwrapStatsConn(conn)
+	iConn = finalmask.UnwrapTcpMask(iConn)
 	_, ok1 := iConn.(*proxyproto.Conn)
 	_, ok2 := iConn.(*net.TCPConn)
 	_, ok3 := iConn.(*internet.UnixConnWrapper)
-	ok4 := finalmask.SpliceAble(iConn)
-	return ok1 || ok2 || ok3 || ok4
+	return ok1 || ok2 || ok3
 }

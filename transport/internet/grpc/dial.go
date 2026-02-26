@@ -125,6 +125,15 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
 			if err == nil {
+				if streamSettings.TcpmaskManager != nil {
+					newConn, err := streamSettings.TcpmaskManager.WrapConnClient(c)
+					if err != nil {
+						c.Close()
+						return nil, errors.New("mask err").Base(err)
+					}
+					c = newConn
+				}
+
 				if tlsConfig != nil {
 					config := tlsConfig.GetTLSConfig()
 					if config.ServerName == "" && address.Family().IsDomain() {

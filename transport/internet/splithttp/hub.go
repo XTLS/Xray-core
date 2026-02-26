@@ -509,6 +509,10 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		errors.LogInfo(ctx, "listening TCP for XHTTP on ", address, ":", port)
 	}
 
+	if !l.isH3 && streamSettings.TcpmaskManager != nil {
+		l.listener, _ = streamSettings.TcpmaskManager.WrapConnListener(l.listener)
+	}
+
 	// tcp/unix (h1/h2)
 	if l.listener != nil {
 		if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {

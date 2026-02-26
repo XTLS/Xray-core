@@ -1,7 +1,10 @@
 package finalmask
 
 import (
+	"context"
 	"net"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 const (
@@ -86,15 +89,39 @@ func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	return raw, nil
 }
 
+type Listener struct {
+	m *TcpmaskManager
+	net.Listener
+}
+
+func (l *Listener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	newConn, err := l.m.WrapConnServer(conn)
+	if err != nil {
+		errors.LogDebugInner(context.Background(), err, "mask err")
+		conn.Close()
+		return nil, err
+	}
+
+	conn = newConn
+	return conn, nil
+}
+
+func (m *TcpmaskManager) WrapConnListener(listener net.Listener) (net.Listener, error) {
+	return &Listener{
+		m:        m,
+		Listener: listener,
+	}, nil
+}
+
 type TcpMaskConn interface {
 	TcpMaskConn()
 	RawConn() net.Conn
 	Splice() bool
-}
-
-func SpliceAble(conn net.Conn) bool {
-	_, ok := UnwrapTcpMask(conn).(*net.TCPConn)
-	return ok
 }
 
 func UnwrapTcpMask(conn net.Conn) net.Conn {

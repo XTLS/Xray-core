@@ -117,6 +117,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			return nil, err
 		}
 
+		if streamSettings.TcpmaskManager != nil {
+			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = newConn
+		}
+
 		if realityConfig != nil {
 			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}
