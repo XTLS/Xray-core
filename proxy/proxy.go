@@ -321,6 +321,7 @@ func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink boo
 func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	var isPadding *bool
 	var switchToDirectCopy *bool
+	var spliceReadyInbound *session.Inbound
 	if w.isUplink {
 		isPadding = &w.trafficState.Outbound.IsPadding
 		switchToDirectCopy = &w.trafficState.Outbound.UplinkWriterDirectCopy
@@ -332,7 +333,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if *switchToDirectCopy {
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil {
 			if !w.isUplink && inbound.CanSpliceCopy == 2 {
-				inbound.CanSpliceCopy = 1
+				spliceReadyInbound = inbound
 			}
 			// if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // TODO: enable uplink splice
 			// 	w.ob.CanSpliceCopy = 1
@@ -354,43 +355,51 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if *isPadding {
 		if len(mb) == 1 && mb[0] == nil {
 			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx, w.testseed) // we do a long padding to hide vless header
-			return w.Writer.WriteMultiBuffer(mb)
-		}
-		isComplete := IsCompleteRecord(mb)
-		mb = ReshapeMultiBuffer(w.ctx, mb)
-		longPadding := w.trafficState.IsTLS
-		for i, b := range mb {
-			if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
-				if w.trafficState.EnableXtls {
-					*switchToDirectCopy = true
+		} else {
+			isComplete := IsCompleteRecord(mb)
+			mb = ReshapeMultiBuffer(w.ctx, mb)
+			longPadding := w.trafficState.IsTLS
+			for i, b := range mb {
+				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
+					if w.trafficState.EnableXtls {
+						*switchToDirectCopy = true
+					}
+					var command byte = CommandPaddingContinue
+					if i == len(mb)-1 {
+						command = CommandPaddingEnd
+						if w.trafficState.EnableXtls {
+							command = CommandPaddingDirect
+						}
+					}
+					mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx, w.testseed)
+					*isPadding = false // padding going to end
+					longPadding = false
+					continue
+				} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
+					*isPadding = false
+					mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
+					break
 				}
 				var command byte = CommandPaddingContinue
-				if i == len(mb)-1 {
+				if i == len(mb)-1 && !*isPadding {
 					command = CommandPaddingEnd
 					if w.trafficState.EnableXtls {
 						command = CommandPaddingDirect
 					}
 				}
-				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, true, w.ctx, w.testseed)
-				*isPadding = false // padding going to end
-				longPadding = false
-				continue
-			} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
-				*isPadding = false
-				mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
-				break
+				mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
 			}
-			var command byte = CommandPaddingContinue
-			if i == len(mb)-1 && !*isPadding {
-				command = CommandPaddingEnd
-				if w.trafficState.EnableXtls {
-					command = CommandPaddingDirect
-				}
-			}
-			mb[i] = XtlsPadding(b, command, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
 		}
 	}
-	return w.Writer.WriteMultiBuffer(mb)
+	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
+		return err
+	}
+	if spliceReadyInbound != nil && spliceReadyInbound.CanSpliceCopy == 2 {
+		// Enable splice only after this write has completed to avoid racing
+		// concurrent direct writes to the same TCP connection.
+		spliceReadyInbound.CanSpliceCopy = 1
+	}
+	return nil
 }
 
 // IsCompleteRecord Is complete tls data record
