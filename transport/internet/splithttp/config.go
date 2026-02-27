@@ -102,27 +102,27 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestMethod s
 		writer.Header().Set("Access-Control-Allow-Origin", origin)
 	}
 
-	requestedMethod := requestHeader.Get("Access-Control-Request-Method")
-	if requestedMethod != "" {
-		writer.Header().Set("Access-Control-Allow-Methods", requestedMethod)
-	} else if requestMethod != "" && requestMethod != "OPTIONS" {
-		writer.Header().Set("Access-Control-Allow-Methods", requestMethod)
-	} else {
-		writer.Header().Set("Access-Control-Allow-Methods", "*")
-	}
-
-	requestedHeaders := requestHeader.Get("Access-Control-Request-Headers")
-	if requestedHeaders == "" {
-		writer.Header().Set("Access-Control-Allow-Headers", "*")
-	} else {
-		writer.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
-	}
-
 	if c.GetNormalizedSessionPlacement() == PlacementCookie ||
 	   c.GetNormalizedSeqPlacement() == PlacementCookie ||
 	   c.XPaddingPlacement == PlacementCookie ||
 	   c.GetNormalizedUplinkDataPlacement() == PlacementCookie {
 		writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+
+	if requestMethod == "OPTIONS" {
+		requestedMethod := requestHeader.Get("Access-Control-Request-Method")
+		if requestedMethod != "" {
+			writer.Header().Set("Access-Control-Allow-Methods", requestedMethod)
+		} else {
+			writer.Header().Set("Access-Control-Allow-Methods", "*")
+		}
+
+		requestedHeaders := requestHeader.Get("Access-Control-Request-Headers")
+		if requestedHeaders == "" {
+			writer.Header().Set("Access-Control-Allow-Headers", "*")
+		} else {
+			writer.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
+		}
 	}
 }
 
