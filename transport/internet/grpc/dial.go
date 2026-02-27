@@ -176,6 +176,8 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		grpcDestHost = dest.Address.IP().String()
 	}
 
+	dialOptions = append(dialOptions, grpc.WithDisableServiceConfig())
+
 	conn, err := grpc.NewClient(
 		"passthrough:///"+net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
