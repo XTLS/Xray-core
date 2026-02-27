@@ -69,10 +69,10 @@ GameTunnel = 8;
 2. Импортировать в `main/distro/all/all.go`:
 
 ```go
-_ "github.com/it2konst/gametunnel-core/transport/internet/gametunnel"
+_ "github.com/it2konst/gametunnel-core/tree/main/transport/internet/gametunnel"
 ```
 
-(или в твоём форке — путь к твоему репозиторию)
+(или в твоём форке - путь к твоему репозиторию)
 
 ## Пример конфигурации
 
