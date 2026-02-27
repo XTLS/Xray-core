@@ -108,18 +108,17 @@ func NewTcpListener(m *TcpmaskManager, l net.Listener) (net.Listener, error) {
 func (l *tcpListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
-		return nil, err
+		return conn, err
 	}
 
 	newConn, err := l.m.WrapConnServer(conn)
 	if err != nil {
 		errors.LogDebugInner(context.Background(), err, "mask err")
-		conn.Close()
-		return nil, err
+		// conn.Close()
+		return conn, nil
 	}
 
-	conn = newConn
-	return conn, nil
+	return newConn, nil
 }
 
 type TcpMaskConn interface {
