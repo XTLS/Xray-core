@@ -69,7 +69,7 @@ GameTunnel = 8;
 2. Импортировать в `main/distro/all/all.go`:
 
 ```go
-_ "github.com/xtls/xray-core/transport/internet/gametunnel"
+_ "github.com/it2konst/gametunnel-core/transport/internet/gametunnel"
 ```
 
 (или в твоём форке — путь к твоему репозиторию)
