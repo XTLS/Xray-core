@@ -25,8 +25,8 @@ var (
 
 var (
 	build    = "Custom"
-	codename = "Xray, Penetrates Everything."
-	intro    = "A unified platform for anti-censorship."
+	codename = "GameTunnel Edition"
+	intro    = "UDP transport extension for Xray-core"
 )
 
 func init() {

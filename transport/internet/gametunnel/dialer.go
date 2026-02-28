@@ -250,15 +250,26 @@ func (c *GameTunnelClientConn) receiveLoop() {
 
 // handlePacket обрабатывает входящий пакет от сервера
 func (c *GameTunnelClientConn) handlePacket(data []byte) {
-	if len(data) == 0 {
-		return
-	}
 	if !IsQUICLike(data[0]) {
 		return
 	}
 
-	// Обрабатываем все пакеты как DATA
-	c.handleDataPacket(data)
+	pktType, _, err := DecodeFlags(data[0])
+	if err != nil {
+		return
+	}
+
+	switch pktType {
+	case PacketType_DATA:
+		c.handleDataPacket(data)
+
+	case PacketType_KEEPALIVE:
+		// Сервер ответил на keep-alive - ничего не делаем
+		return
+
+	case PacketType_CONTROL:
+		c.handleControlPacket(data)
+	}
 }
 
 // handleDataPacket расшифровывает и передаёт данные
@@ -268,6 +279,7 @@ func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
 		return
 	}
 
+	// Additional data - заголовок пакета
 	connIDLen := int(c.config.ConnectionIdLength)
 	adLen := FlagsSize + VersionSize + connIDLen
 	if len(data) < adLen {
@@ -275,13 +287,19 @@ func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
 	}
 	additionalData := data[:adLen]
 
+	// Расшифровываем
 	plaintext, err := c.session.Keys.Decrypt(pkt.Payload, pkt.PacketNumber, additionalData)
 	if err != nil {
 		return
 	}
 
+	// Обновляем счётчик
 	atomic.StoreUint32(&c.session.RecvPacketNum, pkt.PacketNumber)
 
+	// Передаём данные в канал чтения
+	if atomic.LoadInt32(&c.closed) == 1 {
+		return
+	}
 	select {
 	case c.session.inbound <- plaintext:
 	default:

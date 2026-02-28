@@ -1,155 +1,251 @@
-# 🎮 GameTunnel Core
+# GameTunnel - UDP Transport for Xray-core
 
-UDP-транспорт для [xray-core](https://github.com/XTLS/Xray-core), оптимизированный для низкой задержки в онлайн-играх и стриминге.
+**Обфускационный UDP-транспорт для xray-core, оптимизированный под онлайн-игры.**
+
+GameTunnel маскирует VPN-трафик под легитимный QUIC или WebRTC (DTLS), что делает его крайне сложным для обнаружения и блокировки DPI-системами.
 
 ## Особенности
 
-- **UDP-транспорт** - минимальная задержка, без overhead TCP
-- **QUIC-подобная структура пакетов** - естественный вид трафика
-- **ChaCha20-Poly1305** - аутентифицированное шифрование
-- **Curve25519** - обмен ключами с Perfect Forward Secrecy
-- **PSK (Pre-Shared Key)** - дополнительный уровень аутентификации
+- **UDP-based** - минимальная задержка, идеально для онлайн-игр
+- **QUIC-мимикрия** - трафик неотличим от настоящего QUIC для DPI
+- **WebRTC-мимикрия** - альтернативная маскировка под DTLS (видеозвонки)
+- **ChaCha20-Poly1305** - быстрое AEAD-шифрование на любом железе
+- **X25519 Key Exchange** - безопасный обмен ключами за 1-RTT
+- **Pre-Shared Key** - опциональная двухфакторная защита
+- **Приоритизация трафика** - игровые пакеты обрабатываются первыми
+- **Connection Migration** - бесшовное переключение WiFi/Mobile
+- **Мультиплексирование** - несколько потоков в одном соединении
 - **Padding** - маскировка размеров пакетов
-- **Совместимость с xray-core** - работает как обычный транспорт (tcp, ws, kcp, ...)
-
-## Зачем нужен GameTunnel
-
-Для сценариев, где важна **низкая задержка**:
-
-- 🎮 Подключение к игровым серверам в другом регионе
-- 🎬 Стриминг видео без буферизации
-- 📡 Удалённый рабочий стол
-- 🌐 Доступ к собственной инфраструктуре
-
-В отличие от TCP-транспортов, GameTunnel работает поверх UDP и не страдает от head-of-line blocking.
-
-## Установка (сервер)
-
-```bash
-# Скачиваем бинарник
-curl -LO https://github.com/it2konst/gametunnel-core/releases/download/v0.1.1/xray-gametunnel-linux-amd64.tar.gz
-tar xzf xray-gametunnel-linux-amd64.tar.gz
-chmod +x xray-gametunnel
-sudo cp xray-gametunnel /usr/local/bin/
-```
-
-## Конфигурация сервера
-
-```bash
-sudo nano /etc/xray-gametunnel.json
-```
-
-```json
-{
-  "log": { "loglevel": "warning" },
-  "inbounds": [{
-    "port": 443,
-    "protocol": "vless",
-    "settings": {
-      "clients": [{ "id": "YOUR_UUID", "flow": "" }],
-      "decryption": "none"
-    },
-    "streamSettings": {
-      "network": "gametunnel",
-      "gametunnelSettings": {
-        "obfuscation": "quic",
-        "priority": "gaming",
-        "mtu": 1400,
-        "enablePadding": true,
-        "keepAliveInterval": 15,
-        "key": "YOUR_SECRET_KEY"
-      }
-    }
-  }],
-  "outbounds": [{ "protocol": "freedom", "tag": "direct" }]
-}
-```
-
-```bash
-# Генерируем UUID
-xray-gametunnel uuid
-```
-
-## Systemd сервис
-
-```bash
-sudo cat > /etc/systemd/system/xray-gametunnel.service << 'EOF'
-[Unit]
-Description=Xray GameTunnel
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/xray-gametunnel run -c /etc/xray-gametunnel.json
-Restart=on-failure
-RestartSec=3
-LimitNOFILE=infinity
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now xray-gametunnel
-```
-
-## Клиент
-
-### Вариант 1 - Терминал
-
-```bash
-./xray-gametunnel run -c client.json
-curl --socks5-hostname 127.0.0.1:10808 https://ifconfig.me
-```
-
-### Вариант 2 - GUI (v2rayN)
-
-См. [gametunnel-client](https://github.com/it2konst/gametunnel-client) - форк v2rayN с поддержкой GameTunnel в интерфейсе.
-
-## Сборка из исходников
-
-```bash
-git clone https://github.com/it2konst/gametunnel-core.git
-cd gametunnel-core
-CGO_ENABLED=0 go build -o xray-gametunnel -trimpath -ldflags="-s -w" -v ./main
-./xray-gametunnel version
-```
-
-Требуется Go 1.22+.
 
 ## Архитектура
 
 ```
-  Клиент                     Сервер
-┌─────────┐   UDP/443    ┌─────────────┐
-│  VLESS  │◄────────────►│    VLESS    │
-│  + GT   │   ChaCha20   │    + GT     │
-│transport│   Poly1305   │  transport  │
-└─────────┘              └─────────────┘
-     │                          │
-   SOCKS5                    Freedom
-   :10808                   (интернет)
+┌─────────────────────────────────────────────────────┐
+│                    Xray-core                         │
+│  ┌──────────┐                      ┌──────────────┐ │
+│  │  VLESS    │                      │   Routing    │ │
+│  │ Protocol  │                      │   Engine     │ │
+│  └────┬─────┘                      └──────┬───────┘ │
+│       │                                    │         │
+│  ┌────┴────────────────────────────────────┴───────┐ │
+│  │            GameTunnel Transport                  │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │ │
+│  │  │ Priority │ │  Crypto  │ │   Obfuscation    │ │ │
+│  │  │  Queue   │ │ ChaCha20 │ │  QUIC / WebRTC   │ │ │
+│  │  └──────────┘ └──────────┘ └──────────────────┘ │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │ │
+│  │  │   Hub    │ │  Packet  │ │   Session Mgr    │ │ │
+│  │  │ (Server) │ │  Format  │ │  + KeepAlive     │ │ │
+│  │  └──────────┘ └──────────┘ └──────────────────┘ │ │
+│  └──────────────────┬──────────────────────────────┘ │
+│                     │                                 │
+└─────────────────────┼─────────────────────────────────┘
+                      │ UDP Socket
+                 ┌────┴────┐
+                 │ Network │
+                 └─────────┘
 ```
 
-**Handshake:** Curve25519 ECDH → HKDF-SHA256 → ChaCha20-Poly1305  
-**Пакеты:** QUIC Long Header формат с padding и рандомизацией
+## Структура файлов
 
-## Полезные команды
+```
+transport/internet/gametunnel/
+├── config.go          # Конфигурация транспорта
+├── config.proto       # Protobuf-определение конфига
+├── packet.go          # Формат пакета (QUIC-совместимый)
+├── crypto.go          # X25519 + ChaCha20-Poly1305
+├── obfs.go            # Обфускация (QUIC/WebRTC/Raw)
+├── priority.go        # Приоритизация трафика
+├── hub.go             # Менеджер сессий (сервер)
+├── listener.go        # Серверная сторона (xray-core Listener)
+├── dialer.go          # Клиентская сторона (xray-core Dialer)
+├── gametunnel_test.go # Тесты + бенчмарки
+└── README.md          # Документация
+```
+
+## Формат пакета
+
+```
+GameTunnel Packet (маскируется под QUIC Long Header):
++--------+----------+--------+-----------+----------+---------+----------+
+| Flags  | Version  | ConnID | Pkt Num   | Payload  | Padding | Auth Tag |
+| 1 byte | 4 bytes  | 8 bytes| 4 bytes   | variable | variable| 16 bytes |
++--------+----------+--------+-----------+----------+---------+----------+
+     │
+     └─► Bit 7-6: Form+Fixed (= QUIC Long Header)
+         Bit 5-4: Packet Type (Data/Handshake/KeepAlive/Control)
+         Bit 3:   Padding flag
+         Bit 2-0: Random (anti-fingerprint)
+```
+
+## Хэндшейк
+
+```
+Client                                 Server
+  │                                      │
+  │  Client Hello (QUIC Initial)         │
+  │  [PublicKey + Timestamp + Random]     │
+  ├─────────────────────────────────────►│
+  │                                      │
+  │  Server Hello (QUIC Initial)         │
+  │  [PublicKey + Timestamp + Random]     │
+  │◄─────────────────────────────────────┤
+  │                                      │
+  │  ══ Shared Secret (X25519 ECDH) ══   │
+  │  ══ Session Keys (HKDF-SHA256)  ══   │
+  │                                      │
+  │  Encrypted Data ◄──────────────────► │
+  │  (ChaCha20-Poly1305)                 │
+```
+
+## Интеграция в Xray-core
+
+### 1. Клонируем форк
 
 ```bash
-# Статус сервера
-sudo systemctl status xray-gametunnel
+git clone https://github.com/YOUR_USERNAME/gametunnel-core.git
+cd gametunnel-core
+```
 
-# Логи
-sudo journalctl -u xray-gametunnel -f
+### 2. Добавляем GameTunnel в TransportProtocol enum
 
-# Мониторинг трафика
-sudo tcpdump -i any udp port 443 -c 20 -n
+В файле `transport/internet/config.proto`:
+
+```protobuf
+enum TransportProtocol {
+  TCP = 0;
+  UDP = 1;
+  MKCP = 2;
+  WebSocket = 3;
+  HTTP = 4;
+  HTTPUpgrade = 6;
+  SplitHTTP = 7;
+  GameTunnel = 8;  // ← Добавляем
+}
+```
+
+### 3. Регистрируем импорт
+
+В файле `main/distro/all/all.go` добавляем:
+
+```go
+import (
+    _ "github.com/xtls/xray-core/transport/internet/gametunnel"
+)
+```
+
+### 4. Собираем
+
+```bash
+go build -o xray ./main
+```
+
+## Пример конфигурации
+
+### Сервер (xray-core config.json)
+
+```json
+{
+  "inbounds": [
+    {
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "your-uuid-here",
+            "flow": ""
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "gametunnel",
+        "gametunnelSettings": {
+          "obfuscation": "quic",
+          "priority": "gaming",
+          "mtu": 1400,
+          "key": "your-preshared-key",
+          "enable_padding": true
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom"
+    }
+  ]
+}
+```
+
+### Клиент (xray-core config.json)
+
+```json
+{
+  "inbounds": [
+    {
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "your-server.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "your-uuid-here",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "gametunnel",
+        "gametunnelSettings": {
+          "obfuscation": "quic",
+          "priority": "gaming",
+          "key": "your-preshared-key"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Тестирование
+
+```bash
+cd transport/internet/gametunnel
+go test -v ./...
+go test -bench=. -benchmem ./...
 ```
 
 ## Лицензия
 
-MPL-2.0 - наследуется от [xray-core](https://github.com/XTLS/Xray-core/blob/main/LICENSE).
+MPL-2.0 (совместимо с xray-core)
 
-## Связанные проекты
+## Дорожная карта
 
-- [gametunnel-client](https://github.com/it2konst/gametunnel-client) - GUI-клиент (форк v2rayN)
+- [x] Ядро протокола (packet, crypto)
+- [x] Обфускация (QUIC, WebRTC, Raw)
+- [x] Приоритизация трафика
+- [x] Диалер и Листенер для xray-core
+- [x] Unit-тесты и бенчмарки
+- [ ] Интеграция с protobuf (code generation)
+- [ ] Форк 3x-ui с UI для GameTunnel
+- [ ] Сборка кастомного xray-core
+- [ ] Установочный скрипт
+- [ ] Клиентская сборка v2rayN
+- [ ] Ротация ключей шифрования
+- [ ] FEC (Forward Error Correction) для потерянных пакетов
+- [ ] Congestion control

@@ -166,7 +166,11 @@ func (p *Packet) EncodeFlags() byte {
 		flags |= FlagPaddingBit
 	}
 
-	// Reserved bits = 0 (для совместимости с AEAD additional data)
+	// Случайные биты в reserved (bits 2-0)
+	// Это добавляет энтропию и затрудняет fingerprinting
+	// randomBits := make([]byte, 1)
+	// rand.Read(randomBits)
+	// flags |= randomBits[0] & FlagReserved
 
 	return flags
 }
@@ -223,7 +227,12 @@ func (p *Packet) Marshal(config *Config) ([]byte, error) {
 		totalSize += paddingSize + PaddingLengthSize
 	}
 
-// Разрешаем любой размер — UDP сам фрагментирует если нужно
+	// Проверяем, что не превышаем MTU
+	// if totalSize > int(config.MTU) {
+	// 	return nil, fmt.Errorf("packet size %d exceeds MTU %d", totalSize, config.MTU)
+	// }
+
+	// Разрешаем любой размер - UDP сам фрагментирует если нужно
 	// Чанкинг в Write/SendToSession контролирует размер
 	_ = MaxPacketSize
 

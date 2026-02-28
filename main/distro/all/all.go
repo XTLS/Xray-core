@@ -50,6 +50,7 @@ import (
 	_ "github.com/xtls/xray-core/proxy/wireguard"
 
 	// Transports
+	_ "github.com/xtls/xray-core/transport/internet/gametunnel"
 	_ "github.com/xtls/xray-core/transport/internet/grpc"
 	_ "github.com/xtls/xray-core/transport/internet/httpupgrade"
 	_ "github.com/xtls/xray-core/transport/internet/kcp"
@@ -74,6 +75,4 @@ import (
 
 	// Commands
 	_ "github.com/xtls/xray-core/main/commands/all"
-
-	_ "github.com/xtls/xray-core/transport/internet/gametunnel"
 )
