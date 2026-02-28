@@ -168,13 +168,15 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 
 	l, err = callback(lc.Listen(ctx, network, address))
 
-	for _, copt := range sockopt.CustomSockopt {
-		if copt.TcpAfterConn {
-			l = &tcpAfterConnListener{
-				CustomSockopt: sockopt.CustomSockopt,
-				Listener:      l,
+	if sockopt != nil {
+		for _, copt := range sockopt.CustomSockopt {
+			if copt.TcpAfterConn {
+				l = &tcpAfterConnListener{
+					CustomSockopt: sockopt.CustomSockopt,
+					Listener:      l,
+				}
+				break
 			}
-			break
 		}
 	}
 
