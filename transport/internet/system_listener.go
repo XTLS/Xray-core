@@ -167,6 +167,17 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	}
 
 	l, err = callback(lc.Listen(ctx, network, address))
+
+	for _, copt := range sockopt.CustomSockopt {
+		if copt.TcpAfterConn {
+			l = &tcpAfterConnListener{
+				CustomSockopt: sockopt.CustomSockopt,
+				Listener:      l,
+			}
+			break
+		}
+	}
+
 	if err == nil && sockopt != nil && sockopt.AcceptProxyProtocol {
 		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
 		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
@@ -180,6 +191,76 @@ func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sock
 	lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
 
 	return lc.ListenPacket(ctx, addr.Network(), addr.String())
+}
+
+type tcpAfterConnListener struct {
+	CustomSockopt []*CustomSockopt
+	net.Listener
+}
+
+func (l *tcpAfterConnListener) setCustomSockopt(conn net.Conn) error {
+	sys, ok := conn.(syscall.Conn)
+	if !ok {
+		return errors.New("unable to get syscall.Conn")
+	}
+
+	sysConn, err := sys.SyscallConn()
+	if err != nil {
+		return errors.New("failed to get sys fd").Base(err)
+	}
+
+	err = sysConn.Control(func(fd uintptr) {
+		for _, custom := range l.CustomSockopt {
+			if custom.System != "" && custom.System != runtime.GOOS {
+				errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+				continue
+			}
+			// if custom.Network != "" && !isTCPSocket(custom.Network) {
+			// 	continue
+			// }
+			if !custom.TcpAfterConn {
+				continue
+			}
+			var level = 0x6
+			var opt int
+			if len(custom.Opt) == 0 {
+				errors.LogDebug(context.Background(), "No opt!")
+				continue
+			} else {
+				opt, _ = strconv.Atoi(custom.Opt)
+			}
+			if custom.Level != "" {
+				level, _ = strconv.Atoi(custom.Level)
+			}
+			switch custom.Type {
+			case "int":
+				value, _ := strconv.Atoi(string(custom.Value))
+				if err := setsockoptInt(fd, level, opt, value); err != nil {
+					errors.LogDebugInner(context.Background(), err, "failed to set CustomSockoptInt ", opt, " ", value)
+				}
+			case "str":
+				if err := setsockoptString(fd, level, opt, string(custom.Value)); err != nil {
+					errors.LogDebugInner(context.Background(), err, "failed to set CustomSockoptString ", opt, " ", custom.Value)
+				}
+			default:
+				errors.LogDebug(context.Background(), "unknown CustomSockopt type: ", custom.Type)
+			}
+		}
+	})
+
+	return err
+}
+
+func (l *tcpAfterConnListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return conn, err
+	}
+	err = l.setCustomSockopt(conn)
+	if err != nil {
+		errors.LogInfoInner(context.Background(), err, "setCustomSockopt")
+	}
+	return conn, nil
 }
 
 // RegisterListenerController adds a controller to the effective system listener.

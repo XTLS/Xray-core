@@ -263,3 +263,11 @@ func setReusePort(fd uintptr) error {
 	}
 	return nil
 }
+
+func setsockoptInt(fd uintptr, level, opt, value int) error {
+	return syscall.SetsockoptInt(int(fd), level, opt, value)
+}
+
+func setsockoptString(fd uintptr, level, opt int, s string) error {
+	return syscall.SetsockoptString(int(fd), level, opt, s)
+}

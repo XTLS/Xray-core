@@ -105,12 +105,14 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				level, _ = strconv.Atoi(custom.Level)
 			}
 			if custom.Type == "int" {
-				value, _ := strconv.Atoi(custom.Value)
-				if err := syscall.SetsockoptInt(syscall.Handle(fd), level, opt, value); err != nil {
+				value, _ := strconv.Atoi(string(custom.Value))
+				if err := setsockoptInt(fd, level, opt, value); err != nil {
 					return errors.New("failed to set CustomSockoptInt", opt, value, err)
 				}
 			} else if custom.Type == "str" {
-				return errors.New("failed to set CustomSockoptString: Str type does not supported on windows")
+				if err := setsockoptString(fd, level, opt, string(custom.Value)); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+				}
 			} else {
 				return errors.New("unknown CustomSockopt type:", custom.Type)
 			}
@@ -155,6 +157,9 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 			if !strings.HasPrefix(network, custom.Network) {
 				continue
 			}
+			if custom.TcpAfterConn {
+				continue
+			}
 			var level = 0x6 // default TCP
 			var opt int
 			if len(custom.Opt) == 0 {
@@ -166,12 +171,14 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				level, _ = strconv.Atoi(custom.Level)
 			}
 			if custom.Type == "int" {
-				value, _ := strconv.Atoi(custom.Value)
-				if err := syscall.SetsockoptInt(syscall.Handle(fd), level, opt, value); err != nil {
+				value, _ := strconv.Atoi(string(custom.Value))
+				if err := setsockoptInt(fd, level, opt, value); err != nil {
 					return errors.New("failed to set CustomSockoptInt", opt, value, err)
 				}
 			} else if custom.Type == "str" {
-				return errors.New("failed to set CustomSockoptString: Str type does not supported on windows")
+				if err := setsockoptString(fd, level, opt, string(custom.Value)); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
+				}
 			} else {
 				return errors.New("unknown CustomSockopt type:", custom.Type)
 			}
@@ -191,4 +198,16 @@ func setReuseAddr(fd uintptr) error {
 
 func setReusePort(fd uintptr) error {
 	return nil
+}
+
+func setsockoptInt(fd uintptr, level, opt, value int) error {
+	return syscall.SetsockoptInt(syscall.Handle(fd), level, opt, value)
+}
+
+func setsockoptString(fd uintptr, level, opt int, s string) error {
+	var p *byte
+	if len(s) > 0 {
+		p = &[]byte(s)[0]
+	}
+	return syscall.Setsockopt(syscall.Handle(fd), int32(level), int32(opt), p, int32(len(s)))
 }

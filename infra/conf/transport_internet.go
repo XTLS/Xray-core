@@ -1100,12 +1100,13 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type CustomSockoptConfig struct {
-	Syetem  string `json:"system"`
-	Network string `json:"network"`
-	Level   string `json:"level"`
-	Opt     string `json:"opt"`
-	Value   string `json:"value"`
-	Type    string `json:"type"`
+	Syetem       string          `json:"system"`
+	Network      string          `json:"network"`
+	TcpAfterConn bool            `json:"tcpAfterConn"`
+	Level        string          `json:"level"`
+	Opt          string          `json:"opt"`
+	Type         string          `json:"type"`
+	Value        json.RawMessage `json:"value"`
 }
 
 type HappyEyeballsConfig struct {
@@ -1213,13 +1214,28 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	var customSockopts []*internet.CustomSockopt
 
 	for _, copt := range c.CustomSockopt {
+		var err error
+		switch copt.Type {
+		case "int", "str":
+			copt.Value, err = PraseByteSlice(copt.Value, "str")
+		case "", "array", "hex", "base64":
+			copt.Value, err = PraseByteSlice(copt.Value, copt.Type)
+			copt.Type = "str"
+		default:
+			return nil, errors.New("unknown custom sockopt type")
+		}
+		if err != nil {
+			return nil, errors.New("custom sockopt").Base(err)
+		}
+
 		customSockopt := &internet.CustomSockopt{
-			System:  copt.Syetem,
-			Network: copt.Network,
-			Level:   copt.Level,
-			Opt:     copt.Opt,
-			Value:   copt.Value,
-			Type:    copt.Type,
+			System:       copt.Syetem,
+			Network:      copt.Network,
+			TcpAfterConn: copt.TcpAfterConn,
+			Level:        copt.Level,
+			Opt:          copt.Opt,
+			Type:         copt.Type,
+			Value:        copt.Value,
 		}
 		customSockopts = append(customSockopts, customSockopt)
 	}
@@ -1274,6 +1290,40 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		HappyEyeballs:        happyEyeballs,
 		TrustedXForwardedFor: c.TrustedXForwardedFor,
 	}, nil
+}
+
+func PraseByteSlice(data json.RawMessage, typ string) ([]byte, error) {
+	switch strings.ToLower(typ) {
+	case "", "array":
+		if len(data) == 0 {
+			return data, nil
+		}
+		var packet []byte
+		if err := json.Unmarshal(data, &packet); err != nil {
+			return nil, err
+		}
+		return packet, nil
+	case "str":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return []byte(str), nil
+	case "hex":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return hex.DecodeString(str)
+	case "base64":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return base64.StdEncoding.DecodeString(str)
+	default:
+		return nil, errors.New("unknown type")
+	}
 }
 
 var (

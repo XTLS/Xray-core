@@ -22,3 +22,11 @@ func setReuseAddr(fd uintptr) error {
 func setReusePort(fd uintptr) error {
 	return nil
 }
+
+func setsockoptInt(fd uintptr, level, opt, value int) error {
+	return nil
+}
+
+func setsockoptString(fd uintptr, level, opt int, s string) error {
+	return nil
+}

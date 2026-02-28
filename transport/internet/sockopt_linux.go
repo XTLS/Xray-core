@@ -114,12 +114,12 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 				level, _ = strconv.Atoi(custom.Level)
 			}
 			if custom.Type == "int" {
-				value, _ := strconv.Atoi(custom.Value)
-				if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+				value, _ := strconv.Atoi(string(custom.Value))
+				if err := setsockoptInt(fd, level, opt, value); err != nil {
 					return errors.New("failed to set CustomSockoptInt", opt, value, err)
 				}
 			} else if custom.Type == "str" {
-				if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+				if err := setsockoptString(fd, level, opt, string(custom.Value)); err != nil {
 					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 				}
 			} else {
@@ -209,6 +209,9 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				if !strings.HasPrefix(network, custom.Network) {
 					continue
 				}
+				if custom.TcpAfterConn {
+					continue
+				}
 				var level = 0x6 // default TCP
 				var opt int
 				if len(custom.Opt) == 0 {
@@ -220,12 +223,12 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 					level, _ = strconv.Atoi(custom.Level)
 				}
 				if custom.Type == "int" {
-					value, _ := strconv.Atoi(custom.Value)
-					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+					value, _ := strconv.Atoi(string(custom.Value))
+					if err := setsockoptInt(fd, level, opt, value); err != nil {
 						return errors.New("failed to set CustomSockoptInt", opt, value, err)
 					}
 				} else if custom.Type == "str" {
-					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+					if err := setsockoptString(fd, level, opt, string(custom.Value)); err != nil {
 						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 					}
 				} else {
@@ -270,4 +273,12 @@ func setReusePort(fd uintptr) error {
 		return errors.New("failed to set SO_REUSEPORT").Base(err).AtWarning()
 	}
 	return nil
+}
+
+func setsockoptInt(fd uintptr, level, opt, value int) error {
+	return syscall.SetsockoptInt(int(fd), level, opt, value)
+}
+
+func setsockoptString(fd uintptr, level, opt int, s string) error {
+	return syscall.SetsockoptString(int(fd), level, opt, s)
 }

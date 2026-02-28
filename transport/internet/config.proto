@@ -70,10 +70,11 @@ message ProxyConfig {
 message CustomSockopt {
   string system = 1;
   string network = 2;
-  string level = 3;
-  string opt = 4;
-  string value = 5;
+  bool tcp_after_conn = 3;
+  string level = 4;
+  string opt = 5;
   string type = 6;
+  bytes value = 7;
 }
 
 // SocketConfig is options to be applied on network sockets.

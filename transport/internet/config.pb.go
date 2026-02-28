@@ -430,10 +430,11 @@ type CustomSockopt struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	System        string                 `protobuf:"bytes,1,opt,name=system,proto3" json:"system,omitempty"`
 	Network       string                 `protobuf:"bytes,2,opt,name=network,proto3" json:"network,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
-	Opt           string                 `protobuf:"bytes,4,opt,name=opt,proto3" json:"opt,omitempty"`
-	Value         string                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	TcpAfterConn  bool                   `protobuf:"varint,3,opt,name=tcp_after_conn,json=tcpAfterConn,proto3" json:"tcp_after_conn,omitempty"`
+	Level         string                 `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
+	Opt           string                 `protobuf:"bytes,5,opt,name=opt,proto3" json:"opt,omitempty"`
 	Type          string                 `protobuf:"bytes,6,opt,name=type,proto3" json:"type,omitempty"`
+	Value         []byte                 `protobuf:"bytes,7,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -482,6 +483,13 @@ func (x *CustomSockopt) GetNetwork() string {
 	return ""
 }
 
+func (x *CustomSockopt) GetTcpAfterConn() bool {
+	if x != nil {
+		return x.TcpAfterConn
+	}
+	return false
+}
+
 func (x *CustomSockopt) GetLevel() string {
 	if x != nil {
 		return x.Level
@@ -496,18 +504,18 @@ func (x *CustomSockopt) GetOpt() string {
 	return ""
 }
 
-func (x *CustomSockopt) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
-}
-
 func (x *CustomSockopt) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
+}
+
+func (x *CustomSockopt) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
 }
 
 // SocketConfig is options to be applied on network sockets.
@@ -825,14 +833,15 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
-	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +
+	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\xb9\x01\n" +
 	"\rCustomSockopt\x12\x16\n" +
 	"\x06system\x18\x01 \x01(\tR\x06system\x12\x18\n" +
-	"\anetwork\x18\x02 \x01(\tR\anetwork\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\tR\x05level\x12\x10\n" +
-	"\x03opt\x18\x04 \x01(\tR\x03opt\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\tR\x05value\x12\x12\n" +
-	"\x04type\x18\x06 \x01(\tR\x04type\"\x89\t\n" +
+	"\anetwork\x18\x02 \x01(\tR\anetwork\x12$\n" +
+	"\x0etcp_after_conn\x18\x03 \x01(\bR\ftcpAfterConn\x12\x14\n" +
+	"\x05level\x18\x04 \x01(\tR\x05level\x12\x10\n" +
+	"\x03opt\x18\x05 \x01(\tR\x03opt\x12\x12\n" +
+	"\x04type\x18\x06 \x01(\tR\x04type\x12\x14\n" +
+	"\x05value\x18\a \x01(\fR\x05value\"\x89\t\n" +
 	"\fSocketConfig\x12\x12\n" +
 	"\x04mark\x18\x01 \x01(\x05R\x04mark\x12\x10\n" +
 	"\x03tfo\x18\x02 \x01(\x05R\x03tfo\x12H\n" +
