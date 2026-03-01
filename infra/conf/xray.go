@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -393,7 +395,45 @@ func (c *Config) Override(o *Config, fn string) {
 		c.RouterConfig = o.RouterConfig
 	}
 	if o.DNSConfig != nil {
-		c.DNSConfig = o.DNSConfig
+		dns := DNSConfig{}
+		if c.DNSConfig != nil {
+			dns = *c.DNSConfig
+		}
+
+		ro := reflect.ValueOf(*o.DNSConfig)
+		for f1, v1 := range reflect.ValueOf(&dns).Elem().Fields() {
+			if !v1.CanInterface() || !v1.CanSet() {
+				continue
+			}
+			v2 := ro.FieldByName(f1.Name)
+			if !v2.IsValid() || !v2.CanInterface() {
+				continue
+			}
+			if !v2.IsNil() {
+				v1.Set(v2)
+			}
+		}
+
+		if c.DNSConfig != nil {
+			if c.DNSConfig.Hosts == nil || c.DNSConfig.Hosts.Hosts == nil {
+				dns.Hosts = o.DNSConfig.Hosts
+			} else {
+				dns.Hosts = c.DNSConfig.Hosts.Copy()
+				if o.DNSConfig.Hosts != nil {
+					for key, value := range o.DNSConfig.Hosts.Hosts {
+						dns.Hosts.Hosts[key] = value
+					}
+				}
+			}
+
+			if strings.Contains(strings.ToLower(fn), "tail") {
+				dns.Servers = slices.Concat(c.DNSConfig.Servers, o.DNSConfig.Servers)
+			} else {
+				dns.Servers = slices.Concat(o.DNSConfig.Servers, c.DNSConfig.Servers)
+			}
+		}
+
+		c.DNSConfig = &dns
 	}
 	if o.Transport != nil {
 		c.Transport = o.Transport

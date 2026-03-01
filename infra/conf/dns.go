@@ -2,6 +2,7 @@ package conf
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -199,15 +200,15 @@ type DNSConfig struct {
 	Servers                []*NameServerConfig `json:"servers"`
 	Hosts                  *HostsWrapper       `json:"hosts"`
 	ClientIP               *Address            `json:"clientIp"`
-	Tag                    string              `json:"tag"`
-	QueryStrategy          string              `json:"queryStrategy"`
-	DisableCache           bool                `json:"disableCache"`
-	ServeStale             bool                `json:"serveStale"`
-	ServeExpiredTTL        uint32              `json:"serveExpiredTTL"`
-	DisableFallback        bool                `json:"disableFallback"`
-	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
-	EnableParallelQuery    bool                `json:"enableParallelQuery"`
-	UseSystemHosts         bool                `json:"useSystemHosts"`
+	Tag                    *string             `json:"tag"`
+	QueryStrategy          *string             `json:"queryStrategy"`
+	DisableCache           *bool               `json:"disableCache"`
+	ServeStale             *bool               `json:"serveStale"`
+	ServeExpiredTTL        *uint32             `json:"serveExpiredTTL"`
+	DisableFallback        *bool               `json:"disableFallback"`
+	DisableFallbackIfMatch *bool               `json:"disableFallbackIfMatch"`
+	EnableParallelQuery    *bool               `json:"enableParallelQuery"`
+	UseSystemHosts         *bool               `json:"useSystemHosts"`
 }
 
 type HostAddress struct {
@@ -286,6 +287,17 @@ func (m *HostsWrapper) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	return errors.New("invalid DNS hosts").Base(err)
+}
+
+func (m *HostsWrapper) Copy() *HostsWrapper {
+	if m == nil {
+		return nil
+	}
+	Hosts := make(map[string]*HostAddress, len(m.Hosts))
+	for key, value := range m.Hosts {
+		Hosts[key] = value
+	}
+	return &HostsWrapper{Hosts: Hosts}
 }
 
 // Build implements Buildable
@@ -399,15 +411,17 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
+	emptyStr := ""
+	var u32zero uint32 = 0
 	config := &dns.Config{
-		Tag:                    c.Tag,
-		DisableCache:           c.DisableCache,
-		ServeStale:             c.ServeStale,
-		ServeExpiredTTL:        c.ServeExpiredTTL,
-		DisableFallback:        c.DisableFallback,
-		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
-		EnableParallelQuery:    c.EnableParallelQuery,
-		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
+		Tag:                    *cmp.Or(c.Tag, &emptyStr),
+		DisableCache:           c.DisableCache != nil && *c.DisableCache,
+		ServeStale:             c.ServeStale != nil && *c.ServeStale,
+		ServeExpiredTTL:        *cmp.Or(c.ServeExpiredTTL, &u32zero),
+		DisableFallback:        c.DisableFallback != nil && *c.DisableFallback,
+		DisableFallbackIfMatch: c.DisableFallbackIfMatch != nil && *c.DisableFallbackIfMatch,
+		EnableParallelQuery:    c.EnableParallelQuery != nil && *c.EnableParallelQuery,
+		QueryStrategy:          resolveQueryStrategy(*cmp.Or(c.QueryStrategy, &emptyStr)),
 	}
 
 	if c.ClientIP != nil {
@@ -499,7 +513,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		}
 		config.StaticHosts = append(config.StaticHosts, staticHosts...)
 	}
-	if c.UseSystemHosts {
+	if c.UseSystemHosts != nil && *c.UseSystemHosts {
 		systemHosts, err := readSystemHosts()
 		if err != nil {
 			return nil, errors.New("failed to read system hosts").Base(err)
