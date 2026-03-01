@@ -86,4 +86,11 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
+
+  QuicConfig quic = 23;
+}
+
+message QuicConfig {
+  string congestion = 1;
+  uint64 up = 2;
 }

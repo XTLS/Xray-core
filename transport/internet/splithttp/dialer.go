@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -195,7 +196,23 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
-				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				if err != nil {
+					return nil, err
+				}
+				if tlsConfig != nil && tlsConfig.Quic != nil {
+					switch tlsConfig.Quic.Congestion {
+					case "force-brutal":
+						congestion.UseBrutal(quicConn, tlsConfig.Quic.Up)
+					case "reno":
+						// quic-go default, do nothing
+					default:
+						congestion.UseBBR(quicConn)
+					}
+				} else {
+					congestion.UseBBR(quicConn)
+				}
+				return quicConn, nil
 			},
 		}
 	} else if httpVersion == "2" {
