@@ -316,7 +316,3 @@ xray-gametunnel run -test -c /etc/xray-gametunnel.json
 ## License
 
 MPL-2.0 - inherited from [xray-core](https://github.com/XTLS/Xray-core/blob/main/LICENSE).
-
-## Related Projects
-
-- [gametunnel-client](https://github.com/it2konst/gametunnel-client) - GUI client (v2rayN fork)
