@@ -1,45 +1,45 @@
 # 🎮 GameTunnel Core
 
-UDP-транспорт для [xray-core](https://github.com/XTLS/Xray-core), оптимизированный для низкой задержки в онлайн-играх и стриминге.
+A UDP transport extension for [xray-core](https://github.com/XTLS/Xray-core), designed for low-latency gaming and streaming.
 
-## Особенности
+## Features
 
-- **UDP-транспорт** - минимальная задержка, без overhead TCP
-- **QUIC-подобная структура пакетов** - естественный вид трафика
-- **ChaCha20-Poly1305** - аутентифицированное шифрование
-- **Curve25519** - обмен ключами с Perfect Forward Secrecy
-- **PSK (Pre-Shared Key)** - дополнительный уровень аутентификации
-- **Padding** - маскировка размеров пакетов
-- **Цепочки серверов** - маршрутизация через несколько узлов
-- **Совместимость с xray-core** - работает как обычный транспорт (tcp, ws, kcp, ...)
+- **UDP transport** - minimal latency, no TCP overhead or head-of-line blocking
+- **QUIC-like packet structure** - traffic looks like standard QUIC
+- **ChaCha20-Poly1305** - authenticated encryption
+- **Curve25519** - key exchange with Perfect Forward Secrecy
+- **Pre-Shared Key** - additional authentication layer
+- **Padding** - packet size masking
+- **Server chaining** - route traffic through multiple nodes
+- **Web server fallback** - host a website on the same port
+- **Compatible with xray-core** - works alongside tcp, ws, kcp, grpc, and other transports
 
-## Зачем нужен GameTunnel
+## Use Cases
 
-Для сценариев, где важна **низкая задержка и стабильность**:
+GameTunnel is built for scenarios where **low latency and stability** matter:
 
-- 🎮 Подключение к игровым серверам в другом регионе
-- 🎬 Стриминг видео без буферизации
-- 📡 Удалённый рабочий стол
-- 🌐 Доступ к собственной инфраструктуре
+- 🎮 Connecting to game servers in another region
+- 🎬 Video and audio streaming
+- 📡 Remote desktop access
+- 🌐 Accessing your own servers and infrastructure
 
-В отличие от TCP-транспортов, GameTunnel работает поверх UDP и не страдает от head-of-line blocking.
+## Quick Start
 
-## Установка (сервер)
+### Server Installation
+
+Supported OS: Ubuntu 22.04+, Debian 12+
 
 ```bash
-# Скачиваем бинарник
 curl -LO https://github.com/it2konst/gametunnel-core/releases/latest/download/xray-gametunnel-linux-amd64.tar.gz
 tar xzf xray-gametunnel-linux-amd64.tar.gz
 chmod +x xray-gametunnel
 sudo cp xray-gametunnel /usr/local/bin/
 
-# Генерируем UUID
+# Generate UUID
 xray-gametunnel uuid
 ```
 
-Поддерживаемые ОС: Ubuntu 22.04+, Debian 12+.
-
-## Конфигурация сервера
+### Server Configuration
 
 ```bash
 sudo nano /etc/xray-gametunnel.json
@@ -73,9 +73,9 @@ sudo nano /etc/xray-gametunnel.json
 }
 ```
 
-> **Важно:** `key` должен совпадать на сервере и клиенте. `flow` должен быть пустым.
+> **Important:** `key` must match on both server and client. `flow` must be empty.
 
-## Systemd сервис
+### Systemd Service
 
 ```bash
 sudo tee /etc/systemd/system/xray-gametunnel.service > /dev/null << 'EOF'
@@ -97,9 +97,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now xray-gametunnel
 ```
 
-## Клиент
+## Client
 
-### Вариант 1 - Терминал
+### Option 1 - Terminal
 
 ```json
 {
@@ -139,25 +139,87 @@ sudo systemctl enable --now xray-gametunnel
 curl --socks5-hostname 127.0.0.1:10808 https://ifconfig.me
 ```
 
-### Вариант 2 - GUI (v2rayN)
+### Option 2 - GUI (v2rayN)
 
-См. [gametunnel-client](https://github.com/it2konst/gametunnel-client) - форк v2rayN с поддержкой GameTunnel в интерфейсе.
+See [gametunnel-client](https://github.com/it2konst/gametunnel-client) - a v2rayN fork with GameTunnel in the transport list.
 
-При настройке в v2rayN:
+When configuring in v2rayN:
 
-- **Транспорт:** gametunnel
-- **Flow:** оставить пустым
-- **Path:** ваш ключ шифрования (key)
+- **Transport:** gametunnel
+- **Flow:** leave empty
+- **Path:** your encryption key
 
-## Цепочки серверов
+## Hosting a Website on the Same Server
 
-GameTunnel поддерживает маршрутизацию через несколько узлов:
+GameTunnel uses UDP while HTTPS uses TCP - both can share port 443. You can host a regular website alongside the tunnel.
+
+### Install nginx and get SSL certificate
+
+```bash
+apt install nginx certbot -y
+systemctl stop nginx
+certbot certonly --standalone -d your.domain.com
+systemctl start nginx
+```
+
+### Configure nginx
+
+```nginx
+server {
+    listen 80;
+    server_name your.domain.com;
+    return 301 https://$http_host$request_uri;
+}
+server {
+    listen 127.0.0.1:8080 http2;
+    server_name your.domain.com;
+    root /var/www/html/;
+    index index.html;
+    add_header Strict-Transport-Security "max-age=63072000" always;
+}
+```
+
+### Add VLESS TCP fallback to xray config
+
+Add a second inbound alongside the GameTunnel inbound:
+
+```json
+{
+  "port": 443,
+  "protocol": "vless",
+  "tag": "vless-tcp",
+  "settings": {
+    "clients": [{ "id": "YOUR_UUID", "flow": "" }],
+    "decryption": "none",
+    "fallbacks": [{ "alpn": "h2", "dest": 8080 }, { "dest": 8080 }]
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "alpn": ["h2", "http/1.1"],
+      "certificates": [
+        {
+          "certificateFile": "/etc/letsencrypt/live/your.domain.com/fullchain.pem",
+          "keyFile": "/etc/letsencrypt/live/your.domain.com/privkey.pem"
+        }
+      ]
+    }
+  }
+}
+```
+
+Regular browsers see your website at `https://your.domain.com`, while GameTunnel clients connect over UDP on the same port.
+
+## Server Chaining
+
+GameTunnel supports routing through multiple nodes:
 
 ```
-Клиент → GameTunnel(UDP) → Сервер A → VLESS(TCP) → Сервер B → интернет
+Client → GameTunnel(UDP) → Server A → VLESS(TCP) → Server B → internet
 ```
 
-На промежуточном сервере A укажите outbound на сервер B:
+Configure Server A with an outbound pointing to Server B:
 
 ```json
 {
@@ -185,7 +247,15 @@ GameTunnel поддерживает маршрутизацию через нес
 }
 ```
 
-## Сборка из исходников
+## Best Practices
+
+GameTunnel is optimized for **interactive and streaming traffic** - gaming, video, web browsing. For best results:
+
+- **Gaming & streaming** - works great, low latency and stable connections
+- **Web browsing** - works well for regular browsing
+- **Large downloads** (OS updates, package managers, IDE extensions) - consider routing these directly rather than through the tunnel, as UDP transport is not ideal for bulk transfers. You can configure routing rules in your client to send specific domains (e.g. update servers) via the `direct` outbound
+
+## Building from Source
 
 ```bash
 git clone https://github.com/it2konst/gametunnel-core.git
@@ -194,59 +264,59 @@ CGO_ENABLED=0 go build -o xray-gametunnel -trimpath -ldflags="-s -w" -v ./main
 ./xray-gametunnel version
 ```
 
-Требуется Go 1.22+.
+Requires Go 1.22+.
 
-## Архитектура
+## Architecture
 
 ```
-  Клиент                    Сервер
-┌─────────┐   UDP/443    ┌───────────┐
-│  VLESS  │◄────────────►│   VLESS   │
-│  + GT   │   ChaCha20   │   + GT    │
-│transport│   Poly1305   │ transport │
-└─────────┘              └───────────┘
+Client                          Server
+┌─────────┐   UDP/443    ┌─────────────┐
+│  VLESS   │◄────────────►│   VLESS      │
+│  + GT    │  ChaCha20   │   + GT       │
+│ transport│  Poly1305   │  transport   │
+└─────────┘              └─────────────┘
      │                         │
   SOCKS5                    Freedom
-  :10808                   (интернет)
+ :10808                   (internet)
 ```
 
 **Handshake:** Curve25519 ECDH → HKDF-SHA256 → ChaCha20-Poly1305
-**Пакеты:** QUIC Long Header формат с padding и рандомизацией
-**Payload:** чанкинг до 1200 байт для совместимости с MTU
+**Packets:** QUIC Long Header format with padding and randomization
+**Payload:** chunked to 1200 bytes for MTU compatibility
 
-## Параметры gametunnelSettings
+## Settings Reference
 
-| Параметр           | По умолчанию | Описание                                     |
-| ------------------ | ------------ | -------------------------------------------- |
-| obfuscation        | `quic`       | Режим маскировки: `quic`, `webrtc`, `raw`    |
-| priority           | `gaming`     | Приоритизация: `gaming`, `streaming`, `none` |
-| mtu                | `1400`       | Максимальный размер UDP-пакета               |
-| enablePadding      | `true`       | Добавлять случайный padding                  |
-| keepAliveInterval  | `15`         | Интервал keep-alive (секунды)                |
-| key                | `""`         | Pre-shared key для аутентификации            |
-| maxStreams         | `16`         | Макс. мультиплексированных потоков           |
-| connectionIdLength | `8`          | Длина Connection ID (байт)                   |
+| Parameter          | Default  | Description                                   |
+| ------------------ | -------- | --------------------------------------------- |
+| obfuscation        | `quic`   | Traffic masking: `quic`, `webrtc`, `raw`      |
+| priority           | `gaming` | Prioritization: `gaming`, `streaming`, `none` |
+| mtu                | `1400`   | Max UDP packet size                           |
+| enablePadding      | `true`   | Add random padding to packets                 |
+| keepAliveInterval  | `15`     | Keep-alive interval (seconds)                 |
+| key                | `""`     | Pre-shared key for authentication             |
+| maxStreams         | `16`     | Max multiplexed streams                       |
+| connectionIdLength | `8`      | Connection ID length (bytes)                  |
 
-## Полезные команды
+## Useful Commands
 
 ```bash
-# Статус сервера
+# Server status
 sudo systemctl status xray-gametunnel
 
-# Логи
+# Logs
 sudo journalctl -u xray-gametunnel -f
 
-# Мониторинг трафика
+# Monitor traffic
 sudo tcpdump -i any udp port 443 -c 20 -n
 
-# Проверка конфигурации
+# Validate config
 xray-gametunnel run -test -c /etc/xray-gametunnel.json
 ```
 
-## Лицензия
+## License
 
-MPL-2.0 - наследуется от [xray-core](https://github.com/XTLS/Xray-core/blob/main/LICENSE).
+MPL-2.0 - inherited from [xray-core](https://github.com/XTLS/Xray-core/blob/main/LICENSE).
 
-## Связанные проекты
+## Related Projects
 
-- [gametunnel-client](https://github.com/it2konst/gametunnel-client) - GUI-клиент (форк v2rayN)
+- [gametunnel-client](https://github.com/it2konst/gametunnel-client) - GUI client (v2rayN fork)
