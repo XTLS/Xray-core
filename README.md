@@ -269,15 +269,15 @@ Requires Go 1.22+.
 ## Architecture
 
 ```
-Client                          Server
+  Client                     Server
 ┌─────────┐   UDP/443    ┌─────────────┐
-│  VLESS   │◄────────────►│   VLESS      │
-│  + GT    │  ChaCha20   │   + GT       │
-│ transport│  Poly1305   │  transport   │
+│  VLESS  │◄────────────►│    VLESS    │
+│  + GT   │   ChaCha20   │    + GT     │
+│transport│   Poly1305   │  transport  │
 └─────────┘              └─────────────┘
      │                         │
   SOCKS5                    Freedom
- :10808                   (internet)
+  :10808                   (internet)
 ```
 
 **Handshake:** Curve25519 ECDH → HKDF-SHA256 → ChaCha20-Poly1305
