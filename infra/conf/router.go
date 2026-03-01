@@ -522,25 +522,32 @@ func ToCidrList(ips StringList) ([]*router.GeoIP, error) {
 	return geoipList, nil
 }
 
+type WebhookRuleConfig struct {
+	URL           string            `json:"url"`
+	Deduplication uint32            `json:"deduplication"`
+	Headers       map[string]string `json:"headers"`
+}
+
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList       `json:"domain"`
-		Domains    *StringList       `json:"domains"`
-		IP         *StringList       `json:"ip"`
-		Port       *PortList         `json:"port"`
-		Network    *NetworkList      `json:"network"`
-		SourceIP   *StringList       `json:"sourceIP"`
-		Source     *StringList       `json:"source"`
-		SourcePort *PortList         `json:"sourcePort"`
-		User       *StringList       `json:"user"`
-		VlessRoute *PortList         `json:"vlessRoute"`
-		InboundTag *StringList       `json:"inboundTag"`
-		Protocols  *StringList       `json:"protocol"`
-		Attributes map[string]string `json:"attrs"`
-		LocalIP    *StringList       `json:"localIP"`
-		LocalPort  *PortList         `json:"localPort"`
-		Process    *StringList       `json:"process"`
+		Domain     *StringList        `json:"domain"`
+		Domains    *StringList        `json:"domains"`
+		IP         *StringList        `json:"ip"`
+		Port       *PortList          `json:"port"`
+		Network    *NetworkList       `json:"network"`
+		SourceIP   *StringList        `json:"sourceIP"`
+		Source     *StringList        `json:"source"`
+		SourcePort *PortList          `json:"sourcePort"`
+		User       *StringList        `json:"user"`
+		VlessRoute *PortList          `json:"vlessRoute"`
+		InboundTag *StringList        `json:"inboundTag"`
+		Protocols  *StringList        `json:"protocol"`
+		Attributes map[string]string  `json:"attrs"`
+		LocalIP    *StringList        `json:"localIP"`
+		LocalPort  *PortList          `json:"localPort"`
+		Process    *StringList        `json:"process"`
+		Webhook    *WebhookRuleConfig `json:"webhook"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -655,6 +662,14 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Process != nil && len(*rawFieldRule.Process) > 0 {
 		rule.Process = *rawFieldRule.Process
+	}
+
+	if rawFieldRule.Webhook != nil && rawFieldRule.Webhook.URL != "" {
+		rule.Webhook = &router.WebhookConfig{
+			Url:           rawFieldRule.Webhook.URL,
+			Deduplication: rawFieldRule.Webhook.Deduplication,
+			Headers:       rawFieldRule.Webhook.Headers,
+		}
 	}
 
 	return rule, nil
