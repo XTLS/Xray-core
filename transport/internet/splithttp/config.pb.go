@@ -185,7 +185,8 @@ type Config struct {
 	SeqKey               string                 `protobuf:"bytes,23,opt,name=seqKey,proto3" json:"seqKey,omitempty"`
 	UplinkDataPlacement  string                 `protobuf:"bytes,24,opt,name=uplinkDataPlacement,proto3" json:"uplinkDataPlacement,omitempty"`
 	UplinkDataKey        string                 `protobuf:"bytes,25,opt,name=uplinkDataKey,proto3" json:"uplinkDataKey,omitempty"`
-	UplinkChunkSize      uint32                 `protobuf:"varint,26,opt,name=uplinkChunkSize,proto3" json:"uplinkChunkSize,omitempty"`
+	UplinkChunkSize      *RangeConfig           `protobuf:"bytes,26,opt,name=uplinkChunkSize,proto3" json:"uplinkChunkSize,omitempty"`
+	ServerMaxHeaderBytes int32                  `protobuf:"varint,27,opt,name=serverMaxHeaderBytes,proto3" json:"serverMaxHeaderBytes,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -395,9 +396,16 @@ func (x *Config) GetUplinkDataKey() string {
 	return ""
 }
 
-func (x *Config) GetUplinkChunkSize() uint32 {
+func (x *Config) GetUplinkChunkSize() *RangeConfig {
 	if x != nil {
 		return x.UplinkChunkSize
+	}
+	return nil
+}
+
+func (x *Config) GetServerMaxHeaderBytes() int32 {
+	if x != nil {
+		return x.ServerMaxHeaderBytes
 	}
 	return 0
 }
@@ -417,8 +425,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xde\n" +
-	"\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xc2\v\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -447,8 +454,9 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\fseqPlacement\x18\x16 \x01(\tR\fseqPlacement\x12\x16\n" +
 	"\x06seqKey\x18\x17 \x01(\tR\x06seqKey\x120\n" +
 	"\x13uplinkDataPlacement\x18\x18 \x01(\tR\x13uplinkDataPlacement\x12$\n" +
-	"\ruplinkDataKey\x18\x19 \x01(\tR\ruplinkDataKey\x12(\n" +
-	"\x0fuplinkChunkSize\x18\x1a \x01(\rR\x0fuplinkChunkSize\x1a:\n" +
+	"\ruplinkDataKey\x18\x19 \x01(\tR\ruplinkDataKey\x12X\n" +
+	"\x0fuplinkChunkSize\x18\x1a \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0fuplinkChunkSize\x122\n" +
+	"\x14serverMaxHeaderBytes\x18\x1b \x01(\x05R\x14serverMaxHeaderBytes\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +
@@ -487,11 +495,12 @@ var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	0,  // 9: xray.transport.internet.splithttp.Config.scStreamUpServerSecs:type_name -> xray.transport.internet.splithttp.RangeConfig
 	1,  // 10: xray.transport.internet.splithttp.Config.xmux:type_name -> xray.transport.internet.splithttp.XmuxConfig
 	4,  // 11: xray.transport.internet.splithttp.Config.downloadSettings:type_name -> xray.transport.internet.StreamConfig
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	0,  // 12: xray.transport.internet.splithttp.Config.uplinkChunkSize:type_name -> xray.transport.internet.splithttp.RangeConfig
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_splithttp_config_proto_init() }

@@ -156,6 +156,17 @@ func ApplyPaddingToCookie(req *http.Request, name, value string) {
 	})
 }
 
+func ApplyPaddingToResponseCookie(writer http.ResponseWriter, name, value string) {
+	if name == "" || value == "" {
+		return
+	}
+	http.SetCookie(writer, &http.Cookie{
+		Name:  name,
+		Value: value,
+		Path:  "/",
+	})
+}
+
 func ApplyPaddingToQuery(u *url.URL, key, value string) {
 	if u == nil || key == "" || value == "" {
 		return
@@ -218,6 +229,22 @@ func (c *Config) ApplyXPaddingToRequest(req *http.Request, config XPaddingConfig
 		ApplyPaddingToCookie(req, config.Placement.Key, paddingValue)
 	case PlacementQuery:
 		ApplyPaddingToQuery(req.URL, config.Placement.Key, paddingValue)
+	}
+}
+
+func (c *Config) ApplyXPaddingToResponse(writer http.ResponseWriter, config XPaddingConfig) {
+	placement := config.Placement.Placement
+
+	if placement == PlacementHeader || placement == PlacementQueryInHeader {
+		c.ApplyXPaddingToHeader(writer.Header(), config)
+		return
+	}
+
+	paddingValue := GeneratePadding(config.Method, config.Length)
+
+	switch placement {
+	case PlacementCookie:
+		ApplyPaddingToResponseCookie(writer, config.Placement.Key, paddingValue)
 	}
 }
 

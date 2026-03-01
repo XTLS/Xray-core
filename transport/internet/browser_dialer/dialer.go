@@ -22,6 +22,7 @@ type task struct {
 	Method string `json:"method"`
 	URL    string `json:"url"`
 	Extra  any    `json:"extra,omitempty"`
+	StreamResponse bool `json:"streamResponse"`
 }
 
 var conns chan *websocket.Conn
@@ -52,6 +53,7 @@ func init() {
 					}
 				}
 			} else {
+				w.Header().Set("Access-Control-Allow-Origin", "*");
 				w.Write(webpage)
 			}
 		}))
@@ -70,6 +72,7 @@ func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 	task := task{
 		Method: "WS",
 		URL:    uri,
+		StreamResponse: true,
 	}
 
 	if ed != nil {
@@ -84,9 +87,10 @@ func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 type httpExtra struct {
 	Referrer string            `json:"referrer,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
+	Cookies  map[string]string `json:"cookies,omitempty"`
 }
 
-func httpExtraFromHeaders(headers http.Header) *httpExtra {
+func httpExtraFromHeadersAndCookies(headers http.Header, cookies []*http.Cookie) *httpExtra {
 	if len(headers) == 0 {
 		return nil
 	}
@@ -104,24 +108,37 @@ func httpExtraFromHeaders(headers http.Header) *httpExtra {
 		}
 	}
 
+	if len(cookies) > 0 {
+		extra.Cookies = make(map[string]string)
+		for _, cookie := range cookies {
+			extra.Cookies[cookie.Name] = cookie.Value
+		}
+	}
+
 	return &extra
 }
 
-func DialGet(uri string, headers http.Header) (*websocket.Conn, error) {
+func DialGet(uri string, headers http.Header, cookies []*http.Cookie) (*websocket.Conn, error) {
 	task := task{
 		Method: "GET",
 		URL:    uri,
-		Extra:  httpExtraFromHeaders(headers),
+		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		StreamResponse: true,
 	}
 
 	return dialTask(task)
 }
 
-func DialPost(uri string, headers http.Header, payload []byte) error {
+func DialPacket(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
+	return dialWithBody(method, uri, headers, cookies, payload)
+}
+
+func dialWithBody(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
 	task := task{
-		Method: "POST",
+		Method: method,
 		URL:    uri,
-		Extra:  httpExtraFromHeaders(headers),
+		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		StreamResponse: false,
 	}
 
 	conn, err := dialTask(task)

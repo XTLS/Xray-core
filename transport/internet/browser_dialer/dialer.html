@@ -2,6 +2,7 @@
 <html>
 <head>
 	<title>Browser Dialer</title>
+	<link rel="icon" href="data:">
 </head>
 <body>
 	<script>
@@ -29,7 +30,35 @@
 				requestInit.headers = extra.headers;
 			}
 
+			if (extra.cookies) {
+				requestInit.credentials = 'include';
+			}
+
 			return requestInit;
+		}
+
+		function setCookiesFromTask(task) {
+			if (!task.extra.cookies) {
+				return;
+			}
+
+			const url = new URL(task.url);
+
+			for (const [name, value] of Object.entries(task.extra.cookies)) {
+				document.cookie = encodeURIComponent(name) + '=' + encodeURIComponent(value) + '; path=' + url.pathname;
+			}
+		}
+
+		function clearCookiesFromTask(task) {
+			if (!task.extra.cookies) {
+				return;
+			}
+
+			const url = new URL(task.url);
+
+			for (const [name, value] of Object.entries(task.extra.cookies)) {
+				document.cookie = encodeURIComponent(name) + '=; path=' + url.pathname + '; Max-Age=0';
+			}
 		}
 
 		let check = function () {
@@ -48,116 +77,121 @@
 			ws.onmessage = function (event) {
 				clientIdleCount -= 1;
 				let task = JSON.parse(event.data);
-				switch (task.method) {
-					case "WS": {
-						upstreamWsCount += 1;
-						console.log("Dial WS", task.url, task.extra.protocol);
-						const wss = new WebSocket(task.url, task.extra.protocol);
-						wss.binaryType = "arraybuffer";
-						let opened = false;
-						ws.onmessage = function (event) {
-							wss.send(event.data)
-						};
-						wss.onopen = function (event) {
-							opened = true;
-							ws.send("ok")
-						};
-						wss.onmessage = function (event) {
-							ws.send(event.data)
-						};
-						wss.onclose = function (event) {
-							upstreamWsCount -= 1;
-							console.log("Dial WS DONE, remaining: ", upstreamWsCount);
-							ws.close()
-						};
-						wss.onerror = function (event) {
-							!opened && ws.send("fail")
-							wss.close()
-						};
-						ws.onclose = function (event) {
-							wss.close()
-						};
-						break;
-					}
-					case "GET": {
-						(async () => {
-							const requestInit = prepareRequestInit(task.extra);
-
-							console.log("Dial GET", task.url);
-							ws.send("ok");
-							const controller = new AbortController();
-
-							/*
-							Aborting a streaming response in JavaScript
-							requires two levers to be pulled:
-
-							First, the streaming read itself has to be cancelled using
-							reader.cancel(), only then controller.abort() will actually work.
-
-							If controller.abort() alone is called while a
-							reader.read() is ongoing, it will block until the server closes the
-							response, the page is refreshed or the network connection is lost.
-							*/
-
-							let reader = null;
-							ws.onclose = (event) => {
-								try {
-									reader && reader.cancel();
-								} catch(e) {}
-
-								try {
-									controller.abort();
-								} catch(e) {}
-							};
-
-							try {
-								upstreamGetCount += 1;
-
-								requestInit.signal = controller.signal;
-								const response = await fetch(task.url, requestInit);
-
-								const body = await response.body;
-								reader = body.getReader();
-
-								while (true) {
-									const { done, value } = await reader.read();
-									if (value) ws.send(value);  // don't send back "undefined" string when received nothing
-									if (done) break;
-								}
-							} finally {
-								upstreamGetCount -= 1;
-								console.log("Dial GET DONE, remaining: ", upstreamGetCount);
-								ws.close();
-							}
-						})();
-						break;
-					}
-					case "POST": {
-						upstreamPostCount += 1;
-
+				if (task.method == "WS") {
+					upstreamWsCount += 1;
+					console.log("Dial WS", task.url, task.extra.protocol);
+					const wss = new WebSocket(task.url, task.extra.protocol);
+					wss.binaryType = "arraybuffer";
+					let opened = false;
+					ws.onmessage = function (event) {
+						wss.send(event.data)
+					};
+					wss.onopen = function (event) {
+						opened = true;
+						ws.send("ok")
+					};
+					wss.onmessage = function (event) {
+						ws.send(event.data)
+					};
+					wss.onclose = function (event) {
+						upstreamWsCount -= 1;
+						console.log("Dial WS DONE, remaining: ", upstreamWsCount);
+						ws.close()
+					};
+					wss.onerror = function (event) {
+						!opened && ws.send("fail")
+						wss.close()
+					};
+					ws.onclose = function (event) {
+						wss.close()
+					};
+				}
+				else if (task.method == "GET" && task.streamResponse) {
+					(async () => {
 						const requestInit = prepareRequestInit(task.extra);
-						requestInit.method = "POST";
 
-						console.log("Dial POST", task.url);
+						console.log("Dial GET", task.url);
 						ws.send("ok");
-						ws.onmessage = async (event) => {
+						const controller = new AbortController();
+
+						/*
+						Aborting a streaming response in JavaScript
+						requires two levers to be pulled:
+
+						First, the streaming read itself has to be cancelled using
+						reader.cancel(), only then controller.abort() will actually work.
+
+						If controller.abort() alone is called while a
+						reader.read() is ongoing, it will block until the server closes the
+						response, the page is refreshed or the network connection is lost.
+						*/
+
+						let reader = null;
+						ws.onclose = (event) => {
 							try {
-								requestInit.body = event.data;
-								const response = await fetch(task.url, requestInit);
-								if (response.ok) {
-									ws.send("ok");
-								} else {
-									console.error("bad status code");
-									ws.send("fail");
-								}
-							} finally {
-								upstreamPostCount -= 1;
-								console.log("Dial POST DONE, remaining: ", upstreamPostCount);
-								ws.close();
-							}
+								reader && reader.cancel();
+							} catch(e) {}
+
+							try {
+								controller.abort();
+							} catch(e) {}
 						};
-						break;
-					}
+
+						try {
+							upstreamGetCount += 1;
+
+							requestInit.signal = controller.signal;
+							setCookiesFromTask(task);
+							const response = await fetch(task.url, requestInit);
+							clearCookiesFromTask(task);
+
+							const body = await response.body;
+							reader = body.getReader();
+
+							while (true) {
+								const { done, value } = await reader.read();
+								if (value) ws.send(value);  // don't send back "undefined" string when received nothing
+								if (done) break;
+							}
+						} finally {
+							upstreamGetCount -= 1;
+							console.log("Dial GET DONE, remaining: ", upstreamGetCount);
+							ws.close();
+						}
+					})();
+				}
+				else if (!task.streamResponse) {
+					upstreamPostCount += 1;
+
+					const requestInit = prepareRequestInit(task.extra);
+					requestInit.method = task.method;
+
+					console.log("Dial", task.method, task.url);
+					ws.send("ok");
+					ws.onmessage = async (event) => {
+						try {
+							if (["POST", "PUT", "PATCH"].includes(task.method)) {
+								requestInit.body = event.data;
+							}
+							setCookiesFromTask(task);
+							const response = await fetch(task.url, requestInit);
+							clearCookiesFromTask(task);
+							if (response.ok) {
+								ws.send("ok");
+							} else {
+								console.error("bad status code");
+								ws.send("fail");
+							}
+						} finally {
+							upstreamPostCount -= 1;
+							console.log("Dial", task.method, "packet DONE, remaining: ", upstreamPostCount);
+							ws.close();
+						}
+					};
+				}
+				else {
+					console.error(`Incorrect task method=${task.method} streamResponse=${task.streamResponse}.`);
+					ws.close();
 				}
 
 				check();
