@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
+	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
@@ -1277,6 +1278,10 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 }
 
 var (
+	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"sudoku": func() interface{} { return new(Sudoku) },
+	}, "type", "settings")
+
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-dns":       func() interface{} { return new(Dns) },
 		"header-dtls":      func() interface{} { return new(Dtls) },
@@ -1287,6 +1292,7 @@ var (
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"salamander":       func() interface{} { return new(Salamander) },
+		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
@@ -1363,6 +1369,45 @@ func (c *Salamander) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type Sudoku struct {
+	Password string `json:"password"`
+	ASCII    string `json:"ascii"`
+	Packed   bool   `json:"packed"`
+
+	CustomTable       string `json:"customTable"`
+	LegacyCustomTable string `json:"custom_table"`
+
+	PaddingMin       uint32 `json:"paddingMin"`
+	LegacyPaddingMin uint32 `json:"padding_min"`
+	PaddingMax       uint32 `json:"paddingMax"`
+	LegacyPaddingMax uint32 `json:"padding_max"`
+}
+
+func (c *Sudoku) Build() (proto.Message, error) {
+	customTable := c.CustomTable
+	if customTable == "" {
+		customTable = c.LegacyCustomTable
+	}
+
+	paddingMin := c.PaddingMin
+	if paddingMin == 0 {
+		paddingMin = c.LegacyPaddingMin
+	}
+	paddingMax := c.PaddingMax
+	if paddingMax == 0 {
+		paddingMax = c.LegacyPaddingMax
+	}
+
+	return &finalsudoku.Config{
+		Password:    c.Password,
+		Ascii:       c.ASCII,
+		Packed:      c.Packed,
+		CustomTable: customTable,
+		PaddingMin:  paddingMin,
+		PaddingMax:  paddingMax,
+	}, nil
+}
+
 type Xdns struct {
 	Domain string `json:"domain"`
 }
@@ -1403,7 +1448,7 @@ type Mask struct {
 func (c *Mask) Build(tcp bool) (proto.Message, error) {
 	loader := udpmaskLoader
 	if tcp {
-		return nil, errors.New("")
+		loader = tcpmaskLoader
 	}
 
 	settings := []byte("{}")

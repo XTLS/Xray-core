@@ -170,6 +170,27 @@ func NewTrafficState(userUUID []byte) *TrafficState {
 	}
 }
 
+type connUnwrapper interface {
+	UnwrapConn() net.Conn
+}
+
+func unwrapConn(conn net.Conn) net.Conn {
+	const maxConnUnwrapDepth = 8
+	for i := 0; i < maxConnUnwrapDepth && conn != nil; i++ {
+		wrapper, ok := conn.(connUnwrapper)
+		if !ok {
+			break
+		}
+
+		next := wrapper.UnwrapConn()
+		if next == nil {
+			break
+		}
+		conn = next
+	}
+	return conn
+}
+
 // VisionReader is used to read xtls vision protocol
 // Note Vision probably only make sense as the inner most layer of reader, since it need assess traffic state from origin proxy traffic
 type VisionReader struct {
@@ -659,7 +680,7 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 	}
 }
 
-// UnwrapRawConn support unwrap encryption, stats, tls, utls, reality, proxyproto, uds-wrapper conn and get raw tcp/uds conn from it
+// UnwrapRawConn support unwrap encryption, stats, mask wrappers, tls, utls, reality, proxyproto, uds-wrapper conn and get raw tcp/uds conn from it
 func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 	var readCounter, writerCounter stats.Counter
 	if conn != nil {
@@ -676,6 +697,9 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 			readCounter = statConn.ReadCounter
 			writerCounter = statConn.WriteCounter
 		}
+
+		conn = unwrapConn(conn)
+
 		if !isEncryption { // avoids double penetration
 			if xc, ok := conn.(*tls.Conn); ok {
 				conn = xc.NetConn()
@@ -694,6 +718,8 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 		if uc, ok := conn.(*internet.UnixConnWrapper); ok {
 			conn = uc.UnixConn
 		}
+
+		conn = unwrapConn(conn)
 	}
 	return conn, readCounter, writerCounter
 }
