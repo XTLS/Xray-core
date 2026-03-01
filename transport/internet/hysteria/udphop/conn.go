@@ -18,7 +18,7 @@ const (
 	defaultHopInterval = 30 * time.Second
 )
 
-type udpHopPacketConn struct {
+type UdpHopPacketConn struct {
 	Addr           net.Addr
 	Addrs          []net.Addr
 	HopIntervalMin int64
@@ -73,7 +73,7 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64,
 	// if err != nil {
 	// 	return nil, err
 	// }
-	hConn := &udpHopPacketConn{
+	hConn := &UdpHopPacketConn{
 		Addr:           addr,
 		Addrs:          addrs,
 		HopIntervalMin: intervalMin,
@@ -95,7 +95,7 @@ func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64,
 	return hConn, nil
 }
 
-func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
+func (u *UdpHopPacketConn) recvLoop(conn net.PacketConn) {
 	for {
 		buf := u.bufPool.Get().([]byte)
 		n, addr, err := conn.ReadFrom(buf)
@@ -120,7 +120,7 @@ func (u *udpHopPacketConn) recvLoop(conn net.PacketConn) {
 	}
 }
 
-func (u *udpHopPacketConn) hopLoop() {
+func (u *UdpHopPacketConn) hopLoop() {
 	ticker := time.NewTicker(time.Duration(crypto.RandBetween(u.HopIntervalMin, u.HopIntervalMax)) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -134,7 +134,7 @@ func (u *udpHopPacketConn) hopLoop() {
 	}
 }
 
-func (u *udpHopPacketConn) hop() {
+func (u *UdpHopPacketConn) hop() {
 	u.connMutex.Lock()
 	defer u.connMutex.Unlock()
 	if u.closed {
@@ -170,7 +170,7 @@ func (u *udpHopPacketConn) hop() {
 	go u.recvLoop(newConn)
 }
 
-func (u *udpHopPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+func (u *UdpHopPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	for {
 		select {
 		case p := <-u.recvQueue:
@@ -188,7 +188,7 @@ func (u *udpHopPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) 
 	}
 }
 
-func (u *udpHopPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+func (u *UdpHopPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	if u.closed {
@@ -199,7 +199,7 @@ func (u *udpHopPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	return u.currentConn.WriteTo(b, u.Addrs[u.addrIndex])
 }
 
-func (u *udpHopPacketConn) Close() error {
+func (u *UdpHopPacketConn) Close() error {
 	u.connMutex.Lock()
 	defer u.connMutex.Unlock()
 	if u.closed {
@@ -218,13 +218,13 @@ func (u *udpHopPacketConn) Close() error {
 	return err
 }
 
-func (u *udpHopPacketConn) LocalAddr() net.Addr {
+func (u *UdpHopPacketConn) LocalAddr() net.Addr {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	return u.currentConn.LocalAddr()
 }
 
-func (u *udpHopPacketConn) SetDeadline(t time.Time) error {
+func (u *UdpHopPacketConn) SetDeadline(t time.Time) error {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	if u.prevConn != nil {
@@ -233,7 +233,7 @@ func (u *udpHopPacketConn) SetDeadline(t time.Time) error {
 	return u.currentConn.SetDeadline(t)
 }
 
-func (u *udpHopPacketConn) SetReadDeadline(t time.Time) error {
+func (u *UdpHopPacketConn) SetReadDeadline(t time.Time) error {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	if u.prevConn != nil {
@@ -242,7 +242,7 @@ func (u *udpHopPacketConn) SetReadDeadline(t time.Time) error {
 	return u.currentConn.SetReadDeadline(t)
 }
 
-func (u *udpHopPacketConn) SetWriteDeadline(t time.Time) error {
+func (u *UdpHopPacketConn) SetWriteDeadline(t time.Time) error {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	if u.prevConn != nil {
@@ -253,7 +253,7 @@ func (u *udpHopPacketConn) SetWriteDeadline(t time.Time) error {
 
 // UDP-specific methods below
 
-func (u *udpHopPacketConn) SetReadBuffer(bytes int) error {
+func (u *UdpHopPacketConn) SetReadBuffer(bytes int) error {
 	u.connMutex.Lock()
 	defer u.connMutex.Unlock()
 	u.readBufferSize = bytes
@@ -263,7 +263,7 @@ func (u *udpHopPacketConn) SetReadBuffer(bytes int) error {
 	return trySetReadBuffer(u.currentConn, bytes)
 }
 
-func (u *udpHopPacketConn) SetWriteBuffer(bytes int) error {
+func (u *UdpHopPacketConn) SetWriteBuffer(bytes int) error {
 	u.connMutex.Lock()
 	defer u.connMutex.Unlock()
 	u.writeBufferSize = bytes
@@ -273,7 +273,7 @@ func (u *udpHopPacketConn) SetWriteBuffer(bytes int) error {
 	return trySetWriteBuffer(u.currentConn, bytes)
 }
 
-func (u *udpHopPacketConn) SyscallConn() (syscall.RawConn, error) {
+func (u *UdpHopPacketConn) SyscallConn() (syscall.RawConn, error) {
 	u.connMutex.RLock()
 	defer u.connMutex.RUnlock()
 	sc, ok := u.currentConn.(syscall.Conn)

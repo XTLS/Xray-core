@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -49,8 +50,8 @@ type xicmpConnServer struct {
 	mutex  sync.Mutex
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
+func NewConnServer(c *Config, raw net.PacketConn, level int) (net.PacketConn, error) {
+	if level != 0 {
 		return nil, errors.New("xicmp requires being at the outermost level")
 	}
 
@@ -159,8 +160,8 @@ func (c *xicmpConnServer) encode(p []byte, id int, seq int, needSeqByte bool, se
 		return nil, err
 	}
 
-	if len(buf) > 8192 {
-		return nil, errors.New("xicmp len(buf) > 8192")
+	if len(buf) > finalmask.UDPSize {
+		return nil, errors.New("xicmp len(buf) > finalmask.UDPSize")
 	}
 
 	return buf, nil
@@ -177,12 +178,12 @@ func (c *xicmpConnServer) randUntil(b1 byte) byte {
 }
 
 func (c *xicmpConnServer) recvLoop() {
+	var buf [finalmask.UDPSize]byte
+
 	for {
 		if c.closed {
 			break
 		}
-
-		var buf [8192]byte
 
 		n, addr, err := c.icmpConn.ReadFrom(buf[:])
 		if err != nil {
@@ -245,6 +246,15 @@ func (c *xicmpConnServer) recvLoop() {
 
 	close(c.ch)
 	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	for key, q := range c.writeQueueMap {
+		close(q.queue)
+		delete(c.writeQueueMap, key)
+	}
 }
 
 func (c *xicmpConnServer) sendLoop() {
@@ -302,33 +312,30 @@ func (c *xicmpConnServer) sendLoop() {
 	}
 }
 
-func (c *xicmpConnServer) Size() int32 {
-	return 0
-}
-
 func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
-	n = copy(p, packet.p)
-	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+	if len(p) < len(packet.p) {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		return 0, packet.addr, nil
 	}
-	return n, packet.addr, nil
+	copy(p, packet.p)
+	return len(packet.p), packet.addr, nil
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	q := c.ensureQueue(addr)
 	if q == nil {
-		return 0, errors.New("xicmp closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("xicmp closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	buf := make([]byte, len(p))
@@ -338,24 +345,13 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		return 0, errors.New("xicmp queue full")
+		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		return 0, io.ErrShortWrite
 	}
 }
 
 func (c *xicmpConnServer) Close() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil
-	}
-
 	c.closed = true
-	for key, q := range c.writeQueueMap {
-		close(q.queue)
-		delete(c.writeQueueMap, key)
-	}
-
 	_ = c.icmpConn.Close()
 	return c.conn.Close()
 }

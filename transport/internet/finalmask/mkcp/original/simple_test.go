@@ -8,6 +8,22 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 )
 
+func TestSimpleSealInPlace(t *testing.T) {
+	aead := original.NewSimple()
+
+	text := []byte("0123456789012")
+	buf := make([]byte, 8192)
+
+	copy(buf[aead.Overhead():], text)
+	plaintext := buf[aead.Overhead() : aead.Overhead()+len(text)]
+
+	sealed := aead.Seal(nil, nil, plaintext, nil)
+
+	_ = aead.Seal(buf[:0], nil, plaintext, nil)
+
+	assert.Equal(t, sealed, buf[:aead.Overhead()+len(text)])
+}
+
 func TestOriginalBounce(t *testing.T) {
 	aead := original.NewSimple()
 	buf := make([]byte, aead.NonceSize()+aead.Overhead())

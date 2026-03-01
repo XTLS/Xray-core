@@ -1,14 +1,14 @@
 package srtp
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
-	sync "sync"
-	"time"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type srtp struct {
@@ -16,7 +16,7 @@ type srtp struct {
 	number uint16
 }
 
-func (*srtp) Size() int32 {
+func (*srtp) Size() int {
 	return 4
 }
 
@@ -27,136 +27,72 @@ func (h *srtp) Serialize(b []byte) {
 }
 
 type srtpConn struct {
-	first     bool
-	leaveSize int32
-
-	conn   net.PacketConn
+	net.PacketConn
 	header *srtp
-
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	conn := &srtpConn{
-		first:     first,
-		leaveSize: leaveSize,
-
-		conn: raw,
+		PacketConn: raw,
 		header: &srtp{
 			header: 0xB5E8,
 			number: dice.RollUint16(),
 		},
 	}
 
-	if first {
-		conn.readBuf = make([]byte, 8192)
-		conn.writeBuf = make([]byte, 8192)
-	}
-
 	return conn, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, first bool, leaveSize int32) (net.PacketConn, error) {
-	return NewConnClient(c, raw, first, leaveSize)
-}
-
-func (c *srtpConn) Size() int32 {
-	return c.header.Size()
+func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+	return NewConnClient(c, raw)
 }
 
 func (c *srtpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if c.first {
-		c.readMutex.Lock()
-
-		n, addr, err = c.conn.ReadFrom(c.readBuf)
-		if err != nil {
-			c.readMutex.Unlock()
-			return n, addr, err
-		}
-
-		if n < int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		if len(p) < n-int(c.Size()) {
-			c.readMutex.Unlock()
-			return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
-		}
-
-		copy(p, c.readBuf[c.Size():n])
-
-		c.readMutex.Unlock()
-		return n - int(c.Size()), addr, err
+	buf := p
+	if len(p) < finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
 	}
 
-	n, addr, err = c.conn.ReadFrom(p)
-	if err != nil {
+	n, addr, err = c.PacketConn.ReadFrom(buf)
+	if err != nil || n == 0 {
 		return n, addr, err
 	}
 
-	if n < int(c.Size()) {
-		return 0, addr, errors.New("header").Base(io.ErrShortBuffer)
+	if n < c.header.Size() {
+		errors.LogDebug(context.Background(), addr, " mask read err header mismatch")
+		return 0, addr, nil
 	}
 
-	copy(p, p[c.Size():n])
+	if len(p) < n-c.header.Size() {
+		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", n-c.header.Size())
+		return 0, addr, nil
+	}
 
-	return n - int(c.Size()), addr, err
+	copy(p, buf[c.header.Size():n])
+
+	return n - c.header.Size(), addr, nil
 }
 
 func (c *srtpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.first {
-		if c.leaveSize+c.Size()+int32(len(p)) > 8192 {
-			return 0, errors.New("too many masks")
-		}
-
-		c.writeMutex.Lock()
-
-		n = copy(c.writeBuf[c.leaveSize+c.Size():], p)
-		n += int(c.leaveSize) + int(c.Size())
-
-		c.header.Serialize(c.writeBuf[c.leaveSize : c.leaveSize+c.Size()])
-
-		nn, err := c.conn.WriteTo(c.writeBuf[:n], addr)
-
-		if err != nil {
-			c.writeMutex.Unlock()
-			return 0, err
-		}
-
-		if nn != n {
-			c.writeMutex.Unlock()
-			return 0, errors.New("nn != n")
-		}
-
-		c.writeMutex.Unlock()
-		return len(p), nil
+	if c.header.Size()+len(p) > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", c.header.Size()+len(p), " ", finalmask.UDPSize)
+		return 0, io.ErrShortWrite
 	}
 
-	c.header.Serialize(p[c.leaveSize : c.leaveSize+c.Size()])
+	var buf []byte
+	if cap(p) != finalmask.UDPSize {
+		buf = make([]byte, finalmask.UDPSize)
+	} else {
+		buf = p[:c.header.Size()+len(p)]
+	}
 
-	return c.conn.WriteTo(p, addr)
-}
+	copy(buf[c.header.Size():], p)
+	c.header.Serialize(buf)
 
-func (c *srtpConn) Close() error {
-	return c.conn.Close()
-}
+	_, err = c.PacketConn.WriteTo(buf[:c.header.Size()+len(p)], addr)
+	if err != nil {
+		return 0, err
+	}
 
-func (c *srtpConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *srtpConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *srtpConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *srtpConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
+	return len(p), nil
 }

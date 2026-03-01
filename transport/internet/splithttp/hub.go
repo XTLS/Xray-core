@@ -472,6 +472,16 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
+
+		if streamSettings.UdpmaskManager != nil {
+			pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(Conn)
+			if err != nil {
+				Conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			Conn = pktConn
+		}
+
 		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, nil)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
@@ -497,6 +507,10 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen TCP for XHTTP on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP for XHTTP on ", address, ":", port)
+	}
+
+	if !l.isH3 && streamSettings.TcpmaskManager != nil {
+		l.listener, _ = streamSettings.TcpmaskManager.WrapListener(l.listener)
 	}
 
 	// tcp/unix (h1/h2)
