@@ -58,6 +58,7 @@ func NewAckList(writer SegmentWriter, mss uint32) *AckList {
 		numbers:         make([]uint32, 0, 128),
 		nextFlush:       make([]uint32, 0, 128),
 		flushCandidates: make([]uint32, 0, 128),
+		mss:             mss,
 	}
 }
 
