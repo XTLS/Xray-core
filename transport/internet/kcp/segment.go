@@ -138,6 +138,9 @@ type AckSegment struct {
 const ackNumberLimit = 128
 
 func NewAckSegment(limit int) *AckSegment {
+	if limit == 0 {
+		limit = 1
+	}
 	if limit > ackNumberLimit {
 		limit = ackNumberLimit
 	}
