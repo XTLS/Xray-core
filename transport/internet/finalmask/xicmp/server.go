@@ -346,7 +346,7 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return len(p), nil
 	default:
 		errors.LogDebug(context.Background(), addr, " mask write err queue full")
-		return 0, io.ErrShortWrite
+		return 0, nil
 	}
 }
 
