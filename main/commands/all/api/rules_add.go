@@ -84,7 +84,7 @@ func executeAddRules(cmd *base.Command, args []string) {
 		}
 
 		if conf.RouterConfig == nil {
-			base.Fatalf("failed to arr routing tule: config did not have \"routing\" field")
+			base.Fatalf("failed to add routing rule: config did not have \"routing\" field")
 		}
 
 		rcs = append(rcs, *conf.RouterConfig)
