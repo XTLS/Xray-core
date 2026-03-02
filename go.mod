@@ -52,3 +52,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/refraction-networking/utls => github.com/fangliding/utls v0.0.0-20260223095720-1ba92b0f6acd
