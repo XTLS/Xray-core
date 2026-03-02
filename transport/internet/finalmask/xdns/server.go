@@ -126,7 +126,7 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 	q, ok := c.writeQueueMap[addr.String()]
 	if !ok {
 		q = &queue{
-			queue: make(chan []byte, 128),
+			queue: make(chan []byte, 512),
 			stash: make(chan []byte, 1),
 		}
 		c.writeQueueMap[addr.String()] = q

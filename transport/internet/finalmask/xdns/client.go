@@ -60,7 +60,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
-		writeQueue: make(chan *packet, 128),
+		writeQueue: make(chan *packet, 256),
 	}
 
 	rand.Read(conn.clientID)
@@ -213,7 +213,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
-		errors.LogDebug(context.Background(), addr, " mask write err ", err)
+		errors.LogDebug(context.Background(), addr, " mask write err ", err, " ", len(p))
 		return 0, io.ErrShortWrite
 	}
 

@@ -132,20 +132,20 @@ type AckSegment struct {
 	Timestamp       uint32
 	NumberList      []uint32
 
-	limit int
+	Limit int
 }
 
 const ackNumberLimit = 128
 
 func NewAckSegment(limit int) *AckSegment {
-	if limit == 0 {
+	if limit <= 0 {
 		limit = 1
 	}
 	if limit > ackNumberLimit {
 		limit = ackNumberLimit
 	}
 	return &AckSegment{
-		limit: limit,
+		Limit: limit,
 	}
 }
 
@@ -198,7 +198,7 @@ func (s *AckSegment) PutNumber(number uint32) {
 }
 
 func (s *AckSegment) IsFull() bool {
-	return len(s.NumberList) == s.limit
+	return len(s.NumberList) == s.Limit
 }
 
 func (s *AckSegment) IsEmpty() bool {
