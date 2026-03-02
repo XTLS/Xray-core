@@ -65,16 +65,24 @@ func (o *Observer) Type() interface{} {
 func (o *Observer) Start() error {
 	if o.config != nil && len(o.config.SubjectSelector) != 0 {
 		o.finished = done.New()
-		o.hp.StartScheduler(func() ([]string, error) {
+		selector := func() ([]string, error) {
 			hs, ok := o.ohm.(outbound.HandlerSelector)
 			if !ok {
-
 				return nil, errors.New("outbound.Manager is not a HandlerSelector")
 			}
-
 			outbounds := hs.Select(o.config.SubjectSelector)
 			return outbounds, nil
-		})
+		}
+		o.hp.StartScheduler(selector)
+		if notifier, ok := o.ohm.(outbound.HandlerChangeNotifier); ok {
+			notifier.OnHandlerChanged(func() {
+				tags, err := selector()
+				if err != nil || len(tags) == 0 {
+					return
+				}
+				o.hp.Check(tags)
+			})
+		}
 	}
 	return nil
 }

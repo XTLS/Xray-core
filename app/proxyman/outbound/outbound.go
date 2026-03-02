@@ -21,6 +21,14 @@ type Manager struct {
 	untaggedHandlers []outbound.Handler
 	running          bool
 	tagsCache        *sync.Map
+	onChangeFn       func()
+}
+
+// OnHandlerChanged implements outbound.HandlerChangeNotifier.
+func (m *Manager) OnHandlerChanged(fn func()) {
+	m.access.Lock()
+	defer m.access.Unlock()
+	m.onChangeFn = fn
 }
 
 // New creates a new Manager.
@@ -121,7 +129,16 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 	}
 
 	if m.running {
-		return handler.Start()
+		if err := handler.Start(); err != nil {
+			return err
+		}
+	}
+
+	if fn := m.onChangeFn; fn != nil {
+		go func() {
+			defer func() { recover() }()
+			fn()
+		}()
 	}
 
 	return nil

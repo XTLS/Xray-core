@@ -24,6 +24,10 @@ type HandlerSelector interface {
 	Select([]string) []string
 }
 
+type HandlerChangeNotifier interface {
+	OnHandlerChanged(callback func())
+}
+
 // Manager is a feature that manages outbound.Handlers.
 //
 // xray:api:stable
