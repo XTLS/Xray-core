@@ -33,23 +33,6 @@ Arguments:
 Example:
 
 	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 c1.json c2.json
-
-	c1.json:
-
-	{
-		"routing": {
-			"domainStrategy": "AsIs",
-			"domainMatcher": "hybrid",
-			"rules": [
-				{
-					"inboundTag": [
-						"api"
-					],
-					"outboundTag": "api"
-				},
-			]
-		}
-	}
 `,
 	Run: executeAddRules,
 }
