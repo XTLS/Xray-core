@@ -146,7 +146,7 @@ func NewReceivingWorker(kcp *Connection) *ReceivingWorker {
 		window:     NewReceivingWindow(),
 		windowSize: kcp.Config.GetReceivingInFlightSize(),
 	}
-	worker.acklist = NewAckList(worker, kcp.mss)
+	worker.acklist = NewAckList(worker, kcp.mss+DataSegmentOverhead)
 	return worker
 }
 
