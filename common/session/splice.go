@@ -2,6 +2,8 @@ package session
 
 import "sync"
 
+var spliceCopyInitMu sync.Mutex
+
 type spliceCopySignal struct {
 	mu    sync.RWMutex
 	state int
@@ -21,6 +23,9 @@ func newSpliceCopySignal(state int) *spliceCopySignal {
 }
 
 func (i *Inbound) ensureSpliceCopy() *spliceCopySignal {
+	spliceCopyInitMu.Lock()
+	defer spliceCopyInitMu.Unlock()
+
 	if i.spliceCopy == nil {
 		i.spliceCopy = newSpliceCopySignal(i.CanSpliceCopy)
 	}
@@ -94,6 +99,9 @@ func (i *Inbound) SpliceCopyReady() bool {
 }
 
 func (o *Outbound) ensureSpliceCopy() *spliceCopySignal {
+	spliceCopyInitMu.Lock()
+	defer spliceCopyInitMu.Unlock()
+
 	if o.spliceCopy == nil {
 		o.spliceCopy = newSpliceCopySignal(o.CanSpliceCopy)
 	}
