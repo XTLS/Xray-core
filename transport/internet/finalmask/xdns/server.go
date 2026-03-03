@@ -127,6 +127,7 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 			stash: make(chan []byte, 1),
 		}
 		c.writeQueueMap[addr.String()] = q
+		q.last = time.Now()
 	}
 	// q.last = time.Now()
 
