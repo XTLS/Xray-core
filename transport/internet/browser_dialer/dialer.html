@@ -170,7 +170,7 @@
 					ws.send("ok");
 					ws.onmessage = async (event) => {
 						try {
-							if (["POST", "PUT", "PATCH"].includes(task.method)) {
+							if (event.data.byteLength > 0) {
 								requestInit.body = event.data;
 							}
 							setCookiesFromTask(task);

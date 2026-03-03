@@ -326,9 +326,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		switch request.Method {
-		case "POST", "PUT", "PATCH":
-		default:
+		if len(bodyPayload) == 0 {
+			// Methods without a body are usually cached by default.
 			writer.Header().Set("Cache-Control", "no-store")
 		}
 

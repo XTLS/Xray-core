@@ -9,7 +9,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -349,14 +348,6 @@ func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqS
 			for _, cookie := range c.GetRequestCookiesWithPayload(data) {
 				request.AddCookie(cookie)
 			}
-		}
-	}
-
-	switch request.Method {
-	case "POST", "PUT", "PATCH":
-	default:
-		if request.Body != nil {
-			return errors.New("Can't make " + request.Method + " with body")
 		}
 	}
 
