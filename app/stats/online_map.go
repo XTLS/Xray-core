@@ -2,6 +2,7 @@ package stats
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type ipEntry struct {
 type OnlineMap struct {
 	entries map[string]*ipEntry
 	access  sync.Mutex
+	count   atomic.Int64
 }
 
 // NewOnlineMap creates a new OnlineMap instance.
@@ -47,6 +49,7 @@ func (om *OnlineMap) AddIP(ip string) {
 			refCount: 1,
 			lastSeen: time.Now(),
 		}
+		om.count.Add(1)
 	}
 }
 
@@ -62,15 +65,13 @@ func (om *OnlineMap) RemoveIP(ip string) {
 	e.refCount--
 	if e.refCount <= 0 {
 		delete(om.entries, ip)
+		om.count.Add(-1)
 	}
 }
 
 // Count implements stats.OnlineMap.
 func (om *OnlineMap) Count() int {
-	om.access.Lock()
-	defer om.access.Unlock()
-
-	return len(om.entries)
+	return int(om.count.Load())
 }
 
 // List implements stats.OnlineMap.
