@@ -29,6 +29,9 @@ const (
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
+	if inbound != nil {
+		inbound.ensureSpliceCopy()
+	}
 	return context.WithValue(ctx, inboundSessionKey, inbound)
 }
 
@@ -40,6 +43,11 @@ func InboundFromContext(ctx context.Context) *Inbound {
 }
 
 func ContextWithOutbounds(ctx context.Context, outbounds []*Outbound) context.Context {
+	for _, outbound := range outbounds {
+		if outbound != nil {
+			outbound.ensureSpliceCopy()
+		}
+	}
 	return context.WithValue(ctx, outboundSessionKey, outbounds)
 }
 

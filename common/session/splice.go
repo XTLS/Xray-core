@@ -3,88 +3,165 @@ package session
 import "sync"
 
 type spliceCopySignal struct {
+	mu    sync.RWMutex
+	state int
 	ready chan struct{}
 	once  sync.Once
 }
 
-func newSpliceCopySignal() *spliceCopySignal {
-	return &spliceCopySignal{
+func newSpliceCopySignal(state int) *spliceCopySignal {
+	s := &spliceCopySignal{
+		state: state,
 		ready: make(chan struct{}),
 	}
+	if state == 1 {
+		close(s.ready)
+	}
+	return s
+}
+
+func (i *Inbound) ensureSpliceCopy() *spliceCopySignal {
+	if i.spliceCopy == nil {
+		i.spliceCopy = newSpliceCopySignal(i.CanSpliceCopy)
+	}
+	return i.spliceCopy
 }
 
 func (i *Inbound) ArmSpliceCopy() {
+	s := i.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.state = 2
+	s.ready = make(chan struct{})
+	s.once = sync.Once{}
 	i.CanSpliceCopy = 2
-	i.spliceCopy = newSpliceCopySignal()
 }
 
 func (i *Inbound) EnableSpliceCopy() {
-	if i.CanSpliceCopy == 3 {
+	s := i.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state == 3 {
 		return
 	}
-	if i.spliceCopy != nil {
-		i.spliceCopy.once.Do(func() {
-			close(i.spliceCopy.ready)
-		})
-	}
+	s.state = 1
 	i.CanSpliceCopy = 1
+	s.once.Do(func() {
+		close(s.ready)
+	})
 }
 
 func (i *Inbound) DisableSpliceCopy() {
+	s := i.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.state = 3
 	i.CanSpliceCopy = 3
-	i.spliceCopy = nil
 }
 
 func (i *Inbound) SpliceCopyState() int {
-	return i.CanSpliceCopy
+	s := i.ensureSpliceCopy()
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.state
 }
 
 func (i *Inbound) SpliceCopyReady() bool {
-	if i.spliceCopy != nil {
-		select {
-		case <-i.spliceCopy.ready:
-			return true
-		default:
-			return false
-		}
+	s := i.ensureSpliceCopy()
+
+	s.mu.RLock()
+	state := s.state
+	ready := s.ready
+	s.mu.RUnlock()
+
+	if state != 1 {
+		return false
 	}
-	return i.CanSpliceCopy == 1
+	select {
+	case <-ready:
+		return true
+	default:
+		return false
+	}
+}
+
+func (o *Outbound) ensureSpliceCopy() *spliceCopySignal {
+	if o.spliceCopy == nil {
+		o.spliceCopy = newSpliceCopySignal(o.CanSpliceCopy)
+	}
+	return o.spliceCopy
 }
 
 func (o *Outbound) ArmSpliceCopy() {
+	s := o.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.state = 2
+	s.ready = make(chan struct{})
+	s.once = sync.Once{}
 	o.CanSpliceCopy = 2
-	o.spliceCopy = newSpliceCopySignal()
 }
 
 func (o *Outbound) EnableSpliceCopy() {
-	if o.CanSpliceCopy == 3 {
+	s := o.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state == 3 {
 		return
 	}
-	if o.spliceCopy != nil {
-		o.spliceCopy.once.Do(func() {
-			close(o.spliceCopy.ready)
-		})
-	}
+	s.state = 1
 	o.CanSpliceCopy = 1
+	s.once.Do(func() {
+		close(s.ready)
+	})
 }
 
 func (o *Outbound) DisableSpliceCopy() {
+	s := o.ensureSpliceCopy()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.state = 3
 	o.CanSpliceCopy = 3
-	o.spliceCopy = nil
 }
 
 func (o *Outbound) SpliceCopyState() int {
-	return o.CanSpliceCopy
+	s := o.ensureSpliceCopy()
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.state
 }
 
 func (o *Outbound) SpliceCopyReady() bool {
-	if o.spliceCopy != nil {
-		select {
-		case <-o.spliceCopy.ready:
-			return true
-		default:
-			return false
-		}
+	s := o.ensureSpliceCopy()
+
+	s.mu.RLock()
+	state := s.state
+	ready := s.ready
+	s.mu.RUnlock()
+
+	if state != 1 {
+		return false
 	}
-	return o.CanSpliceCopy == 1
+	select {
+	case <-ready:
+		return true
+	default:
+		return false
+	}
 }
