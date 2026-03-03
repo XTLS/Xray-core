@@ -101,7 +101,7 @@ func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.
 		timer:          time.NewTicker(60 * time.Second),
 	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
-		inbound.CanSpliceCopy = 3
+		inbound.DisableSpliceCopy()
 	}
 	go worker.run(ctx)
 	go worker.monitor()

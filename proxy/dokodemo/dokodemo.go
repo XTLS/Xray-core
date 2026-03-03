@@ -129,7 +129,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "dokodemo-door"
-	inbound.CanSpliceCopy = 1
+	inbound.EnableSpliceCopy()
 	inbound.User = &protocol.MemoryUser{
 		Level: d.config.UserLevel,
 	}

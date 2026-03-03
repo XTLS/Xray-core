@@ -73,7 +73,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("target not specified.")
 	}
 	ob.Name = "http"
-	ob.CanSpliceCopy = 2
+	ob.ArmSpliceCopy()
 	target := ob.Target
 	targetAddr := target.NetAddr()
 
@@ -146,7 +146,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 	}
 	responseFunc := func() error {
-		ob.CanSpliceCopy = 1
+		ob.EnableSpliceCopy()
 		defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 		return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 	}

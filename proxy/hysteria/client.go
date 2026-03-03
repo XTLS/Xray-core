@@ -53,7 +53,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("target not specified")
 	}
 	ob.Name = "hysteria"
-	ob.CanSpliceCopy = 3
+	ob.DisableSpliceCopy()
 	target := ob.Target
 
 	conn, err := dialer.Dial(hyCtx.ContextWithRequireDatagram(ctx, target.Network == net.Network_UDP), c.server.Destination)

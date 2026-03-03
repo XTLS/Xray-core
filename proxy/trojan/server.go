@@ -224,7 +224,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "trojan"
-	inbound.CanSpliceCopy = 3
+	inbound.DisableSpliceCopy()
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 

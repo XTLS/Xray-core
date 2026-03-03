@@ -74,7 +74,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		return errors.New("target not specified")
 	}
 	ob.Name = "shadowsocks-2022"
-	ob.CanSpliceCopy = 3
+	ob.DisableSpliceCopy()
 	destination := ob.Target
 	network := destination.Network
 
