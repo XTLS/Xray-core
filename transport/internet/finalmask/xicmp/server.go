@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	idleTimeout      = 2 * time.Minute
+	idleTimeout      = 10 * time.Second
 	maxResponseDelay = 1 * time.Second
 )
 
@@ -30,7 +30,7 @@ type record struct {
 }
 
 type queue struct {
-	lash  time.Time
+	last  time.Time
 	queue chan []byte
 }
 
@@ -77,8 +77,8 @@ func NewConnServer(c *Config, raw net.PacketConn, level int) (net.PacketConn, er
 		proto:  proto,
 		config: c,
 
-		ch:            make(chan *record, 100),
-		readQueue:     make(chan *packet, 128),
+		ch:            make(chan *record, 500),
+		readQueue:     make(chan *packet, 256),
 		writeQueueMap: make(map[string]*queue),
 	}
 
@@ -101,7 +101,7 @@ func (c *xicmpConnServer) clean() {
 		now := time.Now()
 
 		for key, q := range c.writeQueueMap {
-			if now.Sub(q.lash) >= idleTimeout {
+			if now.Sub(q.last) >= idleTimeout {
 				close(q.queue)
 				delete(c.writeQueueMap, key)
 			}
@@ -126,11 +126,11 @@ func (c *xicmpConnServer) ensureQueue(addr net.Addr) *queue {
 	q, ok := c.writeQueueMap[addr.String()]
 	if !ok {
 		q = &queue{
-			queue: make(chan []byte, 128),
+			queue: make(chan []byte, 512),
 		}
 		c.writeQueueMap[addr.String()] = q
 	}
-	q.lash = time.Now()
+	q.last = time.Now()
 
 	return q
 }
@@ -223,6 +223,7 @@ func (c *xicmpConnServer) recvLoop() {
 				},
 			}:
 			default:
+				errors.LogDebug(context.Background(), "mask read err queue full")
 			}
 		}
 

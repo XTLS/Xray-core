@@ -61,7 +61,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
-		writeQueue: make(chan *packet, 512),
+		writeQueue: make(chan *packet, 256),
 	}
 
 	common.Must2(rand.Read(conn.clientID))
@@ -112,6 +112,7 @@ func (c *xdnsConnClient) recvLoop() {
 				addr: addr,
 			}:
 			default:
+				errors.LogDebug(context.Background(), "mask read err queue full")
 			}
 		}
 

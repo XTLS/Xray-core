@@ -91,7 +91,7 @@ func NewConnClient(c *Config, raw net.PacketConn, level int) (net.PacketConn, er
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
-		writeQueue: make(chan *packet, 128),
+		writeQueue: make(chan *packet, 256),
 	}
 
 	go conn.recvLoop()
@@ -206,6 +206,7 @@ func (c *xicmpConnClient) recvLoop() {
 				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
 			}:
 			default:
+				errors.LogDebug(context.Background(), "mask read err queue full")
 			}
 
 			select {

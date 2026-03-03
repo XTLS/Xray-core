@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	idleTimeout      = 6 * time.Second
+	idleTimeout      = 10 * time.Second
 	responseTTL      = 60
 	maxResponseDelay = 1 * time.Second
 )
@@ -74,7 +74,7 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		domain: domain,
 
 		ch:            make(chan *record, 500),
-		readQueue:     make(chan *packet, 128),
+		readQueue:     make(chan *packet, 256),
 		writeQueueMap: make(map[string]*queue),
 	}
 
@@ -127,9 +127,8 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 			stash: make(chan []byte, 1),
 		}
 		c.writeQueueMap[addr.String()] = q
-		q.last = time.Now()
 	}
-	// q.last = time.Now()
+	q.last = time.Now()
 
 	return q
 }
@@ -190,6 +189,7 @@ func (c *xdnsConnServer) recvLoop() {
 					addr: clientIDToAddr(clientID),
 				}:
 				default:
+					errors.LogDebug(context.Background(), "mask read err queue full")
 				}
 			}
 		} else {
@@ -262,19 +262,14 @@ func (c *xdnsConnServer) sendLoop() {
 
 				select {
 				case p = <-q.stash:
-					q.last = time.Now()
 				default:
 					select {
 					case p = <-q.stash:
-						q.last = time.Now()
 					case p = <-q.queue:
-						q.last = time.Now()
 					default:
 						select {
 						case p = <-q.stash:
-							q.last = time.Now()
 						case p = <-q.queue:
-							q.last = time.Now()
 						case <-timer.C:
 						case nextRec = <-c.ch:
 						}
