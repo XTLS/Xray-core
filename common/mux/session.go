@@ -56,7 +56,7 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
 	defer m.Unlock()
 
 	MaxConcurrency := int(Strategy.MaxConcurrency)
-	MaxConnection := uint16(Strategy.MaxConnection)
+	MaxConnection := uint16(Strategy.MaxReuseTimes)
 
 	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= MaxConnection) {
 		return nil
