@@ -200,10 +200,10 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if err != nil {
 					return nil, err
 				}
-				if tlsConfig != nil && tlsConfig.Quic != nil {
-					switch tlsConfig.Quic.Congestion {
+				if streamSettings.QuicParams != nil {
+					switch streamSettings.QuicParams.Congestion {
 					case "force-brutal":
-						congestion.UseBrutal(quicConn, tlsConfig.Quic.Up)
+						congestion.UseBrutal(quicConn, streamSettings.QuicParams.Up)
 					case "reno":
 						// quic-go default, do nothing
 					default:

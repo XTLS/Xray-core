@@ -206,7 +206,7 @@ func (x SocketConfig_TProxyMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SocketConfig_TProxyMode.Descriptor instead.
 func (SocketConfig_TProxyMode) EnumDescriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{4, 0}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{5, 0}
 }
 
 type TransportConfig struct {
@@ -276,6 +276,7 @@ type StreamConfig struct {
 	SecuritySettings []*serial.TypedMessage `protobuf:"bytes,4,rep,name=security_settings,json=securitySettings,proto3" json:"security_settings,omitempty"`
 	Udpmasks         []*serial.TypedMessage `protobuf:"bytes,10,rep,name=udpmasks,proto3" json:"udpmasks,omitempty"`
 	Tcpmasks         []*serial.TypedMessage `protobuf:"bytes,11,rep,name=tcpmasks,proto3" json:"tcpmasks,omitempty"`
+	QuicParams       *QuicParams            `protobuf:"bytes,12,opt,name=quic_params,json=quicParams,proto3" json:"quic_params,omitempty"`
 	SocketSettings   *SocketConfig          `protobuf:"bytes,6,opt,name=socket_settings,json=socketSettings,proto3" json:"socket_settings,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -367,11 +368,70 @@ func (x *StreamConfig) GetTcpmasks() []*serial.TypedMessage {
 	return nil
 }
 
+func (x *StreamConfig) GetQuicParams() *QuicParams {
+	if x != nil {
+		return x.QuicParams
+	}
+	return nil
+}
+
 func (x *StreamConfig) GetSocketSettings() *SocketConfig {
 	if x != nil {
 		return x.SocketSettings
 	}
 	return nil
+}
+
+type QuicParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Congestion    string                 `protobuf:"bytes,1,opt,name=congestion,proto3" json:"congestion,omitempty"`
+	Up            uint64                 `protobuf:"varint,2,opt,name=up,proto3" json:"up,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuicParams) Reset() {
+	*x = QuicParams{}
+	mi := &file_transport_internet_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuicParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuicParams) ProtoMessage() {}
+
+func (x *QuicParams) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuicParams.ProtoReflect.Descriptor instead.
+func (*QuicParams) Descriptor() ([]byte, []int) {
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *QuicParams) GetCongestion() string {
+	if x != nil {
+		return x.Congestion
+	}
+	return ""
+}
+
+func (x *QuicParams) GetUp() uint64 {
+	if x != nil {
+		return x.Up
+	}
+	return 0
 }
 
 type ProxyConfig struct {
@@ -384,7 +444,7 @@ type ProxyConfig struct {
 
 func (x *ProxyConfig) Reset() {
 	*x = ProxyConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[2]
+	mi := &file_transport_internet_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +456,7 @@ func (x *ProxyConfig) String() string {
 func (*ProxyConfig) ProtoMessage() {}
 
 func (x *ProxyConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[2]
+	mi := &file_transport_internet_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,7 +469,7 @@ func (x *ProxyConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyConfig.ProtoReflect.Descriptor instead.
 func (*ProxyConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{2}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProxyConfig) GetTag() string {
@@ -440,7 +500,7 @@ type CustomSockopt struct {
 
 func (x *CustomSockopt) Reset() {
 	*x = CustomSockopt{}
-	mi := &file_transport_internet_config_proto_msgTypes[3]
+	mi := &file_transport_internet_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +512,7 @@ func (x *CustomSockopt) String() string {
 func (*CustomSockopt) ProtoMessage() {}
 
 func (x *CustomSockopt) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[3]
+	mi := &file_transport_internet_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +525,7 @@ func (x *CustomSockopt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CustomSockopt.ProtoReflect.Descriptor instead.
 func (*CustomSockopt) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{3}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CustomSockopt) GetSystem() string {
@@ -547,7 +607,7 @@ type SocketConfig struct {
 
 func (x *SocketConfig) Reset() {
 	*x = SocketConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[4]
+	mi := &file_transport_internet_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +619,7 @@ func (x *SocketConfig) String() string {
 func (*SocketConfig) ProtoMessage() {}
 
 func (x *SocketConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[4]
+	mi := &file_transport_internet_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -572,7 +632,7 @@ func (x *SocketConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SocketConfig.ProtoReflect.Descriptor instead.
 func (*SocketConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{4}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SocketConfig) GetMark() int32 {
@@ -748,7 +808,7 @@ type HappyEyeballsConfig struct {
 
 func (x *HappyEyeballsConfig) Reset() {
 	*x = HappyEyeballsConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[5]
+	mi := &file_transport_internet_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -760,7 +820,7 @@ func (x *HappyEyeballsConfig) String() string {
 func (*HappyEyeballsConfig) ProtoMessage() {}
 
 func (x *HappyEyeballsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[5]
+	mi := &file_transport_internet_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -773,7 +833,7 @@ func (x *HappyEyeballsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HappyEyeballsConfig.ProtoReflect.Descriptor instead.
 func (*HappyEyeballsConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{5}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *HappyEyeballsConfig) GetPrioritizeIpv6() bool {
@@ -811,7 +871,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x1ftransport/internet/config.proto\x12\x17xray.transport.internet\x1a!common/serial/typed_message.proto\x1a\x18common/net/address.proto\"t\n" +
 	"\x0fTransportConfig\x12#\n" +
 	"\rprotocol_name\x18\x03 \x01(\tR\fprotocolName\x12<\n" +
-	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\x97\x04\n" +
+	"\bsettings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\bsettings\"\xdd\x04\n" +
 	"\fStreamConfig\x125\n" +
 	"\aaddress\x18\b \x01(\v2\x1b.xray.common.net.IPOrDomainR\aaddress\x12\x12\n" +
 	"\x04port\x18\t \x01(\rR\x04port\x12#\n" +
@@ -821,8 +881,16 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x11security_settings\x18\x04 \x03(\v2 .xray.common.serial.TypedMessageR\x10securitySettings\x12<\n" +
 	"\budpmasks\x18\n" +
 	" \x03(\v2 .xray.common.serial.TypedMessageR\budpmasks\x12<\n" +
-	"\btcpmasks\x18\v \x03(\v2 .xray.common.serial.TypedMessageR\btcpmasks\x12N\n" +
-	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"Q\n" +
+	"\btcpmasks\x18\v \x03(\v2 .xray.common.serial.TypedMessageR\btcpmasks\x12D\n" +
+	"\vquic_params\x18\f \x01(\v2#.xray.transport.internet.QuicParamsR\n" +
+	"quicParams\x12N\n" +
+	"\x0fsocket_settings\x18\x06 \x01(\v2%.xray.transport.internet.SocketConfigR\x0esocketSettings\"<\n" +
+	"\n" +
+	"QuicParams\x12\x1e\n" +
+	"\n" +
+	"congestion\x18\x01 \x01(\tR\n" +
+	"congestion\x12\x0e\n" +
+	"\x02up\x18\x02 \x01(\x04R\x02up\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +
@@ -911,38 +979,40 @@ func file_transport_internet_config_proto_rawDescGZIP() []byte {
 }
 
 var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_transport_internet_config_proto_goTypes = []any{
 	(DomainStrategy)(0),          // 0: xray.transport.internet.DomainStrategy
 	(AddressPortStrategy)(0),     // 1: xray.transport.internet.AddressPortStrategy
 	(SocketConfig_TProxyMode)(0), // 2: xray.transport.internet.SocketConfig.TProxyMode
 	(*TransportConfig)(nil),      // 3: xray.transport.internet.TransportConfig
 	(*StreamConfig)(nil),         // 4: xray.transport.internet.StreamConfig
-	(*ProxyConfig)(nil),          // 5: xray.transport.internet.ProxyConfig
-	(*CustomSockopt)(nil),        // 6: xray.transport.internet.CustomSockopt
-	(*SocketConfig)(nil),         // 7: xray.transport.internet.SocketConfig
-	(*HappyEyeballsConfig)(nil),  // 8: xray.transport.internet.HappyEyeballsConfig
-	(*serial.TypedMessage)(nil),  // 9: xray.common.serial.TypedMessage
-	(*net.IPOrDomain)(nil),       // 10: xray.common.net.IPOrDomain
+	(*QuicParams)(nil),           // 5: xray.transport.internet.QuicParams
+	(*ProxyConfig)(nil),          // 6: xray.transport.internet.ProxyConfig
+	(*CustomSockopt)(nil),        // 7: xray.transport.internet.CustomSockopt
+	(*SocketConfig)(nil),         // 8: xray.transport.internet.SocketConfig
+	(*HappyEyeballsConfig)(nil),  // 9: xray.transport.internet.HappyEyeballsConfig
+	(*serial.TypedMessage)(nil),  // 10: xray.common.serial.TypedMessage
+	(*net.IPOrDomain)(nil),       // 11: xray.common.net.IPOrDomain
 }
 var file_transport_internet_config_proto_depIdxs = []int32{
-	9,  // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
-	10, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
+	10, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
+	11, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
 	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
-	9,  // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	9,  // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
-	9,  // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
-	7,  // 6: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
-	2,  // 7: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
-	0,  // 8: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	6,  // 9: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
-	1,  // 10: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
-	8,  // 11: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	10, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
+	10, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
+	10, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
+	5,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
+	8,  // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
+	2,  // 8: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
+	0,  // 9: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
+	7,  // 10: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
+	1,  // 11: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
+	9,  // 12: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_config_proto_init() }
@@ -956,7 +1026,7 @@ func file_transport_internet_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_config_proto_rawDesc), len(file_transport_internet_config_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

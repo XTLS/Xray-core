@@ -481,8 +481,6 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		handler.localAddr = l.h3listener.Addr()
 
-		xrayTlsConfig := tls.ConfigFromStreamSettings(streamSettings)
-
 		l.h3server = &http3.Server{
 			Handler: handler,
 		}
@@ -493,10 +491,10 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
 					return
 				}
-				if xrayTlsConfig != nil && xrayTlsConfig.Quic != nil {
-					switch xrayTlsConfig.Quic.Congestion {
+				if streamSettings.QuicParams != nil {
+					switch streamSettings.QuicParams.Congestion {
 					case "force-brutal":
-						congestion.UseBrutal(conn, xrayTlsConfig.Quic.Up)
+						congestion.UseBrutal(conn, streamSettings.QuicParams.Up)
 					case "reno":
 						// quic-go default, do nothing
 					default:

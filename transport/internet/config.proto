@@ -59,7 +59,14 @@ message StreamConfig {
   repeated xray.common.serial.TypedMessage udpmasks = 10;
   repeated xray.common.serial.TypedMessage tcpmasks = 11;
 
+  QuicParams quic_params = 12;
+
   SocketConfig socket_settings = 6;
+}
+
+message QuicParams {
+  string congestion = 1;
+  uint64 up = 2;
 }
 
 message ProxyConfig {

@@ -725,7 +725,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	return certificate, nil
 }
 
-type QuicConfig struct {
+type QuicParamsConfig struct {
 	Congestion string    `json:"congestion"`
 	Up         Bandwidth `json:"up"`
 }
@@ -751,7 +751,6 @@ type TLSConfig struct {
 	ECHConfigList           string           `json:"echConfigList"`
 	ECHForceQuery           string           `json:"echForceQuery"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
-	Quic                    *QuicConfig      `json:"quic"`
 }
 
 // Build implements Buildable.
@@ -854,29 +853,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			return nil, errors.New("Failed to build ech sockopt.").Base(err)
 		}
 		config.EchSocketSettings = ss
-	}
-
-	if c.Quic != nil {
-		up, err := c.Quic.Up.Bps()
-		if err != nil {
-			return nil, err
-		}
-		if up > 0 && up < 65536 {
-			return nil, errors.New("Up must be at least 65536 bytes per second")
-		}
-		switch c.Quic.Congestion {
-		case "", "bbr", "reno":
-		case "force-brutal":
-			if up == 0 {
-				return nil, errors.New("force-brutal requires up")
-			}
-		default:
-			return nil, errors.New("unknown congestion control: ", c.Quic.Congestion, ", valid values: bbr, reno, force-brutal")
-		}
-		config.Quic = &tls.QuicConfig{
-			Congestion: c.Quic.Congestion,
-			Up:         up,
-		}
 	}
 
 	return config, nil
@@ -1451,8 +1427,9 @@ func (c *Mask) Build(tcp bool) (proto.Message, error) {
 }
 
 type FinalMask struct {
-	Tcp []Mask `json:"tcp"`
-	Udp []Mask `json:"udp"`
+	Tcp        []Mask            `json:"tcp"`
+	Udp        []Mask            `json:"udp"`
+	QuicParams *QuicParamsConfig `json:"quicParams"`
 }
 
 type StreamConfig struct {
@@ -1624,6 +1601,28 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
 			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		}
+		if c.FinalMask.QuicParams != nil {
+			up, err := c.FinalMask.QuicParams.Up.Bps()
+			if err != nil {
+				return nil, err
+			}
+			if up > 0 && up < 65536 {
+				return nil, errors.New("Up must be at least 65536 bytes per second")
+			}
+			switch c.FinalMask.QuicParams.Congestion {
+			case "", "bbr", "reno":
+			case "force-brutal":
+				if up == 0 {
+					return nil, errors.New("force-brutal requires up")
+				}
+			default:
+				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: bbr, reno, force-brutal")
+			}
+			config.QuicParams = &internet.QuicParams{
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				Up:         up,
+			}
 		}
 	}
 
