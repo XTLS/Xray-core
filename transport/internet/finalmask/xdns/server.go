@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	idleTimeout      = 2 * time.Minute
+	idleTimeout      = 6 * time.Second
 	responseTTL      = 60
 	maxResponseDelay = 1 * time.Second
 )
@@ -73,7 +73,7 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		domain: domain,
 
-		ch:            make(chan *record, 100),
+		ch:            make(chan *record, 500),
 		readQueue:     make(chan *packet, 128),
 		writeQueueMap: make(map[string]*queue),
 	}
@@ -116,9 +116,6 @@ func (c *xdnsConnServer) clean() {
 }
 
 func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	if c.closed {
 		return nil
 	}
@@ -131,7 +128,7 @@ func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
 		}
 		c.writeQueueMap[addr.String()] = q
 	}
-	q.last = time.Now()
+	// q.last = time.Now()
 
 	return q
 }
@@ -204,6 +201,7 @@ func (c *xdnsConnServer) recvLoop() {
 			select {
 			case c.ch <- &record{resp, addr, clientIDToAddr(clientID)}:
 			default:
+				errors.LogDebug(context.Background(), "mask read err record queue full")
 			}
 		}
 	}
@@ -251,23 +249,31 @@ func (c *xdnsConnServer) sendLoop() {
 			limit := maxEncodedPayload
 			timer := time.NewTimer(maxResponseDelay)
 			for {
-				queue := c.ensureQueue(rec.ClientAddr)
-				if queue == nil {
+				c.mutex.Lock()
+				q := c.ensureQueue(rec.ClientAddr)
+				if q == nil {
+					c.mutex.Unlock()
 					return
 				}
+				c.mutex.Unlock()
 
 				var p []byte
 
 				select {
-				case p = <-queue.stash:
+				case p = <-q.stash:
+					q.last = time.Now()
 				default:
 					select {
-					case p = <-queue.stash:
-					case p = <-queue.queue:
+					case p = <-q.stash:
+						q.last = time.Now()
+					case p = <-q.queue:
+						q.last = time.Now()
 					default:
 						select {
-						case p = <-queue.stash:
-						case p = <-queue.queue:
+						case p = <-q.stash:
+							q.last = time.Now()
+						case p = <-q.queue:
+							q.last = time.Now()
 						case <-timer.C:
 						case nextRec = <-c.ch:
 						}
@@ -284,7 +290,7 @@ func (c *xdnsConnServer) sendLoop() {
 				if payload.Len() == 0 {
 
 				} else if limit < 0 {
-					c.stash(queue, p)
+					c.stash(q, p)
 
 					break
 				}
@@ -296,6 +302,7 @@ func (c *xdnsConnServer) sendLoop() {
 				_ = binary.Write(&payload, binary.BigEndian, uint16(len(p)))
 				payload.Write(p)
 			}
+
 			timer.Stop()
 
 			rec.Resp.Answer[0].Data = EncodeRDataTXT(payload.Bytes())
@@ -334,15 +341,11 @@ func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	q := c.ensureQueue(addr)
-	if q == nil {
-		return 0, io.ErrClosedPipe
-	}
-
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.closed {
+	q := c.ensureQueue(addr)
+	if q == nil {
 		return 0, io.ErrClosedPipe
 	}
 

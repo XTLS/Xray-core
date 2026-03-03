@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
@@ -60,10 +61,10 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 128),
-		writeQueue: make(chan *packet, 256),
+		writeQueue: make(chan *packet, 512),
 	}
 
-	rand.Read(conn.clientID)
+	common.Must2(rand.Read(conn.clientID))
 
 	go conn.recvLoop()
 	go conn.sendLoop()

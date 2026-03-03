@@ -119,9 +119,6 @@ func (c *xicmpConnServer) clean() {
 }
 
 func (c *xicmpConnServer) ensureQueue(addr net.Addr) *queue {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	if c.closed {
 		return nil
 	}
@@ -241,6 +238,7 @@ func (c *xicmpConnServer) recvLoop() {
 			},
 		}:
 		default:
+			errors.LogDebug(context.Background(), "mask read err record queue full")
 		}
 	}
 
@@ -271,10 +269,13 @@ func (c *xicmpConnServer) sendLoop() {
 			}
 		}
 
+		c.mutex.Lock()
 		queue := c.ensureQueue(rec.addr)
 		if queue == nil {
+			c.mutex.Unlock()
 			return
 		}
+		c.mutex.Unlock()
 
 		var p []byte
 
@@ -326,15 +327,11 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	q := c.ensureQueue(addr)
-	if q == nil {
-		return 0, io.ErrClosedPipe
-	}
-
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.closed {
+	q := c.ensureQueue(addr)
+	if q == nil {
 		return 0, io.ErrClosedPipe
 	}
 
