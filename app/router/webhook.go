@@ -7,8 +7,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -16,25 +19,47 @@ import (
 	routing_session "github.com/xtls/xray-core/features/routing/session"
 )
 
-const unixScheme = "unix://"
-
 // parseURL splits a webhook URL into an HTTP URL and an optional Unix socket
 // path. For regular http/https URLs the input is returned unchanged with an
 // empty socketPath. For Unix sockets the format is:
 //
-//	unix:///path/to/socket.sock:/http/path
+//	/path/to/socket.sock:/http/path
+//	@abstract:/http/path
+//	@@padded:/http/path
 //
 // The :/ separator after the socket path delimits the HTTP request path.
 // If omitted, "/" is used.
 func parseURL(raw string) (httpURL, socketPath string) {
-	if !strings.HasPrefix(raw, unixScheme) {
+	if len(raw) == 0 || (!filepath.IsAbs(raw) && raw[0] != '@') {
 		return raw, ""
 	}
-	rest := raw[len(unixScheme):]
-	if idx := strings.Index(rest, ":/"); idx >= 0 {
-		return "http://localhost" + rest[idx+1:], rest[:idx]
+	if idx := strings.Index(raw, ":/"); idx >= 0 {
+		return "http://localhost" + raw[idx+1:], raw[:idx]
 	}
-	return "http://localhost/", rest
+	return "http://localhost/", raw
+}
+
+// resolveSocketPath applies platform-specific transformations to a Unix
+// socket path, matching the behaviour of the listen side in
+// transport/internet/system_listener.go.
+//
+// For abstract sockets (prefix @) on Linux/Android:
+//   - single @ — used as-is (lock-free abstract socket)
+//   - double @@ — stripped to single @ and padded to
+//     syscall.RawSockaddrUnix{}.Path length (HAProxy compat)
+func resolveSocketPath(path string) string {
+	if len(path) == 0 || path[0] != '@' {
+		return path
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "android" {
+		return path
+	}
+	if len(path) > 1 && path[1] == '@' {
+		fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path))
+		copy(fullAddr, path[1:])
+		return string(fullAddr)
+	}
+	return path
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -72,9 +97,6 @@ func NewWebhookNotifier(cfg *WebhookConfig) (*WebhookNotifier, error) {
 	}
 
 	httpURL, socketPath := parseURL(cfg.Url)
-	if strings.HasPrefix(cfg.Url, unixScheme) && socketPath == "" {
-		return nil, errors.New("webhook: unix:// URL requires a socket path (e.g., unix:///path/to/socket.sock:/webhook)")
-	}
 	h := &WebhookNotifier{
 		url:           httpURL,
 		deduplication: cfg.Deduplication,
@@ -85,10 +107,11 @@ func NewWebhookNotifier(cfg *WebhookConfig) (*WebhookNotifier, error) {
 	}
 
 	if socketPath != "" {
+		dialAddr := resolveSocketPath(socketPath)
 		h.client.Transport = &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
-				return d.DialContext(ctx, "unix", socketPath)
+				return d.DialContext(ctx, "unix", dialAddr)
 			},
 		}
 	}
