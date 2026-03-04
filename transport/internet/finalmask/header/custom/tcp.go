@@ -44,7 +44,7 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 func (c *tcpCustomClientConn) TcpMaskConn() {}
 
 func (c *tcpCustomClientConn) RawConn() net.Conn {
-	c.wg.Wait()
+	// c.wg.Wait()
 
 	return c.Conn
 }
@@ -136,7 +136,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 func (c *tcpCustomServerConn) TcpMaskConn() {}
 
 func (c *tcpCustomServerConn) RawConn() net.Conn {
-	c.wg.Wait()
+	// c.wg.Wait()
 
 	return c.Conn
 }
