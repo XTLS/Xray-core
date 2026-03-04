@@ -336,6 +336,7 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	if len(p)+8+1 > finalmask.UDPSize {
 		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+8+1 > ", finalmask.UDPSize)
+		return 0, nil
 	}
 
 	q := c.ensureQueue(addr)

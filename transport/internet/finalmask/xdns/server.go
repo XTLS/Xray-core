@@ -347,6 +347,7 @@ func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	if len(p)+2 > maxEncodedPayload {
 		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+2 > ", maxEncodedPayload)
+		return 0, nil
 	}
 
 	q := c.ensureQueue(addr)
