@@ -223,7 +223,7 @@ func (c *xicmpConnServer) recvLoop() {
 				},
 			}:
 			default:
-				errors.LogDebug(context.Background(), "mask read err queue full")
+				errors.LogDebug(context.Background(), addr, " ", echo.ID, " ", echo.Seq, " mask read err queue full")
 			}
 		}
 
@@ -239,9 +239,11 @@ func (c *xicmpConnServer) recvLoop() {
 			},
 		}:
 		default:
-			errors.LogDebug(context.Background(), "mask read err record queue full")
+			errors.LogDebug(context.Background(), addr, " ", echo.ID, " ", echo.Seq, " mask read err record queue full")
 		}
 	}
+
+	errors.LogDebug(context.Background(), "xicmp closed")
 
 	close(c.ch)
 	close(c.readQueue)
@@ -300,6 +302,7 @@ func (c *xicmpConnServer) sendLoop() {
 
 		buf, err := c.encode(p, rec.id, rec.seq, rec.needSeqByte, rec.seqByte)
 		if err != nil {
+			errors.LogDebug(context.Background(), rec.addr, " ", rec.id, " ", rec.seq, " xicmp wireformat err ", err)
 			continue
 		}
 
@@ -309,7 +312,7 @@ func (c *xicmpConnServer) sendLoop() {
 
 		_, err = c.icmpConn.WriteTo(buf, &net.IPAddr{IP: rec.addr.(*net.UDPAddr).IP})
 		if err != nil {
-			errors.LogDebug(context.Background(), "xicmp writeto err ", err)
+			errors.LogDebug(context.Background(), rec.addr, " ", rec.id, " ", rec.seq, " xicmp writeto err ", err)
 		}
 	}
 }
@@ -320,7 +323,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, nil, net.ErrClosed
 	}
 	if len(p) < len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		errors.LogDebug(context.Background(), packet.addr, " mask read err short buffer ", len(p), " ", len(packet.p))
 		return 0, packet.addr, nil
 	}
 	copy(p, packet.p)
@@ -330,6 +333,10 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	if len(p)+8+1 > finalmask.UDPSize {
+		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+8+1 > ", finalmask.UDPSize)
+	}
 
 	q := c.ensureQueue(addr)
 	if q == nil {
@@ -343,7 +350,7 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		// errors.LogDebug(context.Background(), addr, " mask write err queue full")
 		return 0, nil
 	}
 }

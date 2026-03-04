@@ -206,7 +206,7 @@ func (c *xicmpConnClient) recvLoop() {
 				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
 			}:
 			default:
-				errors.LogDebug(context.Background(), "mask read err queue full")
+				errors.LogDebug(context.Background(), addr, " ", echo.Seq, " ", echo.ID, " mask read err queue full")
 			}
 
 			select {
@@ -215,6 +215,8 @@ func (c *xicmpConnClient) recvLoop() {
 			}
 		}
 	}
+
+	errors.LogDebug(context.Background(), "xicmp closed")
 
 	close(c.pollChan)
 	close(c.readQueue)
@@ -281,7 +283,7 @@ func (c *xicmpConnClient) sendLoop() {
 		if p != nil {
 			_, err := c.icmpConn.WriteTo(p.p, p.addr)
 			if err != nil {
-				errors.LogDebug(context.Background(), "xicmp writeto err ", err)
+				errors.LogDebug(context.Background(), p.addr, " xicmp writeto err ", err)
 			}
 		}
 	}
@@ -293,7 +295,7 @@ func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, nil, net.ErrClosed
 	}
 	if len(p) < len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		errors.LogDebug(context.Background(), packet.addr, " mask read err short buffer ", len(p), " ", len(packet.p))
 		return 0, packet.addr, nil
 	}
 	copy(p, packet.p)
@@ -303,7 +305,7 @@ func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	encoded, err := c.encode(p)
 	if err != nil {
-		errors.LogDebug(context.Background(), addr, " mask write err ", err)
+		errors.LogDebug(context.Background(), addr, " xicmp wireformat err ", err)
 		return 0, nil
 	}
 

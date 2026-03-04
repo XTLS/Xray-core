@@ -90,6 +90,7 @@ func (c *xdnsConnClient) recvLoop() {
 
 		resp, err := MessageFromWireFormat(buf[:n])
 		if err != nil {
+			errors.LogDebug(context.Background(), addr, " xdns from wireformat err ", err)
 			continue
 		}
 
@@ -112,7 +113,7 @@ func (c *xdnsConnClient) recvLoop() {
 				addr: addr,
 			}:
 			default:
-				errors.LogDebug(context.Background(), "mask read err queue full")
+				errors.LogDebug(context.Background(), addr, " mask read err queue full")
 			}
 		}
 
@@ -123,6 +124,8 @@ func (c *xdnsConnClient) recvLoop() {
 			}
 		}
 	}
+
+	errors.LogDebug(context.Background(), "xdns closed")
 
 	close(c.pollChan)
 	close(c.readQueue)
@@ -187,7 +190,11 @@ func (c *xdnsConnClient) sendLoop() {
 		}
 
 		if p != nil {
-			_, _ = c.PacketConn.WriteTo(p.p, p.addr)
+			_, err := c.PacketConn.WriteTo(p.p, p.addr)
+			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.ErrClosedPipe) {
+				c.closed = true
+				break
+			}
 		}
 	}
 }
@@ -198,7 +205,7 @@ func (c *xdnsConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, nil, net.ErrClosed
 	}
 	if len(p) < len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		errors.LogDebug(context.Background(), packet.addr, " mask read err short buffer ", len(p), " ", len(packet.p))
 		return 0, packet.addr, nil
 	}
 	copy(p, packet.p)
@@ -215,7 +222,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	encoded, err := encode(p, c.clientID, c.domain)
 	if err != nil {
-		errors.LogDebug(context.Background(), addr, " mask write err ", err, " ", len(p))
+		errors.LogDebug(context.Background(), addr, " xdns wireformat err ", err, " ", len(p))
 		return 0, nil
 	}
 

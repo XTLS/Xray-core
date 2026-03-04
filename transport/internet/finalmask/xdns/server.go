@@ -165,6 +165,7 @@ func (c *xdnsConnServer) recvLoop() {
 
 		query, err := MessageFromWireFormat(buf[:n])
 		if err != nil {
+			errors.LogDebug(context.Background(), addr, " xdns from wireformat err ", err)
 			continue
 		}
 
@@ -189,7 +190,7 @@ func (c *xdnsConnServer) recvLoop() {
 					addr: clientIDToAddr(clientID),
 				}:
 				default:
-					errors.LogDebug(context.Background(), "mask read err queue full")
+					errors.LogDebug(context.Background(), addr, " ", clientID, " mask read err queue full")
 				}
 			}
 		} else {
@@ -202,10 +203,12 @@ func (c *xdnsConnServer) recvLoop() {
 			select {
 			case c.ch <- &record{resp, addr, clientIDToAddr(clientID)}:
 			default:
-				errors.LogDebug(context.Background(), "mask read err record queue full")
+				errors.LogDebug(context.Background(), addr, " ", clientID, " mask read err record queue full")
 			}
 		}
 	}
+
+	errors.LogDebug(context.Background(), "xdns closed")
 
 	close(c.ch)
 	close(c.readQueue)
@@ -249,6 +252,7 @@ func (c *xdnsConnServer) sendLoop() {
 			var payload bytes.Buffer
 			limit := maxEncodedPayload
 			timer := time.NewTimer(maxResponseDelay)
+
 			for {
 				c.mutex.Lock()
 				q := c.ensureQueue(rec.ClientAddr)
@@ -283,34 +287,31 @@ func (c *xdnsConnServer) sendLoop() {
 				}
 
 				limit -= 2 + len(p)
-				if payload.Len() == 0 {
-
-				} else if limit < 0 {
+				if payload.Len() > 0 && limit < 0 {
 					c.stash(q, p)
-
 					break
 				}
 
-				if int(uint16(len(p))) != len(p) {
-					panic(len(p))
-				}
+				// if len(p) > 65535 {
+				// 	panic(len(p))
+				// }
 
 				_ = binary.Write(&payload, binary.BigEndian, uint16(len(p)))
 				payload.Write(p)
 			}
 
 			timer.Stop()
-
 			rec.Resp.Answer[0].Data = EncodeRDataTXT(payload.Bytes())
 		}
 
 		buf, err := rec.Resp.WireFormat()
 		if err != nil {
+			errors.LogDebug(context.Background(), rec.Addr, " ", rec.ClientAddr, " xdns wireformat err ", err)
 			continue
 		}
 
 		if len(buf) > maxUDPPayload {
-			errors.LogDebug(context.Background(), "xdns server truncate ", len(buf))
+			errors.LogDebug(context.Background(), rec.Addr, " ", rec.ClientAddr, " xdns truncate ", len(buf))
 			buf = buf[:maxUDPPayload]
 			buf[2] |= 0x02
 		}
@@ -319,7 +320,11 @@ func (c *xdnsConnServer) sendLoop() {
 			return
 		}
 
-		_, _ = c.PacketConn.WriteTo(buf, rec.Addr)
+		_, err = c.PacketConn.WriteTo(buf, rec.Addr)
+		if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.ErrClosedPipe) {
+			c.closed = true
+			break
+		}
 	}
 }
 
@@ -329,7 +334,7 @@ func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return 0, nil, net.ErrClosed
 	}
 	if len(p) < len(packet.p) {
-		errors.LogDebug(context.Background(), addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		errors.LogDebug(context.Background(), packet.addr, " mask read err short buffer ", len(p), " ", len(packet.p))
 		return 0, packet.addr, nil
 	}
 	copy(p, packet.p)
@@ -339,6 +344,10 @@ func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	if len(p)+2 > maxEncodedPayload {
+		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+2 > ", maxEncodedPayload)
+	}
 
 	q := c.ensureQueue(addr)
 	if q == nil {
@@ -352,7 +361,7 @@ func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		// errors.LogDebug(context.Background(), addr, " mask write err queue full")
 		return 0, nil
 	}
 }
