@@ -331,13 +331,13 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	if len(p)+8+1 > finalmask.UDPSize {
-		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+8+1 > ", finalmask.UDPSize)
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(p), "+8+1 > ", finalmask.UDPSize)
 		return 0, nil
 	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
 	q := c.ensureQueue(addr)
 	if q == nil {

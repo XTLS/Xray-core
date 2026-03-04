@@ -342,13 +342,13 @@ func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	if len(p)+2 > maxEncodedPayload {
-		errors.LogDebug(context.Background(), addr, " mask write err ", len(p), "+2 > ", maxEncodedPayload)
+		errors.LogDebug(context.Background(), addr, " mask write err short write ", len(p), "+2 > ", maxEncodedPayload)
 		return 0, nil
 	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
 	q := c.ensureQueue(addr)
 	if q == nil {
