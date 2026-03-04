@@ -271,8 +271,8 @@ func (c *xicmpConnServer) sendLoop() {
 		}
 
 		c.mutex.Lock()
-		queue := c.ensureQueue(rec.addr)
-		if queue == nil {
+		q := c.ensureQueue(rec.addr)
+		if q == nil {
 			c.mutex.Unlock()
 			return
 		}
@@ -283,10 +283,10 @@ func (c *xicmpConnServer) sendLoop() {
 		timer := time.NewTimer(maxResponseDelay)
 
 		select {
-		case p = <-queue.queue:
+		case p = <-q.queue:
 		default:
 			select {
-			case p = <-queue.queue:
+			case p = <-q.queue:
 			case <-timer.C:
 			case nextRec = <-c.ch:
 			}
