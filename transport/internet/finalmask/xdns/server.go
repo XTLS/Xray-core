@@ -74,7 +74,7 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		domain: domain,
 
 		ch:            make(chan *record, 500),
-		readQueue:     make(chan *packet, 256),
+		readQueue:     make(chan *packet, 512),
 		writeQueueMap: make(map[string]*queue),
 	}
 

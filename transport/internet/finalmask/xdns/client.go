@@ -60,7 +60,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		domain:   domain,
 
 		pollChan:   make(chan struct{}, pollLimit),
-		readQueue:  make(chan *packet, 128),
+		readQueue:  make(chan *packet, 256),
 		writeQueue: make(chan *packet, 256),
 	}
 

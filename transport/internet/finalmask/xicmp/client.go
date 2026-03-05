@@ -90,7 +90,7 @@ func NewConnClient(c *Config, raw net.PacketConn, level int) (net.PacketConn, er
 		seqStatus: make(map[int]*seqStatus),
 
 		pollChan:   make(chan struct{}, pollLimit),
-		readQueue:  make(chan *packet, 128),
+		readQueue:  make(chan *packet, 256),
 		writeQueue: make(chan *packet, 256),
 	}
 
