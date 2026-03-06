@@ -63,7 +63,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	}
 	if settings.Interval == 0 {
 		settings.Interval = time.Duration(1) * time.Minute
-	} else if settings.Interval < 10 {
+	} else if settings.Interval < 10*time.Second {
 		errors.LogWarning(ctx, "health check interval is too small, 10s is applied")
 		settings.Interval = time.Duration(10) * time.Second
 	}

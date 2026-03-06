@@ -152,11 +152,25 @@ func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) 
 	results := observeResult.(*observatory.ObservationResult)
 
 	outboundlist := outboundList(candidates)
+	tolerance := s.settings.Tolerance
+	if tolerance < 0 {
+		tolerance = 0
+	}
+	if tolerance > 1 {
+		tolerance = 1
+	}
 
 	var ret []*node
 
 	for _, v := range results.Status {
 		if v.Alive && (v.Delay < maxRTT.Milliseconds() || maxRTT == 0) && outboundlist.contains(v.OutboundTag) {
+			if v.HealthPing != nil && v.HealthPing.All > 0 {
+				failRate := float64(v.HealthPing.Fail) / float64(v.HealthPing.All)
+				if failRate > float64(tolerance) {
+					continue
+				}
+			}
+
 			record := &node{
 				Tag:              v.OutboundTag,
 				CountAll:         1,

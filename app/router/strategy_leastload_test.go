@@ -1,7 +1,12 @@
 package router
 
 import (
+	"context"
 	"testing"
+	"time"
+
+	"github.com/xtls/xray-core/app/observatory"
+	"google.golang.org/protobuf/proto"
 )
 
 /*
@@ -175,5 +180,95 @@ func TestSelectLeastLoadBaselinesNoQualified(t *testing.T) {
 	ns := strategy.selectLeastLoad(nodes)
 	if len(ns) != expected {
 		t.Errorf("expected: %v, actual: %v", expected, len(ns))
+	}
+}
+
+type mockLeastLoadObserver struct {
+	result *observatory.ObservationResult
+	err    error
+}
+
+func (m *mockLeastLoadObserver) Type() interface{} {
+	return nil
+}
+
+func (m *mockLeastLoadObserver) Start() error {
+	return nil
+}
+
+func (m *mockLeastLoadObserver) Close() error {
+	return nil
+}
+
+func (m *mockLeastLoadObserver) GetObservation(ctx context.Context) (proto.Message, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.result, nil
+}
+
+func TestLeastLoadToleranceFiltersFailureRate(t *testing.T) {
+	t.Parallel()
+
+	strategy := NewLeastLoadStrategy(&StrategyLeastLoadConfig{
+		Tolerance: 0.5,
+	})
+	strategy.ctx = context.Background()
+	strategy.observer = &mockLeastLoadObserver{
+		result: &observatory.ObservationResult{
+			Status: []*observatory.OutboundStatus{
+				{
+					OutboundTag: "drop",
+					Alive:       true,
+					Delay:       50,
+					HealthPing: &observatory.HealthPingMeasurementResult{
+						All:       10,
+						Fail:      6,
+						Average:   int64(50 * time.Millisecond),
+						Deviation: int64(5 * time.Millisecond),
+					},
+				},
+				{
+					OutboundTag: "keep_edge",
+					Alive:       true,
+					Delay:       40,
+					HealthPing: &observatory.HealthPingMeasurementResult{
+						All:       10,
+						Fail:      5,
+						Average:   int64(40 * time.Millisecond),
+						Deviation: int64(4 * time.Millisecond),
+					},
+				},
+				{
+					OutboundTag: "keep_unknown",
+					Alive:       true,
+					Delay:       60,
+				},
+				{
+					OutboundTag: "keep_all_zero",
+					Alive:       true,
+					Delay:       70,
+					HealthPing: &observatory.HealthPingMeasurementResult{
+						All:  0,
+						Fail: 0,
+					},
+				},
+			},
+		},
+	}
+
+	nodes := strategy.getNodes([]string{"drop", "keep_edge", "keep_unknown", "keep_all_zero"}, 0)
+	got := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		got[node.Tag] = struct{}{}
+	}
+
+	if _, found := got["drop"]; found {
+		t.Fatal("expected 'drop' to be filtered out by tolerance")
+	}
+	for _, tag := range []string{"keep_edge", "keep_unknown", "keep_all_zero"} {
+		if _, found := got[tag]; !found {
+			t.Fatalf("expected %q to remain eligible", tag)
+		}
 	}
 }

@@ -38,7 +38,18 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+
+	status := make([]*OutboundStatus, 0, len(o.status))
+	for _, entry := range o.status {
+		if entry == nil {
+			continue
+		}
+		copied := *entry
+		status = append(status, &copied)
+	}
+	return &ObservationResult{Status: status}, nil
 }
 
 func (o *Observer) Type() interface{} {
@@ -114,8 +125,26 @@ func (o *Observer) background() {
 func (o *Observer) updateStatus(outbounds []string) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
-	// TODO should remove old inbound that is removed
-	_ = outbounds
+
+	if len(o.status) == 0 {
+		return
+	}
+
+	valid := make(map[string]struct{}, len(outbounds))
+	for _, outbound := range outbounds {
+		valid[outbound] = struct{}{}
+	}
+
+	filtered := o.status[:0]
+	for _, status := range o.status {
+		if status == nil {
+			continue
+		}
+		if _, found := valid[status.OutboundTag]; found {
+			filtered = append(filtered, status)
+		}
+	}
+	o.status = filtered
 }
 
 func (o *Observer) probe(outbound string) ProbeResult {
