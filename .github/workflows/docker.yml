@@ -82,7 +82,7 @@ jobs:
 
       - name: Build Docker image (main architectures)
         id: build_main_arches
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: .github/docker/Dockerfile
@@ -97,7 +97,7 @@ jobs:
 
       - name: Build Docker image (additional architectures)
         id: build_additional_arches
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: .github/docker/Dockerfile.usa
