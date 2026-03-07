@@ -53,7 +53,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		switch ECHForceQuery {
 		case "none", "half", "full":
 		case "":
-			ECHForceQuery = "none" // default to none
+			ECHForceQuery = "full" // default to full
 		default:
 			panic("Invalid ECHForceQuery: " + c.EchForceQuery)
 		}
@@ -174,7 +174,7 @@ func QueryRecord(domain string, server string, forceQuery string, sockopt *inter
 	// If expire is zero value, it means we are in initial state, wait for the query to finish
 	// otherwise return old value immediately and update in a goroutine
 	// but if the cache is too old, wait for update
-	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*6).Before(time.Now()) {
+	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*4).Before(time.Now()) {
 		return echConfigCache.Update(domain, server, false, forceQuery, sockopt)
 	} else {
 		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
