@@ -7,30 +7,23 @@ import (
 )
 
 type packedEncoder struct {
-	layout    *byteLayout
-	codec     *codec
-	padding   []byte
-	padMarker byte
+	layouts    []*byteLayout
+	codec      *codec
+	groupIndex int
 }
 
-func newPackedEncoder(t *table, pMin, pMax int) *packedEncoder {
-	e := &packedEncoder{
-		layout:    t.layout,
-		codec:     newCodec(t, pMin, pMax),
-		padMarker: t.layout.padMarker,
-		padding:   make([]byte, 0, len(t.layout.paddingPool)),
+func newPackedEncoder(tables []*table, pMin, pMax int) *packedEncoder {
+	layouts := make([]*byteLayout, 0, len(tables))
+	for _, t := range tables {
+		layouts = append(layouts, t.layout)
 	}
-
-	for _, b := range t.layout.paddingPool {
-		if b != e.padMarker {
-			e.padding = append(e.padding, b)
-		}
+	if len(layouts) == 0 {
+		layouts = append(layouts, entropyLayout())
 	}
-	if len(e.padding) == 0 {
-		e.padding = append(e.padding, e.padMarker)
+	return &packedEncoder{
+		layouts: layouts,
+		codec:   newCodec(nil, pMin, pMax),
 	}
-
-	return e
 }
 
 func (e *packedEncoder) encode(p []byte) ([]byte, error) {
@@ -44,9 +37,11 @@ func (e *packedEncoder) encode(p []byte) ([]byte, error) {
 
 		for bitCount >= 6 {
 			bitCount -= 6
+			layout := e.layouts[e.groupIndex%len(e.layouts)]
 			group := byte(bitBuf >> bitCount)
-			out = e.maybePad(out)
-			out = append(out, e.layout.encodeGroup(group&0x3f))
+			out = e.maybePad(out, layout)
+			out = append(out, layout.encodeGroup(group&0x3f))
+			e.groupIndex++
 			if bitCount > 0 {
 				bitBuf &= (uint64(1) << bitCount) - 1
 			} else {
@@ -56,37 +51,49 @@ func (e *packedEncoder) encode(p []byte) ([]byte, error) {
 	}
 
 	if bitCount > 0 {
-		out = e.maybePad(out)
+		layout := e.layouts[e.groupIndex%len(e.layouts)]
 		group := byte(bitBuf << (6 - bitCount))
-		out = append(out, e.layout.encodeGroup(group&0x3f), e.padMarker)
+		out = e.maybePad(out, layout)
+		out = append(out, layout.encodeGroup(group&0x3f))
+		e.groupIndex++
+		nextLayout := e.layouts[e.groupIndex%len(e.layouts)]
+		out = append(out, nextLayout.padMarker)
 	}
 
-	out = e.maybePad(out)
+	out = e.maybePad(out, e.layouts[e.groupIndex%len(e.layouts)])
 	return out, nil
 }
 
-func (e *packedEncoder) maybePad(out []byte) []byte {
+func (e *packedEncoder) maybePad(out []byte, layout *byteLayout) []byte {
 	if !e.codec.shouldPad() {
 		return out
 	}
-	return append(out, e.padding[e.codec.rng.Intn(len(e.padding))])
+	if len(layout.paddingPool) == 1 {
+		return append(out, layout.paddingPool[0])
+	}
+	for {
+		b := layout.paddingPool[e.codec.rng.Intn(len(layout.paddingPool))]
+		if b != layout.padMarker {
+			return append(out, b)
+		}
+	}
 }
 
 type packedStreamDecoder struct {
-	layout    *byteLayout
-	padMarker byte
-	bitBuf    uint64
-	bitCount  int
+	layouts    []*byteLayout
+	groupIndex int
+	bitBuf     uint64
+	bitCount   int
 }
 
 func (d *packedStreamDecoder) decodeChunk(in []byte, pending []byte) ([]byte, error) {
 	var err error
-	d.bitBuf, d.bitCount, pending, err = decodePackedBytes(
-		d.layout,
-		d.padMarker,
+	d.bitBuf, d.bitCount, d.groupIndex, pending, err = decodePackedBytes(
+		d.layouts,
 		in,
 		d.bitBuf,
 		d.bitCount,
+		d.groupIndex,
 		pending,
 	)
 	return pending, err
@@ -106,31 +113,45 @@ func NewPackedTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
 }
 
 func newPackedReaderWriter(raw net.Conn, config *Config) (io.Reader, io.Writer, error) {
-	t, err := getTable(config)
+	tables, err := getTables(config)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	pMin, pMax := normalizedPadding(config)
-	encoder := newPackedEncoder(t, pMin, pMax)
+	encoder := newPackedEncoder(tables, pMin, pMax)
 	decoder := &packedStreamDecoder{
-		layout:    t.layout,
-		padMarker: t.layout.padMarker,
+		layouts: tablesToLayouts(tables),
 	}
 	return newStreamReader(raw, decoder), newStreamWriter(raw, encoder.encode), nil
 }
 
+func tablesToLayouts(tables []*table) []*byteLayout {
+	layouts := make([]*byteLayout, 0, len(tables))
+	for _, t := range tables {
+		layouts = append(layouts, t.layout)
+	}
+	if len(layouts) == 0 {
+		layouts = append(layouts, entropyLayout())
+	}
+	return layouts
+}
+
 func decodePackedBytes(
-	layout *byteLayout,
-	padMarker byte,
+	layouts []*byteLayout,
 	in []byte,
 	bitBuf uint64,
 	bitCount int,
+	groupIndex int,
 	out []byte,
-) (uint64, int, []byte, error) {
+) (uint64, int, int, []byte, error) {
+	if len(layouts) == 0 {
+		return bitBuf, bitCount, groupIndex, out, fmt.Errorf("sudoku layout set missing")
+	}
 	for _, b := range in {
+		layout := layouts[groupIndex%len(layouts)]
 		if !layout.isHint(b) {
-			if b == padMarker {
+			if b == layout.padMarker {
 				bitBuf = 0
 				bitCount = 0
 			}
@@ -139,8 +160,9 @@ func decodePackedBytes(
 
 		group, ok := layout.decodeGroup(b)
 		if !ok {
-			return bitBuf, bitCount, out, fmt.Errorf("invalid packed sudoku byte: %d", b)
+			return bitBuf, bitCount, groupIndex, out, fmt.Errorf("invalid packed sudoku byte: %d", b)
 		}
+		groupIndex++
 
 		bitBuf = (bitBuf << 6) | uint64(group)
 		bitCount += 6
@@ -156,5 +178,5 @@ func decodePackedBytes(
 		}
 	}
 
-	return bitBuf, bitCount, out, nil
+	return bitBuf, bitCount, groupIndex, out, nil
 }

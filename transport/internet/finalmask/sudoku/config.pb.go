@@ -28,7 +28,7 @@ type Config struct {
 	CustomTable   string                 `protobuf:"bytes,3,opt,name=custom_table,json=customTable,proto3" json:"custom_table,omitempty"`
 	PaddingMin    uint32                 `protobuf:"varint,4,opt,name=padding_min,json=paddingMin,proto3" json:"padding_min,omitempty"`
 	PaddingMax    uint32                 `protobuf:"varint,5,opt,name=padding_max,json=paddingMax,proto3" json:"padding_max,omitempty"`
-	Packed        bool                   `protobuf:"varint,6,opt,name=packed,proto3" json:"packed,omitempty"`
+	CustomTables  []string               `protobuf:"bytes,7,rep,name=custom_tables,json=customTables,proto3" json:"custom_tables,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,18 +98,18 @@ func (x *Config) GetPaddingMax() uint32 {
 	return 0
 }
 
-func (x *Config) GetPacked() bool {
+func (x *Config) GetCustomTables() []string {
 	if x != nil {
-		return x.Packed
+		return x.CustomTables
 	}
-	return false
+	return nil
 }
 
 var File_transport_internet_finalmask_sudoku_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_sudoku_config_proto_rawDesc = "" +
 	"\n" +
-	"0transport/internet/finalmask/sudoku/config.proto\x12(xray.transport.internet.finalmask.sudoku\"\xb7\x01\n" +
+	"0transport/internet/finalmask/sudoku/config.proto\x12(xray.transport.internet.finalmask.sudoku\"\xc4\x01\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x14\n" +
 	"\x05ascii\x18\x02 \x01(\tR\x05ascii\x12!\n" +
@@ -117,8 +117,8 @@ const file_transport_internet_finalmask_sudoku_config_proto_rawDesc = "" +
 	"\vpadding_min\x18\x04 \x01(\rR\n" +
 	"paddingMin\x12\x1f\n" +
 	"\vpadding_max\x18\x05 \x01(\rR\n" +
-	"paddingMax\x12\x16\n" +
-	"\x06packed\x18\x06 \x01(\bR\x06packedB\x9a\x01\n" +
+	"paddingMax\x12#\n" +
+	"\rcustom_tables\x18\a \x03(\tR\fcustomTablesB\x9a\x01\n" +
 	",com.xray.transport.internet.finalmask.sudokuP\x01Z=github.com/xtls/xray-core/transport/internet/finalmask/sudoku\xaa\x02(Xray.Transport.Internet.Finalmask.Sudokub\x06proto3"
 
 var (

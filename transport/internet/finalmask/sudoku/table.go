@@ -26,7 +26,8 @@ type tableCacheKey struct {
 }
 
 var (
-	tableCache sync.Map
+	tableCache    sync.Map
+	tableSetCache sync.Map
 
 	basePatternsOnce sync.Once
 	basePatterns     [][][4]byte
@@ -52,6 +53,17 @@ func (l *byteLayout) isHint(b byte) bool {
 }
 
 func getTable(config *Config) (*table, error) {
+	tables, err := getTables(config)
+	if err != nil {
+		return nil, err
+	}
+	if len(tables) == 0 {
+		return nil, fmt.Errorf("empty sudoku table set")
+	}
+	return tables[0], nil
+}
+
+func getTables(config *Config) ([]*table, error) {
 	if config == nil {
 		return nil, fmt.Errorf("nil sudoku config")
 	}
@@ -61,37 +73,73 @@ func getTable(config *Config) (*table, error) {
 		return nil, err
 	}
 
-	customTable := ""
-	if mode != "prefer_ascii" {
-		customTable = strings.TrimSpace(config.GetCustomTable())
-		if customTable != "" {
-			customTable, err = normalizeCustomTable(customTable)
-			if err != nil {
-				return nil, err
-			}
-		}
+	patterns, err := normalizedCustomPatterns(config, mode)
+	if err != nil {
+		return nil, err
 	}
 
 	cacheKey := tableCacheKey{
 		password:    config.GetPassword(),
 		ascii:       mode,
-		customTable: customTable,
+		customTable: strings.Join(patterns, "\x00"),
 	}
-	if cached, ok := tableCache.Load(cacheKey); ok {
-		return cached.(*table), nil
-	}
-
-	layout, err := resolveLayout(mode, customTable)
-	if err != nil {
-		return nil, err
-	}
-	t, err := buildTable(config.GetPassword(), layout)
-	if err != nil {
-		return nil, err
+	if cached, ok := tableSetCache.Load(cacheKey); ok {
+		return cached.([]*table), nil
 	}
 
-	actual, _ := tableCache.LoadOrStore(cacheKey, t)
-	return actual.(*table), nil
+	tables := make([]*table, 0, len(patterns))
+	for _, pattern := range patterns {
+		layout, err := resolveLayout(mode, pattern)
+		if err != nil {
+			return nil, err
+		}
+		t, err := buildTable(config.GetPassword(), layout)
+		if err != nil {
+			return nil, err
+		}
+		tables = append(tables, t)
+	}
+
+	actual, _ := tableSetCache.LoadOrStore(cacheKey, tables)
+	return actual.([]*table), nil
+}
+
+func normalizedCustomPatterns(config *Config, mode string) ([]string, error) {
+	if config == nil {
+		return []string{""}, nil
+	}
+	if mode == "prefer_ascii" {
+		return []string{""}, nil
+	}
+
+	rawPatterns := config.GetCustomTables()
+	if len(rawPatterns) == 0 {
+		rawPatterns = []string{config.GetCustomTable()}
+	}
+
+	patterns := make([]string, 0, len(rawPatterns))
+	seen := make(map[string]struct{}, len(rawPatterns))
+	for _, raw := range rawPatterns {
+		pattern := strings.TrimSpace(raw)
+		if pattern != "" {
+			var err error
+			pattern, err = normalizeCustomTable(pattern)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if _, ok := seen[pattern]; ok {
+			continue
+		}
+		seen[pattern] = struct{}{}
+		patterns = append(patterns, pattern)
+	}
+
+	if len(patterns) == 0 {
+		return []string{""}, nil
+	}
+
+	return patterns, nil
 }
 
 func normalizedPadding(config *Config) (int, int) {

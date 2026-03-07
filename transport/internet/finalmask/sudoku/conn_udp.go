@@ -8,9 +8,10 @@ import (
 )
 
 type udpConn struct {
-	conn  net.PacketConn
-	table *table
-	codec *codec
+	conn   net.PacketConn
+	tables []*table
+	pMin   int
+	pMax   int
 
 	readBuf []byte
 
@@ -19,7 +20,7 @@ type udpConn struct {
 }
 
 func NewUDPConn(raw net.PacketConn, config *Config) (net.PacketConn, error) {
-	t, err := getTable(config)
+	tables, err := getTables(config)
 	if err != nil {
 		return nil, err
 	}
@@ -27,8 +28,9 @@ func NewUDPConn(raw net.PacketConn, config *Config) (net.PacketConn, error) {
 	pMin, pMax := normalizedPadding(config)
 	return &udpConn{
 		conn:    raw,
-		table:   t,
-		codec:   newCodec(t, pMin, pMax),
+		tables:  tables,
+		pMin:    pMin,
+		pMax:    pMax,
 		readBuf: make([]byte, 65535),
 	}, nil
 }
@@ -48,7 +50,8 @@ func (c *udpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 	decoded := make([]byte, 0, n/4+1)
 	hints := make([]byte, 0, 4)
-	hints, decoded, err = decodeBytes(c.table, c.readBuf[:n], hints, decoded)
+	tableIndex := 0
+	hints, decoded, err = decodeBytes(c.tables, &tableIndex, c.readBuf[:n], hints, decoded)
 	if err != nil {
 		return 0, addr, err
 	}
@@ -66,7 +69,8 @@ func (c *udpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 
-	encoded, err := c.codec.encode(p)
+	// UDP decoding restarts at table 0 for every datagram, so encoding must do the same.
+	encoded, err := newCodec(c.tables, c.pMin, c.pMax).encode(p)
 	if err != nil {
 		return 0, err
 	}

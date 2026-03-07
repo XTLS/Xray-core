@@ -12,18 +12,14 @@ func (c *Config) TCP() {
 func (c *Config) UDP() {
 }
 
+// Sudoku in finalmask mode is a pure appearance transform with no standalone handshake.
+// TCP always keeps classic sudoku on uplink and uses packed downlink optimization on server writes.
 func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
-	if c.GetPacked() {
-		return newPackedDirectionalConn(raw, c, true)
-	}
-	return NewTCPConn(raw, c)
+	return newPackedDirectionalConn(raw, c, true)
 }
 
 func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	if c.GetPacked() {
-		return newPackedDirectionalConn(raw, c, false)
-	}
-	return NewTCPConn(raw, c)
+	return newPackedDirectionalConn(raw, c, false)
 }
 
 func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (net.Conn, error) {

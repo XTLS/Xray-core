@@ -33,15 +33,19 @@ var perm4 = [24][4]byte{
 }
 
 type codec struct {
-	table         *table
+	tables        []*table
 	rng           *rand.Rand
 	paddingChance int
+	tableIndex    int
 }
 
-func newCodec(t *table, pMin, pMax int) *codec {
+func newCodec(tables []*table, pMin, pMax int) *codec {
+	if len(tables) == 0 {
+		tables = nil
+	}
 	rng := newSeededRand()
 	return &codec{
-		table:         t,
+		tables:        tables,
 		rng:           rng,
 		paddingChance: pickPaddingChance(rng, pMin, pMax),
 	}
@@ -76,8 +80,15 @@ func (c *codec) shouldPad() bool {
 	return c.rng.Intn(100) < c.paddingChance
 }
 
-func (c *codec) randomPadding() byte {
-	pool := c.table.layout.paddingPool
+func (c *codec) currentTable() *table {
+	if len(c.tables) == 0 {
+		return nil
+	}
+	return c.tables[c.tableIndex%len(c.tables)]
+}
+
+func (c *codec) randomPadding(t *table) byte {
+	pool := t.layout.paddingPool
 	return pool[c.rng.Intn(len(pool))]
 }
 
@@ -88,11 +99,15 @@ func (c *codec) encode(in []byte) ([]byte, error) {
 
 	out := make([]byte, 0, len(in)*6+8)
 	for _, b := range in {
+		t := c.currentTable()
+		if t == nil {
+			return nil, fmt.Errorf("sudoku table set missing")
+		}
 		if c.shouldPad() {
-			out = append(out, c.randomPadding())
+			out = append(out, c.randomPadding(t))
 		}
 
-		enc := c.table.encode[b]
+		enc := t.encode[b]
 		if len(enc) == 0 {
 			return nil, fmt.Errorf("sudoku encode table missing for byte %d", b)
 		}
@@ -101,21 +116,28 @@ func (c *codec) encode(in []byte) ([]byte, error) {
 		perm := perm4[c.rng.Intn(len(perm4))]
 		for _, idx := range perm {
 			if c.shouldPad() {
-				out = append(out, c.randomPadding())
+				out = append(out, c.randomPadding(t))
 			}
 			out = append(out, hints[idx])
 		}
+		c.tableIndex++
 	}
 
 	if c.shouldPad() {
-		out = append(out, c.randomPadding())
+		if t := c.currentTable(); t != nil {
+			out = append(out, c.randomPadding(t))
+		}
 	}
 
 	return out, nil
 }
 
-func decodeBytes(t *table, in []byte, hintBuf []byte, out []byte) ([]byte, []byte, error) {
+func decodeBytes(tables []*table, tableIndex *int, in []byte, hintBuf []byte, out []byte) ([]byte, []byte, error) {
+	if len(tables) == 0 {
+		return hintBuf, out, fmt.Errorf("sudoku table set missing")
+	}
 	for _, b := range in {
+		t := tables[*tableIndex%len(tables)]
 		if !t.layout.isHint(b) {
 			continue
 		}
@@ -134,6 +156,7 @@ func decodeBytes(t *table, in []byte, hintBuf []byte, out []byte) ([]byte, []byt
 
 		out = append(out, decoded)
 		hintBuf = hintBuf[:0]
+		*tableIndex++
 	}
 
 	return hintBuf, out, nil

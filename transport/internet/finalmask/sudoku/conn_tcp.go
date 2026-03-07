@@ -5,9 +5,13 @@ import (
 	"io"
 	"net"
 	"sync"
+
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const ioBufferSize = 32 * 1024
+
+var _ finalmask.TcpMaskConn = (*wrappedConn)(nil)
 
 type streamDecoder interface {
 	decodeChunk(in []byte, pending []byte) ([]byte, error)
@@ -101,6 +105,10 @@ type wrappedConn struct {
 	writer io.Writer
 }
 
+type closeWriteConn interface {
+	CloseWrite() error
+}
+
 func newWrappedConn(raw net.Conn, reader io.Reader, writer io.Writer) net.Conn {
 	return &wrappedConn{
 		Conn:   raw,
@@ -117,8 +125,22 @@ func (c *wrappedConn) Write(p []byte) (int, error) {
 	return c.writer.Write(p)
 }
 
-func (c *wrappedConn) UnwrapConn() net.Conn {
+func (c *wrappedConn) TcpMaskConn() {}
+
+func (c *wrappedConn) RawConn() net.Conn {
 	return c.Conn
+}
+
+func (c *wrappedConn) Splice() bool {
+	// Sudoku transforms the entire stream; bypassing it would disable masking.
+	return false
+}
+
+func (c *wrappedConn) CloseWrite() error {
+	if raw, ok := c.Conn.(closeWriteConn); ok {
+		return raw.CloseWrite()
+	}
+	return net.ErrClosed
 }
 
 func NewTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
@@ -130,31 +152,32 @@ func NewTCPConn(raw net.Conn, config *Config) (net.Conn, error) {
 }
 
 func newPureReaderWriter(raw net.Conn, config *Config) (io.Reader, io.Writer, error) {
-	t, err := getTable(config)
+	tables, err := getTables(config)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	pMin, pMax := normalizedPadding(config)
-	c := newCodec(t, pMin, pMax)
-	return newStreamReader(raw, newHintStreamDecoder(t)), newStreamWriter(raw, c.encode), nil
+	c := newCodec(tables, pMin, pMax)
+	return newStreamReader(raw, newHintStreamDecoder(tables)), newStreamWriter(raw, c.encode), nil
 }
 
 type hintStreamDecoder struct {
-	table   *table
-	hintBuf []byte
+	tables     []*table
+	tableIndex int
+	hintBuf    []byte
 }
 
-func newHintStreamDecoder(t *table) *hintStreamDecoder {
+func newHintStreamDecoder(tables []*table) *hintStreamDecoder {
 	return &hintStreamDecoder{
-		table:   t,
+		tables:  tables,
 		hintBuf: make([]byte, 0, 4),
 	}
 }
 
 func (d *hintStreamDecoder) decodeChunk(in []byte, pending []byte) ([]byte, error) {
 	var err error
-	d.hintBuf, pending, err = decodeBytes(d.table, in, d.hintBuf, pending)
+	d.hintBuf, pending, err = decodeBytes(d.tables, &d.tableIndex, in, d.hintBuf, pending)
 	return pending, err
 }
 
