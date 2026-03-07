@@ -133,6 +133,15 @@ func TestPacketConnReadWrite(t *testing.T) {
 			layers: 1,
 		},
 		{
+			name: "sudoku-custom-tables",
+			mask: &sudoku.Config{
+				Password:     "sudoku-mask",
+				Ascii:        "prefer_entropy",
+				CustomTables: []string{"xpxvvpvv", "vxpvxvvp"},
+			},
+			layers: 1,
+		},
+		{
 			name: "custom",
 			mask: &custom.UDPConfig{
 				Client: []*custom.UDPItem{
@@ -246,13 +255,12 @@ func TestSudokuBDD(t *testing.T) {
 		}
 	})
 
-	t.Run("GivenSudokuPackedTCPMask_WhenRoundTrip_ThenBothDirectionsMatch", func(t *testing.T) {
+	t.Run("GivenSudokuTCPMask_WhenRoundTrip_ThenBothDirectionsMatch", func(t *testing.T) {
 		cfg := &sudoku.Config{
 			Password:   "sudoku-packed",
 			Ascii:      "prefer_ascii",
 			PaddingMin: 0,
 			PaddingMax: 0,
-			Packed:     true,
 		}
 
 		clientRaw, serverRaw := net.Pipe()
@@ -284,7 +292,7 @@ func TestSudokuBDD(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(clientToServer, c2sRecv) {
-			t.Fatal("packed tcp client->server payload mismatch")
+			t.Fatal("tcp client->server payload mismatch")
 		}
 
 		s2cRecv := make([]byte, len(serverToClient))
@@ -300,14 +308,14 @@ func TestSudokuBDD(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(serverToClient, s2cRecv) {
-			t.Fatal("packed tcp server->client payload mismatch")
+			t.Fatal("tcp server->client payload mismatch")
 		}
 	})
 
-	t.Run("GivenSudokuPackedTCPMask_WhenServerWritesDownlink_ThenWireBytesAreReduced", func(t *testing.T) {
+	t.Run("GivenSudokuTCPMask_WhenServerWritesDownlink_ThenWireBytesAreReduced", func(t *testing.T) {
 		payload := bytes.Repeat([]byte("0123456789abcdef"), 192) // 3072 bytes, divisible by 3.
 
-		countWireBytes := func(cfg *sudoku.Config) int64 {
+		countWireBytes := func(wrapServer func(net.Conn, *sudoku.Config) (net.Conn, error), cfg *sudoku.Config) int64 {
 			t.Helper()
 
 			clientRaw, serverRaw := net.Pipe()
@@ -317,7 +325,7 @@ func TestSudokuBDD(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			serverConn, err := cfg.WrapConnServer(watchedServerRaw)
+			serverConn, err := wrapServer(watchedServerRaw, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -340,25 +348,103 @@ func TestSudokuBDD(t *testing.T) {
 			return watchedServerRaw.Written()
 		}
 
-		base := &sudoku.Config{
+		pureUplinkPackedDownlink := &sudoku.Config{
 			Password:   "sudoku-bandwidth",
 			Ascii:      "prefer_entropy",
 			PaddingMin: 0,
 			PaddingMax: 0,
 		}
-		pureBytes := countWireBytes(base)
+		packedDownlinkBytes := countWireBytes(func(raw net.Conn, cfg *sudoku.Config) (net.Conn, error) {
+			return cfg.WrapConnServer(raw)
+		}, pureUplinkPackedDownlink)
+		legacyPureBytes := countWireBytes(func(raw net.Conn, cfg *sudoku.Config) (net.Conn, error) {
+			return sudoku.NewTCPConn(raw, cfg)
+		}, pureUplinkPackedDownlink)
 
-		packed := &sudoku.Config{
-			Password:   base.Password,
-			Ascii:      base.Ascii,
-			PaddingMin: base.PaddingMin,
-			PaddingMax: base.PaddingMax,
-			Packed:     true,
+		if packedDownlinkBytes >= legacyPureBytes {
+			t.Fatalf("expected default packed downlink bytes < legacy pure bytes, got packed=%d pure=%d", packedDownlinkBytes, legacyPureBytes)
 		}
-		packedBytes := countWireBytes(packed)
+	})
 
-		if packedBytes >= pureBytes {
-			t.Fatalf("expected packed downlink bytes < pure bytes, got packed=%d pure=%d", packedBytes, pureBytes)
+	t.Run("GivenSudokuMultiTableTCPMask_WhenRoundTrip_ThenPayloadMatches", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password:     "sudoku-multi-tcp",
+			Ascii:        "prefer_entropy",
+			CustomTables: []string{"xpxvvpvv", "vxpvxvvp"},
+		}
+
+		clientRaw, serverRaw := net.Pipe()
+		defer clientRaw.Close()
+		defer serverRaw.Close()
+
+		clientConn, err := cfg.WrapConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverConn, err := cfg.WrapConnServer(serverRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		send := bytes.Repeat([]byte("rotate-table"), 513)
+		recv := make([]byte, len(send))
+
+		writeErr := make(chan error, 1)
+		go func() {
+			_, wErr := clientConn.Write(send)
+			writeErr <- wErr
+		}()
+
+		if _, err := io.ReadFull(serverConn, recv); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-writeErr; err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(send, recv) {
+			t.Fatal("multi-table tcp sudoku payload mismatch")
+		}
+	})
+
+	t.Run("GivenSudokuMultiTableTCPMask_WhenPackedDownlink_ThenPayloadMatches", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password:     "sudoku-multi-packed",
+			Ascii:        "prefer_entropy",
+			CustomTables: []string{"xpxvvpvv", "vxpvxvvp"},
+			PaddingMin:   0,
+			PaddingMax:   0,
+		}
+
+		clientRaw, serverRaw := net.Pipe()
+		defer clientRaw.Close()
+		defer serverRaw.Close()
+
+		clientConn, err := cfg.WrapConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverConn, err := cfg.WrapConnServer(serverRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		send := bytes.Repeat([]byte("packed-rotate"), 257)
+		recv := make([]byte, len(send))
+
+		writeErr := make(chan error, 1)
+		go func() {
+			_, wErr := clientConn.Write(send)
+			writeErr <- wErr
+		}()
+
+		if _, err := io.ReadFull(serverConn, recv); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-writeErr; err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(send, recv) {
+			t.Fatal("multi-table tcp sudoku payload mismatch")
 		}
 	})
 
@@ -375,7 +461,128 @@ func TestSudokuBDD(t *testing.T) {
 		}
 	})
 
-	t.Run("GivenSudokuTCPMask_WhenProxyUnwrapRawConn_ThenUnderlyingConnIsExposed", func(t *testing.T) {
+	t.Run("GivenSudokuMultiTableUDPMask_WhenClientSendsMultipleDatagrams_ThenPayloadMatches", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password:     "sudoku-udp-multi",
+			Ascii:        "prefer_entropy",
+			CustomTables: []string{"xpxvvpvv", "vxpvxvvp"},
+			PaddingMin:   0,
+			PaddingMax:   0,
+		}
+		maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
+
+		clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer clientRaw.Close()
+
+		serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer serverRaw.Close()
+
+		client, err := maskManager.WrapPacketConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		server, err := maskManager.WrapPacketConnServer(serverRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_ = client.SetDeadline(time.Now().Add(2 * time.Second))
+		_ = server.SetDeadline(time.Now().Add(2 * time.Second))
+
+		mustSendRecv(t, client, server, []byte("first-datagram"))
+		mustSendRecv(t, client, server, []byte("second-datagram"))
+		mustSendRecv(t, client, server, []byte("third-datagram"))
+	})
+
+	t.Run("GivenSudokuTCPMask_WhenCloseWriteIsCalled_ThenEOFPropagates", func(t *testing.T) {
+		cfg := &sudoku.Config{
+			Password:   "sudoku-closewrite",
+			Ascii:      "prefer_ascii",
+			PaddingMin: 0,
+			PaddingMax: 0,
+		}
+
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+
+		acceptCh := make(chan net.Conn, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			acceptCh <- conn
+		}()
+
+		clientRaw, err := net.Dial("tcp", listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer clientRaw.Close()
+
+		var serverRaw net.Conn
+		select {
+		case serverRaw = <-acceptCh:
+		case err := <-errCh:
+			t.Fatal(err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("accept timeout")
+		}
+		defer serverRaw.Close()
+
+		clientConn, err := cfg.WrapConnClient(clientRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverConn, err := cfg.WrapConnServer(serverRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		closeWriter, ok := clientConn.(interface{ CloseWrite() error })
+		if !ok {
+			t.Fatalf("wrapped conn does not expose CloseWrite: %T", clientConn)
+		}
+
+		writeErr := make(chan error, 1)
+		go func() {
+			if _, err := clientConn.Write([]byte("closewrite")); err != nil {
+				writeErr <- err
+				return
+			}
+			writeErr <- closeWriter.CloseWrite()
+		}()
+
+		buf := make([]byte, len("closewrite"))
+		if _, err := io.ReadFull(serverConn, buf); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(buf, []byte("closewrite")) {
+			t.Fatal("unexpected payload before closewrite")
+		}
+		if err := <-writeErr; err != nil {
+			t.Fatal(err)
+		}
+
+		one := make([]byte, 1)
+		n, err := serverConn.Read(one)
+		if n != 0 || err != io.EOF {
+			t.Fatalf("expected EOF after CloseWrite, got n=%d err=%v", n, err)
+		}
+	})
+
+	t.Run("GivenSudokuTCPMask_WhenProxyUnwrapRawConn_ThenMaskConnIsRetained", func(t *testing.T) {
 		cfg := &sudoku.Config{
 			Password: "sudoku-unwrap",
 			Ascii:    "prefer_entropy",
@@ -394,16 +601,15 @@ func TestSudokuBDD(t *testing.T) {
 		if readCounter != nil || writeCounter != nil {
 			t.Fatal("unexpected stat counters while unwrapping sudoku conn")
 		}
-		if unwrapped != clientRaw {
-			t.Fatalf("unexpected unwrapped conn type: %T", unwrapped)
+		if unwrapped != clientConn {
+			t.Fatalf("expected sudoku conn to stay wrapped, got %T", unwrapped)
 		}
 	})
 
-	t.Run("GivenSudokuPackedTCPMask_WhenProxyUnwrapRawConn_ThenUnderlyingConnIsExposed", func(t *testing.T) {
+	t.Run("GivenSudokuTCPMask_WhenProxyUnwrapRawConn_AfterDownlinkOptimization_ThenMaskConnIsRetained", func(t *testing.T) {
 		cfg := &sudoku.Config{
 			Password: "sudoku-packed-unwrap",
 			Ascii:    "prefer_entropy",
-			Packed:   true,
 		}
 
 		clientRaw, serverRaw := net.Pipe()
@@ -417,10 +623,10 @@ func TestSudokuBDD(t *testing.T) {
 
 		unwrapped, readCounter, writeCounter := proxy.UnwrapRawConn(clientConn)
 		if readCounter != nil || writeCounter != nil {
-			t.Fatal("unexpected stat counters while unwrapping packed sudoku conn")
+			t.Fatal("unexpected stat counters while unwrapping sudoku conn")
 		}
-		if unwrapped != clientRaw {
-			t.Fatalf("unexpected unwrapped conn type: %T", unwrapped)
+		if unwrapped != clientConn {
+			t.Fatalf("expected sudoku conn to stay wrapped, got %T", unwrapped)
 		}
 	})
 }
