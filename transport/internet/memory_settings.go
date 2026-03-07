@@ -63,7 +63,9 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		mss.TcpmaskManager = finalmask.NewTcpmaskManager(masks)
 	}
 
-	mss.QuicParams = &QuicParams{}
+	mss.QuicParams = &QuicParams{
+		Congestion: "reno",
+	}
 
 	if s != nil && s.QuicParams != nil {
 		mss.QuicParams = s.QuicParams
