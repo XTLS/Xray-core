@@ -118,6 +118,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			return nil, err
 		}
 
+		if streamSettings.TcpmaskManager != nil {
+			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = newConn
+		}
+
 		if realityConfig != nil {
 			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}
@@ -183,7 +192,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				switch c := conn.(type) {
 				case *internet.PacketConnWrapper:
 					var ok bool
-					udpConn, ok = c.Conn.(*net.UDPConn)
+					udpConn, ok = c.PacketConn.(*net.UDPConn)
 					if !ok {
 						return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
 					}
@@ -203,6 +212,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					if err != nil {
 						return nil, err
 					}
+				}
+
+				if streamSettings.UdpmaskManager != nil {
+					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
+					if err != nil {
+						udpConn.Close()
+						return nil, errors.New("mask err").Base(err)
+					}
+					udpConn = pktConn
 				}
 
 				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)

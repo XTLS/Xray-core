@@ -52,6 +52,15 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		return nil, err
 	}
 
+	if streamSettings.TcpmaskManager != nil {
+		newConn, err := streamSettings.TcpmaskManager.WrapConnClient(pconn)
+		if err != nil {
+			pconn.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+		pconn = newConn
+	}
+
 	var conn net.Conn
 	var requestURL url.URL
 	tConfig := tls.ConfigFromStreamSettings(streamSettings)
