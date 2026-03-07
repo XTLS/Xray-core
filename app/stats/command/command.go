@@ -70,7 +70,7 @@ func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStat
 	}
 
 	ips := make(map[string]int64)
-	for ip, t := range c.IpTimeMap() {
+	for ip, t := range c.IPTimeMap() {
 		ips[ip] = t.Unix()
 	}
 
