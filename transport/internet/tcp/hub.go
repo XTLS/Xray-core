@@ -64,6 +64,10 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 		errors.LogInfo(ctx, "listening TCP on ", address, ":", port)
 	}
 
+	if streamSettings.TcpmaskManager != nil {
+		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
+	}
+
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
 		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
@@ -108,6 +112,7 @@ func (v *Listener) keepAccepting() {
 			}
 			continue
 		}
+
 		go func() {
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)

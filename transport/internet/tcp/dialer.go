@@ -24,6 +24,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
+	if streamSettings.TcpmaskManager != nil {
+		newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+		if err != nil {
+			conn.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+		conn = newConn
+	}
+
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		mitmServerName := session.MitmServerNameFromContext(ctx)
 		mitmAlpn11 := session.MitmAlpn11FromContext(ctx)
