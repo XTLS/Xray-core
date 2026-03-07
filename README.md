@@ -139,16 +139,6 @@ sudo systemctl enable --now xray-gametunnel
 curl --socks5-hostname 127.0.0.1:10808 https://ifconfig.me
 ```
 
-### Option 2 - GUI (v2rayN)
-
-See [gametunnel-client](https://github.com/it2konst/gametunnel-client) - a v2rayN fork with GameTunnel in the transport list.
-
-When configuring in v2rayN:
-
-- **Transport:** gametunnel
-- **Flow:** leave empty
-- **Path:** your encryption key
-
 ## Hosting a Website on the Same Server
 
 GameTunnel uses UDP while HTTPS uses TCP - both can share port 443. You can host a regular website alongside the tunnel.
@@ -269,15 +259,15 @@ Requires Go 1.22+.
 ## Architecture
 
 ```
-  Client                     Server
-┌─────────┐   UDP/443    ┌─────────────┐
-│  VLESS  │◄────────────►│    VLESS    │
-│  + GT   │   ChaCha20   │    + GT     │
-│transport│   Poly1305   │  transport  │
-└─────────┘              └─────────────┘
-     │                         │
-  SOCKS5                    Freedom
-  :10808                   (internet)
+   Client                   Server
+┌───────────┐  UDP/443   ┌───────────┐
+│   VLESS   │◄──────────►│   VLESS   │
+│   + GT    │  ChaCha20  │   + GT    │
+│ transport │  Poly1305  │ transport │
+└───────────┘            └───────────┘
+      │                        │
+    SOCKS5                  Freedom
+    :10808                 (internet)
 ```
 
 **Handshake:** Curve25519 ECDH → HKDF-SHA256 → ChaCha20-Poly1305
