@@ -60,19 +60,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStrea
 		if dialer == nil {
 			return nil, errors.New(protocol, " dialer not registered").AtError()
 		}
-		conn, err := dialer(ctx, dest, streamSettings)
-		if err != nil {
-			return nil, err
-		}
-		if streamSettings.TcpmaskManager != nil {
-			connWithMask, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
-			if err != nil {
-				conn.Close()
-				return nil, errors.New("failed to apply tcp mask").Base(err)
-			}
-			conn = connWithMask
-		}
-		return conn, nil
+		return dialer(ctx, dest, streamSettings)
 	}
 
 	if dest.Network == net.Network_UDP {
