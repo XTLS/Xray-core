@@ -81,7 +81,7 @@ func (s *Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
-	inbound.DisableSpliceCopy()
+	inbound.CanSpliceCopy = 3
 
 	var useremail string
 	var userlevel uint32

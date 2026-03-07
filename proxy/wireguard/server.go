@@ -31,10 +31,10 @@ type Server struct {
 }
 
 type routingInfo struct {
-	ctx        context.Context
-	dispatcher routing.Dispatcher
-	inboundTag *session.Inbound
-	contentTag *session.Content
+	ctx         context.Context
+	dispatcher  routing.Dispatcher
+	inboundTag  *session.Inbound
+	contentTag  *session.Content
 }
 
 func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
@@ -134,7 +134,7 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		inbound = *s.info.inboundTag
 	}
 	inbound.Name = "wireguard"
-	inbound.DisableSpliceCopy()
+	inbound.CanSpliceCopy = 3
 
 	// overwrite the source to use the tun address for each sub context.
 	// Since gvisor.ForwarderRequest doesn't provide any info to associate the sub-context with the Parent context
