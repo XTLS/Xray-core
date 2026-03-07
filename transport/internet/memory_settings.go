@@ -14,6 +14,7 @@ type MemoryStreamConfig struct {
 	SecuritySettings interface{}
 	TcpmaskManager   *finalmask.TcpmaskManager
 	UdpmaskManager   *finalmask.UdpmaskManager
+	QuicParams       *QuicParams
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
 }
@@ -60,6 +61,10 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 			masks = append(masks, instance.(finalmask.Tcpmask))
 		}
 		mss.TcpmaskManager = finalmask.NewTcpmaskManager(masks)
+	}
+
+	if s != nil && s.QuicParams != nil {
+		mss.QuicParams = s.QuicParams
 	}
 
 	if s != nil && len(s.Udpmasks) > 0 {
