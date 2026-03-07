@@ -153,25 +153,30 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	var transport http.RoundTripper
 
 	if httpVersion == "3" {
-		quicConfig := &quic.Config{
-			InitialStreamReceiveWindow:     streamSettings.QuicParams.InitStreamReceiveWindow,
-			MaxStreamReceiveWindow:         streamSettings.QuicParams.MaxStreamReceiveWindow,
-			InitialConnectionReceiveWindow: streamSettings.QuicParams.InitConnReceiveWindow,
-			MaxConnectionReceiveWindow:     streamSettings.QuicParams.MaxConnReceiveWindow,
-			MaxIdleTimeout:                 time.Duration(streamSettings.QuicParams.MaxIdleTimeout) * time.Second,
-			KeepAlivePeriod:                time.Duration(streamSettings.QuicParams.KeepAlivePeriod) * time.Second,
-			MaxIncomingStreams:             streamSettings.QuicParams.MaxIncomingStreams,
-			DisablePathMTUDiscovery:        streamSettings.QuicParams.DisablePathMtuDiscovery,
+		quicParams := streamSettings.QuicParams
+		if quicParams == nil {
+			quicParams = &internet.QuicParams{}
 		}
-		if streamSettings.QuicParams.MaxIdleTimeout == 0 {
+
+		quicConfig := &quic.Config{
+			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+			KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
+			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
+		}
+		if quicParams.MaxIdleTimeout == 0 {
 			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout
 		}
-		if streamSettings.QuicParams.KeepAlivePeriod == 0 {
+		if quicParams.KeepAlivePeriod == 0 {
 			if keepAlivePeriod == 0 {
 				quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
 			}
 		}
-		if streamSettings.QuicParams.MaxIncomingStreams == 0 {
+		if quicParams.MaxIncomingStreams == 0 {
 			// these two are defaults of quic-go/http3. the default of quic-go (no
 			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
@@ -227,18 +232,16 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if err != nil {
 					return nil, err
 				}
-				if streamSettings.QuicParams != nil {
-					switch streamSettings.QuicParams.Congestion {
-					case "force-brutal":
-						congestion.UseBrutal(quicConn, streamSettings.QuicParams.BrutalUp)
-					case "reno":
-						// quic-go default, do nothing
-					default:
-						congestion.UseBBR(quicConn)
-					}
-				} else {
+
+				switch quicParams.Congestion {
+				case "force-brutal":
+					congestion.UseBrutal(quicConn, quicParams.BrutalUp)
+				case "reno":
+					// quic-go default, do nothing
+				default:
 					congestion.UseBBR(quicConn)
 				}
+
 				return quicConn, nil
 			},
 		}

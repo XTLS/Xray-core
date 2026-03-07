@@ -472,14 +472,19 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Conn = pktConn
 		}
 
+		quicParams := streamSettings.QuicParams
+		if quicParams == nil {
+			quicParams = &internet.QuicParams{}
+		}
+
 		quicConfig := &quic.Config{
-			InitialStreamReceiveWindow:     streamSettings.QuicParams.InitStreamReceiveWindow,
-			MaxStreamReceiveWindow:         streamSettings.QuicParams.MaxStreamReceiveWindow,
-			InitialConnectionReceiveWindow: streamSettings.QuicParams.InitConnReceiveWindow,
-			MaxConnectionReceiveWindow:     streamSettings.QuicParams.MaxConnReceiveWindow,
-			MaxIdleTimeout:                 time.Duration(streamSettings.QuicParams.MaxIdleTimeout) * time.Second,
-			MaxIncomingStreams:             streamSettings.QuicParams.MaxIncomingStreams,
-			DisablePathMTUDiscovery:        streamSettings.QuicParams.DisablePathMtuDiscovery,
+			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
 		}
 
 		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
@@ -500,18 +505,16 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
 					return
 				}
-				if streamSettings.QuicParams != nil {
-					switch streamSettings.QuicParams.Congestion {
-					case "force-brutal":
-						congestion.UseBrutal(conn, streamSettings.QuicParams.BrutalUp)
-					case "reno":
-						// quic-go default, do nothing
-					default:
-						congestion.UseBBR(conn)
-					}
-				} else {
+
+				switch quicParams.Congestion {
+				case "force-brutal":
+					congestion.UseBrutal(conn, quicParams.BrutalUp)
+				case "reno":
+					// quic-go default, do nothing
+				default:
 					congestion.UseBBR(conn)
 				}
+
 				go func() {
 					if err := l.h3server.ServeQUICConn(conn); err != nil {
 						errors.LogDebugInner(ctx, err, "XHTTP/3 connection ended")

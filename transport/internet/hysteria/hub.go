@@ -375,34 +375,38 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		}
 	}
 
+	quicParams := streamSettings.QuicParams
+	if quicParams == nil {
+		quicParams = &internet.QuicParams{}
+	}
 	quicConfig := &quic.Config{
-		InitialStreamReceiveWindow:     streamSettings.QuicParams.InitStreamReceiveWindow,
-		MaxStreamReceiveWindow:         streamSettings.QuicParams.MaxStreamReceiveWindow,
-		InitialConnectionReceiveWindow: streamSettings.QuicParams.InitConnReceiveWindow,
-		MaxConnectionReceiveWindow:     streamSettings.QuicParams.MaxConnReceiveWindow,
-		MaxIdleTimeout:                 time.Duration(streamSettings.QuicParams.MaxIdleTimeout) * time.Second,
-		MaxIncomingStreams:             streamSettings.QuicParams.MaxIncomingStreams,
-		DisablePathMTUDiscovery:        streamSettings.QuicParams.DisablePathMtuDiscovery,
+		InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+		MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+		MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+		MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+		MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+		DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
 		EnableDatagrams:                true,
 		MaxDatagramFrameSize:           MaxDatagramFrameSize,
 		DisablePathManager:             true,
 	}
-	if streamSettings.QuicParams.InitStreamReceiveWindow == 0 {
+	if quicParams.InitStreamReceiveWindow == 0 {
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
-	if streamSettings.QuicParams.MaxStreamReceiveWindow == 0 {
+	if quicParams.MaxStreamReceiveWindow == 0 {
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
-	if streamSettings.QuicParams.InitConnReceiveWindow == 0 {
+	if quicParams.InitConnReceiveWindow == 0 {
 		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2
 	}
-	if streamSettings.QuicParams.MaxConnReceiveWindow == 0 {
+	if quicParams.MaxConnReceiveWindow == 0 {
 		quicConfig.MaxConnectionReceiveWindow = 8388608 * 5 / 2
 	}
-	if streamSettings.QuicParams.MaxIdleTimeout == 0 {
+	if quicParams.MaxIdleTimeout == 0 {
 		quicConfig.MaxIdleTimeout = 30 * time.Second
 	}
-	if streamSettings.QuicParams.MaxIncomingStreams == 0 {
+	if quicParams.MaxIncomingStreams == 0 {
 		quicConfig.MaxIncomingStreams = 1024
 	}
 
@@ -419,7 +423,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		addConn:  handler,
 
 		config:      config,
-		quicParams:  streamSettings.QuicParams,
+		quicParams:  quicParams,
 		validator:   validator,
 		masqHandler: masqHandler,
 	}

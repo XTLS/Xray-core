@@ -518,9 +518,12 @@ type Masquerade struct {
 }
 
 type HysteriaConfig struct {
-	Version int32  `json:"version"`
-	Auth    string `json:"auth"`
-	UdpHop  UdpHop `json:"udphop"`
+	Version    int32      `json:"version"`
+	Auth       string     `json:"auth"`
+	Congestion *string    `json:"congestion"`
+	Up         *Bandwidth `json:"up"`
+	Down       *Bandwidth `json:"down"`
+	UdpHop     UdpHop     `json:"udphop"`
 
 	UdpIdleTimeout int64      `json:"udpIdleTimeout"`
 	Masquerade     Masquerade `json:"masquerade"`
@@ -529,6 +532,10 @@ type HysteriaConfig struct {
 func (c *HysteriaConfig) Build() (proto.Message, error) {
 	if c.Version != 2 {
 		return nil, errors.New("version != 2")
+	}
+
+	if c.Congestion != nil || c.Up != nil || c.Down != nil {
+		return nil, errors.PrintRemovedFeatureError("congestion & up & down", "finalmask/quicParams")
 	}
 
 	var hop *PortList

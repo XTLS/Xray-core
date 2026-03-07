@@ -435,6 +435,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
+	quicParams := streamSettings.QuicParams
+	if quicParams == nil {
+		quicParams = &internet.QuicParams{}
+	}
+
 	manger.mutex.Lock()
 	c, ok := manger.m[addr]
 	if !ok {
@@ -446,7 +451,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			tlsConfig:      tlsConfig.GetTLSConfig(),
 			socketConfig:   streamSettings.SocketSettings,
 			udpmaskManager: streamSettings.UdpmaskManager,
-			quicParams:     streamSettings.QuicParams,
+			quicParams:     quicParams,
 		}
 		manger.m[addr] = c
 	}
