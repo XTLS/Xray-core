@@ -535,7 +535,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Congestion != nil || c.Up != nil || c.Down != nil {
-		return nil, errors.PrintRemovedFeatureError("congestion & up & down", "finalmask/quicParams")
+		errors.LogWarning(context.Background(), "congestion & up & down move to finalmask/quicParams")
 	}
 
 	var hop *PortList
