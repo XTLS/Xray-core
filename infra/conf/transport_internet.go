@@ -717,6 +717,11 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	return certificate, nil
 }
 
+type QuicParamsConfig struct {
+	Congestion string    `json:"congestion"`
+	Up         Bandwidth `json:"up"`
+}
+
 type TLSConfig struct {
 	AllowInsecure           bool             `json:"allowInsecure"`
 	Certs                   []*TLSCertConfig `json:"certificates"`
@@ -1414,8 +1419,9 @@ func (c *Mask) Build(tcp bool) (proto.Message, error) {
 }
 
 type FinalMask struct {
-	Tcp []Mask `json:"tcp"`
-	Udp []Mask `json:"udp"`
+	Tcp        []Mask            `json:"tcp"`
+	Udp        []Mask            `json:"udp"`
+	QuicParams *QuicParamsConfig `json:"quicParams"`
 }
 
 type StreamConfig struct {
@@ -1587,6 +1593,28 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
 			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		}
+		if c.FinalMask.QuicParams != nil {
+			up, err := c.FinalMask.QuicParams.Up.Bps()
+			if err != nil {
+				return nil, err
+			}
+			if up > 0 && up < 65536 {
+				return nil, errors.New("Up must be at least 65536 bytes per second")
+			}
+			switch c.FinalMask.QuicParams.Congestion {
+			case "", "bbr", "reno":
+			case "force-brutal":
+				if up == 0 {
+					return nil, errors.New("force-brutal requires up")
+				}
+			default:
+				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: bbr, reno, force-brutal")
+			}
+			config.QuicParams = &internet.QuicParams{
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				Up:         up,
+			}
 		}
 	}
 

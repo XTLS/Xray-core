@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
@@ -474,8 +475,29 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Handler: handler,
 		}
 		go func() {
-			if err := l.h3server.ServeListener(l.h3listener); err != nil {
-				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
+			for {
+				conn, err := l.h3listener.Accept(context.Background())
+				if err != nil {
+					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
+					return
+				}
+				if streamSettings.QuicParams != nil {
+					switch streamSettings.QuicParams.Congestion {
+					case "force-brutal":
+						congestion.UseBrutal(conn, streamSettings.QuicParams.Up)
+					case "reno":
+						// quic-go default, do nothing
+					default:
+						congestion.UseBBR(conn)
+					}
+				} else {
+					congestion.UseBBR(conn)
+				}
+				go func() {
+					if err := l.h3server.ServeQUICConn(conn); err != nil {
+						errors.LogDebugInner(ctx, err, "XHTTP/3 connection ended")
+					}
+				}()
 			}
 		}()
 	} else { // tcp
@@ -539,6 +561,7 @@ func (ln *Listener) Close() error {
 		if err := ln.h3server.Close(); err != nil {
 			return err
 		}
+		return ln.h3listener.Close()
 	} else if ln.listener != nil {
 		return ln.listener.Close()
 	}
