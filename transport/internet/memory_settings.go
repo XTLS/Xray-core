@@ -64,7 +64,7 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 	}
 
 	mss.QuicParams = &QuicParams{
-		Congestion: "reno",
+		Congestion: "bbr",
 	}
 
 	if s != nil && s.QuicParams != nil {
