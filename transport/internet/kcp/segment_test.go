@@ -71,7 +71,6 @@ func TestACKSegment(t *testing.T) {
 		ReceivingNext:   3,
 		Timestamp:       10,
 		NumberList:      []uint32{1, 3, 5, 7, 9},
-		Limit:           128,
 	}
 
 	nBytes := seg.ByteSize()

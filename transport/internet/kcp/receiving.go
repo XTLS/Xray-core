@@ -47,18 +47,15 @@ type AckList struct {
 
 	flushCandidates []uint32
 	dirty           bool
-
-	mss uint32
 }
 
-func NewAckList(writer SegmentWriter, mss uint32) *AckList {
+func NewAckList(writer SegmentWriter) *AckList {
 	return &AckList{
 		writer:          writer,
 		timestamps:      make([]uint32, 0, 128),
 		numbers:         make([]uint32, 0, 128),
 		nextFlush:       make([]uint32, 0, 128),
 		flushCandidates: make([]uint32, 0, 128),
-		mss:             mss,
 	}
 }
 
@@ -93,7 +90,7 @@ func (l *AckList) Clear(una uint32) {
 func (l *AckList) Flush(current uint32, rto uint32) {
 	l.flushCandidates = l.flushCandidates[:0]
 
-	seg := NewAckSegment((int(l.mss) - 17) / 4)
+	seg := NewAckSegment()
 	for i := 0; i < len(l.numbers); i++ {
 		if l.nextFlush[i] > current {
 			if len(l.flushCandidates) < cap(l.flushCandidates) {
@@ -112,7 +109,7 @@ func (l *AckList) Flush(current uint32, rto uint32) {
 		if seg.IsFull() {
 			l.writer.Write(seg)
 			seg.Release()
-			seg = NewAckSegment((int(l.mss) - 17) / 4)
+			seg = NewAckSegment()
 			l.dirty = false
 		}
 	}
@@ -147,7 +144,7 @@ func NewReceivingWorker(kcp *Connection) *ReceivingWorker {
 		window:     NewReceivingWindow(),
 		windowSize: kcp.Config.GetReceivingInFlightSize(),
 	}
-	worker.acklist = NewAckList(worker, kcp.mss+DataSegmentOverhead)
+	worker.acklist = NewAckList(worker)
 	return worker
 }
 
