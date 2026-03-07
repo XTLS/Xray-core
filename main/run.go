@@ -77,7 +77,7 @@ func executeRun(cmd *base.Command, args []string) {
 	printVersion()
 	server, err := startXray()
 	if err != nil {
-		fmt.Println("Failed to start:", err)
+		fmt.Fprintln(os.Stderr, "Failed to start:", err)
 		// Configuration error. Exit with a special value to prevent systemd from restarting.
 		os.Exit(23)
 	}
@@ -88,7 +88,7 @@ func executeRun(cmd *base.Command, args []string) {
 	}
 
 	if err := server.Start(); err != nil {
-		fmt.Println("Failed to start:", err)
+		fmt.Fprintln(os.Stderr, "Failed to start:", err)
 		os.Exit(-1)
 	}
 	defer server.Close()
@@ -113,7 +113,7 @@ func executeRun(cmd *base.Command, args []string) {
 func dumpConfig() int {
 	files := getConfigFilePath(false)
 	if config, err := core.GetMergedConfig(files); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		time.Sleep(1 * time.Second)
 		return 23
 	} else {
