@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
@@ -131,6 +132,33 @@ func TestPacketConnReadWrite(t *testing.T) {
 			},
 			layers: 1,
 		},
+		{
+			name: "custom",
+			mask: &custom.UDPConfig{
+				Client: []*custom.UDPItem{
+					{
+						Packet: []byte{1},
+					},
+					{
+						Rand: 1,
+					},
+				},
+				Server: []*custom.UDPItem{
+					{
+						Packet: []byte{1},
+					},
+					{
+						Rand: 1,
+					},
+				},
+			},
+			layers: 1,
+		},
+		{
+			name:   "salamander-single",
+			mask:   &salamander.Config{Password: "1234"},
+			layers: 1,
+		},
 	}
 
 	for _, c := range cases {
@@ -150,7 +178,6 @@ func TestPacketConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
 
 			client, err = maskManager.WrapPacketConnClient(client)
 			if err != nil {
@@ -161,7 +188,6 @@ func TestPacketConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer server.Close()
 
 			server, err = maskManager.WrapPacketConnServer(server)
 			if err != nil {
@@ -344,7 +370,7 @@ func TestSudokuBDD(t *testing.T) {
 		}
 		defer raw.Close()
 
-		if _, err := cfg.WrapPacketConnClient(raw, true, 0, false); err == nil {
+		if _, err := cfg.WrapPacketConnClient(raw, 0, 1); err == nil {
 			t.Fatal("expected innermost check failure")
 		}
 	})

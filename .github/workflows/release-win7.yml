@@ -173,7 +173,7 @@ jobs:
           file_glob: true
 
       - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Xray-${{ env.ASSET_NAME }}
           path: |

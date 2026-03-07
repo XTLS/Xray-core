@@ -18,6 +18,7 @@ type Rule struct {
 	RuleTag   string
 	Balancer  *Balancer
 	Condition Condition
+	Webhook   *WebhookNotifier
 }
 
 func (r *Rule) GetTag() (string, error) {

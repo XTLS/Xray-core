@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -117,6 +118,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			return nil, err
 		}
 
+		if streamSettings.TcpmaskManager != nil {
+			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = newConn
+		}
+
 		if realityConfig != nil {
 			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}
@@ -173,7 +183,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				switch c := conn.(type) {
 				case *internet.PacketConnWrapper:
 					var ok bool
-					udpConn, ok = c.Conn.(*net.UDPConn)
+					udpConn, ok = c.PacketConn.(*net.UDPConn)
 					if !ok {
 						return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
 					}
@@ -195,7 +205,32 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
-				return quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				if streamSettings.UdpmaskManager != nil {
+					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
+					if err != nil {
+						udpConn.Close()
+						return nil, errors.New("mask err").Base(err)
+					}
+					udpConn = pktConn
+				}
+
+				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
+				if err != nil {
+					return nil, err
+				}
+				if streamSettings.QuicParams != nil {
+					switch streamSettings.QuicParams.Congestion {
+					case "force-brutal":
+						congestion.UseBrutal(quicConn, streamSettings.QuicParams.Up)
+					case "reno":
+						// quic-go default, do nothing
+					default:
+						congestion.UseBBR(quicConn)
+					}
+				} else {
+					congestion.UseBBR(quicConn)
+				}
+				return quicConn, nil
 			},
 		}
 	} else if httpVersion == "2" {
@@ -396,8 +431,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	scMaxEachPostBytes := transportConfiguration.GetNormalizedScMaxEachPostBytes()
 	scMinPostsIntervalMs := transportConfiguration.GetNormalizedScMinPostsIntervalMs()
 
-	if scMaxEachPostBytes.From <= buf.Size {
-		panic("`scMaxEachPostBytes` should be bigger than " + strconv.Itoa(buf.Size))
+	if scMaxEachPostBytes.From <= 0 {
+		panic("`scMaxEachPostBytes` should be bigger than 0")
 	}
 
 	maxUploadSize := scMaxEachPostBytes.rand()
@@ -405,7 +440,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// code relies on this behavior. Subtract 1 so that together with
 	// uploadWriter wrapper, exact size limits can be enforced
 	// uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - buf.Size))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(max(0, maxUploadSize-buf.Size)))
 
 	conn.writer = uploadWriter{
 		uploadPipeWriter,
@@ -417,57 +452,64 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		var lastWrite time.Time
 
 		for {
-			wroteRequest := done.New()
-
-			ctx := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-				WroteRequest: func(httptrace.WroteRequestInfo) {
-					wroteRequest.Close()
-				},
-			})
-
-			// this intentionally makes a shallow-copy of the struct so we
-			// can reassign Path (potentially concurrently)
-			url := requestURL
-			seqStr := strconv.FormatInt(seq, 10)
-			seq += 1
-
-			if scMinPostsIntervalMs.From > 0 {
-				time.Sleep(time.Duration(scMinPostsIntervalMs.rand())*time.Millisecond - time.Since(lastWrite))
-			}
-
 			// by offloading the uploads into a buffered pipe, multiple conn.Write
 			// calls get automatically batched together into larger POST requests.
 			// without batching, bandwidth is extremely limited.
-			chunk, err := uploadPipeReader.ReadMultiBuffer()
+			remainder, err := uploadPipeReader.ReadMultiBuffer()
 			if err != nil {
 				break
 			}
 
-			lastWrite = time.Now()
-
-			if xmuxClient != nil && (xmuxClient.LeftRequests.Add(-1) <= 0 ||
-				(xmuxClient.UnreusableAt != time.Time{} && lastWrite.After(xmuxClient.UnreusableAt))) {
-				httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
-			}
-
-			go func() {
-				err := httpClient.PostPacket(
-					ctx,
-					url.String(),
-					sessionId,
-					seqStr,
-					&buf.MultiBufferContainer{MultiBuffer: chunk},
-					int64(chunk.Len()),
-				)
-				wroteRequest.Close()
-				if err != nil {
-					errors.LogInfoInner(ctx, err, "failed to send upload")
-					uploadPipeReader.Interrupt()
+			doSplit := atomic.Bool{}
+			for doSplit.Store(true); doSplit.Load(); {
+				var chunk buf.MultiBuffer
+				remainder, chunk = buf.SplitSize(remainder, maxUploadSize)
+				if chunk.IsEmpty() {
+					break
 				}
-			}()
 
-			if _, ok := httpClient.(*DefaultDialerClient); ok {
-				<-wroteRequest.Wait()
+				wroteRequest := done.New()
+
+				ctx := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+					WroteRequest: func(httptrace.WroteRequestInfo) {
+						wroteRequest.Close()
+					},
+				})
+
+				seqStr := strconv.FormatInt(seq, 10)
+				seq += 1
+
+				if scMinPostsIntervalMs.From > 0 {
+					time.Sleep(time.Duration(scMinPostsIntervalMs.rand())*time.Millisecond - time.Since(lastWrite))
+				}
+
+				lastWrite = time.Now()
+
+				if xmuxClient != nil && (xmuxClient.LeftRequests.Add(-1) <= 0 ||
+					(xmuxClient.UnreusableAt != time.Time{} && lastWrite.After(xmuxClient.UnreusableAt))) {
+					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
+				}
+
+				go func() {
+					err := httpClient.PostPacket(
+						ctx,
+						requestURL.String(),
+						sessionId,
+						seqStr,
+						&buf.MultiBufferContainer{MultiBuffer: chunk},
+						int64(chunk.Len()),
+					)
+					wroteRequest.Close()
+					if err != nil {
+						errors.LogInfoInner(ctx, err, "failed to send upload")
+						uploadPipeReader.Interrupt()
+						doSplit.Store(false)
+					}
+				}()
+
+				if _, ok := httpClient.(*DefaultDialerClient); ok {
+					<-wroteRequest.Wait()
+				}
 			}
 		}
 	}()

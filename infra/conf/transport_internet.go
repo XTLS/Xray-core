@@ -18,6 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
+	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -26,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
+	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
@@ -73,7 +76,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	}
 	if c.Tti != nil {
 		tti := *c.Tti
-		if tti < 10 || tti > 100 {
+		if tti < 10 || tti > 5000 {
 			return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
 		}
 		config.Tti = &kcp.TTI{Value: tti}
@@ -231,13 +234,14 @@ type SplitHTTPConfig struct {
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
-	UplinkChunkSize      uint32            `json:"uplinkChunkSize"`
+	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
 	NoGRPCHeader         bool              `json:"noGRPCHeader"`
 	NoSSEHeader          bool              `json:"noSSEHeader"`
 	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
 	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
+	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -317,9 +321,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	switch c.UplinkDataPlacement {
 	case "":
-		c.UplinkDataPlacement = "body"
-	case "body":
-	case "cookie", "header":
+		c.UplinkDataPlacement = splithttp.PlacementAuto
+	case splithttp.PlacementAuto, splithttp.PlacementBody:
+	case splithttp.PlacementCookie, splithttp.PlacementHeader:
 		if c.Mode != "packet-up" {
 			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
 		}
@@ -348,9 +352,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	case "":
 		c.SeqPlacement = "path"
 	case "path", "cookie", "header", "query":
-		if c.SessionPlacement == "path" {
-			return nil, errors.New("SeqPlacement must be path when SessionPlacement is path")
-		}
 	default:
 		return nil, errors.New("unsupported seq placement: " + c.SeqPlacement)
 	}
@@ -373,24 +374,17 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.UplinkDataPlacement != "body" && c.UplinkDataKey == "" {
+	if c.UplinkDataPlacement != splithttp.PlacementBody && c.UplinkDataKey == "" {
 		switch c.UplinkDataPlacement {
-		case "cookie":
+		case splithttp.PlacementCookie:
 			c.UplinkDataKey = "x_data"
-		case "header":
+		case splithttp.PlacementAuto, splithttp.PlacementHeader:
 			c.UplinkDataKey = "X-Data"
 		}
 	}
 
-	if c.UplinkChunkSize == 0 {
-		switch c.UplinkDataPlacement {
-		case "cookie":
-			c.UplinkChunkSize = 3 * 1024 // 3KB
-		case "header":
-			c.UplinkChunkSize = 4 * 1024 // 4KB
-		}
-	} else if c.UplinkChunkSize < 64 {
-		c.UplinkChunkSize = 64
+	if c.ServerMaxHeaderBytes < 0 {
+		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
 
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
@@ -423,13 +417,14 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SeqKey:               c.SeqKey,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
-		UplinkChunkSize:      c.UplinkChunkSize,
+		UplinkChunkSize:      newRangeConfig(c.UplinkChunkSize),
 		NoGRPCHeader:         c.NoGRPCHeader,
 		NoSSEHeader:          c.NoSSEHeader,
 		ScMaxEachPostBytes:   newRangeConfig(c.ScMaxEachPostBytes),
 		ScMinPostsIntervalMs: newRangeConfig(c.ScMinPostsIntervalMs),
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
+		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
@@ -724,6 +719,11 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	certificate.BuildChain = c.BuildChain
 
 	return certificate, nil
+}
+
+type QuicParamsConfig struct {
+	Congestion string    `json:"congestion"`
+	Up         Bandwidth `json:"up"`
 }
 
 type TLSConfig struct {
@@ -1277,12 +1277,49 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}, nil
 }
 
+func PraseByteSlice(data json.RawMessage, typ string) ([]byte, error) {
+	switch strings.ToLower(typ) {
+	case "", "array":
+		if len(data) == 0 {
+			return data, nil
+		}
+		var packet []byte
+		if err := json.Unmarshal(data, &packet); err != nil {
+			return nil, err
+		}
+		return packet, nil
+	case "str":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return []byte(str), nil
+	case "hex":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return hex.DecodeString(str)
+	case "base64":
+		var str string
+		if err := json.Unmarshal(data, &str); err != nil {
+			return nil, err
+		}
+		return base64.StdEncoding.DecodeString(str)
+	default:
+		return nil, errors.New("unknown type")
+	}
+}
+
 var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"sudoku": func() interface{} { return new(Sudoku) },
+		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+		"fragment":      func() interface{} { return new(FragmentMask) },
+		"sudoku":        func() interface{} { return new(Sudoku) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
 		"header-dns":       func() interface{} { return new(Dns) },
 		"header-dtls":      func() interface{} { return new(Dtls) },
 		"header-srtp":      func() interface{} { return new(Srtp) },
@@ -1291,12 +1328,245 @@ var (
 		"header-wireguard": func() interface{} { return new(Wireguard) },
 		"mkcp-original":    func() interface{} { return new(Original) },
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
+		"noise":            func() interface{} { return new(NoiseMask) },
 		"salamander":       func() interface{} { return new(Salamander) },
 		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
 )
+
+type TCPItem struct {
+	Delay  Int32Range      `json:"delay"`
+	Rand   int32           `json:"rand"`
+	Type   string          `json:"type"`
+	Packet json.RawMessage `json:"packet"`
+}
+
+type HeaderCustomTCP struct {
+	Clients [][]TCPItem `json:"clients"`
+	Servers [][]TCPItem `json:"servers"`
+	Errors  [][]TCPItem `json:"errors"`
+}
+
+func (c *HeaderCustomTCP) Build() (proto.Message, error) {
+	for _, value := range c.Clients {
+		for _, item := range value {
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			}
+		}
+	}
+	for _, value := range c.Servers {
+		for _, item := range value {
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			}
+		}
+	}
+	for _, value := range c.Errors {
+		for _, item := range value {
+			if len(item.Packet) > 0 && item.Rand > 0 {
+				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			}
+		}
+	}
+
+	clients := make([]*custom.TCPSequence, len(c.Clients))
+	for i, value := range c.Clients {
+		clients[i] = &custom.TCPSequence{}
+		for _, item := range value {
+			var err error
+			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+				return nil, err
+			}
+			clients[i].Sequence = append(clients[i].Sequence, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	servers := make([]*custom.TCPSequence, len(c.Servers))
+	for i, value := range c.Servers {
+		servers[i] = &custom.TCPSequence{}
+		for _, item := range value {
+			var err error
+			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+				return nil, err
+			}
+			servers[i].Sequence = append(servers[i].Sequence, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	errors := make([]*custom.TCPSequence, len(c.Errors))
+	for i, value := range c.Errors {
+		errors[i] = &custom.TCPSequence{}
+		for _, item := range value {
+			var err error
+			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+				return nil, err
+			}
+			errors[i].Sequence = append(errors[i].Sequence, &custom.TCPItem{
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+				Rand:     item.Rand,
+				Packet:   item.Packet,
+			})
+		}
+	}
+
+	return &custom.TCPConfig{
+		Clients: clients,
+		Servers: servers,
+		Errors:  errors,
+	}, nil
+}
+
+type FragmentMask struct {
+	Packets  string     `json:"packets"`
+	Length   Int32Range `json:"length"`
+	Delay    Int32Range `json:"delay"`
+	MaxSplit Int32Range `json:"maxSplit"`
+}
+
+func (c *FragmentMask) Build() (proto.Message, error) {
+	config := &fragment.Config{}
+
+	switch strings.ToLower(c.Packets) {
+	case "tlshello":
+		config.PacketsFrom = 0
+		config.PacketsTo = 1
+	case "":
+		config.PacketsFrom = 0
+		config.PacketsTo = 0
+	default:
+		from, to, err := ParseRangeString(c.Packets)
+		if err != nil {
+			return nil, errors.New("Invalid PacketsFrom").Base(err)
+		}
+		config.PacketsFrom = int64(from)
+		config.PacketsTo = int64(to)
+		if config.PacketsFrom == 0 {
+			return nil, errors.New("PacketsFrom can't be 0")
+		}
+	}
+
+	config.LengthMin = int64(c.Length.From)
+	config.LengthMax = int64(c.Length.To)
+	if config.LengthMin == 0 {
+		return nil, errors.New("LengthMin can't be 0")
+	}
+
+	config.DelayMin = int64(c.Delay.From)
+	config.DelayMax = int64(c.Delay.To)
+
+	config.MaxSplitMin = int64(c.MaxSplit.From)
+	config.MaxSplitMax = int64(c.MaxSplit.To)
+
+	return config, nil
+}
+
+type NoiseItem struct {
+	Rand   Int32Range      `json:"rand"`
+	Type   string          `json:"type"`
+	Packet json.RawMessage `json:"packet"`
+	Delay  Int32Range      `json:"delay"`
+}
+
+type NoiseMask struct {
+	Reset Int32Range  `json:"reset"`
+	Noise []NoiseItem `json:"noise"`
+}
+
+func (c *NoiseMask) Build() (proto.Message, error) {
+	for _, item := range c.Noise {
+		if len(item.Packet) > 0 && item.Rand.To > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
+		}
+	}
+
+	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
+	for _, item := range c.Noise {
+		var err error
+		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+			return nil, err
+		}
+		noiseSlice = append(noiseSlice, &noise.Item{
+			RandMin:  int64(item.Rand.From),
+			RandMax:  int64(item.Rand.To),
+			Packet:   item.Packet,
+			DelayMin: int64(item.Delay.From),
+			DelayMax: int64(item.Delay.To),
+		})
+	}
+
+	return &noise.Config{
+		ResetMin: int64(c.Reset.From),
+		ResetMax: int64(c.Reset.To),
+		Items:    noiseSlice,
+	}, nil
+}
+
+type UDPItem struct {
+	Rand   int32           `json:"rand"`
+	Type   string          `json:"type"`
+	Packet json.RawMessage `json:"packet"`
+}
+
+type HeaderCustomUDP struct {
+	Client []UDPItem `json:"client"`
+	Server []UDPItem `json:"server"`
+}
+
+func (c *HeaderCustomUDP) Build() (proto.Message, error) {
+	for _, item := range c.Client {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+	for _, item := range c.Server {
+		if len(item.Packet) > 0 && item.Rand > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		}
+	}
+
+	client := make([]*custom.UDPItem, 0, len(c.Client))
+	for _, item := range c.Client {
+		var err error
+		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+			return nil, err
+		}
+		client = append(client, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	server := make([]*custom.UDPItem, 0, len(c.Server))
+	for _, item := range c.Server {
+		var err error
+		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
+			return nil, err
+		}
+		server = append(server, &custom.UDPItem{
+			Rand:   item.Rand,
+			Packet: item.Packet,
+		})
+	}
+
+	return &custom.UDPConfig{
+		Client: client,
+		Server: server,
+	}, nil
+}
 
 type Dns struct {
 	Domain string `json:"domain"`
@@ -1467,8 +1737,9 @@ func (c *Mask) Build(tcp bool) (proto.Message, error) {
 }
 
 type FinalMask struct {
-	Tcp []Mask `json:"tcp"`
-	Udp []Mask `json:"udp"`
+	Tcp        []Mask            `json:"tcp"`
+	Udp        []Mask            `json:"udp"`
+	QuicParams *QuicParamsConfig `json:"quicParams"`
 }
 
 type StreamConfig struct {
@@ -1640,6 +1911,28 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
 			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+		}
+		if c.FinalMask.QuicParams != nil {
+			up, err := c.FinalMask.QuicParams.Up.Bps()
+			if err != nil {
+				return nil, err
+			}
+			if up > 0 && up < 65536 {
+				return nil, errors.New("Up must be at least 65536 bytes per second")
+			}
+			switch c.FinalMask.QuicParams.Congestion {
+			case "", "bbr", "reno":
+			case "force-brutal":
+				if up == 0 {
+					return nil, errors.New("force-brutal requires up")
+				}
+			default:
+				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: bbr, reno, force-brutal")
+			}
+			config.QuicParams = &internet.QuicParams{
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				Up:         up,
+			}
 		}
 	}
 

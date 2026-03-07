@@ -34,6 +34,7 @@ func (i *interConn) Read(b []byte) (int, error) {
 func (i *interConn) Write(b []byte) (int, error) {
 	if i.client {
 		i.mutex.Lock()
+		defer i.mutex.Unlock()
 		if i.client {
 			buf := make([]byte, 0, quicvarint.Len(FrameTypeTCPRequest)+len(b))
 			buf = quicvarint.Append(buf, FrameTypeTCPRequest)
@@ -45,7 +46,6 @@ func (i *interConn) Write(b []byte) (int, error) {
 			i.client = false
 			return len(b), nil
 		}
-		i.mutex.Unlock()
 	}
 
 	return i.stream.Write(b)

@@ -46,15 +46,15 @@ func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (ne
 	return newWrappedConn(raw, reader, writer), nil
 }
 
-func (c *Config) WrapPacketConnClient(raw net.PacketConn, first bool, leaveSize int32, end bool) (net.PacketConn, error) {
-	if !end {
+func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
+	if level != levelCount {
 		return nil, errors.New("sudoku udp mask must be the innermost mask in chain")
 	}
 	return NewUDPConn(raw, c)
 }
 
-func (c *Config) WrapPacketConnServer(raw net.PacketConn, first bool, leaveSize int32, end bool) (net.PacketConn, error) {
-	if !end {
+func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
+	if level != levelCount {
 		return nil, errors.New("sudoku udp mask must be the innermost mask in chain")
 	}
 	return NewUDPConn(raw, c)
