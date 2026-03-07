@@ -1537,7 +1537,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 
 			c.FinalMask.QuicParams.Congestion = strings.ToLower(c.FinalMask.QuicParams.Congestion)
 			switch c.FinalMask.QuicParams.Congestion {
-			case "", "bbr", "reno":
+			case "", "brutal", "reno", "bbr":
 			case "force-brutal":
 				if up == 0 {
 					return nil, errors.New("force-brutal requires up")

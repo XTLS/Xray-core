@@ -158,7 +158,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout
 		}
 		if streamSettings.QuicParams.KeepAlivePeriod == 0 {
-			quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+			if keepAlivePeriod == 0 {
+				quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+			}
 		}
 		if streamSettings.QuicParams.MaxIncomingStreams == 0 {
 			// these two are defaults of quic-go/http3. the default of quic-go (no
