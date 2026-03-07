@@ -554,6 +554,10 @@ func (c *Config) Build() (*core.Config, error) {
 		config.App = append([]*serial.TypedMessage{serial.ToTypedMessage(r)}, config.App...)
 	}
 
+	if c.Observatory != nil && c.BurstObservatory != nil {
+		return nil, errors.New("configure only one of observatory or burstObservatory")
+	}
+
 	if c.Observatory != nil {
 		r, err := c.Observatory.Build()
 		if err != nil {
