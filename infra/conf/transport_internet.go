@@ -72,9 +72,9 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	}
 	if c.Tti != nil {
 		tti := *c.Tti
-		//if tti < 10 || tti > 100 {
-		//	return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
-		//}
+		if tti < 10 || tti > 5000 {
+			return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
+		}
 		config.Tti = &kcp.TTI{Value: tti}
 	}
 	if c.UpCap != nil {
