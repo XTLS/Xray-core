@@ -1642,10 +1642,11 @@ func (c *Salamander) Build() (proto.Message, error) {
 type Sudoku struct {
 	Password string `json:"password"`
 	ASCII    string `json:"ascii"`
-	Packed   bool   `json:"packed"`
 
-	CustomTable       string `json:"customTable"`
-	LegacyCustomTable string `json:"custom_table"`
+	CustomTable       string   `json:"customTable"`
+	LegacyCustomTable string   `json:"custom_table"`
+	CustomTables      []string `json:"customTables"`
+	LegacyCustomSets  []string `json:"custom_tables"`
 
 	PaddingMin       uint32 `json:"paddingMin"`
 	LegacyPaddingMin uint32 `json:"padding_min"`
@@ -1658,6 +1659,10 @@ func (c *Sudoku) Build() (proto.Message, error) {
 	if customTable == "" {
 		customTable = c.LegacyCustomTable
 	}
+	customTables := c.CustomTables
+	if len(customTables) == 0 {
+		customTables = c.LegacyCustomSets
+	}
 
 	paddingMin := c.PaddingMin
 	if paddingMin == 0 {
@@ -1669,12 +1674,12 @@ func (c *Sudoku) Build() (proto.Message, error) {
 	}
 
 	return &finalsudoku.Config{
-		Password:    c.Password,
-		Ascii:       c.ASCII,
-		Packed:      c.Packed,
-		CustomTable: customTable,
-		PaddingMin:  paddingMin,
-		PaddingMax:  paddingMax,
+		Password:     c.Password,
+		Ascii:        c.ASCII,
+		CustomTable:  customTable,
+		CustomTables: customTables,
+		PaddingMin:   paddingMin,
+		PaddingMax:   paddingMax,
 	}, nil
 }
 
