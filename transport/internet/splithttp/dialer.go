@@ -22,8 +22,8 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -144,20 +144,27 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	var transport http.RoundTripper
 
 	if httpVersion == "3" {
-		if keepAlivePeriod == 0 {
-			keepAlivePeriod = net.QuicgoH3KeepAlivePeriod
-		}
-		if keepAlivePeriod < 0 {
-			keepAlivePeriod = 0
-		}
 		quicConfig := &quic.Config{
-			MaxIdleTimeout: net.ConnIdleTimeout,
-
+			InitialStreamReceiveWindow:     streamSettings.QuicParams.InitStreamReceiveWindow,
+			MaxStreamReceiveWindow:         streamSettings.QuicParams.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: streamSettings.QuicParams.InitConnReceiveWindow,
+			MaxConnectionReceiveWindow:     streamSettings.QuicParams.MaxConnReceiveWindow,
+			MaxIdleTimeout:                 time.Duration(streamSettings.QuicParams.MaxIdleTimeout) * time.Second,
+			KeepAlivePeriod:                time.Duration(streamSettings.QuicParams.KeepAlivePeriod) * time.Second,
+			MaxIncomingStreams:             streamSettings.QuicParams.MaxIncomingStreams,
+			DisablePathMTUDiscovery:        streamSettings.QuicParams.DisablePathMtuDiscovery,
+		}
+		if streamSettings.QuicParams.MaxIdleTimeout == 0 {
+			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout
+		}
+		if streamSettings.QuicParams.KeepAlivePeriod == 0 {
+			quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+		}
+		if streamSettings.QuicParams.MaxIncomingStreams == 0 {
 			// these two are defaults of quic-go/http3. the default of quic-go (no
 			// http3) is different, so it is hardcoded here for clarity.
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
-			MaxIncomingStreams: -1,
-			KeepAlivePeriod:    keepAlivePeriod,
+			quicConfig.MaxIncomingStreams = -1
 		}
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,
@@ -203,7 +210,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if streamSettings.QuicParams != nil {
 					switch streamSettings.QuicParams.Congestion {
 					case "force-brutal":
-						congestion.UseBrutal(quicConn, streamSettings.QuicParams.Up)
+						congestion.UseBrutal(quicConn, streamSettings.QuicParams.BrutalUp)
 					case "reno":
 						// quic-go default, do nothing
 					default:
@@ -422,7 +429,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// code relies on this behavior. Subtract 1 so that together with
 	// uploadWriter wrapper, exact size limits can be enforced
 	// uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(maxUploadSize - 1))
-	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(max(0, maxUploadSize - buf.Size)))
+	uploadPipeReader, uploadPipeWriter := pipe.New(pipe.WithSizeLimit(max(0, maxUploadSize-buf.Size)))
 
 	conn.writer = uploadWriter{
 		uploadPipeWriter,

@@ -118,8 +118,10 @@ type client struct {
 	tlsConfig      *go_tls.Config
 	socketConfig   *internet.SocketConfig
 	udpmaskManager *finalmask.UdpmaskManager
-	udpSM          *udpSessionManagerClient
-	mutex          sync.Mutex
+	quicParams     *internet.QuicParams
+
+	udpSM *udpSessionManagerClient
+	mutex sync.Mutex
 }
 
 func (c *client) status() Status {
@@ -190,21 +192,41 @@ func (c *client) dial() error {
 		}
 	}
 
+	quicConfig := &quic.Config{
+		InitialStreamReceiveWindow:     c.quicParams.InitStreamReceiveWindow,
+		MaxStreamReceiveWindow:         c.quicParams.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: c.quicParams.InitConnReceiveWindow,
+		MaxConnectionReceiveWindow:     c.quicParams.MaxConnReceiveWindow,
+		MaxIdleTimeout:                 time.Duration(c.quicParams.MaxIdleTimeout) * time.Second,
+		KeepAlivePeriod:                time.Duration(c.quicParams.KeepAlivePeriod) * time.Second,
+		DisablePathMTUDiscovery:        c.quicParams.DisablePathMtuDiscovery,
+		EnableDatagrams:                true,
+		MaxDatagramFrameSize:           MaxDatagramFrameSize,
+		DisablePathManager:             true,
+	}
+	if c.quicParams.InitStreamReceiveWindow == 0 {
+		quicConfig.InitialStreamReceiveWindow = 8388608
+	}
+	if c.quicParams.MaxStreamReceiveWindow == 0 {
+		quicConfig.InitialStreamReceiveWindow = 8388608
+	}
+	if c.quicParams.InitConnReceiveWindow == 0 {
+		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2
+	}
+	if c.quicParams.MaxConnReceiveWindow == 0 {
+		quicConfig.MaxConnectionReceiveWindow = 8388608 * 5 / 2
+	}
+	if c.quicParams.MaxIdleTimeout == 0 {
+		quicConfig.MaxIdleTimeout = 30 * time.Second
+	}
+	// if c.quicParams.KeepAlivePeriod == 0 {
+	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
+	// }
+
 	var quicConn *quic.Conn
 	rt := &http3.Transport{
 		TLSClientConfig: c.tlsConfig,
-		QUICConfig: &quic.Config{
-			InitialStreamReceiveWindow:     c.config.InitStreamReceiveWindow,
-			MaxStreamReceiveWindow:         c.config.MaxStreamReceiveWindow,
-			InitialConnectionReceiveWindow: c.config.InitConnReceiveWindow,
-			MaxConnectionReceiveWindow:     c.config.MaxConnReceiveWindow,
-			MaxIdleTimeout:                 time.Duration(c.config.MaxIdleTimeout) * time.Second,
-			KeepAlivePeriod:                time.Duration(c.config.KeepAlivePeriod) * time.Second,
-			DisablePathMTUDiscovery:        c.config.DisablePathMtuDiscovery,
-			EnableDatagrams:                true,
-			MaxDatagramFrameSize:           MaxDatagramFrameSize,
-			DisablePathManager:             true,
-		},
+		QUICConfig:      quicConfig,
 		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			qc, err := quic.DialEarly(ctx, pktConn, remote, tlsCfg, cfg)
 			if err != nil {
@@ -223,7 +245,7 @@ func (c *client) dial() error {
 		},
 		Header: http.Header{
 			RequestHeaderAuth:   []string{c.config.Auth},
-			CommonHeaderCCRX:    []string{strconv.FormatUint(c.config.Down, 10)},
+			CommonHeaderCCRX:    []string{strconv.FormatUint(c.quicParams.BrutalDown, 10)},
 			CommonHeaderPadding: []string{authRequestPadding.String()},
 		},
 	}
@@ -246,23 +268,23 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	switch c.config.Congestion {
+	switch c.quicParams.Congestion {
 	case "reno":
 		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
 		errors.LogDebug(c.ctx, "congestion bbr")
 		congestion.UseBBR(quicConn)
 	case "brutal", "":
-		if serverAuto == "auto" || c.config.Up == 0 || serverDown == 0 {
+		if serverAuto == "auto" || c.quicParams.BrutalUp == 0 || serverDown == 0 {
 			errors.LogDebug(c.ctx, "congestion bbr")
 			congestion.UseBBR(quicConn)
 		} else {
-			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.config.Up, serverDown))
-			congestion.UseBrutal(quicConn, min(c.config.Up, serverDown))
+			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.quicParams.BrutalUp, serverDown))
+			congestion.UseBrutal(quicConn, min(c.quicParams.BrutalUp, serverDown))
 		}
 	case "force-brutal":
-		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.config.Up)
-		congestion.UseBrutal(quicConn, c.config.Up)
+		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.quicParams.BrutalUp)
+		congestion.UseBrutal(quicConn, c.quicParams.BrutalUp)
 	default:
 		errors.LogDebug(c.ctx, "congestion reno")
 	}
@@ -398,6 +420,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			tlsConfig:      tlsConfig.GetTLSConfig(),
 			socketConfig:   streamSettings.SocketSettings,
 			udpmaskManager: streamSettings.UdpmaskManager,
+			quicParams:     streamSettings.QuicParams,
 		}
 		manger.m[addr] = c
 	}

@@ -515,21 +515,9 @@ type Masquerade struct {
 }
 
 type HysteriaConfig struct {
-	Version    int32     `json:"version"`
-	Auth       string    `json:"auth"`
-	Congestion string    `json:"congestion"`
-	Up         Bandwidth `json:"up"`
-	Down       Bandwidth `json:"down"`
-	UdpHop     UdpHop    `json:"udphop"`
-
-	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
-	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
-	InitConnectionReceiveWindow uint64 `json:"initConnectionReceiveWindow"`
-	MaxConnectionReceiveWindow  uint64 `json:"maxConnectionReceiveWindow"`
-	MaxIdleTimeout              int64  `json:"maxIdleTimeout"`
-	KeepAlivePeriod             int64  `json:"keepAlivePeriod"`
-	DisablePathMTUDiscovery     bool   `json:"disablePathMTUDiscovery"`
-	MaxIncomingStreams          int64  `json:"maxIncomingStreams"`
+	Version int32  `json:"version"`
+	Auth    string `json:"auth"`
+	UdpHop  UdpHop `json:"udphop"`
 
 	UdpIdleTimeout int64      `json:"udpIdleTimeout"`
 	Masquerade     Masquerade `json:"masquerade"`
@@ -538,20 +526,6 @@ type HysteriaConfig struct {
 func (c *HysteriaConfig) Build() (proto.Message, error) {
 	if c.Version != 2 {
 		return nil, errors.New("version != 2")
-	}
-
-	up, err := c.Up.Bps()
-	if err != nil {
-		return nil, err
-	}
-	down, err := c.Down.Bps()
-	if err != nil {
-		return nil, err
-	}
-
-	c.Congestion = strings.ToLower(c.Congestion)
-	if c.Congestion == "force-brutal" && up == 0 {
-		return nil, errors.New("force-brutal require up")
 	}
 
 	var hop *PortList
@@ -565,37 +539,10 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 		inertvalMax = int64(c.UdpHop.Interval.To)
 	}
 
-	if up > 0 && up < 65536 {
-		return nil, errors.New("Up must be at least 65536 bytes per second")
-	}
-	if down > 0 && down < 65536 {
-		return nil, errors.New("Down must be at least 65536 bytes per second")
-	}
 	if (inertvalMin != 0 && inertvalMin < 5) || (inertvalMax != 0 && inertvalMax < 5) {
 		return nil, errors.New("Interval must be at least 5")
 	}
 
-	if c.InitStreamReceiveWindow > 0 && c.InitStreamReceiveWindow < 16384 {
-		return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
-	}
-	if c.MaxStreamReceiveWindow > 0 && c.MaxStreamReceiveWindow < 16384 {
-		return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
-	}
-	if c.InitConnectionReceiveWindow > 0 && c.InitConnectionReceiveWindow < 16384 {
-		return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
-	}
-	if c.MaxConnectionReceiveWindow > 0 && c.MaxConnectionReceiveWindow < 16384 {
-		return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
-	}
-	if c.MaxIdleTimeout != 0 && (c.MaxIdleTimeout < 4 || c.MaxIdleTimeout > 120) {
-		return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
-	}
-	if c.KeepAlivePeriod != 0 && (c.KeepAlivePeriod < 2 || c.KeepAlivePeriod > 60) {
-		return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
-	}
-	if c.MaxIncomingStreams != 0 && c.MaxIncomingStreams < 8 {
-		return nil, errors.New("MaxIncomingStreams must be at least 8")
-	}
 	if c.UdpIdleTimeout != 0 && (c.UdpIdleTimeout < 2 || c.UdpIdleTimeout > 600) {
 		return nil, errors.New("UdpIdleTimeout must be between 2 and 600")
 	}
@@ -603,20 +550,9 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config := &hysteria.Config{}
 	config.Version = c.Version
 	config.Auth = c.Auth
-	config.Congestion = c.Congestion
-	config.Up = up
-	config.Down = down
 	config.Ports = hop.Build().Ports()
 	config.IntervalMin = inertvalMin
 	config.IntervalMax = inertvalMax
-	config.InitStreamReceiveWindow = c.InitStreamReceiveWindow
-	config.MaxStreamReceiveWindow = c.MaxStreamReceiveWindow
-	config.InitConnReceiveWindow = c.InitConnectionReceiveWindow
-	config.MaxConnReceiveWindow = c.MaxConnectionReceiveWindow
-	config.MaxIdleTimeout = c.MaxIdleTimeout
-	config.KeepAlivePeriod = c.KeepAlivePeriod
-	config.DisablePathMtuDiscovery = c.DisablePathMTUDiscovery
-	config.MaxIncomingStreams = c.MaxIncomingStreams
 	config.UdpIdleTimeout = c.UdpIdleTimeout
 	config.MasqType = c.Masquerade.Type
 	config.MasqFile = c.Masquerade.Dir
@@ -627,27 +563,6 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config.MasqStringHeaders = c.Masquerade.Headers
 	config.MasqStringStatusCode = c.Masquerade.StatusCode
 
-	if config.InitStreamReceiveWindow == 0 {
-		config.InitStreamReceiveWindow = 8388608
-	}
-	if config.MaxStreamReceiveWindow == 0 {
-		config.MaxStreamReceiveWindow = 8388608
-	}
-	if config.InitConnReceiveWindow == 0 {
-		config.InitConnReceiveWindow = 8388608 * 5 / 2
-	}
-	if config.MaxConnReceiveWindow == 0 {
-		config.MaxConnReceiveWindow = 8388608 * 5 / 2
-	}
-	if config.MaxIdleTimeout == 0 {
-		config.MaxIdleTimeout = 30
-	}
-	// if config.KeepAlivePeriod == 0 {
-	// 	config.KeepAlivePeriod = 10
-	// }
-	if config.MaxIncomingStreams == 0 {
-		config.MaxIncomingStreams = 1024
-	}
 	if config.UdpIdleTimeout == 0 {
 		config.UdpIdleTimeout = 60
 	}
@@ -718,8 +633,17 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type QuicParamsConfig struct {
-	Congestion string    `json:"congestion"`
-	Up         Bandwidth `json:"up"`
+	Congestion                  string    `json:"congestion"`
+	BrutalUp                    Bandwidth `json:"brutalUp"`
+	BrutalDown                  Bandwidth `json:"brutalDown"`
+	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
+	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
+	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
+	MaxConnectionReceiveWindow  uint64    `json:"maxConnectionReceiveWindow"`
+	MaxIdleTimeout              int64     `json:"maxIdleTimeout"`
+	KeepAlivePeriod             int64     `json:"keepAlivePeriod"`
+	DisablePathMTUDiscovery     bool      `json:"disablePathMTUDiscovery"`
+	MaxIncomingStreams          int64     `json:"maxIncomingStreams"`
 }
 
 type TLSConfig struct {
@@ -1595,13 +1519,23 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
 		}
 		if c.FinalMask.QuicParams != nil {
-			up, err := c.FinalMask.QuicParams.Up.Bps()
+			up, err := c.FinalMask.QuicParams.BrutalUp.Bps()
 			if err != nil {
 				return nil, err
 			}
-			if up > 0 && up < 65536 {
-				return nil, errors.New("Up must be at least 65536 bytes per second")
+			down, err := c.FinalMask.QuicParams.BrutalDown.Bps()
+			if err != nil {
+				return nil, err
 			}
+
+			if up > 0 && up < 65536 {
+				return nil, errors.New("BrutalUp must be at least 65536 bytes per second")
+			}
+			if down > 0 && down < 65536 {
+				return nil, errors.New("BrutalDown must be at least 65536 bytes per second")
+			}
+
+			c.FinalMask.QuicParams.Congestion = strings.ToLower(c.FinalMask.QuicParams.Congestion)
 			switch c.FinalMask.QuicParams.Congestion {
 			case "", "bbr", "reno":
 			case "force-brutal":
@@ -1611,9 +1545,41 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			default:
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: bbr, reno, force-brutal")
 			}
+
+			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
+				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
+			}
+			if c.FinalMask.QuicParams.MaxStreamReceiveWindow > 0 && c.FinalMask.QuicParams.MaxStreamReceiveWindow < 16384 {
+				return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
+			}
+			if c.FinalMask.QuicParams.InitConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.InitConnectionReceiveWindow < 16384 {
+				return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
+			}
+			if c.FinalMask.QuicParams.MaxConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.MaxConnectionReceiveWindow < 16384 {
+				return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
+			}
+			if c.FinalMask.QuicParams.MaxIdleTimeout != 0 && (c.FinalMask.QuicParams.MaxIdleTimeout < 4 || c.FinalMask.QuicParams.MaxIdleTimeout > 120) {
+				return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
+			}
+			if c.FinalMask.QuicParams.KeepAlivePeriod != 0 && (c.FinalMask.QuicParams.KeepAlivePeriod < 2 || c.FinalMask.QuicParams.KeepAlivePeriod > 60) {
+				return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
+			}
+			if c.FinalMask.QuicParams.MaxIncomingStreams != 0 && c.FinalMask.QuicParams.MaxIncomingStreams < 8 {
+				return nil, errors.New("MaxIncomingStreams must be at least 8")
+			}
+
 			config.QuicParams = &internet.QuicParams{
-				Congestion: c.FinalMask.QuicParams.Congestion,
-				Up:         up,
+				Congestion:              c.FinalMask.QuicParams.Congestion,
+				BrutalUp:                up,
+				BrutalDown:              down,
+				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
+				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,
+				InitConnReceiveWindow:   c.FinalMask.QuicParams.InitConnectionReceiveWindow,
+				MaxConnReceiveWindow:    c.FinalMask.QuicParams.MaxConnectionReceiveWindow,
+				MaxIdleTimeout:          c.FinalMask.QuicParams.MaxIdleTimeout,
+				KeepAlivePeriod:         c.FinalMask.QuicParams.KeepAlivePeriod,
+				DisablePathMtuDiscovery: c.FinalMask.QuicParams.DisablePathMTUDiscovery,
+				MaxIncomingStreams:      c.FinalMask.QuicParams.MaxIncomingStreams,
 			}
 		}
 	}
