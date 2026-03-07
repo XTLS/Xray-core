@@ -30,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
+	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
@@ -1314,6 +1315,7 @@ var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
+		"sudoku":        func() interface{} { return new(Sudoku) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -1328,6 +1330,7 @@ var (
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"noise":            func() interface{} { return new(NoiseMask) },
 		"salamander":       func() interface{} { return new(Salamander) },
+		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
 	}, "type", "settings")
@@ -1634,6 +1637,50 @@ func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
+}
+
+type Sudoku struct {
+	Password string `json:"password"`
+	ASCII    string `json:"ascii"`
+
+	CustomTable       string   `json:"customTable"`
+	LegacyCustomTable string   `json:"custom_table"`
+	CustomTables      []string `json:"customTables"`
+	LegacyCustomSets  []string `json:"custom_tables"`
+
+	PaddingMin       uint32 `json:"paddingMin"`
+	LegacyPaddingMin uint32 `json:"padding_min"`
+	PaddingMax       uint32 `json:"paddingMax"`
+	LegacyPaddingMax uint32 `json:"padding_max"`
+}
+
+func (c *Sudoku) Build() (proto.Message, error) {
+	customTable := c.CustomTable
+	if customTable == "" {
+		customTable = c.LegacyCustomTable
+	}
+	customTables := c.CustomTables
+	if len(customTables) == 0 {
+		customTables = c.LegacyCustomSets
+	}
+
+	paddingMin := c.PaddingMin
+	if paddingMin == 0 {
+		paddingMin = c.LegacyPaddingMin
+	}
+	paddingMax := c.PaddingMax
+	if paddingMax == 0 {
+		paddingMax = c.LegacyPaddingMax
+	}
+
+	return &finalsudoku.Config{
+		Password:     c.Password,
+		Ascii:        c.ASCII,
+		CustomTable:  customTable,
+		CustomTables: customTables,
+		PaddingMin:   paddingMin,
+		PaddingMax:   paddingMax,
+	}, nil
 }
 
 type Xdns struct {
