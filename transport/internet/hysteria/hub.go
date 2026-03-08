@@ -14,6 +14,7 @@ import (
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
+	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -229,6 +230,10 @@ func (h *httpHandler) ProxyStreamHijacker(ft http3.FrameType, stream *quic.Strea
 
 	switch ft {
 	case FrameTypeTCPRequest:
+		if _, err := quicvarint.Read(quicvarint.NewReader(stream)); err != nil {
+			return false, err
+		}
+
 		h.addConn(&interConn{
 			stream: stream,
 			local:  h.conn.LocalAddr(),
@@ -396,7 +401,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
 	if quicParams.MaxStreamReceiveWindow == 0 {
-		quicConfig.InitialStreamReceiveWindow = 8388608
+		quicConfig.MaxStreamReceiveWindow = 8388608
 	}
 	if quicParams.InitConnReceiveWindow == 0 {
 		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2

@@ -234,7 +234,7 @@ func (c *client) dial() error {
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
 	if quicParams.MaxStreamReceiveWindow == 0 {
-		quicConfig.InitialStreamReceiveWindow = 8388608
+		quicConfig.MaxStreamReceiveWindow = 8388608
 	}
 	if quicParams.InitConnReceiveWindow == 0 {
 		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2
