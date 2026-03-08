@@ -223,7 +223,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.masqHandler.ServeHTTP(w, r)
 }
 
-func (h *httpHandler) ProxyStreamHijacker(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
+func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
 	if err != nil || !h.auth {
 		return false, nil
 	}
@@ -272,7 +272,7 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 	}
 	h3 := http3.Server{
 		Handler:          handler,
-		StreamDispatcher: handler.ProxyStreamHijacker,
+		StreamDispatcher: handler.StreamDispatcher,
 	}
 	err := h3.ServeQUICConn(conn)
 	_ = conn.CloseWithError(closeErrCodeOK, "")

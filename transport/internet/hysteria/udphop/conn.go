@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
 	packetQueueSize = 1024
-	udpBufferSize   = 2048 // QUIC packets are at most 1500 bytes long, so 2k should be more than enough
+	udpBufferSize   = finalmask.UDPSize
 
 	defaultHopInterval = 30 * time.Second
 )
