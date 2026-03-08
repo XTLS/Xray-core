@@ -393,6 +393,7 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	raw, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
 		errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
+		raw.Close()
 		return nil, errors.New()
 	}
 
@@ -405,9 +406,11 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 		pktConn = conn
 	case *cnc.Connection:
 		errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level")
+		raw.Close()
 		return nil, errors.New()
 	default:
 		errors.LogDebug(context.Background(), "skip hop: unknown conn ", reflect.TypeOf(conn))
+		raw.Close()
 		return nil, errors.New()
 	}
 

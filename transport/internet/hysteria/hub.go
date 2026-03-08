@@ -270,8 +270,8 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		StreamHijacker: handler.ProxyStreamHijacker,
 	}
 	err := h3.ServeQUICConn(conn)
-	errors.LogDebug(context.Background(), conn.RemoteAddr(), " disconnected with err ", err)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
+	errors.LogDebug(context.Background(), conn.RemoteAddr(), " disconnected with err ", err)
 }
 
 func (l *Listener) keepAccepting() {
