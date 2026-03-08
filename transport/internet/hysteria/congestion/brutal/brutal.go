@@ -2,8 +2,6 @@ package brutal
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/common"
@@ -18,7 +16,6 @@ const (
 	minAckRate                 = 0.8
 	congestionWindowMultiplier = 2
 
-	debugEnv           = "HYSTERIA_BRUTAL_DEBUG"
 	debugPrintInterval = 2
 )
 
@@ -43,13 +40,12 @@ type pktInfo struct {
 	LossCount uint64
 }
 
-func NewBrutalSender(bps uint64) *BrutalSender {
-	debug, _ := strconv.ParseBool(os.Getenv(debugEnv))
+func NewBrutalSender(debugLog bool, bps uint64) *BrutalSender {
 	bs := &BrutalSender{
 		bps:             congestion.ByteCount(bps),
 		maxDatagramSize: congestion.InitialPacketSize,
 		ackRate:         1,
-		debug:           debug,
+		debug:           debugLog,
 	}
 	bs.pacer = common.NewPacer(func() congestion.ByteCount {
 		return congestion.ByteCount(float64(bs.bps) / bs.ackRate)
@@ -88,6 +84,7 @@ func (b *BrutalSender) GetCongestionWindow() congestion.ByteCount {
 func (b *BrutalSender) OnPacketSent(sentTime monotime.Time, bytesInFlight congestion.ByteCount,
 	packetNumber congestion.PacketNumber, bytes congestion.ByteCount, isRetransmittable bool,
 ) {
+	fmt.Println("brutal OnPacketSent")
 	b.pacer.SentPacket(sentTime, bytes)
 }
 

@@ -628,6 +628,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 
 type QuicParamsConfig struct {
 	Congestion                  string    `json:"congestion"`
+	CongestionDebugLog          bool      `json:"congestionDebugLog"`
 	BrutalUp                    Bandwidth `json:"brutalUp"`
 	BrutalDown                  Bandwidth `json:"brutalDown"`
 	UdpHop                      UdpHop    `json:"udphop"`
@@ -1898,9 +1899,10 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			}
 
 			config.QuicParams = &internet.QuicParams{
-				Congestion: c.FinalMask.QuicParams.Congestion,
-				BrutalUp:   up,
-				BrutalDown: down,
+				Congestion:         c.FinalMask.QuicParams.Congestion,
+				CongestionDebugLog: c.FinalMask.QuicParams.CongestionDebugLog,
+				BrutalUp:           up,
+				BrutalDown:         down,
 				UdpHop: &internet.UdpHop{
 					Ports:       hop.Build().Ports(),
 					IntervalMin: inertvalMin,

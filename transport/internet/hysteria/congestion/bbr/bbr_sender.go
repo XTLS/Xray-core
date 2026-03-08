@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/apernet/quic-go/congestion"
@@ -40,8 +38,6 @@ const (
 	derivedHighGain = 2.773
 	// The newly derived CWND gain for STARTUP, 2.
 	derivedHighCWNDGain = 2.0
-
-	debugEnv = "HYSTERIA_BBR_DEBUG"
 )
 
 // The cycle of gains used during the PROBE_BW stage.
@@ -249,10 +245,12 @@ type bbrSender struct {
 var _ congestion.CongestionControl = &bbrSender{}
 
 func NewBbrSender(
+	debugLog bool,
 	clock Clock,
 	initialMaxDatagramSize congestion.ByteCount,
 ) *bbrSender {
 	return newBbrSender(
+		debugLog,
 		clock,
 		initialMaxDatagramSize,
 		initialCongestionWindowPackets*initialMaxDatagramSize,
@@ -261,12 +259,12 @@ func NewBbrSender(
 }
 
 func newBbrSender(
+	debugLog bool,
 	clock Clock,
 	initialMaxDatagramSize,
 	initialCongestionWindow,
 	initialMaxCongestionWindow congestion.ByteCount,
 ) *bbrSender {
-	debug, _ := strconv.ParseBool(os.Getenv(debugEnv))
 	b := &bbrSender{
 		clock:                        clock,
 		mode:                         bbrModeStartup,
@@ -292,7 +290,7 @@ func newBbrSender(
 		cwndToCalculateMinPacingRate:                     initialCongestionWindow,
 		maxCongestionWindowWithNetworkParametersAdjusted: initialMaxCongestionWindow,
 		maxDatagramSize: initialMaxDatagramSize,
-		debug:           debug,
+		debug:           debugLog,
 	}
 	b.pacer = common.NewPacer(b.bandwidthForPacer)
 
@@ -331,6 +329,7 @@ func (b *bbrSender) OnPacketSent(
 	bytes congestion.ByteCount,
 	isRetransmittable bool,
 ) {
+	fmt.Println("bbr OnPacketSent")
 	b.pacer.SentPacket(sentTime, bytes)
 
 	b.lastSentPacket = packetNumber

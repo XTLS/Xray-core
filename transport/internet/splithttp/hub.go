@@ -508,11 +508,13 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 				switch quicParams.Congestion {
 				case "force-brutal":
-					congestion.UseBrutal(conn, quicParams.BrutalUp)
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
+					congestion.UseBrutal(quicParams.CongestionDebugLog, conn, quicParams.BrutalUp)
 				case "reno":
-					// quic-go default, do nothing
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion reno")
 				default:
-					congestion.UseBBR(conn)
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr")
+					congestion.UseBBR(quicParams.CongestionDebugLog, conn)
 				}
 
 				go func() {

@@ -182,18 +182,18 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			case "bbr":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-				congestion.UseBBR(h.conn)
+				congestion.UseBBR(h.quicParams.CongestionDebugLog, h.conn)
 			case "brutal", "":
 				if h.quicParams.BrutalUp == 0 || clientDown == 0 {
 					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(h.conn)
+					congestion.UseBBR(h.quicParams.CongestionDebugLog, h.conn)
 				} else {
 					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", min(h.quicParams.BrutalUp, clientDown))
-					congestion.UseBrutal(h.conn, min(h.quicParams.BrutalUp, clientDown))
+					congestion.UseBrutal(h.quicParams.CongestionDebugLog, h.conn, min(h.quicParams.BrutalUp, clientDown))
 				}
 			case "force-brutal":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", h.quicParams.BrutalUp)
-				congestion.UseBrutal(h.conn, h.quicParams.BrutalUp)
+				congestion.UseBrutal(h.quicParams.CongestionDebugLog, h.conn, h.quicParams.BrutalUp)
 			default:
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			}

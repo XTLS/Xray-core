@@ -287,11 +287,13 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				switch quicParams.Congestion {
 				case "force-brutal":
-					congestion.UseBrutal(quicConn, quicParams.BrutalUp)
+					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
+					congestion.UseBrutal(quicParams.CongestionDebugLog, quicConn, quicParams.BrutalUp)
 				case "reno":
-					// quic-go default, do nothing
+					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
 				default:
-					congestion.UseBBR(quicConn)
+					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
+					congestion.UseBBR(quicParams.CongestionDebugLog, quicConn)
 				}
 
 				return quicConn, nil
