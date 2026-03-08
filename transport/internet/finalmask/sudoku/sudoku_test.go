@@ -372,9 +372,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 								Settings: serial.ToTypedMessage(&hytransport.Config{
 									Version:        2,
 									Auth:           auth,
-									Congestion:     "bbr",
-									Up:             10 * 1024 * 1024,
-									Down:           10 * 1024 * 1024,
 									UdpIdleTimeout: 60,
 								}),
 							},
@@ -438,9 +435,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 								Settings: serial.ToTypedMessage(&hytransport.Config{
 									Version:        2,
 									Auth:           auth,
-									Congestion:     "bbr",
-									Up:             10 * 1024 * 1024,
-									Down:           10 * 1024 * 1024,
 									UdpIdleTimeout: 60,
 								}),
 							},
