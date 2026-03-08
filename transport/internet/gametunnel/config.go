@@ -169,7 +169,14 @@ func (c *Config) GetMaxPayloadSize() uint32 {
 		maxPaddingOverhead = c.PaddingMaxSize + 2
 	}
 
-	maxTotal := c.MTU - headerSize - authTagSize - maxPaddingOverhead
+	overhead := headerSize + authTagSize + maxPaddingOverhead
+
+	// Защита от underflow: если overhead >= MTU, возвращаем минимум
+	if overhead >= c.MTU {
+		return 256
+	}
+
+	maxTotal := c.MTU - overhead
 	if maxTotal > 1200 {
 		maxTotal = 1200
 	}

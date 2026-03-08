@@ -295,7 +295,10 @@ func (c *GameTunnelConn) Close() error {
 	closePkt := NewControlPacket(c.session.ID, pktNum, closePayload)
 	data, err := closePkt.Marshal(c.config)
 	if err == nil {
-		c.hub.conn.WriteToUDP(data, c.session.RemoteAddr)
+		wrapped, wErr := c.hub.obfs.Wrap(data)
+		if wErr == nil {
+			c.hub.conn.WriteToUDP(wrapped, c.session.RemoteAddr)
+		}
 	}
 
 	// Удаляем сессию

@@ -17,10 +17,15 @@ import (
 // отправку игрового пакета, увеличивая пинг.
 //
 // PriorityQueue решает это:
-//   - Пакеты классифицируются по размеру и частоте
+//   - Пакеты классифицируются по размеру
 //   - Игровые пакеты (маленькие, частые) уходят первыми
 //   - Загрузки (большие) отправляются в промежутках
 //   - Стриминг получает средний приоритет
+//
+// Реализация на ring buffer + mutex (вместо каналов):
+//   - Безопасный Peek() без извлечения (для starvation check)
+//   - Нет race condition при checkStarvation
+//   - Нет потери пакетов
 //
 // Три уровня приоритета:
 //   0 (High)   - игры, VoIP, DNS (< 256 байт)
@@ -67,10 +72,66 @@ type PriorityPacket struct {
 	Session *Session
 }
 
+// ====================================================================
+// Ring Buffer - кольцевой буфер для одного уровня приоритета
+// ====================================================================
+
+type priorityRing struct {
+	buf  []*PriorityPacket
+	head int
+	tail int
+	size int
+	cap  int
+}
+
+func newPriorityRing(capacity int) *priorityRing {
+	return &priorityRing{
+		buf: make([]*PriorityPacket, capacity),
+		cap: capacity,
+	}
+}
+
+func (r *priorityRing) Len() int {
+	return r.size
+}
+
+func (r *priorityRing) Push(pkt *PriorityPacket) bool {
+	if r.size == r.cap {
+		return false
+	}
+	r.buf[r.tail] = pkt
+	r.tail = (r.tail + 1) % r.cap
+	r.size++
+	return true
+}
+
+func (r *priorityRing) Pop() *PriorityPacket {
+	if r.size == 0 {
+		return nil
+	}
+	pkt := r.buf[r.head]
+	r.buf[r.head] = nil // prevent memory leak
+	r.head = (r.head + 1) % r.cap
+	r.size--
+	return pkt
+}
+
+// Peek возвращает головной элемент БЕЗ извлечения - безопасная операция
+func (r *priorityRing) Peek() *PriorityPacket {
+	if r.size == 0 {
+		return nil
+	}
+	return r.buf[r.head]
+}
+
+// ====================================================================
+// PriorityQueue
+// ====================================================================
+
 // PriorityQueue - очередь с приоритизацией
 type PriorityQueue struct {
 	// queues - три очереди по приоритетам
-	queues [PriorityLevels]chan *PriorityPacket
+	queues [PriorityLevels]*priorityRing
 
 	// mode - режим приоритизации
 	mode PriorityMode
@@ -85,7 +146,7 @@ type PriorityQueue struct {
 	// Если пакет ждёт дольше - его приоритет повышается
 	starvationTimeout time.Duration
 
-	mu sync.RWMutex
+	mu sync.Mutex
 }
 
 // NewPriorityQueue создаёт новую очередь с приоритизацией
@@ -95,9 +156,9 @@ func NewPriorityQueue(mode PriorityMode) *PriorityQueue {
 		starvationTimeout: 500 * time.Millisecond, // 500ms starvation guard
 	}
 
-	pq.queues[PriorityHigh] = make(chan *PriorityPacket, HighQueueSize)
-	pq.queues[PriorityMedium] = make(chan *PriorityPacket, MediumQueueSize)
-	pq.queues[PriorityLow] = make(chan *PriorityPacket, LowQueueSize)
+	pq.queues[PriorityHigh] = newPriorityRing(HighQueueSize)
+	pq.queues[PriorityMedium] = newPriorityRing(MediumQueueSize)
+	pq.queues[PriorityLow] = newPriorityRing(LowQueueSize)
 
 	return pq
 }
@@ -113,22 +174,23 @@ func (pq *PriorityQueue) Enqueue(data []byte, session *Session) bool {
 		Session:    session,
 	}
 
-	// Пытаемся добавить в соответствующую очередь
-	select {
-	case pq.queues[priority] <- pkt:
-		pq.updateEnqueueStats(priority)
-		return true
-	default:
-		// Очередь полна
-		// Для High-priority: пытаемся вытеснить из Low
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	ok := pq.queues[priority].Push(pkt)
+	if !ok {
+		// Очередь полна - для High-priority пытаемся вытеснить Low
 		if priority == PriorityHigh {
-			return pq.tryBump(pkt)
+			ok = pq.tryBumpLocked(pkt)
 		}
-		pq.mu.Lock()
-		pq.dropped++
-		pq.mu.Unlock()
-		return false
+		if !ok {
+			pq.dropped++
+			return false
+		}
 	}
+
+	pq.updateStatsLocked(priority)
+	return true
 }
 
 // EnqueueWithPriority добавляет пакет с явно указанным приоритетом
@@ -144,51 +206,45 @@ func (pq *PriorityQueue) EnqueueWithPriority(data []byte, priority PriorityLevel
 		Session:    session,
 	}
 
-	select {
-	case pq.queues[priority] <- pkt:
-		pq.updateEnqueueStats(priority)
-		return true
-	default:
-		pq.mu.Lock()
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	ok := pq.queues[priority].Push(pkt)
+	if !ok {
 		pq.dropped++
-		pq.mu.Unlock()
 		return false
 	}
+
+	pq.updateStatsLocked(priority)
+	return true
 }
 
-// Dequeue извлекает следующий пакет для отправки
-// Приоритет: High → Medium → Low
-// С защитой от starvation: если пакет в Low ждёт > starvationTimeout,
-// он обрабатывается раньше Medium
+// Dequeue извлекает следующий пакет для отправки (non-blocking).
+// Приоритет: High → (starvation check Low) → Medium → Low
 func (pq *PriorityQueue) Dequeue() *PriorityPacket {
-	// Всегда сначала проверяем High-priority
-	select {
-	case pkt := <-pq.queues[PriorityHigh]:
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	// Всегда сначала High
+	if pkt := pq.queues[PriorityHigh].Pop(); pkt != nil {
 		return pkt
-	default:
 	}
 
-	// Проверяем starvation в Low-priority
-	if pq.checkStarvation(PriorityLow) {
-		select {
-		case pkt := <-pq.queues[PriorityLow]:
-			return pkt
-		default:
+	// Starvation check: безопасный Peek() - НЕ извлекаем пакет
+	if lowHead := pq.queues[PriorityLow].Peek(); lowHead != nil {
+		if time.Since(lowHead.EnqueuedAt) > pq.starvationTimeout {
+			return pq.queues[PriorityLow].Pop()
 		}
 	}
 
-	// Medium-priority
-	select {
-	case pkt := <-pq.queues[PriorityMedium]:
+	// Medium
+	if pkt := pq.queues[PriorityMedium].Pop(); pkt != nil {
 		return pkt
-	default:
 	}
 
-	// Low-priority
-	select {
-	case pkt := <-pq.queues[PriorityLow]:
+	// Low
+	if pkt := pq.queues[PriorityLow].Pop(); pkt != nil {
 		return pkt
-	default:
 	}
 
 	return nil
@@ -198,21 +254,12 @@ func (pq *PriorityQueue) Dequeue() *PriorityPacket {
 // Используется в основном цикле отправки
 func (pq *PriorityQueue) DequeueBlocking() *PriorityPacket {
 	for {
-		// Non-blocking проверка всех очередей по приоритету
 		pkt := pq.Dequeue()
 		if pkt != nil {
 			return pkt
 		}
-
-		// Блокирующее ожидание любого пакета
-		select {
-		case pkt := <-pq.queues[PriorityHigh]:
-			return pkt
-		case pkt := <-pq.queues[PriorityMedium]:
-			return pkt
-		case pkt := <-pq.queues[PriorityLow]:
-			return pkt
-		}
+		// Короткий sleep вместо busy-wait
+		time.Sleep(100 * time.Microsecond)
 	}
 }
 
@@ -233,18 +280,14 @@ func (pq *PriorityQueue) classify(data []byte) PriorityLevel {
 func (pq *PriorityQueue) classifyGaming(data []byte) PriorityLevel {
 	size := len(data)
 
-	// Маленькие пакеты - скорее всего игры, VoIP, DNS
-	// Игровые пакеты обычно 20-200 байт, 20-60 pps
 	if size <= HighPriorityMaxSize {
 		return PriorityHigh
 	}
 
-	// Средние пакеты - веб-трафик, небольшие загрузки
 	if size <= MediumPriorityMaxSize {
 		return PriorityMedium
 	}
 
-	// Большие пакеты - загрузки, стриминг, обновления
 	return PriorityLow
 }
 
@@ -253,8 +296,6 @@ func (pq *PriorityQueue) classifyGaming(data []byte) PriorityLevel {
 func (pq *PriorityQueue) classifyStreaming(data []byte) PriorityLevel {
 	size := len(data)
 
-	// Для стриминга: аудио/видео пакеты обычно 500-1400 байт
-	// Маленькие пакеты (сигналинг) тоже важны
 	if size <= HighPriorityMaxSize {
 		return PriorityHigh // Сигналинг, контроль
 	}
@@ -266,67 +307,27 @@ func (pq *PriorityQueue) classifyStreaming(data []byte) PriorityLevel {
 	return PriorityMedium // Большие чанки - средний
 }
 
-// tryBump пытается вытеснить Low-priority пакет ради High-priority
-func (pq *PriorityQueue) tryBump(highPkt *PriorityPacket) bool {
-	// Пытаемся забрать из Low
-	select {
-	case <-pq.queues[PriorityLow]:
-		// Освободили место, но кладём в High
-		pq.mu.Lock()
-		pq.dropped++ // Low-priority пакет потерян
-		pq.mu.Unlock()
-	default:
-		// Low тоже пуста - пытаемся Medium
-		select {
-		case <-pq.queues[PriorityMedium]:
-			pq.mu.Lock()
-			pq.dropped++
-			pq.mu.Unlock()
-		default:
-			// Все очереди полны - дропаем
-			pq.mu.Lock()
-			pq.dropped++
-			pq.mu.Unlock()
-			return false
-		}
+// tryBumpLocked вытесняет Low-priority пакет ради High-priority.
+// Вызывается под mu.Lock. Не трогает Medium.
+func (pq *PriorityQueue) tryBumpLocked(highPkt *PriorityPacket) bool {
+	// Забираем из Low
+	dropped := pq.queues[PriorityLow].Pop()
+	if dropped == nil {
+		return false
 	}
+	pq.dropped++
 
-	// Теперь в High должно быть место
-	select {
-	case pq.queues[PriorityHigh] <- highPkt:
-		pq.updateEnqueueStats(PriorityHigh)
+	// Кладём high-priority пакет в High очередь
+	if ok := pq.queues[PriorityHigh].Push(highPkt); ok {
 		return true
-	default:
-		pq.mu.Lock()
-		pq.dropped++
-		pq.mu.Unlock()
-		return false
 	}
+
+	// Не удалось - edge case
+	pq.dropped++
+	return false
 }
 
-// checkStarvation проверяет, не голодает ли очередь
-func (pq *PriorityQueue) checkStarvation(level PriorityLevel) bool {
-	// Peek в очередь без извлечения
-	select {
-	case pkt := <-pq.queues[level]:
-		isStarving := time.Since(pkt.EnqueuedAt) > pq.starvationTimeout
-		// Возвращаем пакет обратно
-		select {
-		case pq.queues[level] <- pkt:
-		default:
-			// Не удалось вернуть - очередь переполнена, дропаем
-		}
-		return isStarving
-	default:
-		return false
-	}
-}
-
-// updateEnqueueStats обновляет статистику
-func (pq *PriorityQueue) updateEnqueueStats(level PriorityLevel) {
-	pq.mu.Lock()
-	defer pq.mu.Unlock()
-
+func (pq *PriorityQueue) updateStatsLocked(level PriorityLevel) {
 	switch level {
 	case PriorityHigh:
 		pq.enqueuedHigh++
@@ -339,13 +340,13 @@ func (pq *PriorityQueue) updateEnqueueStats(level PriorityLevel) {
 
 // GetStats возвращает статистику очереди
 func (pq *PriorityQueue) GetStats() PriorityQueueStats {
-	pq.mu.RLock()
-	defer pq.mu.RUnlock()
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
 
 	return PriorityQueueStats{
-		HighQueued:     len(pq.queues[PriorityHigh]),
-		MediumQueued:   len(pq.queues[PriorityMedium]),
-		LowQueued:      len(pq.queues[PriorityLow]),
+		HighQueued:     pq.queues[PriorityHigh].Len(),
+		MediumQueued:   pq.queues[PriorityMedium].Len(),
+		LowQueued:      pq.queues[PriorityLow].Len(),
 		TotalEnqueued:  pq.enqueuedHigh + pq.enqueuedMedium + pq.enqueuedLow,
 		HighEnqueued:   pq.enqueuedHigh,
 		MediumEnqueued: pq.enqueuedMedium,
@@ -368,12 +369,6 @@ type PriorityQueueStats struct {
 
 // ====================================================================
 // Bandwidth Estimator - оценка пропускной способности
-// ====================================================================
-//
-// Для адаптивной приоритизации полезно знать текущую
-// пропускную способность канала. Если канал перегружен -
-// агрессивнее приоритизируем. Если свободен - пропускаем всё.
-//
 // ====================================================================
 
 // BandwidthEstimator оценивает текущую пропускную способность
@@ -423,7 +418,6 @@ func (be *BandwidthEstimator) RecordBytes(n uint64) {
 }
 
 // GetEstimate возвращает текущую оценку пропускной способности (байт/сек)
-// Используется скользящее среднее по последним замерам
 func (be *BandwidthEstimator) GetEstimate() float64 {
 	be.mu.Lock()
 	defer be.mu.Unlock()
@@ -446,8 +440,6 @@ func (be *BandwidthEstimator) GetEstimateMbps() float64 {
 }
 
 // IsCongestedBy проверяет, перегружен ли канал
-// threshold - порог использования (0.0-1.0)
-// maxBandwidth - максимальная ожидаемая пропускная способность (байт/сек)
 func (be *BandwidthEstimator) IsCongestedBy(threshold float64, maxBandwidth float64) bool {
 	estimate := be.GetEstimate()
 	if maxBandwidth <= 0 {

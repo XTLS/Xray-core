@@ -44,8 +44,8 @@ func parseURL(raw string) (httpURL, socketPath string) {
 // transport/internet/system_listener.go.
 //
 // For abstract sockets (prefix @) on Linux/Android:
-//   - single @ — used as-is (lock-free abstract socket)
-//   - double @@ — stripped to single @ and padded to
+//   - single @ - used as-is (lock-free abstract socket)
+//   - double @@ - stripped to single @ and padded to
 //     syscall.RawSockaddrUnix{}.Path length (HAProxy compat)
 func resolveSocketPath(path string) string {
 	if len(path) == 0 || path[0] != '@' {

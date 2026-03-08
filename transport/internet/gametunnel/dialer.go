@@ -44,6 +44,9 @@ type GameTunnelClientConn struct {
 	// session - клиентская сессия
 	session *ClientSession
 
+	// obfs - обфускатор трафика
+	obfs Obfuscator
+
 	// done - сигнал завершения
 	done *done.Instance
 
@@ -52,6 +55,10 @@ type GameTunnelClientConn struct {
 	readOffset int
 
 	closed int32
+
+	// closeCh - сигнал закрытия для горутин (безопаснее чем close(inbound))
+	closeCh chan struct{}
+
 	mu     sync.Mutex
 }
 
@@ -68,6 +75,9 @@ type ClientSession struct {
 
 	// RecvPacketNum - счётчик входящих пакетов
 	RecvPacketNum uint32
+
+	// ReplayWindow - защита от replay-атак
+	ReplayWindow *ReplayWindow
 
 	// inbound - канал входящих расшифрованных данных
 	inbound chan []byte
@@ -107,8 +117,11 @@ func Dial(ctx context.Context, dest xnet.Destination, streamSettings *internet.M
 	conn.SetReadBuffer(4 * 1024 * 1024)
 	conn.SetWriteBuffer(4 * 1024 * 1024)
 
+	// Создаём обфускатор
+	obfs := NewObfuscator(config.Obfuscation, config)
+
 	// Выполняем хэндшейк
-	clientSession, err := performHandshake(conn, config)
+	clientSession, err := performHandshake(conn, config, obfs)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("handshake failed: %w", err)
@@ -119,7 +132,9 @@ func Dial(ctx context.Context, dest xnet.Destination, streamSettings *internet.M
 		conn:    conn,
 		config:  config,
 		session: clientSession,
+		obfs:    obfs,
 		done:    done.New(),
+		closeCh: make(chan struct{}),
 	}
 
 	// Запускаем горутину приёма пакетов
@@ -129,7 +144,7 @@ func Dial(ctx context.Context, dest xnet.Destination, streamSettings *internet.M
 }
 
 // performHandshake выполняет хэндшейк с сервером
-func performHandshake(conn *net.UDPConn, config *Config) (*ClientSession, error) {
+func performHandshake(conn *net.UDPConn, config *Config, obfs Obfuscator) (*ClientSession, error) {
 	// 1. Генерируем пару ключей
 	keyPair, err := GenerateKeyPair()
 	if err != nil {
@@ -154,8 +169,13 @@ func performHandshake(conn *net.UDPConn, config *Config) (*ClientSession, error)
 		return nil, fmt.Errorf("marshal client hello: %w", err)
 	}
 
-	// 4. Отправляем Client Hello
-	_, err = conn.Write(clientHelloData)
+	// 4. Обфусцируем и отправляем Client Hello
+	wrapped, err := obfs.Wrap(clientHelloData)
+	if err != nil {
+		return nil, fmt.Errorf("wrap client hello: %w", err)
+	}
+
+	_, err = conn.Write(wrapped)
 	if err != nil {
 		return nil, fmt.Errorf("send client hello: %w", err)
 	}
@@ -173,8 +193,13 @@ func performHandshake(conn *net.UDPConn, config *Config) (*ClientSession, error)
 	// Сбрасываем дедлайн
 	conn.SetReadDeadline(time.Time{})
 
-	// 6. Парсим Server Hello
-	serverHelloPkt, err := Unmarshal(buf[:n], int(config.ConnectionIdLength))
+	// 6. Деобфусцируем и парсим Server Hello
+	unwrapped, err := obfs.Unwrap(buf[:n])
+	if err != nil {
+		return nil, fmt.Errorf("unwrap server hello: %w", err)
+	}
+
+	serverHelloPkt, err := Unmarshal(unwrapped, int(config.ConnectionIdLength))
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal server hello: %w", err)
 	}
@@ -205,6 +230,7 @@ func performHandshake(conn *net.UDPConn, config *Config) (*ClientSession, error)
 		ConnectionID:  connID,
 		Keys:          sessionKeys,
 		SendPacketNum: 1, // 0 использован для Client Hello
+		ReplayWindow:  NewReplayWindow(),
 		inbound:       make(chan []byte, 256),
 	}
 
@@ -249,8 +275,14 @@ func (c *GameTunnelClientConn) receiveLoop() {
 }
 
 // handlePacket обрабатывает входящий пакет от сервера
-func (c *GameTunnelClientConn) handlePacket(data []byte) {
-	if !IsQUICLike(data[0]) {
+func (c *GameTunnelClientConn) handlePacket(rawData []byte) {
+	// Деобфусцируем входящий пакет
+	data, err := c.obfs.Unwrap(rawData)
+	if err != nil {
+		return
+	}
+
+	if len(data) == 0 || !IsQUICLike(data[0]) {
 		return
 	}
 
@@ -279,6 +311,11 @@ func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
 		return
 	}
 
+	// Anti-replay: проверяем что пакет не дубликат
+	if c.session.ReplayWindow != nil && !c.session.ReplayWindow.Check(pkt.PacketNumber) {
+		return
+	}
+
 	// Additional data - заголовок пакета
 	connIDLen := int(c.config.ConnectionIdLength)
 	adLen := FlagsSize + VersionSize + connIDLen
@@ -296,13 +333,13 @@ func (c *GameTunnelClientConn) handleDataPacket(data []byte) {
 	// Обновляем счётчик
 	atomic.StoreUint32(&c.session.RecvPacketNum, pkt.PacketNumber)
 
-	// Передаём данные в канал чтения
-	if atomic.LoadInt32(&c.closed) == 1 {
-		return
-	}
+	// Передаём данные в канал чтения (безопасно через closeCh)
 	select {
+	case <-c.closeCh:
+		return
 	case c.session.inbound <- plaintext:
 	default:
+		// Буфер полон - дропаем (нормально для UDP)
 	}
 }
 
@@ -326,7 +363,10 @@ func (c *GameTunnelClientConn) handleControlPacket(data []byte) {
 		pong := NewControlPacket(c.session.ConnectionID, pktNum, []byte{0x02})
 		response, err := pong.Marshal(c.config)
 		if err == nil {
-			c.conn.Write(response)
+			wrapped, wErr := c.obfs.Wrap(response)
+			if wErr == nil {
+				c.conn.Write(wrapped)
+			}
 		}
 	}
 }
@@ -345,7 +385,12 @@ func (c *GameTunnelClientConn) maybeKeepAlive() {
 		return
 	}
 
-	c.conn.Write(data)
+	wrapped, err := c.obfs.Wrap(data)
+	if err != nil {
+		return
+	}
+
+	c.conn.Write(wrapped)
 }
 
 // Read читает расшифрованные данные от сервера
@@ -368,18 +413,21 @@ func (c *GameTunnelClientConn) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 
-	data, ok := <-c.session.inbound
-	if !ok {
+	// Блокируемся с проверкой закрытия через closeCh
+	select {
+	case data, ok := <-c.session.inbound:
+		if !ok {
+			return 0, io.EOF
+		}
+		n := copy(b, data)
+		if n < len(data) {
+			c.readBuf = data
+			c.readOffset = n
+		}
+		return n, nil
+	case <-c.closeCh:
 		return 0, io.EOF
 	}
-
-	n := copy(b, data)
-	if n < len(data) {
-		c.readBuf = data
-		c.readOffset = n
-	}
-
-	return n, nil
 }
 
 // Write отправляет данные серверу через зашифрованный туннель
@@ -425,8 +473,14 @@ func (c *GameTunnelClientConn) Write(b []byte) (int, error) {
 			return totalWritten, fmt.Errorf("marshal: %w", err)
 		}
 
+		// Обфусцируем
+		wrapped, err := c.obfs.Wrap(data)
+		if err != nil {
+			return totalWritten, fmt.Errorf("wrap: %w", err)
+		}
+
 		// Отправляем
-		_, err = c.conn.Write(data)
+		_, err = c.conn.Write(wrapped)
 		if err != nil {
 			return totalWritten, fmt.Errorf("send: %w", err)
 		}
@@ -448,11 +502,16 @@ func (c *GameTunnelClientConn) Close() error {
 	closePkt := NewControlPacket(c.session.ConnectionID, pktNum, []byte{0x00})
 	data, err := closePkt.Marshal(c.config)
 	if err == nil {
-		c.conn.Write(data)
+		wrapped, wErr := c.obfs.Wrap(data)
+		if wErr == nil {
+			c.conn.Write(wrapped)
+		}
 	}
 
-	// Закрываем каналы и сокет
-	close(c.session.inbound)
+	// Сигнализируем горутинам о закрытии
+	close(c.closeCh)
+
+	// Закрываем сокет (receiveLoop завершится по ошибке чтения)
 	c.conn.Close()
 	c.done.Close()
 

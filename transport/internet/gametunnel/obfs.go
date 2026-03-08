@@ -44,16 +44,16 @@ type Obfuscator interface {
 }
 
 // NewObfuscator создаёт обфускатор по режиму из конфига
-func NewObfuscator(mode ObfuscationMode) Obfuscator {
+func NewObfuscator(mode ObfuscationMode, config *Config) Obfuscator {
 	switch mode {
 	case ObfuscationMode_QUIC_MIMIC:
-		return &QUICObfuscator{}
+		return &QUICObfuscator{connIDLen: int(config.ConnectionIdLength)}
 	case ObfuscationMode_WEBRTC_MIMIC:
 		return &WebRTCObfuscator{}
 	case ObfuscationMode_RAW:
 		return &RawObfuscator{}
 	default:
-		return &QUICObfuscator{}
+		return &QUICObfuscator{connIDLen: int(config.ConnectionIdLength)}
 	}
 }
 
@@ -89,7 +89,10 @@ var quicVersions = []uint32{
 }
 
 // QUICObfuscator маскирует трафик под QUIC
-type QUICObfuscator struct{}
+type QUICObfuscator struct {
+	// connIDLen - длина Connection ID из конфига (вместо хардкода 8)
+	connIDLen int
+}
 
 func (o *QUICObfuscator) Name() string {
 	return "quic-mimic"
@@ -113,14 +116,10 @@ func (o *QUICObfuscator) Wrap(packet []byte) ([]byte, error) {
 	// Пропускаем version (4 bytes) - мы запишем свою
 	originalData := packet[FlagsSize+VersionSize:] // всё после flags+version
 
-	// Определяем длину Connection ID из данных
-	// (первые N байт originalData - это Connection ID)
-	// Для правильного расчёта нам нужно знать connIDLen,
-	// но мы можем работать с фиксированным размером.
-	// Берём стандартный QUIC DCID length = 8
-	dcidLen := byte(8)
+	// Используем длину connID из конфига
+	dcidLen := byte(o.connIDLen)
 	if len(originalData) < int(dcidLen) {
-		return nil, fmt.Errorf("packet too short for DCID")
+		return nil, fmt.Errorf("packet too short for DCID: have %d, need %d", len(originalData), dcidLen)
 	}
 
 	dcid := originalData[:dcidLen]

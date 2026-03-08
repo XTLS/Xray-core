@@ -64,6 +64,9 @@ type Session struct {
 	// RecvPacketNum - максимальный принятый номер пакета
 	RecvPacketNum uint32
 
+	// ReplayWindow - защита от replay-атак
+	ReplayWindow *ReplayWindow
+
 	// CreatedAt - время создания сессии
 	CreatedAt time.Time
 
@@ -126,6 +129,9 @@ type Hub struct {
 	// conn - UDP-сокет для отправки/получения
 	conn *net.UDPConn
 
+	// obfs - обфускатор трафика (Wrap на выход, Unwrap на вход)
+	obfs Obfuscator
+
 	// onNewSession - callback при создании новой сессии
 	// Вызывается после успешного хэндшейка
 	onNewSession func(*Session)
@@ -140,6 +146,11 @@ type Hub struct {
 	totalSessions   uint64
 	activeSessions  int32
 
+	// priorityQueue - очередь с приоритизацией исходящих пакетов
+	// Используется inline: при отправке low-priority пакета
+	// сначала отправляются накопленные high-priority
+	priorityQueue *PriorityQueue
+
 	mu     sync.RWMutex
 	closed int32
 }
@@ -150,6 +161,8 @@ func NewHub(config *Config, conn *net.UDPConn) *Hub {
 		sessions:        make(map[string]*Session),
 		config:          config,
 		conn:            conn,
+		obfs:            NewObfuscator(config.Obfuscation, config),
+		priorityQueue:   NewPriorityQueue(config.Priority),
 		cleanupInterval: 30 * time.Second,
 		sessionTimeout:  time.Duration(config.KeepAliveInterval*3) * time.Second,
 	}
@@ -186,7 +199,13 @@ func (h *Hub) Stop() {
 // RoutePacket направляет входящий пакет в соответствующую сессию
 // Возвращает сессию и расшифрованный payload
 // Если сессия не найдена и это Handshake - создаёт новую
-func (h *Hub) RoutePacket(data []byte, remoteAddr *net.UDPAddr) (*Session, []byte, error) {
+func (h *Hub) RoutePacket(rawData []byte, remoteAddr *net.UDPAddr) (*Session, []byte, error) {
+	// Деобфускация входящего пакета
+	data, err := h.obfs.Unwrap(rawData)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unwrap: %w", err)
+	}
+
 	if len(data) < MinPacketSize {
 		return nil, nil, fmt.Errorf("packet too short: %d bytes", len(data))
 	}
@@ -294,6 +313,7 @@ func (h *Hub) handleNewHandshake(data []byte, connID []byte, remoteAddr *net.UDP
 		RemoteAddr:   remoteAddr,
 		Keys:         sessionKeys,
 		LocalKeyPair: serverKeyPair,
+		ReplayWindow: NewReplayWindow(),
 		CreatedAt:    time.Now(),
 		LastActiveAt: time.Now(),
 		Streams:      make(map[uint16]*Stream),
@@ -354,6 +374,11 @@ func (h *Hub) handleDataPacket(session *Session, data []byte) (*Session, []byte,
 		return nil, nil, fmt.Errorf("unmarshal data packet: %w", err)
 	}
 
+	// Anti-replay: проверяем что пакет не дубликат
+	if session.ReplayWindow != nil && !session.ReplayWindow.Check(pkt.PacketNumber) {
+		return nil, nil, fmt.Errorf("replay detected: packet %d", pkt.PacketNumber)
+	}
+
 	// Формируем additional data для AEAD (заголовок до payload)
 	connIDLen := int(h.config.ConnectionIdLength)
 	adLen := FlagsSize + VersionSize + connIDLen
@@ -387,7 +412,12 @@ func (h *Hub) handleKeepAlive(session *Session, data []byte) (*Session, []byte, 
 		return nil, nil, fmt.Errorf("marshal keepalive response: %w", err)
 	}
 
-	_, err = h.conn.WriteToUDP(response, session.RemoteAddr)
+	wrapped, err := h.obfs.Wrap(response)
+	if err != nil {
+		return nil, nil, fmt.Errorf("wrap keepalive: %w", err)
+	}
+
+	_, err = h.conn.WriteToUDP(wrapped, session.RemoteAddr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("send keepalive response: %w", err)
 	}
@@ -420,7 +450,10 @@ func (h *Hub) handleControlPacket(session *Session, data []byte) (*Session, []by
 		pong := NewControlPacket(session.ID, pktNum, pongPayload)
 		response, err := pong.Marshal(h.config)
 		if err == nil {
-			h.conn.WriteToUDP(response, session.RemoteAddr)
+			wrapped, wErr := h.obfs.Wrap(response)
+			if wErr == nil {
+				h.conn.WriteToUDP(wrapped, session.RemoteAddr)
+			}
 		}
 		return session, nil, nil
 
@@ -448,7 +481,13 @@ func (h *Hub) sendServerHello(session *Session, keyPair *KeyPair) error {
 		return fmt.Errorf("marshal server hello: %w", err)
 	}
 
-	_, err = h.conn.WriteToUDP(data, session.RemoteAddr)
+	// Обфусцируем перед отправкой
+	wrapped, err := h.obfs.Wrap(data)
+	if err != nil {
+		return fmt.Errorf("wrap server hello: %w", err)
+	}
+
+	_, err = h.conn.WriteToUDP(wrapped, session.RemoteAddr)
 	if err != nil {
 		return fmt.Errorf("send server hello: %w", err)
 	}
@@ -489,10 +528,38 @@ func (h *Hub) SendToSession(session *Session, payload []byte) error {
 		return fmt.Errorf("marshal data packet: %w", err)
 	}
 
-	// Отправляем
-	_, err = h.conn.WriteToUDP(data, session.RemoteAddr)
+	// Обфусцируем
+	wrapped, err := h.obfs.Wrap(data)
 	if err != nil {
-		return fmt.Errorf("send: %w", err)
+		return fmt.Errorf("wrap: %w", err)
+	}
+
+	// Inline-приоритизация: кладём пакет в очередь,
+	// затем сразу достаём и отправляем все готовые (по приоритету).
+	// Это даёт приоритизацию без отдельной горутины:
+	// high-priority пакеты выходят из очереди раньше low-priority.
+	if h.config.Priority != PriorityMode_NONE {
+		h.priorityQueue.Enqueue(wrapped, session)
+
+		// Drain: отправляем все пакеты из очереди по приоритету
+		for {
+			queued := h.priorityQueue.Dequeue()
+			if queued == nil {
+				break
+			}
+			if queued.Session == nil || atomic.LoadInt32(&queued.Session.closed) == 1 {
+				continue
+			}
+			queued.Session.mu.RLock()
+			addr := queued.Session.RemoteAddr
+			queued.Session.mu.RUnlock()
+			h.conn.WriteToUDP(queued.Data, addr)
+		}
+	} else {
+		_, err = h.conn.WriteToUDP(wrapped, session.RemoteAddr)
+		if err != nil {
+			return fmt.Errorf("send: %w", err)
+		}
 	}
 
 	// Статистика

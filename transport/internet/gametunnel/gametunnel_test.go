@@ -394,7 +394,7 @@ func TestQUICObfuscatorWrapUnwrap(t *testing.T) {
 	original, _ := pkt.Marshal(config)
 
 	// Оборачиваем в QUIC
-	obfs := &QUICObfuscator{}
+	obfs := &QUICObfuscator{connIDLen: int(config.ConnectionIdLength)}
 	wrapped, err := obfs.Wrap(original)
 	if err != nil {
 		t.Fatalf("QUIC Wrap: %v", err)
@@ -482,17 +482,19 @@ func TestRawObfuscator(t *testing.T) {
 }
 
 func TestNewObfuscator(t *testing.T) {
-	quic := NewObfuscator(ObfuscationMode_QUIC_MIMIC)
+	config := DefaultConfig()
+
+	quic := NewObfuscator(ObfuscationMode_QUIC_MIMIC, config)
 	if quic.Name() != "quic-mimic" {
 		t.Errorf("QUIC obfuscator name: got %s", quic.Name())
 	}
 
-	webrtc := NewObfuscator(ObfuscationMode_WEBRTC_MIMIC)
+	webrtc := NewObfuscator(ObfuscationMode_WEBRTC_MIMIC, config)
 	if webrtc.Name() != "webrtc-mimic" {
 		t.Errorf("WebRTC obfuscator name: got %s", webrtc.Name())
 	}
 
-	raw := NewObfuscator(ObfuscationMode_RAW)
+	raw := NewObfuscator(ObfuscationMode_RAW, config)
 	if raw.Name() != "raw" {
 		t.Errorf("Raw obfuscator name: got %s", raw.Name())
 	}
@@ -740,7 +742,7 @@ func TestFullPipeline(t *testing.T) {
 	}
 
 	// 4. Обфусцируем
-	obfs := NewObfuscator(ObfuscationMode_QUIC_MIMIC)
+	obfs := NewObfuscator(ObfuscationMode_QUIC_MIMIC, config)
 	obfuscated, err := obfs.Wrap(packetData)
 	if err != nil {
 		t.Fatalf("Obfuscate: %v", err)
@@ -830,7 +832,7 @@ func BenchmarkQUICObfuscate(b *testing.B) {
 	connID, _ := GenerateConnectionID(int(config.ConnectionIdLength))
 	pkt := NewDataPacket(connID, 1, make([]byte, 128), false)
 	data, _ := pkt.Marshal(config)
-	obfs := &QUICObfuscator{}
+	obfs := &QUICObfuscator{connIDLen: int(config.ConnectionIdLength)}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -848,7 +850,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 	connID, _ := GenerateConnectionID(int(config.ConnectionIdLength))
 	payload := make([]byte, 128)
 	ad := make([]byte, 13)
-	obfs := &QUICObfuscator{}
+	obfs := &QUICObfuscator{connIDLen: int(config.ConnectionIdLength)}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

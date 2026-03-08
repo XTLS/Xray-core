@@ -30,7 +30,7 @@ NC='\033[0m'
 # Версии
 XRAY_REPO="https://github.com/XTLS/Xray-core.git"
 XRAY_BRANCH="main"
-GT_VERSION="0.1.0"
+GT_VERSION="0.2.0"
 BUILD_DIR="$(pwd)/build"
 DIST_DIR="$(pwd)/dist"
 
@@ -49,7 +49,7 @@ check_deps() {
         error "Go не установлен. Установите Go 1.22+ с https://go.dev/dl/"
     fi
 
-    GO_VERSION=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+    GO_VERSION=$(go version | sed -n 's/.*go\([0-9]*\.[0-9]*\).*/\1/p')
     GO_MAJOR=$(echo $GO_VERSION | cut -d. -f1)
     GO_MINOR=$(echo $GO_VERSION | cut -d. -f2)
 
@@ -101,8 +101,15 @@ add_gametunnel() {
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
     SOURCE_DIR="$PROJECT_ROOT/transport/internet/gametunnel"
 
+    # Fallback: если скрипт лежит в корне проекта
     if [ ! -d "$SOURCE_DIR" ]; then
-        error "Не найдена директория с исходниками GameTunnel: $SOURCE_DIR"
+        SOURCE_DIR="$SCRIPT_DIR/transport/internet/gametunnel"
+    fi
+
+    if [ ! -d "$SOURCE_DIR" ]; then
+        error "Не найдена директория с исходниками GameTunnel: $SOURCE_DIR
+Ожидаемая структура: <project_root>/transport/internet/gametunnel/
+Скрипт должен лежать в <project_root>/scripts/ или <project_root>/"
     fi
 
     cp "$SOURCE_DIR"/*.go "$GT_DIR/"
@@ -126,13 +133,29 @@ apply_patches() {
     if [ -f "$ALL_GO" ]; then
         # Добавляем импорт GameTunnel
         if ! grep -q "gametunnel" "$ALL_GO"; then
-            # Находим последний импорт транспорта и добавляем после него
-            sed -i '/transport\/internet\/httpupgrade/a\\t_ "github.com/xtls/xray-core/transport/internet/gametunnel"' "$ALL_GO" 2>/dev/null || \
-            sed -i '/transport\/internet\/splithttp/a\\t_ "github.com/xtls/xray-core/transport/internet/gametunnel"' "$ALL_GO" 2>/dev/null || \
-            sed -i '/transport\/internet\/websocket/a\\t_ "github.com/xtls/xray-core/transport/internet/gametunnel"' "$ALL_GO" 2>/dev/null || \
-            warn "Не удалось автоматически добавить импорт в all.go - добавьте вручную"
+            # Определяем аргумент sed -i для macOS vs Linux
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                SED_INPLACE="sed -i ''"
+            else
+                SED_INPLACE="sed -i"
+            fi
 
-            log "Импорт в all.go добавлен ✓"
+            # Находим последний импорт транспорта и добавляем после него
+            local added=false
+            for transport in httpupgrade splithttp websocket tcp; do
+                if grep -q "transport/internet/${transport}" "$ALL_GO"; then
+                    $SED_INPLACE "/transport\/internet\/${transport}/a\\
+\\t_ \"github.com/xtls/xray-core/transport/internet/gametunnel\"" "$ALL_GO"
+                    added=true
+                    break
+                fi
+            done
+
+            if [ "$added" = false ]; then
+                warn "Не удалось автоматически добавить импорт в all.go - добавьте вручную"
+            else
+                log "Импорт в all.go добавлен ✓"
+            fi
         else
             log "Импорт GameTunnel уже присутствует в all.go"
         fi
@@ -159,7 +182,13 @@ apply_patches() {
     # --- Патч 4: Добавляем зависимости в go.mod ---
     cd "$XRAY_DIR"
     log "Обновление зависимостей..."
-    go mod tidy 2>/dev/null || warn "go mod tidy завершился с предупреждениями"
+
+    # Добавляем crypto-зависимости GameTunnel (если ещё нет)
+    go get golang.org/x/crypto 2>/dev/null || true
+
+    if ! go mod tidy; then
+        warn "go mod tidy завершился с ошибками - проверьте вывод выше"
+    fi
 
     log "Патчи применены ✓"
 }
@@ -176,7 +205,6 @@ create_json_config_parser() {
 package gametunnel
 
 import (
-	"encoding/json"
 	"github.com/xtls/xray-core/infra/conf/serial"
 )
 
@@ -282,14 +310,10 @@ build_binary() {
         -trimpath \
         -buildvcs=false \
         -ldflags="-s -w -buildid= -X github.com/xtls/xray-core/core.build=${commit}-gt${GT_VERSION}" \
-        -v ./main
+        -v ./main || error "Сборка для ${target_os}/${target_arch} провалилась"
 
-    if [ $? -eq 0 ]; then
-        local size=$(du -h "$output_path" | cut -f1)
-        log "${GREEN}✓${NC} Собрано: ${CYAN}${output_name}${NC} (${size})"
-    else
-        error "Сборка для ${target_os}/${target_arch} провалилась"
-    fi
+    local size=$(du -h "$output_path" | cut -f1)
+    log "${GREEN}✓${NC} Собрано: ${CYAN}${output_name}${NC} (${size})"
 }
 
 build_all() {
@@ -322,16 +346,16 @@ create_release() {
         if [ ! -f "$binary" ]; then continue; fi
 
         local name=$(basename "$binary")
-        local archive_name="${name%.*}"  # Убираем .exe если есть
 
         if [[ "$name" == *".exe" ]]; then
-            # Windows - zip
+            # Windows - zip (убираем .exe из имени архива)
+            local archive_name="${name%.exe}"
             cd "$DIST_DIR"
             zip "release/${archive_name}.zip" "$name"
         else
             # Unix - tar.gz
             cd "$DIST_DIR"
-            tar czf "release/${archive_name}.tar.gz" "$name"
+            tar czf "release/${name}.tar.gz" "$name"
         fi
     done
 
