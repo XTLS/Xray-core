@@ -586,6 +586,7 @@ func (ln *Listener) Addr() net.Addr {
 func (ln *Listener) Close() error {
 	if ln.h3server != nil {
 		if err := ln.h3server.Close(); err != nil {
+			_ = ln.h3listener.Close()
 			return err
 		}
 		return ln.h3listener.Close()

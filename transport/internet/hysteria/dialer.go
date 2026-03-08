@@ -210,34 +210,39 @@ func (c *client) dial() error {
 		}
 	}
 
+	quicParams := c.quicParams
+	if quicParams == nil {
+		quicParams = &internet.QuicParams{}
+	}
+
 	quicConfig := &quic.Config{
-		InitialStreamReceiveWindow:     c.quicParams.InitStreamReceiveWindow,
-		MaxStreamReceiveWindow:         c.quicParams.MaxStreamReceiveWindow,
-		InitialConnectionReceiveWindow: c.quicParams.InitConnReceiveWindow,
-		MaxConnectionReceiveWindow:     c.quicParams.MaxConnReceiveWindow,
-		MaxIdleTimeout:                 time.Duration(c.quicParams.MaxIdleTimeout) * time.Second,
-		KeepAlivePeriod:                time.Duration(c.quicParams.KeepAlivePeriod) * time.Second,
-		DisablePathMTUDiscovery:        c.quicParams.DisablePathMtuDiscovery,
+		InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+		MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+		MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+		MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+		KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
+		DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
 		EnableDatagrams:                true,
 		MaxDatagramFrameSize:           MaxDatagramFrameSize,
 		DisablePathManager:             true,
 	}
-	if c.quicParams.InitStreamReceiveWindow == 0 {
+	if quicParams.InitStreamReceiveWindow == 0 {
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
-	if c.quicParams.MaxStreamReceiveWindow == 0 {
+	if quicParams.MaxStreamReceiveWindow == 0 {
 		quicConfig.InitialStreamReceiveWindow = 8388608
 	}
-	if c.quicParams.InitConnReceiveWindow == 0 {
+	if quicParams.InitConnReceiveWindow == 0 {
 		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2
 	}
-	if c.quicParams.MaxConnReceiveWindow == 0 {
+	if quicParams.MaxConnReceiveWindow == 0 {
 		quicConfig.MaxConnectionReceiveWindow = 8388608 * 5 / 2
 	}
-	if c.quicParams.MaxIdleTimeout == 0 {
+	if quicParams.MaxIdleTimeout == 0 {
 		quicConfig.MaxIdleTimeout = 30 * time.Second
 	}
-	// if c.quicParams.KeepAlivePeriod == 0 {
+	// if quicParams.KeepAlivePeriod == 0 {
 	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
 	// }
 
@@ -263,7 +268,7 @@ func (c *client) dial() error {
 		},
 		Header: http.Header{
 			RequestHeaderAuth:   []string{c.config.Auth},
-			CommonHeaderCCRX:    []string{strconv.FormatUint(c.quicParams.BrutalDown, 10)},
+			CommonHeaderCCRX:    []string{strconv.FormatUint(quicParams.BrutalDown, 10)},
 			CommonHeaderPadding: []string{authRequestPadding.String()},
 		},
 	}
@@ -286,23 +291,23 @@ func (c *client) dial() error {
 	serverAuto := resp.Header.Get(CommonHeaderCCRX)
 	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
 
-	switch c.quicParams.Congestion {
+	switch quicParams.Congestion {
 	case "reno":
 		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
 		errors.LogDebug(c.ctx, "congestion bbr")
 		congestion.UseBBR(quicConn)
 	case "brutal", "":
-		if serverAuto == "auto" || c.quicParams.BrutalUp == 0 || serverDown == 0 {
+		if serverAuto == "auto" || quicParams.BrutalUp == 0 || serverDown == 0 {
 			errors.LogDebug(c.ctx, "congestion bbr")
 			congestion.UseBBR(quicConn)
 		} else {
-			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(c.quicParams.BrutalUp, serverDown))
-			congestion.UseBrutal(quicConn, min(c.quicParams.BrutalUp, serverDown))
+			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(quicParams.BrutalUp, serverDown))
+			congestion.UseBrutal(quicConn, min(quicParams.BrutalUp, serverDown))
 		}
 	case "force-brutal":
-		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", c.quicParams.BrutalUp)
-		congestion.UseBrutal(quicConn, c.quicParams.BrutalUp)
+		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", quicParams.BrutalUp)
+		congestion.UseBrutal(quicConn, quicParams.BrutalUp)
 	default:
 		errors.LogDebug(c.ctx, "congestion reno")
 	}
@@ -435,11 +440,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
-	quicParams := streamSettings.QuicParams
-	if quicParams == nil {
-		quicParams = &internet.QuicParams{}
-	}
-
 	manger.mutex.Lock()
 	c, ok := manger.m[addr]
 	if !ok {
@@ -451,7 +451,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			tlsConfig:      tlsConfig.GetTLSConfig(),
 			socketConfig:   streamSettings.SocketSettings,
 			udpmaskManager: streamSettings.UdpmaskManager,
-			quicParams:     quicParams,
+			quicParams:     streamSettings.QuicParams,
 		}
 		manger.m[addr] = c
 	}

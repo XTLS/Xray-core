@@ -379,6 +379,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	if quicParams == nil {
 		quicParams = &internet.QuicParams{}
 	}
+
 	quicConfig := &quic.Config{
 		InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
 		MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,

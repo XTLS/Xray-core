@@ -182,6 +182,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
 			quicConfig.MaxIncomingStreams = -1
 		}
+
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
