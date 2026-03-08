@@ -159,6 +159,9 @@ func (c *client) dial() error {
 	if quicParams == nil {
 		quicParams = &internet.QuicParams{}
 	}
+	if quicParams.UdpHop == nil {
+		quicParams.UdpHop = &internet.UdpHop{}
+	}
 
 	var index int
 	if len(quicParams.UdpHop.Ports) > 0 {

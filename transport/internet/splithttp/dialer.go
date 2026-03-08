@@ -160,6 +160,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{}
 		}
+		if quicParams.UdpHop == nil {
+			quicParams.UdpHop = &internet.UdpHop{}
+		}
 
 		quicConfig := &quic.Config{
 			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
