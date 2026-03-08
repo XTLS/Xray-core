@@ -57,6 +57,20 @@ message GetAllOnlineUsersResponse {
   repeated string users = 1;
 }
 
+message OnlineIPEntry {
+  string ip = 1;
+  int64 last_seen = 2;
+}
+
+message UserOnlineInfo {
+  string email = 1;
+  repeated OnlineIPEntry ips = 2;
+}
+
+message GetAllUsersOnlineInfoResponse {
+  repeated UserOnlineInfo users = 1;
+}
+
 service StatsService {
   rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {}
   rpc GetStatsOnline(GetStatsRequest) returns (GetStatsResponse) {}
@@ -64,6 +78,7 @@ service StatsService {
   rpc GetSysStats(SysStatsRequest) returns (SysStatsResponse) {}
   rpc GetStatsOnlineIpList(GetStatsRequest) returns (GetStatsOnlineIpListResponse) {}
   rpc GetAllOnlineUsers(GetAllOnlineUsersRequest) returns (GetAllOnlineUsersResponse) {}
+  rpc GetAllUsersOnlineInfo(GetAllOnlineUsersRequest) returns (GetAllUsersOnlineInfoResponse) {}
 }
 
 message Config {}

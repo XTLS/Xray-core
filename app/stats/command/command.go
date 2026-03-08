@@ -3,11 +3,10 @@ package command
 import (
 	"context"
 	"runtime"
+	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
@@ -70,9 +69,10 @@ func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStat
 	}
 
 	ips := make(map[string]int64)
-	for ip, t := range c.IPTimeMap() {
-		ips[ip] = t.Unix()
-	}
+	c.ForEach(func(ip string, lastSeen int64) bool {
+		ips[ip] = lastSeen
+		return true
+	})
 
 	return &GetStatsOnlineIpListResponse{
 		Name: request.Name,
@@ -86,6 +86,32 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 	}, nil
 }
 
+func (s *statsServer) GetAllUsersOnlineInfo(ctx context.Context, request *GetAllOnlineUsersRequest) (*GetAllUsersOnlineInfoResponse, error) {
+	resp := &GetAllUsersOnlineInfoResponse{}
+
+	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
+		if om.Count() == 0 {
+			return true
+		}
+
+		_, rest, _ := strings.Cut(name, ">>>")
+		email, _, _ := strings.Cut(rest, ">>>")
+
+		user := &UserOnlineInfo{Email: email}
+		om.ForEach(func(ip string, lastSeen int64) bool {
+			user.Ips = append(user.Ips, &OnlineIPEntry{
+				Ip:       ip,
+				LastSeen: lastSeen,
+			})
+			return true
+		})
+		resp.Users = append(resp.Users, user)
+		return true
+	})
+
+	return resp, nil
+}
+
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
 	matcher, err := strmatcher.Substr.New(request.Pattern)
 	if err != nil {
@@ -94,12 +120,7 @@ func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest
 
 	response := &QueryStatsResponse{}
 
-	manager, ok := s.stats.(*stats.Manager)
-	if !ok {
-		return nil, errors.New("QueryStats only works its own stats.Manager.")
-	}
-
-	manager.VisitCounters(func(name string, c feature_stats.Counter) bool {
+	s.stats.VisitCounters(func(name string, c feature_stats.Counter) bool {
 		if matcher.Match(name) {
 			var value int64
 			if request.Reset_ {

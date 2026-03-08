@@ -551,6 +551,154 @@ func (x *GetAllOnlineUsersResponse) GetUsers() []string {
 	return nil
 }
 
+type OnlineIPEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	LastSeen      int64                  `protobuf:"varint,2,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OnlineIPEntry) Reset() {
+	*x = OnlineIPEntry{}
+	mi := &file_app_stats_command_command_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OnlineIPEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OnlineIPEntry) ProtoMessage() {}
+
+func (x *OnlineIPEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_app_stats_command_command_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OnlineIPEntry.ProtoReflect.Descriptor instead.
+func (*OnlineIPEntry) Descriptor() ([]byte, []int) {
+	return file_app_stats_command_command_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OnlineIPEntry) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *OnlineIPEntry) GetLastSeen() int64 {
+	if x != nil {
+		return x.LastSeen
+	}
+	return 0
+}
+
+type UserOnlineInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	Ips           []*OnlineIPEntry       `protobuf:"bytes,2,rep,name=ips,proto3" json:"ips,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserOnlineInfo) Reset() {
+	*x = UserOnlineInfo{}
+	mi := &file_app_stats_command_command_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserOnlineInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserOnlineInfo) ProtoMessage() {}
+
+func (x *UserOnlineInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_app_stats_command_command_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserOnlineInfo.ProtoReflect.Descriptor instead.
+func (*UserOnlineInfo) Descriptor() ([]byte, []int) {
+	return file_app_stats_command_command_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UserOnlineInfo) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *UserOnlineInfo) GetIps() []*OnlineIPEntry {
+	if x != nil {
+		return x.Ips
+	}
+	return nil
+}
+
+type GetAllUsersOnlineInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Users         []*UserOnlineInfo      `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAllUsersOnlineInfoResponse) Reset() {
+	*x = GetAllUsersOnlineInfoResponse{}
+	mi := &file_app_stats_command_command_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAllUsersOnlineInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAllUsersOnlineInfoResponse) ProtoMessage() {}
+
+func (x *GetAllUsersOnlineInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_stats_command_command_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAllUsersOnlineInfoResponse.ProtoReflect.Descriptor instead.
+func (*GetAllUsersOnlineInfoResponse) Descriptor() ([]byte, []int) {
+	return file_app_stats_command_command_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetAllUsersOnlineInfoResponse) GetUsers() []*UserOnlineInfo {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -559,7 +707,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_app_stats_command_command_proto_msgTypes[10]
+	mi := &file_app_stats_command_command_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -571,7 +719,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_stats_command_command_proto_msgTypes[10]
+	mi := &file_app_stats_command_command_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +732,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_stats_command_command_proto_rawDescGZIP(), []int{10}
+	return file_app_stats_command_command_proto_rawDescGZIP(), []int{13}
 }
 
 var File_app_stats_command_command_proto protoreflect.FileDescriptor
@@ -628,8 +776,16 @@ const file_app_stats_command_command_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x1a\n" +
 	"\x18GetAllOnlineUsersRequest\"1\n" +
 	"\x19GetAllOnlineUsersResponse\x12\x14\n" +
-	"\x05users\x18\x01 \x03(\tR\x05users\"\b\n" +
-	"\x06Config2\x96\x05\n" +
+	"\x05users\x18\x01 \x03(\tR\x05users\"<\n" +
+	"\rOnlineIPEntry\x12\x0e\n" +
+	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x1b\n" +
+	"\tlast_seen\x18\x02 \x01(\x03R\blastSeen\"_\n" +
+	"\x0eUserOnlineInfo\x12\x14\n" +
+	"\x05email\x18\x01 \x01(\tR\x05email\x127\n" +
+	"\x03ips\x18\x02 \x03(\v2%.xray.app.stats.command.OnlineIPEntryR\x03ips\"]\n" +
+	"\x1dGetAllUsersOnlineInfoResponse\x12<\n" +
+	"\x05users\x18\x01 \x03(\v2&.xray.app.stats.command.UserOnlineInfoR\x05users\"\b\n" +
+	"\x06Config2\x9b\x06\n" +
 	"\fStatsService\x12_\n" +
 	"\bGetStats\x12'.xray.app.stats.command.GetStatsRequest\x1a(.xray.app.stats.command.GetStatsResponse\"\x00\x12e\n" +
 	"\x0eGetStatsOnline\x12'.xray.app.stats.command.GetStatsRequest\x1a(.xray.app.stats.command.GetStatsResponse\"\x00\x12e\n" +
@@ -637,7 +793,8 @@ const file_app_stats_command_command_proto_rawDesc = "" +
 	"QueryStats\x12).xray.app.stats.command.QueryStatsRequest\x1a*.xray.app.stats.command.QueryStatsResponse\"\x00\x12b\n" +
 	"\vGetSysStats\x12'.xray.app.stats.command.SysStatsRequest\x1a(.xray.app.stats.command.SysStatsResponse\"\x00\x12w\n" +
 	"\x14GetStatsOnlineIpList\x12'.xray.app.stats.command.GetStatsRequest\x1a4.xray.app.stats.command.GetStatsOnlineIpListResponse\"\x00\x12z\n" +
-	"\x11GetAllOnlineUsers\x120.xray.app.stats.command.GetAllOnlineUsersRequest\x1a1.xray.app.stats.command.GetAllOnlineUsersResponse\"\x00Bd\n" +
+	"\x11GetAllOnlineUsers\x120.xray.app.stats.command.GetAllOnlineUsersRequest\x1a1.xray.app.stats.command.GetAllOnlineUsersResponse\"\x00\x12\x82\x01\n" +
+	"\x15GetAllUsersOnlineInfo\x120.xray.app.stats.command.GetAllOnlineUsersRequest\x1a5.xray.app.stats.command.GetAllUsersOnlineInfoResponse\"\x00Bd\n" +
 	"\x1acom.xray.app.stats.commandP\x01Z+github.com/xtls/xray-core/app/stats/command\xaa\x02\x16Xray.App.Stats.Commandb\x06proto3"
 
 var (
@@ -652,42 +809,49 @@ func file_app_stats_command_command_proto_rawDescGZIP() []byte {
 	return file_app_stats_command_command_proto_rawDescData
 }
 
-var file_app_stats_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_app_stats_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_app_stats_command_command_proto_goTypes = []any{
-	(*GetStatsRequest)(nil),              // 0: xray.app.stats.command.GetStatsRequest
-	(*Stat)(nil),                         // 1: xray.app.stats.command.Stat
-	(*GetStatsResponse)(nil),             // 2: xray.app.stats.command.GetStatsResponse
-	(*QueryStatsRequest)(nil),            // 3: xray.app.stats.command.QueryStatsRequest
-	(*QueryStatsResponse)(nil),           // 4: xray.app.stats.command.QueryStatsResponse
-	(*SysStatsRequest)(nil),              // 5: xray.app.stats.command.SysStatsRequest
-	(*SysStatsResponse)(nil),             // 6: xray.app.stats.command.SysStatsResponse
-	(*GetStatsOnlineIpListResponse)(nil), // 7: xray.app.stats.command.GetStatsOnlineIpListResponse
-	(*GetAllOnlineUsersRequest)(nil),     // 8: xray.app.stats.command.GetAllOnlineUsersRequest
-	(*GetAllOnlineUsersResponse)(nil),    // 9: xray.app.stats.command.GetAllOnlineUsersResponse
-	(*Config)(nil),                       // 10: xray.app.stats.command.Config
-	nil,                                  // 11: xray.app.stats.command.GetStatsOnlineIpListResponse.IpsEntry
+	(*GetStatsRequest)(nil),               // 0: xray.app.stats.command.GetStatsRequest
+	(*Stat)(nil),                          // 1: xray.app.stats.command.Stat
+	(*GetStatsResponse)(nil),              // 2: xray.app.stats.command.GetStatsResponse
+	(*QueryStatsRequest)(nil),             // 3: xray.app.stats.command.QueryStatsRequest
+	(*QueryStatsResponse)(nil),            // 4: xray.app.stats.command.QueryStatsResponse
+	(*SysStatsRequest)(nil),               // 5: xray.app.stats.command.SysStatsRequest
+	(*SysStatsResponse)(nil),              // 6: xray.app.stats.command.SysStatsResponse
+	(*GetStatsOnlineIpListResponse)(nil),  // 7: xray.app.stats.command.GetStatsOnlineIpListResponse
+	(*GetAllOnlineUsersRequest)(nil),      // 8: xray.app.stats.command.GetAllOnlineUsersRequest
+	(*GetAllOnlineUsersResponse)(nil),     // 9: xray.app.stats.command.GetAllOnlineUsersResponse
+	(*OnlineIPEntry)(nil),                 // 10: xray.app.stats.command.OnlineIPEntry
+	(*UserOnlineInfo)(nil),                // 11: xray.app.stats.command.UserOnlineInfo
+	(*GetAllUsersOnlineInfoResponse)(nil), // 12: xray.app.stats.command.GetAllUsersOnlineInfoResponse
+	(*Config)(nil),                        // 13: xray.app.stats.command.Config
+	nil,                                   // 14: xray.app.stats.command.GetStatsOnlineIpListResponse.IpsEntry
 }
 var file_app_stats_command_command_proto_depIdxs = []int32{
 	1,  // 0: xray.app.stats.command.GetStatsResponse.stat:type_name -> xray.app.stats.command.Stat
 	1,  // 1: xray.app.stats.command.QueryStatsResponse.stat:type_name -> xray.app.stats.command.Stat
-	11, // 2: xray.app.stats.command.GetStatsOnlineIpListResponse.ips:type_name -> xray.app.stats.command.GetStatsOnlineIpListResponse.IpsEntry
-	0,  // 3: xray.app.stats.command.StatsService.GetStats:input_type -> xray.app.stats.command.GetStatsRequest
-	0,  // 4: xray.app.stats.command.StatsService.GetStatsOnline:input_type -> xray.app.stats.command.GetStatsRequest
-	3,  // 5: xray.app.stats.command.StatsService.QueryStats:input_type -> xray.app.stats.command.QueryStatsRequest
-	5,  // 6: xray.app.stats.command.StatsService.GetSysStats:input_type -> xray.app.stats.command.SysStatsRequest
-	0,  // 7: xray.app.stats.command.StatsService.GetStatsOnlineIpList:input_type -> xray.app.stats.command.GetStatsRequest
-	8,  // 8: xray.app.stats.command.StatsService.GetAllOnlineUsers:input_type -> xray.app.stats.command.GetAllOnlineUsersRequest
-	2,  // 9: xray.app.stats.command.StatsService.GetStats:output_type -> xray.app.stats.command.GetStatsResponse
-	2,  // 10: xray.app.stats.command.StatsService.GetStatsOnline:output_type -> xray.app.stats.command.GetStatsResponse
-	4,  // 11: xray.app.stats.command.StatsService.QueryStats:output_type -> xray.app.stats.command.QueryStatsResponse
-	6,  // 12: xray.app.stats.command.StatsService.GetSysStats:output_type -> xray.app.stats.command.SysStatsResponse
-	7,  // 13: xray.app.stats.command.StatsService.GetStatsOnlineIpList:output_type -> xray.app.stats.command.GetStatsOnlineIpListResponse
-	9,  // 14: xray.app.stats.command.StatsService.GetAllOnlineUsers:output_type -> xray.app.stats.command.GetAllOnlineUsersResponse
-	9,  // [9:15] is the sub-list for method output_type
-	3,  // [3:9] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	14, // 2: xray.app.stats.command.GetStatsOnlineIpListResponse.ips:type_name -> xray.app.stats.command.GetStatsOnlineIpListResponse.IpsEntry
+	10, // 3: xray.app.stats.command.UserOnlineInfo.ips:type_name -> xray.app.stats.command.OnlineIPEntry
+	11, // 4: xray.app.stats.command.GetAllUsersOnlineInfoResponse.users:type_name -> xray.app.stats.command.UserOnlineInfo
+	0,  // 5: xray.app.stats.command.StatsService.GetStats:input_type -> xray.app.stats.command.GetStatsRequest
+	0,  // 6: xray.app.stats.command.StatsService.GetStatsOnline:input_type -> xray.app.stats.command.GetStatsRequest
+	3,  // 7: xray.app.stats.command.StatsService.QueryStats:input_type -> xray.app.stats.command.QueryStatsRequest
+	5,  // 8: xray.app.stats.command.StatsService.GetSysStats:input_type -> xray.app.stats.command.SysStatsRequest
+	0,  // 9: xray.app.stats.command.StatsService.GetStatsOnlineIpList:input_type -> xray.app.stats.command.GetStatsRequest
+	8,  // 10: xray.app.stats.command.StatsService.GetAllOnlineUsers:input_type -> xray.app.stats.command.GetAllOnlineUsersRequest
+	8,  // 11: xray.app.stats.command.StatsService.GetAllUsersOnlineInfo:input_type -> xray.app.stats.command.GetAllOnlineUsersRequest
+	2,  // 12: xray.app.stats.command.StatsService.GetStats:output_type -> xray.app.stats.command.GetStatsResponse
+	2,  // 13: xray.app.stats.command.StatsService.GetStatsOnline:output_type -> xray.app.stats.command.GetStatsResponse
+	4,  // 14: xray.app.stats.command.StatsService.QueryStats:output_type -> xray.app.stats.command.QueryStatsResponse
+	6,  // 15: xray.app.stats.command.StatsService.GetSysStats:output_type -> xray.app.stats.command.SysStatsResponse
+	7,  // 16: xray.app.stats.command.StatsService.GetStatsOnlineIpList:output_type -> xray.app.stats.command.GetStatsOnlineIpListResponse
+	9,  // 17: xray.app.stats.command.StatsService.GetAllOnlineUsers:output_type -> xray.app.stats.command.GetAllOnlineUsersResponse
+	12, // 18: xray.app.stats.command.StatsService.GetAllUsersOnlineInfo:output_type -> xray.app.stats.command.GetAllUsersOnlineInfoResponse
+	12, // [12:19] is the sub-list for method output_type
+	5,  // [5:12] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_app_stats_command_command_proto_init() }
@@ -701,7 +865,7 @@ func file_app_stats_command_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_stats_command_command_proto_rawDesc), len(file_app_stats_command_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
