@@ -5,9 +5,11 @@ import (
 	gotls "crypto/tls"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	reflect "reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -24,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -187,6 +190,34 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+				udphopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
+					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
+					if err != nil {
+						errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
+						return nil, errors.New()
+					}
+
+					var udpConn net.PacketConn
+
+					switch c := conn.(type) {
+					case *internet.PacketConnWrapper:
+						udpConn = c.PacketConn
+					case *net.UDPConn:
+						udpConn = c
+					default:
+						errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level ", reflect.TypeOf(c))
+						return nil, errors.New()
+					}
+
+					return udpConn, nil
+				}
+
+				var index int
+				if len(quicParams.UdpHop.Ports) > 0 {
+					index = rand.Intn(len(quicParams.UdpHop.Ports))
+					dest.Port = net.Port(quicParams.UdpHop.Ports[index])
+				}
+
 				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 				if err != nil {
 					return nil, err
@@ -197,36 +228,51 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				switch c := conn.(type) {
 				case *internet.PacketConnWrapper:
-					var ok bool
-					udpConn, ok = c.PacketConn.(*net.UDPConn)
-					if !ok {
-						return nil, errors.New("PacketConnWrapper does not contain a UDP connection")
-					}
+					udpConn = c.PacketConn
 					udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
 					if err != nil {
+						conn.Close()
 						return nil, err
 					}
 				case *net.UDPConn:
 					udpConn = c
 					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
 					if err != nil {
+						conn.Close()
 						return nil, err
 					}
 				default:
 					udpConn = &internet.FakePacketConn{Conn: c}
 					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
 					if err != nil {
+						conn.Close()
 						return nil, err
+					}
+
+					if len(quicParams.UdpHop.Ports) > 0 {
+						conn.Close()
+						return nil, errors.New("udphop requires being at the outermost level ", reflect.TypeOf(c))
+					}
+				}
+
+				if len(quicParams.UdpHop.Ports) > 0 {
+					addr := &udphop.UDPHopAddr{
+						IP:    udpAddr.IP,
+						Ports: quicParams.UdpHop.Ports,
+					}
+					udpConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, udphopDialer, udpConn)
+					if err != nil {
+						conn.Close()
+						return nil, errors.New("udphop err").Base(err)
 					}
 				}
 
 				if streamSettings.UdpmaskManager != nil {
-					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
+					udpConn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
 					if err != nil {
-						udpConn.Close()
+						conn.Close()
 						return nil, errors.New("mask err").Base(err)
 					}
-					udpConn = pktConn
 				}
 
 				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)

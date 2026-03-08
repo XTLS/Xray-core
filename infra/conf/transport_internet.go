@@ -518,12 +518,13 @@ type Masquerade struct {
 }
 
 type HysteriaConfig struct {
-	Version    int32      `json:"version"`
-	Auth       string     `json:"auth"`
+	Version int32  `json:"version"`
+	Auth    string `json:"auth"`
+
 	Congestion *string    `json:"congestion"`
 	Up         *Bandwidth `json:"up"`
 	Down       *Bandwidth `json:"down"`
-	UdpHop     UdpHop     `json:"udphop"`
+	UdpHop     *UdpHop    `json:"udphop"`
 
 	UdpIdleTimeout int64      `json:"udpIdleTimeout"`
 	Masquerade     Masquerade `json:"masquerade"`
@@ -534,23 +535,8 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 		return nil, errors.New("version != 2")
 	}
 
-	if c.Congestion != nil || c.Up != nil || c.Down != nil {
-		errors.LogWarning(context.Background(), "congestion & up & down move to finalmask/quicParams")
-	}
-
-	var hop *PortList
-	if err := json.Unmarshal(c.UdpHop.PortList, &hop); err != nil {
-		hop = &PortList{}
-	}
-
-	var inertvalMin, inertvalMax int64
-	if c.UdpHop.Interval != nil {
-		inertvalMin = int64(c.UdpHop.Interval.From)
-		inertvalMax = int64(c.UdpHop.Interval.To)
-	}
-
-	if (inertvalMin != 0 && inertvalMin < 5) || (inertvalMax != 0 && inertvalMax < 5) {
-		return nil, errors.New("Interval must be at least 5")
+	if c.Congestion != nil || c.Up != nil || c.Down != nil || c.UdpHop != nil {
+		errors.LogWarning(context.Background(), "congestion & up & down & udphop move to finalmask/quicParams")
 	}
 
 	if c.UdpIdleTimeout != 0 && (c.UdpIdleTimeout < 2 || c.UdpIdleTimeout > 600) {
@@ -560,9 +546,6 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config := &hysteria.Config{}
 	config.Version = c.Version
 	config.Auth = c.Auth
-	config.Ports = hop.Build().Ports()
-	config.IntervalMin = inertvalMin
-	config.IntervalMax = inertvalMax
 	config.UdpIdleTimeout = c.UdpIdleTimeout
 	config.MasqType = c.Masquerade.Type
 	config.MasqFile = c.Masquerade.Dir
@@ -646,6 +629,7 @@ type QuicParamsConfig struct {
 	Congestion                  string    `json:"congestion"`
 	BrutalUp                    Bandwidth `json:"brutalUp"`
 	BrutalDown                  Bandwidth `json:"brutalDown"`
+	UdpHop                      UdpHop    `json:"udphop"`
 	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
 	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
@@ -1826,7 +1810,22 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 					return nil, errors.New("force-brutal requires up")
 				}
 			default:
-				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: bbr, reno, force-brutal")
+				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
+			}
+
+			var hop *PortList
+			if err := json.Unmarshal(c.FinalMask.QuicParams.UdpHop.PortList, &hop); err != nil {
+				hop = &PortList{}
+			}
+
+			var inertvalMin, inertvalMax int64
+			if c.FinalMask.QuicParams.UdpHop.Interval != nil {
+				inertvalMin = int64(c.FinalMask.QuicParams.UdpHop.Interval.From)
+				inertvalMax = int64(c.FinalMask.QuicParams.UdpHop.Interval.To)
+			}
+
+			if (inertvalMin != 0 && inertvalMin < 5) || (inertvalMax != 0 && inertvalMax < 5) {
+				return nil, errors.New("Interval must be at least 5")
 			}
 
 			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
@@ -1852,9 +1851,14 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			}
 
 			config.QuicParams = &internet.QuicParams{
-				Congestion:              c.FinalMask.QuicParams.Congestion,
-				BrutalUp:                up,
-				BrutalDown:              down,
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				BrutalUp:   up,
+				BrutalDown: down,
+				UdpHop: &internet.UdpHop{
+					Ports:       hop.Build().Ports(),
+					IntervalMin: inertvalMin,
+					IntervalMax: inertvalMax,
+				},
 				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
 				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,
 				InitConnReceiveWindow:   c.FinalMask.QuicParams.InitConnectionReceiveWindow,

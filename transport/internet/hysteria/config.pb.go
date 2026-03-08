@@ -25,18 +25,15 @@ type Config struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Version              int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Auth                 string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
-	Ports                []uint32               `protobuf:"varint,3,rep,packed,name=ports,proto3" json:"ports,omitempty"`
-	IntervalMin          int64                  `protobuf:"varint,4,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
-	IntervalMax          int64                  `protobuf:"varint,5,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
-	UdpIdleTimeout       int64                  `protobuf:"varint,6,opt,name=udp_idle_timeout,json=udpIdleTimeout,proto3" json:"udp_idle_timeout,omitempty"`
-	MasqType             string                 `protobuf:"bytes,7,opt,name=masq_type,json=masqType,proto3" json:"masq_type,omitempty"`
-	MasqFile             string                 `protobuf:"bytes,8,opt,name=masq_file,json=masqFile,proto3" json:"masq_file,omitempty"`
-	MasqUrl              string                 `protobuf:"bytes,9,opt,name=masq_url,json=masqUrl,proto3" json:"masq_url,omitempty"`
-	MasqUrlRewriteHost   bool                   `protobuf:"varint,10,opt,name=masq_url_rewrite_host,json=masqUrlRewriteHost,proto3" json:"masq_url_rewrite_host,omitempty"`
-	MasqUrlInsecure      bool                   `protobuf:"varint,11,opt,name=masq_url_insecure,json=masqUrlInsecure,proto3" json:"masq_url_insecure,omitempty"`
-	MasqString           string                 `protobuf:"bytes,12,opt,name=masq_string,json=masqString,proto3" json:"masq_string,omitempty"`
-	MasqStringHeaders    map[string]string      `protobuf:"bytes,13,rep,name=masq_string_headers,json=masqStringHeaders,proto3" json:"masq_string_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	MasqStringStatusCode int32                  `protobuf:"varint,14,opt,name=masq_string_status_code,json=masqStringStatusCode,proto3" json:"masq_string_status_code,omitempty"`
+	UdpIdleTimeout       int64                  `protobuf:"varint,3,opt,name=udp_idle_timeout,json=udpIdleTimeout,proto3" json:"udp_idle_timeout,omitempty"`
+	MasqType             string                 `protobuf:"bytes,4,opt,name=masq_type,json=masqType,proto3" json:"masq_type,omitempty"`
+	MasqFile             string                 `protobuf:"bytes,5,opt,name=masq_file,json=masqFile,proto3" json:"masq_file,omitempty"`
+	MasqUrl              string                 `protobuf:"bytes,6,opt,name=masq_url,json=masqUrl,proto3" json:"masq_url,omitempty"`
+	MasqUrlRewriteHost   bool                   `protobuf:"varint,7,opt,name=masq_url_rewrite_host,json=masqUrlRewriteHost,proto3" json:"masq_url_rewrite_host,omitempty"`
+	MasqUrlInsecure      bool                   `protobuf:"varint,8,opt,name=masq_url_insecure,json=masqUrlInsecure,proto3" json:"masq_url_insecure,omitempty"`
+	MasqString           string                 `protobuf:"bytes,9,opt,name=masq_string,json=masqString,proto3" json:"masq_string,omitempty"`
+	MasqStringHeaders    map[string]string      `protobuf:"bytes,10,rep,name=masq_string_headers,json=masqStringHeaders,proto3" json:"masq_string_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	MasqStringStatusCode int32                  `protobuf:"varint,11,opt,name=masq_string_status_code,json=masqStringStatusCode,proto3" json:"masq_string_status_code,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -83,27 +80,6 @@ func (x *Config) GetAuth() string {
 		return x.Auth
 	}
 	return ""
-}
-
-func (x *Config) GetPorts() []uint32 {
-	if x != nil {
-		return x.Ports
-	}
-	return nil
-}
-
-func (x *Config) GetIntervalMin() int64 {
-	if x != nil {
-		return x.IntervalMin
-	}
-	return 0
-}
-
-func (x *Config) GetIntervalMax() int64 {
-	if x != nil {
-		return x.IntervalMax
-	}
-	return 0
 }
 
 func (x *Config) GetUdpIdleTimeout() int64 {
@@ -173,24 +149,21 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xff\x04\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xa3\x04\n" +
 	"\x06Config\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
-	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x14\n" +
-	"\x05ports\x18\x03 \x03(\rR\x05ports\x12!\n" +
-	"\finterval_min\x18\x04 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x05 \x01(\x03R\vintervalMax\x12(\n" +
-	"\x10udp_idle_timeout\x18\x06 \x01(\x03R\x0eudpIdleTimeout\x12\x1b\n" +
-	"\tmasq_type\x18\a \x01(\tR\bmasqType\x12\x1b\n" +
-	"\tmasq_file\x18\b \x01(\tR\bmasqFile\x12\x19\n" +
-	"\bmasq_url\x18\t \x01(\tR\amasqUrl\x121\n" +
-	"\x15masq_url_rewrite_host\x18\n" +
-	" \x01(\bR\x12masqUrlRewriteHost\x12*\n" +
-	"\x11masq_url_insecure\x18\v \x01(\bR\x0fmasqUrlInsecure\x12\x1f\n" +
-	"\vmasq_string\x18\f \x01(\tR\n" +
+	"\x04auth\x18\x02 \x01(\tR\x04auth\x12(\n" +
+	"\x10udp_idle_timeout\x18\x03 \x01(\x03R\x0eudpIdleTimeout\x12\x1b\n" +
+	"\tmasq_type\x18\x04 \x01(\tR\bmasqType\x12\x1b\n" +
+	"\tmasq_file\x18\x05 \x01(\tR\bmasqFile\x12\x19\n" +
+	"\bmasq_url\x18\x06 \x01(\tR\amasqUrl\x121\n" +
+	"\x15masq_url_rewrite_host\x18\a \x01(\bR\x12masqUrlRewriteHost\x12*\n" +
+	"\x11masq_url_insecure\x18\b \x01(\bR\x0fmasqUrlInsecure\x12\x1f\n" +
+	"\vmasq_string\x18\t \x01(\tR\n" +
 	"masqString\x12o\n" +
-	"\x13masq_string_headers\x18\r \x03(\v2?.xray.transport.internet.hysteria.Config.MasqStringHeadersEntryR\x11masqStringHeaders\x125\n" +
-	"\x17masq_string_status_code\x18\x0e \x01(\x05R\x14masqStringStatusCode\x1aD\n" +
+	"\x13masq_string_headers\x18\n" +
+	" \x03(\v2?.xray.transport.internet.hysteria.Config.MasqStringHeadersEntryR\x11masqStringHeaders\x125\n" +
+	"\x17masq_string_status_code\x18\v \x01(\x05R\x14masqStringStatusCode\x1aD\n" +
 	"\x16MasqStringHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x82\x01\n" +

@@ -155,10 +155,15 @@ func (c *client) dial() error {
 		c.close()
 	}
 
+	quicParams := c.quicParams
+	if quicParams == nil {
+		quicParams = &internet.QuicParams{}
+	}
+
 	var index int
-	if len(c.config.Ports) > 0 {
-		index = rand.Intn(len(c.config.Ports))
-		c.dest.Port = net.Port(c.config.Ports[index])
+	if len(quicParams.UdpHop.Ports) > 0 {
+		index = rand.Intn(len(quicParams.UdpHop.Ports))
+		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
 	}
 
 	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
@@ -181,7 +186,7 @@ func (c *client) dial() error {
 		pktConn = fakeConn
 		remote = fakeConn.RemoteAddr().(*net.UDPAddr)
 
-		if len(c.config.Ports) > 0 {
+		if len(quicParams.UdpHop.Ports) > 0 {
 			raw.Close()
 			return errors.New("udphop requires being at the outermost level")
 		}
@@ -190,12 +195,12 @@ func (c *client) dial() error {
 		return errors.New("unknown conn ", reflect.TypeOf(conn))
 	}
 
-	if len(c.config.Ports) > 0 {
+	if len(quicParams.UdpHop.Ports) > 0 {
 		addr := &udphop.UDPHopAddr{
 			IP:    remote.IP,
-			Ports: c.config.Ports,
+			Ports: quicParams.UdpHop.Ports,
 		}
-		pktConn, err = udphop.NewUDPHopPacketConn(addr, c.config.IntervalMin, c.config.IntervalMax, c.udphopDialer, pktConn, index)
+		pktConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, c.udphopDialer, pktConn)
 		if err != nil {
 			raw.Close()
 			return errors.New("udphop err").Base(err)
@@ -208,11 +213,6 @@ func (c *client) dial() error {
 			raw.Close()
 			return errors.New("mask err").Base(err)
 		}
-	}
-
-	quicParams := c.quicParams
-	if quicParams == nil {
-		quicParams = &internet.QuicParams{}
 	}
 
 	quicConfig := &quic.Config{
@@ -386,13 +386,13 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	defer c.mutex.Unlock()
 
 	if c.status() != StatusActive {
-		errors.LogDebug(c.ctx, "skip hop: disconnected QUIC")
+		errors.LogDebug(context.Background(), "skip hop: disconnected QUIC")
 		return nil, errors.New()
 	}
 
 	raw, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
-		errors.LogDebug(c.ctx, "skip hop: failed to dial to dest")
+		errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
 		return nil, errors.New()
 	}
 
@@ -404,10 +404,10 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	case *net.UDPConn:
 		pktConn = conn
 	case *cnc.Connection:
-		errors.LogDebug(c.ctx, "skip hop: udphop requires being at the outermost level")
+		errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level")
 		return nil, errors.New()
 	default:
-		errors.LogDebug(c.ctx, "skip hop: unknown conn ", reflect.TypeOf(conn))
+		errors.LogDebug(context.Background(), "skip hop: unknown conn ", reflect.TypeOf(conn))
 		return nil, errors.New()
 	}
 

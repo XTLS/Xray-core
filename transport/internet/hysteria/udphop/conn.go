@@ -49,7 +49,7 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
+func NewUDPHopPacketConn(addr *UDPHopAddr, index int, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn) (net.PacketConn, error) {
 	if intervalMin == 0 || intervalMax == 0 {
 		intervalMin = int64(defaultHopInterval)
 		intervalMax = int64(defaultHopInterval)
