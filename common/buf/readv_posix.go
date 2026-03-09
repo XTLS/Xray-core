@@ -1,5 +1,5 @@
-//go:build !windows && !wasm && !illumos
-// +build !windows,!wasm,!illumos
+//go:build !windows && !wasm && !illumos && !openbsd
+// +build !windows,!wasm,!illumos,!openbsd
 
 package buf
 
@@ -13,6 +13,7 @@ type posixReader struct {
 }
 
 func (r *posixReader) Init(bs []*Buffer) {
+	// Reuse iovec storage across reads to avoid per-call allocations.
 	iovecs := r.iovecs
 	if iovecs == nil {
 		iovecs = make([]syscall.Iovec, 0, len(bs))
@@ -27,6 +28,7 @@ func (r *posixReader) Init(bs []*Buffer) {
 }
 
 func (r *posixReader) Read(fd uintptr) int32 {
+	// On these platforms, a single readv syscall fills iovecs in order.
 	n, _, e := syscall.Syscall(syscall.SYS_READV, fd, uintptr(unsafe.Pointer(&r.iovecs[0])), uintptr(len(r.iovecs)))
 	if e != 0 {
 		return -1
@@ -35,6 +37,7 @@ func (r *posixReader) Read(fd uintptr) int32 {
 }
 
 func (r *posixReader) Clear() {
+	// Drop pointers so pooled buffers are not retained through iovec metadata.
 	for idx := range r.iovecs {
 		r.iovecs[idx].Base = nil
 	}
