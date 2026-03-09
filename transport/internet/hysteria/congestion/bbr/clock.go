@@ -1,10 +1,10 @@
 package bbr
 
-import "github.com/apernet/quic-go/congestion"
+import "github.com/apernet/quic-go/monotime"
 
 // A Clock returns the current time
 type Clock interface {
-	Now() congestion.Time
+	Now() monotime.Time
 }
 
 // DefaultClock implements the Clock interface using the Go stdlib clock.
@@ -13,6 +13,6 @@ type DefaultClock struct{}
 var _ Clock = DefaultClock{}
 
 // Now gets the current time
-func (DefaultClock) Now() congestion.Time {
-	return congestion.Now()
+func (DefaultClock) Now() monotime.Time {
+	return monotime.Now()
 }
