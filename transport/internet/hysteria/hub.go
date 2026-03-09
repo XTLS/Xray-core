@@ -14,6 +14,7 @@ import (
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
+	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -221,13 +222,17 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.masqHandler.ServeHTTP(w, r)
 }
 
-func (h *httpHandler) ProxyStreamHijacker(ft http3.FrameType, id quic.ConnectionTracingID, stream *quic.Stream, err error) (bool, error) {
+func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
 	if err != nil || !h.auth {
 		return false, nil
 	}
 
 	switch ft {
 	case FrameTypeTCPRequest:
+		if _, err := quicvarint.Read(quicvarint.NewReader(stream)); err != nil {
+			return false, err
+		}
+
 		h.addConn(&interConn{
 			stream: stream,
 			local:  h.conn.LocalAddr(),
@@ -263,8 +268,8 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		masqHandler: l.masqHandler,
 	}
 	h3 := http3.Server{
-		Handler:        handler,
-		StreamHijacker: handler.ProxyStreamHijacker,
+		Handler:          handler,
+		StreamDispatcher: handler.StreamDispatcher,
 	}
 	err := h3.ServeQUICConn(conn)
 	errors.LogDebug(context.Background(), conn.RemoteAddr(), " disconnected with err ", err)
