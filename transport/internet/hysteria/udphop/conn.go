@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
 	packetQueueSize = 1024
-	udpBufferSize   = 2048 // QUIC packets are at most 1500 bytes long, so 2k should be more than enough
+	udpBufferSize   = finalmask.UDPSize
 
 	defaultHopInterval = 30 * time.Second
 )
@@ -49,7 +50,7 @@ type udpPacket struct {
 
 type ListenUDPFunc = func(*net.UDPAddr) (net.PacketConn, error)
 
-func NewUDPHopPacketConn(addr *UDPHopAddr, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn, index int) (net.PacketConn, error) {
+func NewUDPHopPacketConn(addr *UDPHopAddr, index int, intervalMin int64, intervalMax int64, listenUDPFunc ListenUDPFunc, pktConn net.PacketConn) (net.PacketConn, error) {
 	if intervalMin == 0 || intervalMax == 0 {
 		intervalMin = int64(defaultHopInterval)
 		intervalMax = int64(defaultHopInterval)

@@ -20,10 +20,10 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -254,7 +254,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		dataPlacement := h.config.GetNormalizedUplinkDataPlacement()
 		var headerPayload []byte
 		if dataPlacement == PlacementAuto || dataPlacement == PlacementHeader {
-			var headerPayloadChunks [] string
+			var headerPayloadChunks []string
 			for i := 0; true; i++ {
 				chunk := request.Header.Get(fmt.Sprintf("%s-%d", uplinkDataKey, i))
 				if chunk == "" {
@@ -463,7 +463,6 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
-
 		if streamSettings.UdpmaskManager != nil {
 			pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(Conn)
 			if err != nil {
@@ -473,7 +472,22 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Conn = pktConn
 		}
 
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, nil)
+		quicParams := streamSettings.QuicParams
+		if quicParams == nil {
+			quicParams = &internet.QuicParams{}
+		}
+
+		quicConfig := &quic.Config{
+			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
+		}
+
+		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
@@ -491,22 +505,23 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 					errors.LogInfoInner(ctx, err, "XHTTP/3 listener closed")
 					return
 				}
-				if streamSettings.QuicParams != nil {
-					switch streamSettings.QuicParams.Congestion {
-					case "force-brutal":
-						congestion.UseBrutal(conn, streamSettings.QuicParams.Up)
-					case "reno":
-						// quic-go default, do nothing
-					default:
-						congestion.UseBBR(conn)
-					}
-				} else {
+
+				switch quicParams.Congestion {
+				case "force-brutal":
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
+					congestion.UseBrutal(conn, quicParams.BrutalUp)
+				case "reno":
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion reno")
+				default:
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr")
 					congestion.UseBBR(conn)
 				}
+
 				go func() {
 					if err := l.h3server.ServeQUICConn(conn); err != nil {
 						errors.LogDebugInner(ctx, err, "XHTTP/3 connection ended")
 					}
+					_ = conn.CloseWithError(0, "")
 				}()
 			}
 		}()
@@ -573,6 +588,7 @@ func (ln *Listener) Addr() net.Addr {
 func (ln *Listener) Close() error {
 	if ln.h3server != nil {
 		if err := ln.h3server.Close(); err != nil {
+			_ = ln.h3listener.Close()
 			return err
 		}
 		return ln.h3listener.Close()

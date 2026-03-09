@@ -22,34 +22,20 @@ const (
 )
 
 type Config struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Version                 int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Auth                    string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
-	Congestion              string                 `protobuf:"bytes,3,opt,name=congestion,proto3" json:"congestion,omitempty"`
-	Up                      uint64                 `protobuf:"varint,4,opt,name=up,proto3" json:"up,omitempty"`
-	Down                    uint64                 `protobuf:"varint,5,opt,name=down,proto3" json:"down,omitempty"`
-	Ports                   []uint32               `protobuf:"varint,6,rep,packed,name=ports,proto3" json:"ports,omitempty"`
-	IntervalMin             int64                  `protobuf:"varint,7,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
-	IntervalMax             int64                  `protobuf:"varint,8,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,9,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,10,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,11,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,12,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,13,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,14,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,15,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
-	MaxIncomingStreams      int64                  `protobuf:"varint,16,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
-	UdpIdleTimeout          int64                  `protobuf:"varint,17,opt,name=udp_idle_timeout,json=udpIdleTimeout,proto3" json:"udp_idle_timeout,omitempty"`
-	MasqType                string                 `protobuf:"bytes,18,opt,name=masq_type,json=masqType,proto3" json:"masq_type,omitempty"`
-	MasqFile                string                 `protobuf:"bytes,19,opt,name=masq_file,json=masqFile,proto3" json:"masq_file,omitempty"`
-	MasqUrl                 string                 `protobuf:"bytes,20,opt,name=masq_url,json=masqUrl,proto3" json:"masq_url,omitempty"`
-	MasqUrlRewriteHost      bool                   `protobuf:"varint,21,opt,name=masq_url_rewrite_host,json=masqUrlRewriteHost,proto3" json:"masq_url_rewrite_host,omitempty"`
-	MasqUrlInsecure         bool                   `protobuf:"varint,22,opt,name=masq_url_insecure,json=masqUrlInsecure,proto3" json:"masq_url_insecure,omitempty"`
-	MasqString              string                 `protobuf:"bytes,23,opt,name=masq_string,json=masqString,proto3" json:"masq_string,omitempty"`
-	MasqStringHeaders       map[string]string      `protobuf:"bytes,24,rep,name=masq_string_headers,json=masqStringHeaders,proto3" json:"masq_string_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	MasqStringStatusCode    int32                  `protobuf:"varint,25,opt,name=masq_string_status_code,json=masqStringStatusCode,proto3" json:"masq_string_status_code,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Version              int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Auth                 string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
+	UdpIdleTimeout       int64                  `protobuf:"varint,3,opt,name=udp_idle_timeout,json=udpIdleTimeout,proto3" json:"udp_idle_timeout,omitempty"`
+	MasqType             string                 `protobuf:"bytes,4,opt,name=masq_type,json=masqType,proto3" json:"masq_type,omitempty"`
+	MasqFile             string                 `protobuf:"bytes,5,opt,name=masq_file,json=masqFile,proto3" json:"masq_file,omitempty"`
+	MasqUrl              string                 `protobuf:"bytes,6,opt,name=masq_url,json=masqUrl,proto3" json:"masq_url,omitempty"`
+	MasqUrlRewriteHost   bool                   `protobuf:"varint,7,opt,name=masq_url_rewrite_host,json=masqUrlRewriteHost,proto3" json:"masq_url_rewrite_host,omitempty"`
+	MasqUrlInsecure      bool                   `protobuf:"varint,8,opt,name=masq_url_insecure,json=masqUrlInsecure,proto3" json:"masq_url_insecure,omitempty"`
+	MasqString           string                 `protobuf:"bytes,9,opt,name=masq_string,json=masqString,proto3" json:"masq_string,omitempty"`
+	MasqStringHeaders    map[string]string      `protobuf:"bytes,10,rep,name=masq_string_headers,json=masqStringHeaders,proto3" json:"masq_string_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	MasqStringStatusCode int32                  `protobuf:"varint,11,opt,name=masq_string_status_code,json=masqStringStatusCode,proto3" json:"masq_string_status_code,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -94,104 +80,6 @@ func (x *Config) GetAuth() string {
 		return x.Auth
 	}
 	return ""
-}
-
-func (x *Config) GetCongestion() string {
-	if x != nil {
-		return x.Congestion
-	}
-	return ""
-}
-
-func (x *Config) GetUp() uint64 {
-	if x != nil {
-		return x.Up
-	}
-	return 0
-}
-
-func (x *Config) GetDown() uint64 {
-	if x != nil {
-		return x.Down
-	}
-	return 0
-}
-
-func (x *Config) GetPorts() []uint32 {
-	if x != nil {
-		return x.Ports
-	}
-	return nil
-}
-
-func (x *Config) GetIntervalMin() int64 {
-	if x != nil {
-		return x.IntervalMin
-	}
-	return 0
-}
-
-func (x *Config) GetIntervalMax() int64 {
-	if x != nil {
-		return x.IntervalMax
-	}
-	return 0
-}
-
-func (x *Config) GetInitStreamReceiveWindow() uint64 {
-	if x != nil {
-		return x.InitStreamReceiveWindow
-	}
-	return 0
-}
-
-func (x *Config) GetMaxStreamReceiveWindow() uint64 {
-	if x != nil {
-		return x.MaxStreamReceiveWindow
-	}
-	return 0
-}
-
-func (x *Config) GetInitConnReceiveWindow() uint64 {
-	if x != nil {
-		return x.InitConnReceiveWindow
-	}
-	return 0
-}
-
-func (x *Config) GetMaxConnReceiveWindow() uint64 {
-	if x != nil {
-		return x.MaxConnReceiveWindow
-	}
-	return 0
-}
-
-func (x *Config) GetMaxIdleTimeout() int64 {
-	if x != nil {
-		return x.MaxIdleTimeout
-	}
-	return 0
-}
-
-func (x *Config) GetKeepAlivePeriod() int64 {
-	if x != nil {
-		return x.KeepAlivePeriod
-	}
-	return 0
-}
-
-func (x *Config) GetDisablePathMtuDiscovery() bool {
-	if x != nil {
-		return x.DisablePathMtuDiscovery
-	}
-	return false
-}
-
-func (x *Config) GetMaxIncomingStreams() int64 {
-	if x != nil {
-		return x.MaxIncomingStreams
-	}
-	return 0
 }
 
 func (x *Config) GetUdpIdleTimeout() int64 {
@@ -261,37 +149,21 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xf0\b\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xa3\x04\n" +
 	"\x06Config\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
-	"\x04auth\x18\x02 \x01(\tR\x04auth\x12\x1e\n" +
-	"\n" +
-	"congestion\x18\x03 \x01(\tR\n" +
-	"congestion\x12\x0e\n" +
-	"\x02up\x18\x04 \x01(\x04R\x02up\x12\x12\n" +
-	"\x04down\x18\x05 \x01(\x04R\x04down\x12\x14\n" +
-	"\x05ports\x18\x06 \x03(\rR\x05ports\x12!\n" +
-	"\finterval_min\x18\a \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\b \x01(\x03R\vintervalMax\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\t \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\n" +
-	" \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\v \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\f \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\r \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\x0e \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\x0f \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
-	"\x14max_incoming_streams\x18\x10 \x01(\x03R\x12maxIncomingStreams\x12(\n" +
-	"\x10udp_idle_timeout\x18\x11 \x01(\x03R\x0eudpIdleTimeout\x12\x1b\n" +
-	"\tmasq_type\x18\x12 \x01(\tR\bmasqType\x12\x1b\n" +
-	"\tmasq_file\x18\x13 \x01(\tR\bmasqFile\x12\x19\n" +
-	"\bmasq_url\x18\x14 \x01(\tR\amasqUrl\x121\n" +
-	"\x15masq_url_rewrite_host\x18\x15 \x01(\bR\x12masqUrlRewriteHost\x12*\n" +
-	"\x11masq_url_insecure\x18\x16 \x01(\bR\x0fmasqUrlInsecure\x12\x1f\n" +
-	"\vmasq_string\x18\x17 \x01(\tR\n" +
+	"\x04auth\x18\x02 \x01(\tR\x04auth\x12(\n" +
+	"\x10udp_idle_timeout\x18\x03 \x01(\x03R\x0eudpIdleTimeout\x12\x1b\n" +
+	"\tmasq_type\x18\x04 \x01(\tR\bmasqType\x12\x1b\n" +
+	"\tmasq_file\x18\x05 \x01(\tR\bmasqFile\x12\x19\n" +
+	"\bmasq_url\x18\x06 \x01(\tR\amasqUrl\x121\n" +
+	"\x15masq_url_rewrite_host\x18\a \x01(\bR\x12masqUrlRewriteHost\x12*\n" +
+	"\x11masq_url_insecure\x18\b \x01(\bR\x0fmasqUrlInsecure\x12\x1f\n" +
+	"\vmasq_string\x18\t \x01(\tR\n" +
 	"masqString\x12o\n" +
-	"\x13masq_string_headers\x18\x18 \x03(\v2?.xray.transport.internet.hysteria.Config.MasqStringHeadersEntryR\x11masqStringHeaders\x125\n" +
-	"\x17masq_string_status_code\x18\x19 \x01(\x05R\x14masqStringStatusCode\x1aD\n" +
+	"\x13masq_string_headers\x18\n" +
+	" \x03(\v2?.xray.transport.internet.hysteria.Config.MasqStringHeadersEntryR\x11masqStringHeaders\x125\n" +
+	"\x17masq_string_status_code\x18\v \x01(\x05R\x14masqStringStatusCode\x1aD\n" +
 	"\x16MasqStringHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x82\x01\n" +
