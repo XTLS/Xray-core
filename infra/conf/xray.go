@@ -227,6 +227,70 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	return nil
 }
 
+func isInternalOrInvalidAddress(address *Address) bool {
+	if address == nil {
+		return true
+	}
+	ip := address.IP()
+	if ip == nil {
+		return true
+	}
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsMulticast() || ip.IsLinkLocalUnicast()
+}
+
+func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
+	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.GetSecurityType() != "" {
+		return nil
+	}
+	// VMess
+	if vmCfg, ok := rawConfig.(*VMessOutboundConfig); ok {
+		return c.checkVMessTLSConflict(vmCfg)
+	}
+
+	// VLESS should always with encryption
+	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
+		if !isInternalOrInvalidAddress(vlessCfg.Address) {
+			// When the encryption present, GetSecurityType() => should not be empty
+			return errors.New("vless without TLS or other encryption is prohibited")
+		}
+	}
+
+	// Trojan，unlikely
+	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
+		if !isInternalOrInvalidAddress(tjCfg.Address) {
+			return errors.New("trojan without TLS is prohibited")
+		}
+	}
+
+	// Hysteria, unlikely
+	// if _, ok := rawConfig.(*HysteriaClientConfig); ok {
+	// 	return errors.New("hysteria2 without TLS is prohibited")
+	// }
+
+	return nil
+}
+func (c *OutboundDetourConfig) checkVMessTLSConflict(vmCfg *VMessOutboundConfig) error {
+	sec := ""
+	if vmCfg.Address != nil {
+		sec = vmCfg.Security
+	} else if len(vmCfg.Receivers) > 0 {
+		rec := vmCfg.Receivers[0]
+		if len(rec.Users) > 0 {
+			acct := new(VMessAccount)
+			if err := json.Unmarshal(rec.Users[0], acct); err == nil {
+				sec = strings.ToLower(acct.Security)
+			}
+		}
+	}
+
+	if sec == "none" || sec == "auto" || sec == "" || sec == "zero" {
+		if !isInternalOrInvalidAddress(vmCfg.Address) {
+			return errors.New("vmess with 'none' or 'zero' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
+		}
+	}
+	return nil
+}
+
 // Build implements Buildable.
 func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	senderSettings := &proxyman.SenderConfig{}
@@ -319,6 +383,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	rawConfig, err := outboundConfigLoader.LoadWithID(settings, c.Protocol)
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
+	}
+	if err := c.checkOutboundTLSConflict(rawConfig, senderSettings); err != nil {
+		return nil, err
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
