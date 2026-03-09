@@ -501,7 +501,7 @@ func (b Bandwidth) Bps() (uint64, error) {
 }
 
 type UdpHop struct {
-	PortList json.RawMessage `json:"port"`
+	PortList json.RawMessage `json:"ports"`
 	Interval *Int32Range     `json:"interval"`
 }
 
