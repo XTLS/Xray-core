@@ -632,7 +632,7 @@ type QuicParamsConfig struct {
 	Debug                       bool      `json:"debug"`
 	BrutalUp                    Bandwidth `json:"brutalUp"`
 	BrutalDown                  Bandwidth `json:"brutalDown"`
-	UdpHop                      UdpHop    `json:"udphop"`
+	UdpHop                      UdpHop    `json:"udpHop"`
 	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
 	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
