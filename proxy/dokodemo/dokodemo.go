@@ -56,6 +56,9 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 
 // Network implements proxy.Inbound.
 func (d *DokodemoDoor) Network() []net.Network {
+	if  len(d.config.Networks) == 1 {
+		return append(d.config.Networks, net.Network_UNIX)
+	}
 	return d.config.Networks
 }
 
@@ -68,6 +71,10 @@ func (d *DokodemoDoor) policy() policy.Session {
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
+	// forwarding from unix to tcp add
+	if network == net.Network_UNIX {
+		network =  d.config.Networks[0]
+	}
 	dest := net.Destination{
 		Network: network,
 		Address: d.address,
