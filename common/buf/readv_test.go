@@ -236,7 +236,9 @@ func TestReadvReaderMultiEOF(t *testing.T) {
 		// Write exactly one full buffer and close. The client will read it,
 		// advance alloc to 2, and then encounter EOF through readMulti().
 		data := make([]byte, Size)
-		conn.Write(data)
+		if _, err := conn.Write(data); err != nil {
+			return
+		}
 	}()
 
 	client, err := net.Dial("tcp", ln.Addr().String())
@@ -244,7 +246,9 @@ func TestReadvReaderMultiEOF(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	client.(*net.TCPConn).SetDeadline(time.Now().Add(3 * time.Second))
+	if err := client.(*net.TCPConn).SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 
 	rawConn, err := client.(*net.TCPConn).SyscallConn()
 	if err != nil {
@@ -294,8 +298,12 @@ func TestReadvReaderRawConnError(t *testing.T) {
 		// Write one full buffer, then hold the connection open so the client
 		// enters readMulti and blocks waiting for more data.
 		data := make([]byte, Size)
-		conn.Write(data)
-		io.Copy(io.Discard, conn)
+		if _, err := conn.Write(data); err != nil {
+			return
+		}
+		if _, err := io.Copy(io.Discard, conn); err != nil {
+			return
+		}
 	}()
 
 	client, err := net.Dial("tcp", ln.Addr().String())
@@ -303,7 +311,9 @@ func TestReadvReaderRawConnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	client.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := client.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 
 	rawConn, err := client.(*net.TCPConn).SyscallConn()
 	if err != nil {
@@ -325,10 +335,15 @@ func TestReadvReaderRawConnError(t *testing.T) {
 	ReleaseMulti(mb)
 
 	// Expire the deadline before the next read so rawConn.Read fails.
-	client.SetDeadline(time.Now().Add(50 * time.Millisecond))
+	if err := client.SetDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(60 * time.Millisecond)
 
-	_, err = reader.ReadMultiBuffer()
+	mb, err = reader.ReadMultiBuffer()
+	if mb != nil {
+		ReleaseMulti(mb)
+	}
 	if err == nil {
 		t.Fatal("expected error from timed-out rawConn.Read, got nil")
 	}

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 type openbsdTestCounter struct {
@@ -156,11 +157,15 @@ func TestOpenBSDSmallPayload(t *testing.T) {
 
 	go func() {
 		// Server writes once then closes to produce a clean EOF boundary.
-		server.Write(payload)
-		server.Close()
+		if _, err := server.Write(payload); err != nil {
+			return
+		}
+		_ = server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 
 	var got []byte
@@ -208,11 +213,15 @@ func TestOpenBSDLargePayload(t *testing.T) {
 
 	go func() {
 		// A single large write is enough to force multiple internal buffers.
-		server.Write(payload)
-		server.Close()
+		if _, err := server.Write(payload); err != nil {
+			return
+		}
+		_ = server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 
 	var got []byte
@@ -246,7 +255,9 @@ func TestOpenBSDSeqReaderEAGAINAtStart(t *testing.T) {
 	defer cleanup()
 	_ = server
 
-	client.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	mr := newMultiReader()
 	b := New()
 	defer b.Release()
@@ -287,6 +298,194 @@ func TestOpenBSDSeqReaderEINTRRetry(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 read attempts, got %d", calls)
+	}
+}
+
+type scriptedReadStep struct {
+	wantBuf int
+	n       int
+	err     error
+}
+
+// TestOpenBSDSeqReaderScriptedScenarios runs deterministic syscall scripts to
+// validate retry semantics and return-code contracts independent of socket timing.
+func TestOpenBSDSeqReaderScriptedScenarios(t *testing.T) {
+	b1 := New()
+	b2 := New()
+	defer b1.Release()
+	defer b2.Release()
+
+	bufID := map[uintptr]int{
+		uintptr(unsafe.Pointer(&b1.v[0])): 1,
+		uintptr(unsafe.Pointer(&b2.v[0])): 2,
+	}
+
+	tests := []struct {
+		name    string
+		steps   []scriptedReadStep
+		wantN   int32
+		wantTry int
+	}{
+		{
+			name: "eintr_retries_same_buffer_then_progress",
+			steps: []scriptedReadStep{
+				{wantBuf: 1, n: 0, err: syscall.EINTR},
+				{wantBuf: 1, n: int(Size), err: nil},
+				{wantBuf: 2, n: 0, err: syscall.EAGAIN},
+			},
+			wantN:   int32(Size),
+			wantTry: 3,
+		},
+		{
+			name: "fatal_without_progress_returns_neg_one",
+			steps: []scriptedReadStep{
+				{wantBuf: 1, n: 0, err: syscall.ECONNRESET},
+			},
+			wantN:   -1,
+			wantTry: 1,
+		},
+		{
+			name: "eof_without_progress_returns_zero",
+			steps: []scriptedReadStep{
+				{wantBuf: 1, n: 0, err: nil},
+			},
+			wantN:   0,
+			wantTry: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			originalRead := openbsdRead
+			defer func() {
+				openbsdRead = originalRead
+			}()
+
+			tries := 0
+			openbsdRead = func(fd int, p []byte) (int, error) {
+				if tries >= len(tc.steps) {
+					t.Fatalf("unexpected extra read call: %d", tries+1)
+				}
+				step := tc.steps[tries]
+				tries++
+
+				gotBuf := bufID[uintptr(unsafe.Pointer(&p[0]))]
+				if gotBuf != step.wantBuf {
+					t.Fatalf("step %d: expected buffer %d, got %d", tries, step.wantBuf, gotBuf)
+				}
+
+				return step.n, step.err
+			}
+
+			r := &openbsdSeqReader{}
+			r.Init([]*Buffer{b1, b2})
+			n := r.Read(1)
+			r.Clear()
+
+			if n != tc.wantN {
+				t.Fatalf("expected n=%d, got %d", tc.wantN, n)
+			}
+			if tries != tc.wantTry {
+				t.Fatalf("expected %d read calls, got %d", tc.wantTry, tries)
+			}
+		})
+	}
+}
+
+// TestOpenBSDSeqReaderEINTRBufferVisitInvariant stress-tests the retry loop
+// with seeded scripts and checks that EINTR never advances to the next buffer.
+func TestOpenBSDSeqReaderEINTRBufferVisitInvariant(t *testing.T) {
+	const seeds = 16
+
+	for seed := 0; seed < seeds; seed++ {
+		seed := seed
+		t.Run("seed_"+strconv.Itoa(seed), func(t *testing.T) {
+			rnd := rand.New(rand.NewSource(int64(seed) + 404))
+
+			b1 := New()
+			b2 := New()
+			b3 := New()
+			defer b1.Release()
+			defer b2.Release()
+			defer b3.Release()
+
+			bufID := map[uintptr]int{
+				uintptr(unsafe.Pointer(&b1.v[0])): 1,
+				uintptr(unsafe.Pointer(&b2.v[0])): 2,
+				uintptr(unsafe.Pointer(&b3.v[0])): 3,
+			}
+
+			outcome := rnd.Intn(4)
+			fullBeforeTail := rnd.Intn(3)
+			shortTail := 1 + rnd.Intn(int(Size)-1)
+
+			calls := 0
+			lastBuf := 0
+			var wantN int32
+
+			openbsdReadOrig := openbsdRead
+			defer func() {
+				openbsdRead = openbsdReadOrig
+			}()
+
+			openbsdRead = func(fd int, p []byte) (int, error) {
+				calls++
+				buf := bufID[uintptr(unsafe.Pointer(&p[0]))]
+				if buf == 0 {
+					t.Fatalf("unknown buffer at call %d", calls)
+				}
+
+				if lastBuf != 0 && buf < lastBuf {
+					t.Fatalf("buffer order regressed: last=%d current=%d", lastBuf, buf)
+				}
+
+				if rnd.Intn(3) == 0 {
+					lastBuf = buf
+					return 0, syscall.EINTR
+				}
+
+				if buf <= fullBeforeTail {
+					lastBuf = buf
+					wantN += int32(Size)
+					return int(Size), nil
+				}
+
+				lastBuf = buf
+				switch outcome {
+				case 0:
+					wantN += int32(shortTail)
+					return shortTail, nil
+				case 1:
+					if wantN == 0 {
+						wantN = -1
+					}
+					return 0, syscall.EAGAIN
+				case 2:
+					if wantN == 0 {
+						wantN = -1
+					}
+					return 0, syscall.ECONNRESET
+				default:
+					if wantN == 0 {
+						wantN = 0
+					}
+					return 0, nil
+				}
+			}
+
+			r := &openbsdSeqReader{}
+			r.Init([]*Buffer{b1, b2, b3})
+			gotN := r.Read(1)
+			r.Clear()
+
+			if gotN != wantN {
+				t.Fatalf("seed=%d: expected %d, got %d", seed, wantN, gotN)
+			}
+			if calls == 0 {
+				t.Fatal("expected at least one syscall read")
+			}
+		})
 	}
 }
 
@@ -363,13 +562,71 @@ func TestOpenBSDSeqReaderEINTRAfterPartialPreservesTotal(t *testing.T) {
 	}
 }
 
+// TestOpenBSDSeqReaderFatalErrorReturnsNegOne verifies that fatal errors
+// (ECONNRESET, etc.) with no prior data return -1, allowing the Go runtime
+// poller to detect the error via pollEventErr and propagate it to the caller
+// as a real error instead of silently converting it to io.EOF.
+func TestOpenBSDSeqReaderFatalErrorReturnsNegOne(t *testing.T) {
+	b := New()
+	defer b.Release()
+
+	originalRead := openbsdRead
+	defer func() { openbsdRead = originalRead }()
+
+	openbsdRead = func(fd int, p []byte) (int, error) {
+		return 0, syscall.ECONNRESET
+	}
+
+	r := &openbsdSeqReader{}
+	r.Init([]*Buffer{b})
+	n := r.Read(1)
+	r.Clear()
+
+	if n != -1 {
+		t.Fatalf("expected -1 for fatal error with no prior data, got %d", n)
+	}
+}
+
+// TestOpenBSDSeqReaderFatalErrorAfterPartialPreservesTotal verifies that when
+// a fatal error occurs after some data has been read, the partial byte count
+// is returned (deferring error to next call) rather than losing data.
+func TestOpenBSDSeqReaderFatalErrorAfterPartialPreservesTotal(t *testing.T) {
+	b1 := New()
+	b2 := New()
+	defer b1.Release()
+	defer b2.Release()
+
+	originalRead := openbsdRead
+	defer func() { openbsdRead = originalRead }()
+
+	calls := 0
+	openbsdRead = func(fd int, p []byte) (int, error) {
+		calls++
+		if calls == 1 {
+			return int(Size), nil
+		}
+		return 0, syscall.ECONNRESET
+	}
+
+	r := &openbsdSeqReader{}
+	r.Init([]*Buffer{b1, b2})
+	n := r.Read(1)
+	r.Clear()
+
+	if n != int32(Size) {
+		t.Fatalf("expected %d bytes preserved before fatal error, got %d", Size, n)
+	}
+}
+
 // TestOpenBSDSeqReaderEAGAINMidLoop checks that partial progress is returned
 // when a later buffer in the same cycle sees EAGAIN.
 func TestOpenBSDSeqReaderEAGAINMidLoop(t *testing.T) {
 	server, client, cleanup := tcpPair(t)
 	defer cleanup()
 
-	client.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	payload := make([]byte, Size)
 	if _, err := server.Write(payload); err != nil {
 		t.Fatalf("write failed: %v", err)
@@ -398,7 +655,9 @@ func TestOpenBSDSeqReaderEOFMidLoop(t *testing.T) {
 	server, client, cleanup := tcpPair(t)
 	defer cleanup()
 
-	client.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	payload := make([]byte, Size)
 	if _, err := server.Write(payload); err != nil {
 		t.Fatalf("write failed: %v", err)
@@ -432,7 +691,9 @@ func TestOpenBSDSeqReaderShortReadBreak(t *testing.T) {
 	server, client, cleanup := tcpPair(t)
 	defer cleanup()
 
-	client.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	payload := make([]byte, Size+17)
 	if _, err := server.Write(payload); err != nil {
 		t.Fatalf("write failed: %v", err)
@@ -508,7 +769,9 @@ func TestOpenBSDSlowFragmentedRead(t *testing.T) {
 		server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 
 	var got []byte
@@ -565,11 +828,15 @@ func TestOpenBSDReadVReaderCounterMatchesBytes(t *testing.T) {
 	}
 
 	go func() {
-		server.Write(payload)
-		server.Close()
+		if _, err := server.Write(payload); err != nil {
+			return
+		}
+		_ = server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	counter := &openbsdTestCounter{}
 	reader := NewReadVReader(client, rawConnOf(t, client), counter)
 
@@ -597,15 +864,21 @@ func TestOpenBSDReadVReaderEOFImmediatelyAfterDrain(t *testing.T) {
 	}
 
 	go func() {
-		server.Write(payload)
-		if tcpServer, ok := server.(*net.TCPConn); ok {
-			tcpServer.CloseWrite()
+		if _, err := server.Write(payload); err != nil {
 			return
 		}
-		server.Close()
+		if tcpServer, ok := server.(*net.TCPConn); ok {
+			if err := tcpServer.CloseWrite(); err != nil {
+				return
+			}
+			return
+		}
+		_ = server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 
 	got := readAll(t, reader, len(payload))
@@ -651,7 +924,9 @@ func TestOpenBSDRandomFragmentedStream(t *testing.T) {
 		server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(8 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(8 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 	got := readAll(t, reader, payloadSize)
 
@@ -689,11 +964,15 @@ func TestOpenBSDBoundarySizesMatrix(t *testing.T) {
 
 			go func() {
 				// Single write keeps expected byte pattern deterministic per subtest.
-				server.Write(payload)
-				server.Close()
+				if _, err := server.Write(payload); err != nil {
+					return
+				}
+				_ = server.Close()
 			}()
 
-			client.SetReadDeadline(time.Now().Add(4 * time.Second))
+			if err := client.SetReadDeadline(time.Now().Add(4 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			reader := NewReadVReader(client, rawConnOf(t, client), nil)
 			got := readAll(t, reader, n)
 
@@ -740,7 +1019,9 @@ func TestOpenBSDManyBurstsWithIdleGaps(t *testing.T) {
 		server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 	got := readAll(t, reader, len(payload))
 
@@ -781,7 +1062,9 @@ func TestOpenBSDIntermittentEAGAINThenProgress(t *testing.T) {
 		server.Close()
 	}()
 
-	client.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 	got := readAll(t, reader, payloadSize)
 
@@ -799,7 +1082,9 @@ func TestOpenBSDSeqReaderReuseAcrossPhases(t *testing.T) {
 	server, client, cleanup := tcpPair(t)
 	defer cleanup()
 
-	client.SetReadDeadline(time.Now().Add(6 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(6 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	mr := newMultiReader()
 	b1 := New()
 	b2 := New()
@@ -820,11 +1105,15 @@ func TestOpenBSDSeqReaderReuseAcrossPhases(t *testing.T) {
 
 	go func() {
 		// Phase 1 and phase 2 are intentionally serialized to make boundaries explicit.
-		server.Write(phase1)
+		if _, err := server.Write(phase1); err != nil {
+			return
+		}
 		close(phase1Ready)
 		<-allowPhase2
-		server.Write(phase2)
-		server.Close()
+		if _, err := server.Write(phase2); err != nil {
+			return
+		}
+		_ = server.Close()
 	}()
 
 	<-phase1Ready
@@ -903,7 +1192,9 @@ func TestOpenBSDPropertyFragmentedSeeds(t *testing.T) {
 				server.Close()
 			}()
 
-			client.SetReadDeadline(time.Now().Add(12 * time.Second))
+			if err := client.SetReadDeadline(time.Now().Add(12 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			reader := NewReadVReader(client, rawConnOf(t, client), nil)
 			got := readAll(t, reader, payloadSize)
 
@@ -923,10 +1214,16 @@ func TestOpenBSDFatalErrorNoSpin(t *testing.T) {
 	server, client, cleanup := tcpPair(t)
 	defer cleanup()
 
-	server.(*net.TCPConn).SetLinger(0)
-	server.Close()
+	if err := server.(*net.TCPConn).SetLinger(0); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
 
-	client.SetReadDeadline(time.Now().Add(1 * time.Second))
+	if err := client.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	reader := NewReadVReader(client, rawConnOf(t, client), nil)
 
 	done := make(chan struct{})
@@ -947,6 +1244,165 @@ func TestOpenBSDFatalErrorNoSpin(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("ReadMultiBuffer hung on fatal error (100% CPU spin regression)")
+	}
+}
+
+// TestOpenBSDFatalErrorPropagatesAsNonEOF verifies that fatal socket teardown
+// does not get silently converted to io.EOF at the ReadVReader boundary.
+func TestOpenBSDFatalErrorPropagatesAsNonEOF(t *testing.T) {
+	server, client, cleanup := tcpPair(t)
+	defer cleanup()
+
+	// Force an RST on close so the peer observes a fatal read-side condition.
+	if err := server.(*net.TCPConn).SetLinger(0); err != nil {
+		t.Fatalf("set linger failed: %v", err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatalf("server close failed: %v", err)
+	}
+
+	if err := client.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("set deadline failed: %v", err)
+	}
+	reader := NewReadVReader(client, rawConnOf(t, client), nil)
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for fatal read error")
+		default:
+		}
+
+		mb, err := reader.ReadMultiBuffer()
+		if mb != nil {
+			ReleaseMulti(mb)
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			t.Fatalf("expected non-EOF fatal error, got %v", err)
+		}
+		return
+	}
+}
+
+// TestOpenBSDFatalErrorSubsequentReadStillFails quickly checks that after the
+// first fatal read error, a subsequent read also terminates with an error
+// rather than hanging or unexpectedly returning nil.
+func TestOpenBSDFatalErrorSubsequentReadStillFails(t *testing.T) {
+	server, client, cleanup := tcpPair(t)
+	defer cleanup()
+
+	if err := server.(*net.TCPConn).SetLinger(0); err != nil {
+		t.Fatalf("set linger failed: %v", err)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatalf("server close failed: %v", err)
+	}
+
+	if err := client.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("set deadline failed: %v", err)
+	}
+	reader := NewReadVReader(client, rawConnOf(t, client), nil)
+
+	readErr := func() error {
+		deadline := time.After(3 * time.Second)
+		for {
+			select {
+			case <-deadline:
+				t.Fatal("timed out waiting for read error")
+			default:
+			}
+
+			mb, err := reader.ReadMultiBuffer()
+			if mb != nil {
+				ReleaseMulti(mb)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err1 := readErr()
+	if errors.Is(err1, io.EOF) {
+		t.Fatalf("expected first error to be non-EOF, got %v", err1)
+	}
+
+	err2 := readErr()
+	if err2 == nil {
+		t.Fatal("expected second read to fail after fatal teardown")
+	}
+}
+
+// TestOpenBSDPartialThenFatalNonEOF verifies mixed lifecycle semantics:
+// successful data delivery first, then fatal non-EOF teardown afterward.
+func TestOpenBSDPartialThenFatalNonEOF(t *testing.T) {
+	server, client, cleanup := tcpPair(t)
+	defer cleanup()
+
+	const payloadSize = 2048
+	payload := make([]byte, payloadSize)
+	for i := range payload {
+		payload[i] = byte((i*29 + 5) % 251)
+	}
+
+	triggerRST := make(chan struct{})
+	go func() {
+		if _, err := server.Write(payload); err != nil {
+			return
+		}
+		<-triggerRST
+		_ = server.(*net.TCPConn).SetLinger(0)
+		_ = server.Close()
+	}()
+
+	if err := client.SetReadDeadline(time.Now().Add(4 * time.Second)); err != nil {
+		t.Fatalf("set deadline failed: %v", err)
+	}
+	reader := NewReadVReader(client, rawConnOf(t, client), nil)
+
+	var got []byte
+	for len(got) < payloadSize {
+		mb, err := reader.ReadMultiBuffer()
+		if mb != nil {
+			for _, b := range mb {
+				got = append(got, b.Bytes()...)
+			}
+			ReleaseMulti(mb)
+		}
+		if err != nil {
+			t.Fatalf("unexpected error while reading payload: %v", err)
+		}
+	}
+
+	if !bytes.Equal(got[:payloadSize], payload) {
+		t.Fatal("payload mismatch before fatal teardown")
+	}
+
+	close(triggerRST)
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for fatal non-EOF error after payload")
+		default:
+		}
+
+		mb, err := reader.ReadMultiBuffer()
+		if mb != nil {
+			ReleaseMulti(mb)
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			t.Fatalf("expected non-EOF fatal error after payload, got %v", err)
+		}
+		return
 	}
 }
 

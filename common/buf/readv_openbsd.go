@@ -32,12 +32,16 @@ func (r *openbsdSeqReader) Read(fd uintptr) int32 {
 	for _, b := range r.bs {
 		// Read directly into each pooled buffer in sequence.
 		// This emulates readv's "fill iovecs in order" behavior without SYS_READV.
-		n, err := openbsdRead(int(fd), b.v[:])
-		if err != nil {
-			if err == syscall.EINTR {
-				// Interrupted syscall is transient; retry the same buffer read.
-				continue
+		var n int
+		var err error
+		for {
+			n, err = openbsdRead(int(fd), b.v[:])
+			if err != syscall.EINTR {
+				break
 			}
+			// Interrupted syscall is transient; retry the same buffer.
+		}
+		if err != nil {
 			if total > 0 {
 				// Preserve already-received bytes and defer surfacing the hard error.
 				// The next read call will observe socket state again.
@@ -47,9 +51,12 @@ func (r *openbsdSeqReader) Read(fd uintptr) int32 {
 				// rawConn.Read interprets -1 as "not ready yet" and re-arms polling.
 				return -1
 			}
-			// Fatal error (ECONNRESET, EBADF, etc.) -> return 0.
-			// Returning -1 here causes an infinite spin loop in rawConn.Read.
-			return 0
+			// Fatal error (ECONNRESET, EBADF, etc.) — also return -1.
+			// This matches posixReader/windowsReader: all errors signal "not done"
+			// so RawRead calls waitRead, which detects the error condition via
+			// kqueue's pollEventErr bit and returns it to readMulti as a real
+			// error instead of silently converting it to io.EOF.
+			return -1
 		}
 		if n == 0 {
 			if total > 0 {
