@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/apernet/quic-go/congestion"
-	"github.com/apernet/quic-go/monotime"
 )
 
 const (
@@ -16,7 +15,7 @@ const (
 type Pacer struct {
 	budgetAtLastSent congestion.ByteCount
 	maxDatagramSize  congestion.ByteCount
-	lastSentTime     monotime.Time
+	lastSentTime     congestion.Time
 	getBandwidth     func() congestion.ByteCount // in bytes/s
 }
 
@@ -29,7 +28,7 @@ func NewPacer(getBandwidth func() congestion.ByteCount) *Pacer {
 	return p
 }
 
-func (p *Pacer) SentPacket(sendTime monotime.Time, size congestion.ByteCount) {
+func (p *Pacer) SentPacket(sendTime congestion.Time, size congestion.ByteCount) {
 	budget := p.Budget(sendTime)
 	if size > budget {
 		p.budgetAtLastSent = 0
@@ -39,7 +38,7 @@ func (p *Pacer) SentPacket(sendTime monotime.Time, size congestion.ByteCount) {
 	p.lastSentTime = sendTime
 }
 
-func (p *Pacer) Budget(now monotime.Time) congestion.ByteCount {
+func (p *Pacer) Budget(now congestion.Time) congestion.ByteCount {
 	if p.lastSentTime.IsZero() {
 		return p.maxBurstSize()
 	}
@@ -59,7 +58,7 @@ func (p *Pacer) maxBurstSize() congestion.ByteCount {
 
 // TimeUntilSend returns when the next packet should be sent.
 // It returns the zero value if a packet can be sent immediately.
-func (p *Pacer) TimeUntilSend() monotime.Time {
+func (p *Pacer) TimeUntilSend() congestion.Time {
 	if p.budgetAtLastSent >= p.maxDatagramSize {
 		return 0
 	}

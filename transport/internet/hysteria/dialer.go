@@ -299,18 +299,18 @@ func (c *client) dial() error {
 		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
 		errors.LogDebug(c.ctx, "congestion bbr")
-		congestion.UseBBR(quicParams.CongestionDebugLog, quicConn)
+		congestion.UseBBR(quicConn)
 	case "brutal", "":
 		if serverAuto == "auto" || quicParams.BrutalUp == 0 || serverDown == 0 {
 			errors.LogDebug(c.ctx, "congestion bbr")
-			congestion.UseBBR(quicParams.CongestionDebugLog, quicConn)
+			congestion.UseBBR(quicConn)
 		} else {
 			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(quicParams.BrutalUp, serverDown))
-			congestion.UseBrutal(quicParams.CongestionDebugLog, quicConn, min(quicParams.BrutalUp, serverDown))
+			congestion.UseBrutal(quicConn, min(quicParams.BrutalUp, serverDown))
 		}
 	case "force-brutal":
 		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", quicParams.BrutalUp)
-		congestion.UseBrutal(quicParams.CongestionDebugLog, quicConn, quicParams.BrutalUp)
+		congestion.UseBrutal(quicConn, quicParams.BrutalUp)
 	default:
 		errors.LogDebug(c.ctx, "congestion reno")
 	}

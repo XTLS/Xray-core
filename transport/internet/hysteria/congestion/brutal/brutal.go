@@ -2,12 +2,13 @@ package brutal
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/common"
 
 	"github.com/apernet/quic-go/congestion"
-	"github.com/apernet/quic-go/monotime"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 	minAckRate                 = 0.8
 	congestionWindowMultiplier = 2
 
+	debugEnv           = "HYSTERIA_BRUTAL_DEBUG"
 	debugPrintInterval = 2
 )
 
@@ -40,12 +42,13 @@ type pktInfo struct {
 	LossCount uint64
 }
 
-func NewBrutalSender(debugLog bool, bps uint64) *BrutalSender {
+func NewBrutalSender(bps uint64) *BrutalSender {
+	debug, _ := strconv.ParseBool(os.Getenv(debugEnv))
 	bs := &BrutalSender{
 		bps:             congestion.ByteCount(bps),
 		maxDatagramSize: congestion.InitialPacketSize,
 		ackRate:         1,
-		debug:           debugLog,
+		debug:           debug,
 	}
 	bs.pacer = common.NewPacer(func() congestion.ByteCount {
 		return congestion.ByteCount(float64(bs.bps) / bs.ackRate)
@@ -57,11 +60,11 @@ func (b *BrutalSender) SetRTTStatsProvider(rttStats congestion.RTTStatsProvider)
 	b.rttStats = rttStats
 }
 
-func (b *BrutalSender) TimeUntilSend(bytesInFlight congestion.ByteCount) monotime.Time {
+func (b *BrutalSender) TimeUntilSend(bytesInFlight congestion.ByteCount) congestion.Time {
 	return b.pacer.TimeUntilSend()
 }
 
-func (b *BrutalSender) HasPacingBudget(now monotime.Time) bool {
+func (b *BrutalSender) HasPacingBudget(now congestion.Time) bool {
 	return b.pacer.Budget(now) >= b.maxDatagramSize
 }
 
@@ -81,15 +84,14 @@ func (b *BrutalSender) GetCongestionWindow() congestion.ByteCount {
 	return cwnd
 }
 
-func (b *BrutalSender) OnPacketSent(sentTime monotime.Time, bytesInFlight congestion.ByteCount,
+func (b *BrutalSender) OnPacketSent(sentTime congestion.Time, bytesInFlight congestion.ByteCount,
 	packetNumber congestion.PacketNumber, bytes congestion.ByteCount, isRetransmittable bool,
 ) {
-	fmt.Println("brutal OnPacketSent")
 	b.pacer.SentPacket(sentTime, bytes)
 }
 
 func (b *BrutalSender) OnPacketAcked(number congestion.PacketNumber, ackedBytes congestion.ByteCount,
-	priorInFlight congestion.ByteCount, eventTime monotime.Time,
+	priorInFlight congestion.ByteCount, eventTime congestion.Time,
 ) {
 	// Stub
 }
@@ -100,7 +102,7 @@ func (b *BrutalSender) OnCongestionEvent(number congestion.PacketNumber, lostByt
 	// Stub
 }
 
-func (b *BrutalSender) OnCongestionEventEx(priorInFlight congestion.ByteCount, eventTime monotime.Time, ackedPackets []congestion.AckedPacketInfo, lostPackets []congestion.LostPacketInfo) {
+func (b *BrutalSender) OnCongestionEventEx(priorInFlight congestion.ByteCount, eventTime congestion.Time, ackedPackets []congestion.AckedPacketInfo, lostPackets []congestion.LostPacketInfo) {
 	currentTimestamp := int64(time.Duration(eventTime) / time.Second)
 	slot := currentTimestamp % pktInfoSlotCount
 	if b.pktInfoSlots[slot].Timestamp == currentTimestamp {

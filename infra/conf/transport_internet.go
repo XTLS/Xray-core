@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -628,7 +629,7 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 
 type QuicParamsConfig struct {
 	Congestion                  string    `json:"congestion"`
-	CongestionDebugLog          bool      `json:"congestionDebugLog"`
+	Debug                       bool      `json:"debug"`
 	BrutalUp                    Bandwidth `json:"brutalUp"`
 	BrutalDown                  Bandwidth `json:"brutalDown"`
 	UdpHop                      UdpHop    `json:"udphop"`
@@ -1898,11 +1899,15 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("MaxIncomingStreams must be at least 8")
 			}
 
+			if c.FinalMask.QuicParams.Debug {
+				os.Setenv("HYSTERIA_BBR_DEBUG", "true")
+				os.Setenv("HYSTERIA_BRUTAL_DEBUG", "true")
+			}
+
 			config.QuicParams = &internet.QuicParams{
-				Congestion:         c.FinalMask.QuicParams.Congestion,
-				CongestionDebugLog: c.FinalMask.QuicParams.CongestionDebugLog,
-				BrutalUp:           up,
-				BrutalDown:         down,
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				BrutalUp:   up,
+				BrutalDown: down,
 				UdpHop: &internet.UdpHop{
 					Ports:       hop.Build().Ports(),
 					IntervalMin: inertvalMin,

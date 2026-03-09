@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/apernet/quic-go/congestion"
-	"github.com/apernet/quic-go/monotime"
 )
 
 const (
@@ -104,7 +103,7 @@ type maxAckHeightTracker struct {
 	// bandwidth.
 	maxAckHeightFilter *WindowedFilter[extraAckedEvent, roundTripCount]
 	// The time this aggregation started and the number of bytes acked during it.
-	aggregationEpochStartTime monotime.Time
+	aggregationEpochStartTime congestion.Time
 	aggregationEpochBytes     congestion.ByteCount
 	// The last sent packet number before the current aggregation epoch started.
 	lastSentPacketNumberBeforeEpoch congestion.PacketNumber
@@ -134,7 +133,7 @@ func (m *maxAckHeightTracker) Update(
 	roundTripCount roundTripCount,
 	lastSentPacketNumber congestion.PacketNumber,
 	lastAckedPacketNumber congestion.PacketNumber,
-	ackTime monotime.Time,
+	ackTime congestion.Time,
 	bytesAcked congestion.ByteCount,
 ) congestion.ByteCount {
 	forceNewEpoch := false
@@ -242,7 +241,7 @@ func (m *maxAckHeightTracker) NumAckAggregationEpochs() uint64 {
 
 // AckPoint represents a point on the ack line.
 type ackPoint struct {
-	ackTime         monotime.Time
+	ackTime         congestion.Time
 	totalBytesAcked congestion.ByteCount
 }
 
@@ -251,7 +250,7 @@ type recentAckPoints struct {
 	ackPoints [2]ackPoint
 }
 
-func (r *recentAckPoints) Update(ackTime monotime.Time, totalBytesAcked congestion.ByteCount) {
+func (r *recentAckPoints) Update(ackTime congestion.Time, totalBytesAcked congestion.ByteCount) {
 	if ackTime.Before(r.ackPoints[1].ackTime) {
 		r.ackPoints[1].ackTime = ackTime
 	} else if ackTime.After(r.ackPoints[1].ackTime) {
@@ -285,7 +284,7 @@ func (r *recentAckPoints) LessRecentPoint() *ackPoint {
 // that moment.
 type connectionStateOnSentPacket struct {
 	// Time at which the packet is sent.
-	sentTime monotime.Time
+	sentTime congestion.Time
 	// Size of the packet.
 	size congestion.ByteCount
 	// The value of |totalBytesSentAtLastAckedPacket| at the time the
@@ -293,10 +292,10 @@ type connectionStateOnSentPacket struct {
 	totalBytesSentAtLastAckedPacket congestion.ByteCount
 	// The value of |lastAckedPacketSentTime| at the time the packet was
 	// sent.
-	lastAckedPacketSentTime monotime.Time
+	lastAckedPacketSentTime congestion.Time
 	// The value of |lastAckedPacketAckTime| at the time the packet was
 	// sent.
-	lastAckedPacketAckTime monotime.Time
+	lastAckedPacketAckTime congestion.Time
 	// Send time states that are returned to the congestion controller when the
 	// packet is acked or lost.
 	sendTimeState sendTimeState
@@ -306,7 +305,7 @@ type connectionStateOnSentPacket struct {
 // sampler.
 // |bytes_in_flight| is the bytes in flight right after the packet is sent.
 func newConnectionStateOnSentPacket(
-	sentTime monotime.Time,
+	sentTime congestion.Time,
 	size congestion.ByteCount,
 	bytesInFlight congestion.ByteCount,
 	sampler *bandwidthSampler,
@@ -457,10 +456,10 @@ type bandwidthSampler struct {
 
 	// The time at which the last acknowledged packet was sent. Set to
 	// QuicTime::Zero() if no valid timestamp is available.
-	lastAckedPacketSentTime monotime.Time
+	lastAckedPacketSentTime congestion.Time
 
 	// The time at which the most recent packet was acknowledged.
-	lastAckedPacketAckTime monotime.Time
+	lastAckedPacketAckTime congestion.Time
 
 	// The most recently sent packet.
 	lastSentPacket congestion.PacketNumber
@@ -552,7 +551,7 @@ func (b *bandwidthSampler) IsOverestimateAvoidanceEnabled() bool {
 }
 
 func (b *bandwidthSampler) OnPacketSent(
-	sentTime monotime.Time,
+	sentTime congestion.Time,
 	packetNumber congestion.PacketNumber,
 	bytes congestion.ByteCount,
 	bytesInFlight congestion.ByteCount,
@@ -596,7 +595,7 @@ func (b *bandwidthSampler) OnPacketSent(
 }
 
 func (b *bandwidthSampler) OnCongestionEvent(
-	ackTime monotime.Time,
+	ackTime congestion.Time,
 	ackedPackets []congestion.AckedPacketInfo,
 	lostPackets []congestion.LostPacketInfo,
 	maxBandwidth Bandwidth,
@@ -759,7 +758,7 @@ func (b *bandwidthSampler) chooseA0Point(totalBytesAcked congestion.ByteCount, a
 	return true
 }
 
-func (b *bandwidthSampler) onPacketAcknowledged(ackTime monotime.Time, packetNumber congestion.PacketNumber) bandwidthSample {
+func (b *bandwidthSampler) onPacketAcknowledged(ackTime congestion.Time, packetNumber congestion.PacketNumber) bandwidthSample {
 	sample := newBandwidthSample()
 	b.lastAckedPacket = packetNumber
 	sentPacketPointer := b.connectionStateMap.GetEntry(packetNumber)

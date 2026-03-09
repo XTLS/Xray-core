@@ -14,7 +14,6 @@ import (
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
-	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -182,18 +181,18 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			case "bbr":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-				congestion.UseBBR(h.quicParams.CongestionDebugLog, h.conn)
+				congestion.UseBBR(h.conn)
 			case "brutal", "":
 				if h.quicParams.BrutalUp == 0 || clientDown == 0 {
 					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(h.quicParams.CongestionDebugLog, h.conn)
+					congestion.UseBBR(h.conn)
 				} else {
 					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", min(h.quicParams.BrutalUp, clientDown))
-					congestion.UseBrutal(h.quicParams.CongestionDebugLog, h.conn, min(h.quicParams.BrutalUp, clientDown))
+					congestion.UseBrutal(h.conn, min(h.quicParams.BrutalUp, clientDown))
 				}
 			case "force-brutal":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", h.quicParams.BrutalUp)
-				congestion.UseBrutal(h.quicParams.CongestionDebugLog, h.conn, h.quicParams.BrutalUp)
+				congestion.UseBrutal(h.conn, h.quicParams.BrutalUp)
 			default:
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			}
@@ -223,17 +222,13 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.masqHandler.ServeHTTP(w, r)
 }
 
-func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
+func (h *httpHandler) ProxyStreamHijacker(ft http3.FrameType, id quic.ConnectionTracingID, stream *quic.Stream, err error) (bool, error) {
 	if err != nil || !h.auth {
 		return false, nil
 	}
 
 	switch ft {
 	case FrameTypeTCPRequest:
-		if _, err := quicvarint.Read(quicvarint.NewReader(stream)); err != nil {
-			return false, err
-		}
-
 		h.addConn(&interConn{
 			stream: stream,
 			local:  h.conn.LocalAddr(),
@@ -271,8 +266,8 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		masqHandler: l.masqHandler,
 	}
 	h3 := http3.Server{
-		Handler:          handler,
-		StreamDispatcher: handler.StreamDispatcher,
+		Handler:        handler,
+		StreamHijacker: handler.ProxyStreamHijacker,
 	}
 	err := h3.ServeQUICConn(conn)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
