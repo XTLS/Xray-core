@@ -89,13 +89,14 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 			}
 		}()
 
-		r := &netReadInfo{
-			buff: bufs[0],
+		r, ok := <-bind.readQueue
+		if !ok {
+			return 0, errors.New("channel closed")
 		}
-		r.waiter.Add(1)
-		bind.readQueue <- r
-		r.waiter.Wait() // wait read goroutine done, or we will miss the result
+
+		copy(bufs[0], r.buff[:r.bytes])
 		sizes[0], eps[0] = r.bytes, r.endpoint
+		r.waiter.Done()
 		return 1, r.err
 	}
 	workers := bind.workers
@@ -133,24 +134,29 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 	}
 	endpoint.conn = c
 
-	go func(readQueue <-chan *netReadInfo, endpoint *netEndpoint) {
+	go func(readQueue chan<- *netReadInfo, endpoint *netEndpoint) {
+		defer func() {
+			_ = recover() // handle send on closed channel
+		}()
 		for {
-			v, ok := <-readQueue
-			if !ok {
-				return
-			}
-			i, err := c.Read(v.buff)
+			buff := make([]byte, 1700)
+			i, err := c.Read(buff)
 
 			if i > 3 {
-				v.buff[1] = 0
-				v.buff[2] = 0
-				v.buff[3] = 0
+				buff[1] = 0
+				buff[2] = 0
+				buff[3] = 0
 			}
 
-			v.bytes = i
-			v.endpoint = endpoint
-			v.err = err
-			v.waiter.Done()
+			r := &netReadInfo{
+				buff:     buff,
+				bytes:    i,
+				endpoint: endpoint,
+				err:      err,
+			}
+			r.waiter.Add(1)
+			readQueue <- r
+			r.waiter.Wait()
 			if err != nil {
 				endpoint.conn = nil
 				return
