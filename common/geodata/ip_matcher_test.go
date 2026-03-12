@@ -1,4 +1,4 @@
-package router_test
+package geodata
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
@@ -36,7 +35,7 @@ func getAssetPath(file string) (string, error) {
 }
 
 func TestGeoIPMatcher(t *testing.T) {
-	cidrList := []*router.CIDR{
+	cidrList := []*CIDR{
 		{Ip: []byte{0, 0, 0, 0}, Prefix: 8},
 		{Ip: []byte{10, 0, 0, 0}, Prefix: 8},
 		{Ip: []byte{100, 64, 0, 0}, Prefix: 10},
@@ -53,7 +52,7 @@ func TestGeoIPMatcher(t *testing.T) {
 		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
 	}
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: cidrList,
 	})
 	common.Must(err)
@@ -110,12 +109,12 @@ func TestGeoIPMatcher(t *testing.T) {
 }
 
 func TestGeoIPMatcherRegression(t *testing.T) {
-	cidrList := []*router.CIDR{
+	cidrList := []*CIDR{
 		{Ip: []byte{98, 108, 20, 0}, Prefix: 22},
 		{Ip: []byte{98, 108, 20, 0}, Prefix: 23},
 	}
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: cidrList,
 	})
 	common.Must(err)
@@ -144,11 +143,11 @@ func TestGeoIPMatcherRegression(t *testing.T) {
 }
 
 func TestGeoIPReverseMatcher(t *testing.T) {
-	cidrList := []*router.CIDR{
+	cidrList := []*CIDR{
 		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
 		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
 	}
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: cidrList,
 	})
 	common.Must(err)
@@ -185,7 +184,7 @@ func TestGeoIPMatcher4CN(t *testing.T) {
 	ips, err := loadGeoIP("CN")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: ips,
 	})
 	common.Must(err)
@@ -199,7 +198,7 @@ func TestGeoIPMatcher6US(t *testing.T) {
 	ips, err := loadGeoIP("US")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: ips,
 	})
 	common.Must(err)
@@ -209,7 +208,7 @@ func TestGeoIPMatcher6US(t *testing.T) {
 	}
 }
 
-func loadGeoIP(country string) ([]*router.CIDR, error) {
+func loadGeoIP(country string) ([]*CIDR, error) {
 	path, err := getAssetPath("geoip.dat")
 	if err != nil {
 		return nil, err
@@ -219,13 +218,13 @@ func loadGeoIP(country string) ([]*router.CIDR, error) {
 		return nil, err
 	}
 
-	var geoipList router.GeoIPList
+	var geoipList GeoIPList
 	if err := proto.Unmarshal(geoipBytes, &geoipList); err != nil {
 		return nil, err
 	}
 
 	for _, geoip := range geoipList.Entry {
-		if geoip.CountryCode == country {
+		if geoip.Code == country {
 			return geoip.Cidr, nil
 		}
 	}
@@ -237,7 +236,7 @@ func BenchmarkGeoIPMatcher4CN(b *testing.B) {
 	ips, err := loadGeoIP("CN")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: ips,
 	})
 	common.Must(err)
@@ -253,7 +252,7 @@ func BenchmarkGeoIPMatcher6US(b *testing.B) {
 	ips, err := loadGeoIP("US")
 	common.Must(err)
 
-	matcher, err := router.BuildOptimizedGeoIPMatcher(&router.GeoIP{
+	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
 		Cidr: ips,
 	})
 	common.Must(err)

@@ -1,4 +1,4 @@
-package router
+package geodata
 
 import (
 	"context"
@@ -801,8 +801,6 @@ type GeoIPSetFactory struct {
 	shared map[string]*GeoIPSet // TODO: cleanup
 }
 
-var ipsetFactory = GeoIPSetFactory{shared: make(map[string]*GeoIPSet)}
-
 func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPSet, error) {
 	f.Lock()
 	defer f.Unlock()
@@ -879,7 +877,7 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
 }
 
-func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
+func (r *GeoIPRegistry) buildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 	n := len(geoips)
 	if n == 0 {
 		return nil, errors.New("no geoip configs provided")
@@ -893,8 +891,8 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 		if geoip == nil {
 			return nil, errors.New("geoip entry is nil")
 		}
-		if geoip.CountryCode == "" {
-			ipset, err := ipsetFactory.Create(geoip.Cidr)
+		if geoip.Code == "" {
+			ipset, err := r.ipsetFactory.Create(geoip.Cidr)
 			if err != nil {
 				return nil, err
 			}
@@ -916,7 +914,7 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 
 		sort.Slice(mergeables, func(i, j int) bool {
 			gi, gj := mergeables[i], mergeables[j]
-			return gi.CountryCode < gj.CountryCode
+			return gi.Code < gj.Code
 		})
 
 		var sb strings.Builder
@@ -924,15 +922,15 @@ func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
 		cidrGroups := make([][]*CIDR, 0, n)
 		var last *GeoIP
 		for i, geoip := range mergeables {
-			if i == 0 || (geoip.CountryCode != last.CountryCode) {
+			if i == 0 || (geoip.Code != last.Code) {
 				last = geoip
-				sb.WriteString(geoip.CountryCode)
+				sb.WriteString(geoip.Code)
 				sb.WriteString(",")
 				cidrGroups = append(cidrGroups, geoip.Cidr)
 			}
 		}
 
-		return ipsetFactory.GetOrCreate(sb.String(), cidrGroups)
+		return r.ipsetFactory.GetOrCreate(sb.String(), cidrGroups)
 	}
 
 	ipset, err := buildIPSet(pos)
