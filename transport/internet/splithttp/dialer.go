@@ -5,7 +5,7 @@ import (
 	gotls "crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/ech"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -115,37 +116,40 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
-	dialContext := func(ctxInner context.Context) (net.Conn, error) {
-		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+	preTLSDialFn := func(c context.Context) (net.Conn, error) {
+		rawConn, err := internet.DialSystem(c, dest, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
 		}
 
 		if streamSettings.TcpmaskManager != nil {
-			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(rawConn)
 			if err != nil {
-				conn.Close()
+				rawConn.Close()
 				return nil, errors.New("mask err").Base(err)
 			}
-			conn = newConn
+			rawConn = newConn
 		}
+		return rawConn, nil
+	}
 
+	dialContext := func(ctxInner context.Context) (net.Conn, error) {
 		if realityConfig != nil {
-			return reality.UClient(conn, realityConfig, ctxInner, dest)
-		}
-
-		if gotlsConfig != nil {
-			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-				conn = tls.UClient(conn, gotlsConfig, fingerprint)
-				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
-					return nil, err
-				}
-			} else {
-				conn = tls.Client(conn, gotlsConfig)
+			raw, err := preTLSDialFn(ctxInner)
+			if err != nil {
+				return nil, err
 			}
+			return reality.UClient(raw, realityConfig, ctxInner, dest)
 		}
 
-		return conn, nil
+		if gotlsConfig == nil {
+			return preTLSDialFn(ctxInner)
+		}
+
+		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+			return ech.UHandshake(ctxInner, preTLSDialFn, gotlsConfig, fingerprint, false)
+		}
+		return ech.StdHandshake(ctxInner, preTLSDialFn, gotlsConfig)
 	}
 
 	var keepAlivePeriod time.Duration
@@ -193,110 +197,108 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
-				udphopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
-					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
+				quicSetupFn := func(c context.Context, echCfg *gotls.Config) (*quic.Conn, error) {
+					udphopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
+						conn, err := internet.DialSystem(c, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
+						if err != nil {
+							errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
+							conn.Close()
+							return nil, errors.New()
+						}
+						switch c := conn.(type) {
+						case *internet.PacketConnWrapper:
+							return c.PacketConn, nil
+						case *net.UDPConn:
+							return c, nil
+						default:
+							errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level ", reflect.TypeOf(c))
+							conn.Close()
+							return nil, errors.New()
+						}
+					}
+
+					var index int
+					if len(quicParams.UdpHop.Ports) > 0 {
+						index = rand.IntN(len(quicParams.UdpHop.Ports))
+						dest.Port = net.Port(quicParams.UdpHop.Ports[index])
+					}
+
+					conn, err := internet.DialSystem(c, dest, streamSettings.SocketSettings)
 					if err != nil {
-						errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
-						conn.Close()
-						return nil, errors.New()
+						return nil, err
 					}
 
 					var udpConn net.PacketConn
+					var udpAddr *net.UDPAddr
 
-					switch c := conn.(type) {
+					switch tc := conn.(type) {
 					case *internet.PacketConnWrapper:
-						udpConn = c.PacketConn
+						udpConn = tc.PacketConn
+						udpAddr, err = net.ResolveUDPAddr("udp", tc.Dest.String())
+						if err != nil {
+							conn.Close()
+							return nil, err
+						}
 					case *net.UDPConn:
-						udpConn = c
+						udpConn = tc
+						udpAddr, err = net.ResolveUDPAddr("udp", tc.RemoteAddr().String())
+						if err != nil {
+							conn.Close()
+							return nil, err
+						}
 					default:
-						errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level ", reflect.TypeOf(c))
-						conn.Close()
-						return nil, errors.New()
-					}
-
-					return udpConn, nil
-				}
-
-				var index int
-				if len(quicParams.UdpHop.Ports) > 0 {
-					index = rand.Intn(len(quicParams.UdpHop.Ports))
-					dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-				}
-
-				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				var udpConn net.PacketConn
-				var udpAddr *net.UDPAddr
-
-				switch c := conn.(type) {
-				case *internet.PacketConnWrapper:
-					udpConn = c.PacketConn
-					udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
-					if err != nil {
-						conn.Close()
-						return nil, err
-					}
-				case *net.UDPConn:
-					udpConn = c
-					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-					if err != nil {
-						conn.Close()
-						return nil, err
-					}
-				default:
-					udpConn = &internet.FakePacketConn{Conn: c}
-					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-					if err != nil {
-						conn.Close()
-						return nil, err
+						udpConn = &internet.FakePacketConn{Conn: conn}
+						udpAddr, err = net.ResolveUDPAddr("udp", conn.RemoteAddr().String())
+						if err != nil {
+							conn.Close()
+							return nil, err
+						}
+						if len(quicParams.UdpHop.Ports) > 0 {
+							conn.Close()
+							return nil, errors.New("udphop requires being at the outermost level ", reflect.TypeOf(tc))
+						}
 					}
 
 					if len(quicParams.UdpHop.Ports) > 0 {
-						conn.Close()
-						return nil, errors.New("udphop requires being at the outermost level ", reflect.TypeOf(c))
+						addr := &udphop.UDPHopAddr{
+							IP:    udpAddr.IP,
+							Ports: quicParams.UdpHop.Ports,
+						}
+						udpConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, udphopDialer, udpConn)
+						if err != nil {
+							conn.Close()
+							return nil, errors.New("udphop err").Base(err)
+						}
 					}
-				}
 
-				if len(quicParams.UdpHop.Ports) > 0 {
-					addr := &udphop.UDPHopAddr{
-						IP:    udpAddr.IP,
-						Ports: quicParams.UdpHop.Ports,
+					if streamSettings.UdpmaskManager != nil {
+						udpConn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
+						if err != nil {
+							conn.Close()
+							return nil, errors.New("mask err").Base(err)
+						}
 					}
-					udpConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, udphopDialer, udpConn)
+
+					quicConn, err := quic.DialEarly(c, udpConn, udpAddr, echCfg, cfg)
 					if err != nil {
-						conn.Close()
-						return nil, errors.New("udphop err").Base(err)
+						return nil, err
 					}
-				}
 
-				if streamSettings.UdpmaskManager != nil {
-					udpConn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("mask err").Base(err)
+					switch quicParams.Congestion {
+					case "force-brutal":
+						errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
+						congestion.UseBrutal(quicConn, quicParams.BrutalUp)
+					case "reno":
+						errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
+					default:
+						errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
+						congestion.UseBBR(quicConn)
 					}
+
+					return quicConn, nil
 				}
 
-				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
-				if err != nil {
-					return nil, err
-				}
-
-				switch quicParams.Congestion {
-				case "force-brutal":
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
-					congestion.UseBrutal(quicConn, quicParams.BrutalUp)
-				case "reno":
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
-				default:
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(quicConn)
-				}
-
-				return quicConn, nil
+				return ech.QUICHandshake(ctx, quicSetupFn, tlsCfg)
 			},
 		}
 	} else if httpVersion == "2" {

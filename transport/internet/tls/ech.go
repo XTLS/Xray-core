@@ -53,7 +53,7 @@ func ApplyECH(c *Config, config *tls.Config) error {
 		switch ECHForceQuery {
 		case "none", "half", "full":
 		case "":
-			ECHForceQuery = "full" // default to full
+			ECHForceQuery = "none" // default to none
 		default:
 			panic("Invalid ECHForceQuery: " + c.EchForceQuery)
 		}
@@ -105,9 +105,10 @@ type ECHConfigCache struct {
 }
 
 type echConfigRecord struct {
-	config []byte
-	expire time.Time
-	err    error
+	config    []byte
+	expire    time.Time
+	err       error
+	updatedAt time.Time
 }
 
 var (
@@ -146,10 +147,12 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 	if ttl == 0 {
 		ttl = dns2.DefaultTTL
 	}
+	now := time.Now()
 	configRecord = &echConfigRecord{
-		config: echConfig,
-		expire: time.Now().Add(time.Duration(ttl) * time.Second),
-		err:    err,
+		config:    echConfig,
+		expire:    now.Add(time.Duration(ttl) * time.Second),
+		err:       err,
+		updatedAt: now,
 	}
 	c.configRecord.Store(configRecord)
 	return configRecord.config, configRecord.err
@@ -158,6 +161,12 @@ func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate boo
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DNS server and update the cache.
 func QueryRecord(domain string, server string, forceQuery string, sockopt *internet.SocketConfig) ([]byte, error) {
+	if recent, ok := lookupRecentECH(domain); ok {
+		errors.LogDebug(context.Background(), "RecentECH cache hit for domain: ", domain)
+		refreshDNSCacheFromRecent(domain, server, sockopt, recent)
+		return recent, nil
+	}
+
 	GlobalECHConfigCacheKey := ECHCacheKey(server, domain, sockopt)
 	echConfigCache, ok := GlobalECHConfigCache.Load(GlobalECHConfigCacheKey)
 	if !ok {
@@ -171,21 +180,64 @@ func QueryRecord(domain string, server string, forceQuery string, sockopt *inter
 		return configRecord.config, configRecord.err
 	}
 
-	// If expire is zero value, it means we are in initial state, wait for the query to finish
-	// otherwise return old value immediately and update in a goroutine
-	// but if the cache is too old, wait for update
-	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*4).Before(time.Now()) {
+	if configRecord.expire.Equal(time.Time{}) || configRecord.expire.Add(time.Hour*4).Before(time.Now()) {
 		return echConfigCache.Update(domain, server, false, forceQuery, sockopt)
-	} else {
-		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
-		if echConfigCache.UpdateLock.TryLock() {
-			go func() {
-				defer echConfigCache.UpdateLock.Unlock()
-				echConfigCache.Update(domain, server, true, forceQuery, sockopt)
-			}()
-		}
-		return configRecord.config, configRecord.err
 	}
+	if echConfigCache.UpdateLock.TryLock() {
+		go func() {
+			defer echConfigCache.UpdateLock.Unlock()
+			echConfigCache.Update(domain, server, true, forceQuery, sockopt)
+		}()
+	}
+	return configRecord.config, configRecord.err
+}
+
+func refreshDNSCacheFromRecent(domain, server string, sockopt *internet.SocketConfig, config []byte) {
+	key := ECHCacheKey(server, domain, sockopt)
+	cache, ok := GlobalECHConfigCache.Load(key)
+	if !ok {
+		return
+	}
+	now := time.Now()
+	cache.configRecord.Store(&echConfigRecord{
+		config:    config,
+		expire:    now.Add(time.Hour),
+		err:       nil,
+		updatedAt: now,
+	})
+}
+
+const recentECHMaxAge = time.Hour
+
+type recentECHEntry struct {
+	config   []byte
+	storedAt time.Time
+}
+
+var recentECHCache sync.Map
+
+func StoreRecentECH(serverName string, config []byte) {
+	if len(config) == 0 || serverName == "" {
+		return
+	}
+	recentECHCache.Store(serverName, &recentECHEntry{
+		config:   config,
+		storedAt: time.Now(),
+	})
+	errors.LogDebug(context.Background(), "RecentECH stored for: ", serverName, " (", len(config), " bytes)")
+}
+
+func lookupRecentECH(serverName string) ([]byte, bool) {
+	v, ok := recentECHCache.Load(serverName)
+	if !ok {
+		return nil, false
+	}
+	e := v.(*recentECHEntry)
+	if time.Since(e.storedAt) > recentECHMaxAge {
+		recentECHCache.Delete(serverName)
+		return nil, false
+	}
+	return e.config, true
 }
 
 // dnsQuery is the real func for sending type65 query for given domain to given DNS server.
@@ -233,7 +285,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 						if err != nil {
 							return nil, err
 						}
-						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname()}, utls.HelloChrome_Auto)
+						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname(), InsecureSkipVerify: true}, utls.HelloChrome_Auto)
 						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
 							return nil, err
 						}
@@ -254,7 +306,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
 		req.Header.Set("User-Agent", utils.ChromeUA)
-		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
+		// req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 		resp, err := client.Do(req)
 		if err != nil {

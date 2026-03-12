@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/ech"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -46,23 +47,26 @@ func init() {
 func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, ed []byte) (net.Conn, error) {
 	wsSettings := streamSettings.ProtocolSettings.(*Config)
 
+	preTLSDialFn := func(c context.Context) (net.Conn, error) {
+		conn, err := internet.DialSystem(c, dest, streamSettings.SocketSettings)
+		if err != nil {
+			return nil, err
+		}
+		if streamSettings.TcpmaskManager != nil {
+			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
+			if err != nil {
+				conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			conn = newConn
+		}
+
+		return conn, nil
+	}
+
 	dialer := &websocket.Dialer{
 		NetDial: func(network, addr string) (net.Conn, error) {
-			conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-			if err != nil {
-				return nil, err
-			}
-
-			if streamSettings.TcpmaskManager != nil {
-				newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
-				if err != nil {
-					conn.Close()
-					return nil, errors.New("mask err").Base(err)
-				}
-				conn = newConn
-			}
-
-			return conn, err
+			return preTLSDialFn(ctx)
 		},
 		ReadBufferSize:   4 * 1024,
 		WriteBufferSize:  4 * 1024,
@@ -77,29 +81,14 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		tlsConfig := tConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		dialer.TLSClientConfig = tlsConfig
 		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
-			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (net.Conn, error) {
+			dialer.NetDialTLSContext = func(c context.Context, _, addr string) (net.Conn, error) {
 				// Like the NetDial in the dialer
-				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				cn, err := ech.UHandshake(c, preTLSDialFn, tlsConfig, fingerprint, true)
 				if err != nil {
 					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
 				}
 
-				if streamSettings.TcpmaskManager != nil {
-					newConn, err := streamSettings.TcpmaskManager.WrapConnClient(pconn)
-					if err != nil {
-						pconn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-					pconn = newConn
-				}
-
-				// TLS and apply the handshake
-				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
-				if err := cn.WebsocketHandshakeContext(ctx); err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
-					return nil, err
-				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
 						errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
