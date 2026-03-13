@@ -58,6 +58,13 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		globalDialerMap = make(map[dialerConf]*XmuxManager)
 	}
 
+	// Clean up dead managers to prevent unbounded map growth
+	for k, mgr := range globalDialerMap {
+		if mgr.IsAllDead() {
+			delete(globalDialerMap, k)
+		}
+	}
+
 	key := dialerConf{dest, streamSettings}
 
 	xmuxManager, found := globalDialerMap[key]
@@ -513,6 +520,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		maxUploadSize,
 	}
 
+	// Bound concurrent upload goroutines to limit memory from in-flight POST buffers
+	const maxConcurrentUploads = 4
+	uploadSem := make(chan struct{}, maxConcurrentUploads)
+
 	go func() {
 		var seq int64
 		var lastWrite time.Time
@@ -556,7 +567,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
 				}
 
+				uploadSem <- struct{}{}
 				go func() {
+					defer func() { <-uploadSem }()
 					err := httpClient.PostPacket(
 						ctx,
 						requestURL.String(),
@@ -596,23 +609,17 @@ type uploadWriter struct {
 }
 
 func (w uploadWriter) Write(b []byte) (int, error) {
-	/*
-		capacity := int(w.maxLen - w.Len())
-		if capacity > 0 && capacity < len(b) {
-			b = b[:capacity]
-		}
-	*/
+	written := 0
+	for len(b) > 0 {
+		buffer := buf.New()
+		n, _ := buffer.Write(b)
+		b = b[n:]
 
-	buffer := buf.MultiBufferContainer{}
-	common.Must2(buffer.Write(b))
-
-	var writed int
-	for _, buff := range buffer.MultiBuffer {
-		err := w.WriteMultiBuffer(buf.MultiBuffer{buff})
+		err := w.WriteMultiBuffer(buf.MultiBuffer{buffer})
 		if err != nil {
-			return writed, err
+			return written, err
 		}
-		writed += int(buff.Len())
+		written += n
 	}
-	return writed, nil
+	return written, nil
 }

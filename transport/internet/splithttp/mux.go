@@ -60,6 +60,18 @@ func (m *XmuxManager) newXmuxClient() *XmuxClient {
 	return xmuxClient
 }
 
+func (m *XmuxManager) IsAllDead() bool {
+	if len(m.xmuxClients) == 0 {
+		return false
+	}
+	for _, c := range m.xmuxClients {
+		if !c.XmuxConn.IsClosed() && c.OpenUsage.Load() > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when locking
 	for i := 0; i < len(m.xmuxClients); {
 		xmuxClient := m.xmuxClients[i]

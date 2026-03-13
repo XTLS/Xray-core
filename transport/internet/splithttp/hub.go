@@ -293,15 +293,29 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		var bodyPayload []byte
 		if dataPlacement == PlacementAuto || dataPlacement == PlacementBody {
-			bodyPayload, err = io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
-			if err != nil {
-				errors.LogInfoInner(context.Background(), err, "failed to upload (ReadAll)")
+			// Single exact-size allocation instead of io.ReadAll's grow-and-copy
+			bodyPayload = make([]byte, scMaxEachPostBytes+1)
+			n, readErr := io.ReadFull(request.Body, bodyPayload)
+			if readErr != nil && readErr != io.ErrUnexpectedEOF && readErr != io.EOF {
+				errors.LogInfoInner(context.Background(), readErr, "failed to upload (ReadFull)")
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			bodyPayload = bodyPayload[:n]
 		}
 
-		payload := slices.Concat(headerPayload, cookiePayload, bodyPayload)
+		// Fast path: skip slices.Concat when only one source has data
+		var payload []byte
+		switch {
+		case len(headerPayload) == 0 && len(cookiePayload) == 0:
+			payload = bodyPayload
+		case len(bodyPayload) == 0 && len(cookiePayload) == 0:
+			payload = headerPayload
+		case len(headerPayload) == 0 && len(bodyPayload) == 0:
+			payload = cookiePayload
+		default:
+			payload = slices.Concat(headerPayload, cookiePayload, bodyPayload)
+		}
 
 		if len(payload) > scMaxEachPostBytes {
 			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")

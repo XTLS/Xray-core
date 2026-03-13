@@ -9,7 +9,6 @@ import (
 	"net/http/httptrace"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -112,12 +111,19 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			return errors.New("bad status code:", resp.Status)
 		}
 	} else {
-		// stringify the entire HTTP/1.1 request so it can be
-		// safely retried. if instead req.Write is called multiple
-		// times, the body is already drained after the first
-		// request
-		requestBuff := new(bytes.Buffer)
-		common.Must(req.Write(requestBuff))
+		// Pre-read body for retry safety on stale pooled connections.
+		// Use exact contentLength to avoid io.ReadAll grow-and-copy.
+		var bodyBytes []byte
+		if body != nil && contentLength > 0 {
+			bodyBytes = make([]byte, contentLength)
+			if _, err = io.ReadFull(body, bodyBytes); err != nil {
+				return err
+			}
+		} else if body != nil {
+			if bodyBytes, err = io.ReadAll(body); err != nil {
+				return err
+			}
+		}
 
 		var uploadConn any
 		var h1UploadConn *H1Conn
@@ -151,15 +157,15 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				}
 			}
 
-			_, err := h1UploadConn.Write(requestBuff.Bytes())
-			// if the write failed, we try another connection from
-			// the pool, until the write on a new connection fails.
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			req.ContentLength = int64(len(bodyBytes))
+			writeErr := req.Write(h1UploadConn)
 			// failed writes to a pooled connection are normal when
 			// the connection has been closed in the meantime.
-			if err == nil {
+			if writeErr == nil {
 				break
 			} else if newConnection {
-				return err
+				return writeErr
 			}
 		}
 
