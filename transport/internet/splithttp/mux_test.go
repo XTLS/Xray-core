@@ -7,12 +7,10 @@ import (
 	. "github.com/xtls/xray-core/transport/internet/splithttp"
 )
 
-type fakeRoundTripper struct {
-	closed bool
-}
+type fakeRoundTripper struct{}
 
 func (f *fakeRoundTripper) IsClosed() bool {
-	return f.closed
+	return false
 }
 
 func TestMaxConnections(t *testing.T) {
@@ -90,37 +88,5 @@ func TestDefault(t *testing.T) {
 
 	if len(xmuxClients) != 1 {
 		t.Error("did not get 1 distinct clients, got ", len(xmuxClients))
-	}
-}
-
-func TestIsAllDead_AllClosed(t *testing.T) {
-	rt := &fakeRoundTripper{}
-	xmuxManager := NewXmuxManager(XmuxConfig{}, func() XmuxConn {
-		return rt
-	})
-
-	client := xmuxManager.GetXmuxClient(context.Background())
-	client.OpenUsage.Add(1)
-
-	if xmuxManager.IsAllDead() {
-		t.Error("expected manager to be alive while client has open usage")
-	}
-
-	client.OpenUsage.Add(-1)
-	rt.closed = true
-
-	if !xmuxManager.IsAllDead() {
-		t.Error("expected manager to be dead after all clients closed")
-	}
-}
-
-func TestIsAllDead_EmptyManager(t *testing.T) {
-	xmuxManager := NewXmuxManager(XmuxConfig{}, func() XmuxConn {
-		return &fakeRoundTripper{}
-	})
-
-	// Empty manager (no clients ever created) should not be considered dead
-	if xmuxManager.IsAllDead() {
-		t.Error("empty manager should not be considered dead")
 	}
 }

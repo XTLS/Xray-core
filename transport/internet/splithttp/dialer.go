@@ -58,13 +58,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		globalDialerMap = make(map[dialerConf]*XmuxManager)
 	}
 
-	// Clean up dead managers to prevent unbounded map growth
-	for k, mgr := range globalDialerMap {
-		if mgr.IsAllDead() {
-			delete(globalDialerMap, k)
-		}
-	}
-
 	key := dialerConf{dest, streamSettings}
 
 	xmuxManager, found := globalDialerMap[key]
@@ -520,10 +513,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		maxUploadSize,
 	}
 
-	// Bound concurrent upload goroutines to limit memory from in-flight POST buffers
-	const maxConcurrentUploads = 4
-	uploadSem := make(chan struct{}, maxConcurrentUploads)
-
 	go func() {
 		var seq int64
 		var lastWrite time.Time
@@ -567,9 +556,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
 				}
 
-				uploadSem <- struct{}{}
 				go func() {
-					defer func() { <-uploadSem }()
 					err := httpClient.PostPacket(
 						ctx,
 						requestURL.String(),
