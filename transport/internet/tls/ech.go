@@ -254,6 +254,13 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
 		req.Header.Set("User-Agent", utils.ChromeUA)
+		req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
+		req.Header.Set("Sec-CH-UA-Mobile", "?0")
+		req.Header.Set("Sec-CH-UA-Platform", "Windows")
+		req.Header.Set("Sec-Fetch-Mode", "cors") // Vary!
+		req.Header.Set("Sec-Fetch-Dest", "empty") // Vary!
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
 		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 		resp, err := client.Do(req)

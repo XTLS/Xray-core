@@ -98,6 +98,13 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	}
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", utils.ChromeUA)
+		req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
+		req.Header.Set("Sec-CH-UA-Mobile", "?0")
+		req.Header.Set("Sec-CH-UA-Platform", "Windows")
+		req.Header.Set("Sec-Fetch-Mode", "cors") // Vary!
+		req.Header.Set("Sec-Fetch-Dest", "empty") // Vary!
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
 	}
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
