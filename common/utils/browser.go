@@ -37,7 +37,7 @@ func getValidManglingChar() string {
 // It would be better to have the three parts ordered randomly upon generation
 var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
 
-func ApplyDefaultHeaders(header http.Header, browser string, context string) {
+func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific
 	switch browser {
 	case "chrome":
@@ -50,8 +50,8 @@ func ApplyDefaultHeaders(header http.Header, browser string, context string) {
 		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
 		header.Set("Accept-Language", "en-US,en;q=0.5")
 	}
-	// Context-specific
-	switch context {
+	// variant-specific
+	switch variant {
 	case "nav":
 		header.Set("Sec-Fetch-Mode", "navigate")
 		header.Set("Sec-Fetch-Dest", "document")
