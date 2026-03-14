@@ -6,7 +6,6 @@ import (
 	"time"
 	"net/http"
 	"strings"
-	"fmt"
 
 	"github.com/klauspost/cpuid/v2"
 )

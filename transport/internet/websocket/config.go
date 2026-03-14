@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"net/http"
-	"fmt"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/utils"
