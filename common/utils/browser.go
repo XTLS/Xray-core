@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"strconv"
 	"time"
+	"net/http"
 
 	"github.com/klauspost/cpuid/v2"
 )
@@ -35,3 +36,26 @@ func getValidManglingChar() string {
 
 // It would be better to have the three parts ordered randomly upon generation
 var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
+
+func ApplyDefaultHeaders(&headers http.Header, browser string, context string) {
+	switch browser {
+		case "chrome":
+			&header.Set("User-Agent", utils.ChromeUA)
+			&header.Set("Sec-CH-UA", utils.ChromeUACH)
+			&header.Set("Sec-CH-UA-Mobile", "?0")
+			&header.Set("Sec-CH-UA-Platform", "Windows")
+			switch context {
+			case "nav":
+				&header.Set("Sec-Fetch-Mode", "navigate") // Vary!
+				&header.Set("Sec-Fetch-Dest", "document") // Vary!
+			case "ws":
+				&header.Set("Sec-Fetch-Mode", "websocket") // Vary!
+				&header.Set("Sec-Fetch-Dest", "empty") // Vary!
+			case "fetch":
+				&header.Set("Sec-Fetch-Mode", "cors") // Vary!
+				&header.Set("Sec-Fetch-Dest", "empty") // Vary!
+			}
+			&header.Set("Sec-Fetch-Site", "none")
+			&header.Set("Sec-Fetch-User", "?1")
+	}
+}
