@@ -25,17 +25,51 @@ func ChromeVersion() int {
 	return version - 1
 }
 
+// The full Chromium brand GREASE implementation
 var clientHintGreaseNA = []string{" ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"}
 var clientHintVersionNA = []string{"8", "99", "24"}
+var clientHintShuffle3 = [][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
+var clientHintShuffle4 = [][4]int{
+	{0, 1, 2, 3}, {0, 1, 3, 2}, {0, 2, 1, 3}, {0, 2, 3, 1}, {0, 3, 1, 2}, {0, 3, 2, 1},
+	{1, 0, 2, 3}, {1, 0, 3, 2}, {1, 2, 0, 3}, {1, 2, 3, 0}, {1, 3, 0, 2}, {1, 3, 2, 0},
+	{2, 0, 1, 3}, {2, 0, 3, 1}, {2, 1, 0, 3}, {2, 1, 3, 0}, {2, 3, 0, 1}, {2, 3, 1, 0},
+	{3, 0, 1, 2}, {3, 0, 2, 1}, {3, 1, 0, 2}, {3, 1, 2, 0}, {3, 2, 0, 1}, {3, 2, 1, 0}}
 func getGreasedChInvalidBrand(seed int) string {
 	return "\"Not" + clientHintGreaseNA[seed % len(clientHintGreaseNA)] + "A" + clientHintGreaseNA[(seed + 1) % len(clientHintGreaseNA)] + "Brand\";v=\"" + clientHintVersionNA[seed % len(clientHintVersionNA)] + "\"";
+}
+func getGreasedChOrder(brandLength int, seed int) []int {
+	switch brandLength {
+		case 1:
+			return []int{0}
+		case 2:
+			return []int{seed % brandLength, (seed + 1) % brandLength}
+		case 3:
+			return clientHintShuffle3[seed % len(clientHintShuffle3)][:]
+		default:
+			return clientHintShuffle4[seed % len(clientHintShuffle4)][:]
+	}
+	return []int{}
+}
+func getUngreasedChUa(majorVersion int) []string {
+	return []string {getGreasedChInvalidBrand(majorVersion),
+	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\"",
+	"\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\""}
+}
+func getGreasedChUa(majorVersion int) string {
+	rawCh := getUngreasedChUa(majorVersion)
+	shuffleMap := getGreasedChOrder(len(rawCh), majorVersion)
+	shuffledCh := make([]string, len(rawCh))
+	for i, e := range shuffleMap {
+		shuffledCh[e] = rawCh[i]
+	}
+	return strings.Join(shuffledCh, ", ")
 }
 
 // ChromeUA provides default browser User-Agent based on CPU-seeded PRNG.
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
 // It would be better to have the three parts ordered randomly upon generation
-var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", " + getGreasedChInvalidBrand(AnchoredChromeVersion)
+var ChromeUACH = getGreasedChUa(AnchoredChromeVersion)
 
 func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific
