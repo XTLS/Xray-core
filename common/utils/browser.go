@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 	"net/http"
+	"strings"
 
 	"github.com/klauspost/cpuid/v2"
 )
