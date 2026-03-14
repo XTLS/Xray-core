@@ -29,7 +29,7 @@ func (c *Config) GetRequestHeader() http.Header {
 		utils.ApplyDefaultHeaders(header, "chrome", "ws")
 	}
 	for key, value := range header {
-		fmt.Println("Has header - " + key + ": " + value)
+		fmt.Println("Has header - " + key + ":", value)
 	}
 	return header
 }
