@@ -134,6 +134,15 @@ func (b *Balancer) SelectOutbounds() ([]string, error) {
 	return tags, nil
 }
 
+// PickBalancerOutbound implements routing.BalancerSelector.
+func (r *Router) PickBalancerOutbound(tag string) (string, bool, error) {
+	if b, ok := r.balancers[tag]; ok {
+		outboundTag, err := b.PickOutbound()
+		return outboundTag, true, err
+	}
+	return "", false, nil
+}
+
 // GetPrincipleTarget implements routing.BalancerPrincipleTarget
 func (r *Router) GetPrincipleTarget(tag string) ([]string, error) {
 	if b, ok := r.balancers[tag]; ok {
