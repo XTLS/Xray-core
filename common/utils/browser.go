@@ -37,27 +37,27 @@ func getValidManglingChar() string {
 // It would be better to have the three parts ordered randomly upon generation
 var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
 
-func ApplyDefaultHeaders(header *http.Header, browser string, context string) {
+func ApplyDefaultHeaders(header http.Header, browser string, context string) {
 	switch browser {
 	case "chrome":
-		&header.Set("User-Agent", ChromeUA)
-		&header.Set("Sec-CH-UA", ChromeUACH)
-		&header.Set("Sec-CH-UA-Mobile", "?0")
-		&header.Set("Sec-CH-UA-Platform", "Windows")
+		header.Set("User-Agent", ChromeUA)
+		header.Set("Sec-CH-UA", ChromeUACH)
+		header.Set("Sec-CH-UA-Mobile", "?0")
+		header.Set("Sec-CH-UA-Platform", "Windows")
 	}
 	switch context {
 	case "nav":
-		&header.Set("Sec-Fetch-Mode", "navigate")
-		&header.Set("Sec-Fetch-Dest", "document")
-		&header.Set("Sec-Fetch-Site", "none")
+		header.Set("Sec-Fetch-Mode", "navigate")
+		header.Set("Sec-Fetch-Dest", "document")
+		header.Set("Sec-Fetch-Site", "none")
 	case "ws":
-		&header.Set("Sec-Fetch-Mode", "websocket")
-		&header.Set("Sec-Fetch-Dest", "empty")
-		&header.Set("Sec-Fetch-Site", "cross-site")
+		header.Set("Sec-Fetch-Mode", "websocket")
+		header.Set("Sec-Fetch-Dest", "empty")
+		header.Set("Sec-Fetch-Site", "cross-site")
 	case "fetch":
-		&header.Set("Sec-Fetch-Mode", "cors")
-		&header.Set("Sec-Fetch-Dest", "empty")
-		&header.Set("Sec-Fetch-Site", "cross-site")
+		header.Set("Sec-Fetch-Mode", "cors")
+		header.Set("Sec-Fetch-Dest", "empty")
+		header.Set("Sec-Fetch-Site", "cross-site")
 	}
-	&header.Set("Sec-Fetch-User", "?1")
+	header.Set("Sec-Fetch-User", "?1")
 }
