@@ -38,26 +38,68 @@ func getValidManglingChar() string {
 var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
 
 func ApplyDefaultHeaders(header http.Header, browser string, context string) {
+	// Browser-specific
 	switch browser {
 	case "chrome":
 		header.Set("User-Agent", ChromeUA)
 		header.Set("Sec-CH-UA", ChromeUACH)
 		header.Set("Sec-CH-UA-Mobile", "?0")
 		header.Set("Sec-CH-UA-Platform", "Windows")
+		header.Set("Accept-Language", "en-US,en;q=0.9")
+	case "firefox":
+		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
+		header.Set("Accept-Language", "en-US,en;q=0.5")
 	}
+	// Context-specific
 	switch context {
 	case "nav":
 		header.Set("Sec-Fetch-Mode", "navigate")
 		header.Set("Sec-Fetch-Dest", "document")
 		header.Set("Sec-Fetch-Site", "none")
+		header.Set("Upgrade-Insecure-Requests", "1")
+		header.Set("Priority", "u=0, i")
+		if header.Get("Cache-Control") == "" {
+			switch browser {
+			case "chrome":
+				header.Set("Cache-Control", "max-age=0")
+			}
+		}
+		if header.Get("Accept") == "" {
+			switch browser {
+			case "chrome":
+				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+			case "firefox":
+				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+			}
+		}
 	case "ws":
 		header.Set("Sec-Fetch-Mode", "websocket")
 		header.Set("Sec-Fetch-Dest", "empty")
 		header.Set("Sec-Fetch-Site", "cross-site")
+		if header.Get("Cache-Control") == "" {
+			header.Set("Cache-Control", "no-cache")
+		}
+		if header.Get("Accept") == "" {
+			header.Set("Accept", "*/*")
+		}
 	case "fetch":
 		header.Set("Sec-Fetch-Mode", "cors")
 		header.Set("Sec-Fetch-Dest", "empty")
 		header.Set("Sec-Fetch-Site", "cross-site")
+		if header.Get("Priority") == "" {
+			switch browser {
+			case "chrome":
+				header.Set("Priority", "u=1, i")
+			case "firefox":
+				header.Set("Priority", "u=4")
+			}
+		}
+		if header.Get("Cache-Control") == "" {
+			header.Set("Cache-Control", "no-cache")
+		}
+		if header.Get("Accept") == "" {
+			header.Set("Accept", "*/*")
+		}
 	}
 	header.Set("Sec-Fetch-User", "?1")
 }
