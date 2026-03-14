@@ -165,6 +165,13 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		}
 		req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
 		req.Header.Set("User-Agent", utils.ChromeUA)
+		req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
+		req.Header.Set("Sec-CH-UA-Mobile", "?0")
+		req.Header.Set("Sec-CH-UA-Platform", "Windows")
+		req.Header.Set("Sec-Fetch-Mode", "navigate") // Vary!
+		req.Header.Set("Sec-Fetch-Dest", "document") // Vary!
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
 		response, err := httpClient.Do(req)
 		if err != nil {
 			return errors.New("outbound failed to relay connection").Base(err)
