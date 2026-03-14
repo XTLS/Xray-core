@@ -28,6 +28,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	for key, value := range header {
 		fmt.Println("Had header - " + key + ":", value)
 	}
+	// UA header would have already been set by now with the current implementation
 	if header.Get("User-Agent") == "" {
 		utils.ApplyDefaultHeaders(header, "chrome", "ws")
 	}
