@@ -37,11 +37,11 @@ func getValidManglingChar() string {
 // It would be better to have the three parts ordered randomly upon generation
 var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
 
-func ApplyDefaultHeaders(headers *http.Header, browser string, context string) {
+func ApplyDefaultHeaders(header *http.Header, browser string, context string) {
 	switch browser {
 	case "chrome":
-		&header.Set("User-Agent", utils.ChromeUA)
-		&header.Set("Sec-CH-UA", utils.ChromeUACH)
+		&header.Set("User-Agent", ChromeUA)
+		&header.Set("Sec-CH-UA", ChromeUACH)
 		&header.Set("Sec-CH-UA-Mobile", "?0")
 		&header.Set("Sec-CH-UA-Platform", "Windows")
 	}
