@@ -25,17 +25,17 @@ func ChromeVersion() int {
 	return version - 1
 }
 
+var clientHintGreaseNA = []string{" ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"}
+var clientHintVersionNA = []string{"8", "99", "24"}
+func getGreasedChInvalidBrand(seed int) string {
+	return "\"Not" + clientHintGreaseNA[seed % len(clientHintGreaseNA)] + "A" + clientHintGreaseNA[(seed + 1) % len(clientHintGreaseNA)] + "Brand\";v=\"" + clientHintVersionNA[seed % len(clientHintVersionNA)] + "\"";
+}
+
 // ChromeUA provides default browser User-Agent based on CPU-seeded PRNG.
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
-
-func getValidManglingChar() string {
-	// Valid characters for the mangled Sec-CH-UA header
-	return string(" ,-_:;()"[rand.Int() & 7]);
-}
-
 // It would be better to have the three parts ordered randomly upon generation
-var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
+var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", " + getGreasedChInvalidBrand(AnchoredChromeVersion)
 
 func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific
