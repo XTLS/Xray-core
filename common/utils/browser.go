@@ -25,4 +25,13 @@ func ChromeVersion() int {
 }
 
 // ChromeUA provides default browser User-Agent based on CPU-seeded PRNG.
-var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(ChromeVersion()) + ".0.0.0 Safari/537.36"
+var AnchoredChromeVersion = ChromeVersion()
+var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
+
+func getValidManglingChar() string {
+	// Valid characters for the mangled Sec-CH-UA header
+	return string(" ,-_:;()"[rand.Int() & 7]);
+}
+
+// It would be better to have the three parts ordered randomly upon generation
+var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + ", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
