@@ -221,14 +221,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		req.Header.Set(h.Key, h.Value)
 	}
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", utils.ChromeUA)
-		req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
-		req.Header.Set("Sec-CH-UA-Mobile", "?0")
-		req.Header.Set("Sec-CH-UA-Platform", "Windows")
-		req.Header.Set("Sec-Fetch-Mode", "cors") // Vary!
-		req.Header.Set("Sec-Fetch-Dest", "empty") // Vary!
-		req.Header.Set("Sec-Fetch-Site", "none")
-		req.Header.Set("Sec-Fetch-User", "?1")
+		utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 	}
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {

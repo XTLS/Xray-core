@@ -52,14 +52,7 @@ func (c *Config) GetRequestHeader() http.Header {
 		header.Add(k, v)
 	}
 	if header.Get("User-Agent") == "" {
-		header.Set("User-Agent", utils.ChromeUA)
-		header.Set("Sec-CH-UA", utils.ChromeUACH)
-		header.Set("Sec-CH-UA-Mobile", "?0")
-		header.Set("Sec-CH-UA-Platform", "Windows")
-		header.Set("Sec-Fetch-Mode", "cors") // Vary!
-		header.Set("Sec-Fetch-Dest", "empty") // Vary!
-		header.Set("Sec-Fetch-Site", "none")
-		header.Set("Sec-Fetch-User", "?1")
+		utils.ApplyDefaultHeaders(header, "chrome", "fetch")
 	}
 	return header
 }

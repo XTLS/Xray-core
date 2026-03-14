@@ -223,14 +223,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 				if req == nil {
 					return
 				}
-				req.Header.Set("User-Agent", utils.ChromeUA)
-				req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
-				req.Header.Set("Sec-CH-UA-Mobile", "?0")
-				req.Header.Set("Sec-CH-UA-Platform", "Windows")
-				req.Header.Set("Sec-Fetch-Mode", "navigate") // Vary!
-				req.Header.Set("Sec-Fetch-Dest", "document") // Vary!
-				req.Header.Set("Sec-Fetch-Site", "none")
-				req.Header.Set("Sec-Fetch-User", "?1")
+				utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 				if first && config.Show {
 					fmt.Printf("REALITY localAddr: %v\treq.UserAgent(): %v\n", localAddr, req.UserAgent())
 				}

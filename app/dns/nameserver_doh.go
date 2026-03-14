@@ -214,14 +214,7 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 
 	req.Header.Add("Accept", "application/dns-message")
 	req.Header.Add("Content-Type", "application/dns-message")
-	req.Header.Set("User-Agent", utils.ChromeUA)
-	req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
-	req.Header.Set("Sec-CH-UA-Mobile", "?0")
-	req.Header.Set("Sec-CH-UA-Platform", "Windows")
-	req.Header.Set("Sec-Fetch-Mode", "cors") // Vary!
-	req.Header.Set("Sec-Fetch-Dest", "empty") // Vary!
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
+	utils.ApplyDefaultHeaders(req.Header, "chrome", "fetch")
 	req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 	hc := s.httpClient
