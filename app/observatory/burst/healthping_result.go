@@ -45,6 +45,9 @@ func (h *HealthPingRTTS) Get() *HealthPingStats {
 // Make sure use Mutex.Lock() before calling it, RWMutex.RLock()
 // is not an option since it writes cache
 func (h *HealthPingRTTS) GetWithCache() *HealthPingStats {
+	if len(h.rtts) == 0 || h.idx < 0 {
+		return h.getStatistics()
+	}
 	lastPutAt := h.rtts[h.idx].time
 	now := time.Now()
 	if h.stats == nil || h.lastUpdateAt.Before(lastPutAt) || h.findOutdated(now) >= 0 {
@@ -67,6 +70,23 @@ func (h *HealthPingRTTS) Put(d time.Duration) {
 	now := time.Now()
 	h.rtts[h.idx].time = now
 	h.rtts[h.idx].value = d
+}
+
+func (h *HealthPingRTTS) LatestTimes() (time.Time, time.Time) {
+	var lastTry time.Time
+	var lastSeen time.Time
+	for _, rtt := range h.rtts {
+		if rtt == nil || rtt.time.IsZero() {
+			continue
+		}
+		if lastTry.Before(rtt.time) {
+			lastTry = rtt.time
+		}
+		if rtt.value != 0 && rtt.value != rttFailed && lastSeen.Before(rtt.time) {
+			lastSeen = rtt.time
+		}
+	}
+	return lastTry, lastSeen
 }
 
 func (h *HealthPingRTTS) calcIndex(step int) int {

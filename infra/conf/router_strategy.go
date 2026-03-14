@@ -43,6 +43,10 @@ type strategyLeastLoadConfig struct {
 	MaxRTT duration.Duration `json:"maxRTT,omitempty"`
 	// acceptable failure rate
 	Tolerance float64 `json:"tolerance,omitempty"`
+	// minimum burst samples before a candidate can replace the current healthy winner
+	MinSamples int32 `json:"minSamples,omitempty"`
+	// consecutive soft-fail cycles allowed for the current winner
+	SoftFailGrace int32 `json:"softFailGrace,omitempty"`
 }
 
 // healthCheckSettings holds settings for health Checker
@@ -86,6 +90,14 @@ func (v *strategyLeastLoadConfig) Build() (proto.Message, error) {
 	config.Expected = v.Expected
 	if config.Expected < 0 {
 		config.Expected = 0
+	}
+	config.MinSamples = v.MinSamples
+	if config.MinSamples < 0 {
+		config.MinSamples = 0
+	}
+	config.SoftFailGrace = v.SoftFailGrace
+	if config.SoftFailGrace < 0 {
+		config.SoftFailGrace = 0
 	}
 	config.MaxRTT = int64(v.MaxRTT)
 	if config.MaxRTT < 0 {

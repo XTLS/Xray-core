@@ -32,6 +32,8 @@ type HealthPing struct {
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
+
+	batchCheck func(tags []string, duration time.Duration, rounds int)
 }
 
 // NewHealthPing creates a new HealthPing with settings
@@ -84,7 +86,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 }
 
 // StartScheduler implements the HealthChecker
-func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
+func (h *HealthPing) StartScheduler(selector func() ([]string, error), afterBatch func()) {
 	if h.ticker != nil {
 		return
 	}
@@ -94,28 +96,11 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	h.ticker = ticker
 	h.tickerClose = tickerClose
 	go func() {
-		tags, err := selector()
-		if err != nil {
-			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
-			return
-		}
-		h.Check(tags)
-	}()
-
-	go func() {
+		h.runInitialBatch(selector, afterBatch)
 		for {
-			go func() {
-				tags, err := selector()
-				if err != nil {
-					errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
-					return
-				}
-				h.doCheck(tags, interval, h.Settings.SamplingCount)
-				h.Cleanup(tags)
-			}()
 			select {
 			case <-ticker.C:
-				continue
+				h.runScheduledBatch(selector, interval, afterBatch)
 			case <-tickerClose:
 				return
 			}
@@ -140,7 +125,7 @@ func (h *HealthPing) Check(tags []string) error {
 		return nil
 	}
 	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
-	h.doCheck(tags, 0, 1)
+	h.runCheck(tags, 0, 1)
 	return nil
 }
 
@@ -167,11 +152,7 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 			h.Settings.Timeout,
 			handler,
 		)
-		for i := 0; i < rounds; i++ {
-			delay := time.Duration(0)
-			if duration > 0 {
-				delay = time.Duration(dice.RollInt63n(int64(duration)))
-			}
+		for _, delay := range h.sampleDelays(duration, rounds) {
 			time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
 				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
@@ -210,6 +191,75 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 			h.PutResult(rtt.handler, rtt.value)
 		}
 	}
+}
+
+func (h *HealthPing) sampleDelays(duration time.Duration, rounds int) []time.Duration {
+	delays := make([]time.Duration, 0, rounds)
+	if rounds <= 0 {
+		return delays
+	}
+	if duration <= 0 {
+		for i := 0; i < rounds; i++ {
+			delays = append(delays, 0)
+		}
+		return delays
+	}
+
+	slot := duration / time.Duration(rounds)
+	if slot <= 0 {
+		for i := 0; i < rounds; i++ {
+			delays = append(delays, 0)
+		}
+		return delays
+	}
+
+	jitterMax := slot / 4
+	for i := 0; i < rounds; i++ {
+		slotStart := time.Duration(i) * slot
+		delay := slotStart
+		if jitterMax > 0 {
+			delay += time.Duration(dice.RollInt63n(int64(jitterMax)))
+		}
+		delays = append(delays, delay)
+	}
+	return delays
+}
+
+func (h *HealthPing) runInitialBatch(selector func() ([]string, error), afterBatch func()) {
+	tags, err := selector()
+	if err != nil {
+		errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
+		return
+	}
+	_ = h.Check(tags)
+	h.Cleanup(tags)
+	if afterBatch != nil {
+		afterBatch()
+	}
+}
+
+func (h *HealthPing) runScheduledBatch(selector func() ([]string, error), duration time.Duration, afterBatch func()) {
+	tags, err := selector()
+	if err != nil {
+		errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
+		return
+	}
+	h.runCheck(tags, duration, h.Settings.SamplingCount)
+	h.Cleanup(tags)
+	if afterBatch != nil {
+		afterBatch()
+	}
+}
+
+func (h *HealthPing) runCheck(tags []string, duration time.Duration, rounds int) {
+	if len(tags) == 0 {
+		return
+	}
+	if h.batchCheck != nil {
+		h.batchCheck(tags, duration, rounds)
+		return
+	}
+	h.doCheck(tags, duration, rounds)
 }
 
 // PutResult put a ping rtt to results

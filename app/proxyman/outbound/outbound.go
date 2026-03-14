@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -104,7 +105,7 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 	m.access.Lock()
 	defer m.access.Unlock()
 
-	m.tagsCache = &sync.Map{}
+	m.tagsCache.Clear()
 
 	if m.defaultHandler == nil {
 		m.defaultHandler = handler
@@ -135,7 +136,7 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	m.access.Lock()
 	defer m.access.Unlock()
 
-	m.tagsCache = &sync.Map{}
+	m.tagsCache.Clear()
 
 	delete(m.taggedHandler, tag)
 	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
@@ -165,7 +166,7 @@ func (m *Manager) Select(selectors []string) []string {
 
 	key := strings.Join(selectors, ",")
 	if cache, ok := m.tagsCache.Load(key); ok {
-		return cache.([]string)
+		return slices.Clone(cache.([]string))
 	}
 
 	m.access.RLock()
@@ -185,7 +186,7 @@ func (m *Manager) Select(selectors []string) []string {
 	sort.Strings(tags)
 	m.tagsCache.Store(key, tags)
 
-	return tags
+	return slices.Clone(tags)
 }
 
 func init() {

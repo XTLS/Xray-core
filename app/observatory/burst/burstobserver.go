@@ -2,8 +2,9 @@ package burst
 
 import (
 	"context"
-
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
@@ -20,7 +21,8 @@ type Observer struct {
 	config *Config
 	ctx    context.Context
 
-	statusLock sync.Mutex
+	statusLock sync.RWMutex
+	status     []*observatory.OutboundStatus
 	hp         *HealthPing
 
 	finished *done.Instance
@@ -29,33 +31,50 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &observatory.ObservationResult{Status: o.createResult()}, nil
+	o.statusLock.RLock()
+	defer o.statusLock.RUnlock()
+	return &observatory.ObservationResult{Status: cloneObservationStatuses(o.status)}, nil
 }
 
 func (o *Observer) createResult() []*observatory.OutboundStatus {
 	var result []*observatory.OutboundStatus
 	o.hp.access.Lock()
 	defer o.hp.access.Unlock()
-	for name, value := range o.hp.Results {
+	tags := make([]string, 0, len(o.hp.Results))
+	for name := range o.hp.Results {
+		tags = append(tags, name)
+	}
+	sort.Strings(tags)
+	for _, name := range tags {
+		value := o.hp.Results[name]
+		stats := value.GetWithCache()
+		lastTryTime, lastSeenTime := value.LatestTimes()
 		status := observatory.OutboundStatus{
-			Alive:           value.getStatistics().All != value.getStatistics().Fail,
-			Delay:           value.getStatistics().Average.Milliseconds(),
+			Alive:           stats.All != stats.Fail,
+			Delay:           stats.Average.Milliseconds(),
 			LastErrorReason: "",
 			OutboundTag:     name,
-			LastSeenTime:    0,
-			LastTryTime:     0,
+			LastSeenTime:    unixOrZero(lastSeenTime),
+			LastTryTime:     unixOrZero(lastTryTime),
 			HealthPing: &observatory.HealthPingMeasurementResult{
-				All:       int64(value.getStatistics().All),
-				Fail:      int64(value.getStatistics().Fail),
-				Deviation: int64(value.getStatistics().Deviation),
-				Average:   int64(value.getStatistics().Average),
-				Max:       int64(value.getStatistics().Max),
-				Min:       int64(value.getStatistics().Min),
+				All:       int64(stats.All),
+				Fail:      int64(stats.Fail),
+				Deviation: int64(stats.Deviation),
+				Average:   int64(stats.Average),
+				Max:       int64(stats.Max),
+				Min:       int64(stats.Min),
 			},
 		}
 		result = append(result, &status)
 	}
 	return result
+}
+
+func unixOrZero(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.Unix()
 }
 
 func (o *Observer) Type() interface{} {
@@ -65,16 +84,7 @@ func (o *Observer) Type() interface{} {
 func (o *Observer) Start() error {
 	if o.config != nil && len(o.config.SubjectSelector) != 0 {
 		o.finished = done.New()
-		o.hp.StartScheduler(func() ([]string, error) {
-			hs, ok := o.ohm.(outbound.HandlerSelector)
-			if !ok {
-
-				return nil, errors.New("outbound.Manager is not a HandlerSelector")
-			}
-
-			outbounds := hs.Select(o.config.SubjectSelector)
-			return outbounds, nil
-		})
+		o.hp.StartScheduler(o.selectOutbounds, o.refreshSnapshot)
 	}
 	return nil
 }
@@ -85,6 +95,40 @@ func (o *Observer) Close() error {
 		return o.finished.Close()
 	}
 	return nil
+}
+
+func (o *Observer) selectOutbounds() ([]string, error) {
+	hs, ok := o.ohm.(outbound.HandlerSelector)
+	if !ok {
+		return nil, errors.New("outbound.Manager is not a HandlerSelector")
+	}
+	return hs.Select(o.config.SubjectSelector), nil
+}
+
+func (o *Observer) refreshSnapshot() {
+	o.setStatusSnapshot(o.createResult())
+}
+
+func (o *Observer) setStatusSnapshot(status []*observatory.OutboundStatus) {
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+	o.status = status
+}
+
+func cloneObservationStatuses(statuses []*observatory.OutboundStatus) []*observatory.OutboundStatus {
+	clones := make([]*observatory.OutboundStatus, 0, len(statuses))
+	for _, status := range statuses {
+		if status == nil {
+			continue
+		}
+		cloned := *status
+		if status.HealthPing != nil {
+			healthPing := *status.HealthPing
+			cloned.HealthPing = &healthPing
+		}
+		clones = append(clones, &cloned)
+	}
+	return clones
 }
 
 func New(ctx context.Context, config *Config) (*Observer, error) {

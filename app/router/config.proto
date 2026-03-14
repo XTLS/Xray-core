@@ -148,6 +148,10 @@ message StrategyLeastLoadConfig {
   int64 maxRTT = 5;
   // acceptable failure rate
   float tolerance = 6;
+  // minimum burst samples before a candidate can displace the current healthy winner
+  int32 minSamples = 7;
+  // consecutive soft-fail cycles allowed for the current healthy winner
+  int32 softFailGrace = 8;
 }
 
 message Config {

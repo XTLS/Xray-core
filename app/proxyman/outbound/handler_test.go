@@ -108,11 +108,11 @@ func TestTagsCache(t *testing.T) {
 	v.AddFeature(ohm)
 	ctx := context.WithValue(context.Background(), xrayKey, v)
 
-	stop_add_rm := false
+	var stopAddRemove atomic.Bool
 	wg_add_rm := sync.WaitGroup{}
 	addHandlers := func() {
 		defer wg_add_rm.Done()
-		for !stop_add_rm {
+		for !stopAddRemove.Load() {
 			time.Sleep(delay)
 			idx := counter.Add(1)
 			tag := fmt.Sprintf("%s%d", tags_prefix, idx)
@@ -135,7 +135,7 @@ func TestTagsCache(t *testing.T) {
 
 	rmHandlers := func() {
 		defer wg_add_rm.Done()
-		for !stop_add_rm {
+		for !stopAddRemove.Load() {
 			time.Sleep(delay)
 			tags.Range(func(key interface{}, value interface{}) bool {
 				if _, ok := tags.LoadAndDelete(key); ok {
@@ -150,10 +150,10 @@ func TestTagsCache(t *testing.T) {
 
 	selectors := []string{tags_prefix}
 	wg_get := sync.WaitGroup{}
-	stop_get := false
+	var stopGet atomic.Bool
 	getTags := func() {
 		defer wg_get.Done()
-		for !stop_get {
+		for !stopGet.Load() {
 			time.Sleep(delay)
 			_ = ohm.Select(selectors)
 			// t.Logf("get tags: %v", tag)
@@ -169,8 +169,46 @@ func TestTagsCache(t *testing.T) {
 	}
 
 	time.Sleep(test_duration)
-	stop_add_rm = true
+	stopAddRemove.Store(true)
 	wg_add_rm.Wait()
-	stop_get = true
+	stopGet.Store(true)
 	wg_get.Wait()
+}
+
+func TestSelectReturnsClonedSlice(t *testing.T) {
+	ohm, err := New(context.Background(), &proxyman.OutboundConfig{})
+	if err != nil {
+		t.Fatal("failed to create outbound handler manager")
+	}
+
+	config := &core.Config{
+		App: []*serial.TypedMessage{},
+	}
+	v, _ := core.New(config)
+	v.AddFeature(ohm)
+	ctx := context.WithValue(context.Background(), xrayKey, v)
+
+	for _, tag := range []string{"node-b", "node-a"} {
+		handler, err := NewHandler(ctx, &core.OutboundHandlerConfig{
+			Tag:           tag,
+			ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+		})
+		if err != nil {
+			t.Fatal("failed to create handler:", err)
+		}
+		if err := ohm.AddHandler(ctx, handler); err != nil {
+			t.Fatal("failed to add handler:", err)
+		}
+	}
+
+	selected := ohm.Select([]string{"node"})
+	selected[0] = "mutated"
+
+	selectedAgain := ohm.Select([]string{"node"})
+	if len(selectedAgain) != 2 {
+		t.Fatalf("expected 2 selected tags, got %d", len(selectedAgain))
+	}
+	if selectedAgain[0] != "node-a" || selectedAgain[1] != "node-b" {
+		t.Fatalf("unexpected selected tags: %v", selectedAgain)
+	}
 }
