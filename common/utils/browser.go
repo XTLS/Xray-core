@@ -34,4 +34,4 @@ func getValidManglingChar() string {
 }
 
 // It would be better to have the three parts ordered randomly upon generation
-var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + ", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
+var ChromeUACH = "\"Google Chrome\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Chromium\";v=\"" + strconv.Itoa(AnchoredChromeVersion) + "\", \"Not" + getValidManglingChar() + "A" + getValidManglingChar() + "Brand\";v=\"9" + string("6789"[rand.Int() & 3]) + "\""
