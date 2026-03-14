@@ -46,31 +46,31 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 			},
 			{
 				Name: "Sec-CH-UA",
-				Value: []strings{utils.ChromeUACH},
+				Value: []string{utils.ChromeUACH},
 			},
 			{
 				Name: "Sec-CH-UA-Mobile",
-				Value: []strings{"?0"},
+				Value: []string{"?0"},
 			},
 			{
 				Name: "Sec-CH-UA-Platform",
-				Value: []strings{"Windows"},
+				Value: []string{"Windows"},
 			},
 			{
 				Name: "Sec-Fetch-Mode",
-				Value: []strings{"no-cors", "cors", "same-origin"},
+				Value: []string{"no-cors", "cors", "same-origin"},
 			},
 			{
 				Name: "Sec-Fetch-Dest",
-				Value: []strings{"empty"},
+				Value: []string{"empty"},
 			},
 			{
 				Name: "Sec-Fetch-Site",
-				Value: []strings{"none"},
+				Value: []string{"none"},
 			},
 			{
 				Name: "Sec-Fetch-User",
-				Value: []strings{"?1"},
+				Value: []string{"?1"},
 			},
 			{
 				Name:  "Accept-Encoding",
