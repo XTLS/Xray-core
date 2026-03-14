@@ -138,7 +138,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		}
 	}
 	header.Set("Sec-Fetch-User", "?1")
-	for key, value := range header {
+	/*for key, value := range header {
 		fmt.Println("Added header - " + key + ": ", value)
-	}
+	}*/
 }

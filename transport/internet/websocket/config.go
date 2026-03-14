@@ -25,16 +25,16 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Header {
 		header.Add(k, v)
 	}
-	for key, value := range header {
+	/*for key, value := range header {
 		fmt.Println("Had header - " + key + ":", value)
-	}
+	}*/
 	// UA header would have already been set by now with the current implementation
-	if header.Get("User-Agent") == "" {
+	if header.Get("User-Agent") == "" || header.Get("Sec-Fetch-Mode") == "" {
 		utils.ApplyDefaultHeaders(header, "chrome", "ws")
 	}
-	for key, value := range header {
+	/*for key, value := range header {
 		fmt.Println("Has header - " + key + ":", value)
-	}
+	}*/
 	return header
 }
 
