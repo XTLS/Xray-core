@@ -562,8 +562,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 						requestURL.String(),
 						sessionId,
 						seqStr,
-						&buf.MultiBufferContainer{MultiBuffer: chunk},
-						int64(chunk.Len()),
+						chunk,
 					)
 					wroteRequest.Close()
 					if err != nil {
