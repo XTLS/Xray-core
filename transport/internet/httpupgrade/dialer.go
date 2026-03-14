@@ -101,7 +101,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		req.Header.Set("Sec-CH-UA", utils.ChromeUACH)
 		req.Header.Set("Sec-CH-UA-Mobile", "?0")
 		req.Header.Set("Sec-CH-UA-Platform", "Windows")
-		req.Header.Set("Sec-Fetch-Mode", "cors") // Vary!
+		req.Header.Set("Sec-Fetch-Mode", "websocket") // Vary!
 		req.Header.Set("Sec-Fetch-Dest", "empty") // Vary!
 		req.Header.Set("Sec-Fetch-Site", "none")
 		req.Header.Set("Sec-Fetch-User", "?1")
