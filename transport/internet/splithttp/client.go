@@ -116,7 +116,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
 		// request
-		requestBuff := new(bytes.Buffer)
+		requestBuff := bytes.NewBuffer(make([]byte, 0, int(contentLength)+512))
 		common.Must(req.Write(requestBuff))
 
 		var uploadConn any

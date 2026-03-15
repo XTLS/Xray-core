@@ -293,15 +293,35 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		var bodyPayload []byte
 		if dataPlacement == PlacementAuto || dataPlacement == PlacementBody {
-			bodyPayload, err = io.ReadAll(io.LimitReader(request.Body, int64(scMaxEachPostBytes)+1))
+			limit := int64(scMaxEachPostBytes) + 1
+			if request.ContentLength > 0 && request.ContentLength <= limit {
+				bodyPayload = make([]byte, request.ContentLength)
+				_, err = io.ReadFull(request.Body, bodyPayload)
+			} else if request.ContentLength > limit {
+				errors.LogInfo(context.Background(), "Too large Content-Length:", request.ContentLength)
+				writer.WriteHeader(http.StatusRequestEntityTooLarge)
+				return
+			} else {
+				bodyPayload, err = io.ReadAll(io.LimitReader(request.Body, limit))
+			}
 			if err != nil {
-				errors.LogInfoInner(context.Background(), err, "failed to upload (ReadAll)")
+				errors.LogInfoInner(context.Background(), err, "failed to upload (ReadBody)")
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 		}
 
-		payload := slices.Concat(headerPayload, cookiePayload, bodyPayload)
+		var payload []byte
+		switch {
+		case len(headerPayload) > 0 && len(cookiePayload) == 0 && len(bodyPayload) == 0:
+			payload = headerPayload
+		case len(headerPayload) == 0 && len(cookiePayload) > 0 && len(bodyPayload) == 0:
+			payload = cookiePayload
+		case len(headerPayload) == 0 && len(cookiePayload) == 0:
+			payload = bodyPayload
+		default:
+			payload = slices.Concat(headerPayload, cookiePayload, bodyPayload)
+		}
 
 		if len(payload) > scMaxEachPostBytes {
 			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")

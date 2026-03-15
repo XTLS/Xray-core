@@ -58,6 +58,12 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		globalDialerMap = make(map[dialerConf]*XmuxManager)
 	}
 
+	for key, manager := range globalDialerMap {
+		if !manager.HasActiveClients() {
+			delete(globalDialerMap, key)
+		}
+	}
+
 	key := dialerConf{dest, streamSettings}
 
 	xmuxManager, found := globalDialerMap[key]

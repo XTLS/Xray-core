@@ -60,6 +60,15 @@ func (m *XmuxManager) newXmuxClient() *XmuxClient {
 	return xmuxClient
 }
 
+func (m *XmuxManager) HasActiveClients() bool {
+	for _, client := range m.xmuxClients {
+		if !client.XmuxConn.IsClosed() || client.OpenUsage.Load() > 0 {
+			return true
+		}
+	}
+	return len(m.xmuxClients) == 0 // new manager without clients = active
+}
+
 func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when locking
 	for i := 0; i < len(m.xmuxClients); {
 		xmuxClient := m.xmuxClients[i]
