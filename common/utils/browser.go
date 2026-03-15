@@ -79,7 +79,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header.Set("User-Agent", ChromeUA)
 		header.Set("Sec-CH-UA", ChromeUACH)
 		header.Set("Sec-CH-UA-Mobile", "?0")
-		header.Set("Sec-CH-UA-Platform", "Windows")
+		header.Set("Sec-CH-UA-Platform", "\"Windows\"")
 		header.Set("Accept-Language", "en-US,en;q=0.9")
 	case "firefox":
 		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
