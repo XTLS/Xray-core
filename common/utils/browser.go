@@ -91,6 +91,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header.Set("Sec-Fetch-Mode", "navigate")
 		header.Set("Sec-Fetch-Dest", "document")
 		header.Set("Sec-Fetch-Site", "none")
+		header.Set("Sec-Fetch-User", "?1")
 		header.Set("Upgrade-Insecure-Requests", "1")
 		header.Set("Priority", "u=0, i")
 		if header.Get("Cache-Control") == "" {
@@ -114,6 +115,9 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		if header.Get("Cache-Control") == "" {
 			header.Set("Cache-Control", "no-cache")
 		}
+		if header.Get("Pragma") == "" {
+			header.Set("Pragma", "no-cache")
+		}
 		if header.Get("Accept") == "" {
 			header.Set("Accept", "*/*")
 		}
@@ -132,11 +136,13 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		if header.Get("Cache-Control") == "" {
 			header.Set("Cache-Control", "no-cache")
 		}
+		if header.Get("Pragma") == "" {
+			header.Set("Pragma", "no-cache")
+		}
 		if header.Get("Accept") == "" {
 			header.Set("Accept", "*/*")
 		}
 	}
-	header.Set("Sec-Fetch-User", "?1")
 	/*for key, value := range header {
 		fmt.Println("Added header - " + key + ": ", value)
 	}*/
