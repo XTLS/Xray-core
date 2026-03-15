@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
@@ -41,21 +42,20 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessio
 	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
-func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, body io.Reader, contentLength int64) error {
+func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
-	request, err := http.NewRequest(method, url, body)
+	request, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return err
 	}
 
-	request.ContentLength = contentLength
-	err = c.transportConfig.FillPacketRequest(request, sessionId, seqStr)
+	err = c.transportConfig.FillPacketRequest(request, sessionId, seqStr, payload)
 	if err != nil {
 		return err
 	}
 
 	var bytes []byte
-	if (request.Body != nil) {
+	if request.Body != nil {
 		bytes, err = io.ReadAll(request.Body)
 		if err != nil {
 			return err
