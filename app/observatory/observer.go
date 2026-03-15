@@ -164,7 +164,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 			probeURL = o.config.ProbeUrl
 		}
 		req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
-		req.Header.Set("User-Agent", utils.ChromeUA)
+		utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 		response, err := httpClient.Do(req)
 		if err != nil {
 			return errors.New("outbound failed to relay connection").Base(err)

@@ -62,7 +62,7 @@ func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if err != nil {
 		return rttFailed, err
 	}
-	req.Header.Set("User-Agent", utils.ChromeUA)
+	utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 
 	start := time.Now()
 	resp, err := s.httpClient.Do(req)

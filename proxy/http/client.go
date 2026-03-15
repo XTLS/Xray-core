@@ -221,7 +221,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		req.Header.Set(h.Key, h.Value)
 	}
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", utils.ChromeUA)
+		utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 	}
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
