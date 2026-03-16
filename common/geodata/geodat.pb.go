@@ -141,6 +141,244 @@ func (x *Domain) GetAttribute() []*Domain_Attribute {
 	return nil
 }
 
+type GeoSite struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	Domain        []*Domain              `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GeoSite) Reset() {
+	*x = GeoSite{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeoSite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeoSite) ProtoMessage() {}
+
+func (x *GeoSite) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeoSite.ProtoReflect.Descriptor instead.
+func (*GeoSite) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GeoSite) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *GeoSite) GetDomain() []*Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type GeoSiteList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         []*GeoSite             `protobuf:"bytes,1,rep,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GeoSiteList) Reset() {
+	*x = GeoSiteList{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeoSiteList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeoSiteList) ProtoMessage() {}
+
+func (x *GeoSiteList) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeoSiteList.ProtoReflect.Descriptor instead.
+func (*GeoSiteList) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GeoSiteList) GetEntry() []*GeoSite {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type GeoSiteRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	Attrs         string                 `protobuf:"bytes,3,opt,name=attrs,proto3" json:"attrs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GeoSiteRule) Reset() {
+	*x = GeoSiteRule{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeoSiteRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeoSiteRule) ProtoMessage() {}
+
+func (x *GeoSiteRule) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeoSiteRule.ProtoReflect.Descriptor instead.
+func (*GeoSiteRule) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GeoSiteRule) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *GeoSiteRule) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *GeoSiteRule) GetAttrs() string {
+	if x != nil {
+		return x.Attrs
+	}
+	return ""
+}
+
+type DomainRule struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Value:
+	//
+	//	*DomainRule_Geosite
+	//	*DomainRule_Custom
+	Value         isDomainRule_Value `protobuf_oneof:"value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DomainRule) Reset() {
+	*x = DomainRule{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainRule) ProtoMessage() {}
+
+func (x *DomainRule) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainRule.ProtoReflect.Descriptor instead.
+func (*DomainRule) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DomainRule) GetValue() isDomainRule_Value {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *DomainRule) GetGeosite() *GeoSiteRule {
+	if x != nil {
+		if x, ok := x.Value.(*DomainRule_Geosite); ok {
+			return x.Geosite
+		}
+	}
+	return nil
+}
+
+func (x *DomainRule) GetCustom() *Domain {
+	if x != nil {
+		if x, ok := x.Value.(*DomainRule_Custom); ok {
+			return x.Custom
+		}
+	}
+	return nil
+}
+
+type isDomainRule_Value interface {
+	isDomainRule_Value()
+}
+
+type DomainRule_Geosite struct {
+	Geosite *GeoSiteRule `protobuf:"bytes,1,opt,name=geosite,proto3,oneof"`
+}
+
+type DomainRule_Custom struct {
+	Custom *Domain `protobuf:"bytes,2,opt,name=custom,proto3,oneof"`
+}
+
+func (*DomainRule_Geosite) isDomainRule_Value() {}
+
+func (*DomainRule_Custom) isDomainRule_Value() {}
+
 type CIDR struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IP address, should be either 4 or 16 bytes.
@@ -153,7 +391,7 @@ type CIDR struct {
 
 func (x *CIDR) Reset() {
 	*x = CIDR{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[1]
+	mi := &file_common_geodata_geodat_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +403,7 @@ func (x *CIDR) String() string {
 func (*CIDR) ProtoMessage() {}
 
 func (x *CIDR) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[1]
+	mi := &file_common_geodata_geodat_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +416,7 @@ func (x *CIDR) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CIDR.ProtoReflect.Descriptor instead.
 func (*CIDR) Descriptor() ([]byte, []int) {
-	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{1}
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CIDR) GetIp() []byte {
@@ -206,7 +444,7 @@ type GeoIP struct {
 
 func (x *GeoIP) Reset() {
 	*x = GeoIP{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[2]
+	mi := &file_common_geodata_geodat_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -218,7 +456,7 @@ func (x *GeoIP) String() string {
 func (*GeoIP) ProtoMessage() {}
 
 func (x *GeoIP) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[2]
+	mi := &file_common_geodata_geodat_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -231,7 +469,7 @@ func (x *GeoIP) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeoIP.ProtoReflect.Descriptor instead.
 func (*GeoIP) Descriptor() ([]byte, []int) {
-	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{2}
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GeoIP) GetCode() string {
@@ -264,7 +502,7 @@ type GeoIPList struct {
 
 func (x *GeoIPList) Reset() {
 	*x = GeoIPList{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[3]
+	mi := &file_common_geodata_geodat_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -276,7 +514,7 @@ func (x *GeoIPList) String() string {
 func (*GeoIPList) ProtoMessage() {}
 
 func (x *GeoIPList) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[3]
+	mi := &file_common_geodata_geodat_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -289,7 +527,7 @@ func (x *GeoIPList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeoIPList.ProtoReflect.Descriptor instead.
 func (*GeoIPList) Descriptor() ([]byte, []int) {
-	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{3}
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GeoIPList) GetEntry() []*GeoIP {
@@ -299,29 +537,30 @@ func (x *GeoIPList) GetEntry() []*GeoIP {
 	return nil
 }
 
-type GeoSite struct {
+type GeoIPRule struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
-	Domain        []*Domain              `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
+	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	ReverseMatch  bool                   `protobuf:"varint,3,opt,name=reverse_match,json=reverseMatch,proto3" json:"reverse_match,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GeoSite) Reset() {
-	*x = GeoSite{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[4]
+func (x *GeoIPRule) Reset() {
+	*x = GeoIPRule{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GeoSite) String() string {
+func (x *GeoIPRule) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GeoSite) ProtoMessage() {}
+func (*GeoIPRule) ProtoMessage() {}
 
-func (x *GeoSite) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[4]
+func (x *GeoIPRule) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,47 +571,58 @@ func (x *GeoSite) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GeoSite.ProtoReflect.Descriptor instead.
-func (*GeoSite) Descriptor() ([]byte, []int) {
-	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use GeoIPRule.ProtoReflect.Descriptor instead.
+func (*GeoIPRule) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *GeoSite) GetCode() string {
+func (x *GeoIPRule) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *GeoIPRule) GetCode() string {
 	if x != nil {
 		return x.Code
 	}
 	return ""
 }
 
-func (x *GeoSite) GetDomain() []*Domain {
+func (x *GeoIPRule) GetReverseMatch() bool {
 	if x != nil {
-		return x.Domain
+		return x.ReverseMatch
 	}
-	return nil
+	return false
 }
 
-type GeoSiteList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entry         []*GeoSite             `protobuf:"bytes,1,rep,name=entry,proto3" json:"entry,omitempty"`
+type IPRule struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Value:
+	//
+	//	*IPRule_Geoip
+	//	*IPRule_Custom
+	Value         isIPRule_Value `protobuf_oneof:"value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GeoSiteList) Reset() {
-	*x = GeoSiteList{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[5]
+func (x *IPRule) Reset() {
+	*x = IPRule{}
+	mi := &file_common_geodata_geodat_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GeoSiteList) String() string {
+func (x *IPRule) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GeoSiteList) ProtoMessage() {}
+func (*IPRule) ProtoMessage() {}
 
-func (x *GeoSiteList) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[5]
+func (x *IPRule) ProtoReflect() protoreflect.Message {
+	mi := &file_common_geodata_geodat_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -383,17 +633,51 @@ func (x *GeoSiteList) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GeoSiteList.ProtoReflect.Descriptor instead.
-func (*GeoSiteList) Descriptor() ([]byte, []int) {
-	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{5}
+// Deprecated: Use IPRule.ProtoReflect.Descriptor instead.
+func (*IPRule) Descriptor() ([]byte, []int) {
+	return file_common_geodata_geodat_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *GeoSiteList) GetEntry() []*GeoSite {
+func (x *IPRule) GetValue() isIPRule_Value {
 	if x != nil {
-		return x.Entry
+		return x.Value
 	}
 	return nil
 }
+
+func (x *IPRule) GetGeoip() *GeoIPRule {
+	if x != nil {
+		if x, ok := x.Value.(*IPRule_Geoip); ok {
+			return x.Geoip
+		}
+	}
+	return nil
+}
+
+func (x *IPRule) GetCustom() *CIDR {
+	if x != nil {
+		if x, ok := x.Value.(*IPRule_Custom); ok {
+			return x.Custom
+		}
+	}
+	return nil
+}
+
+type isIPRule_Value interface {
+	isIPRule_Value()
+}
+
+type IPRule_Geoip struct {
+	Geoip *GeoIPRule `protobuf:"bytes,1,opt,name=geoip,proto3,oneof"`
+}
+
+type IPRule_Custom struct {
+	Custom *CIDR `protobuf:"bytes,2,opt,name=custom,proto3,oneof"`
+}
+
+func (*IPRule_Geoip) isIPRule_Value() {}
+
+func (*IPRule_Custom) isIPRule_Value() {}
 
 type Domain_Attribute struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -409,7 +693,7 @@ type Domain_Attribute struct {
 
 func (x *Domain_Attribute) Reset() {
 	*x = Domain_Attribute{}
-	mi := &file_common_geodata_geodat_proto_msgTypes[6]
+	mi := &file_common_geodata_geodat_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -421,7 +705,7 @@ func (x *Domain_Attribute) String() string {
 func (*Domain_Attribute) ProtoMessage() {}
 
 func (x *Domain_Attribute) ProtoReflect() protoreflect.Message {
-	mi := &file_common_geodata_geodat_proto_msgTypes[6]
+	mi := &file_common_geodata_geodat_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +790,21 @@ const file_common_geodata_geodat_proto_rawDesc = "" +
 	"\x05Regex\x10\x01\x12\n" +
 	"\n" +
 	"\x06Domain\x10\x02\x12\b\n" +
-	"\x04Full\x10\x03\".\n" +
+	"\x04Full\x10\x03\"R\n" +
+	"\aGeoSite\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x123\n" +
+	"\x06domain\x18\x02 \x03(\v2\x1b.xray.common.geodata.DomainR\x06domain\"A\n" +
+	"\vGeoSiteList\x122\n" +
+	"\x05entry\x18\x01 \x03(\v2\x1c.xray.common.geodata.GeoSiteR\x05entry\"K\n" +
+	"\vGeoSiteRule\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12\x14\n" +
+	"\x05attrs\x18\x03 \x01(\tR\x05attrs\"\x8a\x01\n" +
+	"\n" +
+	"DomainRule\x12<\n" +
+	"\ageosite\x18\x01 \x01(\v2 .xray.common.geodata.GeoSiteRuleH\x00R\ageosite\x125\n" +
+	"\x06custom\x18\x02 \x01(\v2\x1b.xray.common.geodata.DomainH\x00R\x06customB\a\n" +
+	"\x05value\".\n" +
 	"\x04CIDR\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\fR\x02ip\x12\x16\n" +
 	"\x06prefix\x18\x02 \x01(\rR\x06prefix\"o\n" +
@@ -515,12 +813,15 @@ const file_common_geodata_geodat_proto_rawDesc = "" +
 	"\x04cidr\x18\x02 \x03(\v2\x19.xray.common.geodata.CIDRR\x04cidr\x12#\n" +
 	"\rreverse_match\x18\x03 \x01(\bR\freverseMatch\"=\n" +
 	"\tGeoIPList\x120\n" +
-	"\x05entry\x18\x01 \x03(\v2\x1a.xray.common.geodata.GeoIPR\x05entry\"R\n" +
-	"\aGeoSite\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\x123\n" +
-	"\x06domain\x18\x02 \x03(\v2\x1b.xray.common.geodata.DomainR\x06domain\"A\n" +
-	"\vGeoSiteList\x122\n" +
-	"\x05entry\x18\x01 \x03(\v2\x1c.xray.common.geodata.GeoSiteR\x05entryB[\n" +
+	"\x05entry\x18\x01 \x03(\v2\x1a.xray.common.geodata.GeoIPR\x05entry\"X\n" +
+	"\tGeoIPRule\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12#\n" +
+	"\rreverse_match\x18\x03 \x01(\bR\freverseMatch\"~\n" +
+	"\x06IPRule\x126\n" +
+	"\x05geoip\x18\x01 \x01(\v2\x1e.xray.common.geodata.GeoIPRuleH\x00R\x05geoip\x123\n" +
+	"\x06custom\x18\x02 \x01(\v2\x19.xray.common.geodata.CIDRH\x00R\x06customB\a\n" +
+	"\x05valueB[\n" +
 	"\x17com.xray.common.geodataP\x01Z(github.com/xtls/xray-core/common/geodata\xaa\x02\x13Xray.Common.Geodatab\x06proto3"
 
 var (
@@ -536,29 +837,37 @@ func file_common_geodata_geodat_proto_rawDescGZIP() []byte {
 }
 
 var file_common_geodata_geodat_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_common_geodata_geodat_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_common_geodata_geodat_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_common_geodata_geodat_proto_goTypes = []any{
 	(Domain_Type)(0),         // 0: xray.common.geodata.Domain.Type
 	(*Domain)(nil),           // 1: xray.common.geodata.Domain
-	(*CIDR)(nil),             // 2: xray.common.geodata.CIDR
-	(*GeoIP)(nil),            // 3: xray.common.geodata.GeoIP
-	(*GeoIPList)(nil),        // 4: xray.common.geodata.GeoIPList
-	(*GeoSite)(nil),          // 5: xray.common.geodata.GeoSite
-	(*GeoSiteList)(nil),      // 6: xray.common.geodata.GeoSiteList
-	(*Domain_Attribute)(nil), // 7: xray.common.geodata.Domain.Attribute
+	(*GeoSite)(nil),          // 2: xray.common.geodata.GeoSite
+	(*GeoSiteList)(nil),      // 3: xray.common.geodata.GeoSiteList
+	(*GeoSiteRule)(nil),      // 4: xray.common.geodata.GeoSiteRule
+	(*DomainRule)(nil),       // 5: xray.common.geodata.DomainRule
+	(*CIDR)(nil),             // 6: xray.common.geodata.CIDR
+	(*GeoIP)(nil),            // 7: xray.common.geodata.GeoIP
+	(*GeoIPList)(nil),        // 8: xray.common.geodata.GeoIPList
+	(*GeoIPRule)(nil),        // 9: xray.common.geodata.GeoIPRule
+	(*IPRule)(nil),           // 10: xray.common.geodata.IPRule
+	(*Domain_Attribute)(nil), // 11: xray.common.geodata.Domain.Attribute
 }
 var file_common_geodata_geodat_proto_depIdxs = []int32{
-	0, // 0: xray.common.geodata.Domain.type:type_name -> xray.common.geodata.Domain.Type
-	7, // 1: xray.common.geodata.Domain.attribute:type_name -> xray.common.geodata.Domain.Attribute
-	2, // 2: xray.common.geodata.GeoIP.cidr:type_name -> xray.common.geodata.CIDR
-	3, // 3: xray.common.geodata.GeoIPList.entry:type_name -> xray.common.geodata.GeoIP
-	1, // 4: xray.common.geodata.GeoSite.domain:type_name -> xray.common.geodata.Domain
-	5, // 5: xray.common.geodata.GeoSiteList.entry:type_name -> xray.common.geodata.GeoSite
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: xray.common.geodata.Domain.type:type_name -> xray.common.geodata.Domain.Type
+	11, // 1: xray.common.geodata.Domain.attribute:type_name -> xray.common.geodata.Domain.Attribute
+	1,  // 2: xray.common.geodata.GeoSite.domain:type_name -> xray.common.geodata.Domain
+	2,  // 3: xray.common.geodata.GeoSiteList.entry:type_name -> xray.common.geodata.GeoSite
+	4,  // 4: xray.common.geodata.DomainRule.geosite:type_name -> xray.common.geodata.GeoSiteRule
+	1,  // 5: xray.common.geodata.DomainRule.custom:type_name -> xray.common.geodata.Domain
+	6,  // 6: xray.common.geodata.GeoIP.cidr:type_name -> xray.common.geodata.CIDR
+	7,  // 7: xray.common.geodata.GeoIPList.entry:type_name -> xray.common.geodata.GeoIP
+	9,  // 8: xray.common.geodata.IPRule.geoip:type_name -> xray.common.geodata.GeoIPRule
+	6,  // 9: xray.common.geodata.IPRule.custom:type_name -> xray.common.geodata.CIDR
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_common_geodata_geodat_proto_init() }
@@ -566,7 +875,15 @@ func file_common_geodata_geodat_proto_init() {
 	if File_common_geodata_geodat_proto != nil {
 		return
 	}
-	file_common_geodata_geodat_proto_msgTypes[6].OneofWrappers = []any{
+	file_common_geodata_geodat_proto_msgTypes[4].OneofWrappers = []any{
+		(*DomainRule_Geosite)(nil),
+		(*DomainRule_Custom)(nil),
+	}
+	file_common_geodata_geodat_proto_msgTypes[9].OneofWrappers = []any{
+		(*IPRule_Geoip)(nil),
+		(*IPRule_Custom)(nil),
+	}
+	file_common_geodata_geodat_proto_msgTypes[10].OneofWrappers = []any{
 		(*Domain_Attribute_BoolValue)(nil),
 		(*Domain_Attribute_IntValue)(nil),
 	}
@@ -576,7 +893,7 @@ func file_common_geodata_geodat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_geodata_geodat_proto_rawDesc), len(file_common_geodata_geodat_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
