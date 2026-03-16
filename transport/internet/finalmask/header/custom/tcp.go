@@ -2,13 +2,11 @@ package custom
 
 import (
 	"bytes"
-	"crypto/rand"
 	"io"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -231,7 +229,7 @@ func writeSequence(w io.Writer, sequence *TCPSequence) bool {
 		}
 		if item.Rand > 0 {
 			buf := make([]byte, item.Rand)
-			common.Must2(rand.Read(buf))
+			crypto.RandBytesBetween(buf, int64(item.RandMin), int64(item.RandMax))
 			merged = append(merged, buf...)
 		} else {
 			merged = append(merged, item.Packet...)

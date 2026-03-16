@@ -14,3 +14,6 @@ func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount 
 func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
 	return NewConnServer(c, raw)
 }
+
+func (c *Config) HeaderConn() {
+}

@@ -16,3 +16,9 @@ func RandBetween(from int64, to int64) int64 {
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(to-from))
 	return from + bigInt.Int64()
 }
+
+func RandBytesBetween(b []byte, from, to int64) {
+	for i := range b {
+		b[i] = byte(RandBetween(from, to))
+	}
+}

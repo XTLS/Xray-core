@@ -1256,6 +1256,7 @@ var (
 type TCPItem struct {
 	Delay  Int32Range      `json:"delay"`
 	Rand   int32           `json:"rand"`
+	Range  *Int32Range     `json:"range"`
 	Type   string          `json:"type"`
 	Packet json.RawMessage `json:"packet"`
 }
@@ -1293,6 +1294,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for i, value := range c.Clients {
 		clients[i] = &custom.TCPSequence{}
 		for _, item := range value {
+			if item.Range == nil {
+				item.Range = &Int32Range{From: 0, To: 256}
+			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
@@ -1301,6 +1305,8 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
 				Rand:     item.Rand,
+				RandMin:  item.Range.From,
+				RandMax:  item.Range.To,
 				Packet:   item.Packet,
 			})
 		}
@@ -1310,6 +1316,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for i, value := range c.Servers {
 		servers[i] = &custom.TCPSequence{}
 		for _, item := range value {
+			if item.Range == nil {
+				item.Range = &Int32Range{From: 0, To: 256}
+			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
@@ -1318,6 +1327,8 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
 				Rand:     item.Rand,
+				RandMin:  item.Range.From,
+				RandMax:  item.Range.To,
 				Packet:   item.Packet,
 			})
 		}
@@ -1327,6 +1338,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for i, value := range c.Errors {
 		errors[i] = &custom.TCPSequence{}
 		for _, item := range value {
+			if item.Range == nil {
+				item.Range = &Int32Range{From: 0, To: 256}
+			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
@@ -1335,6 +1349,8 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
 				Rand:     item.Rand,
+				RandMin:  item.Range.From,
+				RandMax:  item.Range.To,
 				Packet:   item.Packet,
 			})
 		}
@@ -1434,6 +1450,7 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 
 type UDPItem struct {
 	Rand   int32           `json:"rand"`
+	Range  *Int32Range     `json:"range"`
 	Type   string          `json:"type"`
 	Packet json.RawMessage `json:"packet"`
 }
@@ -1457,25 +1474,35 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 
 	client := make([]*custom.UDPItem, 0, len(c.Client))
 	for _, item := range c.Client {
+		if item.Range == nil {
+			item.Range = &Int32Range{From: 0, To: 256}
+		}
 		var err error
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 			return nil, err
 		}
 		client = append(client, &custom.UDPItem{
-			Rand:   item.Rand,
-			Packet: item.Packet,
+			Rand:    item.Rand,
+			RandMin: item.Range.From,
+			RandMax: item.Range.To,
+			Packet:  item.Packet,
 		})
 	}
 
 	server := make([]*custom.UDPItem, 0, len(c.Server))
 	for _, item := range c.Server {
+		if item.Range == nil {
+			item.Range = &Int32Range{From: 0, To: 256}
+		}
 		var err error
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 			return nil, err
 		}
 		server = append(server, &custom.UDPItem{
-			Rand:   item.Rand,
-			Packet: item.Packet,
+			Rand:    item.Rand,
+			RandMin: item.Range.From,
+			RandMax: item.Range.To,
+			Packet:  item.Packet,
 		})
 	}
 

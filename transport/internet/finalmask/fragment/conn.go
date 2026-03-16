@@ -33,9 +33,6 @@ func NewConnServer(c *Config, raw net.Conn, server bool) (net.Conn, error) {
 func (c *fragmentConn) TcpMaskConn() {}
 
 func (c *fragmentConn) RawConn() net.Conn {
-	if c.server {
-		return c
-	}
 	return c.Conn
 }
 
