@@ -3,8 +3,9 @@
 package tun
 
 import (
+	"crypto/md5"
 	"errors"
-	_ "unsafe"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
@@ -66,7 +67,9 @@ func NewTun(options TunOptions) (Tun, error) {
 }
 
 func open(name string) (*wintun.Adapter, error) {
-	var guid *windows.GUID
+	// generate a deterministic GUID from the adapter name
+	id := md5.Sum([]byte(name))
+	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
 	// try to open existing adapter by name
 	adapter, err := wintun.OpenAdapter(name)
 	if err == nil {
