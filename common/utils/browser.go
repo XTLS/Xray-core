@@ -111,7 +111,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	case "ws":
 		header.Set("Sec-Fetch-Mode", "websocket")
 		header.Set("Sec-Fetch-Dest", "empty")
-		header.Set("Sec-Fetch-Site", "cross-site")
+		header.Set("Sec-Fetch-Site", "same-origin")
 		if header.Get("Cache-Control") == "" {
 			header.Set("Cache-Control", "no-cache")
 		}
@@ -124,7 +124,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	case "fetch":
 		header.Set("Sec-Fetch-Mode", "cors")
 		header.Set("Sec-Fetch-Dest", "empty")
-		header.Set("Sec-Fetch-Site", "cross-site")
+		header.Set("Sec-Fetch-Site", "same-origin")
 		if header.Get("Priority") == "" {
 			switch browser {
 			case "chrome":
