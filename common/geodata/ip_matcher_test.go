@@ -1,61 +1,52 @@
 package geodata
 
 import (
-	"fmt"
-	"os"
+	"net"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/platform/filesystem"
-	"google.golang.org/protobuf/proto"
+	xnet "github.com/xtls/xray-core/common/net"
 )
 
-func getAssetPath(file string) (string, error) {
-	path := platform.GetAssetLocation(file)
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		path := filepath.Join("..", "..", "resources", file)
-		_, err := os.Stat(path)
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("can't find %s in standard asset locations or {project_root}/resources", file)
-		}
-		if err != nil {
-			return "", fmt.Errorf("can't stat %s: %v", path, err)
-		}
-		return path, nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("can't stat %s: %v", path, err)
-	}
+func buildGeoIPMatcher(rawRules ...string) GeoIPMatcher {
+	rules, err := ParseIPRules(rawRules)
+	common.Must(err)
 
-	return path, nil
+	matcher, err := newGeoIPRegistry().BuildGeoIPMatcher(rules)
+	common.Must(err)
+
+	return matcher
+}
+
+func sortIPStrings(ips []net.IP) []string {
+	output := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		output = append(output, ip.String())
+	}
+	slices.Sort(output)
+	return output
 }
 
 func TestGeoIPMatcher(t *testing.T) {
-	cidrList := []*CIDR{
-		{Ip: []byte{0, 0, 0, 0}, Prefix: 8},
-		{Ip: []byte{10, 0, 0, 0}, Prefix: 8},
-		{Ip: []byte{100, 64, 0, 0}, Prefix: 10},
-		{Ip: []byte{127, 0, 0, 0}, Prefix: 8},
-		{Ip: []byte{169, 254, 0, 0}, Prefix: 16},
-		{Ip: []byte{172, 16, 0, 0}, Prefix: 12},
-		{Ip: []byte{192, 0, 0, 0}, Prefix: 24},
-		{Ip: []byte{192, 0, 2, 0}, Prefix: 24},
-		{Ip: []byte{192, 168, 0, 0}, Prefix: 16},
-		{Ip: []byte{192, 18, 0, 0}, Prefix: 15},
-		{Ip: []byte{198, 51, 100, 0}, Prefix: 24},
-		{Ip: []byte{203, 0, 113, 0}, Prefix: 24},
-		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
-		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
-	}
-
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: cidrList,
-	})
-	common.Must(err)
+	matcher := buildGeoIPMatcher(
+		"0.0.0.0/8",
+		"10.0.0.0/8",
+		"100.64.0.0/10",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"172.16.0.0/12",
+		"192.0.0.0/24",
+		"192.0.2.0/24",
+		"192.168.0.0/16",
+		"192.18.0.0/15",
+		"198.51.100.0/24",
+		"203.0.113.0/24",
+		"8.8.8.8/32",
+		"91.108.4.0/16",
+	)
 
 	testCases := []struct {
 		Input  string
@@ -99,25 +90,18 @@ func TestGeoIPMatcher(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		ip := net.ParseAddress(testCase.Input).IP()
-		actual := matcher.Match(ip)
-		if actual != testCase.Output {
-			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
 		}
 	}
 }
 
 func TestGeoIPMatcherRegression(t *testing.T) {
-	cidrList := []*CIDR{
-		{Ip: []byte{98, 108, 20, 0}, Prefix: 22},
-		{Ip: []byte{98, 108, 20, 0}, Prefix: 23},
-	}
-
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: cidrList,
-	})
-	common.Must(err)
+	matcher := buildGeoIPMatcher(
+		"98.108.20.0/22",
+		"98.108.20.0/23",
+	)
 
 	testCases := []struct {
 		Input  string
@@ -133,25 +117,52 @@ func TestGeoIPMatcherRegression(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		ip := net.ParseAddress(testCase.Input).IP()
-		actual := matcher.Match(ip)
-		if actual != testCase.Output {
-			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
 		}
 	}
 }
 
 func TestGeoIPReverseMatcher(t *testing.T) {
-	cidrList := []*CIDR{
-		{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
-		{Ip: []byte{91, 108, 4, 0}, Prefix: 16},
+	matcher := buildGeoIPMatcher(
+		"8.8.8.8/32",
+		"91.108.4.0/16",
+	)
+	matcher.SetReverse(true)
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "8.8.8.8",
+			Output: false,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
+			Output: false,
+		},
+		{
+			Input:  "91.108.255.254",
+			Output: false,
+		},
 	}
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: cidrList,
-	})
-	common.Must(err)
-	matcher.SetReverse(true) // Reverse match
+
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
+		}
+	}
+}
+
+func TestGeoIPReverseMatcher2(t *testing.T) {
+	matcher := buildGeoIPMatcher(
+		"8.8.8.8/32",
+		"91.108.4.0/16",
+		"fe80::", // Keep IPv6 family non-empty so reverse matching can evaluate IPv6 input.
+	)
+	matcher.SetReverse(true)
 
 	testCases := []struct {
 		Input  string
@@ -171,23 +182,106 @@ func TestGeoIPReverseMatcher(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		ip := net.ParseAddress(testCase.Input).IP()
-		actual := matcher.Match(ip)
-		if actual != testCase.Output {
-			t.Error("expect input", testCase.Input, "to be", testCase.Output, ", but actually", actual)
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
 		}
 	}
 }
 
-func TestGeoIPMatcher4CN(t *testing.T) {
-	ips, err := loadGeoIP("CN")
-	common.Must(err)
+func TestGeoIPMatcherAnyMatchAndMatches(t *testing.T) {
+	matcher := buildGeoIPMatcher(
+		"8.8.8.8/32",
+		"2001:4860:4860::8888/128",
+	)
+	ip := func(raw string) net.IP {
+		return xnet.ParseAddress(raw).IP()
+	}
 
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: ips,
+	if matcher.AnyMatch(nil) {
+		t.Fatal("expect AnyMatch(nil) to be false")
+	}
+
+	if !matcher.AnyMatch([]net.IP{
+		net.IP{},
+		ip("1.1.1.1"),
+		ip("8.8.8.8"),
+	}) {
+		t.Fatal("expect AnyMatch to ignore invalid IPs and return true when one valid IP matches")
+	}
+
+	if matcher.AnyMatch([]net.IP{
+		ip("1.1.1.1"),
+		ip("2001:db8::1"),
+	}) {
+		t.Fatal("expect AnyMatch to be false when no valid IP matches")
+	}
+
+	if !matcher.Matches([]net.IP{
+		ip("8.8.8.8"),
+		ip("2001:4860:4860::8888"),
+	}) {
+		t.Fatal("expect Matches to be true when all valid IPs match")
+	}
+
+	if matcher.Matches([]net.IP{
+		ip("8.8.8.8"),
+		ip("1.1.1.1"),
+	}) {
+		t.Fatal("expect Matches to be false when one valid IP does not match")
+	}
+
+	if matcher.Matches([]net.IP{
+		ip("8.8.8.8"),
+		net.IP{},
+	}) {
+		t.Fatal("expect Matches to be false when any IP is invalid")
+	}
+}
+
+func TestGeoIPMatcherFilterIPs(t *testing.T) {
+	matcher := buildGeoIPMatcher(
+		"8.8.8.8/32",
+		"91.108.4.0/16",
+		"2001:4860:4860::8888/128",
+	)
+	ip := func(raw string) net.IP {
+		return xnet.ParseAddress(raw).IP()
+	}
+
+	matched, unmatched := matcher.FilterIPs([]net.IP{
+		net.IP{},
+		ip("8.8.8.8"),
+		ip("91.108.255.254"),
+		ip("1.1.1.1"),
+		ip("2001:4860:4860::8888"),
+		ip("2001:db8::1"),
 	})
-	common.Must(err)
+
+	wantMatched := []string{
+		"2001:4860:4860::8888",
+		"8.8.8.8",
+		"91.108.255.254",
+	}
+	slices.Sort(wantMatched)
+	if v := sortIPStrings(matched); !reflect.DeepEqual(v, wantMatched) {
+		t.Error("unexpected output: ", v, " want ", wantMatched)
+	}
+
+	wantUnmatched := []string{
+		"1.1.1.1",
+		"2001:db8::1",
+	}
+	slices.Sort(wantUnmatched)
+	if v := sortIPStrings(unmatched); !reflect.DeepEqual(v, wantUnmatched) {
+		t.Error("unexpected output: ", v, " want ", wantUnmatched)
+	}
+}
+
+func TestGeoIPMatcher4CN(t *testing.T) {
+	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
+
+	matcher := buildGeoIPMatcher("geoip:cn")
 
 	if matcher.Match([]byte{8, 8, 8, 8}) {
 		t.Error("expect CN geoip doesn't contain 8.8.8.8, but actually does")
@@ -195,71 +289,37 @@ func TestGeoIPMatcher4CN(t *testing.T) {
 }
 
 func TestGeoIPMatcher6US(t *testing.T) {
-	ips, err := loadGeoIP("US")
-	common.Must(err)
+	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: ips,
-	})
-	common.Must(err)
+	matcher := buildGeoIPMatcher("geoip:us")
 
-	if !matcher.Match(net.ParseAddress("2001:4860:4860::8888").IP()) {
+	if !matcher.Match(xnet.ParseAddress("2001:4860:4860::8888").IP()) {
 		t.Error("expect US geoip contain 2001:4860:4860::8888, but actually not")
 	}
 }
 
-func loadGeoIP(country string) ([]*CIDR, error) {
-	path, err := getAssetPath("geoip.dat")
-	if err != nil {
-		return nil, err
-	}
-	geoipBytes, err := filesystem.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var geoipList GeoIPList
-	if err := proto.Unmarshal(geoipBytes, &geoipList); err != nil {
-		return nil, err
-	}
-
-	for _, geoip := range geoipList.Entry {
-		if geoip.Code == country {
-			return geoip.Cidr, nil
-		}
-	}
-
-	panic("country not found: " + country)
-}
-
 func BenchmarkGeoIPMatcher4CN(b *testing.B) {
-	ips, err := loadGeoIP("CN")
-	common.Must(err)
+	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: ips,
-	})
-	common.Must(err)
+	matcher := buildGeoIPMatcher("geoip:cn")
+	ip := net.IP{8, 8, 8, 8}
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = matcher.Match([]byte{8, 8, 8, 8})
+		_ = matcher.Match(ip)
 	}
 }
 
 func BenchmarkGeoIPMatcher6US(b *testing.B) {
-	ips, err := loadGeoIP("US")
-	common.Must(err)
+	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher, err := IPRegistry.buildOptimizedGeoIPMatcher(&GeoIP{
-		Cidr: ips,
-	})
-	common.Must(err)
+	matcher := buildGeoIPMatcher("geoip:us")
+	ip := xnet.ParseAddress("2001:4860:4860::8888").IP()
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = matcher.Match(net.ParseAddress("2001:4860:4860::8888").IP())
+		_ = matcher.Match(ip)
 	}
 }
