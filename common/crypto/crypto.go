@@ -4,6 +4,8 @@ package crypto // import "github.com/xtls/xray-core/common/crypto"
 import (
 	"crypto/rand"
 	"math/big"
+
+	"github.com/xtls/xray-core/common"
 )
 
 func RandBetween(from int64, to int64) int64 {
@@ -17,8 +19,14 @@ func RandBetween(from int64, to int64) int64 {
 	return from + bigInt.Int64()
 }
 
-func RandBytesBetween(b []byte, from, to int64) {
+func RandBytesBetween(b []byte, from, to byte) {
+	common.Must2(rand.Read(b))
+
+	if from > to {
+		from, to = to, from
+	}
+
 	for i := range b {
-		b[i] = byte(RandBetween(from, to))
+		b[i] = from + b[i]%(to-from+1)
 	}
 }
