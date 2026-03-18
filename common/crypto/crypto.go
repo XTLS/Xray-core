@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common"
 )
 
+// [,)
 func RandBetween(from int64, to int64) int64 {
 	if from == to {
 		return from
@@ -19,6 +20,7 @@ func RandBetween(from int64, to int64) int64 {
 	return from + bigInt.Int64()
 }
 
+// [,]
 func RandBytesBetween(b []byte, from, to byte) {
 	common.Must2(rand.Read(b))
 
@@ -26,11 +28,7 @@ func RandBytesBetween(b []byte, from, to byte) {
 		from, to = to, from
 	}
 
-	if from == to {
-		to = from + 1
-	}
-
 	for i := range b {
-		b[i] = from + b[i]%(to-from)
+		b[i] = from + b[i]%(to-from+1)
 	}
 }

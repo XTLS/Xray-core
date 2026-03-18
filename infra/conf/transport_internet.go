@@ -1295,7 +1295,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		clients[i] = &custom.TCPSequence{}
 		for _, item := range value {
 			if item.RandByte == nil {
-				item.RandByte = &Int32Range{From: 0, To: 256}
+				item.RandByte = &Int32Range{From: 0, To: 255}
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1317,7 +1317,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		servers[i] = &custom.TCPSequence{}
 		for _, item := range value {
 			if item.RandByte == nil {
-				item.RandByte = &Int32Range{From: 0, To: 256}
+				item.RandByte = &Int32Range{From: 0, To: 255}
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1339,7 +1339,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		errors[i] = &custom.TCPSequence{}
 		for _, item := range value {
 			if item.RandByte == nil {
-				item.RandByte = &Int32Range{From: 0, To: 256}
+				item.RandByte = &Int32Range{From: 0, To: 255}
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1475,7 +1475,7 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	client := make([]*custom.UDPItem, 0, len(c.Client))
 	for _, item := range c.Client {
 		if item.RandByte == nil {
-			item.RandByte = &Int32Range{From: 0, To: 256}
+			item.RandByte = &Int32Range{From: 0, To: 255}
 		}
 		var err error
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1492,7 +1492,7 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	server := make([]*custom.UDPItem, 0, len(c.Server))
 	for _, item := range c.Server {
 		if item.RandByte == nil {
-			item.RandByte = &Int32Range{From: 0, To: 256}
+			item.RandByte = &Int32Range{From: 0, To: 255}
 		}
 		var err error
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
