@@ -51,6 +51,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
+	//if len(header.Values("User-Agent")) < 1 {
 	if header.Get("User-Agent") == "" {
 		utils.ApplyDefaultHeaders(header, "chrome", "fetch")
 	}

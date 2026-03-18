@@ -96,6 +96,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	for key, value := range transportConfiguration.Header {
 		AddHeader(req.Header, key, value)
 	}
+	//if len(header.Values("User-Agent")) < 1 {
 	if req.Header.Get("User-Agent") == "" {
 		utils.ApplyDefaultHeaders(req.Header, "chrome", "ws")
 	}
