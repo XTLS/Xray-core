@@ -52,13 +52,13 @@ func (c *Config) GetRequestHeader() http.Header {
 		header.Add(k, v)
 	}
 	//if len(header.Values("User-Agent")) < 1 {
-	switch req.Header.Get("User-Agent") {
+	switch header.Get("User-Agent") {
 	case "", "!chrome":
 		utils.ApplyDefaultHeaders(header, "chrome", "fetch")
 	case "!firefox":
 		utils.ApplyDefaultHeaders(header, "firefox", "fetch")
 	case "!go":
-		utils.ApplyDefaultHeaders(req.Header, "go", "fetch")
+		utils.ApplyDefaultHeaders(header, "go", "fetch")
 	}
 	return header
 }
