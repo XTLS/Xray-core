@@ -1,6 +1,3 @@
-//go:build !wasm
-// +build !wasm
-
 package buf_test
 
 import (

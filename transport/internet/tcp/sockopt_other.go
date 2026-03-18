@@ -1,5 +1,5 @@
-//go:build !linux && !freebsd && !darwin
-// +build !linux,!freebsd,!darwin
+//go:build !linux && !darwin
+// +build !linux,!darwin
 
 package tcp
 
