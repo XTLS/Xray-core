@@ -28,6 +28,10 @@ func RandBytesBetween(b []byte, from, to byte) {
 		from, to = to, from
 	}
 
+	if to-from == 255 {
+		return
+	}
+
 	for i := range b {
 		b[i] = from + b[i]%(to-from+1)
 	}
