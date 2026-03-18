@@ -97,8 +97,11 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		AddHeader(req.Header, key, value)
 	}
 	//if len(header.Values("User-Agent")) < 1 {
-	if req.Header.Get("User-Agent") == "" {
+	switch req.Header.Get("User-Agent") {
+	case "", "!chrome":
 		utils.ApplyDefaultHeaders(req.Header, "chrome", "ws")
+	case "!firefox":
+		utils.ApplyDefaultHeaders(req.Header, "firefox", "ws")
 	}
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
