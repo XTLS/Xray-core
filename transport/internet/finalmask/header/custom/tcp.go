@@ -229,7 +229,7 @@ func writeSequence(w io.Writer, sequence *TCPSequence) bool {
 		}
 		if item.Rand > 0 {
 			buf := make([]byte, item.Rand)
-			crypto.RandBytesBetween(buf, int64(item.RandMin), int64(item.RandMax))
+			crypto.RandBytesBetween(buf, byte(item.RandMin), byte(item.RandMax))
 			merged = append(merged, buf...)
 		} else {
 			merged = append(merged, item.Packet...)

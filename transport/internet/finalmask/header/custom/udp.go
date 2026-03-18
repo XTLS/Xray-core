@@ -18,7 +18,7 @@ func (h *udpCustomClient) Serialize(b []byte) {
 	index := 0
 	for _, item := range h.client {
 		if item.Rand > 0 {
-			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], int64(item.RandMin), int64(item.RandMax))
+			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], byte(item.RandMin), byte(item.RandMax))
 			index += int(item.Rand)
 		} else {
 			index += len(item.Packet)
@@ -105,7 +105,7 @@ func (h *udpCustomServer) Serialize(b []byte) {
 	index := 0
 	for _, item := range h.server {
 		if item.Rand > 0 {
-			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], int64(item.RandMin), int64(item.RandMax))
+			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], byte(item.RandMin), byte(item.RandMax))
 			index += int(item.Rand)
 		} else {
 			index += len(item.Packet)
