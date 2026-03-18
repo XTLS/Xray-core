@@ -57,6 +57,8 @@ func (c *Config) GetRequestHeader() http.Header {
 		utils.ApplyDefaultHeaders(header, "chrome", "fetch")
 	case "!firefox":
 		utils.ApplyDefaultHeaders(header, "firefox", "fetch")
+	case "!go":
+		utils.ApplyDefaultHeaders(req.Header, "go", "fetch")
 	}
 	return header
 }

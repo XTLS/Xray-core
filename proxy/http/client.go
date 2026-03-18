@@ -226,6 +226,8 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
 	case "!firefox":
 		utils.ApplyDefaultHeaders(req.Header, "firefox", "nav")
+	case "!go":
+		utils.ApplyDefaultHeaders(req.Header, "go", "nav")
 	}
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {

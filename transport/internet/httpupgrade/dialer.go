@@ -102,6 +102,8 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		utils.ApplyDefaultHeaders(req.Header, "chrome", "ws")
 	case "!firefox":
 		utils.ApplyDefaultHeaders(req.Header, "firefox", "ws")
+	case "!go":
+		utils.ApplyDefaultHeaders(req.Header, "go", "ws")
 	}
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")

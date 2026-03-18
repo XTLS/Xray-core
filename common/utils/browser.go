@@ -86,6 +86,10 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
 		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
+	case "go":
+		// Expose the default net/http header
+		header.Del("User-Agent")
+		return
 	}
 	// variant-specific
 	switch variant {
@@ -145,7 +149,4 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 			header.Set("Accept", "*/*")
 		}
 	}
-	/*for key, value := range header {
-		fmt.Println("Added header - " + key + ": ", value)
-	}*/
 }
