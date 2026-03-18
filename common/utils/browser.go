@@ -76,30 +76,27 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific
 	switch browser {
 	case "chrome":
+		header["Sec-CH-UA"] = []string{ChromeUACH}
+		header["Sec-CH-UA-Mobile"] = []string{"?0"}
+		header["Sec-CH-UA-Platform"] = []string{"\"Windows\""}
+		header["DNT"] = []string{"1"}
 		header.Set("User-Agent", ChromeUA)
-		header.Set("Sec-CH-UA", ChromeUACH)
-		header.Set("Sec-CH-UA-Mobile", "?0")
-		header.Set("Sec-CH-UA-Platform", "\"Windows\"")
 		header.Set("Accept-Language", "en-US,en;q=0.9")
 	case "firefox":
 		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
+		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
 	}
 	// variant-specific
 	switch variant {
 	case "nav":
-		header.Set("Sec-Fetch-Mode", "navigate")
-		header.Set("Sec-Fetch-Dest", "document")
-		header.Set("Sec-Fetch-Site", "none")
-		header.Set("Sec-Fetch-User", "?1")
-		header.Set("Upgrade-Insecure-Requests", "1")
-		header.Set("Priority", "u=0, i")
 		if header.Get("Cache-Control") == "" {
 			switch browser {
 			case "chrome":
 				header.Set("Cache-Control", "max-age=0")
 			}
 		}
+		header.Set("Upgrade-Insecure-Requests", "1")
 		if header.Get("Accept") == "" {
 			switch browser {
 			case "chrome":
@@ -108,6 +105,11 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 			}
 		}
+		header.Set("Sec-Fetch-Site", "none")
+		header.Set("Sec-Fetch-Mode", "navigate")
+		header.Set("Sec-Fetch-User", "?1")
+		header.Set("Sec-Fetch-Dest", "document")
+		header.Set("Priority", "u=0, i")
 	case "ws":
 		header.Set("Sec-Fetch-Mode", "websocket")
 		header.Set("Sec-Fetch-Dest", "empty")
