@@ -594,7 +594,7 @@ func detectGUIPlatform() bool {
 	switch runtime.GOOS {
 	case "android", "ios", "windows", "darwin":
 		return true
-	case "linux", "freebsd", "openbsd":
+	case "linux":
 		if t := os.Getenv("XDG_SESSION_TYPE"); t == "wayland" || t == "x11" {
 			return true
 		}
