@@ -191,9 +191,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	)
 	if err == nil {
 		userAgent := grpcSettings.UserAgent
-		if userAgent == "" {
-			userAgent = utils.ChromeUA
-		}
 		setUserAgent(conn, userAgent)
 		conn.Connect()
 	}
