@@ -30,11 +30,10 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("PrivateKey: %v\nPassword (Public key/pbk): %v\nHash32: %v\n",
+	fmt.Printf("PrivateKey: %v\nPassword (PublicKey): %v\nHash32: %v\n",
 		encoding.EncodeToString(privateKey),
 		encoding.EncodeToString(password),
 		encoding.EncodeToString(hash32[:]))
-	fmt.Println("\nNote: Use 'Password' as the 'Public Key (pbk)' for connection links; share it only with trusted users to maintain stealth.")
 }
 
 func genCurve25519(inputPrivateKey []byte) (privateKey []byte, password []byte, hash32 [32]byte, returnErr error) {
