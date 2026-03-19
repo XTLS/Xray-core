@@ -220,15 +220,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 	for _, h := range header {
 		req.Header.Set(h.Key, h.Value)
 	}
-	//if len(header.Values("User-Agent")) < 1 {
-	switch req.Header.Get("User-Agent") {
-	case "", "!chrome":
-		utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
-	case "!firefox":
-		utils.ApplyDefaultHeaders(req.Header, "firefox", "nav")
-	case "!go":
-		utils.ApplyDefaultHeaders(req.Header, "go", "nav")
-	}
+	utils.UseDefaultHeadersWith(req.Header, "nav")
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
 		req.Header.Set("Proxy-Connection", "Keep-Alive")
