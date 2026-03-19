@@ -150,3 +150,18 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		}
 	}
 }
+
+func UseDefaultHeadersWith(header http.Header, variant string) {
+	if len(header.Values("User-Agent")) < 1 {
+		ApplyDefaultHeaders(header, "chrome", variant)
+	} else {
+		switch header.Get("User-Agent") {
+		case "!chrome":
+			ApplyDefaultHeaders(header, "chrome", variant)
+		case "!firefox":
+			ApplyDefaultHeaders(header, "firefox", variant)
+		case "!go":
+			ApplyDefaultHeaders(header, "go", variant)
+		}
+	}
+}
