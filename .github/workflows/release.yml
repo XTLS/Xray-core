@@ -82,6 +82,8 @@ jobs:
         goos: [windows, linux, darwin, android]
         goarch: [amd64, 386, arm64]
         patch-assetname: [""]
+        # Building for FreeBSD and OpenBSD has been suspended unless
+        # there are active contributors that uses FreeBSD or OpenBSD actively.
         exclude:
           # Exclude i386 on darwin
           - goarch: 386
@@ -124,10 +126,6 @@ jobs:
           - goos: linux
             goarch: ppc64le
           # END PPC
-          # BEGIN S390X
-          - goos: linux
-            goarch: s390x
-          # END S390X
           # END Other architectures
       fail-fast: false
 
@@ -172,6 +170,16 @@ jobs:
 
       - name: Build Xray
         run: |
+          # Special processing for ARM64
+          if [[ ${GOARCH} == 'arm64' ]]; then
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOARM64="v8.1"
+            fi
+            if [[ ${GOOS} == 'darwin' ]]; then
+              GOARM64="v8.4"
+            fi
+          fi
+          # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then

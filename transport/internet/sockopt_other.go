@@ -1,5 +1,5 @@
-//go:build !windows && !darwin && !linux && !android
-// +build !windows,!darwin,!linux,!android
+//go:build !windows && !darwin && !linux && !android && !freebsd
+// +build !windows,!darwin,!linux,!android,!freebsd
 
 package internet
 
