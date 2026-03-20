@@ -74,10 +74,11 @@ func getGreasedChUa(majorVersion int, forkName string) string {
 	return strings.Join(shuffledCh, ", ")
 }
 
-// It's better to pin on Firefox ESR releases, can have a Firefox ESR version generator later
+// It's better to pin on Firefox ESR releases, and there could be a Firefox ESR version generator later
+// However, if the Firefox fingerprint in uTLS doesn't have its update cadence match that of Firefox ESR, then it's better to update the Firefox version manually instead every time a new major ESR release is available
 var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
-// ChromeUA provides default browser User-Agent based on CPU-seeded PRNG.
+// The code below provides a coherent default browser user agent string based on a CPU-seeded PRNG
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
 var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
