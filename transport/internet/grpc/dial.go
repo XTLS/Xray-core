@@ -197,7 +197,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		case "!chrome":
 			userAgent = utils.ChromeUA
 		case "!edge":
-			userAgent = utils.MSEdgeUS
+			userAgent = utils.MSEdgeUA
 		case "!firefox":
 			userAgent = utils.FirefoxUA
 		}
