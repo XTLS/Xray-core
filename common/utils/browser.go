@@ -74,11 +74,11 @@ func getGreasedChUa(majorVersion int, forkName string) string {
 	return strings.Join(shuffledCh, ", ")
 }
 
-// It's better to pin on Firefox ESR releases, and there could be a Firefox ESR version generator later
-// However, if the Firefox fingerprint in uTLS doesn't have its update cadence match that of Firefox ESR, then it's better to update the Firefox version manually instead every time a new major ESR release is available
+// It's better to pin on Firefox ESR releases, and there could be a Firefox ESR version generator later.
+// However, if the Firefox fingerprint in uTLS doesn't have its update cadence match that of Firefox ESR, then it's better to update the Firefox version manually instead every time a new major ESR release is available.
 var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
-// The code below provides a coherent default browser user agent string based on a CPU-seeded PRNG
+// The code below provides a coherent default browser user agent string based on a CPU-seeded PRNG.
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
 var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
@@ -86,7 +86,7 @@ var MSEdgeUA = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0
 var MSEdgeUACH = getGreasedChUa(AnchoredChromeVersion, "edge")
 
 func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
-	// Browser-specific
+	// Browser-specific.
 	switch browser {
 	case "chrome":
 		header["Sec-CH-UA"] = []string{ChromeUACH}
@@ -107,11 +107,11 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
 	case "go":
-		// Expose the default net/http header
+		// Expose the default net/http header.
 		header.Del("User-Agent")
 		return
 	}
-	// variant-specific
+	// Context-specific.
 	switch variant {
 	case "nav":
 		if header.Get("Cache-Control") == "" {
@@ -172,7 +172,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 }
 
 func UseDefaultHeadersWith(header http.Header, variant string) {
-	// The global UA special value handler
+	// The global UA special value handler.
 	if len(header.Values("User-Agent")) < 1 {
 		ApplyDefaultHeaders(header, "chrome", variant)
 	} else {
