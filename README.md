@@ -108,6 +108,7 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
+  - [INCY](https://github.com/INCY-DEV/incy-platforms/releases/latest)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
@@ -116,10 +117,12 @@
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)
+  - [INCY](https://play.google.com/store/apps/details?id=llc.itdev.incy)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
+  - [INCY](https://apps.apple.com/ru/app/incy/id6756943388)
 - macOS arm64 & x64
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973)
   - [V2rayU](https://github.com/yanue/V2rayU)
@@ -130,6 +133,7 @@
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
+  - [INCY](https://github.com/INCY-DEV/incy-platforms/releases/latest)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
@@ -138,6 +142,7 @@
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
+  - [INCY](https://github.com/INCY-DEV/incy-platforms/releases/latest)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
