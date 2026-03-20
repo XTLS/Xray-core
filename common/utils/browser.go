@@ -51,26 +51,36 @@ func getGreasedChOrder(brandLength int, seed int) []int {
 	}
 	return []int{}
 }
-func getUngreasedChUa(majorVersion int) []string {
-	return []string {getGreasedChInvalidBrand(majorVersion),
-	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\"",
-	"\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\""}
+func getUngreasedChUa(majorVersion int, forkName string) []string {
+	baseChUa := []string{getGreasedChInvalidBrand(majorVersion),
+	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\""}
+	switch forkName {
+	case "chrome":
+		append(baseChUa, "\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+	case "edge":
+		append(baseChUa, "\"Microsoft Edge\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+	}
+	return baseChUa
 }
-func getGreasedChUa(majorVersion int) string {
-	rawCh := getUngreasedChUa(majorVersion)
-	shuffleMap := getGreasedChOrder(len(rawCh), majorVersion)
-	shuffledCh := make([]string, len(rawCh))
+func getGreasedChUa(majorVersion int, forkName string) string {
+	ungreasedCh := getUngreasedChUa(majorVersion, forkName)
+	shuffleMap := getGreasedChOrder(len(ungreasedCh), majorVersion)
+	shuffledCh := make([]string, len(ungreasedCh))
 	for i, e := range shuffleMap {
-		shuffledCh[e] = rawCh[i]
+		shuffledCh[e] = ungreasedCh[i]
 	}
 	return strings.Join(shuffledCh, ", ")
 }
 
+// It's better to pin on Firefox ESR releases, can have a Firefox ESR version generator later
+var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
 // ChromeUA provides default browser User-Agent based on CPU-seeded PRNG.
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
-// It would be better to have the three parts ordered randomly upon generation
-var ChromeUACH = getGreasedChUa(AnchoredChromeVersion)
+var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
+var MSEdgeUA = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0"
+var MSEdgeUACH = getGreasedChUa(AnchoredChromeVersion, "edge")
 
 func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific
@@ -82,8 +92,15 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header["DNT"] = []string{"1"}
 		header.Set("User-Agent", ChromeUA)
 		header.Set("Accept-Language", "en-US,en;q=0.9")
+	case "edge":
+		header["Sec-CH-UA"] = []string{MSEdgeUACH}
+		header["Sec-CH-UA-Mobile"] = []string{"?0"}
+		header["Sec-CH-UA-Platform"] = []string{"\"Windows\""}
+		header["DNT"] = []string{"1"}
+		header.Set("User-Agent", MSEdgeUA)
+		header.Set("Accept-Language", "en-US,en;q=0.9")
 	case "firefox":
-		header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0") // Can have a Firefox ESR version generator later
+		header.Set("User-Agent", FirefoxUA)
 		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
 	case "go":
@@ -96,14 +113,14 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	case "nav":
 		if header.Get("Cache-Control") == "" {
 			switch browser {
-			case "chrome":
+			case "chrome", "edge":
 				header.Set("Cache-Control", "max-age=0")
 			}
 		}
 		header.Set("Upgrade-Insecure-Requests", "1")
 		if header.Get("Accept") == "" {
 			switch browser {
-			case "chrome":
+			case "chrome", "edge":
 				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 			case "firefox":
 				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -133,7 +150,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 		header.Set("Sec-Fetch-Site", "same-origin")
 		if header.Get("Priority") == "" {
 			switch browser {
-			case "chrome":
+			case "chrome", "edge":
 				header.Set("Priority", "u=1, i")
 			case "firefox":
 				header.Set("Priority", "u=4")
@@ -161,6 +178,8 @@ func UseDefaultHeadersWith(header http.Header, variant string) {
 			ApplyDefaultHeaders(header, "chrome", variant)
 		case "!firefox":
 			ApplyDefaultHeaders(header, "firefox", variant)
+		case "!edge":
+			ApplyDefaultHeaders(header, "edge", variant)
 		case "!go":
 			ApplyDefaultHeaders(header, "go", variant)
 		}
