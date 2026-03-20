@@ -52,13 +52,15 @@ func getGreasedChOrder(brandLength int, seed int) []int {
 	return []int{}
 }
 func getUngreasedChUa(majorVersion int, forkName string) []string {
-	baseChUa := []string{getGreasedChInvalidBrand(majorVersion),
-	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\""}
+	// Set the capacity to 4, the maximum allowed brand size, so Go will never allocate memory twice
+	baseChUa := make([]string, 0, 4)
+	baseChUa = append(baseChUa, getGreasedChInvalidBrand(majorVersion),
+	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\"")
 	switch forkName {
 	case "chrome":
-		append(baseChUa, "\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+		baseChUa = append(baseChUa, "\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\"")
 	case "edge":
-		append(baseChUa, "\"Microsoft Edge\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+		baseChUa = append(baseChUa, "\"Microsoft Edge\";v=\"" + strconv.Itoa(majorVersion) + "\"")
 	}
 	return baseChUa
 }
