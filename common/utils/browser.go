@@ -177,13 +177,13 @@ func UseDefaultHeadersWith(header http.Header, variant string) {
 		ApplyDefaultHeaders(header, "chrome", variant)
 	} else {
 		switch header.Get("User-Agent") {
-		case "!chrome":
+		case "chrome":
 			ApplyDefaultHeaders(header, "chrome", variant)
-		case "!firefox":
+		case "firefox":
 			ApplyDefaultHeaders(header, "firefox", variant)
-		case "!edge":
+		case "edge":
 			ApplyDefaultHeaders(header, "edge", variant)
-		case "!go":
+		case "golang":
 			ApplyDefaultHeaders(header, "go", variant)
 		}
 	}
