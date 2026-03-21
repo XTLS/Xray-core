@@ -130,7 +130,7 @@ func ParseWireGuardKey(str string) (string, error) {
 		return "", errors.New("key must not be empty")
 	}
 
-	if len(str)%2 == 0 {
+	if len(str) == 64 {
 		_, err = hex.DecodeString(str)
 		if err == nil {
 			return str, nil
@@ -138,12 +138,7 @@ func ParseWireGuardKey(str string) (string, error) {
 	}
 
 	var dat []byte
-	str = strings.TrimSuffix(str, "=")
-	if strings.ContainsRune(str, '+') || strings.ContainsRune(str, '/') {
-		dat, err = base64.RawStdEncoding.DecodeString(str)
-	} else {
-		dat, err = base64.RawURLEncoding.DecodeString(str)
-	}
+	dat, err = base64.StdEncoding.DecodeString(str)
 	if err == nil {
 		return hex.EncodeToString(dat), nil
 	}
