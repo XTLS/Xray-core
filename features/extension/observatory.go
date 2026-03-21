@@ -13,7 +13,7 @@ type Observatory interface {
 	GetObservation(ctx context.Context) (proto.Message, error)
 }
 
-type BrustObservatory interface {
+type BurstObservatory interface {
 	Observatory
 	Check(tag []string)
 }
