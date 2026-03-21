@@ -172,7 +172,7 @@ func ApplyMasqueradedHeaders(header http.Header, browser string, variant string)
 }
 
 func HandleTransportUASettings(header http.Header, variant string) {
-	// The global UA special value handler.
+	// The global UA special value handler for transports.
 	if len(header.Values("User-Agent")) < 1 {
 		ApplyMasqueradedHeaders(header, "chrome", variant)
 	} else {
