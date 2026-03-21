@@ -25,3 +25,6 @@ func (c *UDPConfig) WrapPacketConnClient(raw net.PacketConn, level int, levelCou
 func (c *UDPConfig) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
 	return NewConnServerUDP(c, raw)
 }
+
+func (c *UDPConfig) HeaderConn() {
+}

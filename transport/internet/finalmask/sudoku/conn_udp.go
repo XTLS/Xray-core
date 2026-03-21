@@ -35,10 +35,6 @@ func NewUDPConn(raw net.PacketConn, config *Config) (net.PacketConn, error) {
 	}, nil
 }
 
-func (c *udpConn) Size() int32 {
-	return 0
-}
-
 func (c *udpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()

@@ -10,7 +10,9 @@ message TCPItem {
     int64 delay_min = 1;
     int64 delay_max = 2;
     int32 rand = 3;
-    bytes packet = 4;
+    int32 rand_min = 4;
+    int32 rand_max = 5;
+    bytes packet = 6;
 }
 
 message TCPSequence {
@@ -25,7 +27,9 @@ message TCPConfig {
 
 message UDPItem {
     int32 rand = 1;
-    bytes packet = 2;
+    int32 rand_min = 2;
+    int32 rand_max = 3;
+    bytes packet = 4;
 }
 
 message UDPConfig {
