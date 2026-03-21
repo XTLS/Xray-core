@@ -106,7 +106,7 @@ func applyMasqueradedHeaders(header http.Header, browser string, variant string)
 		header.Set("User-Agent", FirefoxUA)
 		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
-	case "go":
+	case "golang":
 		// Expose the default net/http header.
 		header.Del("User-Agent")
 		return
@@ -185,7 +185,7 @@ func TryDefaultHeadersWith(header http.Header, variant string) {
 		case "edge":
 			applyMasqueradedHeaders(header, "edge", variant)
 		case "golang":
-			applyMasqueradedHeaders(header, "go", variant)
+			applyMasqueradedHeaders(header, "golang", variant)
 		}
 	}
 }
