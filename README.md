@@ -10,6 +10,8 @@
 
 [![Happ](https://github.com/user-attachments/assets/14055dab-e8bb-48bd-89e8-962709e4098e)](https://happ.su)
 
+[![BlancVPN](https://github.com/user-attachments/assets/9145ea7d-5da3-446e-8143-710dba4292c3)](https://blanc.link/VMTSDqW)
+
 [**Sponsor Xray-core**](https://github.com/XTLS/Xray-core/issues/3668)
 
 ## Donation & NFTs
