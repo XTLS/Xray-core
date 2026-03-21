@@ -85,7 +85,7 @@ var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
 var MSEdgeUA = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0"
 var MSEdgeUACH = getGreasedChUa(AnchoredChromeVersion, "edge")
 
-func ApplyMasqueradedHeaders(header http.Header, browser string, variant string) {
+func applyMasqueradedHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific.
 	switch browser {
 	case "chrome":
@@ -173,18 +173,19 @@ func ApplyMasqueradedHeaders(header http.Header, browser string, variant string)
 
 func HandleTransportUASettings(header http.Header, variant string) {
 	// The global UA special value handler for transports.
+	// Just a FYI to whoever needing to fix this piece of code after some spontaneous event, I tried to make the two methods separate to let the code be cleaner and more organized.
 	if len(header.Values("User-Agent")) < 1 {
-		ApplyMasqueradedHeaders(header, "chrome", variant)
+		applyMasqueradedHeaders(header, "chrome", variant)
 	} else {
 		switch header.Get("User-Agent") {
 		case "chrome":
-			ApplyMasqueradedHeaders(header, "chrome", variant)
+			applyMasqueradedHeaders(header, "chrome", variant)
 		case "firefox":
-			ApplyMasqueradedHeaders(header, "firefox", variant)
+			applyMasqueradedHeaders(header, "firefox", variant)
 		case "edge":
-			ApplyMasqueradedHeaders(header, "edge", variant)
+			applyMasqueradedHeaders(header, "edge", variant)
 		case "golang":
-			ApplyMasqueradedHeaders(header, "go", variant)
+			applyMasqueradedHeaders(header, "go", variant)
 		}
 	}
 }
