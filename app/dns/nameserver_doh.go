@@ -214,7 +214,7 @@ func (s *DoHNameServer) dohHTTPSContext(ctx context.Context, b []byte) ([]byte, 
 
 	req.Header.Add("Accept", "application/dns-message")
 	req.Header.Add("Content-Type", "application/dns-message")
-	utils.ApplyDefaultHeaders(req.Header, "chrome", "fetch")
+	utils.ApplyMasqueradedHeaders(req.Header, "chrome", "fetch")
 	req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
 	hc := s.httpClient

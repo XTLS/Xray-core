@@ -85,7 +85,7 @@ var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
 var MSEdgeUA = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0"
 var MSEdgeUACH = getGreasedChUa(AnchoredChromeVersion, "edge")
 
-func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
+func ApplyMasqueradedHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific.
 	switch browser {
 	case "chrome":
@@ -174,17 +174,17 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 func HandleTransportUASettings(header http.Header, variant string) {
 	// The global UA special value handler.
 	if len(header.Values("User-Agent")) < 1 {
-		ApplyDefaultHeaders(header, "chrome", variant)
+		ApplyMasqueradedHeaders(header, "chrome", variant)
 	} else {
 		switch header.Get("User-Agent") {
 		case "chrome":
-			ApplyDefaultHeaders(header, "chrome", variant)
+			ApplyMasqueradedHeaders(header, "chrome", variant)
 		case "firefox":
-			ApplyDefaultHeaders(header, "firefox", variant)
+			ApplyMasqueradedHeaders(header, "firefox", variant)
 		case "edge":
-			ApplyDefaultHeaders(header, "edge", variant)
+			ApplyMasqueradedHeaders(header, "edge", variant)
 		case "golang":
-			ApplyDefaultHeaders(header, "go", variant)
+			ApplyMasqueradedHeaders(header, "go", variant)
 		}
 	}
 }

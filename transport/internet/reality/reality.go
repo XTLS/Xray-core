@@ -223,7 +223,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 				if req == nil {
 					return
 				}
-				utils.ApplyDefaultHeaders(req.Header, "chrome", "nav")
+				utils.ApplyMasqueradedHeaders(req.Header, "chrome", "nav")
 				if first && config.Show {
 					fmt.Printf("REALITY localAddr: %v\treq.UserAgent(): %v\n", localAddr, req.UserAgent())
 				}
