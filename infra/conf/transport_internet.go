@@ -909,6 +909,12 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 			}
 		}
 
+		for _, sn := range config.ServerNames {
+			if strings.Contains(sn, "apple") || strings.Contains(sn, "icloud") {
+				errors.LogWarning(context.Background(), `REALITY: Choosing apple, icloud, etc. as the target may get your IP blocked by the GFW`)
+			}
+		}
+
 		config.LimitFallbackUpload = new(reality.LimitFallback)
 		config.LimitFallbackUpload.AfterBytes = c.LimitFallbackUpload.AfterBytes
 		config.LimitFallbackUpload.BytesPerSec = c.LimitFallbackUpload.BytesPerSec
