@@ -32,6 +32,10 @@ func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
 }
 
+func (o *Observer) Check(tag []string) {
+	o.hp.Check(tag)
+}
+
 func (o *Observer) createResult() []*observatory.OutboundStatus {
 	var result []*observatory.OutboundStatus
 	o.hp.access.Lock()

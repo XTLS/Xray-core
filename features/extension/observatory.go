@@ -13,6 +13,11 @@ type Observatory interface {
 	GetObservation(ctx context.Context) (proto.Message, error)
 }
 
+type BurstObservatory interface {
+	Observatory
+	Check(tag []string)
+}
+
 func ObservatoryType() interface{} {
 	return (*Observatory)(nil)
 }
