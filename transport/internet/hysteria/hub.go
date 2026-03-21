@@ -113,8 +113,8 @@ func (m *udpSessionManagerServer) feed(id uint32, d []byte) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	udpConn, ok = m.m[id]
 	if !ok {
-		ok = true
 		udpConn = &InterUdpConn{
 			conn:   m.conn,
 			local:  m.conn.LocalAddr(),

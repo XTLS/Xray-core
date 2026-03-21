@@ -223,8 +223,8 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	uc, ok = m.m[src.NetAddr()]
 	if !ok {
-		ok = true
 		uc = &udpConn{
 			ch:  make(chan []byte, 1024),
 			src: src,

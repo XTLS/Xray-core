@@ -352,12 +352,12 @@ func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b.Resize(0, buf.Size)
 	for {
 		n, addr, err := c.Conn.(net.PacketConn).ReadFrom(b.Bytes())
-		if n == 0 && err == nil {
-			continue
-		}
 		if err != nil {
 			b.Release()
 			return nil, err
+		}
+		if n == 0 || addr == nil {
+			continue
 		}
 		b.Resize(0, int32(n))
 
