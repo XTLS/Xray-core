@@ -191,7 +191,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	)
 	if err == nil {
 		userAgent := grpcSettings.UserAgent
-		// This section is intentionally different from utils.UseDefaultHeadersWith().
 		// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
 		switch userAgent {
 		case "chrome", "":

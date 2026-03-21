@@ -171,7 +171,7 @@ func ApplyDefaultHeaders(header http.Header, browser string, variant string) {
 	}
 }
 
-func UseDefaultHeadersWith(header http.Header, variant string) {
+func HandleTransportUASettings(header http.Header, variant string) {
 	// The global UA special value handler.
 	if len(header.Values("User-Agent")) < 1 {
 		ApplyDefaultHeaders(header, "chrome", variant)

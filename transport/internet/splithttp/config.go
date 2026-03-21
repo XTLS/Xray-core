@@ -51,7 +51,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Headers {
 		header.Add(k, v)
 	}
-	utils.UseDefaultHeadersWith(header, "fetch")
+	utils.HandleTransportUASettings(header, "fetch")
 	return header
 }
 

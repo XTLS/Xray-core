@@ -96,7 +96,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	for key, value := range transportConfiguration.Header {
 		AddHeader(req.Header, key, value)
 	}
-	utils.UseDefaultHeadersWith(req.Header, "ws")
+	utils.HandleTransportUASettings(req.Header, "ws")
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
 
