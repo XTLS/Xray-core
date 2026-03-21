@@ -62,7 +62,7 @@ func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if err != nil {
 		return rttFailed, err
 	}
-	utils.HandleTransportUASettings(req.Header, "nav")
+	utils.TryDefaultHeadersWith(req.Header, "nav")
 
 	start := time.Now()
 	resp, err := s.httpClient.Do(req)

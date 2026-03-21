@@ -171,8 +171,8 @@ func applyMasqueradedHeaders(header http.Header, browser string, variant string)
 	}
 }
 
-func HandleTransportUASettings(header http.Header, variant string) {
-	// The global UA special value handler for transports.
+func TryDefaultHeadersWith(header http.Header, variant string) {
+	// The global UA special value handler for transports. Used to be called HandleTransportUASettings.
 	// Just a FYI to whoever needing to fix this piece of code after some spontaneous event, I tried to make the two methods separate to let the code be cleaner and more organized.
 	if len(header.Values("User-Agent")) < 1 {
 		applyMasqueradedHeaders(header, "chrome", variant)
