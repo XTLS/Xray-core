@@ -1290,7 +1290,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		}
 	}
 
-	errInvalidRandge := errors.New("invalid randRange")
+	errInvalidRange := errors.New("invalid randRange")
 
 	clients := make([]*custom.TCPSequence, len(c.Clients))
 	for i, value := range c.Clients {
@@ -1300,7 +1300,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				item.RandRange = &Int32Range{From: 0, To: 255}
 			}
 			if item.RandRange.From < 0 || item.RandRange.To > 255 {
-				return nil, errInvalidRandge
+				return nil, errInvalidRange
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1325,7 +1325,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				item.RandRange = &Int32Range{From: 0, To: 255}
 			}
 			if item.RandRange.From < 0 || item.RandRange.To > 255 {
-				return nil, errInvalidRandge
+				return nil, errInvalidRange
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
@@ -1350,7 +1350,7 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				item.RandRange = &Int32Range{From: 0, To: 255}
 			}
 			if item.RandRange.From < 0 || item.RandRange.To > 255 {
-				return nil, errInvalidRandge
+				return nil, errInvalidRange
 			}
 			var err error
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
