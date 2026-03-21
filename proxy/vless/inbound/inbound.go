@@ -659,8 +659,8 @@ func (r *Reverse) NewMux(ctx context.Context, link *transport.Link, observer fea
 		return errors.New("failed to create portal worker").Base(err).AtWarning()
 	}
 	r.picker.AddWorker(worker)
-	if burustObs, ok := observer.(extension.BrustObservatory); ok {
-		go burustObs.Check([]string{r.Tag()})
+	if burstObs, ok := observer.(extension.BurstObservatory); ok {
+		go burstObs.Check([]string{r.Tag()})
 	}
 	select {
 	case <-ctx.Done():
