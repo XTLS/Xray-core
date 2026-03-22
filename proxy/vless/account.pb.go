@@ -22,10 +22,15 @@ const (
 )
 
 type Reverse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tag           string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Tag                 string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	SniffingEnabled     bool                   `protobuf:"varint,2,opt,name=sniffing_enabled,json=sniffingEnabled,proto3" json:"sniffing_enabled,omitempty"`
+	DestinationOverride []string               `protobuf:"bytes,3,rep,name=destination_override,json=destinationOverride,proto3" json:"destination_override,omitempty"`
+	DomainsExcluded     []string               `protobuf:"bytes,4,rep,name=domains_excluded,json=domainsExcluded,proto3" json:"domains_excluded,omitempty"`
+	MetadataOnly        bool                   `protobuf:"varint,5,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
+	RouteOnly           bool                   `protobuf:"varint,6,opt,name=route_only,json=routeOnly,proto3" json:"route_only,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Reverse) Reset() {
@@ -63,6 +68,41 @@ func (x *Reverse) GetTag() string {
 		return x.Tag
 	}
 	return ""
+}
+
+func (x *Reverse) GetSniffingEnabled() bool {
+	if x != nil {
+		return x.SniffingEnabled
+	}
+	return false
+}
+
+func (x *Reverse) GetDestinationOverride() []string {
+	if x != nil {
+		return x.DestinationOverride
+	}
+	return nil
+}
+
+func (x *Reverse) GetDomainsExcluded() []string {
+	if x != nil {
+		return x.DomainsExcluded
+	}
+	return nil
+}
+
+func (x *Reverse) GetMetadataOnly() bool {
+	if x != nil {
+		return x.MetadataOnly
+	}
+	return false
+}
+
+func (x *Reverse) GetRouteOnly() bool {
+	if x != nil {
+		return x.RouteOnly
+	}
+	return false
 }
 
 type Account struct {
@@ -179,9 +219,15 @@ var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\"\x1b\n" +
+	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\"\xe8\x01\n" +
 	"\aReverse\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\"\x86\x02\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12)\n" +
+	"\x10sniffing_enabled\x18\x02 \x01(\bR\x0fsniffingEnabled\x121\n" +
+	"\x14destination_override\x18\x03 \x03(\tR\x13destinationOverride\x12)\n" +
+	"\x10domains_excluded\x18\x04 \x03(\tR\x0fdomainsExcluded\x12#\n" +
+	"\rmetadata_only\x18\x05 \x01(\bR\fmetadataOnly\x12\x1d\n" +
+	"\n" +
+	"route_only\x18\x06 \x01(\bR\trouteOnly\"\x86\x02\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x1e\n" +
