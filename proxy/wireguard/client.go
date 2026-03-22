@@ -356,8 +356,11 @@ func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			b.Release()
 			return nil, err
 		}
-		if n == 0 || addr == nil {
+		if n == 0 {
 			continue
+		}
+		if addr == nil { // should never hit
+			addr = c.dest.RawNetAddr()
 		}
 		b.Resize(0, int32(n))
 
