@@ -254,7 +254,7 @@ func (m *udpManager) close(uc *udpConn) {
 	}
 }
 
-func (m *udpManager) writeRawUDPPacket(payload []byte, src net.Destination, dst net.Destination) {
+func (m *udpManager) writeRawUDPPacket(payload []byte, src net.Destination, dst net.Destination) error {
 	udpLen := header.UDPMinimumSize + len(payload)
 	srcIP := tcpip.AddrFromSlice(src.Address.IP())
 	dstIP := tcpip.AddrFromSlice(dst.Address.IP())
@@ -311,15 +311,17 @@ func (m *udpManager) writeRawUDPPacket(payload []byte, src net.Destination, dst 
 	// dispatch the packet
 	err := m.stack.WriteRawPacket(1, ipProtocol, buffer.MakeWithView(pkt.ToView()))
 	if err != nil {
-		errors.LogDebug(context.Background(), "failed to write raw udp packet back to stack err ", err)
+		return errors.New("failed to write raw udp packet back to stack err ", err)
 	}
+
+	return nil
 }
 
 type udpConn struct {
 	ch        chan []byte
 	src       net.Destination
 	dst       net.Destination
-	writeFunc func(payload []byte, src net.Destination, dst net.Destination)
+	writeFunc func(payload []byte, src net.Destination, dst net.Destination) error
 	closeFunc func()
 	closed    bool
 }
@@ -337,19 +339,26 @@ func (c *udpConn) Read(p []byte) (int, error) {
 }
 
 func (c *udpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	for _, b := range mb {
+	for i, b := range mb {
 		dst := c.dst
 		if b.UDP != nil {
 			dst = *b.UDP
 		}
-		c.writeFunc(b.Bytes(), dst, c.src)
+		err := c.writeFunc(b.Bytes(), dst, c.src)
+		if err != nil {
+			buf.ReleaseMulti(mb[i:])
+			return err
+		}
 		b.Release()
 	}
 	return nil
 }
 
 func (c *udpConn) Write(p []byte) (int, error) {
-	c.writeFunc(p, c.dst, c.src)
+	err := c.writeFunc(p, c.dst, c.src)
+	if err != nil {
+		return 0, err
+	}
 	return len(p), nil
 }
 
