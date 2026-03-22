@@ -368,11 +368,14 @@ func (c *udpConn) Close() error {
 }
 
 func (c *udpConn) LocalAddr() net.Addr {
-	return c.src.RawNetAddr()
+	return &net.UDPAddr{
+		IP:   []byte{0, 0, 0, 0},
+		Port: 0,
+	}
 }
 
 func (c *udpConn) RemoteAddr() net.Addr {
-	return c.dst.RawNetAddr()
+	return c.src.RawNetAddr()
 }
 
 func (c *udpConn) SetDeadline(t time.Time) error {
