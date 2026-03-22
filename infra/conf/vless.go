@@ -42,6 +42,22 @@ func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
 	return r, nil
 }
 
+func buildReverseFromRawJSON(raw json.RawMessage) (*vless.Reverse, error) {
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawFields); err != nil {
+		return nil, err
+	}
+	rawReverse, ok := rawFields["reverse"]
+	if !ok {
+		return nil, nil
+	}
+	rc := new(VLessReverseConfig)
+	if err := json.Unmarshal(rawReverse, rc); err != nil {
+		return nil, errors.New("invalid reverse config").Base(err)
+	}
+	return rc.Build()
+}
+
 type VLessInboundFallback struct {
 	Name string          `json:"name"`
 	Alpn string          `json:"alpn"`
@@ -100,19 +116,9 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
 		}
 
-		var rawFields map[string]json.RawMessage
-		if err := json.Unmarshal(rawUser, &rawFields); err != nil {
-			return nil, errors.New(`VLESS clients: invalid user`).Base(err)
-		}
-		if rawReverse, ok := rawFields["reverse"]; ok {
-			rc := new(VLessReverseConfig)
-			if err := json.Unmarshal(rawReverse, rc); err != nil {
-				return nil, errors.New(`VLESS clients: invalid reverse config`).Base(err)
-			}
-			rv, err := rc.Build()
-			if err != nil {
-				return nil, err
-			}
+		if rv, err := buildReverseFromRawJSON(rawUser); err != nil {
+			return nil, errors.New(`VLESS clients`).Base(err)
+		} else if rv != nil {
 			account.Reverse = rv
 		}
 
@@ -307,19 +313,9 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New(`VLESS users: invalid user`).Base(err)
 				}
-				var rawFields map[string]json.RawMessage
-				if err := json.Unmarshal(rawUser, &rawFields); err != nil {
-					return nil, errors.New(`VLESS users: invalid user`).Base(err)
-				}
-				if rawReverse, ok := rawFields["reverse"]; ok {
-					rc := new(VLessReverseConfig)
-					if err := json.Unmarshal(rawReverse, rc); err != nil {
-						return nil, errors.New(`VLESS users: invalid reverse config`).Base(err)
-					}
-					rv, err := rc.Build()
-					if err != nil {
-						return nil, err
-					}
+				if rv, err := buildReverseFromRawJSON(rawUser); err != nil {
+					return nil, errors.New(`VLESS users`).Base(err)
+				} else if rv != nil {
 					account.Reverse = rv
 				}
 			}
