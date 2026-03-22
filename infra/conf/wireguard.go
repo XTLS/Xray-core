@@ -138,7 +138,12 @@ func ParseWireGuardKey(str string) (string, error) {
 	}
 
 	var dat []byte
-	dat, err = base64.StdEncoding.DecodeString(str)
+	str = strings.TrimSuffix(str, "=")
+	if strings.ContainsRune(str, '+') || strings.ContainsRune(str, '/') {
+		dat, err = base64.RawStdEncoding.DecodeString(str)
+	} else {
+		dat, err = base64.RawURLEncoding.DecodeString(str)
+	}
 	if err == nil {
 		return hex.EncodeToString(dat), nil
 	}
