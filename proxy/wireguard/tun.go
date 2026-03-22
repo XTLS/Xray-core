@@ -186,9 +186,9 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 
 		gstack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
 			data := pkt.Clone().Data().AsRange().ToSlice()
-			if len(data) == 0 {
-				return false
-			}
+			// if len(data) == 0 {
+			// 	return false
+			// }
 			src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
 			dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
 			manager.feed(src, dst, data)
