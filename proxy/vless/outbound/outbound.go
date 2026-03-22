@@ -101,14 +101,14 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			Tag:  a.Reverse.Tag,
 			User: handler.server.User, // TODO: email
 		})
-		if a.Reverse.SniffingEnabled {
+		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
 			rvsCtx = session.ContextWithContent(rvsCtx, &session.Content{
 				SniffingRequest: session.SniffingRequest{
-					Enabled:                        true,
-					OverrideDestinationForProtocol: a.Reverse.DestinationOverride,
-					ExcludeForDomain:               a.Reverse.DomainsExcluded,
-					MetadataOnly:                   a.Reverse.MetadataOnly,
-					RouteOnly:                       a.Reverse.RouteOnly,
+					Enabled:                        sc.Enabled,
+					OverrideDestinationForProtocol: sc.DestinationOverride,
+					ExcludeForDomain:               sc.DomainsExcluded,
+					MetadataOnly:                   sc.MetadataOnly,
+					RouteOnly:                      sc.RouteOnly,
 				},
 			})
 		}

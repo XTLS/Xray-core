@@ -7,6 +7,7 @@
 package vless
 
 import (
+	proxyman "github.com/xtls/xray-core/app/proxyman"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -22,15 +23,11 @@ const (
 )
 
 type Reverse struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Tag                 string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	SniffingEnabled     bool                   `protobuf:"varint,2,opt,name=sniffing_enabled,json=sniffingEnabled,proto3" json:"sniffing_enabled,omitempty"`
-	DestinationOverride []string               `protobuf:"bytes,3,rep,name=destination_override,json=destinationOverride,proto3" json:"destination_override,omitempty"`
-	DomainsExcluded     []string               `protobuf:"bytes,4,rep,name=domains_excluded,json=domainsExcluded,proto3" json:"domains_excluded,omitempty"`
-	MetadataOnly        bool                   `protobuf:"varint,5,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
-	RouteOnly           bool                   `protobuf:"varint,6,opt,name=route_only,json=routeOnly,proto3" json:"route_only,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Tag           string                   `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	Sniffing      *proxyman.SniffingConfig `protobuf:"bytes,2,opt,name=sniffing,proto3" json:"sniffing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Reverse) Reset() {
@@ -70,39 +67,11 @@ func (x *Reverse) GetTag() string {
 	return ""
 }
 
-func (x *Reverse) GetSniffingEnabled() bool {
+func (x *Reverse) GetSniffing() *proxyman.SniffingConfig {
 	if x != nil {
-		return x.SniffingEnabled
-	}
-	return false
-}
-
-func (x *Reverse) GetDestinationOverride() []string {
-	if x != nil {
-		return x.DestinationOverride
+		return x.Sniffing
 	}
 	return nil
-}
-
-func (x *Reverse) GetDomainsExcluded() []string {
-	if x != nil {
-		return x.DomainsExcluded
-	}
-	return nil
-}
-
-func (x *Reverse) GetMetadataOnly() bool {
-	if x != nil {
-		return x.MetadataOnly
-	}
-	return false
-}
-
-func (x *Reverse) GetRouteOnly() bool {
-	if x != nil {
-		return x.RouteOnly
-	}
-	return false
 }
 
 type Account struct {
@@ -219,15 +188,10 @@ var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\"\xe8\x01\n" +
+	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\x1a\x19app/proxyman/config.proto\"Z\n" +
 	"\aReverse\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\x12)\n" +
-	"\x10sniffing_enabled\x18\x02 \x01(\bR\x0fsniffingEnabled\x121\n" +
-	"\x14destination_override\x18\x03 \x03(\tR\x13destinationOverride\x12)\n" +
-	"\x10domains_excluded\x18\x04 \x03(\tR\x0fdomainsExcluded\x12#\n" +
-	"\rmetadata_only\x18\x05 \x01(\bR\fmetadataOnly\x12\x1d\n" +
-	"\n" +
-	"route_only\x18\x06 \x01(\bR\trouteOnly\"\x86\x02\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12=\n" +
+	"\bsniffing\x18\x02 \x01(\v2!.xray.app.proxyman.SniffingConfigR\bsniffing\"\x86\x02\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x1e\n" +
@@ -256,16 +220,18 @@ func file_proxy_vless_account_proto_rawDescGZIP() []byte {
 
 var file_proxy_vless_account_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proxy_vless_account_proto_goTypes = []any{
-	(*Reverse)(nil), // 0: xray.proxy.vless.Reverse
-	(*Account)(nil), // 1: xray.proxy.vless.Account
+	(*Reverse)(nil),                 // 0: xray.proxy.vless.Reverse
+	(*Account)(nil),                 // 1: xray.proxy.vless.Account
+	(*proxyman.SniffingConfig)(nil), // 2: xray.app.proxyman.SniffingConfig
 }
 var file_proxy_vless_account_proto_depIdxs = []int32{
-	0, // 0: xray.proxy.vless.Account.reverse:type_name -> xray.proxy.vless.Reverse
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: xray.proxy.vless.Reverse.sniffing:type_name -> xray.app.proxyman.SniffingConfig
+	0, // 1: xray.proxy.vless.Account.reverse:type_name -> xray.proxy.vless.Reverse
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vless_account_proto_init() }
