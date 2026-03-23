@@ -39,18 +39,14 @@ func (m domainMatcher) String() string {
 	return "domain:" + string(m)
 }
 
-type RegexMatcher struct {
-	Pattern string
-	reg     *regexp.Regexp
+type regexMatcher struct {
+	pattern *regexp.Regexp
 }
 
-func (m *RegexMatcher) Match(s string) bool {
-	if m.reg == nil {
-		m.reg = regexp.MustCompile(m.Pattern)
-	}
-	return m.reg.MatchString(s)
+func (m *regexMatcher) Match(s string) bool {
+	return m.pattern.MatchString(s)
 }
 
-func (m *RegexMatcher) String() string {
-	return "regexp:" + m.Pattern
+func (m *regexMatcher) String() string {
+	return "regexp:" + m.pattern.String()
 }

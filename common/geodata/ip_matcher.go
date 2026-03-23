@@ -1,8 +1,9 @@
-package router
+package geodata
 
 import (
 	"context"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -59,9 +60,15 @@ func (m *HeuristicGeoIPMatcher) Match(ip net.IP) bool {
 
 func (m *HeuristicGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
 	if ipx.Is4() {
+		if m.ipset.max4 == 0xff {
+			return false
+		}
 		return m.ipset.ipv4.Contains(ipx) != m.reverse
 	}
 	if ipx.Is6() {
+		if m.ipset.max6 == 0xff {
+			return false
+		}
 		return m.ipset.ipv6.Contains(ipx) != m.reverse
 	}
 	return false
@@ -801,9 +808,9 @@ type GeoIPSetFactory struct {
 	shared map[string]*GeoIPSet // TODO: cleanup
 }
 
-var ipsetFactory = GeoIPSetFactory{shared: make(map[string]*GeoIPSet)}
+func (f *GeoIPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*GeoIPSet, error) {
+	key := buildGeoIPRulesKey(rules)
 
-func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPSet, error) {
 	f.Lock()
 	defer f.Unlock()
 
@@ -811,40 +818,87 @@ func (f *GeoIPSetFactory) GetOrCreate(key string, cidrGroups [][]*CIDR) (*GeoIPS
 		return ipset, nil
 	}
 
-	ipset, err := f.Create(cidrGroups...)
+	ipset, err := f.createFrom(func(add func(*CIDR)) error {
+		for _, r := range rules {
+			cidrs, err := loadIP(r.File, r.Code)
+			if err != nil {
+				return err
+			}
+			for i, c := range cidrs {
+				add(c)
+				cidrs[i] = nil // peak mem
+			}
+		}
+		return nil
+	})
 	if err == nil {
 		f.shared[key] = ipset
 	}
 	return ipset, err
 }
 
-func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
+func buildGeoIPRulesKey(rules []*GeoIPRule) string {
+	rules = slices.Clone(rules)
+
+	sort.Slice(rules, func(i, j int) bool {
+		ri, rj := rules[i], rules[j]
+		if ri.File != rj.File {
+			return ri.File < rj.File
+		}
+		return ri.Code < rj.Code
+	})
+
+	var sb strings.Builder
+	sb.Grow(len(rules) * 20) // geoip.dat:xx,
+	var last *GeoIPRule
+	for i, r := range rules {
+		if i == 0 || (r.File != last.File || r.Code != last.Code) {
+			last = r
+			sb.WriteString(r.File)
+			sb.WriteString(":")
+			sb.WriteString(r.Code)
+			sb.WriteString(",")
+		}
+	}
+	return sb.String()
+}
+
+func (f *GeoIPSetFactory) CreateFromCIDRs(cidrs []*CIDR) (*GeoIPSet, error) {
+	return f.createFrom(func(add func(*CIDR)) error {
+		for _, c := range cidrs {
+			add(c)
+		}
+		return nil
+	})
+}
+
+func (f *GeoIPSetFactory) createFrom(yield func(func(*CIDR)) error) (*GeoIPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
 
-	for _, cidrGroup := range cidrGroups {
-		for i, cidrEntry := range cidrGroup {
-			cidrGroup[i] = nil
-			ipBytes := cidrEntry.GetIp()
-			prefixLen := int(cidrEntry.GetPrefix())
+	err := yield(func(c *CIDR) {
+		ipBytes := c.GetIp()
+		prefixLen := int(c.GetPrefix())
 
-			addr, ok := netip.AddrFromSlice(ipBytes)
-			if !ok {
-				errors.LogError(context.Background(), "ignore invalid IP byte slice: ", ipBytes)
-				continue
-			}
-
-			prefix := netip.PrefixFrom(addr, prefixLen)
-			if !prefix.IsValid() {
-				errors.LogError(context.Background(), "ignore created invalid prefix from addr ", addr, " and length ", prefixLen)
-				continue
-			}
-
-			if addr.Is4() {
-				ipv4Builder.AddPrefix(prefix)
-			} else if addr.Is6() {
-				ipv6Builder.AddPrefix(prefix)
-			}
+		addr, ok := netip.AddrFromSlice(ipBytes)
+		if !ok {
+			errors.LogError(context.Background(), "ignore invalid IP byte slice: ", ipBytes)
+			return
 		}
+
+		prefix := netip.PrefixFrom(addr, prefixLen)
+		if !prefix.IsValid() {
+			errors.LogError(context.Background(), "ignore created invalid prefix from addr ", addr, " and length ", prefixLen)
+			return
+		}
+
+		if addr.Is4() {
+			ipv4Builder.AddPrefix(prefix)
+		} else if addr.Is6() {
+			ipv6Builder.AddPrefix(prefix)
+		}
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	ipv4, err := ipv4Builder.IPSet()
@@ -879,75 +933,50 @@ func (f *GeoIPSetFactory) Create(cidrGroups ...[]*CIDR) (*GeoIPSet, error) {
 	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
 }
 
-func BuildOptimizedGeoIPMatcher(geoips ...*GeoIP) (GeoIPMatcher, error) {
-	n := len(geoips)
-	if n == 0 {
-		return nil, errors.New("no geoip configs provided")
-	}
+func buildOptimizedGeoIPMatcher(f *GeoIPSetFactory, rules []*IPRule) (GeoIPMatcher, error) {
+	n := len(rules)
+	custom := make([]*CIDR, 0, n)
+	pos := make([]*GeoIPRule, 0, n)
+	neg := make([]*GeoIPRule, 0, n)
 
-	var subs []*HeuristicGeoIPMatcher
-	pos := make([]*GeoIP, 0, n)
-	neg := make([]*GeoIP, 0, n/2)
-
-	for _, geoip := range geoips {
-		if geoip == nil {
-			return nil, errors.New("geoip entry is nil")
-		}
-		if geoip.CountryCode == "" {
-			ipset, err := ipsetFactory.Create(geoip.Cidr)
-			if err != nil {
-				return nil, err
+	for _, r := range rules {
+		switch v := r.Value.(type) {
+		case *IPRule_Custom:
+			custom = append(custom, v.Custom)
+		case *IPRule_Geoip:
+			if !v.Geoip.ReverseMatch {
+				pos = append(pos, v.Geoip)
+			} else {
+				neg = append(neg, v.Geoip)
 			}
-			subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: geoip.ReverseMatch})
-			continue
-		}
-		if !geoip.ReverseMatch {
-			pos = append(pos, geoip)
-		} else {
-			neg = append(neg, geoip)
+		default:
+			panic("unknown ip rule type")
 		}
 	}
 
-	buildIPSet := func(mergeables []*GeoIP) (*GeoIPSet, error) {
-		n := len(mergeables)
-		if n == 0 {
-			return nil, nil
+	subs := make([]*HeuristicGeoIPMatcher, 0, 3)
+
+	if len(custom) > 0 {
+		ipset, err := f.CreateFromCIDRs(custom)
+		if err != nil {
+			return nil, err
 		}
-
-		sort.Slice(mergeables, func(i, j int) bool {
-			gi, gj := mergeables[i], mergeables[j]
-			return gi.CountryCode < gj.CountryCode
-		})
-
-		var sb strings.Builder
-		sb.Grow(n * 3) // xx,
-		cidrGroups := make([][]*CIDR, 0, n)
-		var last *GeoIP
-		for i, geoip := range mergeables {
-			if i == 0 || (geoip.CountryCode != last.CountryCode) {
-				last = geoip
-				sb.WriteString(geoip.CountryCode)
-				sb.WriteString(",")
-				cidrGroups = append(cidrGroups, geoip.Cidr)
-			}
-		}
-
-		return ipsetFactory.GetOrCreate(sb.String(), cidrGroups)
-	}
-
-	ipset, err := buildIPSet(pos)
-	if err != nil {
-		return nil, err
-	}
-	if ipset != nil {
 		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: false})
 	}
 
-	ipset, err = buildIPSet(neg)
-	if err != nil {
-		return nil, err
+	if len(pos) > 0 {
+		ipset, err := f.GetOrCreateFromGeoIPRules(pos)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: false})
 	}
-	if ipset != nil {
+
+	if len(neg) > 0 {
+		ipset, err := f.GetOrCreateFromGeoIPRules(neg)
+		if err != nil {
+			return nil, err
+		}
 		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: true})
 	}
 

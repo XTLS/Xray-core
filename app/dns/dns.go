@@ -12,11 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/dns"
@@ -85,31 +83,9 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		return nil, errors.New("unexpected query strategy ", config.QueryStrategy)
 	}
 
-	var hosts *StaticHosts
-	mphLoaded := false
-	domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
-	if domainMatcherPath != "" {
-		if f, err := os.Open(domainMatcherPath); err == nil {
-			defer f.Close()
-			if m, err := router.LoadGeoSiteMatcher(f, "HOSTS"); err == nil {
-				f.Seek(0, 0)
-				if hostIPs, err := router.LoadGeoSiteHosts(f); err == nil {
-					if sh, err := NewStaticHostsFromCache(m, hostIPs); err == nil {
-						hosts = sh
-						mphLoaded = true
-						errors.LogDebug(ctx, "MphDomainMatcher loaded from cache for DNS hosts, size: ", sh.matchers.Size())
-					}
-				}
-			}
-		}
-	}
-
-	if !mphLoaded {
-		sh, err := NewStaticHosts(config.StaticHosts)
-		if err != nil {
-			return nil, errors.New("failed to create hosts").Base(err)
-		}
-		hosts = sh
+	hosts, err := NewStaticHosts(config.StaticHosts)
+	if err != nil {
+		return nil, errors.New("failed to create hosts").Base(err)
 	}
 
 	var clients []*Client
