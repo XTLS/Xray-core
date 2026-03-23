@@ -78,86 +78,66 @@ jobs:
       contents: write
     strategy:
       matrix:
-        # Include amd64 on all platforms.
-        goos: [windows, freebsd, openbsd, linux, darwin]
-        goarch: [amd64, 386]
+        # Include x86-64 and ARM64 on all platforms.
+        goos: [windows, linux, darwin, android]
+        goarch: [amd64, arm64]
         patch-assetname: [""]
-        exclude:
-          # Exclude i386 on darwin
-          - goarch: 386
-            goos: darwin
+        # Building for FreeBSD and OpenBSD has been suspended unless
+        # there are active contributors that uses FreeBSD or OpenBSD actively.
+        # PRs for FreeBSD and OpenBSD compatibility are welcome.
+        # Building for BSDs will be add back when there is active maintenance.
         include:
-          # BEGIN MacOS ARM64
-          - goos: darwin
-            goarch: arm64
-          # END MacOS ARM64
-          # BEGIN Linux ARM 5 6 7
-          - goos: linux
-            goarch: arm
-            goarm: 7
-          - goos: linux
-            goarch: arm
-            goarm: 6
-          - goos: linux
-            goarch: arm
-            goarm: 5
-          # END Linux ARM 5 6 7
-          # BEGIN Android ARM 8
-          - goos: android
-            goarch: arm64
-          # END Android ARM 8
-          # BEGIN Android AMD64
-          - goos: android
-            goarch: amd64
-            patch-assetname: android-amd64
-          # END Android AMD64
-          # Windows ARM
-          - goos: windows
-            goarch: arm64
-          # BEGIN Other architectures
-          # BEGIN riscv64 & ARM64 & LOONG64
-          - goos: linux
-            goarch: arm64
+          # BEGIN RISCV & LoongArch
           - goos: linux
             goarch: riscv64
           - goos: linux
             goarch: loong64
-          # END riscv64 & ARM64 & LOONG64
-          # BEGIN MIPS
-          - goos: linux
-            goarch: mips64
-          - goos: linux
-            goarch: mips64le
-          - goos: linux
-            goarch: mipsle
-          - goos: linux
-            goarch: mips
-          # END MIPS
+          # END RISCV & LoongArch
           # BEGIN PPC
           - goos: linux
             goarch: ppc64
           - goos: linux
             goarch: ppc64le
           # END PPC
-          # BEGIN FreeBSD ARM
-          - goos: freebsd
-            goarch: arm64
-          - goos: freebsd
-            goarch: arm
-            goarm: 7
-          # END FreeBSD ARM
           # BEGIN S390X
           - goos: linux
             goarch: s390x
           # END S390X
-          # END Other architectures
-          # BEGIN OPENBSD ARM
-          - goos: openbsd
-            goarch: arm64
-          - goos: openbsd
+          # BEGIN x86
+          # Removing x86 32-bit on Linux might depending on upstream.
+          - goos: linux
+            goarch: 386
+          # Removing x86 32-bit on Windows (not win7) might be in v27 or v28 or depending on upstream?
+          - goos: windows
+            goarch: 386
+          # END x86
+          # BEGIN MIPS
+          # MIPS64 BE/LE might be removed in v27
+          - goos: linux
+            goarch: mips64
+          - goos: linux
+            goarch: mips64le
+          # MIPS32 BE/LE might be removed in v28 or v29 or evaluate annualy.
+          # This is a long tail architecture due to router productions.
+          - goos: linux
+            goarch: mipsle
+          - goos: linux
+            goarch: mips
+          # END MIPS
+          # BEGIN Linux ARM
+          # ARMv7 is a long tail
+          - goos: linux
             goarch: arm
             goarm: 7
-          # END OPENBSD ARM
+          # ARMv6 might be removed in v28 or in the middle of v27
+          - goos: linux
+            goarch: arm
+            goarm: 6
+          # ARMv5 might be removed in v27 or in the middle of v26
+          - goos: linux
+            goarch: arm
+            goarm: 5
+          # END Linux ARM 5 6 7
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -186,8 +166,8 @@ jobs:
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
-          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
+          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM\"].friendlyName" -r < .github/build/friendly-filenames.json)
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
@@ -201,6 +181,13 @@ jobs:
 
       - name: Build Xray
         run: |
+          # Special processing for ARM64
+          if [[ ${GOARCH} == 'arm64' ]]; then
+            if [[ ${GOOS} == 'darwin' ]]; then
+              GOARM64="v8.4"
+            fi
+          fi
+          # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then
