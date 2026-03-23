@@ -107,7 +107,7 @@ jobs:
           # Removing x86 32-bit on Linux might depending on upstream.
           - goos: linux
             goarch: 386
-          # Removing x86 32-bit on Windows (not win7) might be in v27 or v28 or depending on upstream?
+          # Back-seating x86 32-bit on Windows (not win7) might be in v27.
           - goos: windows
             goarch: 386
           # END x86
@@ -117,7 +117,7 @@ jobs:
             goarch: mips64
           - goos: linux
             goarch: mips64le
-          # MIPS32 BE/LE might be removed in v28 or v29 or evaluate annualy.
+          # MIPS32 BE/LE might be back-seated in v28.
           # This is a long tail architecture due to router productions.
           - goos: linux
             goarch: mipsle
@@ -129,11 +129,11 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
-          # ARMv6 might be removed in v28 or in the middle of v27
+          # ARMv6 might be back-seated in v28
           - goos: linux
             goarch: arm
             goarm: 6
-          # ARMv5 might be removed in v27 or in the middle of v26
+          # ARMv5 might be removed in v27
           - goos: linux
             goarch: arm
             goarm: 5
