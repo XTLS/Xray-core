@@ -174,6 +174,10 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 			return nil, err
 		}
 		receiverSettings.StreamSettings = ss
+		if strings.Contains(ss.SecurityType, "reality") && (receiverSettings.PortList == nil ||
+			len(receiverSettings.PortList.Ports()) != 1 || receiverSettings.PortList.Ports()[0] != 443) {
+			errors.LogWarning(context.Background(), `REALITY: Listening on non-443 ports may get your IP blocked by the GFW`)
+		}
 	}
 	if c.SniffingConfig != nil {
 		s, err := c.SniffingConfig.Build()

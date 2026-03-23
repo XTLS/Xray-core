@@ -220,9 +220,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 	for _, h := range header {
 		req.Header.Set(h.Key, h.Value)
 	}
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", utils.ChromeUA)
-	}
+	utils.TryDefaultHeadersWith(req.Header, "nav")
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
 		req.Header.Set("Proxy-Connection", "Keep-Alive")

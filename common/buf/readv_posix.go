@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build !windows && !openbsd
+// +build !windows,!openbsd
 
 package buf
 

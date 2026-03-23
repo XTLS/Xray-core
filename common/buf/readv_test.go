@@ -1,3 +1,6 @@
+//go:build !openbsd
+// +build !openbsd
+
 package buf_test
 
 import (

@@ -30,7 +30,7 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("PrivateKey: %v\nPassword: %v\nHash32: %v\n",
+	fmt.Printf("PrivateKey: %v\nPassword (PublicKey): %v\nHash32: %v\n",
 		encoding.EncodeToString(privateKey),
 		encoding.EncodeToString(password),
 		encoding.EncodeToString(hash32[:]))

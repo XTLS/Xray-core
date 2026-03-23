@@ -227,6 +227,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		defer conn.Close()
 
+		conn = &udpConnClient{
+			Conn: conn,
+			dest: destination,
+		}
+
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
 			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
@@ -335,4 +340,35 @@ func (h *Handler) createIPCRequest() string {
 	}
 
 	return request.String()[:request.Len()]
+}
+
+type udpConnClient struct {
+	net.Conn
+	dest net.Destination
+}
+
+func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	b := buf.New()
+	b.Resize(0, buf.Size)
+	n, addr, err := c.Conn.(net.PacketConn).ReadFrom(b.Bytes())
+	if err != nil {
+		b.Release()
+		return nil, err
+	}
+	if addr == nil { // should never hit
+		addr = c.dest.RawNetAddr()
+	}
+	b.Resize(0, int32(n))
+
+	b.UDP = &net.Destination{
+		Address: net.IPAddress(addr.(*net.UDPAddr).IP),
+		Port:    net.Port(addr.(*net.UDPAddr).Port),
+		Network: net.Network_UDP,
+	}
+
+	return buf.MultiBuffer{b}, nil
+}
+
+func (c *udpConnClient) Write(p []byte) (int, error) {
+	return c.Conn.(net.PacketConn).WriteTo(p, c.dest.RawNetAddr())
 }
