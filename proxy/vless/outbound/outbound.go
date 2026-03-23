@@ -97,14 +97,26 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if a.Reverse != nil {
+		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
+			Tag:  a.Reverse.Tag,
+			User: handler.server.User, // TODO: email
+		})
+		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
+			rvsCtx = session.ContextWithContent(rvsCtx, &session.Content{
+				SniffingRequest: session.SniffingRequest{
+					Enabled:                        sc.Enabled,
+					OverrideDestinationForProtocol: sc.DestinationOverride,
+					ExcludeForDomain:               sc.DomainsExcluded,
+					MetadataOnly:                   sc.MetadataOnly,
+					RouteOnly:                      sc.RouteOnly,
+				},
+			})
+		}
 		handler.reverse = &Reverse{
 			tag:        a.Reverse.Tag,
 			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
-			ctx: session.ContextWithInbound(ctx, &session.Inbound{
-				Tag:  a.Reverse.Tag,
-				User: handler.server.User, // TODO: email
-			}),
-			handler: handler,
+			ctx:        rvsCtx,
+			handler:    handler,
 		}
 		handler.reverse.monitorTask = &task.Periodic{
 			Execute:  handler.reverse.monitor,
