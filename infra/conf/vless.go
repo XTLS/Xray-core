@@ -20,28 +20,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type VLessReverseConfig struct {
-	Tag      string          `json:"tag"`
-	Sniffing *SniffingConfig `json:"sniffing"`
-}
-
-func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
-	if c.Tag == "" {
-		return nil, errors.New(`VLESS reverse: "tag" can't be empty`)
-	}
-	r := &vless.Reverse{
-		Tag: c.Tag,
-	}
-	if c.Sniffing != nil {
-		sc, err := c.Sniffing.Build()
-		if err != nil {
-			return nil, errors.New(`VLESS reverse: invalid sniffing config`).Base(err)
-		}
-		r.Sniffing = sc
-	}
-	return r, nil
-}
-
 type VLessInboundFallback struct {
 	Name string          `json:"name"`
 	Alpn string          `json:"alpn"`
@@ -100,8 +78,13 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
 		}
 
-		if account.Reverse != nil && account.Reverse.Tag == "" {
-			return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
+		if account.Reverse != nil {
+			if account.Reverse.Tag == "" {
+				return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
+			}
+			if account.Reverse.Sniffing != nil { // may not be reached: error json unmarshal
+				return nil, errors.New(`VLESS clients: inbound's "reverse" can't have "sniffing"`)
+			}
 		}
 
 		user.Account = serial.ToTypedMessage(account)
@@ -219,6 +202,28 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type VLessReverseConfig struct {
+	Tag      string          `json:"tag"`
+	Sniffing *SniffingConfig `json:"sniffing"`
+}
+
+func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
+	if c.Tag == "" {
+		return nil, errors.New(`VLESS reverse: "tag" can't be empty`)
+	}
+	r := &vless.Reverse{
+		Tag: c.Tag,
+	}
+	if c.Sniffing != nil {
+		sc, err := c.Sniffing.Build()
+		if err != nil {
+			return nil, errors.New(`VLESS reverse: invalid "sniffing" config`).Base(err)
+		}
+		r.Sniffing = sc
+	}
+	return r, nil
+}
+
 type VLessOutboundVnext struct {
 	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
@@ -283,11 +288,11 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				//account.Seed = c.Seed
 				account.Encryption = c.Encryption
 				if c.Reverse != nil {
-					rv, err := c.Reverse.Build()
+					rvs, err := c.Reverse.Build()
 					if err != nil {
 						return nil, err
 					}
-					account.Reverse = rv
+					account.Reverse = rvs
 				}
 				account.Testpre = c.Testpre
 				account.Testseed = c.Testseed
@@ -295,15 +300,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New(`VLESS users: invalid user`).Base(err)
 				}
-				var rc struct {
-					Reverse *VLessReverseConfig `json:"reverse"`
-				}
-				if err := json.Unmarshal(rawUser, &rc); err == nil && rc.Reverse != nil {
-					rv, err := rc.Reverse.Build()
-					if err != nil {
-						return nil, err
-					}
-					account.Reverse = rv
+				if account.Reverse != nil { // may not be reached: error json unmarshal
+					return nil, errors.New(`VLESS users: please use simplified outbound's config style to use "reverse"`)
 				}
 			}
 
@@ -362,10 +360,6 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
 				}
 				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
-			}
-
-			if account.Reverse != nil && account.Reverse.Tag == "" {
-				return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
 			}
 
 			user.Account = serial.ToTypedMessage(account)
