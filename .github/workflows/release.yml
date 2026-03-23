@@ -78,45 +78,39 @@ jobs:
       contents: write
     strategy:
       matrix:
-        # Include amd64 on all platforms.
+        # Include x86-64 and ARM64 on all platforms.
         goos: [windows, linux, darwin, android]
-        goarch: [amd64, 386, arm64]
+        goarch: [amd64, arm64]
         patch-assetname: [""]
         # Building for FreeBSD and OpenBSD has been suspended unless
         # there are active contributors that uses FreeBSD or OpenBSD actively.
         # PRs for FreeBSD and OpenBSD compatibility are welcome.
         # Building for BSDs will be add back when there is active maintenance.
-        exclude:
-          # Exclude x86 32-bit on macOS
-          - goarch: 386
-            goos: darwin
-          # Exclude x86 32-bit on Android
-          - goarch: 386
-            goos: android
-          # Removing x86 32-bit on Windows (not win7) might be in v27 or v28 or depending on upstream?
-          # Removing x86 32-bit on Linux might depending on upstream.
         include:
-          # BEGIN Linux ARM 5 6 7
-          # ARMv7 is a long tail
-          - goos: linux
-            goarch: arm
-            goarm: 7
-          # ARMv6 might be removed in v28 or in the middle of v27
-          - goos: linux
-            goarch: arm
-            goarm: 6
-          # ARMv5 might be removed in v27 or in the middle of v26
-          - goos: linux
-            goarch: arm
-            goarm: 5
-          # END Linux ARM 5 6 7
-          # BEGIN Other architectures
           # BEGIN RISCV & LoongArch
           - goos: linux
             goarch: riscv64
           - goos: linux
             goarch: loong64
           # END RISCV & LoongArch
+          # BEGIN PPC
+          - goos: linux
+            goarch: ppc64
+          - goos: linux
+            goarch: ppc64le
+          # END PPC
+          # BEGIN S390X
+          - goos: linux
+            goarch: s390x
+          # END S390X
+          # BEGIN x86
+          # Removing x86 32-bit on Linux might depending on upstream.
+          - goos: linux
+            goarch: 386
+          # Removing x86 32-bit on Windows (not win7) might be in v27 or v28 or depending on upstream?
+          - goos: windows
+            goarch: 386
+          # END x86
           # BEGIN MIPS
           # MIPS64 BE/LE might be removed in v27
           - goos: linux
@@ -130,17 +124,20 @@ jobs:
           - goos: linux
             goarch: mips
           # END MIPS
-          # BEGIN PPC
+          # BEGIN Linux ARM
+          # ARMv7 is a long tail
           - goos: linux
-            goarch: ppc64
+            goarch: arm
+            goarm: 7
+          # ARMv6 might be removed in v28 or in the middle of v27
           - goos: linux
-            goarch: ppc64le
-          # END PPC
-          # BEGIN S390X
+            goarch: arm
+            goarm: 6
+          # ARMv5 might be removed in v27 or in the middle of v26
           - goos: linux
-            goarch: s390x
-          # END S390X
-          # END Other architectures
+            goarch: arm
+            goarm: 5
+          # END Linux ARM 5 6 7
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -169,8 +166,8 @@ jobs:
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
-          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
+          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM\"].friendlyName" -r < .github/build/friendly-filenames.json)
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
