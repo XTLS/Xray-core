@@ -26,7 +26,6 @@ jobs:
             assetname: freebsd-32
           - goos: freebsd
             goarch: arm
-            goarm: 7
             assetname: freebsd-arm32-v7a
           - goos: openbsd
             goarch: amd64
@@ -39,7 +38,6 @@ jobs:
             assetname: openbsd-32
           - goos: openbsd
             goarch: arm
-            goarm: 7
             assetname: openbsd-arm32-v7a
       fail-fast: false
 
@@ -47,7 +45,6 @@ jobs:
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
-      GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
@@ -70,6 +67,9 @@ jobs:
 
       - name: Build Xray
         run: |
+          if [[ ${GOARCH} == 'arm' ]]; then
+            GOARM="7"
+          fi
           # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)

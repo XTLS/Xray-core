@@ -104,20 +104,20 @@ jobs:
             goarch: s390x
           # END S390X
           # BEGIN x86
-          # Removing x86 32-bit on Linux might depending on upstream.
+          # Removing x86 32-bit on Linux will depending on upstream.
           - goos: linux
             goarch: 386
-          # Back-seating x86 32-bit on Windows (not win7) might be in v27.
+          # Back-seating x86 32-bit on Windows (not win7) will be in v27.
           - goos: windows
             goarch: 386
           # END x86
           # BEGIN MIPS
-          # MIPS64 BE/LE might be removed in v27
+          # MIPS64 BE/LE will be removed in v27
           - goos: linux
             goarch: mips64
           - goos: linux
             goarch: mips64le
-          # MIPS32 BE/LE might be back-seated in v28.
+          # MIPS32 BE/LE will be back-seated in v27.
           # This is a long tail architecture due to router productions.
           - goos: linux
             goarch: mipsle
@@ -129,15 +129,15 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
-          # ARMv6 might be back-seated in v28
+          # ARMv6 will be removed in v27
           - goos: linux
             goarch: arm
             goarm: 6
-          # ARMv5 might be removed in v27
+          # ARMv5 will be removed in v27
           - goos: linux
             goarch: arm
             goarm: 5
-          # END Linux ARM 5 6 7
+          # END Linux ARM
       fail-fast: false
 
     runs-on: ubuntu-latest
