@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -36,9 +37,10 @@ func init() {
 
 type MultiUserInbound struct {
 	sync.Mutex
-	networks []net.Network
-	users    []*protocol.MemoryUser
-	service  *shadowaead_2022.MultiService[int]
+	networks    []net.Network
+	users       []*protocol.MemoryUser
+	service     *shadowaead_2022.MultiService[int]
+	connTracker *proxy.UserConnTracker
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -63,8 +65,9 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	}
 
 	inbound := &MultiUserInbound{
-		networks: networks,
-		users:    memUsers,
+		networks:    networks,
+		users:       memUsers,
+		connTracker: proxy.NewUserConnTracker(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -118,6 +121,8 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
 		return errors.New("Email must not be empty.")
 	}
+
+	i.connTracker.CancelAll(strings.ToLower(email))
 
 	i.Lock()
 	defer i.Unlock()
@@ -236,6 +241,14 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID := i.connTracker.Register(email, connCancel)
+		defer i.connTracker.Unregister(email, connID)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
 	if !destination.IsValid() {
@@ -261,6 +274,14 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID := i.connTracker.Register(email, connCancel)
+		defer i.connTracker.Unregister(email, connID)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
 	link, err := dispatcher.Dispatch(ctx, destination)

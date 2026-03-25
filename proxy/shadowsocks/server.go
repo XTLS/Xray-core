@@ -2,6 +2,7 @@ package shadowsocks
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -17,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -26,6 +28,7 @@ type Server struct {
 	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
+	connTracker   *proxy.UserConnTracker
 }
 
 // NewServer create a new Shadowsocks server.
@@ -48,6 +51,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		connTracker:   proxy.NewUserConnTracker(),
 	}
 
 	return s, nil
@@ -60,6 +64,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -235,6 +240,10 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	sessionPolicy = s.policyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	if email := strings.ToLower(request.User.Email); email != "" {
+		connID := s.connTracker.Register(email, cancel)
+		defer s.connTracker.Unregister(email, connID)
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, dest)

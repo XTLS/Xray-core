@@ -3,6 +3,7 @@ package hysteria
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
@@ -25,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
+	connTracker   *proxy.UserConnTracker
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -45,6 +48,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		connTracker:   proxy.NewUserConnTracker(),
 	}
 
 	return s, nil
@@ -59,6 +63,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 }
 
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -94,6 +99,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			useremail = inbound.User.Email
 			userlevel = inbound.User.Level
 		}
+	}
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(useremail); email != "" {
+		connID := s.connTracker.Register(email, connCancel)
+		defer s.connTracker.Unregister(email, connID)
 	}
 
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {

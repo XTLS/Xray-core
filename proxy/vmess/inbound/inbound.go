@@ -21,6 +21,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -107,6 +108,7 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
+	connTracker           *proxy.UserConnTracker
 }
 
 // New creates a new VMess inbound handler.
@@ -118,6 +120,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
+		connTracker:           proxy.NewUserConnTracker(),
 	}
 
 	for _, user := range config.User {
@@ -180,6 +183,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if !h.usersByEmail.Remove(email) {
 		return errors.New("User ", email, " not found.")
 	}
+	h.connTracker.CancelAll(strings.ToLower(email))
 	h.clients.Remove(email)
 	return nil
 }
@@ -276,6 +280,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	if email := strings.ToLower(request.User.Email); email != "" {
+		connID := h.connTracker.Register(email, cancel)
+		defer h.connTracker.Unregister(email, connID)
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
