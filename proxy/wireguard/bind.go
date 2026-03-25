@@ -73,15 +73,16 @@ func (bind *netBind) BatchSize() int {
 
 // Open implements conn.Bind
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
-	bind.readQueue = make(chan *netReadInfo)
+	if bind.readQueue == nil {
+		bind.readQueue = make(chan *netReadInfo)
+	}
 
 	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
 		r, ok := <-bind.readQueue
 		if !ok {
 			return 0, errors.New("channel closed")
 		}
-		copy(bufs[0], r.buff)
-		sizes[0], eps[0] = len(r.buff), r.endpoint
+		sizes[0], eps[0] = copy(bufs[0], r.buff), r.endpoint
 		return 1, nil
 	}
 	workers := bind.workers
@@ -100,6 +101,7 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 func (bind *netBind) Close() error {
 	if bind.readQueue != nil {
 		close(bind.readQueue)
+		bind.readQueue = nil
 	}
 	return nil
 }

@@ -81,7 +81,7 @@ func createIPCRequest(conf *DeviceConfig) string {
 
 	if !conf.IsClient {
 		// placeholder, we'll handle actual port listening on Xray
-		request.WriteString("listen_port=1337\n")
+		// request.WriteString("listen_port=1337\n")
 	}
 
 	for _, peer := range conf.Peers {

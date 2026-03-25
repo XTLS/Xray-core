@@ -49,6 +49,8 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 					IPv4Enable: hasIPv4,
 					IPv6Enable: hasIPv6,
 				},
+				workers:   int(conf.NumWorkers),
+				readQueue: make(chan *netReadInfo),
 			},
 		},
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
