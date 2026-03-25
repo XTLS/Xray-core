@@ -2,27 +2,21 @@ package wireguard
 
 import (
 	"context"
-	"errors"
 	"net/netip"
 	"strconv"
-	"sync"
 
 	"golang.zx2c4.com/wireguard/conn"
+	"golang.zx2c4.com/wireguard/device"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
 type netReadInfo struct {
-	// status
-	waiter sync.WaitGroup
-	// param
-	buff []byte
-	// result
-	bytes    int
+	buff     []byte
 	endpoint conn.Endpoint
-	err      error
 }
 
 // reduce duplicated code
@@ -82,22 +76,13 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.readQueue = make(chan *netReadInfo)
 
 	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				n = 0
-				err = errors.New("channel closed")
-			}
-		}()
-
 		r, ok := <-bind.readQueue
 		if !ok {
 			return 0, errors.New("channel closed")
 		}
-
-		copy(bufs[0], r.buff[:r.bytes])
-		sizes[0], eps[0] = r.bytes, r.endpoint
-		r.waiter.Done()
-		return 1, r.err
+		copy(bufs[0], r.buff)
+		sizes[0], eps[0] = len(r.buff), r.endpoint
+		return 1, nil
 	}
 	workers := bind.workers
 	if workers <= 0 {
@@ -136,30 +121,29 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 
 	go func(readQueue chan<- *netReadInfo, endpoint *netEndpoint) {
 		defer func() {
-			_ = recover() // handle send on closed channel
+			if r := recover(); r != nil {
+				errors.LogInfo(context.Background(), "channel closed")
+			}
 		}()
-		for {
-			buff := make([]byte, 1700)
-			i, err := c.Read(buff)
 
-			if i > 3 {
+		for {
+			buff := make([]byte, device.MaxMessageSize)
+			n, err := c.Read(buff)
+
+			if err != nil {
+				endpoint.conn = nil
+				return
+			}
+
+			if n > 3 {
 				buff[1] = 0
 				buff[2] = 0
 				buff[3] = 0
 			}
 
-			r := &netReadInfo{
-				buff:     buff,
-				bytes:    i,
+			readQueue <- &netReadInfo{
+				buff:     buff[:n],
 				endpoint: endpoint,
-				err:      err,
-			}
-			r.waiter.Add(1)
-			readQueue <- r
-			r.waiter.Wait()
-			if err != nil {
-				endpoint.conn = nil
-				return
 			}
 		}
 	}(bind.readQueue, endpoint)
