@@ -83,6 +83,7 @@ type Handler struct {
 	observer               features.Feature
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
+	connTracker            *proxy.UserConnTracker
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
@@ -99,6 +100,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		observer:               v.GetFeature(extension.ObservatoryType()),
 		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
+		connTracker:            proxy.NewUserConnTracker(),
 	}
 
 	if config.Decryption != "" && config.Decryption != "none" {
@@ -243,6 +245,7 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
+	h.connTracker.CancelAll(strings.ToLower(e))
 	h.RemoveReverse(h.validator.GetByEmail(e))
 	return h.validator.Del(e)
 }
@@ -528,6 +531,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
 	}
 	errors.LogInfo(ctx, "received request for ", request.Destination())
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(request.User.Email); email != "" {
+		connID := h.connTracker.Register(email, connCancel)
+		defer h.connTracker.Unregister(email, connID)
+	}
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {

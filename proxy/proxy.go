@@ -13,6 +13,8 @@ import (
 	"math/big"
 	"runtime"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -97,6 +99,56 @@ type GetInbound interface {
 
 type GetOutbound interface {
 	GetOutbound() Outbound
+}
+
+// UserConnTracker tracks active connection cancel functions per user email,
+// enabling forced disconnection of all connections belonging to a user.
+type UserConnTracker struct {
+	mu    sync.Mutex
+	conns map[string]map[uint32]context.CancelFunc
+	next  uint32 // accessed atomically
+}
+
+func NewUserConnTracker() *UserConnTracker {
+	return &UserConnTracker{
+		conns: make(map[string]map[uint32]context.CancelFunc),
+	}
+}
+
+// Register records a connection's cancel function under the given email.
+// Returns an ID to pass to Unregister when the connection ends.
+func (t *UserConnTracker) Register(email string, cancel context.CancelFunc) uint32 {
+	id := atomic.AddUint32(&t.next, 1)
+	t.mu.Lock()
+	if t.conns[email] == nil {
+		t.conns[email] = make(map[uint32]context.CancelFunc)
+	}
+	t.conns[email][id] = cancel
+	t.mu.Unlock()
+	return id
+}
+
+// Unregister removes a connection from the tracker when it closes naturally.
+func (t *UserConnTracker) Unregister(email string, id uint32) {
+	t.mu.Lock()
+	if m := t.conns[email]; m != nil {
+		delete(m, id)
+		if len(m) == 0 {
+			delete(t.conns, email)
+		}
+	}
+	t.mu.Unlock()
+}
+
+// CancelAll cancels every active connection belonging to email.
+func (t *UserConnTracker) CancelAll(email string) {
+	t.mu.Lock()
+	cancels := t.conns[email]
+	delete(t.conns, email)
+	t.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
 }
 
 // TrafficState is used to track uplink and downlink of one connection

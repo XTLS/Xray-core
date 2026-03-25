@@ -2,6 +2,8 @@ package hysteria
 
 import (
 	"context"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -14,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
@@ -24,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
+	connTracker   *proxy.UserConnTracker
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -44,6 +48,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		connTracker:   proxy.NewUserConnTracker(),
 	}
 
 	return s, nil
@@ -58,6 +63,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 }
 
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -81,44 +87,80 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
-	inbound.User = &protocol.MemoryUser{}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
 
+	var useremail string
+	var userlevel uint32
 	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := iConn.(User); ok && v.User() != nil {
+	if v, ok := iConn.(User); ok {
 		inbound.User = v.User()
+		if inbound.User != nil {
+			useremail = inbound.User.Email
+			userlevel = inbound.User.Level
+		}
 	}
 
-	if _, ok := iConn.(*hysteria.InterConn); ok {
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(useremail); email != "" {
+		connID := s.connTracker.Register(email, connCancel)
+		defer s.connTracker.Unregister(email, connID)
+	}
+
+	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
+		r := io.Reader(conn)
+		b := make([]byte, MaxUDPSize)
+		df := &Defragger{}
+		var firstMsg *UDPMessage
+		var firstDest net.Destination
+
+		for {
+			n, err := r.Read(b)
+			if err != nil {
+				return err
+			}
+
+			msg, err := ParseUDPMessage(b[:n])
+			if err != nil {
+				continue
+			}
+
+			dfMsg := df.Feed(msg)
+			if dfMsg == nil {
+				continue
+			}
+
+			firstMsg = dfMsg
+			firstDest, err = net.ParseDestination("udp:" + firstMsg.Addr)
+			if err != nil {
+				errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
+				continue
+			}
+
+			break
+		}
+
 		reader := &UDPReader{
-			reader: conn,
-			df:     &Defragger{},
+			Reader:    r,
+			buf:       b,
+			df:        df,
+			firstMsg:  firstMsg,
+			firstDest: &firstDest,
 		}
-
-		b := buf.New()
-		b.Resize(0, buf.Size)
-		n, addr, err := reader.ReadFrom(b.Bytes())
-		if err != nil {
-			b.Release()
-			return err
-		}
-		b.Resize(0, int32(n))
-		b.UDP = addr
-
-		reader.firstBuf = b
 
 		writer := &UDPWriter{
-			writer: conn,
-			addr:   addr.NetAddr(),
+			Writer: conn,
+			buf:    make([]byte, MaxUDPSize),
+			addr:   firstMsg.Addr,
 		}
 
-		return dispatcher.DispatchLink(ctx, *addr, &transport.Link{
+		return dispatcher.DispatchLink(ctx, firstDest, &transport.Link{
 			Reader: reader,
 			Writer: writer,
 		})
 	} else {
-		sessionPolicy := s.policyManager.ForLevel(inbound.User.Level)
+		sessionPolicy := s.policyManager.ForLevel(userlevel)
 
 		common.Must(conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)))
 		addr, err := ReadTCPRequest(conn)
@@ -142,7 +184,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			To:     dest,
 			Status: log.AccessAccepted,
 			Reason: "",
-			Email:  inbound.User.Email,
+			Email:  useremail,
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
 

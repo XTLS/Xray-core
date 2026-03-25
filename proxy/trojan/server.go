@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -39,6 +40,7 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
+	connTracker   *proxy.UserConnTracker
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -60,6 +62,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
 		cone:          ctx.Value("cone").(bool),
+		connTracker:   proxy.NewUserConnTracker(),
 	}
 
 	if config.Fallbacks != nil {
@@ -122,6 +125,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -227,6 +231,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.CanSpliceCopy = 3
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID := s.connTracker.Register(email, connCancel)
+		defer s.connTracker.Unregister(email, connID)
+	}
 
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
