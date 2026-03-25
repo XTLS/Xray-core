@@ -1,6 +1,6 @@
 name: Extended or Back-seated Nightly Build
 # Secondary builds are built here.
-# Failing maybe not a blocking. This depends on judgements.
+# Failing maybe not meaning a blocking. This is a judgement call.
 
 on:
   workflow_dispatch:
@@ -22,9 +22,6 @@ jobs:
             goarch: arm64
             assetname: freebsd-arm64-v8a
           - goos: freebsd
-            goarch: 386
-            assetname: freebsd-32
-          - goos: freebsd
             goarch: arm
             assetname: freebsd-arm32-v7a
           - goos: openbsd
@@ -33,9 +30,6 @@ jobs:
           - goos: openbsd
             goarch: arm64
             assetname: openbsd-arm64-v8a
-          - goos: openbsd
-            goarch: 386
-            assetname: openbsd-32
           - goos: openbsd
             goarch: arm
             assetname: openbsd-arm32-v7a
@@ -75,16 +69,10 @@ jobs:
           COMMID=$(git describe --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Building Xray for Windows...'
-            go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            go build -o build_assets/xray.exe -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           else
             echo 'Building Xray...'
-            if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
-              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-              echo 'Building soft-float Xray for MIPS/MIPSLE 32-bit...'
-              GOMIPS=softfloat go build -o build_assets/xray_softfloat -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-            else
-              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-            fi
+            go build -o build_assets/xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           fi
 
       - name: Copy README.md & LICENSE
