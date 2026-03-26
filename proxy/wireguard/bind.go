@@ -4,6 +4,7 @@ import (
 	"context"
 	gonet "net"
 	"net/netip"
+	"runtime"
 	"strconv"
 
 	"golang.zx2c4.com/wireguard/conn"
@@ -89,6 +90,9 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 		}
 	}
 	workers := bind.workers
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
 	if workers <= 0 {
 		workers = 1
 	}
