@@ -2,6 +2,7 @@ package wireguard
 
 import (
 	"context"
+	"io"
 
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -91,20 +92,16 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	nep := ep.(*netEndpoint)
 	nep.conn = conn
 
-	defer func() {
-		_ = recover()
-	}()
-
 	reader := buf.NewPacketReader(conn)
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
-			buf.ReleaseMulti(mb)
 			nep.conn = nil
+			buf.ReleaseMulti(mb)
 			return err
 		}
 
-		for _, b := range mb {
+		for i, b := range mb {
 			buff := b.Bytes()
 
 			if b.Len() > 3 {
@@ -113,9 +110,15 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 				buff[3] = 0
 			}
 
-			s.bindServer.readQueue <- &netReadInfo{
+			select {
+			case s.bindServer.readQueue <- &netReadInfo{
 				buff:     buff,
 				endpoint: nep,
+			}:
+			case <-s.bindServer.closedCh:
+				nep.conn = nil
+				buf.ReleaseMulti(mb[i:])
+				return io.EOF
 			}
 		}
 	}
