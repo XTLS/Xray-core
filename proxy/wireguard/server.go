@@ -2,7 +2,6 @@ package wireguard
 
 import (
 	"context"
-	"io"
 
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -118,7 +117,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			case <-s.bindServer.closedCh:
 				nep.conn = nil
 				buf.ReleaseMulti(mb[i:])
-				return io.EOF
+				return errors.New("bind closed")
 			}
 		}
 	}
