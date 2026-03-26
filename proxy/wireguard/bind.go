@@ -200,7 +200,8 @@ func (bind *netBindServer) Send(buff [][]byte, endpoint conn.Endpoint) error {
 	}
 
 	if nend.conn == nil {
-		return errors.New("connection not open yet")
+		errors.LogDebug(context.Background(), nend.dst.NetAddr(), " send on closed peer")
+		return errors.New("peer closed")
 	}
 
 	for _, buff := range buff {
