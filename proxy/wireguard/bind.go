@@ -76,7 +76,7 @@ func (bind *netBind) BatchSize() int {
 // Open implements conn.Bind
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 	bind.closedCh = make(chan struct{})
-	errors.LogInfo(context.Background(), "bind opened")
+	errors.LogDebug(context.Background(), "bind opened")
 
 	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
 		select {
@@ -84,7 +84,7 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 			sizes[0], eps[0] = copy(bufs[0], r.buff), r.endpoint
 			return 1, nil
 		case <-bind.closedCh:
-			errors.LogInfo(context.Background(), "bind closed")
+			errors.LogDebug(context.Background(), "recv func closed")
 			return 0, gonet.ErrClosed
 		}
 	}
@@ -102,6 +102,7 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 
 // Close implements conn.Bind
 func (bind *netBind) Close() error {
+	errors.LogDebug(context.Background(), "bind closed")
 	if bind.closedCh != nil {
 		close(bind.closedCh)
 	}
