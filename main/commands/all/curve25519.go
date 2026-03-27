@@ -4,12 +4,13 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 
 	"lukechampine.com/blake3"
 )
 
-func Curve25519Genkey(StdEncoding bool, input_base64 string) {
+func Curve25519Genkey(StdEncoding bool, input_base64 string, jsonOutput bool) {
 	var encoding *base64.Encoding
 	if *input_stdEncoding || StdEncoding {
 		encoding = base64.StdEncoding
@@ -30,10 +31,19 @@ func Curve25519Genkey(StdEncoding bool, input_base64 string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("PrivateKey: %v\nPassword (PublicKey): %v\nHash32: %v\n",
-		encoding.EncodeToString(privateKey),
-		encoding.EncodeToString(password),
-		encoding.EncodeToString(hash32[:]))
+	if jsonOutput {
+		output, _ := json.Marshal(map[string]string{
+			"privateKey": encoding.EncodeToString(privateKey),
+			"publicKey":  encoding.EncodeToString(password),
+			"hash32":     encoding.EncodeToString(hash32[:]),
+		})
+		fmt.Println(string(output))
+	} else {
+		fmt.Printf("PrivateKey: %v\nPassword (PublicKey): %v\nHash32: %v\n",
+			encoding.EncodeToString(privateKey),
+			encoding.EncodeToString(password),
+			encoding.EncodeToString(hash32[:]))
+	}
 }
 
 func genCurve25519(inputPrivateKey []byte) (privateKey []byte, password []byte, hash32 [32]byte, returnErr error) {

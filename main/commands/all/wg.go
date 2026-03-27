@@ -23,5 +23,5 @@ func init() {
 var input_wireguard = cmdWG.Flag.String("i", "", "")
 
 func executeWG(cmd *base.Command, args []string) {
-	Curve25519Genkey(true, *input_wireguard)
+	Curve25519Genkey(true, *input_wireguard, false)
 }

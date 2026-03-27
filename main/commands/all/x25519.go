@@ -5,7 +5,7 @@ import (
 )
 
 var cmdX25519 = &base.Command{
-	UsageLine: `{{.Exec}} x25519 [-i "private key (base64.RawURLEncoding)"] [--std-encoding]`,
+	UsageLine: `{{.Exec}} x25519 [-i "private key (base64.RawURLEncoding)"] [--std-encoding] [--json]`,
 	Short:     `Generate key pair for X25519 key exchange (REALITY, VLESS Encryption)`,
 	Long: `
 Generate key pair for X25519 key exchange (REALITY, VLESS Encryption).
@@ -23,7 +23,8 @@ func init() {
 
 var input_stdEncoding = cmdX25519.Flag.Bool("std-encoding", false, "")
 var input_x25519 = cmdX25519.Flag.String("i", "", "")
+var input_jsonOutput = cmdX25519.Flag.Bool("json", false, "")
 
 func executeX25519(cmd *base.Command, args []string) {
-	Curve25519Genkey(false, *input_x25519)
+	Curve25519Genkey(false, *input_x25519, *input_jsonOutput)
 }
