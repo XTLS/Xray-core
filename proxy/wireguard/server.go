@@ -2,8 +2,6 @@ package wireguard
 
 import (
 	"context"
-	goerrors "errors"
-	"io"
 
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -51,6 +49,8 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 					IPv4Enable: hasIPv4,
 					IPv6Enable: hasIPv6,
 				},
+				workers:   int(conf.NumWorkers),
+				readQueue: make(chan *netReadInfo),
 			},
 		},
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
@@ -93,25 +93,31 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	reader := buf.NewPacketReader(conn)
 	for {
-		mpayload, err := reader.ReadMultiBuffer()
+		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
+			nep.conn = nil
+			buf.ReleaseMulti(mb)
 			return err
 		}
 
-		for _, payload := range mpayload {
-			v, ok := <-s.bindServer.readQueue
-			if !ok {
-				return nil
-			}
-			i, err := payload.Read(v.buff)
+		for i, b := range mb {
+			buff := b.Bytes()
 
-			v.bytes = i
-			v.endpoint = nep
-			v.err = err
-			v.waiter.Done()
-			if err != nil && goerrors.Is(err, io.EOF) {
+			if b.Len() > 3 {
+				buff[1] = 0
+				buff[2] = 0
+				buff[3] = 0
+			}
+
+			select {
+			case s.bindServer.readQueue <- &netReadInfo{
+				buff:     buff,
+				endpoint: nep,
+			}:
+			case <-s.bindServer.closedCh:
 				nep.conn = nil
-				return nil
+				buf.ReleaseMulti(mb[i:])
+				return errors.New("bind closed")
 			}
 		}
 	}
@@ -138,9 +144,11 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	// Currently we have no way to link to the original source address
 	inbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
 	ctx = session.ContextWithInbound(ctx, &inbound)
+	content := new(session.Content)
 	if s.info.contentTag != nil {
-		ctx = session.ContextWithContent(ctx, s.info.contentTag)
+		content.SniffingRequest = s.info.contentTag.SniffingRequest
 	}
+	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SubContextFromMuxInbound(ctx)
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
