@@ -144,9 +144,15 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	// Currently we have no way to link to the original source address
 	inbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
 	ctx = session.ContextWithInbound(ctx, &inbound)
+	content := new(session.Content)
 	if s.info.contentTag != nil {
-		ctx = session.ContextWithContent(ctx, s.info.contentTag)
+		content.SniffingRequest.Enabled = s.info.contentTag.SniffingRequest.Enabled
+		content.SniffingRequest.OverrideDestinationForProtocol = s.info.contentTag.SniffingRequest.OverrideDestinationForProtocol
+		content.SniffingRequest.ExcludeForDomain = s.info.contentTag.SniffingRequest.ExcludeForDomain
+		content.SniffingRequest.MetadataOnly = s.info.contentTag.SniffingRequest.MetadataOnly
+		content.SniffingRequest.RouteOnly = s.info.contentTag.SniffingRequest.RouteOnly
 	}
+	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SubContextFromMuxInbound(ctx)
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
