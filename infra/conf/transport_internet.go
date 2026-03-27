@@ -1425,10 +1425,11 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 }
 
 type NoiseItem struct {
-	Rand   Int32Range      `json:"rand"`
-	Type   string          `json:"type"`
-	Packet json.RawMessage `json:"packet"`
-	Delay  Int32Range      `json:"delay"`
+	Rand      Int32Range      `json:"rand"`
+	RandRange *Int32Range     `json:"randRange"`
+	Type      string          `json:"type"`
+	Packet    json.RawMessage `json:"packet"`
+	Delay     Int32Range      `json:"delay"`
 }
 
 type NoiseMask struct {
@@ -1445,16 +1446,24 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
+		if item.RandRange == nil {
+			item.RandRange = &Int32Range{From: 0, To: 255}
+		}
+		if item.RandRange.From < 0 || item.RandRange.To > 255 {
+			return nil, errors.New("invalid randRange")
+		}
 		var err error
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 			return nil, err
 		}
 		noiseSlice = append(noiseSlice, &noise.Item{
-			RandMin:  int64(item.Rand.From),
-			RandMax:  int64(item.Rand.To),
-			Packet:   item.Packet,
-			DelayMin: int64(item.Delay.From),
-			DelayMax: int64(item.Delay.To),
+			RandMin:      int64(item.Rand.From),
+			RandMax:      int64(item.Rand.To),
+			RandRangeMin: item.RandRange.From,
+			RandRangeMax: item.RandRange.To,
+			Packet:       item.Packet,
+			DelayMin:     int64(item.Delay.From),
+			DelayMax:     int64(item.Delay.To),
 		})
 	}
 
