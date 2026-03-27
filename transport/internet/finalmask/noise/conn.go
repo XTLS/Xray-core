@@ -1,12 +1,10 @@
 package noise
 
 import (
-	"crypto/rand"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 )
 
@@ -77,7 +75,7 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 			for _, item := range c.config.Items {
 				if item.RandMax > 0 {
 					item.Packet = make([]byte, crypto.RandBetween(item.RandMin, item.RandMax))
-					common.Must2(rand.Read(item.Packet))
+					crypto.RandBytesBetween(item.Packet, byte(item.RandRangeMin), byte(item.RandRangeMax))
 				}
 				c.PacketConn.WriteTo(item.Packet, addr)
 				time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
