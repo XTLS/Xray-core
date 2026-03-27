@@ -146,11 +146,7 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 	ctx = session.ContextWithInbound(ctx, &inbound)
 	content := new(session.Content)
 	if s.info.contentTag != nil {
-		content.SniffingRequest.Enabled = s.info.contentTag.SniffingRequest.Enabled
-		content.SniffingRequest.OverrideDestinationForProtocol = s.info.contentTag.SniffingRequest.OverrideDestinationForProtocol
-		content.SniffingRequest.ExcludeForDomain = s.info.contentTag.SniffingRequest.ExcludeForDomain
-		content.SniffingRequest.MetadataOnly = s.info.contentTag.SniffingRequest.MetadataOnly
-		content.SniffingRequest.RouteOnly = s.info.contentTag.SniffingRequest.RouteOnly
+		content.SniffingRequest = s.info.contentTag.SniffingRequest
 	}
 	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SubContextFromMuxInbound(ctx)
