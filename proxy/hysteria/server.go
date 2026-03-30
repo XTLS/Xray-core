@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -16,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
@@ -27,7 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
-	connTracker   *proxy.UserConnTracker
+	connTracker   *connectiontracker.Tracker
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -48,7 +48,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		connTracker:   proxy.NewUserConnTracker(),
+		connTracker:   connectiontracker.New(),
 	}
 
 	return s, nil
@@ -104,7 +104,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(useremail); email != "" {
-		connID := s.connTracker.Register(email, connCancel)
+		connID, _ := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "hysteria")
 		defer s.connTracker.Unregister(email, connID)
 	}
 

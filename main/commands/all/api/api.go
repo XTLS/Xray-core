@@ -34,5 +34,9 @@ var CmdAPI = &base.Command{
 		cmdOnlineStats,
 		cmdOnlineStatsIpList,
 		cmdGetAllOnlineUsers,
+		cmdConnList,
+		cmdConnClose,
+		cmdConnUserStats,
+		cmdConnStream,
 	},
 }
