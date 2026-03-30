@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -18,7 +19,6 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -28,7 +28,7 @@ type Server struct {
 	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
-	connTracker   *proxy.UserConnTracker
+	connTracker   *connectiontracker.Tracker
 }
 
 // NewServer create a new Shadowsocks server.
@@ -51,7 +51,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
-		connTracker:   proxy.NewUserConnTracker(),
+		connTracker:   connectiontracker.New(),
 	}
 
 	return s, nil
@@ -241,7 +241,7 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	if email := strings.ToLower(request.User.Email); email != "" {
-		connID := s.connTracker.Register(email, cancel)
+		connID, _ := s.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "shadowsocks")
 		defer s.connTracker.Unregister(email, connID)
 	}
 

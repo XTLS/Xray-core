@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -21,7 +22,6 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -40,7 +40,7 @@ type Server struct {
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
 	cone          bool
-	connTracker   *proxy.UserConnTracker
+	connTracker   *connectiontracker.Tracker
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -62,7 +62,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
 		cone:          ctx.Value("cone").(bool),
-		connTracker:   proxy.NewUserConnTracker(),
+		connTracker:   connectiontracker.New(),
 	}
 
 	if config.Fallbacks != nil {
@@ -235,7 +235,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID := s.connTracker.Register(email, connCancel)
+		connID, _ := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "trojan")
 		defer s.connTracker.Unregister(email, connID)
 	}
 

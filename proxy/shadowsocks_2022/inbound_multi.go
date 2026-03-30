@@ -16,6 +16,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -27,7 +28,6 @@ import (
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -42,7 +42,7 @@ type MultiUserInbound struct {
 	networks    []net.Network
 	users       []*protocol.MemoryUser
 	service     *shadowaead_2022.MultiService[int]
-	connTracker *proxy.UserConnTracker
+	connTracker *connectiontracker.Tracker
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -69,7 +69,7 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	inbound := &MultiUserInbound{
 		networks:    networks,
 		users:       memUsers,
-		connTracker: proxy.NewUserConnTracker(),
+		connTracker: connectiontracker.New(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -247,7 +247,7 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID := i.connTracker.Register(email, connCancel)
+		connID, _ := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
 		defer i.connTracker.Unregister(email, connID)
 	}
 
@@ -279,7 +279,7 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID := i.connTracker.Register(email, connCancel)
+		connID, _ := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
 		defer i.connTracker.Unregister(email, connID)
 	}
 

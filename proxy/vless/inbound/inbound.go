@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
@@ -83,7 +84,7 @@ type Handler struct {
 	observer               features.Feature
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
-	connTracker            *proxy.UserConnTracker
+	connTracker            *connectiontracker.Tracker
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
@@ -100,7 +101,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		observer:               v.GetFeature(extension.ObservatoryType()),
 		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
-		connTracker:            proxy.NewUserConnTracker(),
+		connTracker:            connectiontracker.New(),
 	}
 
 	if config.Decryption != "" && config.Decryption != "none" {
@@ -535,7 +536,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(request.User.Email); email != "" {
-		connID := h.connTracker.Register(email, connCancel)
+		inboundTag := ""
+		if ib := session.InboundFromContext(ctx); ib != nil {
+			inboundTag = ib.Tag
+		}
+		connID, _ := h.connTracker.RegisterWithMeta(email, connCancel, inboundTag, "vless")
 		defer h.connTracker.Unregister(email, connID)
 	}
 
