@@ -212,7 +212,10 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	uc, ok := m.m[src.NetAddr()]
 	if ok {
 		select {
-		case uc.ch <- data:
+		case uc.queue <- &packet{
+			p:    data,
+			dest: &dst,
+		}:
 		default:
 		}
 		m.mutex.RUnlock()
@@ -226,9 +229,9 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	uc, ok = m.m[src.NetAddr()]
 	if !ok {
 		uc = &udpConn{
-			ch:  make(chan []byte, 1024),
-			src: src,
-			dst: dst,
+			queue: make(chan *packet, 1024),
+			src:   src,
+			dst:   dst,
 		}
 		uc.writeFunc = m.writeRawUDPPacket
 		uc.closeFunc = func() {
@@ -241,7 +244,10 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	}
 
 	select {
-	case uc.ch <- data:
+	case uc.queue <- &packet{
+		p:    data,
+		dest: &dst,
+	}:
 	default:
 	}
 }
@@ -249,7 +255,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 func (m *udpManager) close(uc *udpConn) {
 	if !uc.closed {
 		uc.closed = true
-		close(uc.ch)
+		close(uc.queue)
 		delete(m.m, uc.src.NetAddr())
 	}
 }
@@ -317,8 +323,13 @@ func (m *udpManager) writeRawUDPPacket(payload []byte, src net.Destination, dst 
 	return nil
 }
 
+type packet struct {
+	p    []byte
+	dest *net.Destination
+}
+
 type udpConn struct {
-	ch        chan []byte
+	queue     chan *packet
 	src       net.Destination
 	dst       net.Destination
 	writeFunc func(payload []byte, src net.Destination, dst net.Destination) error
@@ -326,13 +337,34 @@ type udpConn struct {
 	closed    bool
 }
 
+func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	for {
+		q, ok := <-c.queue
+		if !ok {
+			return nil, io.EOF
+		}
+
+		b := buf.New()
+
+		_, err := b.Write(q.p)
+		if err != nil {
+			errors.LogInfoInner(context.Background(), err, "drop udp size ", len(q.p), " to ", q.dest.NetAddr())
+			continue
+		}
+
+		b.UDP = q.dest
+
+		return buf.MultiBuffer{b}, nil
+	}
+}
+
 func (c *udpConn) Read(p []byte) (int, error) {
-	b, ok := <-c.ch
+	q, ok := <-c.queue
 	if !ok {
 		return 0, io.EOF
 	}
-	n := copy(p, b)
-	if n != len(b) {
+	n := copy(p, q.p)
+	if n != len(q.p) {
 		return 0, io.ErrShortBuffer
 	}
 	return n, nil
