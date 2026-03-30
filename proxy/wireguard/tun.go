@@ -348,7 +348,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 		_, err := b.Write(q.p)
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "drop udp size ", len(q.p), " to ", q.dest.NetAddr())
+			errors.LogInfoInner(context.Background(), err, "drop udp size ", len(q.p), " to ", q.dest.NetAddr(), " original ", c.dst.NetAddr())
 			continue
 		}
 
