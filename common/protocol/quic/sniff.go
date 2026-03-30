@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
@@ -219,6 +220,9 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 				length, err := quicvarint.Read(buffer) // Field: Length
 				if err != nil || length > uint64(buffer.Len()) {
 					return nil, io.ErrUnexpectedEOF
+				}
+				if offset > math.MaxInt32 || length > math.MaxInt32 || offset > uint64(math.MaxInt32)-length {
+					return nil, io.ErrShortBuffer
 				}
 				currentCryptoLen := int32(offset + length)
 				if cryptoLen < currentCryptoLen {
