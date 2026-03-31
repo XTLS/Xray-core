@@ -1660,7 +1660,8 @@ func (c *Sudoku) Build() (proto.Message, error) {
 }
 
 type Xdns struct {
-	Domain string `json:"domain"`
+	Domain    string   `json:"domain"`
+	Resolvers []string `json:"resolvers,omitempty"`
 }
 
 func (c *Xdns) Build() (proto.Message, error) {
@@ -1669,7 +1670,8 @@ func (c *Xdns) Build() (proto.Message, error) {
 	}
 
 	return &xdns.Config{
-		Domain: c.Domain,
+		Domain:    c.Domain,
+		Resolvers: c.Resolvers,
 	}, nil
 }
 
