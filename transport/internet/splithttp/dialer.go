@@ -293,7 +293,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				case "reno":
 					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
 				default:
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
+					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr ", quicParams.BbrProfile)
 					congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 				}
 

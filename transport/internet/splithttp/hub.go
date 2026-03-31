@@ -539,7 +539,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 				case "reno":
 					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion reno")
 				default:
-					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr")
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr ", quicParams.BbrProfile)
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				}
 

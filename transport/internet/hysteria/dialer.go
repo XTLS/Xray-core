@@ -299,11 +299,11 @@ func (c *client) dial() error {
 	case "reno":
 		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
-		errors.LogDebug(c.ctx, "congestion bbr")
+		errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
 		congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 	case "brutal", "":
 		if serverAuto == "auto" || quicParams.BrutalUp == 0 || serverDown == 0 {
-			errors.LogDebug(c.ctx, "congestion bbr")
+			errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
 			congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 		} else {
 			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(quicParams.BrutalUp, serverDown))

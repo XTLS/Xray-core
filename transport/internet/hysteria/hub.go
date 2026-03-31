@@ -189,11 +189,11 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case "reno":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			case "bbr":
-				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
+				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr ", h.quicParams.BbrProfile)
 				congestion.UseBBR(h.conn, bbr.Profile(h.quicParams.BbrProfile))
 			case "brutal", "":
 				if h.quicParams.BrutalUp == 0 || clientDown == 0 {
-					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
+					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr ", h.quicParams.BbrProfile)
 					congestion.UseBBR(h.conn, bbr.Profile(h.quicParams.BbrProfile))
 				} else {
 					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", min(h.quicParams.BrutalUp, clientDown))

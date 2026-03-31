@@ -1899,6 +1899,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			profile := strings.ToLower(c.FinalMask.QuicParams.BbrProfile)
 			switch profile {
 			case "", string(bbr.ProfileConservative), string(bbr.ProfileStandard), string(bbr.ProfileAggressive):
+				if profile == "" {
+					profile = string(bbr.ProfileStandard)
+				}
 			default:
 				return nil, errors.New("unknown bbr profile")
 			}
