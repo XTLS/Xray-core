@@ -52,8 +52,9 @@ type xdnsConnClient struct {
 	clientID []byte
 	domain   Name
 
-	resolvers   []*net.UDPAddr
-	resolverIdx atomic.Uint32
+	resolverConns []net.PacketConn
+	resolverAddrs []*net.UDPAddr
+	resolverIdx   atomic.Uint32
 
 	pollChan   chan struct{}
 	readQueue  chan *packet
@@ -85,18 +86,50 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	for _, rs := range c.Resolvers {
 		addr, err := parseResolverAddr(rs)
 		if err != nil {
+			for _, rc := range conn.resolverConns {
+				rc.Close()
+			}
 			return nil, errors.New("invalid resolver address: ", rs, ": ", err)
 		}
-		conn.resolvers = append(conn.resolvers, addr)
+		uc, err := net.ListenPacket("udp", ":0")
+		if err != nil {
+			for _, rc := range conn.resolverConns {
+				rc.Close()
+			}
+			return nil, errors.New("failed to create resolver socket: ", err)
+		}
+		conn.resolverConns = append(conn.resolverConns, uc)
+		conn.resolverAddrs = append(conn.resolverAddrs, addr)
 	}
 
-	go conn.recvLoop()
+	if len(conn.resolverConns) > 0 {
+		for _, rc := range conn.resolverConns {
+			go conn.recvLoopFrom(rc)
+		}
+	} else {
+		go conn.recvLoop()
+	}
 	go conn.sendLoop()
 
 	return conn, nil
 }
 
 func (c *xdnsConnClient) recvLoop() {
+	c.recvLoopFrom(c.PacketConn)
+
+	errors.LogDebug(context.Background(), "xdns closed")
+
+	close(c.pollChan)
+	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	close(c.writeQueue)
+}
+
+func (c *xdnsConnClient) recvLoopFrom(conn net.PacketConn) {
 	var buf [finalmask.UDPSize]byte
 
 	for {
@@ -104,7 +137,7 @@ func (c *xdnsConnClient) recvLoop() {
 			break
 		}
 
-		n, addr, err := c.PacketConn.ReadFrom(buf[:])
+		n, addr, err := conn.ReadFrom(buf[:])
 		if err != nil || n == 0 {
 			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
 				break
@@ -151,17 +184,6 @@ func (c *xdnsConnClient) recvLoop() {
 			}
 		}
 	}
-
-	errors.LogDebug(context.Background(), "xdns closed")
-
-	close(c.pollChan)
-	close(c.readQueue)
-
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c.closed = true
-	close(c.writeQueue)
 }
 
 func (c *xdnsConnClient) sendLoop() {
@@ -220,12 +242,14 @@ func (c *xdnsConnClient) sendLoop() {
 		}
 
 		if p != nil {
-			dest := p.addr
-			if len(c.resolvers) > 0 {
+			var err error
+			if len(c.resolverConns) > 0 {
 				idx := c.resolverIdx.Add(1)
-				dest = c.resolvers[idx%uint32(len(c.resolvers))]
+				i := idx % uint32(len(c.resolverConns))
+				_, err = c.resolverConns[i].WriteTo(p.p, c.resolverAddrs[i])
+			} else {
+				_, err = c.PacketConn.WriteTo(p.p, p.addr)
 			}
-			_, err := c.PacketConn.WriteTo(p.p, dest)
 			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.ErrClosedPipe) {
 				c.closed = true
 				break
@@ -275,6 +299,9 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 func (c *xdnsConnClient) Close() error {
 	c.closed = true
+	for _, rc := range c.resolverConns {
+		rc.Close()
+	}
 	return c.PacketConn.Close()
 }
 
