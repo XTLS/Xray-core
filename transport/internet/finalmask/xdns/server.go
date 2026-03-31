@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -15,9 +16,8 @@ import (
 )
 
 const (
-	idleTimeout      = 10 * time.Second
-	responseTTL      = 60
-	maxResponseDelay = 1 * time.Second
+	idleTimeout = 10 * time.Second
+	responseTTL = 60
 )
 
 var (
@@ -58,7 +58,7 @@ type xdnsConnServer struct {
 	readQueue     chan *packet
 	writeQueueMap map[string]*queue
 
-	closed bool
+	closed atomic.Bool
 	mutex  sync.Mutex
 }
 
@@ -90,7 +90,7 @@ func (c *xdnsConnServer) clean() {
 		c.mutex.Lock()
 		defer c.mutex.Unlock()
 
-		if c.closed {
+		if c.closed.Load() {
 			return true
 		}
 
@@ -116,14 +116,14 @@ func (c *xdnsConnServer) clean() {
 }
 
 func (c *xdnsConnServer) ensureQueue(addr net.Addr) *queue {
-	if c.closed {
+	if c.closed.Load() {
 		return nil
 	}
 
 	q, ok := c.writeQueueMap[addr.String()]
 	if !ok {
 		q = &queue{
-			queue: make(chan []byte, 512),
+			queue: make(chan []byte, 4096),
 			stash: make(chan []byte, 1),
 		}
 		c.writeQueueMap[addr.String()] = q
@@ -137,7 +137,7 @@ func (c *xdnsConnServer) stash(queue *queue, p []byte) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.closed {
+	if c.closed.Load() {
 		return
 	}
 
@@ -151,7 +151,7 @@ func (c *xdnsConnServer) recvLoop() {
 	var buf [finalmask.UDPSize]byte
 
 	for {
-		if c.closed {
+		if c.closed.Load() {
 			break
 		}
 
@@ -216,7 +216,7 @@ func (c *xdnsConnServer) recvLoop() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.closed = true
+	c.closed.Store(true)
 	for key, q := range c.writeQueueMap {
 		close(q.queue)
 		close(q.stash)
@@ -224,17 +224,57 @@ func (c *xdnsConnServer) recvLoop() {
 	}
 }
 
-func (c *xdnsConnServer) sendLoop() {
-	var nextRec *record
-	for {
-		rec := nextRec
-		nextRec = nil
+func (c *xdnsConnServer) sendEmptyResponse(rec *record) {
+	if rec.Resp.Rcode() == RcodeNoError && len(rec.Resp.Question) == 1 {
+		rec.Resp.Answer = []RR{
+			{
+				Name:  rec.Resp.Question[0].Name,
+				Type:  rec.Resp.Question[0].Type,
+				Class: rec.Resp.Question[0].Class,
+				TTL:   responseTTL,
+				Data:  EncodeRDataTXT(nil),
+			},
+		}
+	}
+	buf, err := rec.Resp.WireFormat()
+	if err != nil {
+		return
+	}
+	if len(buf) > maxUDPPayload {
+		buf = buf[:maxUDPPayload]
+		buf[2] |= 0x02
+	}
+	c.PacketConn.WriteTo(buf, rec.Addr)
+}
 
-		if rec == nil {
-			var ok bool
-			rec, ok = <-c.ch
-			if !ok {
-				break
+func (c *xdnsConnServer) sendLoop() {
+	for {
+		rec, ok := <-c.ch
+		if !ok {
+			break
+		}
+
+		// Drain excess records, keeping the latest. mKCP floods retransmissions
+		// that fill c.ch with hundreds of queries. Process only the latest one.
+		// Send empty responses for discarded records so resolvers don't time out.
+	drain:
+		for {
+			select {
+			case newer, ok2 := <-c.ch:
+				if !ok2 {
+					break drain
+				}
+				// Refresh queue timestamp immediately so clean() cannot reap
+				// a queue with pending downlink data during the drain loop.
+				c.mutex.Lock()
+				if q, ok := c.writeQueueMap[rec.ClientAddr.String()]; ok {
+					q.last = time.Now()
+				}
+				c.mutex.Unlock()
+				c.sendEmptyResponse(rec)
+				rec = newer
+			default:
+				break drain
 			}
 		}
 
@@ -251,56 +291,69 @@ func (c *xdnsConnServer) sendLoop() {
 
 			var payload bytes.Buffer
 			limit := maxEncodedPayload
-			timer := time.NewTimer(maxResponseDelay)
 
-			for {
-				c.mutex.Lock()
-				q := c.ensureQueue(rec.ClientAddr)
-				if q == nil {
-					c.mutex.Unlock()
-					return
-				}
+			c.mutex.Lock()
+			q := c.ensureQueue(rec.ClientAddr)
+			if q == nil {
 				c.mutex.Unlock()
+				return
+			}
+			c.mutex.Unlock()
 
-				var p []byte
-
+			// Try to get data immediately (non-blocking). If no data is
+			// available, wait briefly (50ms) for data to arrive. DNS tunneling
+			// needs fast turnaround because the client can only receive data in
+			// responses to its queries.
+			var p []byte
+			select {
+			case p = <-q.stash:
+			default:
 				select {
 				case p = <-q.stash:
+				case p = <-q.queue:
 				default:
+					timer := time.NewTimer(50 * time.Millisecond)
 					select {
 					case p = <-q.stash:
+						timer.Stop()
 					case p = <-q.queue:
-					default:
-						select {
-						case p = <-q.stash:
-						case p = <-q.queue:
-						case <-timer.C:
-						case nextRec = <-c.ch:
-						}
+						timer.Stop()
+					case <-timer.C:
 					}
 				}
-
-				timer.Reset(0)
-
-				if len(p) == 0 {
-					break
-				}
-
-				limit -= 2 + len(p)
-				if payload.Len() > 0 && limit < 0 {
-					c.stash(q, p)
-					break
-				}
-
-				// if len(p) > 65535 {
-				// 	panic(len(p))
-				// }
-
-				_ = binary.Write(&payload, binary.BigEndian, uint16(len(p)))
-				payload.Write(p)
 			}
 
-			timer.Stop()
+			// Pack first packet
+			if len(p) > 0 {
+				limit -= 2 + len(p)
+				_ = binary.Write(&payload, binary.BigEndian, uint16(len(p)))
+				payload.Write(p)
+
+				// Try to batch more packets immediately (non-blocking)
+				for {
+					var p2 []byte
+					select {
+					case p2 = <-q.stash:
+					default:
+						select {
+						case p2 = <-q.stash:
+						case p2 = <-q.queue:
+						default:
+						}
+					}
+					if len(p2) == 0 {
+						break
+					}
+					limit -= 2 + len(p2)
+					if limit < 0 {
+						c.stash(q, p2)
+						break
+					}
+					_ = binary.Write(&payload, binary.BigEndian, uint16(len(p2)))
+					payload.Write(p2)
+				}
+			}
+
 			rec.Resp.Answer[0].Data = EncodeRDataTXT(payload.Bytes())
 		}
 
@@ -316,13 +369,13 @@ func (c *xdnsConnServer) sendLoop() {
 			buf[2] |= 0x02
 		}
 
-		if c.closed {
+		if c.closed.Load() {
 			return
 		}
 
 		_, err = c.PacketConn.WriteTo(buf, rec.Addr)
 		if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.ErrClosedPipe) {
-			c.closed = true
+			c.closed.Store(true)
 			break
 		}
 	}
@@ -362,13 +415,12 @@ func (c *xdnsConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	case q.queue <- buf:
 		return len(p), nil
 	default:
-		// errors.LogDebug(context.Background(), addr, " mask write err queue full")
 		return 0, nil
 	}
 }
 
 func (c *xdnsConnServer) Close() error {
-	c.closed = true
+	c.closed.Store(true)
 	return c.PacketConn.Close()
 }
 
