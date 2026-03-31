@@ -50,4 +50,5 @@ message Config {
   string uplinkDataKey = 25;
   RangeConfig uplinkChunkSize = 26;
   int32 serverMaxHeaderBytes = 27;
+  bool allow_h2c = 28;
 }

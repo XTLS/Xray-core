@@ -243,6 +243,7 @@ type SplitHTTPConfig struct {
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
+	AllowH2C             bool              `json:"allowH2C"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -426,6 +427,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
+		AllowH2C:             c.AllowH2C,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),

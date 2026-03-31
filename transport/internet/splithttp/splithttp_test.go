@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"net/http"
 	"runtime"
 	"testing"
 	"time"
@@ -186,39 +185,60 @@ func Test_ListenXHAndDial_H2C(t *testing.T) {
 	}
 
 	listenPort := tcp.PickPort()
-
-	streamSettings := &internet.MemoryStreamConfig{
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
 		ProtocolName: "splithttp",
 		ProtocolSettings: &Config{
-			Path: "shs",
+			Path: "/sh",
+			AllowH2C:  true,
 		},
-	}
-	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
-		go func() {
-			_ = conn.Close()
-		}()
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+
+			var b [1024]byte
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
 	})
 	common.Must(err)
-	defer listen.Close()
-
-	protocols := new(http.Protocols)
-	protocols.SetUnencryptedHTTP2(true)
-	client := http.Client{
-		Transport: &http.Transport{
-			Protocols: protocols,
-		},
+	ctx := context.Background()
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "sh", AllowH2C: true},
 	}
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 
-	resp, err := client.Get("http://" + net.LocalHostIP.String() + ":" + listenPort.String())
+	common.Must(err)
+	_, err = conn.Write([]byte("Test connection 1"))
 	common.Must(err)
 
-	if resp.StatusCode != 404 {
-		t.Error("Expected 404 but got:", resp.StatusCode)
+	var b [1024]byte
+	fmt.Println("test2")
+	n, _ := io.ReadFull(conn, b[:])
+	fmt.Println("string is", n)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
 	}
 
-	if resp.ProtoMajor != 2 {
-		t.Error("Expected h2 but got:", resp.ProtoMajor)
+	common.Must(conn.Close())
+	conn, err = Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+
+	common.Must(err)
+	_, err = conn.Write([]byte("Test connection 2"))
+	common.Must(err)
+	n, _ = io.ReadFull(conn, b[:])
+	common.Must(err)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
 	}
+	common.Must(conn.Close())
+
+	common.Must(listen.Close())
 }
 
 func Test_ListenXHAndDial_QUIC(t *testing.T) {

@@ -79,11 +79,14 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	return xmuxClient.XmuxConn.(DialerClient), xmuxClient
 }
 
-func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config) string {
+func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config, allowH2C bool) string {
 	if realityConfig != nil {
 		return "2"
 	}
 	if tlsConfig == nil {
+		if allowH2C {
+			return "2"
+		}
 		return "1.1"
 	}
 	if len(tlsConfig.NextProtocol) != 1 {
@@ -101,8 +104,9 @@ func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config) str
 func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
-	httpVersion := decideHTTPVersion(tlsConfig, realityConfig)
+	httpVersion := decideHTTPVersion(tlsConfig, realityConfig, transportConfig.AllowH2C)
 	if httpVersion == "3" {
 		dest.Network = net.Network_UDP // better to keep this line
 	}
@@ -112,8 +116,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	if tlsConfig != nil {
 		gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 	}
-
-	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
 		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
@@ -312,6 +314,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			},
 			IdleConnTimeout: net.ConnIdleTimeout,
 			ReadIdleTimeout: keepAlivePeriod,
+			AllowHTTP:       transportConfig.AllowH2C,
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
@@ -348,13 +351,12 @@ func init() {
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 
-	httpVersion := decideHTTPVersion(tlsConfig, realityConfig)
+	httpVersion := decideHTTPVersion(tlsConfig, realityConfig, transportConfiguration.AllowH2C)
 	if httpVersion == "3" {
 		dest.Network = net.Network_UDP
 	}
-
-	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	var requestURL url.URL
 
 	if tlsConfig != nil || realityConfig != nil {
@@ -413,7 +415,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		dest2 := *memory2.Destination // just panic
 		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
 		realityConfig2 := reality.ConfigFromStreamSettings(memory2)
-		httpVersion2 := decideHTTPVersion(tlsConfig2, realityConfig2)
+		config2 := memory2.ProtocolSettings.(*Config)
+		httpVersion2 := decideHTTPVersion(tlsConfig2, realityConfig2, config2.AllowH2C)
 		if httpVersion2 == "3" {
 			dest2.Network = net.Network_UDP
 		}
@@ -422,7 +425,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		} else {
 			requestURL2.Scheme = "http"
 		}
-		config2 := memory2.ProtocolSettings.(*Config)
 		requestURL2.Host = config2.Host
 		if requestURL2.Host == "" && tlsConfig2 != nil {
 			requestURL2.Host = tlsConfig2.ServerName
