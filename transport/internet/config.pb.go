@@ -445,17 +445,18 @@ func (x *UdpHop) GetIntervalMax() int64 {
 type QuicParams struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Congestion              string                 `protobuf:"bytes,1,opt,name=congestion,proto3" json:"congestion,omitempty"`
-	BrutalUp                uint64                 `protobuf:"varint,2,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
-	BrutalDown              uint64                 `protobuf:"varint,3,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
-	UdpHop                  *UdpHop                `protobuf:"bytes,4,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,5,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,6,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,7,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,8,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,9,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,10,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,11,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
-	MaxIncomingStreams      int64                  `protobuf:"varint,12,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
+	BbrProfile              string                 `protobuf:"bytes,2,opt,name=bbr_profile,json=bbrProfile,proto3" json:"bbr_profile,omitempty"`
+	BrutalUp                uint64                 `protobuf:"varint,3,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
+	BrutalDown              uint64                 `protobuf:"varint,4,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
+	UdpHop                  *UdpHop                `protobuf:"bytes,5,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
+	InitStreamReceiveWindow uint64                 `protobuf:"varint,6,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
+	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,7,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
+	InitConnReceiveWindow   uint64                 `protobuf:"varint,8,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
+	MaxConnReceiveWindow    uint64                 `protobuf:"varint,9,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
+	MaxIdleTimeout          int64                  `protobuf:"varint,10,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
+	KeepAlivePeriod         int64                  `protobuf:"varint,11,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
+	DisablePathMtuDiscovery bool                   `protobuf:"varint,12,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
+	MaxIncomingStreams      int64                  `protobuf:"varint,13,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -493,6 +494,13 @@ func (*QuicParams) Descriptor() ([]byte, []int) {
 func (x *QuicParams) GetCongestion() string {
 	if x != nil {
 		return x.Congestion
+	}
+	return ""
+}
+
+func (x *QuicParams) GetBbrProfile() string {
+	if x != nil {
+		return x.BbrProfile
 	}
 	return ""
 }
@@ -1028,25 +1036,27 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x06UdpHop\x12\x14\n" +
 	"\x05ports\x18\x01 \x03(\rR\x05ports\x12!\n" +
 	"\finterval_min\x18\x02 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xd1\x04\n" +
+	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xf2\x04\n" +
 	"\n" +
 	"QuicParams\x12\x1e\n" +
 	"\n" +
 	"congestion\x18\x01 \x01(\tR\n" +
-	"congestion\x12\x1b\n" +
-	"\tbrutal_up\x18\x02 \x01(\x04R\bbrutalUp\x12\x1f\n" +
-	"\vbrutal_down\x18\x03 \x01(\x04R\n" +
+	"congestion\x12\x1f\n" +
+	"\vbbr_profile\x18\x02 \x01(\tR\n" +
+	"bbrProfile\x12\x1b\n" +
+	"\tbrutal_up\x18\x03 \x01(\x04R\bbrutalUp\x12\x1f\n" +
+	"\vbrutal_down\x18\x04 \x01(\x04R\n" +
 	"brutalDown\x128\n" +
-	"\audp_hop\x18\x04 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\x05 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\x06 \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\a \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\b \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\t \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\n" +
-	" \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\v \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
-	"\x14max_incoming_streams\x18\f \x01(\x03R\x12maxIncomingStreams\"Q\n" +
+	"\audp_hop\x18\x05 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12;\n" +
+	"\x1ainit_stream_receive_window\x18\x06 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
+	"\x19max_stream_receive_window\x18\a \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
+	"\x18init_conn_receive_window\x18\b \x01(\x04R\x15initConnReceiveWindow\x125\n" +
+	"\x17max_conn_receive_window\x18\t \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
+	"\x10max_idle_timeout\x18\n" +
+	" \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
+	"\x11keep_alive_period\x18\v \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
+	"\x1adisable_path_mtu_discovery\x18\f \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
+	"\x14max_incoming_streams\x18\r \x01(\x03R\x12maxIncomingStreams\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/apernet/quic-go/congestion"
@@ -28,16 +29,13 @@ const (
 
 	invalidPacketNumber            = -1
 	initialCongestionWindowPackets = 32
+	minCongestionWindowPackets     = 4
 
 	// Constants based on TCP defaults.
 	// The minimum CWND to ensure delayed acks don't reduce bandwidth measurements.
 	// Does not inflate the pacing rate.
-	defaultMinimumCongestionWindow = 4 * congestion.ByteCount(congestion.InitialPacketSize)
-
 	// The gain used for the STARTUP, equal to 2/ln(2).
 	defaultHighGain = 2.885
-	// The newly derived gain for STARTUP, equal to 4 * ln(2)
-	derivedHighGain = 2.773
 	// The newly derived CWND gain for STARTUP, 2.
 	derivedHighCWNDGain = 2.0
 
@@ -66,7 +64,6 @@ const (
 	// Flag.
 	defaultStartupFullLossCount  = 8
 	quicBbr2DefaultLossThreshold = 0.02
-	maxBbrBurstPackets           = 10
 )
 
 type bbrMode int
@@ -96,6 +93,76 @@ const (
 	// start).
 	bbrRecoveryStateGrowth
 )
+
+type Profile string
+
+const (
+	ProfileConservative Profile = "conservative"
+	ProfileStandard     Profile = "standard"
+	ProfileAggressive   Profile = "aggressive"
+)
+
+type profileConfig struct {
+	highGain                            float64
+	highCwndGain                        float64
+	congestionWindowGainConstant        float64
+	numStartupRtts                      int64
+	drainToTarget                       bool
+	detectOvershooting                  bool
+	bytesLostMultiplier                 uint8
+	enableAckAggregationStartup         bool
+	expireAckAggregationStartup         bool
+	enableOverestimateAvoidance         bool
+	reduceExtraAckedOnBandwidthIncrease bool
+}
+
+func ParseProfile(profile string) (Profile, error) {
+	switch normalized := strings.ToLower(profile); normalized {
+	case "", string(ProfileStandard):
+		return ProfileStandard, nil
+	case string(ProfileConservative):
+		return ProfileConservative, nil
+	case string(ProfileAggressive):
+		return ProfileAggressive, nil
+	default:
+		return "", fmt.Errorf("unsupported BBR profile %q", profile)
+	}
+}
+
+func configForProfile(profile Profile) profileConfig {
+	switch profile {
+	case ProfileConservative:
+		return profileConfig{
+			highGain:                            2.25,
+			highCwndGain:                        1.75,
+			congestionWindowGainConstant:        1.75,
+			numStartupRtts:                      2,
+			drainToTarget:                       true,
+			detectOvershooting:                  true,
+			bytesLostMultiplier:                 1,
+			enableOverestimateAvoidance:         true,
+			reduceExtraAckedOnBandwidthIncrease: true,
+		}
+	case ProfileAggressive:
+		return profileConfig{
+			highGain:                     3.0,
+			highCwndGain:                 2.25,
+			congestionWindowGainConstant: 2.5,
+			numStartupRtts:               4,
+			bytesLostMultiplier:          2,
+			enableAckAggregationStartup:  true,
+			expireAckAggregationStartup:  true,
+		}
+	default:
+		return profileConfig{
+			highGain:                     defaultHighGain,
+			highCwndGain:                 derivedHighCWNDGain,
+			congestionWindowGainConstant: 2.0,
+			numStartupRtts:               roundTripsWithoutGrowthBeforeExitingStartup,
+			bytesLostMultiplier:          2,
+		}
+	}
+}
 
 type bbrSender struct {
 	rttStats congestion.RTTStatsProvider
@@ -144,6 +211,9 @@ type bbrSender struct {
 
 	// The smallest value the |congestion_window_| can achieve.
 	minCongestionWindow congestion.ByteCount
+
+	// The BBR profile used by the sender.
+	profile Profile
 
 	// The pacing gain applied during the STARTUP phase.
 	highGain float64
@@ -251,12 +321,14 @@ var _ congestion.CongestionControl = &bbrSender{}
 func NewBbrSender(
 	clock Clock,
 	initialMaxDatagramSize congestion.ByteCount,
+	profile Profile,
 ) *bbrSender {
 	return newBbrSender(
 		clock,
 		initialMaxDatagramSize,
 		initialCongestionWindowPackets*initialMaxDatagramSize,
 		congestion.MaxCongestionWindowPackets*initialMaxDatagramSize,
+		profile,
 	)
 }
 
@@ -265,6 +337,7 @@ func newBbrSender(
 	initialMaxDatagramSize,
 	initialCongestionWindow,
 	initialMaxCongestionWindow congestion.ByteCount,
+	profile Profile,
 ) *bbrSender {
 	debug, _ := strconv.ParseBool(os.Getenv(debugEnv))
 	b := &bbrSender{
@@ -277,9 +350,10 @@ func newBbrSender(
 		congestionWindow:             initialCongestionWindow,
 		initialCongestionWindow:      initialCongestionWindow,
 		maxCongestionWindow:          initialMaxCongestionWindow,
-		minCongestionWindow:          defaultMinimumCongestionWindow,
+		minCongestionWindow:          minCongestionWindowForMaxDatagramSize(initialMaxDatagramSize),
+		profile:                      ProfileStandard,
 		highGain:                     defaultHighGain,
-		highCwndGain:                 defaultHighGain,
+		highCwndGain:                 derivedHighCWNDGain,
 		drainGain:                    1.0 / defaultHighGain,
 		pacingGain:                   1.0,
 		congestionWindowGain:         1.0,
@@ -295,18 +369,61 @@ func newBbrSender(
 		debug:           debug,
 	}
 	b.pacer = common.NewPacer(b.bandwidthForPacer)
-
-	/*
-		if b.tracer != nil {
-			b.lastState = logging.CongestionStateStartup
-			b.tracer.UpdatedCongestionState(logging.CongestionStateStartup)
-		}
-	*/
+	b.applyProfile(profile)
+	if b.debug {
+		b.debugPrint("Profile: %s", b.profile)
+	}
 
 	b.enterStartupMode(b.clock.Now())
-	b.setHighCwndGain(derivedHighCWNDGain)
 
 	return b
+}
+
+func (b *bbrSender) applyProfile(profile Profile) {
+	if profile == "" {
+		profile = ProfileStandard
+	}
+	cfg := configForProfile(profile)
+	b.profile = profile
+	b.highGain = cfg.highGain
+	b.highCwndGain = cfg.highCwndGain
+	b.drainGain = 1.0 / cfg.highGain
+	b.congestionWindowGainConstant = cfg.congestionWindowGainConstant
+	b.numStartupRtts = cfg.numStartupRtts
+	b.drainToTarget = cfg.drainToTarget
+	b.detectOvershooting = cfg.detectOvershooting
+	b.bytesLostMultiplierWhileDetectingOvershooting = cfg.bytesLostMultiplier
+	b.enableAckAggregationDuringStartup = cfg.enableAckAggregationStartup
+	b.expireAckAggregationInStartup = cfg.expireAckAggregationStartup
+	if cfg.enableOverestimateAvoidance {
+		b.sampler.EnableOverestimateAvoidance()
+	}
+	b.sampler.SetReduceExtraAckedOnBandwidthIncrease(cfg.reduceExtraAckedOnBandwidthIncrease)
+}
+
+func minCongestionWindowForMaxDatagramSize(maxDatagramSize congestion.ByteCount) congestion.ByteCount {
+	return minCongestionWindowPackets * maxDatagramSize
+}
+
+func scaleByteWindowForDatagramSize(window, oldMaxDatagramSize, newMaxDatagramSize congestion.ByteCount) congestion.ByteCount {
+	if oldMaxDatagramSize == newMaxDatagramSize {
+		return window
+	}
+	return congestion.ByteCount(uint64(window) * uint64(newMaxDatagramSize) / uint64(oldMaxDatagramSize))
+}
+
+func (b *bbrSender) rescalePacketSizedWindows(maxDatagramSize congestion.ByteCount) {
+	oldMaxDatagramSize := b.maxDatagramSize
+	b.maxDatagramSize = maxDatagramSize
+	b.initialCongestionWindow = scaleByteWindowForDatagramSize(b.initialCongestionWindow, oldMaxDatagramSize, maxDatagramSize)
+	b.maxCongestionWindow = scaleByteWindowForDatagramSize(b.maxCongestionWindow, oldMaxDatagramSize, maxDatagramSize)
+	b.minCongestionWindow = minCongestionWindowForMaxDatagramSize(maxDatagramSize)
+	b.cwndToCalculateMinPacingRate = scaleByteWindowForDatagramSize(b.cwndToCalculateMinPacingRate, oldMaxDatagramSize, maxDatagramSize)
+	b.maxCongestionWindowWithNetworkParametersAdjusted = scaleByteWindowForDatagramSize(
+		b.maxCongestionWindowWithNetworkParametersAdjusted,
+		oldMaxDatagramSize,
+		maxDatagramSize,
+	)
 }
 
 func (b *bbrSender) SetRTTStatsProvider(provider congestion.RTTStatsProvider) {
@@ -370,14 +487,24 @@ func (b *bbrSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 
 // SetMaxDatagramSize implements the SendAlgorithm interface.
 func (b *bbrSender) SetMaxDatagramSize(s congestion.ByteCount) {
+	if b.debug {
+		b.debugPrint("Max Datagram Size: %d", s)
+	}
 	if s < b.maxDatagramSize {
 		panic(fmt.Sprintf("congestion BUG: decreased max datagram size from %d to %d", b.maxDatagramSize, s))
 	}
-	cwndIsMinCwnd := b.congestionWindow == b.minCongestionWindow
-	b.maxDatagramSize = s
-	if cwndIsMinCwnd {
+	oldMinCongestionWindow := b.minCongestionWindow
+	oldInitialCongestionWindow := b.initialCongestionWindow
+	b.rescalePacketSizedWindows(s)
+	switch b.congestionWindow {
+	case oldMinCongestionWindow:
 		b.congestionWindow = b.minCongestionWindow
+	case oldInitialCongestionWindow:
+		b.congestionWindow = b.initialCongestionWindow
+	default:
+		b.congestionWindow = min(b.maxCongestionWindow, max(b.congestionWindow, b.minCongestionWindow))
 	}
+	b.recoveryWindow = min(b.maxCongestionWindow, max(b.recoveryWindow, b.minCongestionWindow))
 	b.pacer.SetMaxDatagramSize(s)
 }
 
@@ -519,33 +646,12 @@ func (b *bbrSender) PacingRate() Bandwidth {
 	return b.pacingRate
 }
 
-func (b *bbrSender) hasGoodBandwidthEstimateForResumption() bool {
-	return b.hasNonAppLimitedSample()
-}
-
-func (b *bbrSender) hasNonAppLimitedSample() bool {
-	return b.hasNoAppLimitedSample
-}
-
-// Sets the pacing gain used in STARTUP.  Must be greater than 1.
-func (b *bbrSender) setHighGain(highGain float64) {
-	b.highGain = highGain
-	if b.mode == bbrModeStartup {
-		b.pacingGain = highGain
-	}
-}
-
 // Sets the CWND gain used in STARTUP.  Must be greater than 1.
 func (b *bbrSender) setHighCwndGain(highCwndGain float64) {
 	b.highCwndGain = highCwndGain
 	if b.mode == bbrModeStartup {
 		b.congestionWindowGain = highCwndGain
 	}
-}
-
-// Sets the gain used in DRAIN.  Must be less than 1.
-func (b *bbrSender) setDrainGain(drainGain float64) {
-	b.drainGain = drainGain
 }
 
 // Get the current bandwidth estimate. Note that Bandwidth is in bits per second.
