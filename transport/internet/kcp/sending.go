@@ -321,7 +321,9 @@ func (w *SendingWorker) Flush(current uint32) {
 		cwnd = w.controlWindow
 	}
 
-	cwnd *= 20 // magic
+	if !w.conn.Config.Congestion {
+		cwnd *= 20
+	}
 
 	if !w.window.IsEmpty() {
 		w.window.Flush(current, w.conn.roundTrip.Timeout(), cwnd)
