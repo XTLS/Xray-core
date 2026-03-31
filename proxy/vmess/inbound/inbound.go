@@ -281,8 +281,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	if email := strings.ToLower(request.User.Email); email != "" {
-		connID, _ := h.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "vmess")
+		connID, connEntry := h.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "vmess")
 		defer h.connTracker.Unregister(email, connID)
+		connection = connectiontracker.WrapConn(connection, connEntry)
 	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)

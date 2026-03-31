@@ -540,8 +540,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if ib := session.InboundFromContext(ctx); ib != nil {
 			inboundTag = ib.Tag
 		}
-		connID, _ := h.connTracker.RegisterWithMeta(email, connCancel, inboundTag, "vless")
+		connID, connEntry := h.connTracker.RegisterWithMeta(email, connCancel, inboundTag, "vless")
 		defer h.connTracker.Unregister(email, connID)
+		connection = connectiontracker.WrapConn(connection, connEntry)
 	}
 
 	inbound := session.InboundFromContext(ctx)

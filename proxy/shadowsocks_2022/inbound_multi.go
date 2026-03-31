@@ -245,8 +245,9 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID, _ := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
 		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
 	}
 
 	dispatcher := session.DispatcherFromContext(ctx)
@@ -278,8 +279,9 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID, _ := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
 		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapPacketConn(conn, connEntry)
 	}
 
 	dispatcher := session.DispatcherFromContext(ctx)

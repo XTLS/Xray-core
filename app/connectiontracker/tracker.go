@@ -9,6 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	B "github.com/sagernet/sing/common/buf"
+	M "github.com/sagernet/sing/common/metadata"
+	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -313,4 +316,36 @@ func (c *TrackedConn) Write(b []byte) (int, error) {
 // counters in entry. Call after RegisterWithMeta to enable byte-level tracking.
 func WrapConn(conn stat.Connection, entry *ConnEntry) stat.Connection {
 	return &TrackedConn{Connection: conn, entry: entry}
+}
+
+// TrackedPacketConn wraps an N.PacketConn (UDP) and records per-connection
+// traffic counters into the associated ConnEntry.
+type TrackedPacketConn struct {
+	N.PacketConn
+	entry *ConnEntry
+}
+
+func (c *TrackedPacketConn) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
+	addr, err := c.PacketConn.ReadPacket(buffer)
+	if err == nil && buffer.Len() > 0 {
+		atomic.AddInt64(&c.entry.uplink, int64(buffer.Len()))
+		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+	}
+	return addr, err
+}
+
+func (c *TrackedPacketConn) WritePacket(buffer *B.Buffer, destination M.Socksaddr) error {
+	err := c.PacketConn.WritePacket(buffer, destination)
+	if err == nil && buffer.Len() > 0 {
+		atomic.AddInt64(&c.entry.downlink, int64(buffer.Len()))
+		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+	}
+	return err
+}
+
+// WrapPacketConn wraps a UDP PacketConn so that every ReadPacket and WritePacket
+// updates the traffic counters in entry. Call after RegisterWithMeta to enable
+// byte-level tracking for UDP connections.
+func WrapPacketConn(conn N.PacketConn, entry *ConnEntry) N.PacketConn {
+	return &TrackedPacketConn{PacketConn: conn, entry: entry}
 }
