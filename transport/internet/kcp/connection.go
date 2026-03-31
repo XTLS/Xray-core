@@ -610,7 +610,7 @@ func (c *Connection) flush() {
 	if c.State() == StateTerminated {
 		return
 	}
-	if c.State() == StateActive && current-atomic.LoadUint32(&c.lastIncomingTime) >= 30000 {
+	if c.State() == StateActive && current-atomic.LoadUint32(&c.lastIncomingTime) >= 120000 {
 		c.Close()
 	}
 	if c.State() == StateReadyToClose && c.sendingWorker.IsEmpty() {
