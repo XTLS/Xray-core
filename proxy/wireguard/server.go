@@ -101,17 +101,17 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 
 		for i, b := range mb {
-			buff := b.Bytes()
 
+			rawBytes := b.Bytes()
 			if b.Len() > 3 {
-				buff[1] = 0
-				buff[2] = 0
-				buff[3] = 0
+				rawBytes[1] = 0
+				rawBytes[2] = 0
+				rawBytes[3] = 0
 			}
 
 			select {
 			case s.bindServer.readQueue <- &netReadInfo{
-				buff:     buff,
+				buff:     b,
 				endpoint: nep,
 			}:
 			case <-s.bindServer.closedCh:
