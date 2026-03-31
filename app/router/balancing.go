@@ -67,6 +67,7 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 				tags = aliveTags
 			}
 		}
+		tags = preferECHAcceptedCandidates(s.ctx, s.observatory, tags)
 	}
 
 	n := len(tags)

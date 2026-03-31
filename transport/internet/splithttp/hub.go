@@ -50,6 +50,40 @@ type httpSession struct {
 	isFullyConnected *done.Instance
 }
 
+func (h *requestHandler) isMASQUERequest(request *http.Request) bool {
+	return request.Method == http.MethodConnect && request.Proto == MASQUEProtocolConnectUDP
+}
+
+func (h *requestHandler) handleMASQUERequest(writer http.ResponseWriter, request *http.Request, remoteAddr net.Addr) bool {
+	if !h.isMASQUERequest(request) {
+		return false
+	}
+	if request.ProtoMajor != 3 {
+		errors.LogInfo(context.Background(), "MASQUE mode requires HTTP/3")
+		writer.WriteHeader(http.StatusBadRequest)
+		return true
+	}
+	if mode := h.config.GetNormalizedMode(); mode != ModeAuto && mode != ModeMasque {
+		errors.LogInfo(context.Background(), "masque mode is not allowed")
+		writer.WriteHeader(http.StatusBadRequest)
+		return true
+	}
+
+	streamer, ok := writer.(http3.HTTPStreamer)
+	if !ok {
+		errors.LogInfo(context.Background(), "MASQUE request requires HTTP/3 stream hijacking support")
+		writer.WriteHeader(http.StatusInternalServerError)
+		return true
+	}
+
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.WriteHeader(http.StatusOK)
+
+	stream := streamer.HTTPStream()
+	h.ln.addConn(newServerMASQUEConn(stream, h.localAddr, remoteAddr))
+	return true
+}
+
 func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	// fast path
 	currentSessionAny, ok := h.sessions.Load(sessionId)
@@ -147,7 +181,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	sessionId, seqStr := h.config.ExtractMetaFromRequest(request, h.path)
 
-	if sessionId == "" && h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
+	if sessionId == "" && !h.isMASQUERequest(request) && h.config.Mode != "" && h.config.Mode != ModeAuto && h.config.Mode != ModeStreamOne && h.config.Mode != ModeStreamUp {
 		errors.LogInfo(context.Background(), "stream-one mode is not allowed")
 		writer.WriteHeader(http.StatusBadRequest)
 		return
@@ -186,6 +220,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 	}
 
+	if h.handleMASQUERequest(writer, request, remoteAddr) {
+		return
+	}
+
 	var currentSession *httpSession
 	if sessionId != "" {
 		currentSession = h.upsertSession(sessionId)
@@ -204,7 +242,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	if isUplinkRequest && sessionId != "" { // stream-up, packet-up
 		if seqStr == "" {
-			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
+			if h.config.Mode != "" && h.config.Mode != ModeAuto && h.config.Mode != ModeStreamUp {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
 				writer.WriteHeader(http.StatusBadRequest)
 				return
@@ -246,7 +284,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
-		if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "packet-up" {
+		if h.config.Mode != "" && h.config.Mode != ModeAuto && h.config.Mode != ModePacketUp {
 			errors.LogInfo(context.Background(), "packet-up mode is not allowed")
 			writer.WriteHeader(http.StatusBadRequest)
 			return
@@ -466,6 +504,9 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
+	if l.config.IsMASQUEMode() && !l.isH3 {
+		return nil, errors.New("MASQUE mode requires HTTP/3")
+	}
 
 	var err error
 	if port == net.Port(0) { // unix
@@ -518,7 +559,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		handler.localAddr = l.h3listener.Addr()
 
 		l.h3server = &http3.Server{
-			Handler: handler,
+			Handler:         handler,
+			EnableDatagrams: l.config.IsMASQUEMode(),
 		}
 		go func() {
 			for {

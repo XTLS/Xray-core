@@ -56,7 +56,9 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	})
 
 	method := "GET" // stream-down
-	if body != nil {
+	if c.transportConfig.IsMASQUEMode() {
+		method = http.MethodConnect
+	} else if body != nil {
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
 	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)

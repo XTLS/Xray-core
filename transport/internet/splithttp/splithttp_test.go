@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -221,6 +222,30 @@ func Test_ListenXHAndDial_H2C(t *testing.T) {
 	}
 }
 
+func TestFillStreamRequestMASQUE(t *testing.T) {
+	config := &Config{Mode: ModeMasque}
+	req, err := http.NewRequest(http.MethodPost, "https://example.com/sh", bytes.NewBufferString("payload"))
+	common.Must(err)
+
+	config.FillStreamRequest(req, "", "")
+
+	if req.Method != http.MethodConnect {
+		t.Fatalf("expected CONNECT, got %q", req.Method)
+	}
+	if req.Proto != MASQUEProtocolConnectUDP {
+		t.Fatalf("expected MASQUE protocol %q, got %q", MASQUEProtocolConnectUDP, req.Proto)
+	}
+	if got := req.Header.Get(HeaderCapsuleProtocol); got != "?1" {
+		t.Fatalf("expected Capsule-Protocol ?1, got %q", got)
+	}
+	if got := req.Header.Get("Content-Type"); got != "" {
+		t.Fatalf("expected no gRPC content type in MASQUE mode, got %q", got)
+	}
+	if got := req.Header.Get("Sec-Fetch-Mode"); got != "" {
+		t.Fatalf("expected no fetch camouflage headers in MASQUE mode, got %q", got)
+	}
+}
+
 func Test_ListenXHAndDial_QUIC(t *testing.T) {
 	if runtime.GOARCH == "arm64" {
 		return
@@ -302,6 +327,163 @@ func Test_ListenXHAndDial_QUIC(t *testing.T) {
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
 		t.Error("end: ", end, " start: ", start)
+	}
+}
+
+func Test_ListenXHAndDial_QUIC_MASQUE(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		return
+	}
+
+	listenPort := udp.PickPort()
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "shs",
+			Mode: ModeMasque,
+		},
+		SecurityType: "tls",
+		SecuritySettings: &tls.Config{
+			Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+			PinnedPeerCertSha256: [][]byte{ctHash[:]},
+			NextProtocol:         []string{"h3"},
+		},
+	}
+
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func() {
+			defer conn.Close()
+
+			b := buf.New()
+			defer b.Release()
+
+			for {
+				b.Clear()
+				if _, err := b.ReadFrom(conn); err != nil {
+					return
+				}
+				common.Must2(conn.Write(b.Bytes()))
+			}
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	time.Sleep(time.Second)
+
+	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	defer conn.Close()
+
+	payload := []byte("masque payload")
+	common.Must2(conn.Write(payload))
+
+	reply := make([]byte, len(payload))
+	common.Must2(io.ReadFull(conn, reply))
+	if r := cmp.Diff(reply, payload); r != "" {
+		t.Error(r)
+	}
+}
+
+func Test_ListenXHAndDial_QUIC_MASQUE_Datagrams(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		return
+	}
+
+	listenPort := udp.PickPort()
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "shs",
+			Mode: ModeMasque,
+		},
+		SecurityType: "tls",
+		SecuritySettings: &tls.Config{
+			Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+			PinnedPeerCertSha256: [][]byte{ctHash[:]},
+			NextProtocol:         []string{"h3"},
+		},
+	}
+
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func() {
+			defer conn.Close()
+
+			common.Must(internet.EnableTransportDatagramRead(conn))
+			common.Must(internet.EnableTransportDatagramWrite(conn))
+
+			payloads := [][]byte{
+				[]byte("masque datagram one"),
+				[]byte("masque datagram two with more bytes"),
+			}
+
+			for _, payload := range payloads {
+				reply := make([]byte, len(payload))
+				common.Must2(io.ReadFull(conn, reply))
+				if r := cmp.Diff(reply, payload); r != "" {
+					t.Error(r)
+					return
+				}
+				common.Must2(conn.Write(reply))
+			}
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	time.Sleep(time.Second)
+
+	ctx := internet.ContextWithTransportDatagrams(context.Background(), true)
+	conn, err := Dial(ctx, net.UDPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	defer conn.Close()
+
+	common.Must(internet.EnableTransportDatagramWrite(conn))
+	common.Must(internet.EnableTransportDatagramRead(conn))
+
+	payloads := [][]byte{
+		[]byte("masque datagram one"),
+		[]byte("masque datagram two with more bytes"),
+	}
+
+	for _, payload := range payloads {
+		common.Must2(conn.Write(payload))
+
+		reply := make([]byte, len(payload))
+		common.Must2(io.ReadFull(conn, reply))
+		if r := cmp.Diff(reply, payload); r != "" {
+			t.Error(r)
+		}
+	}
+}
+
+func TestDialMASQUERequiresHTTP3(t *testing.T) {
+	_, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), tcp.PickPort()), &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+			Mode: ModeMasque,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "MASQUE mode requires HTTP/3") {
+		t.Fatalf("expected HTTP/3 requirement error, got %v", err)
+	}
+}
+
+func TestListenXHRejectsMASQUENonH3(t *testing.T) {
+	_, err := ListenXH(context.Background(), net.LocalHostIP, tcp.PickPort(), &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+			Mode: ModeMasque,
+		},
+	}, func(conn stat.Connection) {})
+	if err == nil || !strings.Contains(err.Error(), "MASQUE mode requires HTTP/3") {
+		t.Fatalf("expected HTTP/3 requirement error, got %v", err)
 	}
 }
 

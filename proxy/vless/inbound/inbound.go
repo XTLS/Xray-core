@@ -40,6 +40,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -596,6 +597,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	default:
 		return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()
 	}
+	useTransportDatagrams := requestAddons.Flow != vless.XRV &&
+		(request.Command == protocol.RequestCommandUDP || (request.Command == protocol.RequestCommandMux && !isMuxAndNotXUDP(request, first)))
 
 	if request.Command != protocol.RequestCommandMux {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -610,6 +613,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	trafficState := proxy.NewTrafficState(userSentID)
+	if useTransportDatagrams {
+		if err := internet.EnableTransportDatagramRead(connection); err != nil {
+			return errors.New("failed to enable transport datagram read").Base(err).AtWarning()
+		}
+	}
 	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
 	if requestAddons.Flow == vless.XRV {
 		clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
@@ -619,8 +627,19 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
 		return errors.New("failed to encode response header").Base(err).AtWarning()
 	}
-	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
-	bufferWriter.SetFlushNext()
+	var clientWriter buf.Writer
+	if useTransportDatagrams {
+		if err := bufferWriter.SetBuffered(false); err != nil {
+			return errors.New("failed to flush VLESS UDP response header").Base(err).AtWarning()
+		}
+		if err := internet.EnableTransportDatagramWrite(connection); err != nil {
+			return errors.New("failed to enable transport datagram write").Base(err).AtWarning()
+		}
+		clientWriter = encoding.EncodeBodyAddons(buf.NewWriter(connection), request, requestAddons, trafficState, false, ctx, connection, nil)
+	} else {
+		clientWriter = encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
+		bufferWriter.SetFlushNext()
+	}
 
 	if request.Command == protocol.RequestCommandRvs {
 		r, err := h.GetReverse(account)

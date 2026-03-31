@@ -5,11 +5,9 @@ import (
 	gotls "crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
-	reflect "reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -25,8 +23,6 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
-	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
-	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -46,9 +42,10 @@ var (
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
-	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
-		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
+	if browser_dialer.HasBrowserDialer() && realityConfig == nil && !transportConfig.IsMASQUEMode() {
+		return &BrowserDialerClient{transportConfig: transportConfig}, nil
 	}
 
 	globalDialerAccess.Lock()
@@ -63,7 +60,6 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	xmuxManager, found := globalDialerMap[key]
 
 	if !found {
-		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		var xmuxConfig XmuxConfig
 		if transportConfig.Xmux != nil {
 			xmuxConfig = *transportConfig.Xmux
@@ -156,147 +152,14 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	var transport http.RoundTripper
 
 	if httpVersion == "3" {
-		quicParams := streamSettings.QuicParams
-		if quicParams == nil {
-			quicParams = &internet.QuicParams{}
-		}
-		if quicParams.UdpHop == nil {
-			quicParams.UdpHop = &internet.UdpHop{}
-		}
-
-		quicConfig := &quic.Config{
-			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
-			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
-			InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
-			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
-			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
-			KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
-			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
-			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
-		}
-		if quicParams.MaxIdleTimeout == 0 {
-			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout
-		}
-		if quicParams.KeepAlivePeriod == 0 {
-			if keepAlivePeriod == 0 {
-				quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
-			}
-		}
-		if quicParams.MaxIncomingStreams == 0 {
-			// these two are defaults of quic-go/http3. the default of quic-go (no
-			// http3) is different, so it is hardcoded here for clarity.
-			// https://github.com/quic-go/quic-go/blob/b8ea5c798155950fb5bbfdd06cad1939c9355878/http3/client.go#L36-L39
-			quicConfig.MaxIncomingStreams = -1
-		}
+		quicConfig := newH3QUICConfig(streamSettings, keepAlivePeriod, transportConfig.IsMASQUEMode())
 
 		transport = &http3.Transport{
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
+			EnableDatagrams: transportConfig.IsMASQUEMode(),
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
-				udphopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
-					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
-					if err != nil {
-						errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
-						conn.Close()
-						return nil, errors.New()
-					}
-
-					var udpConn net.PacketConn
-
-					switch c := conn.(type) {
-					case *internet.PacketConnWrapper:
-						udpConn = c.PacketConn
-					case *net.UDPConn:
-						udpConn = c
-					default:
-						errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level ", reflect.TypeOf(c))
-						conn.Close()
-						return nil, errors.New()
-					}
-
-					return udpConn, nil
-				}
-
-				var index int
-				if len(quicParams.UdpHop.Ports) > 0 {
-					index = rand.Intn(len(quicParams.UdpHop.Ports))
-					dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-				}
-
-				conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				var udpConn net.PacketConn
-				var udpAddr *net.UDPAddr
-
-				switch c := conn.(type) {
-				case *internet.PacketConnWrapper:
-					udpConn = c.PacketConn
-					udpAddr, err = net.ResolveUDPAddr("udp", c.Dest.String())
-					if err != nil {
-						conn.Close()
-						return nil, err
-					}
-				case *net.UDPConn:
-					udpConn = c
-					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-					if err != nil {
-						conn.Close()
-						return nil, err
-					}
-				default:
-					udpConn = &internet.FakePacketConn{Conn: c}
-					udpAddr, err = net.ResolveUDPAddr("udp", c.RemoteAddr().String())
-					if err != nil {
-						conn.Close()
-						return nil, err
-					}
-
-					if len(quicParams.UdpHop.Ports) > 0 {
-						conn.Close()
-						return nil, errors.New("udphop requires being at the outermost level ", reflect.TypeOf(c))
-					}
-				}
-
-				if len(quicParams.UdpHop.Ports) > 0 {
-					addr := &udphop.UDPHopAddr{
-						IP:    udpAddr.IP,
-						Ports: quicParams.UdpHop.Ports,
-					}
-					udpConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, udphopDialer, udpConn)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("udphop err").Base(err)
-					}
-				}
-
-				if streamSettings.UdpmaskManager != nil {
-					udpConn, err = streamSettings.UdpmaskManager.WrapPacketConnClient(udpConn)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-				}
-
-				quicConn, err := quic.DialEarly(ctx, udpConn, udpAddr, tlsCfg, cfg)
-				if err != nil {
-					return nil, err
-				}
-
-				switch quicParams.Congestion {
-				case "force-brutal":
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion brutal bytes per second ", quicParams.BrutalUp)
-					congestion.UseBrutal(quicConn, quicParams.BrutalUp)
-				case "reno":
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
-				default:
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(quicConn)
-				}
-
-				return quicConn, nil
+				return dialQUICConn(ctx, dest, streamSettings, tlsCfg, cfg)
 			},
 		}
 	} else if httpVersion == "2" {
@@ -354,6 +217,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		dest.Network = net.Network_UDP
 	}
 
+	var gotlsConfig *gotls.Config
+	if tlsConfig != nil {
+		gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+	}
+
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 	var requestURL url.URL
 
@@ -376,21 +244,27 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
-	httpClient, xmuxClient := getHTTPClient(ctx, dest, streamSettings)
-
-	mode := transportConfiguration.Mode
-	if mode == "" || mode == "auto" {
-		mode = "packet-up"
+	mode := transportConfiguration.GetNormalizedMode()
+	if mode == ModeAuto {
+		mode = ModePacketUp
 		if realityConfig != nil {
-			mode = "stream-one"
+			mode = ModeStreamOne
 			if transportConfiguration.DownloadSettings != nil {
-				mode = "stream-up"
+				mode = ModeStreamUp
 			}
 		}
 	}
+	if mode == ModeMasque && httpVersion != "3" {
+		return nil, errors.New("MASQUE mode requires HTTP/3")
+	}
+	if mode == ModeMasque && internet.WantTransportDatagrams(ctx) {
+		return dialMASQUE(ctx, dest, requestURL, streamSettings, gotlsConfig)
+	}
+
+	httpClient, xmuxClient := getHTTPClient(ctx, dest, streamSettings)
 
 	sessionId := ""
-	if mode != "stream-one" {
+	if mode != ModeStreamOne && mode != ModeMasque {
 		sessionIdUuid := uuid.New()
 		sessionId = sessionIdUuid.String()
 	}
@@ -464,7 +338,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	var err error
-	if mode == "stream-one" {
+	if mode == ModeStreamOne || mode == ModeMasque {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
@@ -483,7 +357,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			return nil, err
 		}
 	}
-	if mode == "stream-up" {
+	if mode == ModeStreamUp {
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}

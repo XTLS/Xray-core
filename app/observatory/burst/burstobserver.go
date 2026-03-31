@@ -2,6 +2,7 @@ package burst
 
 import (
 	"context"
+	"sort"
 
 	"sync"
 
@@ -59,6 +60,9 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 		}
 		result = append(result, &status)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].OutboundTag < result[j].OutboundTag
+	})
 	return result
 }
 

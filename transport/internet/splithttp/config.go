@@ -29,6 +29,18 @@ func (c *Config) GetNormalizedPath() string {
 	return path
 }
 
+func (c *Config) GetNormalizedMode() string {
+	if c.Mode == "" {
+		return ModeAuto
+	}
+
+	return c.Mode
+}
+
+func (c *Config) IsMASQUEMode() bool {
+	return c.GetNormalizedMode() == ModeMasque
+}
+
 func (c *Config) GetNormalizedQuery() string {
 	pathAndQuery := strings.SplitN(c.Path, "?", 2)
 	query := ""
@@ -51,6 +63,12 @@ func (c *Config) GetRequestHeader() http.Header {
 	header := http.Header{}
 	for k, v := range c.Headers {
 		header.Add(k, v)
+	}
+	if c.IsMASQUEMode() {
+		if header.Get("Accept") == "" {
+			header.Set("Accept", "*/*")
+		}
+		return header
 	}
 	utils.TryDefaultHeadersWith(header, "fetch")
 	return header
@@ -316,6 +334,17 @@ func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqS
 
 	c.ApplyXPaddingToRequest(request, config)
 	c.ApplyMetaToRequest(request, sessionId, "")
+
+	if c.IsMASQUEMode() {
+		request.Method = http.MethodConnect
+		request.Proto = MASQUEProtocolConnectUDP
+		request.ProtoMajor = 3
+		request.ProtoMinor = 0
+		if request.Header.Get(HeaderCapsuleProtocol) == "" {
+			request.Header.Set(HeaderCapsuleProtocol, "?1")
+		}
+		return
+	}
 
 	if request.Body != nil && !c.NoGRPCHeader { // stream-up/one
 		request.Header.Set("Content-Type", "application/grpc")

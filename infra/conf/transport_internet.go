@@ -279,8 +279,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	switch c.Mode {
 	case "":
-		c.Mode = "auto"
-	case "auto", "packet-up", "stream-up", "stream-one":
+		c.Mode = splithttp.ModeAuto
+	case splithttp.ModeAuto, splithttp.ModePacketUp, splithttp.ModeStreamUp, splithttp.ModeStreamOne, splithttp.ModeMasque:
 	default:
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}
@@ -325,7 +325,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.UplinkDataPlacement = splithttp.PlacementAuto
 	case splithttp.PlacementAuto, splithttp.PlacementBody:
 	case splithttp.PlacementCookie, splithttp.PlacementHeader:
-		if c.Mode != "packet-up" {
+		if c.Mode != splithttp.ModePacketUp {
 			return nil, errors.New("UplinkDataPlacement can be " + c.UplinkDataPlacement + " only in packet-up mode")
 		}
 	default:
@@ -337,7 +337,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 	c.UplinkHTTPMethod = strings.ToUpper(c.UplinkHTTPMethod)
 
-	if c.UplinkHTTPMethod == "GET" && c.Mode != "packet-up" {
+	if c.UplinkHTTPMethod == "GET" && c.Mode != splithttp.ModePacketUp {
 		return nil, errors.New("uplinkHTTPMethod can be GET only in packet-up mode")
 	}
 
@@ -437,8 +437,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 
 	if c.DownloadSettings != nil {
-		if c.Mode == "stream-one" {
-			return nil, errors.New(`Can not use "downloadSettings" in "stream-one" mode.`)
+		if c.Mode == splithttp.ModeStreamOne || c.Mode == splithttp.ModeMasque {
+			return nil, errors.New(`Can not use "downloadSettings" in "stream-one" or "masque" mode.`)
 		}
 		var err error
 		if config.DownloadSettings, err = c.DownloadSettings.Build(); err != nil {

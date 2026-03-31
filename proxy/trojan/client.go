@@ -60,7 +60,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
-		rawConn, err := dialer.Dial(ctx, server.Destination)
+		rawConn, err := dialer.Dial(internet.ContextWithTransportDatagrams(ctx, destination.Network == net.Network_UDP), server.Destination)
 		if err != nil {
 			return err
 		}
@@ -109,24 +109,32 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		var bodyWriter buf.Writer
 		if destination.Network == net.Network_UDP {
-			bodyWriter = &PacketWriter{Writer: connWriter, Target: destination}
+			if _, err = connWriter.Write(nil); err != nil {
+				return err.(*errors.Error).AtWarning()
+			}
+			if err = bufferWriter.SetBuffered(false); err != nil {
+				return errors.New("failed to flush trojan udp header").Base(err).AtWarning()
+			}
+			if err = internet.EnableTransportDatagramWrite(conn); err != nil {
+				return errors.New("failed to enable transport datagram write").Base(err).AtWarning()
+			}
+			bodyWriter = &PacketWriter{Writer: conn, Target: destination}
 		} else {
 			bodyWriter = connWriter
-		}
+			// write some request payload to buffer
+			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
+				return errors.New("failed to write A request payload").Base(err).AtWarning()
+			}
 
-		// write some request payload to buffer
-		if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-			return errors.New("failed to write A request payload").Base(err).AtWarning()
-		}
+			// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
+			if err = bufferWriter.SetBuffered(false); err != nil {
+				return errors.New("failed to flush payload").Base(err).AtWarning()
+			}
 
-		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
-		if err = bufferWriter.SetBuffered(false); err != nil {
-			return errors.New("failed to flush payload").Base(err).AtWarning()
-		}
-
-		// Send header if not sent yet
-		if _, err = connWriter.Write([]byte{}); err != nil {
-			return err.(*errors.Error).AtWarning()
+			// Send header if not sent yet
+			if _, err = connWriter.Write([]byte{}); err != nil {
+				return err.(*errors.Error).AtWarning()
+			}
 		}
 
 		if err = buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer)); err != nil {
@@ -141,6 +149,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		var reader buf.Reader
 		if network == net.Network_UDP {
+			if err := internet.EnableTransportDatagramRead(conn); err != nil {
+				return errors.New("failed to enable transport datagram read").Base(err).AtWarning()
+			}
 			reader = &PacketReader{
 				Reader: conn,
 			}

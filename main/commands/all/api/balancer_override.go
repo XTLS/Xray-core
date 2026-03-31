@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+
 	routerService "github.com/xtls/xray-core/app/router/command"
 	"github.com/xtls/xray-core/main/commands/base"
 )
@@ -25,6 +27,9 @@ Arguments:
 
 	-t, -timeout <seconds>
 		Timeout in seconds for calling API. Default 3
+
+	-b, -balancer <tag>
+		The balancer tag to override.
 
 	-r, -remove
 		Remove the existing override.
@@ -53,21 +58,40 @@ func executeBalancerOverride(cmd *base.Command, args []string) {
 		base.Fatalf("balancer tag not specified")
 	}
 
+	target, err := resolveBalancerOverrideTarget(cmd.Flag.Args(), remove)
+	if err != nil {
+		base.Fatalf("%s", err)
+	}
+
 	conn, ctx, close := dialAPIServer()
 	defer close()
 
 	client := routerService.NewRoutingServiceClient(conn)
-	target := ""
-	if !remove {
-		target = cmd.Flag.Args()[0]
-	}
 	r := &routerService.OverrideBalancerTargetRequest{
 		BalancerTag: balancer,
 		Target:      target,
 	}
 
-	_, err := client.OverrideBalancerTarget(ctx, r)
+	_, err = client.OverrideBalancerTarget(ctx, r)
 	if err != nil {
-		base.Fatalf("failed to perform balancer health checks: %s", err)
+		base.Fatalf("failed to override balancer target: %s", err)
 	}
+}
+
+func resolveBalancerOverrideTarget(args []string, remove bool) (string, error) {
+	if remove {
+		if len(args) > 0 {
+			return "", errors.New("outbound tag is not allowed with -remove")
+		}
+		return "", nil
+	}
+
+	if len(args) == 0 {
+		return "", errors.New("outbound tag not specified")
+	}
+	if len(args) > 1 {
+		return "", errors.New("too many outbound tags specified")
+	}
+
+	return args[0], nil
 }

@@ -10,6 +10,7 @@ import (
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/utils"
 )
 
@@ -26,6 +27,7 @@ var _ Interface = (*Conn)(nil)
 
 type Conn struct {
 	*tls.Conn
+	echConfigured bool
 }
 
 const tlsCloseTimeout = 250 * time.Millisecond
@@ -36,6 +38,15 @@ func (c *Conn) Close() error {
 	})
 	defer timer.Stop()
 	return c.Conn.Close()
+}
+
+func (c *Conn) HandshakeContext(ctx context.Context) error {
+	if err := c.Conn.HandshakeContext(ctx); err != nil {
+		return err
+	}
+	state := c.ConnectionState()
+	reportECHStatus(ctx, c.echConfigured, state.ECHAccepted, state.ServerName)
+	return nil
 }
 
 func (c *Conn) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -60,7 +71,10 @@ func (c *Conn) NegotiatedProtocol() string {
 // Client initiates a TLS client handshake on the given connection.
 func Client(c net.Conn, config *tls.Config) net.Conn {
 	tlsConn := tls.Client(c, config)
-	return &Conn{Conn: tlsConn}
+	return &Conn{
+		Conn:          tlsConn,
+		echConfigured: len(config.EncryptedClientHelloConfigList) != 0,
+	}
 }
 
 // Server initiates a TLS server handshake on the given connection.
@@ -71,6 +85,7 @@ func Server(c net.Conn, config *tls.Config) net.Conn {
 
 type UConn struct {
 	*utls.UConn
+	echConfigured bool
 }
 
 var _ Interface = (*UConn)(nil)
@@ -81,6 +96,15 @@ func (c *UConn) Close() error {
 	})
 	defer timer.Stop()
 	return c.Conn.Close()
+}
+
+func (c *UConn) HandshakeContext(ctx context.Context) error {
+	if err := c.UConn.HandshakeContext(ctx); err != nil {
+		return err
+	}
+	state := c.ConnectionState()
+	reportECHStatus(ctx, c.echConfigured, state.ECHAccepted, state.ServerName)
+	return nil
 }
 
 func (c *UConn) HandshakeContextServerName(ctx context.Context) string {
@@ -130,7 +154,10 @@ func (c *UConn) NegotiatedProtocol() string {
 
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
 	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
-	return &UConn{UConn: utlsConn}
+	return &UConn{
+		UConn:         utlsConn,
+		echConfigured: len(config.EncryptedClientHelloConfigList) != 0,
+	}
 }
 
 func GeneraticUClient(c net.Conn, config *tls.Config) *utls.UConn {
@@ -151,6 +178,17 @@ func copyConfig(c *tls.Config) *utls.Config {
 		config.NextProtos = c.NextProtos
 	}
 	return config
+}
+
+func reportECHStatus(ctx context.Context, echConfigured bool, echAccepted bool, serverName string) {
+	if !echConfigured && !echAccepted {
+		return
+	}
+	session.SubmitOutboundECHStatusToOriginator(ctx, session.OutboundECHStatus{
+		Enabled:    echConfigured,
+		Accepted:   echAccepted,
+		ServerName: serverName,
+	})
 }
 
 func init() {

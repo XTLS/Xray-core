@@ -164,7 +164,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					defer func() { recover() }()
 					ctx := xctx.ContextWithID(context.Background(), session.NewID())
 					for {
-						conn, err := dialer.Dial(ctx, rec.Destination)
+						conn, err := dialer.Dial(internet.ContextWithTransportDatagrams(ctx, ob.Target.Network == net.Network_UDP), rec.Destination)
 						if err != nil {
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
 							continue
@@ -191,7 +191,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if conn == nil {
 		if err := retry.ExponentialBackoff(5, 200).On(func() error {
 			var err error
-			conn, err = dialer.Dial(ctx, rec.Destination)
+			conn, err = dialer.Dial(internet.ContextWithTransportDatagrams(ctx, ob.Target.Network == net.Network_UDP), rec.Destination)
 			if err != nil {
 				return err
 			}
@@ -293,6 +293,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	default:
 		ob.CanSpliceCopy = 3
 	}
+	useTransportDatagrams := target.Network == net.Network_UDP && requestAddons.Flow != vless.XRV
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
@@ -326,33 +327,45 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to encode request header").Base(err).AtWarning()
 		}
 
-		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
+		var serverWriter buf.Writer
+		if useTransportDatagrams {
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return errors.New("failed to flush VLESS UDP header").Base(err).AtWarning()
+			}
+			if err := internet.EnableTransportDatagramWrite(conn); err != nil {
+				return errors.New("failed to enable transport datagram write").Base(err).AtWarning()
+			}
+			serverWriter = encoding.EncodeBodyAddons(buf.NewWriter(conn), request, requestAddons, trafficState, true, ctx, conn, ob)
+		} else {
+			serverWriter = encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
+		}
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 		}
-		timeoutReader, ok := clientReader.(buf.TimeoutReader)
-		if ok {
-			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
-			if err1 == nil {
-				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
-					return err // ...
+		if !useTransportDatagrams {
+			timeoutReader, ok := clientReader.(buf.TimeoutReader)
+			if ok {
+				multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
+				if err1 == nil {
+					if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
+						return err // ...
+					}
+				} else if err1 != buf.ErrReadTimeout {
+					return err1
+				} else if requestAddons.Flow == vless.XRV {
+					mb := make(buf.MultiBuffer, 1)
+					errors.LogInfo(ctx, "Insert padding with empty content to camouflage VLESS header ", mb.Len())
+					if err := serverWriter.WriteMultiBuffer(mb); err != nil {
+						return err // ...
+					}
 				}
-			} else if err1 != buf.ErrReadTimeout {
-				return err1
-			} else if requestAddons.Flow == vless.XRV {
-				mb := make(buf.MultiBuffer, 1)
-				errors.LogInfo(ctx, "Insert padding with empty content to camouflage VLESS header ", mb.Len())
-				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
-					return err // ...
-				}
+			} else {
+				errors.LogDebug(ctx, "Reader is not timeout reader, will send out vless header separately from first payload")
 			}
-		} else {
-			errors.LogDebug(ctx, "Reader is not timeout reader, will send out vless header separately from first payload")
-		}
-		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
-		if err := bufferWriter.SetBuffered(false); err != nil {
-			return errors.New("failed to write A request payload").Base(err).AtWarning()
+			// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return errors.New("failed to write A request payload").Base(err).AtWarning()
+			}
 		}
 
 		if requestAddons.Flow == vless.XRV {
@@ -385,8 +398,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return errors.New("failed to decode response header").Base(err).AtInfo()
 		}
+		if useTransportDatagrams {
+			if err := internet.EnableTransportDatagramRead(conn); err != nil {
+				return errors.New("failed to enable transport datagram read").Base(err).AtWarning()
+			}
+		}
 
-		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
 		if requestAddons.Flow == vless.XRV {
 			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)

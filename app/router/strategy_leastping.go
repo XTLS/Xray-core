@@ -38,11 +38,15 @@ func (l *LeastPingStrategy) PickOutbound(strings []string) string {
 		return ""
 	}
 	outboundsList := outboundList(strings)
+	preferred := outboundList(preferECHAcceptedCandidates(l.ctx, l.observatory, strings))
 	if result, ok := observeReport.(*observatory.ObservationResult); ok {
 		status := result.Status
 		leastPing := int64(99999999)
 		selectedOutboundName := ""
 		for _, v := range status {
+			if len(preferred) > 0 && !preferred.contains(v.OutboundTag) {
+				continue
+			}
 			if outboundsList.contains(v.OutboundTag) && v.Alive && v.Delay < leastPing {
 				selectedOutboundName = v.OutboundTag
 				leastPing = v.Delay

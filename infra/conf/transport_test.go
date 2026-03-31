@@ -2,10 +2,12 @@ package conf_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -154,5 +156,43 @@ func TestSocketConfig(t *testing.T) {
 	})
 	if expectedOutput.ParseTFOValue() != -1 {
 		t.Fatalf("unexpected parsed TFO value, which should be -1")
+	}
+}
+
+func TestSplitHTTPMasqueModeBuild(t *testing.T) {
+	config := &SplitHTTPConfig{
+		Path: "/sh",
+		Mode: splithttp.ModeMasque,
+	}
+
+	msg, err := config.Build()
+	if err != nil {
+		t.Fatalf("unexpected build error: %v", err)
+	}
+
+	built, ok := msg.(*splithttp.Config)
+	if !ok {
+		t.Fatalf("unexpected config type %T", msg)
+	}
+	if built.Mode != splithttp.ModeMasque {
+		t.Fatalf("expected mode %q, got %q", splithttp.ModeMasque, built.Mode)
+	}
+}
+
+func TestSplitHTTPMasqueModeRejectsDownloadSettings(t *testing.T) {
+	config := &SplitHTTPConfig{
+		Path: "/sh",
+		Mode: splithttp.ModeMasque,
+		DownloadSettings: &StreamConfig{
+			Network: func() *TransportProtocol {
+				protocol := TransportProtocol("tcp")
+				return &protocol
+			}(),
+		},
+	}
+
+	_, err := config.Build()
+	if err == nil || !strings.Contains(err.Error(), `"downloadSettings"`) {
+		t.Fatalf("expected downloadSettings validation error, got %v", err)
 	}
 }

@@ -151,6 +151,7 @@ func (s *LeastLoadStrategy) getNodes(candidates []string, maxRTT time.Duration) 
 
 	results := observeResult.(*observatory.ObservationResult)
 
+	candidates = preferECHAcceptedCandidates(s.ctx, s.observer, candidates)
 	outboundlist := outboundList(candidates)
 
 	var ret []*node

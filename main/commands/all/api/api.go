@@ -15,6 +15,7 @@ var CmdAPI = &base.Command{
 		cmdGetStats,
 		cmdQueryStats,
 		cmdSysStats,
+		cmdMasqueTelemetry,
 		cmdBalancerInfo,
 		cmdBalancerOverride,
 		cmdAddInbounds,

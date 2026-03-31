@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"hash/crc64"
+	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -68,7 +69,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 
 	err := retry.ExponentialBackoff(5, 200).On(func() error {
-		rawConn, err := dialer.Dial(ctx, rec.Destination)
+		rawConn, err := dialer.Dial(internet.ContextWithTransportDatagrams(ctx, ob.Target.Network == net.Network_UDP), rec.Destination)
 		if err != nil {
 			return err
 		}
@@ -153,6 +154,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
 	}
+	useTransportDatagrams := target.Network == net.Network_UDP
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -162,7 +164,17 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to encode request").Base(err).AtWarning()
 		}
 
-		bodyWriter, err := session.EncodeRequestBody(request, writer)
+		var bodyWriterTarget io.Writer = writer
+		if useTransportDatagrams {
+			if err := writer.SetBuffered(false); err != nil {
+				return errors.New("failed to flush VMess UDP header").Base(err).AtWarning()
+			}
+			if err := internet.EnableTransportDatagramWrite(conn); err != nil {
+				return errors.New("failed to enable transport datagram write").Base(err).AtWarning()
+			}
+			bodyWriterTarget = conn
+		}
+		bodyWriter, err := session.EncodeRequestBody(request, bodyWriterTarget)
 		if err != nil {
 			return errors.New("failed to start encoding").Base(err)
 		}
@@ -170,12 +182,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			bodyWriter = xudp.NewPacketWriter(bodyWriter, target, xudp.GetGlobalID(ctx))
 		}
-		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-			return errors.New("failed to write first payload").Base(err)
-		}
+		if !useTransportDatagrams {
+			if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
+				return errors.New("failed to write first payload").Base(err)
+			}
 
-		if err := writer.SetBuffered(false); err != nil {
-			return err
+			if err := writer.SetBuffered(false); err != nil {
+				return err
+			}
 		}
 
 		if err := buf.Copy(input, bodyWriter, buf.UpdateActivity(timer)); err != nil {
@@ -200,6 +214,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to read header").Base(err)
 		}
 		h.handleCommand(rec.Destination, header.Command)
+		if useTransportDatagrams {
+			if err := internet.EnableTransportDatagramRead(conn); err != nil {
+				return errors.New("failed to enable transport datagram read").Base(err).AtWarning()
+			}
+		}
 
 		bodyReader, err := session.DecodeResponseBody(request, reader)
 		if err != nil {

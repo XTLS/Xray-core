@@ -26,6 +26,7 @@ const (
 	fullHandlerKey            ctx.SessionKey = 10 // outbound gets full handler
 	mitmAlpn11Key             ctx.SessionKey = 11 // used by TLS dialer
 	mitmServerNameKey         ctx.SessionKey = 12 // used by TLS dialer
+	trackedECHStatusKey       ctx.SessionKey = 13 // used by observatory to detect ECH usage
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -116,6 +117,16 @@ type TrackedRequestErrorFeedback interface {
 	SubmitError(err error)
 }
 
+type OutboundECHStatus struct {
+	Enabled    bool
+	Accepted   bool
+	ServerName string
+}
+
+type TrackedECHFeedback interface {
+	SubmitECHStatus(status OutboundECHStatus)
+}
+
 func SubmitOutboundErrorToOriginator(ctx context.Context, err error) {
 	if errorTracker := ctx.Value(trackedConnectionErrorKey); errorTracker != nil {
 		errorTracker := errorTracker.(TrackedRequestErrorFeedback)
@@ -123,8 +134,19 @@ func SubmitOutboundErrorToOriginator(ctx context.Context, err error) {
 	}
 }
 
+func SubmitOutboundECHStatusToOriginator(ctx context.Context, status OutboundECHStatus) {
+	if echTracker := ctx.Value(trackedECHStatusKey); echTracker != nil {
+		echTracker := echTracker.(TrackedECHFeedback)
+		echTracker.SubmitECHStatus(status)
+	}
+}
+
 func TrackedConnectionError(ctx context.Context, tracker TrackedRequestErrorFeedback) context.Context {
 	return context.WithValue(ctx, trackedConnectionErrorKey, tracker)
+}
+
+func TrackedOutboundECHStatus(ctx context.Context, tracker TrackedECHFeedback) context.Context {
+	return context.WithValue(ctx, trackedECHStatusKey, tracker)
 }
 
 func ContextWithDispatcher(ctx context.Context, dispatcher routing.Dispatcher) context.Context {

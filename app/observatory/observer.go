@@ -30,6 +30,7 @@ type Observer struct {
 
 	statusLock sync.Mutex
 	status     []*OutboundStatus
+	echStatus  map[string]extension.ECHStatus
 
 	finished *done.Instance
 
@@ -38,7 +39,25 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+
+	return &ObservationResult{Status: cloneAndSortOutboundStatuses(o.status)}, nil
+}
+
+func (o *Observer) GetOutboundECHStatus(ctx context.Context) (map[string]extension.ECHStatus, error) {
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+
+	if len(o.echStatus) == 0 {
+		return nil, nil
+	}
+
+	snapshot := make(map[string]extension.ECHStatus, len(o.echStatus))
+	for tag, status := range o.echStatus {
+		snapshot[tag] = status
+	}
+	return snapshot, nil
 }
 
 func (o *Observer) Type() interface{} {
@@ -80,8 +99,8 @@ func (o *Observer) background() {
 		if !o.config.EnableConcurrency {
 			sort.Strings(outbounds)
 			for _, v := range outbounds {
-				result := o.probe(v)
-				o.updateStatusForResult(v, &result)
+				result, echStatus := o.probe(v)
+				o.updateStatusForResult(v, &result, echStatus)
 				if o.finished.Done() {
 					return
 				}
@@ -94,8 +113,8 @@ func (o *Observer) background() {
 
 		for _, v := range outbounds {
 			go func(v string) {
-				result := o.probe(v)
-				o.updateStatusForResult(v, &result)
+				result, echStatus := o.probe(v)
+				o.updateStatusForResult(v, &result, echStatus)
 				ch <- struct{}{}
 			}(v)
 		}
@@ -114,12 +133,41 @@ func (o *Observer) background() {
 func (o *Observer) updateStatus(outbounds []string) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
-	// TODO should remove old inbound that is removed
-	_ = outbounds
+
+	allowed := make(map[string]struct{}, len(outbounds))
+	for _, outbound := range outbounds {
+		allowed[outbound] = struct{}{}
+	}
+
+	for tag := range o.echStatus {
+		if _, ok := allowed[tag]; !ok {
+			delete(o.echStatus, tag)
+		}
+	}
+
+	if len(o.status) == 0 {
+		return
+	}
+
+	filtered := o.status[:0]
+	for _, status := range o.status {
+		if status == nil {
+			continue
+		}
+		if _, ok := allowed[status.OutboundTag]; ok {
+			filtered = append(filtered, status)
+		}
+	}
+
+	for i := len(filtered); i < len(o.status); i++ {
+		o.status[i] = nil
+	}
+	o.status = filtered
 }
 
-func (o *Observer) probe(outbound string) ProbeResult {
+func (o *Observer) probe(outbound string) (ProbeResult, extension.ECHStatus) {
 	errorCollectorForRequest := newErrorCollector()
+	echCollectorForRequest := newECHCollector()
 
 	httpTransport := http.Transport{
 		Proxy: func(*http.Request) (*url.URL, error) {
@@ -134,6 +182,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 					return errors.New("cannot understand address").Base(err)
 				}
 				trackedCtx := session.TrackedConnectionError(o.ctx, errorCollectorForRequest)
+				trackedCtx = session.TrackedOutboundECHStatus(trackedCtx, echCollectorForRequest)
 				conn, err := tagged.Dialer(trackedCtx, o.dispatcher, dest, outbound)
 				if err != nil {
 					return errors.New("cannot dial remote address ", dest).Base(err)
@@ -179,13 +228,13 @@ func (o *Observer) probe(outbound string) ProbeResult {
 	if err != nil {
 		var errorMessage = "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
 		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)
-		return ProbeResult{Alive: false, LastErrorReason: errorMessage}
+		return ProbeResult{Alive: false, LastErrorReason: errorMessage}, echCollectorForRequest.Status()
 	}
 	errors.LogInfo(o.ctx, "the outbound ", outbound, " is alive:", GETTime.Seconds())
-	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}
+	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}, echCollectorForRequest.Status()
 }
 
-func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {
+func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult, echStatus extension.ECHStatus) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
 	var status *OutboundStatus
@@ -207,6 +256,18 @@ func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {
 		status.LastErrorReason = result.LastErrorReason
 		status.Delay = 99999999
 	}
+
+	if o.echStatus == nil {
+		o.echStatus = make(map[string]extension.ECHStatus)
+	}
+	echStatus.LastTryTime = status.LastTryTime
+	echStatus.Accepted = echStatus.Accepted && result.Alive
+	if echStatus.Accepted {
+		echStatus.LastSeenTime = status.LastTryTime
+	} else {
+		echStatus.LastSeenTime = 0
+	}
+	o.echStatus[outbound] = echStatus
 }
 
 func (o *Observer) findStatusLocationLockHolderOnly(outbound string) int {
@@ -216,6 +277,40 @@ func (o *Observer) findStatusLocationLockHolderOnly(outbound string) int {
 		}
 	}
 	return -1
+}
+
+func cloneAndSortOutboundStatuses(statuses []*OutboundStatus) []*OutboundStatus {
+	if len(statuses) == 0 {
+		return nil
+	}
+
+	snapshot := make([]*OutboundStatus, 0, len(statuses))
+	for _, status := range statuses {
+		if status == nil {
+			continue
+		}
+		snapshot = append(snapshot, cloneOutboundStatus(status))
+	}
+
+	sort.Slice(snapshot, func(i, j int) bool {
+		return snapshot[i].OutboundTag < snapshot[j].OutboundTag
+	})
+
+	return snapshot
+}
+
+func cloneOutboundStatus(status *OutboundStatus) *OutboundStatus {
+	if status == nil {
+		return nil
+	}
+
+	cloned := *status
+	if status.HealthPing != nil {
+		healthPing := *status.HealthPing
+		cloned.HealthPing = &healthPing
+	}
+
+	return &cloned
 }
 
 func New(ctx context.Context, config *Config) (*Observer, error) {

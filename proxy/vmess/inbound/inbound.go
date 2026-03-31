@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -273,6 +274,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.User = request.User
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
+	useTransportDatagrams := request.Command == protocol.RequestCommandUDP
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
@@ -286,6 +288,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
+		if useTransportDatagrams {
+			if err := internet.EnableTransportDatagramRead(connection); err != nil {
+				return errors.New("failed to enable transport datagram read").Base(err).AtWarning()
+			}
+		}
 		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 		if err != nil {
 			return errors.New("failed to start decoding").Base(err)
@@ -300,11 +307,28 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		writer := buf.NewBufferedWriter(buf.NewWriter(connection))
-		defer writer.Flush()
 
 		response := &protocol.ResponseHeader{
 			Command: h.generateCommand(ctx, request),
 		}
+		if useTransportDatagrams {
+			svrSession.EncodeResponseHeader(response, writer)
+			if err := writer.SetBuffered(false); err != nil {
+				return err
+			}
+			if err := internet.EnableTransportDatagramWrite(connection); err != nil {
+				return errors.New("failed to enable transport datagram write").Base(err).AtWarning()
+			}
+			bodyWriter, err := svrSession.EncodeResponseBody(request, connection)
+			if err != nil {
+				return errors.New("failed to start encoding response").Base(err)
+			}
+			if response.Command != nil {
+				return errors.New("transport datagrams do not support VMess response commands").AtWarning()
+			}
+			return buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer))
+		}
+		defer writer.Flush()
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
