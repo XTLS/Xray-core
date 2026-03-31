@@ -114,8 +114,24 @@ func (o *Observer) background() {
 func (o *Observer) updateStatus(outbounds []string) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
-	// TODO should remove old inbound that is removed
-	_ = outbounds
+
+	if len(o.status) == 0 {
+		return
+	}
+
+	active := make(map[string]struct{}, len(outbounds))
+	for _, outbound := range outbounds {
+		active[outbound] = struct{}{}
+	}
+
+	pruned := o.status[:0]
+	for _, status := range o.status {
+		if _, ok := active[status.OutboundTag]; ok {
+			pruned = append(pruned, status)
+		}
+	}
+
+	o.status = pruned
 }
 
 func (o *Observer) probe(outbound string) ProbeResult {
