@@ -241,8 +241,9 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	if email := strings.ToLower(request.User.Email); email != "" {
-		connID, _ := s.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "shadowsocks")
+		connID, connEntry := s.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "shadowsocks")
 		defer s.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
 	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)

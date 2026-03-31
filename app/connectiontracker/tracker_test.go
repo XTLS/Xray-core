@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	B "github.com/sagernet/sing/common/buf"
+	M "github.com/sagernet/sing/common/metadata"
 	"github.com/xtls/xray-core/app/connectiontracker"
 )
 
@@ -364,6 +366,123 @@ func TestWrapConnUpdatesLastActivity(t *testing.T) {
 	wrapped := connectiontracker.WrapConn(fc, entry)
 	buf := make([]byte, 1)
 	wrapped.Read(buf) //nolint:errcheck
+
+	after := tracker.ListConnections()[0].LastActivity
+	if !after.After(before) {
+		t.Errorf("LastActivity not updated: before=%v after=%v", before, after)
+	}
+}
+
+// fakePacketConn is a minimal N.PacketConn for WrapPacketConn tests.
+type fakePacketConn struct {
+	readPacketData *B.Buffer
+	readPacketErr  error
+	writePacketErr error
+}
+
+func (f *fakePacketConn) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
+	if f.readPacketErr != nil {
+		return M.Socksaddr{}, f.readPacketErr
+	}
+	if f.readPacketData != nil {
+		buffer.Write(f.readPacketData.Bytes())
+	}
+	return M.Socksaddr{}, nil
+}
+
+func (f *fakePacketConn) WritePacket(buffer *B.Buffer, _ M.Socksaddr) error {
+	return f.writePacketErr
+}
+
+func (f *fakePacketConn) Close() error {
+	return nil
+}
+
+func (f *fakePacketConn) LocalAddr() net.Addr {
+	return nil
+}
+
+func (f *fakePacketConn) SetDeadline(_ time.Time) error {
+	return nil
+}
+
+func (f *fakePacketConn) SetReadDeadline(_ time.Time) error {
+	return nil
+}
+
+func (f *fakePacketConn) SetWriteDeadline(_ time.Time) error {
+	return nil
+}
+
+func TestWrapPacketConnCountsUplinkOnReadPacket(t *testing.T) {
+	tracker := connectiontracker.New()
+	_, entry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+
+	data := B.New()
+	data.Write([]byte("hello world"))
+
+	fpc := &fakePacketConn{readPacketData: data}
+	wrapped := connectiontracker.WrapPacketConn(fpc, entry)
+
+	buf := B.New()
+	defer buf.Release()
+	if _, err := wrapped.ReadPacket(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	conns := tracker.ListConnections()
+	if len(conns) != 1 {
+		t.Fatalf("expected 1 connection")
+	}
+	if conns[0].Uplink != 11 {
+		t.Errorf("Uplink: got %d, want 11", conns[0].Uplink)
+	}
+	if conns[0].Downlink != 0 {
+		t.Errorf("Downlink should be 0, got %d", conns[0].Downlink)
+	}
+}
+
+func TestWrapPacketConnCountsDownlinkOnWritePacket(t *testing.T) {
+	tracker := connectiontracker.New()
+	_, entry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+
+	fpc := &fakePacketConn{}
+	wrapped := connectiontracker.WrapPacketConn(fpc, entry)
+
+	buf := B.New()
+	buf.Write([]byte("goodbye world"))
+	if err := wrapped.WritePacket(buf, M.Socksaddr{}); err != nil {
+		t.Fatal(err)
+	}
+
+	conns := tracker.ListConnections()
+	if len(conns) != 1 {
+		t.Fatalf("expected 1 connection")
+	}
+	if conns[0].Downlink != 13 {
+		t.Errorf("Downlink: got %d, want 13", conns[0].Downlink)
+	}
+	if conns[0].Uplink != 0 {
+		t.Errorf("Uplink should be 0, got %d", conns[0].Uplink)
+	}
+}
+
+func TestWrapPacketConnUpdatesLastActivity(t *testing.T) {
+	tracker := connectiontracker.New()
+	_, entry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+
+	before := tracker.ListConnections()[0].LastActivity
+
+	time.Sleep(time.Millisecond)
+
+	data := B.New()
+	data.Write([]byte("x"))
+
+	fpc := &fakePacketConn{readPacketData: data}
+	wrapped := connectiontracker.WrapPacketConn(fpc, entry)
+	buf := B.New()
+	defer buf.Release()
+	wrapped.ReadPacket(buf) //nolint:errcheck
 
 	after := tracker.ListConnections()[0].LastActivity
 	if !after.After(before) {

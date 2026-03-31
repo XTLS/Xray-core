@@ -235,8 +235,9 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
 	if email := strings.ToLower(user.Email); email != "" {
-		connID, _ := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "trojan")
+		connID, connEntry := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "trojan")
 		defer s.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
 	}
 
 	if destination.Network == net.Network_UDP { // handle udp request
