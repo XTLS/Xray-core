@@ -36,9 +36,11 @@ type packet struct {
 
 type xdnsConnClient struct {
 	net.PacketConn
-	resolverConns []net.PacketConn
-	resolverAddrs []*net.UDPAddr
-	resolverIdx   uint32
+	resolverConns  []net.PacketConn
+	resolverAddrs  []*net.UDPAddr
+	resolverIdx    uint32
+	resolverLast   []time.Time
+	resolverClosed []bool
 
 	clientID []byte
 	domain   Name
@@ -102,17 +104,42 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conn.resolverConns = append(conn.resolverConns, uc)
 		conn.resolverAddrs = append(conn.resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
 	}
+	conn.resolverLast = make([]time.Time, len(conn.resolverConns))
+	conn.resolverClosed = make([]bool, len(conn.resolverConns))
 
+	go conn.healthCheck()
 	go conn.recvLoop()
 	go conn.sendLoop()
 
 	return conn, nil
 }
 
+func (c *xdnsConnClient) healthCheck() {
+	for {
+		if c.closed {
+			return
+		}
+
+		now := time.Now()
+		for i := range c.resolverLast {
+			if c.resolverLast[i].IsZero() {
+				continue
+			}
+			c.mutex.Lock()
+			if now.Sub(c.resolverLast[i]) > 3*time.Second {
+				c.resolverClosed[i] = true
+			}
+			c.mutex.Unlock()
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
 func (c *xdnsConnClient) recvLoop() {
 	var wg sync.WaitGroup
 
-	for _, rc := range c.resolverConns {
+	for i, rc := range c.resolverConns {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -162,6 +189,11 @@ func (c *xdnsConnClient) recvLoop() {
 				}
 
 				if anyPacket {
+					c.mutex.Lock()
+					c.resolverLast[i] = time.Now()
+					c.resolverClosed[i] = false
+					c.mutex.Unlock()
+
 					select {
 					case c.pollChan <- struct{}{}:
 					default:
@@ -233,8 +265,23 @@ func (c *xdnsConnClient) sendLoop() {
 		}
 
 		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
-		c.resolverIdx += 1
-		c.resolverIdx %= uint32(len(c.resolverConns))
+		if c.resolverLast[c.resolverIdx].IsZero() {
+			c.resolverLast[c.resolverIdx] = time.Now()
+		}
+		cur := c.resolverIdx
+		for {
+			c.resolverIdx += 1
+			c.resolverIdx %= uint32(len(c.resolverConns))
+			if c.resolverIdx == cur {
+				break
+			}
+			c.mutex.Lock()
+			if !c.resolverClosed[c.resolverIdx] {
+				c.mutex.Unlock()
+				break
+			}
+			c.mutex.Unlock()
+		}
 	}
 }
 
