@@ -39,9 +39,7 @@ type xdnsConnClient struct {
 	resolverConns []net.PacketConn
 	resolverAddrs []*net.UDPAddr
 	resolverIdx   uint32
-	// resolverRecv  []uint32
-	resolverSend []uint32
-	resolverDead []bool
+	resolverSend  []uint32
 
 	clientID []byte
 	domain   Name
@@ -106,31 +104,11 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conn.resolverAddrs = append(conn.resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
 	}
 	conn.resolverSend = make([]uint32, len(conn.resolverConns))
-	conn.resolverDead = make([]bool, len(conn.resolverConns))
 
-	go conn.healthCheck()
 	go conn.recvLoop()
 	go conn.sendLoop()
 
 	return conn, nil
-}
-
-func (c *xdnsConnClient) healthCheck() {
-	for {
-		if c.closed {
-			return
-		}
-
-		for i := range c.resolverSend {
-			c.mutex.Lock()
-			if c.resolverSend[i] > 3 {
-				c.resolverDead[i] = true
-			}
-			c.mutex.Unlock()
-		}
-
-		time.Sleep(1 * time.Second)
-	}
 }
 
 func (c *xdnsConnClient) recvLoop() {
@@ -188,7 +166,6 @@ func (c *xdnsConnClient) recvLoop() {
 				if anyPacket {
 					c.mutex.Lock()
 					c.resolverSend[i] = 0
-					c.resolverDead[i] = false
 					c.mutex.Unlock()
 
 					select {
@@ -261,6 +238,9 @@ func (c *xdnsConnClient) sendLoop() {
 			return
 		}
 
+		c.mutex.Lock()
+		c.resolverSend[c.resolverIdx] += 1
+		c.mutex.Unlock()
 		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
 		cur := c.resolverIdx
 		for {
@@ -270,15 +250,12 @@ func (c *xdnsConnClient) sendLoop() {
 				break
 			}
 			c.mutex.Lock()
-			if !c.resolverDead[c.resolverIdx] {
-				c.mutex.Unlock()
+			alive := c.resolverSend[c.resolverIdx] <= 3
+			c.mutex.Unlock()
+			if alive {
 				break
 			}
-			c.mutex.Unlock()
 		}
-		c.mutex.Lock()
-		c.resolverSend[cur] += 1
-		c.mutex.Unlock()
 	}
 }
 
