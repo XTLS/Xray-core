@@ -15,7 +15,7 @@ func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount 
 	_, ok1 := raw.(*internet.FakePacketConn)
 	_, ok2 := raw.(*udphop.UdpHopPacketConn)
 	if level != 0 || ok1 || ok2 {
-		return nil, errors.New("xicmp requires being at the outermost level")
+		return nil, errors.New("xdns requires being at the outermost level")
 	}
 	return NewConnClient(c, raw)
 }
