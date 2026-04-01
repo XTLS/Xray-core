@@ -177,9 +177,6 @@ func (c *xdnsConnClient) recvLoop() {
 
 	close(c.pollChan)
 	close(c.readQueue)
-	for _, rc := range c.resolverConns {
-		rc.Close()
-	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -282,6 +279,9 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 func (c *xdnsConnClient) Close() error {
 	c.closed = true
+	for _, rc := range c.resolverConns {
+		rc.Close()
+	}
 	return c.PacketConn.Close()
 }
 
