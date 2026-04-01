@@ -311,8 +311,6 @@ func (c *xicmpConnServer) sendLoop() {
 			errors.LogDebug(context.Background(), rec.addr, " ", rec.id, " ", rec.seq, " xicmp writeto err ", err)
 		}
 	}
-
-	c.closed = true
 }
 
 func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {

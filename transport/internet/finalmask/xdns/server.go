@@ -322,11 +322,10 @@ func (c *xdnsConnServer) sendLoop() {
 
 		_, err = c.PacketConn.WriteTo(buf, rec.Addr)
 		if go_errors.Is(err, net.ErrClosed) {
+			c.closed = true
 			break
 		}
 	}
-
-	c.closed = true
 }
 
 func (c *xdnsConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {

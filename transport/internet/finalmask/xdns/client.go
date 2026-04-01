@@ -11,6 +11,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -39,7 +40,7 @@ type xdnsConnClient struct {
 	resolverConns []net.PacketConn
 	resolverAddrs []*net.UDPAddr
 	resolverIdx   uint32
-	resolverSend  []uint32
+	resolverSend  []atomic.Uint32
 
 	clientID []byte
 	domain   Name
@@ -103,7 +104,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conn.resolverConns = append(conn.resolverConns, uc)
 		conn.resolverAddrs = append(conn.resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
 	}
-	conn.resolverSend = make([]uint32, len(conn.resolverConns))
+	conn.resolverSend = make([]atomic.Uint32, len(conn.resolverConns))
 
 	go conn.recvLoop()
 	go conn.sendLoop()
@@ -164,9 +165,7 @@ func (c *xdnsConnClient) recvLoop() {
 				}
 
 				if anyPacket {
-					c.mutex.Lock()
-					c.resolverSend[i] = 0
-					c.mutex.Unlock()
+					c.resolverSend[i].Swap(0)
 
 					select {
 					case c.pollChan <- struct{}{}:
@@ -238,9 +237,7 @@ func (c *xdnsConnClient) sendLoop() {
 			return
 		}
 
-		c.mutex.Lock()
-		c.resolverSend[c.resolverIdx] += 1
-		c.mutex.Unlock()
+		c.resolverSend[c.resolverIdx].Add(1)
 		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
 		cur := c.resolverIdx
 		for {
@@ -249,10 +246,7 @@ func (c *xdnsConnClient) sendLoop() {
 			if c.resolverIdx == cur {
 				break
 			}
-			c.mutex.Lock()
-			alive := c.resolverSend[c.resolverIdx] <= 3
-			c.mutex.Unlock()
-			if alive {
+			if c.resolverSend[c.resolverIdx].Load() <= 3 {
 				break
 			}
 		}
