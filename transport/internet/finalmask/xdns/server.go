@@ -156,8 +156,8 @@ func (c *xdnsConnServer) recvLoop() {
 		}
 
 		n, addr, err := c.PacketConn.ReadFrom(buf[:])
-		if err != nil || n == 0 {
-			if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
+		if err != nil {
+			if go_errors.Is(err, net.ErrClosed) {
 				break
 			}
 			continue
@@ -321,7 +321,7 @@ func (c *xdnsConnServer) sendLoop() {
 		}
 
 		_, err = c.PacketConn.WriteTo(buf, rec.Addr)
-		if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.ErrClosedPipe) {
+		if go_errors.Is(err, net.ErrClosed) {
 			c.closed = true
 			break
 		}

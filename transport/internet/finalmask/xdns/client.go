@@ -127,8 +127,8 @@ func (c *xdnsConnClient) recvLoop() {
 				}
 
 				n, addr, err := rc.ReadFrom(buf[:])
-				if err != nil || n == 0 {
-					if go_errors.Is(err, net.ErrClosed) || go_errors.Is(err, io.EOF) {
+				if err != nil {
+					if go_errors.Is(err, net.ErrClosed) {
 						break
 					}
 					continue
