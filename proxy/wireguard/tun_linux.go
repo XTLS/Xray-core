@@ -75,7 +75,13 @@ func (d *deviceNet) DialContextTCPAddrPort(ctx context.Context, addr netip.AddrP
 }
 
 func (d *deviceNet) DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error) {
-	conn, err := d.lc.ListenPacket(context.Background(), "udp", ":0")
+	var conn net.PacketConn
+	var err error
+	if raddr.Addr().Is4() {
+		conn, err = d.lc.ListenPacket(context.Background(), "udp4", ":0")
+	} else {
+		conn, err = d.lc.ListenPacket(context.Background(), "udp6", ":0")
+	}
 	if err != nil {
 		return nil, err
 	}
