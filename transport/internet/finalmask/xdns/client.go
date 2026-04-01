@@ -36,11 +36,12 @@ type packet struct {
 
 type xdnsConnClient struct {
 	net.PacketConn
-	resolverConns  []net.PacketConn
-	resolverAddrs  []*net.UDPAddr
-	resolverIdx    uint32
-	resolverLast   []time.Time
-	resolverClosed []bool
+	resolverConns []net.PacketConn
+	resolverAddrs []*net.UDPAddr
+	resolverIdx   uint32
+	// resolverRecv  []uint32
+	resolverSend []uint32
+	resolverDead []bool
 
 	clientID []byte
 	domain   Name
@@ -104,8 +105,8 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conn.resolverConns = append(conn.resolverConns, uc)
 		conn.resolverAddrs = append(conn.resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
 	}
-	conn.resolverLast = make([]time.Time, len(conn.resolverConns))
-	conn.resolverClosed = make([]bool, len(conn.resolverConns))
+	conn.resolverSend = make([]uint32, len(conn.resolverConns))
+	conn.resolverDead = make([]bool, len(conn.resolverConns))
 
 	go conn.healthCheck()
 	go conn.recvLoop()
@@ -120,14 +121,10 @@ func (c *xdnsConnClient) healthCheck() {
 			return
 		}
 
-		now := time.Now()
-		for i := range c.resolverLast {
-			if c.resolverLast[i].IsZero() {
-				continue
-			}
+		for i := range c.resolverSend {
 			c.mutex.Lock()
-			if now.Sub(c.resolverLast[i]) > 3*time.Second {
-				c.resolverClosed[i] = true
+			if c.resolverSend[i] > 3 {
+				c.resolverDead[i] = true
 			}
 			c.mutex.Unlock()
 		}
@@ -190,8 +187,8 @@ func (c *xdnsConnClient) recvLoop() {
 
 				if anyPacket {
 					c.mutex.Lock()
-					c.resolverLast[i] = time.Now()
-					c.resolverClosed[i] = false
+					c.resolverSend[i] = 0
+					c.resolverDead[i] = false
 					c.mutex.Unlock()
 
 					select {
@@ -265,9 +262,6 @@ func (c *xdnsConnClient) sendLoop() {
 		}
 
 		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
-		if c.resolverLast[c.resolverIdx].IsZero() {
-			c.resolverLast[c.resolverIdx] = time.Now()
-		}
 		cur := c.resolverIdx
 		for {
 			c.resolverIdx += 1
@@ -276,12 +270,15 @@ func (c *xdnsConnClient) sendLoop() {
 				break
 			}
 			c.mutex.Lock()
-			if !c.resolverClosed[c.resolverIdx] {
+			if !c.resolverDead[c.resolverIdx] {
 				c.mutex.Unlock()
 				break
 			}
 			c.mutex.Unlock()
 		}
+		c.mutex.Lock()
+		c.resolverSend[cur] += 1
+		c.mutex.Unlock()
 	}
 }
 
