@@ -225,10 +225,7 @@ func (c *xdnsConnClient) sendLoop() {
 			}
 		} else {
 			if !pollTimer.Stop() {
-				select {
-				case <-pollTimer.C:
-				default:
-				}
+				<-pollTimer.C
 			}
 			pollDelay = initPollDelay
 		}
