@@ -36,7 +36,7 @@ type packet struct {
 }
 
 type xdnsConnClient struct {
-	net.PacketConn
+	conn          net.PacketConn
 	resolverConns []net.PacketConn
 	resolverAddrs []*net.UDPAddr
 	resolverIdx   uint32
@@ -64,7 +64,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	conn := &xdnsConnClient{
-		PacketConn: raw,
+		conn: raw,
 
 		clientID: make([]byte, 8),
 		domain:   domain,
@@ -297,7 +297,32 @@ func (c *xdnsConnClient) Close() error {
 	for _, rc := range c.resolverConns {
 		rc.Close()
 	}
-	return c.PacketConn.Close()
+	return c.conn.Close()
+}
+
+func (c *xdnsConnClient) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *xdnsConnClient) SetDeadline(t time.Time) error {
+	for _, rc := range c.resolverConns {
+		rc.SetDeadline(t)
+	}
+	return c.conn.SetDeadline(t)
+}
+
+func (c *xdnsConnClient) SetReadDeadline(t time.Time) error {
+	for _, rc := range c.resolverConns {
+		rc.SetReadDeadline(t)
+	}
+	return c.conn.SetReadDeadline(t)
+}
+
+func (c *xdnsConnClient) SetWriteDeadline(t time.Time) error {
+	for _, rc := range c.resolverConns {
+		rc.SetWriteDeadline(t)
+	}
+	return c.conn.SetWriteDeadline(t)
 }
 
 func encode(p []byte, clientID []byte, domain Name) ([]byte, error) {
