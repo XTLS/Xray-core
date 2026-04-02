@@ -58,24 +58,9 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		return nil, errors.New("empty resolvers")
 	}
 
-	domain, err := ParseName(c.Domain)
-	if err != nil {
-		return nil, err
-	}
-
-	conn := &xdnsConnClient{
-		conn: raw,
-
-		clientID: make([]byte, 8),
-		domain:   domain,
-
-		pollChan:   make(chan struct{}, pollLimit),
-		readQueue:  make(chan *packet, 256),
-		writeQueue: make(chan *packet, 256),
-	}
-
-	common.Must2(rand.Read(conn.clientID))
-
+	var resolverConns []net.PacketConn
+	var resolverAddrs []*net.UDPAddr
+	var resolverSend []atomic.Uint32
 	for _, rs := range c.Resolvers {
 		h, p, err := net.SplitHostPort(rs)
 		if err != nil {
@@ -96,15 +81,36 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 			uc, err = net.ListenPacket("udp6", ":0")
 		}
 		if err != nil {
-			for _, rc := range conn.resolverConns {
+			for _, rc := range resolverConns {
 				rc.Close()
 			}
 			return nil, errors.New("failed to create resolver socket: ", err)
 		}
-		conn.resolverConns = append(conn.resolverConns, uc)
-		conn.resolverAddrs = append(conn.resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
+		resolverConns = append(resolverConns, uc)
+		resolverAddrs = append(resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
 	}
-	conn.resolverSend = make([]atomic.Uint32, len(conn.resolverConns))
+	resolverSend = make([]atomic.Uint32, len(resolverConns))
+
+	domain, err := ParseName(c.Domain)
+	if err != nil {
+		return nil, err
+	}
+
+	conn := &xdnsConnClient{
+		conn:          raw,
+		resolverConns: resolverConns,
+		resolverAddrs: resolverAddrs,
+		resolverSend:  resolverSend,
+
+		clientID: make([]byte, 8),
+		domain:   domain,
+
+		pollChan:   make(chan struct{}, pollLimit),
+		readQueue:  make(chan *packet, 256),
+		writeQueue: make(chan *packet, 256),
+	}
+
+	common.Must2(rand.Read(conn.clientID))
 
 	go conn.recvLoop()
 	go conn.sendLoop()
@@ -141,7 +147,10 @@ func (c *xdnsConnClient) recvLoop() {
 					continue
 				}
 
-				payload := dnsResponsePayload(&resp, c.domain)
+				payload, valid := dnsResponsePayload(&resp, c.domain)
+				if valid {
+					c.resolverSend[i].Store(0)
+				}
 
 				r := bytes.NewReader(payload)
 				anyPacket := false
@@ -165,8 +174,6 @@ func (c *xdnsConnClient) recvLoop() {
 				}
 
 				if anyPacket {
-					c.resolverSend[i].Swap(0)
-
 					select {
 					case c.pollChan <- struct{}{}:
 					default:
@@ -414,31 +421,32 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	return p, err
 }
 
-func dnsResponsePayload(resp *Message, domain Name) []byte {
+func dnsResponsePayload(resp *Message, domain Name) (payload []byte, valid bool) {
+	payload = nil
+	valid = false
+
 	if resp.Flags&0x8000 != 0x8000 {
-		return nil
+		return
 	}
 	if resp.Flags&0x000f != RcodeNoError {
-		return nil
+		return
 	}
 
 	if len(resp.Answer) != 1 {
-		return nil
+		return
 	}
 	answer := resp.Answer[0]
 
 	_, ok := answer.Name.TrimSuffix(domain)
 	if !ok {
-		return nil
+		return
 	}
 
 	if answer.Type != RRTypeTXT {
-		return nil
-	}
-	payload, err := DecodeRDataTXT(answer.Data)
-	if err != nil {
-		return nil
+		return
 	}
 
-	return payload
+	valid = true
+	payload, _ = DecodeRDataTXT(answer.Data)
+	return
 }
