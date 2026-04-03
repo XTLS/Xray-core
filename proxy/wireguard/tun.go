@@ -411,11 +411,11 @@ func (c *udpConn) Close() error {
 }
 
 func (c *udpConn) LocalAddr() net.Addr {
-	return c.src.RawNetAddr() // fake
+	return c.dst.RawNetAddr()
 }
 
 func (c *udpConn) RemoteAddr() net.Addr {
-	return c.src.RawNetAddr() // src
+	return c.src.RawNetAddr()
 }
 
 func (c *udpConn) SetDeadline(t time.Time) error {
