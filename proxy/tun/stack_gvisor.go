@@ -114,12 +114,8 @@ func (t *stackGVisor) Start() error {
 		// this function handle packets passing from the tun to the gVisor, therefore the src/dst assignement
 		srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
 		dstIP := net.IPAddress(id.LocalAddress.AsSlice())
-		if srcIP == nil {
-			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid src address ", id.RemoteAddress.AsSlice())
-			return false
-		}
-		if dstIP == nil {
-			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid dst address ", id.LocalAddress.AsSlice())
+		if srcIP == nil || dstIP == nil {
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid ip address ", id.RemoteAddress.AsSlice(), " ", id.LocalAddress.AsSlice())
 			return false
 		}
 		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
