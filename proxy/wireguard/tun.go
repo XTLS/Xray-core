@@ -189,8 +189,16 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 			// if len(data) == 0 {
 			// 	return false
 			// }
-			src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
-			dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
+			srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
+			dstIP := net.IPAddress(id.LocalAddress.AsSlice())
+			if srcIP == nil {
+				errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid src address ", id.RemoteAddress.AsSlice())
+			}
+			if dstIP == nil {
+				errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid dst address ", id.LocalAddress.AsSlice())
+			}
+			src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
+			dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
 			manager.feed(src, dst, data)
 			return true
 		})
@@ -217,6 +225,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 			dest: &dst,
 		}:
 		default:
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full")
 		}
 		m.mutex.RUnlock()
 		return
@@ -249,6 +258,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 		dest: &dst,
 	}:
 	default:
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full")
 	}
 }
 
@@ -348,7 +358,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 		_, err := b.Write(q.p)
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "drop udp size ", len(q.p), " to ", q.dest.NetAddr(), " original ", c.dst.NetAddr())
+			errors.LogDebugInner(context.Background(), err, "drop udp with size ", len(q.p), " to ", q.dest.NetAddr(), " original ", c.dst.NetAddr())
 			b.Release()
 			continue
 		}
