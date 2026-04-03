@@ -5,10 +5,12 @@ package tun
 import (
 	"crypto/md5"
 	"errors"
+	"net/netip"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
+	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -70,13 +72,8 @@ func open(name string) (*wintun.Adapter, error) {
 	// generate a deterministic GUID from the adapter name
 	id := md5.Sum([]byte(name))
 	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
-	// try to open existing adapter by name
-	adapter, err := wintun.OpenAdapter(name)
-	if err == nil {
-		return adapter, nil
-	}
 	// try to create adapter anew
-	adapter, err = wintun.CreateAdapter(name, "Xray", guid)
+	adapter, err := wintun.CreateAdapter(name, "Xray", guid)
 	if err == nil {
 		return adapter, nil
 	}
@@ -84,6 +81,70 @@ func open(name string) (*wintun.Adapter, error) {
 }
 
 func (t *WindowsTun) Start() error {
+	var has4, has6 bool
+	allowedIPs := make([]netip.Prefix, 0, len(t.options.WinRoute))
+	for _, route := range t.options.WinRoute {
+		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
+	}
+	routesMap := make(map[winipcfg.RouteData]struct{})
+	for _, ip := range allowedIPs {
+		route := winipcfg.RouteData{
+			Destination: ip.Masked(),
+			Metric:      0,
+		}
+		if ip.Addr().Is4() {
+			has4 = true
+			route.NextHop = netip.IPv4Unspecified()
+		} else {
+			has6 = true
+			route.NextHop = netip.IPv6Unspecified()
+		}
+		routesMap[route] = struct{}{}
+	}
+	routesData := make([]*winipcfg.RouteData, 0, len(routesMap))
+	for route := range routesMap {
+		r := route
+		routesData = append(routesData, &r)
+	}
+	luid := winipcfg.LUID(t.adapter.LUID())
+	err := luid.SetRoutes(routesData)
+	if err != nil {
+		return err
+	}
+	if has4 {
+		ipif, err := luid.IPInterface(windows.AF_INET)
+		if err != nil {
+			return err
+		}
+		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
+		ipif.DadTransmits = 0
+		ipif.ManagedAddressConfigurationSupported = false
+		ipif.OtherStatefulConfigurationSupported = false
+		ipif.NLMTU = t.options.MTU
+		ipif.UseAutomaticMetric = false
+		ipif.Metric = 0
+		err = ipif.Set()
+		if err != nil {
+			return err
+		}
+	}
+	if has6 {
+		ipif, err := luid.IPInterface(windows.AF_INET6)
+		if err != nil {
+			return err
+		}
+		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
+		ipif.DadTransmits = 0
+		ipif.ManagedAddressConfigurationSupported = false
+		ipif.OtherStatefulConfigurationSupported = false
+		ipif.NLMTU = t.options.MTU
+		ipif.UseAutomaticMetric = false
+		ipif.Metric = 0
+		err = ipif.Set()
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -26,6 +26,7 @@ type Config struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	MTU           uint32                 `protobuf:"varint,2,opt,name=MTU,proto3" json:"MTU,omitempty"`
 	UserLevel     uint32                 `protobuf:"varint,3,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	WinRoute      []string               `protobuf:"bytes,4,rep,name=win_route,json=winRoute,proto3" json:"win_route,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,16 +82,24 @@ func (x *Config) GetUserLevel() uint32 {
 	return 0
 }
 
+func (x *Config) GetWinRoute() []string {
+	if x != nil {
+		return x.WinRoute
+	}
+	return nil
+}
+
 var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"M\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"j\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x03 \x01(\rR\tuserLevelBL\n" +
+	"user_level\x18\x03 \x01(\rR\tuserLevel\x12\x1b\n" +
+	"\twin_route\x18\x04 \x03(\tR\bwinRouteBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 
 var (

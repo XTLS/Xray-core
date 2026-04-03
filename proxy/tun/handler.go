@@ -61,8 +61,9 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 
 	tunName := t.config.Name
 	tunOptions := TunOptions{
-		Name: tunName,
-		MTU:  t.config.MTU,
+		Name:     tunName,
+		MTU:      t.config.MTU,
+		WinRoute: t.config.WinRoute,
 	}
 	tunInterface, err := NewTun(tunOptions)
 	if err != nil {

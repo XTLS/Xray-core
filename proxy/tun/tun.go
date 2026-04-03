@@ -8,6 +8,7 @@ type Tun interface {
 
 // TunOptions for tun interface implementation
 type TunOptions struct {
-	Name string
-	MTU  uint32
+	Name     string
+	MTU      uint32
+	WinRoute []string
 }
