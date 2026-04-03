@@ -112,8 +112,16 @@ func (t *stackGVisor) Start() error {
 		// source/destination of the packet we process as incoming, on gVisor side are Remote/Local
 		// in other terms, src is the side behind tun, dst is the side behind gVisor
 		// this function handle packets passing from the tun to the gVisor, therefore the src/dst assignement
-		src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
-		dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
+		srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
+		dstIP := net.IPAddress(id.LocalAddress.AsSlice())
+		if srcIP == nil {
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid src address ", id.RemoteAddress.AsSlice())
+		}
+		if dstIP == nil {
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid dst address ", id.LocalAddress.AsSlice())
+		}
+		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
+		dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
 
 		return udpForwarder.HandlePacket(src, dst, data)
 	})

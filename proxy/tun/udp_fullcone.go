@@ -48,6 +48,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 			dest: &dst,
 		}:
 		default:
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
 		}
 		u.RUnlock()
 		return true
@@ -73,6 +74,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 		dest: &dst,
 	}:
 	default:
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
 	}
 
 	return true
@@ -108,7 +110,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 		_, err := b.Write(e.data)
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "drop udp with size ", len(e.data), " to ", e.dest.NetAddr(), " original ", c.dst.NetAddr())
+			errors.LogDebugInner(context.Background(), err, "drop udp with size ", len(e.data), " to ", e.dest.NetAddr(), " original ", c.dst.NetAddr())
 			b.Release()
 			continue
 		}
