@@ -83,10 +83,12 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
 
+	iConn := stat.TryUnwrapStatsConn(conn)
+
 	var useremail string
 	var userlevel uint32
 	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := conn.(User); ok {
+	if v, ok := iConn.(User); ok {
 		inbound.User = v.User()
 		if inbound.User != nil {
 			useremail = inbound.User.Email
@@ -94,7 +96,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 	}
 
-	iConn := stat.TryUnwrapStatsConn(conn)
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
 		r := io.Reader(conn)
 		b := make([]byte, MaxUDPSize)
