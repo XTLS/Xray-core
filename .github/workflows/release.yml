@@ -186,6 +186,18 @@ jobs:
             if [[ ${GOOS} == 'darwin' ]]; then
               GOARM64="v8.4"
             fi
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOARM64="v8.2"
+            fi
+          fi
+          # Special processing for x86-64
+          if [[ ${GOARCH} == 'amd64' ]]; then
+            if [[ ${GOOS} == 'darwin' ]]; then
+              GOAMD64="v3"
+            fi
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOAMD64="v2"
+            fi
           fi
           # Building
           mkdir -p build_assets
