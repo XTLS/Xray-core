@@ -477,6 +477,12 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
+	if clientCerts := c.BuildClientCertificates(); len(clientCerts) > 0 {
+		config.GetClientCertificate = func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return clientCerts[0], nil
+		}
+	}
+
 	return config
 }
 
@@ -546,6 +552,63 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 
 func IsFromMitm(str string) bool {
 	return strings.ToLower(str) == "frommitm"
+}
+
+func (c *Config) BuildClientCertificates() []*tls.Certificate {
+	if len(c.ClientCertificate) == 0 {
+		return nil
+	}
+
+	certs := make([]*tls.Certificate, 0, len(c.ClientCertificate))
+
+	for _, clientCert := range c.ClientCertificate {
+		certData := clientCert.Certificate
+		keyData := clientCert.Key
+
+		if clientCert.CertificatePath != "" {
+			content, err := filesystem.ReadCert(clientCert.CertificatePath)
+			if err != nil {
+				errors.LogError(context.Background(), "failed to read client certificate file: ", err)
+				continue
+			}
+			certData = content
+		}
+
+		if clientCert.KeyPath != "" {
+			content, err := filesystem.ReadCert(clientCert.KeyPath)
+			if err != nil {
+				errors.LogError(context.Background(), "failed to read client key file: ", err)
+				continue
+			}
+			keyData = content
+		}
+
+		if len(certData) == 0 {
+			certData = clientCert.Certificate
+		}
+		if len(keyData) == 0 {
+			keyData = clientCert.Key
+		}
+
+		if len(certData) == 0 || len(keyData) == 0 {
+			errors.LogWarning(context.Background(), "client certificate and key must be provided together, skipping")
+			continue
+		}
+
+		keyPair, err := tls.X509KeyPair(certData, keyData)
+		if err != nil {
+			errors.LogWarningInner(context.Background(), err, "failed to parse client X509 key pair")
+			continue
+		}
+
+		certs = append(certs, &keyPair)
+	}
+
+	if len(certs) == 0 {
+		return nil
+	}
+
+	return certs
 }
 
 type verifyResult int
