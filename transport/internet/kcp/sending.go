@@ -321,7 +321,7 @@ func (w *SendingWorker) Flush(current uint32) {
 		cwnd = w.controlWindow
 	}
 
-	if !w.conn.Config.Congestion {
+	if w.conn.Config.Congestion {
 		cwnd *= 20
 	}
 
