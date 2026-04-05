@@ -181,12 +181,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 
 		if p.Stats.UserOnline {
-			name := "user>>>" + user.Email + ">>>online"
-			if om, _ := stats.GetOrRegisterOnlineMap(d.stats, name); om != nil {
-				userIP := sessionInbound.Source.Address.String()
-				om.AddIP(userIP)
-				context.AfterFunc(ctx, func() { om.RemoveIP(userIP) })
-			}
+			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
 		}
 	}
 
@@ -220,16 +215,19 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 			}
 		}
 		if p.Stats.UserOnline {
-			name := "user>>>" + user.Email + ">>>online"
-			if om, _ := stats.GetOrRegisterOnlineMap(statsManager, name); om != nil {
-				userIP := sessionInbound.Source.Address.String()
-				om.AddIP(userIP)
-				context.AfterFunc(ctx, func() { om.RemoveIP(userIP) })
-			}
+			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
 		}
 	}
 
 	return link
+}
+
+func trackOnlineIP(ctx context.Context, sm stats.Manager, email, ip string) {
+	name := "user>>>" + email + ">>>online"
+	if om, _ := stats.GetOrRegisterOnlineMap(sm, name); om != nil {
+		om.AddIP(ip)
+		context.AfterFunc(ctx, func() { om.RemoveIP(ip) })
+	}
 }
 
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
