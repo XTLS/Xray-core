@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -496,7 +497,10 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		quicParams := streamSettings.QuicParams
 		if quicParams == nil {
-			quicParams = &internet.QuicParams{}
+			quicParams = &internet.QuicParams{
+				BbrProfile: string(bbr.ProfileStandard),
+				UdpHop:     &internet.UdpHop{},
+			}
 		}
 
 		quicConfig := &quic.Config{
@@ -535,8 +539,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 				case "reno":
 					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion reno")
 				default:
-					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(conn)
+					errors.LogDebug(context.Background(), conn.RemoteAddr(), " ", "congestion bbr ", quicParams.BbrProfile)
+					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				}
 
 				go func() {

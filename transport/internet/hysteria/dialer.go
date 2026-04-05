@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -157,10 +158,10 @@ func (c *client) dial() error {
 
 	quicParams := c.quicParams
 	if quicParams == nil {
-		quicParams = &internet.QuicParams{}
-	}
-	if quicParams.UdpHop == nil {
-		quicParams.UdpHop = &internet.UdpHop{}
+		quicParams = &internet.QuicParams{
+			BbrProfile: string(bbr.ProfileStandard),
+			UdpHop:     &internet.UdpHop{},
+		}
 	}
 
 	var index int
@@ -298,12 +299,12 @@ func (c *client) dial() error {
 	case "reno":
 		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
-		errors.LogDebug(c.ctx, "congestion bbr")
-		congestion.UseBBR(quicConn)
+		errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
+		congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 	case "brutal", "":
 		if serverAuto == "auto" || quicParams.BrutalUp == 0 || serverDown == 0 {
-			errors.LogDebug(c.ctx, "congestion bbr")
-			congestion.UseBBR(quicConn)
+			errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
+			congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 		} else {
 			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(quicParams.BrutalUp, serverDown))
 			congestion.UseBrutal(quicConn, min(quicParams.BrutalUp, serverDown))

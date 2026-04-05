@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -158,10 +159,10 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	if httpVersion == "3" {
 		quicParams := streamSettings.QuicParams
 		if quicParams == nil {
-			quicParams = &internet.QuicParams{}
-		}
-		if quicParams.UdpHop == nil {
-			quicParams.UdpHop = &internet.UdpHop{}
+			quicParams = &internet.QuicParams{
+				BbrProfile: string(bbr.ProfileStandard),
+				UdpHop:     &internet.UdpHop{},
+			}
 		}
 
 		quicConfig := &quic.Config{
@@ -292,8 +293,8 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				case "reno":
 					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion reno")
 				default:
-					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(quicConn)
+					errors.LogDebug(context.Background(), quicConn.RemoteAddr(), " ", "congestion bbr ", quicParams.BbrProfile)
+					congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
 				}
 
 				return quicConn, nil
