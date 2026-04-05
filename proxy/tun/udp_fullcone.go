@@ -38,7 +38,7 @@ func newUdpConnectionHandler(handleConnection func(conn net.Conn, dest net.Desti
 
 // HandlePacket handles UDP packets coming from tun, to forward to the dispatcher
 // this custom handler support FullCone NAT of returning packets, binding connection only by the source addr:port
-func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destination, data []byte) bool {
+func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destination, data []byte) {
 	u.RLock()
 	conn, found := u.udpConns[src]
 	if found {
@@ -51,7 +51,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
 		}
 		u.RUnlock()
-		return true
+		return
 	}
 	u.RUnlock()
 
@@ -76,8 +76,6 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 	default:
 		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
 	}
-
-	return true
 }
 
 func (u *udpConnectionHandler) connectionFinished(src net.Destination) {

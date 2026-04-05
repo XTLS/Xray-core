@@ -120,8 +120,8 @@ func (t *stackGVisor) Start() error {
 		}
 		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
 		dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
-
-		return udpForwarder.HandlePacket(src, dst, data)
+		udpForwarder.HandlePacket(src, dst, data)
+		return true
 	})
 
 	t.stack = ipStack
