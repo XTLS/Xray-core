@@ -16,18 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: 设置 Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          
       - name: 克隆仓库
         uses: actions/checkout@v4
         with:
           repository: zero-custom/Xray-core
-          ref: mtls-client-cert
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          fetch-depth: 1
+          
+      - name: 设置 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
           
       - name: 同步上游 (Release 触发)
         if: github.event_name == 'release'
@@ -36,8 +36,6 @@ jobs:
           git fetch upstream
           git checkout main
           git merge upstream/main --no-edit || echo "No changes to merge"
-          git checkout mtls-client-cert
-          git rebase main || echo "No changes to rebase"
           
       - name: 手动同步上游 (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch' && inputs.sync_upstream == 'true'
@@ -46,8 +44,6 @@ jobs:
           git fetch upstream
           git checkout main
           git merge upstream/main --no-edit || echo "No changes to merge"
-          git checkout mtls-client-cert
-          git rebase main || echo "No changes to rebase"
           
       - name: 编译
         env:
@@ -70,7 +66,7 @@ jobs:
           git config user.email "action@github.com"
           git add -A
           git commit -m "chore: sync with upstream" || echo "No changes to commit"
-          git push origin mtls-client-cert || echo "Push failed"
+          git push origin main || echo "Push failed"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
