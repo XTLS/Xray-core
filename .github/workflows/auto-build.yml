@@ -1,0 +1,141 @@
+name: Auto Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: '同步上游代码'
+        required: false
+        default: 'false'
+        type: boolean
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 设置 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          
+      - name: 克隆仓库
+        uses: actions/checkout@v4
+        with:
+          repository: zero-custom/Xray-core
+          ref: mtls-client-cert
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: 同步上游 (Release 触发)
+        if: github.event_name == 'release'
+        run: |
+          git remote add upstream https://github.com/XTLS/Xray-core.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main --no-edit || echo "No changes to merge"
+          git checkout mtls-client-cert
+          git rebase main || echo "No changes to rebase"
+          
+      - name: 手动同步上游 (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' && inputs.sync_upstream == 'true'
+        run: |
+          git remote add upstream https://github.com/XTLS/Xray-core.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main --no-edit || echo "No changes to merge"
+          git checkout mtls-client-cert
+          git rebase main || echo "No changes to rebase"
+          
+      - name: 编译
+        env:
+          GOPROXY: https://mirrors.tencent.com/
+        run: |
+          CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-s -w -buildid=" ./main
+          
+      - name: 上传产物
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-bin
+          path: xray
+          retention-days: 30
+          
+      - name: 提交更改
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.sync_upstream == 'true')
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add -A
+          git commit -m "chore: sync with upstream" || echo "No changes to commit"
+          git push origin mtls-client-cert || echo "Push failed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  release:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 下载编译产物
+        uses: actions/download-artifact@v4
+        with:
+          name: xray-bin
+          path: .
+          
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.event.release.tag_name }} + mTLS
+          body: |
+            Xray-core with mTLS client certificate support.
+            
+            Based on upstream release: ${{ github.event.release.tag_name }}
+            
+            ## Features
+            - mTLS client certificate support
+            - Compatible with uTLS fingerprint
+            - Support for file path or inline PEM format
+          files: xray
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  docker:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 下载编译产物
+        uses: actions/download-artifact@v4
+        with:
+          name: xray-bin
+          path: .
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: 构建并推送 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/xray:latest
+            ${{ secrets.DOCKER_USERNAME }}/xray:${{ github.event.release.tag_name }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.event.release.tag_name }}
