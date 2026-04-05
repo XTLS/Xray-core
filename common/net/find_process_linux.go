@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !android
 
 package net
 
@@ -13,43 +13,43 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, err error) {
-	isLocal, err := IsLocal(dest.Address.IP())
+func FindProcess(src Destination, dest Destination) (PID int, Name string, AbsolutePath string, err error) {
+	isLocal, err := IsLocal(src.Address.IP())
 	if err != nil {
 		return 0, "", "", errors.New("failed to determine if address is local: ", err)
 	}
 	if !isLocal {
 		return 0, "", "", ErrNotLocal
 	}
-	if dest.Network != Network_TCP && dest.Network != Network_UDP {
+	if src.Network != Network_TCP && src.Network != Network_UDP {
 		panic("Unsupported network type for process lookup.")
 	}
 	// the core should never has a domain as source(?
-	if dest.Address.Family() == AddressFamilyDomain {
+	if src.Address.Family() == AddressFamilyDomain {
 		panic("Domain addresses are not supported for process lookup.")
 	}
 	var procFile string
 
-	switch dest.Network {
+	switch src.Network {
 	case Network_TCP:
-		if dest.Address.Family() == AddressFamilyIPv4 {
+		if src.Address.Family() == AddressFamilyIPv4 {
 			procFile = "/proc/net/tcp"
 		}
-		if dest.Address.Family() == AddressFamilyIPv6 {
+		if src.Address.Family() == AddressFamilyIPv6 {
 			procFile = "/proc/net/tcp6"
 		}
 	case Network_UDP:
-		if dest.Address.Family() == AddressFamilyIPv4 {
+		if src.Address.Family() == AddressFamilyIPv4 {
 			procFile = "/proc/net/udp"
 		}
-		if dest.Address.Family() == AddressFamilyIPv6 {
+		if src.Address.Family() == AddressFamilyIPv6 {
 			procFile = "/proc/net/udp6"
 		}
 	default:
 		panic("Unsupported network type for process lookup.")
 	}
 
-	targetHexAddr, err := formatLittleEndianString(dest.Address, dest.Port)
+	targetHexAddr, err := formatLittleEndianString(src.Address, src.Port)
 	if err != nil {
 		return 0, "", "", errors.New("failed to format address: ", err)
 	}
@@ -59,7 +59,7 @@ func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, e
 		return 0, "", "", errors.New("could not search in ", procFile).Base(err)
 	}
 	if inode == "" {
-		return 0, "", "", errors.New("connection for ", dest.Address, ":", dest.Port, " not found in ", procFile)
+		return 0, "", "", errors.New("connection for ", src.Address, ":", src.Port, " not found in ", procFile)
 	}
 
 	pidStr, err := findPidByInode(inode)
