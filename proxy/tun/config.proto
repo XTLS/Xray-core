@@ -10,5 +10,6 @@ message Config {
   string name = 1;
   uint32 MTU = 2;
   uint32 user_level = 3;
-  repeated string win_route = 4;
+  repeated string address = 4;
+  repeated string route = 5;
 }

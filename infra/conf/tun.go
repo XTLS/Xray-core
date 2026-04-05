@@ -9,7 +9,8 @@ type TunConfig struct {
 	Name      string   `json:"name"`
 	MTU       uint32   `json:"MTU"`
 	UserLevel uint32   `json:"userLevel"`
-	WinRoute  []string `json:"winRoute"`
+	Address   []string `json:"address"`
+	Route     []string `json:"route"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -17,7 +18,8 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		Name:      v.Name,
 		MTU:       v.MTU,
 		UserLevel: v.UserLevel,
-		WinRoute:  v.WinRoute,
+		Address:   v.Address,
+		Route:     v.Route,
 	}
 
 	if v.Name == "" {

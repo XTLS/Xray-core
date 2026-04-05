@@ -4,10 +4,11 @@ package tun
 
 import (
 	"crypto/md5"
-	"errors"
+	go_errors "errors"
 	"net/netip"
 	"unsafe"
 
+	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -82,8 +83,8 @@ func open(name string) (*wintun.Adapter, error) {
 
 func (t *WindowsTun) Start() error {
 	var has4, has6 bool
-	allowedIPs := make([]netip.Prefix, 0, len(t.options.WinRoute))
-	for _, route := range t.options.WinRoute {
+	allowedIPs := make([]netip.Prefix, 0, len(t.options.Route))
+	for _, route := range t.options.Route {
 		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
 	}
 	routesMap := make(map[winipcfg.RouteData]struct{})
@@ -109,8 +110,20 @@ func (t *WindowsTun) Start() error {
 	luid := winipcfg.LUID(t.adapter.LUID())
 	err := luid.SetRoutes(routesData)
 	if err != nil {
-		return err
+		return errors.New("unable to set routes").Base(err)
 	}
+
+	if len(t.options.Address) > 0 {
+		addresses := make([]netip.Prefix, 0, len(t.options.Address))
+		for _, address := range t.options.Address {
+			addresses = append(addresses, netip.MustParsePrefix(address))
+		}
+		err := luid.SetIPAddresses(addresses)
+		if err != nil {
+			return errors.New("unable to set ips").Base(err)
+		}
+	}
+
 	if has4 {
 		ipif, err := luid.IPInterface(windows.AF_INET)
 		if err != nil {
@@ -145,6 +158,7 @@ func (t *WindowsTun) Start() error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -180,7 +194,7 @@ func (t *WindowsTun) WritePacket(packetBuffer *stack.PacketBuffer) tcpip.Error {
 // which will make the stack call Wait which should implement desired push-back
 func (t *WindowsTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	packet, err := t.session.ReceivePacket()
-	if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
+	if go_errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
 		return 0, nil, ErrQueueEmpty
 	}
 	if err != nil {
