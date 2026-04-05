@@ -370,6 +370,18 @@ func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func (c *udpConnClient) Write(p []byte) (int, error) {
-	return c.Conn.(net.PacketConn).WriteTo(p, c.dest.RawNetAddr())
+func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	for i, b := range mb {
+		dst := c.dest
+		if b.UDP != nil {
+			dst = *b.UDP
+		}
+		_, err := c.Conn.(net.PacketConn).WriteTo(b.Bytes(), dst.RawNetAddr())
+		if err != nil {
+			buf.ReleaseMulti(mb[i:])
+			return err
+		}
+		b.Release()
+	}
+	return nil
 }

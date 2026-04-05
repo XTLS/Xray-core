@@ -10,18 +10,20 @@ import (
 	"net/netip"
 	"os"
 	"sync"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 
-	"github.com/sagernet/sing/common/control"
 	"github.com/vishvananda/netlink"
 	"github.com/xtls/xray-core/common/errors"
-	wgtun "golang.zx2c4.com/wireguard/tun"
+	"github.com/xtls/xray-core/transport/internet"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 type deviceNet struct {
 	tunnel
-	dialer net.Dialer
+	dialer *net.Dialer
+	lc     *net.ListenConfig
 
 	handle    *netlink.Handle
 	linkAddrs []netlink.Addr
@@ -47,10 +49,23 @@ func allocateIPv6TableIndex() int {
 }
 
 func newDeviceNet(interfaceName string) *deviceNet {
-	var dialer net.Dialer
-	bindControl := control.BindToInterface(control.NewDefaultInterfaceFinder(), interfaceName, -1)
-	dialer.Control = control.Append(dialer.Control, bindControl)
-	return &deviceNet{dialer: dialer}
+	dialer := &net.Dialer{}
+	dialer.Control = func(network, address string, c syscall.RawConn) error {
+		return c.Control(func(fd uintptr) {
+			if err := syscall.BindToDevice(int(fd), interfaceName); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to bind to device")
+			}
+		})
+	}
+	lc := &net.ListenConfig{}
+	lc.Control = func(network, address string, c syscall.RawConn) error {
+		return c.Control(func(fd uintptr) {
+			if err := syscall.BindToDevice(int(fd), interfaceName); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to bind to device")
+			}
+		})
+	}
+	return &deviceNet{dialer: dialer, lc: lc}
 }
 
 func (d *deviceNet) DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (
@@ -60,9 +75,23 @@ func (d *deviceNet) DialContextTCPAddrPort(ctx context.Context, addr netip.AddrP
 }
 
 func (d *deviceNet) DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error) {
-	dialer := d.dialer
-	dialer.LocalAddr = &net.UDPAddr{IP: laddr.Addr().AsSlice(), Port: int(laddr.Port())}
-	return dialer.DialContext(context.Background(), "udp", raddr.String())
+	var conn net.PacketConn
+	var err error
+	if raddr.Addr().Is4() {
+		conn, err = d.lc.ListenPacket(context.Background(), "udp4", ":0")
+	} else {
+		conn, err = d.lc.ListenPacket(context.Background(), "udp6", ":0")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &internet.PacketConnWrapper{
+		PacketConn: conn,
+		Dest: &net.UDPAddr{
+			IP:   raddr.Addr().AsSlice(),
+			Port: int(raddr.Port()),
+		},
+	}, nil
 }
 
 func (d *deviceNet) Close() (err error) {
@@ -134,7 +163,7 @@ func createKernelTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 	}
 
 	n := CalculateInterfaceName("wg")
-	wgt, err := wgtun.CreateTUN(n, mtu)
+	wgt, err := tun.CreateTUN(n, mtu)
 	if err != nil {
 		return nil, err
 	}

@@ -189,8 +189,14 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 			// if len(data) == 0 {
 			// 	return false
 			// }
-			src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
-			dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
+			srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
+			dstIP := net.IPAddress(id.LocalAddress.AsSlice())
+			if srcIP == nil || dstIP == nil {
+				errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid ip address ", id.RemoteAddress.AsSlice(), " ", id.LocalAddress.AsSlice())
+				return true
+			}
+			src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
+			dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
 			manager.feed(src, dst, data)
 			return true
 		})
@@ -212,8 +218,12 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	uc, ok := m.m[src.NetAddr()]
 	if ok {
 		select {
-		case uc.ch <- data:
+		case uc.queue <- &packet{
+			p:    data,
+			dest: &dst,
+		}:
 		default:
+			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full")
 		}
 		m.mutex.RUnlock()
 		return
@@ -226,9 +236,9 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	uc, ok = m.m[src.NetAddr()]
 	if !ok {
 		uc = &udpConn{
-			ch:  make(chan []byte, 1024),
-			src: src,
-			dst: dst,
+			queue: make(chan *packet, 1024),
+			src:   src,
+			dst:   dst,
 		}
 		uc.writeFunc = m.writeRawUDPPacket
 		uc.closeFunc = func() {
@@ -241,15 +251,19 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	}
 
 	select {
-	case uc.ch <- data:
+	case uc.queue <- &packet{
+		p:    data,
+		dest: &dst,
+	}:
 	default:
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full")
 	}
 }
 
 func (m *udpManager) close(uc *udpConn) {
 	if !uc.closed {
 		uc.closed = true
-		close(uc.ch)
+		close(uc.queue)
 		delete(m.m, uc.src.NetAddr())
 	}
 }
@@ -317,8 +331,13 @@ func (m *udpManager) writeRawUDPPacket(payload []byte, src net.Destination, dst 
 	return nil
 }
 
+type packet struct {
+	p    []byte
+	dest *net.Destination
+}
+
 type udpConn struct {
-	ch        chan []byte
+	queue     chan *packet
 	src       net.Destination
 	dst       net.Destination
 	writeFunc func(payload []byte, src net.Destination, dst net.Destination) error
@@ -326,13 +345,35 @@ type udpConn struct {
 	closed    bool
 }
 
+func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	for {
+		q, ok := <-c.queue
+		if !ok {
+			return nil, io.EOF
+		}
+
+		b := buf.New()
+
+		_, err := b.Write(q.p)
+		if err != nil {
+			errors.LogDebugInner(context.Background(), err, "drop udp with size ", len(q.p), " to ", q.dest.NetAddr(), " original ", c.dst.NetAddr())
+			b.Release()
+			continue
+		}
+
+		b.UDP = q.dest
+
+		return buf.MultiBuffer{b}, nil
+	}
+}
+
 func (c *udpConn) Read(p []byte) (int, error) {
-	b, ok := <-c.ch
+	q, ok := <-c.queue
 	if !ok {
 		return 0, io.EOF
 	}
-	n := copy(p, b)
-	if n != len(b) {
+	n := copy(p, q.p)
+	if n != len(q.p) {
 		return 0, io.ErrShortBuffer
 	}
 	return n, nil
@@ -368,11 +409,11 @@ func (c *udpConn) Close() error {
 }
 
 func (c *udpConn) LocalAddr() net.Addr {
-	return c.src.RawNetAddr() // fake
+	return c.dst.RawNetAddr()
 }
 
 func (c *udpConn) RemoteAddr() net.Addr {
-	return c.src.RawNetAddr() // src
+	return c.src.RawNetAddr()
 }
 
 func (c *udpConn) SetDeadline(t time.Time) error {
