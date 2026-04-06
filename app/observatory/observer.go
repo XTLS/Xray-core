@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -70,7 +71,7 @@ func (o *Observer) background() {
 
 		outbounds := hs.Select(o.config.SubjectSelector)
 
-		o.updateStatus(outbounds)
+		o.clearRemovedOutbounds(outbounds)
 
 		sleepTime := time.Second * 10
 		if o.config.ProbeInterval != 0 {
@@ -111,11 +112,19 @@ func (o *Observer) background() {
 	}
 }
 
-func (o *Observer) updateStatus(outbounds []string) {
+func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
-	// TODO should remove old inbound that is removed
-	_ = outbounds
+	if len(o.status) == 0 {
+		return
+	}
+	var pruned []*OutboundStatus
+	for _, status := range o.status {
+		if slices.Contains(outbounds, status.OutboundTag) {
+			pruned = append(pruned, status)
+		}
+	}
+	o.status = pruned
 }
 
 func (o *Observer) probe(outbound string) ProbeResult {
