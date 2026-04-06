@@ -71,8 +71,14 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
 	}
 
+	if c.Mtu != nil && *c.Mtu < 21 {
+		return nil, errors.New("CwndMultiplier must be at least 21").AtError()
+	}
 	if c.Tti != nil && (*c.Tti < 10 || *c.Tti > 5000) {
 		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
+	}
+	if c.CwndMultiplier != nil && *c.CwndMultiplier < 1 {
+		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
 	}
 
 	config := &kcp.Config{
@@ -103,21 +109,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		config.WriteBuffer = *c.WriteBufferSize * 1024 * 1024
 	}
 
-	if config.Mtu == 0 {
-		config.Mtu = 1350
-	}
-	if config.Tti == 0 {
-		config.Tti = 50
-	}
-	// if config.UplinkCapacity == 0 {
-	// 	config.UplinkCapacity = 5
-	// }
-	// if config.DownlinkCapacity == 0 {
-	// 	config.DownlinkCapacity = 20
-	// }
-	if config.CwndMultiplier == 0 {
-		config.CwndMultiplier = 1
-	}
+	// Special cg
 	if config.WriteBuffer == 0 {
 		config.WriteBuffer = 512 * 1024
 	}
