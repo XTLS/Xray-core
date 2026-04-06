@@ -52,7 +52,7 @@ type queue struct {
 type xdnsConnServer struct {
 	net.PacketConn
 
-	domain Name
+	domains []Name
 
 	ch            chan *record
 	readQueue     chan *packet
@@ -63,15 +63,27 @@ type xdnsConnServer struct {
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	domain, err := ParseName(c.Domain)
-	if err != nil {
-		return nil, err
+	domains := make([]Name, 0, len(c.Domains))
+	if len(c.Domains) == 0 {
+		domain, err := ParseName(c.Domain)
+		if err != nil {
+			return nil, err
+		}
+		domains = append(domains, domain)
+	} else {
+		for _, domain := range c.Domains {
+			domain, err := ParseName(domain)
+			if err != nil {
+				return nil, err
+			}
+			domains = append(domains, domain)
+		}
 	}
 
 	conn := &xdnsConnServer{
 		PacketConn: raw,
 
-		domain: domain,
+		domains: domains,
 
 		ch:            make(chan *record, 500),
 		readQueue:     make(chan *packet, 512),
@@ -169,7 +181,7 @@ func (c *xdnsConnServer) recvLoop() {
 			continue
 		}
 
-		resp, payload := responseFor(&query, c.domain)
+		resp, payload := responseFor(&query, c.domains)
 
 		var clientID [8]byte
 		n = copy(clientID[:], payload)
@@ -399,7 +411,7 @@ func nextPacketServer(r *bytes.Reader) ([]byte, error) {
 	}
 }
 
-func responseFor(query *Message, domain Name) (*Message, []byte) {
+func responseFor(query *Message, domains []Name) (*Message, []byte) {
 	resp := &Message{
 		ID:       query.ID,
 		Flags:    0x8000,
@@ -447,7 +459,14 @@ func responseFor(query *Message, domain Name) (*Message, []byte) {
 	}
 	question := query.Question[0]
 
-	prefix, ok := question.Name.TrimSuffix(domain)
+	var prefix Name
+	var ok bool
+	for _, domain := range domains {
+		prefix, ok = question.Name.TrimSuffix(domain)
+		if ok {
+			break
+		}
+	}
 	if !ok {
 		resp.Flags |= RcodeNameError
 		return resp, nil
@@ -525,7 +544,7 @@ func computeMaxEncodedPayload(limit int) int {
 			},
 		},
 	}
-	resp, _ := responseFor(query, [][]byte{})
+	resp, _ := responseFor(query, []Name{[][]byte{}})
 
 	resp.Answer = []RR{
 		{
