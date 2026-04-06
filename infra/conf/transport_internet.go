@@ -72,7 +72,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Mtu != nil && *c.Mtu < 21 {
-		return nil, errors.New("CwndMultiplier must be at least 21").AtError()
+		return nil, errors.New("Mtu must be at least 21").AtError()
 	}
 	if c.Tti != nil && (*c.Tti < 10 || *c.Tti > 5000) {
 		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
