@@ -19,8 +19,15 @@ import (
 
 func TestDialAndListen(t *testing.T) {
 	listerner, err := NewListener(context.Background(), net.LocalHostIP, net.Port(0), &internet.MemoryStreamConfig{
-		ProtocolName:     "mkcp",
-		ProtocolSettings: &Config{},
+		ProtocolName: "mkcp",
+		ProtocolSettings: &Config{
+			Mtu:              1350,
+			Tti:              50,
+			UplinkCapacity:   5,
+			DownlinkCapacity: 20,
+			CwndMultiplier:   20,
+			WriteBuffer:      2 * 1024 * 1024,
+		},
 	}, func(conn stat.Connection) {
 		go func(c stat.Connection) {
 			payload := make([]byte, 4096)
