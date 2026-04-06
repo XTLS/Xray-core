@@ -79,12 +79,12 @@ jobs:
     strategy:
       matrix:
         # Include x86-64 and ARM64 on all platforms.
-        goos: [windows, linux, darwin, android]
+        goos: [windows, freebsd, linux, darwin, android]
         goarch: [amd64, arm64]
         patch-assetname: [""]
-        # Building for FreeBSD and OpenBSD has been suspended unless
-        # there are active contributors that uses FreeBSD or OpenBSD actively.
-        # PRs for FreeBSD and OpenBSD compatibility are welcome.
+        # Building for OpenBSD has been suspended unless there are active
+        # contributors that uses OpenBSD actively.
+        # PRs for OpenBSD compatibility are welcome.
         # Building for BSDs will be add back when there is active maintenance.
         include:
           # BEGIN RISCV & LoongArch
@@ -138,6 +138,10 @@ jobs:
             goarch: arm
             goarm: 5
           # END Linux ARM
+          # BEGIN BSD ARM
+          - goos: freebsd
+            goarch: arm
+          # END BSD ARM
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -198,6 +202,10 @@ jobs:
             if [[ ${GOOS} == 'windows' ]]; then
               GOAMD64="v2"
             fi
+          fi
+          # Special processing for 32-bit ARM
+          if [[ ${GOARCH} == 'arm' ]] && [[ ${GOOS} != 'linux' ]]; then
+            GOARM="7"
           fi
           # Building
           mkdir -p build_assets

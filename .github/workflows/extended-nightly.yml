@@ -15,15 +15,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - goos: freebsd
-            goarch: amd64
-            assetname: freebsd-64
-          - goos: freebsd
-            goarch: arm64
-            assetname: freebsd-arm64-v8a
-          - goos: freebsd
-            goarch: arm
-            assetname: freebsd-arm32-v7a
           - goos: openbsd
             goarch: amd64
             assetname: openbsd-64
@@ -33,6 +24,9 @@ jobs:
           - goos: openbsd
             goarch: arm
             assetname: openbsd-arm32-v7a
+          - goos: openbsd
+            goarch: 386
+            assetname: openbsd-32
       fail-fast: false
 
     runs-on: ubuntu-latest
