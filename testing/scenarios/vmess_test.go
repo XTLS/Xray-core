@@ -94,9 +94,9 @@ func TestVMessGCM(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -192,9 +192,9 @@ func TestVMessGCMReadv(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -293,9 +293,9 @@ func TestVMessGCMUDP(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -388,9 +388,9 @@ func TestVMessChacha20(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_CHACHA20_POLY1305,
 								},
@@ -484,7 +484,7 @@ func TestVMessNone(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -642,18 +642,9 @@ func TestVMessKCPLarge(t *testing.T) {
 							{
 								ProtocolName: "mkcp",
 								Settings: serial.ToTypedMessage(&kcp.Config{
-									ReadBuffer: &kcp.ReadBuffer{
-										Size: 512 * 1024,
-									},
-									WriteBuffer: &kcp.WriteBuffer{
-										Size: 512 * 1024,
-									},
-									UplinkCapacity: &kcp.UplinkCapacity{
-										Value: 20,
-									},
-									DownlinkCapacity: &kcp.DownlinkCapacity{
-										Value: 20,
-									},
+									WriteBuffer:      512 * 1024,
+									UplinkCapacity:   20,
+									DownlinkCapacity: 20,
 								}),
 							},
 						},
@@ -704,7 +695,7 @@ func TestVMessKCPLarge(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -721,18 +712,9 @@ func TestVMessKCPLarge(t *testing.T) {
 							{
 								ProtocolName: "mkcp",
 								Settings: serial.ToTypedMessage(&kcp.Config{
-									ReadBuffer: &kcp.ReadBuffer{
-										Size: 512 * 1024,
-									},
-									WriteBuffer: &kcp.WriteBuffer{
-										Size: 512 * 1024,
-									},
-									UplinkCapacity: &kcp.UplinkCapacity{
-										Value: 20,
-									},
-									DownlinkCapacity: &kcp.DownlinkCapacity{
-										Value: 20,
-									},
+									WriteBuffer:      512 * 1024,
+									UplinkCapacity:   20,
+									DownlinkCapacity: 20,
 								}),
 							},
 						},
@@ -833,7 +815,7 @@ func TestVMessGCMMux(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -956,7 +938,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1059,7 +1041,7 @@ func TestVMessZero(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1154,7 +1136,7 @@ func TestVMessGCMLengthAuth(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1254,7 +1236,7 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{

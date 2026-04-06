@@ -54,15 +54,15 @@ var (
 )
 
 type KCPConfig struct {
-	Mtu             *uint32         `json:"mtu"`
-	Tti             *uint32         `json:"tti"`
-	UpCap           *uint32         `json:"uplinkCapacity"`
-	DownCap         *uint32         `json:"downlinkCapacity"`
-	Congestion      *bool           `json:"congestion"`
-	ReadBufferSize  *uint32         `json:"readBufferSize"`
-	WriteBufferSize *uint32         `json:"writeBufferSize"`
-	HeaderConfig    json.RawMessage `json:"header"`
-	Seed            *string         `json:"seed"`
+	Mtu             *uint32 `json:"mtu"`
+	Tti             *uint32 `json:"tti"`
+	UpCap           *uint32 `json:"uplinkCapacity"`
+	DownCap         *uint32 `json:"downlinkCapacity"`
+	CwndMultiplier  *uint32 `json:"cwndMultiplier"`
+	WriteBufferSize *uint32 `json:"writeBufferSize"`
+
+	HeaderConfig json.RawMessage `json:"header"`
+	Seed         *string         `json:"seed"`
 }
 
 // Build implements Buildable.
@@ -70,44 +70,33 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	config := new(kcp.Config)
 
 	if c.Mtu != nil {
-		mtu := *c.Mtu
-		// if mtu < 576 || mtu > 1460 {
-		// 	return nil, errors.New("invalid mKCP MTU size: ", mtu).AtError()
-		// }
-		config.Mtu = &kcp.MTU{Value: mtu}
+		config.Mtu = *c.Mtu
 	}
 	if c.Tti != nil {
 		tti := *c.Tti
 		if tti < 10 || tti > 5000 {
 			return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
 		}
-		config.Tti = &kcp.TTI{Value: tti}
+		config.Tti = tti
 	}
 	if c.UpCap != nil {
-		config.UplinkCapacity = &kcp.UplinkCapacity{Value: *c.UpCap}
+		config.UplinkCapacity = *c.UpCap
 	}
 	if c.DownCap != nil {
-		config.DownlinkCapacity = &kcp.DownlinkCapacity{Value: *c.DownCap}
+		config.DownlinkCapacity = *c.DownCap
 	}
-	if c.Congestion != nil {
-		config.Congestion = *c.Congestion
-	}
-	if c.ReadBufferSize != nil {
-		size := *c.ReadBufferSize
-		if size > 0 {
-			config.ReadBuffer = &kcp.ReadBuffer{Size: size * 1024 * 1024}
-		} else {
-			config.ReadBuffer = &kcp.ReadBuffer{Size: 512 * 1024}
-		}
+	if c.CwndMultiplier != nil {
+		config.CwndMultiplier = *c.CwndMultiplier
 	}
 	if c.WriteBufferSize != nil {
 		size := *c.WriteBufferSize
 		if size > 0 {
-			config.WriteBuffer = &kcp.WriteBuffer{Size: size * 1024 * 1024}
+			config.WriteBuffer = size * 1024 * 1024
 		} else {
-			config.WriteBuffer = &kcp.WriteBuffer{Size: 512 * 1024}
+			config.WriteBuffer = 512 * 1024
 		}
 	}
+
 	if c.HeaderConfig != nil || c.Seed != nil {
 		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
 	}

@@ -7,51 +7,50 @@ import (
 
 // GetMTUValue returns the value of MTU settings.
 func (c *Config) GetMTUValue() uint32 {
-	if c == nil || c.Mtu == nil {
+	if c == nil || c.Mtu == 0 {
 		return 1350
 	}
-	return c.Mtu.Value
+	return c.Mtu
 }
 
 // GetTTIValue returns the value of TTI settings.
 func (c *Config) GetTTIValue() uint32 {
-	if c == nil || c.Tti == nil {
+	if c == nil || c.Tti == 0 {
 		return 50
 	}
-	return c.Tti.Value
+	return c.Tti
 }
 
 // GetUplinkCapacityValue returns the value of UplinkCapacity settings.
 func (c *Config) GetUplinkCapacityValue() uint32 {
-	if c == nil || c.UplinkCapacity == nil {
+	if c == nil || c.UplinkCapacity == 0 {
 		return 5
 	}
-	return c.UplinkCapacity.Value
+	return c.UplinkCapacity
 }
 
 // GetDownlinkCapacityValue returns the value of DownlinkCapacity settings.
 func (c *Config) GetDownlinkCapacityValue() uint32 {
-	if c == nil || c.DownlinkCapacity == nil {
+	if c == nil || c.DownlinkCapacity == 0 {
 		return 20
 	}
-	return c.DownlinkCapacity.Value
+	return c.DownlinkCapacity
+}
+
+func (c *Config) GetCwndMultiplierValue() uint32 {
+	if c == nil || c.CwndMultiplier == 0 {
+		return 1
+	}
+	return c.CwndMultiplier
 }
 
 // GetWriteBufferSize returns the size of WriterBuffer in bytes.
 func (c *Config) GetWriteBufferSize() uint32 {
-	if c == nil || c.WriteBuffer == nil {
+	if c == nil || c.WriteBuffer == 0 {
 		return 2 * 1024 * 1024
 	}
-	return c.WriteBuffer.Size
+	return c.WriteBuffer
 }
-
-// GetReadBufferSize returns the size of ReadBuffer in bytes.
-// func (c *Config) GetReadBufferSize() uint32 {
-// 	if c == nil || c.ReadBuffer == nil {
-// 		return 2 * 1024 * 1024
-// 	}
-// 	return c.ReadBuffer.Size
-// }
 
 func (c *Config) GetSendingInFlightSize() uint32 {
 	size := c.GetUplinkCapacityValue() * 1024 * 1024 / c.GetMTUValue() / (1000 / c.GetTTIValue())
@@ -72,10 +71,6 @@ func (c *Config) GetReceivingInFlightSize() uint32 {
 	}
 	return size
 }
-
-// func (c *Config) GetReceivingBufferSize() uint32 {
-// 	return c.GetReadBufferSize() / c.GetMTUValue()
-// }
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
