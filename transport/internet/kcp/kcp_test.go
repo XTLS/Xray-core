@@ -53,8 +53,15 @@ func TestDialAndListen(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		errg.Go(func() error {
 			clientConn, err := DialKCP(context.Background(), net.UDPDestination(net.LocalHostIP, port), &internet.MemoryStreamConfig{
-				ProtocolName:     "mkcp",
-				ProtocolSettings: &Config{},
+				ProtocolName: "mkcp",
+				ProtocolSettings: &Config{
+					Mtu:              1350,
+					Tti:              50,
+					UplinkCapacity:   5,
+					DownlinkCapacity: 20,
+					CwndMultiplier:   20,
+					WriteBuffer:      2 * 1024 * 1024,
+				},
 			})
 			if err != nil {
 				return err
