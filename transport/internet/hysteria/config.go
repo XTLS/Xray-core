@@ -48,6 +48,8 @@ const protocolName = "hysteria"
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
-		return new(Config)
+		return &Config{
+			UdpIdleTimeout: 60,
+		}
 	}))
 }
