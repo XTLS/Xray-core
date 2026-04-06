@@ -54,12 +54,12 @@ var (
 )
 
 type KCPConfig struct {
-	Mtu             *uint32 `json:"mtu"`
-	Tti             *uint32 `json:"tti"`
-	UpCap           *uint32 `json:"uplinkCapacity"`
-	DownCap         *uint32 `json:"downlinkCapacity"`
-	CwndMultiplier  *uint32 `json:"cwndMultiplier"`
-	WriteBufferSize *uint32 `json:"writeBufferSize"`
+	Mtu             uint32 `json:"mtu"`
+	Tti             uint32 `json:"tti"`
+	UpCap           uint32 `json:"uplinkCapacity"`
+	DownCap         uint32 `json:"downlinkCapacity"`
+	CwndMultiplier  uint32 `json:"cwndMultiplier"`
+	WriteBufferSize uint32 `json:"writeBufferSize"`
 
 	HeaderConfig json.RawMessage `json:"header"`
 	Seed         *string         `json:"seed"`
@@ -67,38 +67,30 @@ type KCPConfig struct {
 
 // Build implements Buildable.
 func (c *KCPConfig) Build() (proto.Message, error) {
-	config := new(kcp.Config)
-
-	if c.Mtu != nil {
-		config.Mtu = *c.Mtu
-	}
-	if c.Tti != nil {
-		tti := *c.Tti
-		if tti < 10 || tti > 5000 {
-			return nil, errors.New("invalid mKCP TTI: ", tti).AtError()
-		}
-		config.Tti = tti
-	}
-	if c.UpCap != nil {
-		config.UplinkCapacity = *c.UpCap
-	}
-	if c.DownCap != nil {
-		config.DownlinkCapacity = *c.DownCap
-	}
-	if c.CwndMultiplier != nil {
-		config.CwndMultiplier = *c.CwndMultiplier
-	}
-	if c.WriteBufferSize != nil {
-		size := *c.WriteBufferSize
-		if size > 0 {
-			config.WriteBuffer = size * 1024 * 1024
-		} else {
-			config.WriteBuffer = 512 * 1024
-		}
-	}
-
 	if c.HeaderConfig != nil || c.Seed != nil {
 		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
+	}
+
+	if c.Tti != 0 && (c.Tti < 10 || c.Tti > 5000) {
+		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
+	}
+
+	config := new(kcp.Config)
+	config.Mtu = c.Mtu
+	config.Tti = c.Tti
+	config.UplinkCapacity = c.UpCap
+	config.DownlinkCapacity = c.DownCap
+	config.CwndMultiplier = c.CwndMultiplier
+	config.WriteBuffer = c.WriteBufferSize
+
+	if config.WriteBuffer == 0 {
+		config.WriteBuffer = 512 * 1024
+	} else {
+		config.WriteBuffer = config.WriteBuffer * 1024 * 1024
+	}
+
+	if config.CwndMultiplier == 0 {
+		config.CwndMultiplier = 20
 	}
 
 	return config, nil
