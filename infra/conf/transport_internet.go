@@ -96,7 +96,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if config.Mtu < 21 {
 		return nil, errors.New("Mtu must be at least 21").AtError()
 	}
-	if config.Tti < 10 || config.Tti > 5000 {
+	if config.Tti < 10 || config.Tti > 1000 {
 		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
 	}
 	if config.CwndMultiplier < 1 {
