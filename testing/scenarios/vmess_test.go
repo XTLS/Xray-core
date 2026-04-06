@@ -22,7 +22,6 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/kcp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -638,16 +637,6 @@ func TestVMessKCPLarge(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
 						ProtocolName: "mkcp",
-						TransportSettings: []*internet.TransportConfig{
-							{
-								ProtocolName: "mkcp",
-								Settings: serial.ToTypedMessage(&kcp.Config{
-									WriteBuffer:      512 * 1024,
-									UplinkCapacity:   20,
-									DownlinkCapacity: 20,
-								}),
-							},
-						},
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
@@ -708,16 +697,6 @@ func TestVMessKCPLarge(t *testing.T) {
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
 						ProtocolName: "mkcp",
-						TransportSettings: []*internet.TransportConfig{
-							{
-								ProtocolName: "mkcp",
-								Settings: serial.ToTypedMessage(&kcp.Config{
-									WriteBuffer:      512 * 1024,
-									UplinkCapacity:   20,
-									DownlinkCapacity: 20,
-								}),
-							},
-						},
 					},
 				}),
 			},

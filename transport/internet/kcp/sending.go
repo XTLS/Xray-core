@@ -322,7 +322,7 @@ func (w *SendingWorker) Flush(current uint32) {
 		cwnd = w.controlWindow
 	}
 
-	cwnd *= w.conn.Config.GetCwndMultiplierValue()
+	cwnd *= w.conn.Config.CwndMultiplier
 
 	if !w.window.IsEmpty() {
 		w.window.Flush(current, w.conn.roundTrip.Timeout(), cwnd)

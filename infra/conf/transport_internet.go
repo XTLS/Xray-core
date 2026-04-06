@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -71,24 +72,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
 	}
 
-	if c.Mtu != nil && *c.Mtu < 21 {
-		return nil, errors.New("Mtu must be at least 21").AtError()
-	}
-	if c.Tti != nil && (*c.Tti < 10 || *c.Tti > 5000) {
-		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
-	}
-	if c.CwndMultiplier != nil && *c.CwndMultiplier < 1 {
-		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
-	}
-
-	config := &kcp.Config{
-		Mtu:              1350,
-		Tti:              50,
-		UplinkCapacity:   5,
-		DownlinkCapacity: 20,
-		CwndMultiplier:   20,
-		WriteBuffer:      2 * 1024 * 1024,
-	}
+	config := common.Must2(internet.CreateTransportConfig(kcp.ProtocolName)).(*kcp.Config)
 
 	if c.Mtu != nil {
 		config.Mtu = *c.Mtu
@@ -109,7 +93,15 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		config.WriteBuffer = *c.WriteBufferSize * 1024 * 1024
 	}
 
-	// Special cg
+	if config.Mtu < 21 {
+		return nil, errors.New("Mtu must be at least 21").AtError()
+	}
+	if config.Tti < 10 || config.Tti > 5000 {
+		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
+	}
+	if config.CwndMultiplier < 1 {
+		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
+	}
 	if config.WriteBuffer == 0 {
 		config.WriteBuffer = 512 * 1024
 	}
