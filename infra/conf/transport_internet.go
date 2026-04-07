@@ -587,6 +587,13 @@ type TLSCertConfig struct {
 	BuildChain     bool     `json:"buildChain"`
 }
 
+type TLSClientCertConfig struct {
+	CertFile string   `json:"certificateFile"`
+	CertStr  []string `json:"certificate"`
+	KeyFile  string   `json:"keyFile"`
+	KeyStr   []string `json:"key"`
+}
+
 // Build implements Buildable.
 func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	certificate := new(tls.Certificate)
@@ -646,26 +653,27 @@ type QuicParamsConfig struct {
 }
 
 type TLSConfig struct {
-	AllowInsecure           bool             `json:"allowInsecure"`
-	Certs                   []*TLSCertConfig `json:"certificates"`
-	ServerName              string           `json:"serverName"`
-	ALPN                    *StringList      `json:"alpn"`
-	EnableSessionResumption bool             `json:"enableSessionResumption"`
-	DisableSystemRoot       bool             `json:"disableSystemRoot"`
-	MinVersion              string           `json:"minVersion"`
-	MaxVersion              string           `json:"maxVersion"`
-	CipherSuites            string           `json:"cipherSuites"`
-	Fingerprint             string           `json:"fingerprint"`
-	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
-	CurvePreferences        *StringList      `json:"curvePreferences"`
-	MasterKeyLog            string           `json:"masterKeyLog"`
-	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
-	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
-	ECHServerKeys           string           `json:"echServerKeys"`
-	ECHConfigList           string           `json:"echConfigList"`
-	ECHForceQuery           string           `json:"echForceQuery"`
-	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
+	AllowInsecure           bool                   `json:"allowInsecure"`
+	Certs                   []*TLSCertConfig       `json:"certificates"`
+	ServerName              string                 `json:"serverName"`
+	ALPN                    *StringList            `json:"alpn"`
+	EnableSessionResumption bool                   `json:"enableSessionResumption"`
+	DisableSystemRoot       bool                   `json:"disableSystemRoot"`
+	MinVersion              string                 `json:"minVersion"`
+	MaxVersion              string                 `json:"maxVersion"`
+	CipherSuites            string                 `json:"cipherSuites"`
+	Fingerprint             string                 `json:"fingerprint"`
+	RejectUnknownSNI        bool                   `json:"rejectUnknownSni"`
+	CurvePreferences        *StringList            `json:"curvePreferences"`
+	MasterKeyLog            string                 `json:"masterKeyLog"`
+	PinnedPeerCertSha256    string                 `json:"pinnedPeerCertSha256"`
+	VerifyPeerCertByName    string                 `json:"verifyPeerCertByName"`
+	VerifyPeerCertInNames   []string               `json:"verifyPeerCertInNames"`
+	ECHServerKeys           string                 `json:"echServerKeys"`
+	ECHConfigList           string                 `json:"echConfigList"`
+	ECHForceQuery           string                 `json:"echForceQuery"`
+	ECHSocketSettings       *SocketConfig          `json:"echSockopt"`
+	ClientCertificate       []*TLSClientCertConfig `json:"clientCertificate"`
 }
 
 // Build implements Buildable.
@@ -768,6 +776,23 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			return nil, errors.New("Failed to build ech sockopt.").Base(err)
 		}
 		config.EchSocketSettings = ss
+	}
+
+	if len(c.ClientCertificate) > 0 {
+		for _, cc := range c.ClientCertificate {
+			clientCert := new(tls.ClientCertificate)
+			cert, err := readFileOrString(cc.CertFile, cc.CertStr)
+			if err != nil {
+				return nil, errors.New("failed to parse client certificate").Base(err)
+			}
+			clientCert.Certificate = cert
+			key, err := readFileOrString(cc.KeyFile, cc.KeyStr)
+			if err != nil {
+				return nil, errors.New("failed to parse client key").Base(err)
+			}
+			clientCert.Key = key
+			config.ClientCertificate = append(config.ClientCertificate, clientCert)
+		}
 	}
 
 	return config, nil

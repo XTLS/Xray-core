@@ -37,6 +37,13 @@ message Certificate {
   bool build_chain = 8;
 }
 
+message ClientCertificate {
+  bytes certificate = 1;
+  bytes key = 2;
+  string certificate_path = 3;
+  string key_path = 4;
+}
+
 message Config {
   bool allow_insecure = 1;
 
@@ -86,4 +93,6 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
+
+  repeated ClientCertificate client_certificate = 23;
 }
