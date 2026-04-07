@@ -39,7 +39,7 @@ func procyield(cycles uint32)
 
 type DarwinTun struct {
 	tunFile *os.File
-	options TunOptions
+	options *Config
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 }
 
@@ -47,7 +47,7 @@ var _ Tun = (*DarwinTun)(nil)
 var _ GVisorTun = (*DarwinTun)(nil)
 var _ GVisorDevice = (*DarwinTun)(nil)
 
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	// Check if fd is provided via environment (iOS mode)
 	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
 	if fdStr != "" {

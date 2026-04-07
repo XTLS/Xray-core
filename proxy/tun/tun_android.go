@@ -15,7 +15,7 @@ import (
 
 type AndroidTun struct {
 	tunFd   int
-	options TunOptions
+	options *Config
 }
 
 // DefaultTun implements Tun
@@ -25,7 +25,7 @@ var _ Tun = (*AndroidTun)(nil)
 var _ GVisorTun = (*AndroidTun)(nil)
 
 // NewTun builds new tun interface handler
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	fd, err := strconv.Atoi(platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "0" }))
 	errors.LogInfo(context.Background(), "read Android Tun Fd ", fd, err)
 

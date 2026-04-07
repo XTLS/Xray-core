@@ -15,7 +15,7 @@ import (
 type LinuxTun struct {
 	tunFd   int
 	tunLink netlink.Link
-	options TunOptions
+	options *Config
 }
 
 // LinuxTun implements Tun
@@ -25,7 +25,7 @@ var _ Tun = (*LinuxTun)(nil)
 var _ GVisorTun = (*LinuxTun)(nil)
 
 // NewTun builds new tun interface handler (linux specific)
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	tunFd, err := open(options.Name)
 	if err != nil {
 		return nil, err

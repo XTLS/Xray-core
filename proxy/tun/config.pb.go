@@ -28,6 +28,7 @@ type Config struct {
 	UserLevel     uint32                 `protobuf:"varint,3,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	Address       []string               `protobuf:"bytes,4,rep,name=address,proto3" json:"address,omitempty"`
 	Route         []string               `protobuf:"bytes,5,rep,name=route,proto3" json:"route,omitempty"`
+	Dns           []string               `protobuf:"bytes,6,rep,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -97,18 +98,26 @@ func (x *Config) GetRoute() []string {
 	return nil
 }
 
+func (x *Config) GetDns() []string {
+	if x != nil {
+		return x.Dns
+	}
+	return nil
+}
+
 var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"}\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\x8f\x01\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x03 \x01(\rR\tuserLevel\x12\x18\n" +
 	"\aaddress\x18\x04 \x03(\tR\aaddress\x12\x14\n" +
-	"\x05route\x18\x05 \x03(\tR\x05routeBL\n" +
+	"\x05route\x18\x05 \x03(\tR\x05route\x12\x10\n" +
+	"\x03dns\x18\x06 \x03(\tR\x03dnsBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 
 var (

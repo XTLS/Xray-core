@@ -5,11 +5,3 @@ type Tun interface {
 	Start() error
 	Close() error
 }
-
-// TunOptions for tun interface implementation
-type TunOptions struct {
-	Name    string
-	MTU     uint32
-	Address []string
-	Route   []string
-}

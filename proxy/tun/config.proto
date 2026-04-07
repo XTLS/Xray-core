@@ -12,4 +12,5 @@ message Config {
   uint32 user_level = 3;
   repeated string address = 4;
   repeated string route = 5;
+  repeated string dns = 6;
 }

@@ -11,6 +11,7 @@ type TunConfig struct {
 	UserLevel uint32   `json:"userLevel"`
 	Address   []string `json:"address"`
 	Route     []string `json:"route"`
+	Dns       []string `json:"dns"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -20,6 +21,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel: v.UserLevel,
 		Address:   v.Address,
 		Route:     v.Route,
+		Dns:       v.Dns,
 	}
 
 	if v.Name == "" {

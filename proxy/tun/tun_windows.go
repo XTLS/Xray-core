@@ -24,7 +24,7 @@ func procyield(cycles uint32)
 // current version is heavily stripped to do nothing more,
 // then create a network interface, to be provided as endpoint to gVisor ip stack
 type WindowsTun struct {
-	options  TunOptions
+	options  *Config
 	adapter  *wintun.Adapter
 	session  wintun.Session
 	readWait windows.Handle
@@ -42,7 +42,7 @@ var _ GVisorDevice = (*WindowsTun)(nil)
 
 // NewTun creates a Wintun interface with the given name. Should a Wintun
 // interface with the same name exist, it tried to be reused.
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	// instantiate wintun adapter
 	adapter, err := open(options.Name)
 	if err != nil {
@@ -154,6 +154,21 @@ func (t *WindowsTun) Start() error {
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(t.options.Dns) > 0 {
+		dns := make([]netip.Addr, 0, len(t.options.Dns))
+		for _, ip := range t.options.Dns {
+			dns = append(dns, netip.MustParseAddr(ip))
+		}
+		err := luid.SetDNS(windows.AF_INET, dns, nil)
+		if err != nil {
+			return err
+		}
+		err = luid.SetDNS(windows.AF_INET6, dns, nil)
 		if err != nil {
 			return err
 		}

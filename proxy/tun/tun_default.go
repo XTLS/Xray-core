@@ -17,7 +17,7 @@ var _ Tun = (*DefaultTun)(nil)
 var _ GVisorTun = (*DefaultTun)(nil)
 
 // NewTun builds new tun interface handler
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	return nil, errors.New("Tun is not supported on your platform")
 }
 
