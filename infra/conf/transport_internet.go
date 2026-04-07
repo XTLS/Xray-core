@@ -1671,6 +1671,16 @@ func (c *Xdns) Build() (proto.Message, error) {
 		return nil, errors.PrintRemovedFeatureError("domain", "domains(server) & resolvers(client)")
 	}
 
+	if len(c.Domains) == 0 && len(c.Resolvers) == 0 {
+		return nil, errors.New("empty domains & empty resolvers")
+	}
+
+	for _, r := range c.Resolvers {
+		if !strings.Contains(r, "+udp://") {
+			return nil, errors.New("invalid resolver ", r)
+		}
+	}
+
 	return &xdns.Config{
 		Domains:   c.Domains,
 		Resolvers: c.Resolvers,
