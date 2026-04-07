@@ -1660,11 +1660,17 @@ func (c *Sudoku) Build() (proto.Message, error) {
 }
 
 type Xdns struct {
+	Domain json.RawMessage `json:"domain"`
+
 	Domains   []string `json:"domains"`
 	Resolvers []string `json:"resolvers"`
 }
 
 func (c *Xdns) Build() (proto.Message, error) {
+	if c.Domain != nil {
+		return nil, errors.PrintRemovedFeatureError("domain", "domains(server) & resolvers(client)")
+	}
+
 	return &xdns.Config{
 		Domains:   c.Domains,
 		Resolvers: c.Resolvers,
