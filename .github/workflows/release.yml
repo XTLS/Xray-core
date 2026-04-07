@@ -138,10 +138,6 @@ jobs:
             goarch: arm
             goarm: 5
           # END Linux ARM
-          # BEGIN BSD ARM
-          - goos: freebsd
-            goarch: arm
-          # END BSD ARM
       fail-fast: false
 
     runs-on: ubuntu-latest

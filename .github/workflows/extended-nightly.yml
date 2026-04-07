@@ -21,12 +21,6 @@ jobs:
           - goos: openbsd
             goarch: arm64
             assetname: openbsd-arm64-v8a
-          - goos: openbsd
-            goarch: arm
-            assetname: openbsd-arm32-v7a
-          - goos: openbsd
-            goarch: 386
-            assetname: openbsd-32
       fail-fast: false
 
     runs-on: ubuntu-latest
