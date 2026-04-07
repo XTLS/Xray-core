@@ -26,7 +26,7 @@ func TestDialAndListen(t *testing.T) {
 			UplinkCapacity:   5,
 			DownlinkCapacity: 20,
 			CwndMultiplier:   20,
-			WriteBuffer:      2 * 1024 * 1024,
+			MaxSendingWindow: 2 * 1024 * 1024,
 		},
 	}, func(conn stat.Connection) {
 		go func(c stat.Connection) {
@@ -60,7 +60,7 @@ func TestDialAndListen(t *testing.T) {
 					UplinkCapacity:   5,
 					DownlinkCapacity: 20,
 					CwndMultiplier:   20,
-					WriteBuffer:      2 * 1024 * 1024,
+					MaxSendingWindow: 2 * 1024 * 1024,
 				},
 			})
 			if err != nil {

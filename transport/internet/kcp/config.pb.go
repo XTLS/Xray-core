@@ -28,7 +28,7 @@ type Config struct {
 	UplinkCapacity   uint32                 `protobuf:"varint,3,opt,name=uplink_capacity,json=uplinkCapacity,proto3" json:"uplink_capacity,omitempty"`
 	DownlinkCapacity uint32                 `protobuf:"varint,4,opt,name=downlink_capacity,json=downlinkCapacity,proto3" json:"downlink_capacity,omitempty"`
 	CwndMultiplier   uint32                 `protobuf:"varint,5,opt,name=cwnd_multiplier,json=cwndMultiplier,proto3" json:"cwnd_multiplier,omitempty"`
-	WriteBuffer      uint32                 `protobuf:"varint,6,opt,name=write_buffer,json=writeBuffer,proto3" json:"write_buffer,omitempty"`
+	MaxSendingWindow uint32                 `protobuf:"varint,6,opt,name=max_sending_window,json=maxSendingWindow,proto3" json:"max_sending_window,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -98,9 +98,9 @@ func (x *Config) GetCwndMultiplier() uint32 {
 	return 0
 }
 
-func (x *Config) GetWriteBuffer() uint32 {
+func (x *Config) GetMaxSendingWindow() uint32 {
 	if x != nil {
-		return x.WriteBuffer
+		return x.MaxSendingWindow
 	}
 	return 0
 }
@@ -109,14 +109,14 @@ var File_transport_internet_kcp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_kcp_config_proto_rawDesc = "" +
 	"\n" +
-	"#transport/internet/kcp/config.proto\x12\x1bxray.transport.internet.kcp\"\xce\x01\n" +
+	"#transport/internet/kcp/config.proto\x12\x1bxray.transport.internet.kcp\"\xd9\x01\n" +
 	"\x06Config\x12\x10\n" +
 	"\x03mtu\x18\x01 \x01(\rR\x03mtu\x12\x10\n" +
 	"\x03tti\x18\x02 \x01(\rR\x03tti\x12'\n" +
 	"\x0fuplink_capacity\x18\x03 \x01(\rR\x0euplinkCapacity\x12+\n" +
 	"\x11downlink_capacity\x18\x04 \x01(\rR\x10downlinkCapacity\x12'\n" +
-	"\x0fcwnd_multiplier\x18\x05 \x01(\rR\x0ecwndMultiplier\x12!\n" +
-	"\fwrite_buffer\x18\x06 \x01(\rR\vwriteBufferBs\n" +
+	"\x0fcwnd_multiplier\x18\x05 \x01(\rR\x0ecwndMultiplier\x12,\n" +
+	"\x12max_sending_window\x18\x06 \x01(\rR\x10maxSendingWindowBs\n" +
 	"\x1fcom.xray.transport.internet.kcpP\x01Z0github.com/xtls/xray-core/transport/internet/kcp\xaa\x02\x1bXray.Transport.Internet.Kcpb\x06proto3"
 
 var (

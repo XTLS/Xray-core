@@ -22,7 +22,7 @@ func TestConnectionReadTimeout(t *testing.T) {
 		UplinkCapacity:   5,
 		DownlinkCapacity: 20,
 		CwndMultiplier:   20,
-		WriteBuffer:      2 * 1024 * 1024,
+		MaxSendingWindow: 2 * 1024 * 1024,
 	})
 	conn.SetReadDeadline(time.Now().Add(time.Second))
 

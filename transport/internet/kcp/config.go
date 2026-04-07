@@ -14,7 +14,7 @@ func (c *Config) GetSendingInFlightSize() uint32 {
 }
 
 func (c *Config) GetSendingBufferSize() uint32 {
-	return c.WriteBuffer / c.Mtu
+	return c.MaxSendingWindow / c.Mtu
 }
 
 func (c *Config) GetReceivingInFlightSize() uint32 {
@@ -33,7 +33,7 @@ func init() {
 			UplinkCapacity:   5,
 			DownlinkCapacity: 20,
 			CwndMultiplier:   20,
-			WriteBuffer:      2 * 1024 * 1024,
+			MaxSendingWindow: 2 * 1024 * 1024,
 		}
 	}))
 }

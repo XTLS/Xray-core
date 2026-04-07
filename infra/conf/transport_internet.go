@@ -55,12 +55,12 @@ var (
 )
 
 type KCPConfig struct {
-	Mtu             *uint32 `json:"mtu"`
-	Tti             *uint32 `json:"tti"`
-	UpCap           *uint32 `json:"uplinkCapacity"`
-	DownCap         *uint32 `json:"downlinkCapacity"`
-	CwndMultiplier  *uint32 `json:"cwndMultiplier"`
-	WriteBufferSize *uint32 `json:"writeBufferSize"`
+	Mtu              *uint32 `json:"mtu"`
+	Tti              *uint32 `json:"tti"`
+	UpCap            *uint32 `json:"uplinkCapacity"`
+	DownCap          *uint32 `json:"downlinkCapacity"`
+	CwndMultiplier   *uint32 `json:"cwndMultiplier"`
+	MaxSendingWindow *uint32 `json:"maxSendingWindow"`
 
 	HeaderConfig json.RawMessage `json:"header"`
 	Seed         *string         `json:"seed"`
@@ -89,8 +89,8 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if c.CwndMultiplier != nil {
 		config.CwndMultiplier = *c.CwndMultiplier
 	}
-	if c.WriteBufferSize != nil {
-		config.WriteBuffer = *c.WriteBufferSize * 1024 * 1024
+	if c.MaxSendingWindow != nil {
+		config.MaxSendingWindow = *c.MaxSendingWindow * 1024 * 1024
 	}
 
 	if config.Mtu < 21 {
@@ -102,8 +102,8 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if config.CwndMultiplier < 1 {
 		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
 	}
-	if config.WriteBuffer == 0 {
-		config.WriteBuffer = 512 * 1024
+	if config.MaxSendingWindow == 0 {
+		config.MaxSendingWindow = 512 * 1024
 	}
 
 	return config, nil

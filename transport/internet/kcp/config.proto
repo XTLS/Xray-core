@@ -12,5 +12,5 @@ message Config {
   uint32 uplink_capacity = 3;
   uint32 downlink_capacity = 4;
   uint32 cwnd_multiplier = 5;
-  uint32 write_buffer = 6;
+  uint32 max_sending_window = 6;
 }
