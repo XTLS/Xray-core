@@ -4,6 +4,7 @@ import (
 	"context"
 	goerrors "errors"
 	"io"
+	gonet "net"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -64,6 +65,7 @@ func (s *Server) Network() []net.Network {
 	if s.config.UdpEnabled {
 		list = append(list, net.Network_UDP)
 	}
+	list = append(list, net.Network_UNIX)
 	return list
 }
 
@@ -80,7 +82,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 
 	switch network {
-	case net.Network_TCP:
+	case net.Network_TCP, net.Network_UNIX:
 		firstbyte := make([]byte, 1)
 		if n, err := conn.Read(firstbyte); n == 0 {
 			if goerrors.Is(err, io.EOF) {
@@ -112,11 +114,18 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return errors.New("inbound gateway not specified")
 	}
 
+	var localAddr net.Address
+	if tcpAddr, ok := conn.LocalAddr().(*gonet.TCPAddr); ok {
+		localAddr = net.IPAddress(tcpAddr.IP)
+	} else {
+		localAddr = net.LocalHostIP
+	}
+
 	svrSession := &ServerSession{
 		config:       s.config,
 		address:      inbound.Gateway.Address,
 		port:         inbound.Gateway.Port,
-		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
+		localAddress: localAddr,
 	}
 
 	// Firstbyte is for forwarded conn from SOCKS inbound
