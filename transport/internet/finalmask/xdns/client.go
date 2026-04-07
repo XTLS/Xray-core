@@ -158,10 +158,7 @@ func (c *xdnsConnClient) recvLoop() {
 					continue
 				}
 
-				payload, valid := dnsResponsePayload(&resp, c.domains)
-				if valid {
-					c.resolverSend[i].Store(0)
-				}
+				payload := dnsResponsePayload(&resp, c.domains)
 
 				r := bytes.NewReader(payload)
 				anyPacket := false
@@ -185,6 +182,7 @@ func (c *xdnsConnClient) recvLoop() {
 				}
 
 				if anyPacket {
+					c.resolverSend[i].Store(0)
 					select {
 					case c.pollChan <- struct{}{}:
 					default:
@@ -292,7 +290,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
-	encoded, err := encode(p, c.clientID, c.domains[c.resolverIdx])
+	encoded, err := encode(p, c.clientID, c.domains[c.resolverIdx%uint32(len(c.resolverConns))])
 	if err != nil {
 		errors.LogDebug(context.Background(), addr, " xdns wireformat err ", err, " ", len(p))
 		return 0, nil
@@ -432,19 +430,16 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	return p, err
 }
 
-func dnsResponsePayload(resp *Message, domains []Name) (payload []byte, valid bool) {
-	payload = nil
-	valid = false
-
+func dnsResponsePayload(resp *Message, domains []Name) []byte {
 	if resp.Flags&0x8000 != 0x8000 {
-		return
+		return nil
 	}
 	if resp.Flags&0x000f != RcodeNoError {
-		return
+		return nil
 	}
 
 	if len(resp.Answer) != 1 {
-		return
+		return nil
 	}
 	answer := resp.Answer[0]
 
@@ -456,14 +451,16 @@ func dnsResponsePayload(resp *Message, domains []Name) (payload []byte, valid bo
 		}
 	}
 	if !ok {
-		return
+		return nil
 	}
 
 	if answer.Type != RRTypeTXT {
-		return
+		return nil
+	}
+	payload, err := DecodeRDataTXT(answer.Data)
+	if err != nil {
+		return nil
 	}
 
-	valid = true
-	payload, _ = DecodeRDataTXT(answer.Data)
-	return
+	return payload
 }
