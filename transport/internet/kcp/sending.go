@@ -292,15 +292,16 @@ func (w *SendingWorker) OnPacketLoss(lossRate uint32) {
 		return
 	}
 
-	cwnd := w.conn.Config.GetSendingInFlightSize()
 	if lossRate >= 15 {
 		w.controlWindow = 3 * w.controlWindow / 4
-	} else if lossRate <= 5 {
+	}
+	if lossRate <= 5 {
 		w.controlWindow += w.controlWindow / 4
 	}
 	if w.controlWindow < 16 {
 		w.controlWindow = 16
 	}
+	cwnd := w.conn.Config.GetSendingInFlightSize()
 	if w.controlWindow > cwnd {
 		w.controlWindow = cwnd
 	}
