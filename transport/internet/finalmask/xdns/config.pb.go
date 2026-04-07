@@ -23,9 +23,8 @@ const (
 
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	Domains       []string               `protobuf:"bytes,2,rep,name=domains,proto3" json:"domains,omitempty"`
-	Resolvers     []string               `protobuf:"bytes,3,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
+	Domains       []string               `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
+	Resolvers     []string               `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -60,13 +59,6 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
 func (x *Config) GetDomains() []string {
 	if x != nil {
 		return x.Domains
@@ -85,11 +77,10 @@ var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescrip
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\n" +
-	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\"X\n" +
-	"\x06Config\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x18\n" +
-	"\adomains\x18\x02 \x03(\tR\adomains\x12\x1c\n" +
-	"\tresolvers\x18\x03 \x03(\tR\tresolversB\x94\x01\n" +
+	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\"@\n" +
+	"\x06Config\x12\x18\n" +
+	"\adomains\x18\x01 \x03(\tR\adomains\x12\x1c\n" +
+	"\tresolvers\x18\x02 \x03(\tR\tresolversB\x94\x01\n" +
 	"*com.xray.transport.internet.finalmask.xdnsP\x01Z;github.com/xtls/xray-core/transport/internet/finalmask/xdns\xaa\x02&Xray.Transport.Internet.Finalmask.Xdnsb\x06proto3"
 
 var (

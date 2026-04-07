@@ -63,21 +63,16 @@ type xdnsConnServer struct {
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	domains := make([]Name, 0, len(c.Domains))
 	if len(c.Domains) == 0 {
-		domain, err := ParseName(c.Domain)
+		return nil, errors.New("empty domains")
+	}
+	domains := make([]Name, 0, len(c.Domains))
+	for _, domain := range c.Domains {
+		domain, err := ParseName(domain)
 		if err != nil {
 			return nil, err
 		}
 		domains = append(domains, domain)
-	} else {
-		for _, domain := range c.Domains {
-			domain, err := ParseName(domain)
-			if err != nil {
-				return nil, err
-			}
-			domains = append(domains, domain)
-		}
 	}
 
 	conn := &xdnsConnServer{

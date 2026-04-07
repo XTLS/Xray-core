@@ -1660,18 +1660,12 @@ func (c *Sudoku) Build() (proto.Message, error) {
 }
 
 type Xdns struct {
-	Domain    string   `json:"domain"`
 	Domains   []string `json:"domains"`
 	Resolvers []string `json:"resolvers"`
 }
 
 func (c *Xdns) Build() (proto.Message, error) {
-	if c.Domain == "" && len(c.Domains) == 0 {
-		return nil, errors.New("empty domain")
-	}
-
 	return &xdns.Config{
-		Domain:    c.Domain,
 		Domains:   c.Domains,
 		Resolvers: c.Resolvers,
 	}, nil
