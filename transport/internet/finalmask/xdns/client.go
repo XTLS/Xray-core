@@ -253,16 +253,16 @@ func (c *xdnsConnClient) sendLoop() {
 			return
 		}
 
-		c.resolverSend[c.resolverIdx].Add(1)
-		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
 		cur := c.resolverIdx
+		curSend := c.resolverSend[c.resolverIdx].Add(1)
+		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
 		for {
 			c.resolverIdx += 1
 			c.resolverIdx %= uint32(len(c.resolverConns))
 			if c.resolverIdx == cur {
 				break
 			}
-			if c.resolverSend[c.resolverIdx].Load() <= 3 {
+			if c.resolverSend[c.resolverIdx].Load() < curSend {
 				break
 			}
 		}
