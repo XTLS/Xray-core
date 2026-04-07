@@ -23,6 +23,7 @@ type Handler struct {
 	ctx             context.Context
 	config          *Config
 	stack           Stack
+	tun             Tun
 	policyManager   policy.Manager
 	dispatcher      routing.Dispatcher
 	tag             string
@@ -95,6 +96,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 
 	t.stack = tunStack
+	t.tun = tunInterface
 
 	errors.LogInfo(t.ctx, tunName, " up")
 	return nil
@@ -142,6 +144,11 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
+}
+
+// Close implements common.Closable.
+func (t *Handler) Close() error {
+	return errors.Combine(t.stack.Close(), t.tun.Close())
 }
 
 // Network implements proxy.Inbound
