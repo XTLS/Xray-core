@@ -3,14 +3,15 @@ package command
 import (
 	"context"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -87,11 +88,6 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 }
 
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
-	matcher, err := strmatcher.Substr.New(request.Pattern)
-	if err != nil {
-		return nil, err
-	}
-
 	response := &QueryStatsResponse{}
 
 	manager, ok := s.stats.(*stats.Manager)
@@ -100,7 +96,7 @@ func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest
 	}
 
 	manager.VisitCounters(func(name string, c feature_stats.Counter) bool {
-		if matcher.Match(name) {
+		if strings.Contains(name, request.Pattern) {
 			var value int64
 			if request.Reset_ {
 				value = c.Set(0)
