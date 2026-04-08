@@ -28,7 +28,7 @@ type WindowsTun struct {
 	adapter  *wintun.Adapter
 	session  wintun.Session
 	readWait windows.Handle
-	MTU      uint32
+	luid     winipcfg.LUID
 }
 
 // WindowsTun implements Tun
@@ -61,9 +61,7 @@ func NewTun(options *Config) (Tun, error) {
 		adapter:  adapter,
 		session:  session,
 		readWait: session.ReadWaitEvent(),
-		// there is currently no iphndl.dll support, which is the netlink library for windows
-		// so there is nowhere to change MTU for the Wintun interface, and we take its default value
-		MTU: wintun.PacketSizeMax,
+		luid:     winipcfg.LUID(adapter.LUID()),
 	}
 
 	return tun, nil
@@ -107,8 +105,7 @@ func (t *WindowsTun) Start() error {
 		r := route
 		routesData = append(routesData, &r)
 	}
-	luid := winipcfg.LUID(t.adapter.LUID())
-	err := luid.SetRoutes(routesData)
+	err := t.luid.SetRoutes(routesData)
 	if err != nil {
 		return errors.New("unable to set routes").Base(err)
 	}
@@ -118,14 +115,14 @@ func (t *WindowsTun) Start() error {
 		for _, address := range t.options.Address {
 			addresses = append(addresses, netip.MustParsePrefix(address))
 		}
-		err := luid.SetIPAddresses(addresses)
+		err := t.luid.SetIPAddresses(addresses)
 		if err != nil {
 			return errors.New("unable to set ips").Base(err)
 		}
 	}
 
 	if has4 {
-		ipif, err := luid.IPInterface(windows.AF_INET)
+		ipif, err := t.luid.IPInterface(windows.AF_INET)
 		if err != nil {
 			return err
 		}
@@ -142,7 +139,7 @@ func (t *WindowsTun) Start() error {
 		}
 	}
 	if has6 {
-		ipif, err := luid.IPInterface(windows.AF_INET6)
+		ipif, err := t.luid.IPInterface(windows.AF_INET6)
 		if err != nil {
 			return err
 		}
@@ -164,11 +161,11 @@ func (t *WindowsTun) Start() error {
 		for _, ip := range t.options.Dns {
 			dns = append(dns, netip.MustParseAddr(ip))
 		}
-		err := luid.SetDNS(windows.AF_INET, dns, nil)
+		err := t.luid.SetDNS(windows.AF_INET, dns, nil)
 		if err != nil {
 			return err
 		}
-		err = luid.SetDNS(windows.AF_INET6, dns, nil)
+		err = t.luid.SetDNS(windows.AF_INET6, dns, nil)
 		if err != nil {
 			return err
 		}
