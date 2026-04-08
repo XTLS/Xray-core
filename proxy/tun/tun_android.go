@@ -4,6 +4,7 @@ package tun
 
 import (
 	"context"
+	"net"
 	"strconv"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -20,9 +21,6 @@ type AndroidTun struct {
 
 // DefaultTun implements Tun
 var _ Tun = (*AndroidTun)(nil)
-
-// DefaultTun implements GVisorTun
-var _ GVisorTun = (*AndroidTun)(nil)
 
 // NewTun builds new tun interface handler
 func NewTun(options *Config) (Tun, error) {
@@ -47,6 +45,29 @@ func (t *AndroidTun) Start() error {
 
 func (t *AndroidTun) Close() error {
 	return nil
+}
+
+func (t *AndroidTun) Name() (string, error) {
+	ifr, err := unix.NewIfreq("")
+	if err != nil {
+		return "", err
+	}
+	if err = unix.IoctlIfreq(t.tunFd, unix.TUNGETIFF, ifr); err != nil {
+		return "", err
+	}
+	return ifr.Name(), nil
+}
+
+func (t *AndroidTun) Index() (int, error) {
+	name, err := t.Name()
+	if err != nil {
+		return 0, err
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return iface.Index, nil
 }
 
 func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {

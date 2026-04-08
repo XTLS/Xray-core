@@ -21,9 +21,6 @@ type LinuxTun struct {
 // LinuxTun implements Tun
 var _ Tun = (*LinuxTun)(nil)
 
-// LinuxTun implements GVisorTun
-var _ GVisorTun = (*LinuxTun)(nil)
-
 // NewTun builds new tun interface handler (linux specific)
 func NewTun(options *Config) (Tun, error) {
 	tunFd, err := open(options.Name)
@@ -108,6 +105,14 @@ func (t *LinuxTun) Close() error {
 	_ = unix.Close(t.tunFd)
 
 	return nil
+}
+
+func (t *LinuxTun) Name() (string, error) {
+	return t.tunLink.Attrs().Name, nil
+}
+
+func (t *LinuxTun) Index() (int, error) {
+	return t.tunLink.Attrs().Index, nil
 }
 
 // newEndpoint builds new gVisor stack.LinkEndpoint from the tun interface file descriptor

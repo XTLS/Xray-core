@@ -34,9 +34,6 @@ type WindowsTun struct {
 // WindowsTun implements Tun
 var _ Tun = (*WindowsTun)(nil)
 
-// WindowsTun implements GVisorTun
-var _ GVisorTun = (*WindowsTun)(nil)
-
 // WindowsTun implements GVisorDevice
 var _ GVisorDevice = (*WindowsTun)(nil)
 
@@ -179,6 +176,22 @@ func (t *WindowsTun) Close() error {
 	_ = t.adapter.Close()
 
 	return nil
+}
+
+func (t *WindowsTun) Name() (string, error) {
+	row, err := t.luid.Interface()
+	if err != nil {
+		return "", err
+	}
+	return row.Alias(), nil
+}
+
+func (t *WindowsTun) Index() (int, error) {
+	row, err := t.luid.Interface()
+	if err != nil {
+		return 0, err
+	}
+	return int(row.InterfaceIndex), nil
 }
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device

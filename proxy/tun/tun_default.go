@@ -13,9 +13,6 @@ type DefaultTun struct {
 // DefaultTun implements Tun
 var _ Tun = (*DefaultTun)(nil)
 
-// DefaultTun implements GVisorTun
-var _ GVisorTun = (*DefaultTun)(nil)
-
 // NewTun builds new tun interface handler
 func NewTun(options *Config) (Tun, error) {
 	return nil, errors.New("Tun is not supported on your platform")
@@ -27,6 +24,14 @@ func (t *DefaultTun) Start() error {
 
 func (t *DefaultTun) Close() error {
 	return errors.New("Tun is not supported on your platform")
+}
+
+func (t *DefaultTun) Name() (string, error) {
+	return "", errors.New("Tun is not supported on your platform")
+}
+
+func (t *DefaultTun) Index() (int, error) {
+	return 0, errors.New("Tun is not supported on your platform")
 }
 
 func (t *DefaultTun) newEndpoint() (stack.LinkEndpoint, error) {

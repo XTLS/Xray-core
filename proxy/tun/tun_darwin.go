@@ -25,6 +25,7 @@ const (
 	sysprotoControl = 2
 	gateway         = "169.254.10.1/30"
 	utunHeaderSize  = 4
+	UTUN_OPT_IFNAME = 2
 )
 
 const (
@@ -40,11 +41,11 @@ func procyield(cycles uint32)
 type DarwinTun struct {
 	tunFile *os.File
 	options *Config
+	tunFd   int
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 }
 
 var _ Tun = (*DarwinTun)(nil)
-var _ GVisorTun = (*DarwinTun)(nil)
 var _ GVisorDevice = (*DarwinTun)(nil)
 
 func NewTun(options *Config) (Tun, error) {
@@ -64,6 +65,7 @@ func NewTun(options *Config) (Tun, error) {
 		return &DarwinTun{
 			tunFile: os.NewFile(uintptr(fd), "utun"),
 			options: options,
+			tunFd:   fd,
 			ownsFd:  false,
 		}, nil
 	}
@@ -83,6 +85,7 @@ func NewTun(options *Config) (Tun, error) {
 	return &DarwinTun{
 		tunFile: tunFile,
 		options: options,
+		tunFd:   int(tunFile.Fd()),
 		ownsFd:  true,
 	}, nil
 }
@@ -97,6 +100,22 @@ func (t *DarwinTun) Close() error {
 	}
 	// iOS: don't close the fd, it's owned by NetworkExtension
 	return nil
+}
+
+func (t *DarwinTun) Name() (string, error) {
+	return unix.GetsockoptString(t.tunFd, sysprotoControl, UTUN_OPT_IFNAME)
+}
+
+func (t *DarwinTun) Index() (int, error) {
+	name, err := t.Name()
+	if err != nil {
+		return 0, err
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return iface.Index, nil
 }
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device
