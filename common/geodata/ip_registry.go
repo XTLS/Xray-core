@@ -1,17 +1,17 @@
 package geodata
 
-type GeoIPRegistry struct {
-	ipsetFactory *GeoIPSetFactory
+type IPRegistry struct {
+	ipsetFactory *IPSetFactory
 }
 
-func (r *GeoIPRegistry) BuildGeoIPMatcher(rules []*IPRule) (GeoIPMatcher, error) {
-	return buildOptimizedGeoIPMatcher(r.ipsetFactory, rules)
+func (r *IPRegistry) BuildIPMatcher(rules []*IPRule) (IPMatcher, error) {
+	return buildOptimizedIPMatcher(r.ipsetFactory, rules)
 }
 
-func newGeoIPRegistry() *GeoIPRegistry {
-	return &GeoIPRegistry{
-		ipsetFactory: &GeoIPSetFactory{shared: make(map[string]*GeoIPSet)},
+func newIPRegistry() *IPRegistry {
+	return &IPRegistry{
+		ipsetFactory: &IPSetFactory{shared: make(map[string]*IPSet)},
 	}
 }
 
-var IPRegistry = newGeoIPRegistry()
+var IPReg = newIPRegistry()

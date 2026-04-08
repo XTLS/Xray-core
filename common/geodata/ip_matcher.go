@@ -14,7 +14,7 @@ import (
 	"go4.org/netipx"
 )
 
-type GeoIPMatcher interface {
+type IPMatcher interface {
 	// TODO: (PERF) all net.IP -> netipx.Addr
 
 	// Invalid IP always return false.
@@ -34,13 +34,13 @@ type GeoIPMatcher interface {
 	SetReverse(reverse bool)
 }
 
-type GeoIPSet struct {
+type IPSet struct {
 	ipv4, ipv6 *netipx.IPSet
 	max4, max6 uint8
 }
 
-type HeuristicGeoIPMatcher struct {
-	ipset   *GeoIPSet
+type HeuristicIPMatcher struct {
+	ipset   *IPSet
 	reverse bool
 }
 
@@ -49,8 +49,8 @@ type ipBucket struct {
 	ips []net.IP
 }
 
-// Match implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) Match(ip net.IP) bool {
+// Match implements IPMatcher.
+func (m *HeuristicIPMatcher) Match(ip net.IP) bool {
 	ipx, ok := netipx.FromStdIP(ip)
 	if !ok {
 		return false
@@ -58,7 +58,7 @@ func (m *HeuristicGeoIPMatcher) Match(ip net.IP) bool {
 	return m.matchAddr(ipx)
 }
 
-func (m *HeuristicGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
+func (m *HeuristicIPMatcher) matchAddr(ipx netip.Addr) bool {
 	if ipx.Is4() {
 		if m.ipset.max4 == 0xff {
 			return false
@@ -74,8 +74,8 @@ func (m *HeuristicGeoIPMatcher) matchAddr(ipx netip.Addr) bool {
 	return false
 }
 
-// AnyMatch implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+// AnyMatch implements IPMatcher.
+func (m *HeuristicIPMatcher) AnyMatch(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -124,8 +124,8 @@ func (m *HeuristicGeoIPMatcher) AnyMatch(ips []net.IP) bool {
 	return false
 }
 
-// Matches implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) Matches(ips []net.IP) bool {
+// Matches implements IPMatcher.
+func (m *HeuristicIPMatcher) Matches(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -212,8 +212,8 @@ func prefixKeyFromIP(ip net.IP) (key [9]byte, ok bool) {
 	return key, false // illegal
 }
 
-// FilterIPs implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
+// FilterIPs implements IPMatcher.
+func (m *HeuristicIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -302,22 +302,22 @@ func (m *HeuristicGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmat
 	return
 }
 
-// ToggleReverse implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) ToggleReverse() {
+// ToggleReverse implements IPMatcher.
+func (m *HeuristicIPMatcher) ToggleReverse() {
 	m.reverse = !m.reverse
 }
 
-// SetReverse implements GeoIPMatcher.
-func (m *HeuristicGeoIPMatcher) SetReverse(reverse bool) {
+// SetReverse implements IPMatcher.
+func (m *HeuristicIPMatcher) SetReverse(reverse bool) {
 	m.reverse = reverse
 }
 
-type GeneralMultiGeoIPMatcher struct {
-	matchers []GeoIPMatcher
+type GeneralMultiIPMatcher struct {
+	matchers []IPMatcher
 }
 
-// Match implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) Match(ip net.IP) bool {
+// Match implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) Match(ip net.IP) bool {
 	for _, m := range mm.matchers {
 		if m.Match(ip) {
 			return true
@@ -326,8 +326,8 @@ func (mm *GeneralMultiGeoIPMatcher) Match(ip net.IP) bool {
 	return false
 }
 
-// AnyMatch implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+// AnyMatch implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) AnyMatch(ips []net.IP) bool {
 	for _, m := range mm.matchers {
 		if m.AnyMatch(ips) {
 			return true
@@ -336,8 +336,8 @@ func (mm *GeneralMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
 	return false
 }
 
-// Matches implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) Matches(ips []net.IP) bool {
+// Matches implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) Matches(ips []net.IP) bool {
 	for _, m := range mm.matchers {
 		if m.Matches(ips) {
 			return true
@@ -346,8 +346,8 @@ func (mm *GeneralMultiGeoIPMatcher) Matches(ips []net.IP) bool {
 	return false
 }
 
-// FilterIPs implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
+// FilterIPs implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	matched = make([]net.IP, 0, len(ips))
 	unmatched = ips
 	for _, m := range mm.matchers {
@@ -363,26 +363,26 @@ func (mm *GeneralMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, u
 	return
 }
 
-// ToggleReverse implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) ToggleReverse() {
+// ToggleReverse implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) ToggleReverse() {
 	for _, m := range mm.matchers {
 		m.ToggleReverse()
 	}
 }
 
-// SetReverse implements GeoIPMatcher.
-func (mm *GeneralMultiGeoIPMatcher) SetReverse(reverse bool) {
+// SetReverse implements IPMatcher.
+func (mm *GeneralMultiIPMatcher) SetReverse(reverse bool) {
 	for _, m := range mm.matchers {
 		m.SetReverse(reverse)
 	}
 }
 
-type HeuristicMultiGeoIPMatcher struct {
-	matchers []*HeuristicGeoIPMatcher
+type HeuristicMultiIPMatcher struct {
+	matchers []*HeuristicIPMatcher
 }
 
-// Match implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) Match(ip net.IP) bool {
+// Match implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) Match(ip net.IP) bool {
 	ipx, ok := netipx.FromStdIP(ip)
 	if !ok {
 		return false
@@ -396,8 +396,8 @@ func (mm *HeuristicMultiGeoIPMatcher) Match(ip net.IP) bool {
 	return false
 }
 
-// AnyMatch implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
+// AnyMatch implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) AnyMatch(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -446,8 +446,8 @@ func (mm *HeuristicMultiGeoIPMatcher) AnyMatch(ips []net.IP) bool {
 	return false
 }
 
-// Matches implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) Matches(ips []net.IP) bool {
+// Matches implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) Matches(ips []net.IP) bool {
 	n := len(ips)
 	if n == 0 {
 		return false
@@ -510,7 +510,7 @@ type ipViews struct {
 	precise4, precise6 []netip.Addr
 }
 
-func (v *ipViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP) bool {
+func (v *ipViews) ensureForMatcher(m *HeuristicIPMatcher, ips []net.IP) bool {
 	needHeur4 := m.ipset.max4 <= 24 && v.buckets4 == nil
 	needHeur6 := m.ipset.max6 <= 64 && v.buckets6 == nil
 	needPrec4 := m.ipset.max4 > 24 && v.precise4 == nil
@@ -588,8 +588,8 @@ func (v *ipViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP) bool 
 	return true
 }
 
-// FilterIPs implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
+// FilterIPs implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
 	n := len(ips)
 	if n == 0 {
 		return []net.IP{}, []net.IP{}
@@ -701,7 +701,7 @@ type ipBucketViews struct {
 	precise4, precise6 map[netip.Addr]net.IP
 }
 
-func (v *ipBucketViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP) {
+func (v *ipBucketViews) ensureForMatcher(m *HeuristicIPMatcher, ips []net.IP) {
 	needHeur4 := m.ipset.max4 <= 24 && v.buckets4 == nil
 	needHeur6 := m.ipset.max6 <= 64 && v.buckets6 == nil
 	needPrec4 := m.ipset.max4 > 24 && v.precise4 == nil
@@ -789,26 +789,26 @@ func (v *ipBucketViews) ensureForMatcher(m *HeuristicGeoIPMatcher, ips []net.IP)
 	}
 }
 
-// ToggleReverse implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) ToggleReverse() {
+// ToggleReverse implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) ToggleReverse() {
 	for _, m := range mm.matchers {
 		m.ToggleReverse()
 	}
 }
 
-// SetReverse implements GeoIPMatcher.
-func (mm *HeuristicMultiGeoIPMatcher) SetReverse(reverse bool) {
+// SetReverse implements IPMatcher.
+func (mm *HeuristicMultiIPMatcher) SetReverse(reverse bool) {
 	for _, m := range mm.matchers {
 		m.SetReverse(reverse)
 	}
 }
 
-type GeoIPSetFactory struct {
+type IPSetFactory struct {
 	sync.Mutex
-	shared map[string]*GeoIPSet // TODO: cleanup
+	shared map[string]*IPSet // TODO: cleanup
 }
 
-func (f *GeoIPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*GeoIPSet, error) {
+func (f *IPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*IPSet, error) {
 	key := buildGeoIPRulesKey(rules)
 
 	f.Lock()
@@ -863,7 +863,7 @@ func buildGeoIPRulesKey(rules []*GeoIPRule) string {
 	return sb.String()
 }
 
-func (f *GeoIPSetFactory) CreateFromCIDRs(cidrs []*CIDR) (*GeoIPSet, error) {
+func (f *IPSetFactory) CreateFromCIDRs(cidrs []*CIDR) (*IPSet, error) {
 	return f.createFrom(func(add func(*CIDR)) error {
 		for _, c := range cidrs {
 			add(c)
@@ -872,7 +872,7 @@ func (f *GeoIPSetFactory) CreateFromCIDRs(cidrs []*CIDR) (*GeoIPSet, error) {
 	})
 }
 
-func (f *GeoIPSetFactory) createFrom(yield func(func(*CIDR)) error) (*GeoIPSet, error) {
+func (f *IPSetFactory) createFrom(yield func(func(*CIDR)) error) (*IPSet, error) {
 	var ipv4Builder, ipv6Builder netipx.IPSetBuilder
 
 	err := yield(func(c *CIDR) {
@@ -930,10 +930,10 @@ func (f *GeoIPSetFactory) createFrom(yield func(func(*CIDR)) error) (*GeoIPSet, 
 		max6 = 0xff
 	}
 
-	return &GeoIPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
+	return &IPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
 }
 
-func buildOptimizedGeoIPMatcher(f *GeoIPSetFactory, rules []*IPRule) (GeoIPMatcher, error) {
+func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error) {
 	n := len(rules)
 	custom := make([]*CIDR, 0, n)
 	pos := make([]*GeoIPRule, 0, n)
@@ -954,14 +954,14 @@ func buildOptimizedGeoIPMatcher(f *GeoIPSetFactory, rules []*IPRule) (GeoIPMatch
 		}
 	}
 
-	subs := make([]*HeuristicGeoIPMatcher, 0, 3)
+	subs := make([]*HeuristicIPMatcher, 0, 3)
 
 	if len(custom) > 0 {
 		ipset, err := f.CreateFromCIDRs(custom)
 		if err != nil {
 			return nil, err
 		}
-		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: false})
+		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
 	if len(pos) > 0 {
@@ -969,7 +969,7 @@ func buildOptimizedGeoIPMatcher(f *GeoIPSetFactory, rules []*IPRule) (GeoIPMatch
 		if err != nil {
 			return nil, err
 		}
-		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: false})
+		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
 	if len(neg) > 0 {
@@ -977,15 +977,15 @@ func buildOptimizedGeoIPMatcher(f *GeoIPSetFactory, rules []*IPRule) (GeoIPMatch
 		if err != nil {
 			return nil, err
 		}
-		subs = append(subs, &HeuristicGeoIPMatcher{ipset: ipset, reverse: true})
+		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: true})
 	}
 
 	switch len(subs) {
 	case 0:
-		return nil, errors.New("no valid geoip matcher")
+		return nil, errors.New("no valid ip matcher")
 	case 1:
 		return subs[0], nil
 	default:
-		return &HeuristicMultiGeoIPMatcher{matchers: subs}, nil
+		return &HeuristicMultiIPMatcher{matchers: subs}, nil
 	}
 }

@@ -11,11 +11,11 @@ import (
 	xnet "github.com/xtls/xray-core/common/net"
 )
 
-func buildGeoIPMatcher(rawRules ...string) GeoIPMatcher {
+func buildIPMatcher(rawRules ...string) IPMatcher {
 	rules, err := ParseIPRules(rawRules)
 	common.Must(err)
 
-	matcher, err := newGeoIPRegistry().BuildGeoIPMatcher(rules)
+	matcher, err := newIPRegistry().BuildIPMatcher(rules)
 	common.Must(err)
 
 	return matcher
@@ -30,8 +30,8 @@ func sortIPStrings(ips []net.IP) []string {
 	return output
 }
 
-func TestGeoIPMatcher(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPMatcher(t *testing.T) {
+	matcher := buildIPMatcher(
 		"0.0.0.0/8",
 		"10.0.0.0/8",
 		"100.64.0.0/10",
@@ -97,8 +97,8 @@ func TestGeoIPMatcher(t *testing.T) {
 	}
 }
 
-func TestGeoIPMatcherRegression(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPMatcherRegression(t *testing.T) {
+	matcher := buildIPMatcher(
 		"98.108.20.0/22",
 		"98.108.20.0/23",
 	)
@@ -124,8 +124,8 @@ func TestGeoIPMatcherRegression(t *testing.T) {
 	}
 }
 
-func TestGeoIPReverseMatcher(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPReverseMatcher(t *testing.T) {
+	matcher := buildIPMatcher(
 		"8.8.8.8/32",
 		"91.108.4.0/16",
 	)
@@ -156,8 +156,8 @@ func TestGeoIPReverseMatcher(t *testing.T) {
 	}
 }
 
-func TestGeoIPReverseMatcher2(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPReverseMatcher2(t *testing.T) {
+	matcher := buildIPMatcher(
 		"8.8.8.8/32",
 		"91.108.4.0/16",
 		"fe80::", // Keep IPv6 family non-empty so reverse matching can evaluate IPv6 input.
@@ -189,8 +189,8 @@ func TestGeoIPReverseMatcher2(t *testing.T) {
 	}
 }
 
-func TestGeoIPMatcherAnyMatchAndMatches(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPMatcherAnyMatchAndMatches(t *testing.T) {
+	matcher := buildIPMatcher(
 		"8.8.8.8/32",
 		"2001:4860:4860::8888/128",
 	)
@@ -239,8 +239,8 @@ func TestGeoIPMatcherAnyMatchAndMatches(t *testing.T) {
 	}
 }
 
-func TestGeoIPMatcherFilterIPs(t *testing.T) {
-	matcher := buildGeoIPMatcher(
+func TestIPMatcherFilterIPs(t *testing.T) {
+	matcher := buildIPMatcher(
 		"8.8.8.8/32",
 		"91.108.4.0/16",
 		"2001:4860:4860::8888/128",
@@ -278,30 +278,30 @@ func TestGeoIPMatcherFilterIPs(t *testing.T) {
 	}
 }
 
-func TestGeoIPMatcher4CN(t *testing.T) {
+func TestIPMatcher4CN(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildGeoIPMatcher("geoip:cn")
+	matcher := buildIPMatcher("geoip:cn")
 
 	if matcher.Match([]byte{8, 8, 8, 8}) {
 		t.Error("expect CN geoip doesn't contain 8.8.8.8, but actually does")
 	}
 }
 
-func TestGeoIPMatcher6US(t *testing.T) {
+func TestIPMatcher6US(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildGeoIPMatcher("geoip:us")
+	matcher := buildIPMatcher("geoip:us")
 
 	if !matcher.Match(xnet.ParseAddress("2001:4860:4860::8888").IP()) {
 		t.Error("expect US geoip contain 2001:4860:4860::8888, but actually not")
 	}
 }
 
-func BenchmarkGeoIPMatcher4CN(b *testing.B) {
+func BenchmarkIPMatcher4CN(b *testing.B) {
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildGeoIPMatcher("geoip:cn")
+	matcher := buildIPMatcher("geoip:cn")
 	ip := net.IP{8, 8, 8, 8}
 
 	b.ResetTimer()
@@ -311,10 +311,10 @@ func BenchmarkGeoIPMatcher4CN(b *testing.B) {
 	}
 }
 
-func BenchmarkGeoIPMatcher6US(b *testing.B) {
+func BenchmarkIPMatcher6US(b *testing.B) {
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildGeoIPMatcher("geoip:us")
+	matcher := buildIPMatcher("geoip:us")
 	ip := xnet.ParseAddress("2001:4860:4860::8888").IP()
 
 	b.ResetTimer()
