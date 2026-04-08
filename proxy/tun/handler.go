@@ -60,6 +60,14 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 		return err
 	}
 
+	tunIndex, err := tunInterface.Index()
+	if err != nil {
+		_ = tunInterface.Close()
+		return err
+	}
+	updater = &InterfaceUpdater{tunIndex: tunIndex}
+	updater.Update()
+
 	errors.LogInfo(t.ctx, tunName, " created")
 
 	tunStackOptions := StackOptions{
