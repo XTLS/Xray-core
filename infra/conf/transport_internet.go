@@ -90,7 +90,7 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 		config.CwndMultiplier = *c.CwndMultiplier
 	}
 	if c.MaxSendingWindow != nil {
-		config.MaxSendingWindow = *c.MaxSendingWindow * 1024 * 1024
+		config.MaxSendingWindow = *c.MaxSendingWindow
 	}
 
 	if config.Mtu < 21 {
@@ -102,8 +102,8 @@ func (c *KCPConfig) Build() (proto.Message, error) {
 	if config.CwndMultiplier < 1 {
 		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
 	}
-	if config.MaxSendingWindow == 0 {
-		config.MaxSendingWindow = 512 * 1024
+	if config.GetSendingBufferSize() == 0 {
+		return nil, errors.New("MaxSendingWindow must be >= Mtu").AtError()
 	}
 
 	return config, nil
