@@ -6,7 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/geodata/strmatcher"
 )
 
 func TestMatcher(t *testing.T) {

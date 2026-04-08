@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/xtls/xray-core/common"
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/geodata/strmatcher"
 )
 
 func TestMphMatcherGroup(t *testing.T) {
