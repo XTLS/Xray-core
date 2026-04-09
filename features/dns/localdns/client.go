@@ -84,7 +84,6 @@ func New() *Client {
 	}
 
 	r := &net.Resolver{}
-	r.PreferGo = true
 	r.Dial = d.DialContext
 
 	return &Client{
