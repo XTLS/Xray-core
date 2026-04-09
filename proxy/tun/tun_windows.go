@@ -185,7 +185,9 @@ func (t *WindowsTun) Start() error {
 }
 
 func (t *WindowsTun) Close() error {
-	t.changeCallback.Unregister()
+	if t.changeCallback != nil {
+		t.changeCallback.Unregister()
+	}
 	t.session.End()
 	_ = t.adapter.Close()
 
