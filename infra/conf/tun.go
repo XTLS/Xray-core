@@ -6,22 +6,24 @@ import (
 )
 
 type TunConfig struct {
-	Name      string   `json:"name"`
-	MTU       uint32   `json:"MTU"`
-	UserLevel uint32   `json:"userLevel"`
-	Address   []string `json:"address"`
-	Route     []string `json:"route"`
-	Dns       []string `json:"dns"`
+	Name          string   `json:"name"`
+	MTU           uint32   `json:"MTU"`
+	UserLevel     uint32   `json:"userLevel"`
+	AutoInterface bool     `json:"autoInterface"`
+	Address       []string `json:"address"`
+	Route         []string `json:"route"`
+	Dns           []string `json:"dns"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
 	config := &tun.Config{
-		Name:      v.Name,
-		MTU:       v.MTU,
-		UserLevel: v.UserLevel,
-		Address:   v.Address,
-		Route:     v.Route,
-		Dns:       v.Dns,
+		Name:          v.Name,
+		MTU:           v.MTU,
+		UserLevel:     v.UserLevel,
+		AutoInterface: v.AutoInterface,
+		Address:       v.Address,
+		Route:         v.Route,
+		Dns:           v.Dns,
 	}
 
 	if v.Name == "" {

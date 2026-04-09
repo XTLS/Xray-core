@@ -3,7 +3,7 @@
 package tun
 
 import (
-	"errors"
+	go_errors "errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
@@ -142,7 +143,7 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	b.SetByte(3, family)
 
 	if _, err := t.tunFile.Write(b.Bytes()); err != nil {
-		if errors.Is(err, unix.EAGAIN) {
+		if go_errors.Is(err, unix.EAGAIN) {
 			return &tcpip.ErrWouldBlock{}
 		}
 		return &tcpip.ErrAborted{}
@@ -159,7 +160,7 @@ func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 
 	// read the bytes to the interface file
 	n, err := b.ReadFrom(t.tunFile)
-	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+	if go_errors.Is(err, unix.EAGAIN) || go_errors.Is(err, unix.EINTR) {
 		b.Release()
 		return 0, nil, ErrQueueEmpty
 	}
@@ -378,6 +379,6 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 	case "tcp6", "udp6", "ip6":
 		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index)
 	default:
-		return errors.New("unknown network")
+		return errors.New("unknown network ", network)
 	}
 }

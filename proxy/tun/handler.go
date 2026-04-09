@@ -62,26 +62,28 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 		return err
 	}
 
-	tunIndex, err := tunInterface.Index()
-	if err != nil {
-		_ = tunInterface.Close()
-		return err
-	}
-	updater = &InterfaceUpdater{tunIndex: tunIndex}
-	updater.Update()
-	internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
-		iface := updater.Get()
-		if iface == nil {
-			errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
-			return nil
+	if t.config.AutoInterface {
+		tunIndex, err := tunInterface.Index()
+		if err != nil {
+			_ = tunInterface.Close()
+			return err
 		}
-		return c.Control(func(fd uintptr) {
-			err := setinterface(network, address, fd, iface)
-			if err != nil {
-				errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
+		updater = &InterfaceUpdater{tunIndex: tunIndex}
+		updater.Update()
+		internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
+			iface := updater.Get()
+			if iface == nil {
+				errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
+				return nil
 			}
+			return c.Control(func(fd uintptr) {
+				err := setinterface(network, address, fd, iface)
+				if err != nil {
+					errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
+				}
+			})
 		})
-	})
+	}
 
 	errors.LogInfo(t.ctx, tunName, " created")
 

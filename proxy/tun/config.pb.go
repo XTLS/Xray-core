@@ -26,9 +26,10 @@ type Config struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	MTU           uint32                 `protobuf:"varint,2,opt,name=MTU,proto3" json:"MTU,omitempty"`
 	UserLevel     uint32                 `protobuf:"varint,3,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	Address       []string               `protobuf:"bytes,4,rep,name=address,proto3" json:"address,omitempty"`
-	Route         []string               `protobuf:"bytes,5,rep,name=route,proto3" json:"route,omitempty"`
-	Dns           []string               `protobuf:"bytes,6,rep,name=dns,proto3" json:"dns,omitempty"`
+	AutoInterface bool                   `protobuf:"varint,4,opt,name=auto_interface,json=autoInterface,proto3" json:"auto_interface,omitempty"`
+	Address       []string               `protobuf:"bytes,5,rep,name=address,proto3" json:"address,omitempty"`
+	Route         []string               `protobuf:"bytes,6,rep,name=route,proto3" json:"route,omitempty"`
+	Dns           []string               `protobuf:"bytes,7,rep,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -84,6 +85,13 @@ func (x *Config) GetUserLevel() uint32 {
 	return 0
 }
 
+func (x *Config) GetAutoInterface() bool {
+	if x != nil {
+		return x.AutoInterface
+	}
+	return false
+}
+
 func (x *Config) GetAddress() []string {
 	if x != nil {
 		return x.Address
@@ -109,15 +117,16 @@ var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\x8f\x01\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xb6\x01\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x03 \x01(\rR\tuserLevel\x12\x18\n" +
-	"\aaddress\x18\x04 \x03(\tR\aaddress\x12\x14\n" +
-	"\x05route\x18\x05 \x03(\tR\x05route\x12\x10\n" +
-	"\x03dns\x18\x06 \x03(\tR\x03dnsBL\n" +
+	"user_level\x18\x03 \x01(\rR\tuserLevel\x12%\n" +
+	"\x0eauto_interface\x18\x04 \x01(\bR\rautoInterface\x12\x18\n" +
+	"\aaddress\x18\x05 \x03(\tR\aaddress\x12\x14\n" +
+	"\x05route\x18\x06 \x03(\tR\x05route\x12\x10\n" +
+	"\x03dns\x18\a \x03(\tR\x03dnsBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 
 var (

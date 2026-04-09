@@ -171,14 +171,16 @@ func (t *WindowsTun) Start() error {
 		}
 	}
 
-	t.changeCallback, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
-		if notificationType != winipcfg.MibDeleteInstance {
-			return
+	if t.options.AutoInterface {
+		t.changeCallback, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
+			if notificationType != winipcfg.MibDeleteInstance {
+				return
+			}
+			updater.Update()
+		})
+		if err != nil {
+			return err
 		}
-		updater.Update()
-	})
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -289,7 +291,7 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
 		}
 	default:
-		return errors.New("unknown network")
+		return errors.New("unknown network ", network)
 	}
 
 	return nil
