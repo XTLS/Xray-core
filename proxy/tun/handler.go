@@ -69,7 +69,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 	updater = &InterfaceUpdater{tunIndex: tunIndex}
 	updater.Update()
-	err = internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
+	internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
 		iface := updater.Get()
 		if iface == nil {
 			errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
@@ -82,10 +82,6 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 			}
 		})
 	})
-	if err != nil {
-		_ = tunInterface.Close()
-		return err
-	}
 
 	errors.LogInfo(t.ctx, tunName, " created")
 
