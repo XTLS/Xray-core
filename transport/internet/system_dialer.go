@@ -189,13 +189,37 @@ func (d *SimpleSystemDialer) DestIpAddress() net.IP {
 	return nil
 }
 
-func RegisterDialerController(ctl func(network, address string, c syscall.RawConn) error) {
-	if ctl == nil {
-		return
+// UseAlternativeSystemDialer replaces the current system dialer with a given one.
+// Caller must ensure there is no race condition.
+//
+// xray:api:stable
+func UseAlternativeSystemDialer(dialer SystemDialer) {
+	if dialer == nil {
+		dialer = &DefaultSystemDialer{}
 	}
+	effectiveSystemDialer = dialer
+}
+
+// RegisterDialerController adds a controller to the effective system dialer.
+// The controller can be used to operate on file descriptors before they are put into use.
+// It only works when effective dialer is the default dialer.
+//
+// xray:api:beta
+func RegisterDialerController(ctl func(network, address string, c syscall.RawConn) error) error {
+	if ctl == nil {
+		return errors.New("nil listener controller")
+	}
+
 	ControllersLock.Lock()
 	Controllers = append(Controllers, ctl)
 	ControllersLock.Unlock()
+
+	_, ok := effectiveSystemDialer.(*DefaultSystemDialer)
+	if !ok {
+		return errors.New("RegisterListenerController not supported in custom dialer")
+	}
+
+	return nil
 }
 
 type FakePacketConn struct {
