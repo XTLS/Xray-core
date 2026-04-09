@@ -2,6 +2,7 @@ package tun
 
 import (
 	"context"
+	"syscall"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -67,6 +69,23 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 	updater = &InterfaceUpdater{tunIndex: tunIndex}
 	updater.Update()
+	err = internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
+		iface := updater.Get()
+		if iface == nil {
+			errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
+			return nil
+		}
+		return c.Control(func(fd uintptr) {
+			err := setinterface(network, address, fd, iface)
+			if err != nil {
+				errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
+			}
+		})
+	})
+	if err != nil {
+		_ = tunInterface.Close()
+		return err
+	}
 
 	errors.LogInfo(t.ctx, tunName, " created")
 

@@ -17,16 +17,11 @@ type InterfaceUpdater struct {
 
 var updater *InterfaceUpdater
 
-func (updater *InterfaceUpdater) Get() *int {
+func (updater *InterfaceUpdater) Get() *net.Interface {
 	updater.Lock()
 	defer updater.Unlock()
 
-	if updater.iface == nil {
-		return nil
-	}
-
-	index := updater.iface.Index
-	return &index
+	return updater.iface
 }
 
 func (updater *InterfaceUpdater) Update() {
@@ -34,8 +29,8 @@ func (updater *InterfaceUpdater) Update() {
 	defer updater.Unlock()
 
 	if updater.iface != nil {
-		_, err := net.InterfaceByIndex(updater.iface.Index)
-		if err == nil {
+		iface, err := net.InterfaceByIndex(updater.iface.Index)
+		if err == nil && iface.Name == updater.iface.Name {
 			return
 		}
 	}
@@ -44,7 +39,7 @@ func (updater *InterfaceUpdater) Update() {
 
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		errors.LogInfoInner(context.Background(), err, "failed to update default interface")
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to update interface")
 		return
 	}
 
@@ -60,10 +55,10 @@ func (updater *InterfaceUpdater) Update() {
 	}
 
 	if got == nil {
-		errors.LogInfo(context.Background(), "failed to update default interface > got == nil")
+		errors.LogInfo(context.Background(), "[tun] failed to update interface > got == nil")
 		return
 	}
 
 	updater.iface = got
-	errors.LogInfo(context.Background(), "update default interface ", got.Name, " ", got.Index)
+	errors.LogInfo(context.Background(), "[tun] update interface ", got.Name, " ", got.Index)
 }

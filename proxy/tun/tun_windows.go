@@ -4,7 +4,9 @@ package tun
 
 import (
 	"crypto/md5"
+	"encoding/binary"
 	go_errors "errors"
+	"net"
 	"net/netip"
 	"unsafe"
 
@@ -24,11 +26,12 @@ func procyield(cycles uint32)
 // current version is heavily stripped to do nothing more,
 // then create a network interface, to be provided as endpoint to gVisor ip stack
 type WindowsTun struct {
-	options  *Config
-	adapter  *wintun.Adapter
-	session  wintun.Session
-	readWait windows.Handle
-	luid     winipcfg.LUID
+	options        *Config
+	adapter        *wintun.Adapter
+	session        wintun.Session
+	readWait       windows.Handle
+	luid           winipcfg.LUID
+	changeCallback winipcfg.ChangeCallback
 }
 
 // WindowsTun implements Tun
@@ -168,10 +171,21 @@ func (t *WindowsTun) Start() error {
 		}
 	}
 
+	t.changeCallback, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
+		if notificationType != winipcfg.MibDeleteInstance {
+			return
+		}
+		updater.Update()
+	})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (t *WindowsTun) Close() error {
+	t.changeCallback.Unregister()
 	t.session.End()
 	_ = t.adapter.Close()
 
@@ -244,4 +258,37 @@ func (t *WindowsTun) Wait() {
 
 func (t *WindowsTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
+}
+
+const (
+	IP_UNICAST_IF   = 31
+	IPV6_UNICAST_IF = 31
+)
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	var index [4]byte
+	binary.BigEndian.PutUint32(index[:], uint32(iface.Index))
+
+	switch network {
+	case "tcp4", "udp4", "ip4":
+		err := windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_UNICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
+		if err != nil {
+			return err
+		}
+		if network == "udp4" {
+			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, windows.IP_MULTICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
+		}
+	case "tcp6", "udp6", "ip6":
+		err := windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_UNICAST_IF, iface.Index)
+		if err != nil {
+			return err
+		}
+		if network == "udp6" {
+			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
+		}
+	default:
+		return errors.New("unknown network")
+	}
+
+	return nil
 }

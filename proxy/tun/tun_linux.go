@@ -3,6 +3,8 @@
 package tun
 
 import (
+	"net"
+
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
@@ -122,4 +124,8 @@ func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 		MTU:               t.options.MTU,
 		RXChecksumOffload: true,
 	})
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	return unix.BindToDevice(int(fd), iface.Name)
 }

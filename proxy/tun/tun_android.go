@@ -77,3 +77,7 @@ func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {
 		RXChecksumOffload: true,
 	})
 }
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	return unix.BindToDevice(int(fd), iface.Name)
+}

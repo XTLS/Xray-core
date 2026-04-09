@@ -9,7 +9,6 @@ import (
 	"net/netip"
 	"os"
 	"strconv"
-	"syscall"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -365,9 +364,20 @@ func setIPAddress(name string, gateway netip.Prefix) error {
 }
 
 func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
-	_, _, errno := unix.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
 	if errno != 0 {
 		return errno
 	}
 	return nil
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	switch network {
+	case "tcp4", "udp4", "ip4":
+		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index)
+	case "tcp6", "udp6", "ip6":
+		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index)
+	default:
+		return errors.New("unknown network")
+	}
 }

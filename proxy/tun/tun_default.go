@@ -3,6 +3,8 @@
 package tun
 
 import (
+	"net"
+
 	"github.com/xtls/xray-core/common/errors"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -36,4 +38,8 @@ func (t *DefaultTun) Index() (int, error) {
 
 func (t *DefaultTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return nil, errors.New("Tun is not supported on your platform")
+}
+
+func setinterface(string, string, uintptr, *net.Interface) error {
+	return errors.New("Tun is not supported on your platform")
 }
