@@ -27,7 +27,7 @@ func procyield(cycles uint32)
 // current version is heavily stripped to do nothing more,
 // then create a network interface, to be provided as endpoint to gVisor ip stack
 type WindowsTun struct {
-	sync.Mutex
+	sync.RWMutex
 
 	options        *Config
 	adapter        *wintun.Adapter
@@ -225,8 +225,8 @@ func (t *WindowsTun) Index() (int, error) {
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device
 func (t *WindowsTun) WritePacket(packetBuffer *stack.PacketBuffer) tcpip.Error {
-	t.Lock()
-	defer t.Unlock()
+	t.RLock()
+	defer t.RUnlock()
 	if t.closed {
 		return &tcpip.ErrClosedForSend{}
 	}
