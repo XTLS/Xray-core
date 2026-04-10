@@ -228,7 +228,7 @@ func (t *WindowsTun) WritePacket(packetBuffer *stack.PacketBuffer) tcpip.Error {
 	t.Lock()
 	defer t.Unlock()
 	if t.closed {
-		return nil
+		return &tcpip.ErrClosedForSend{}
 	}
 
 	// request buffer from Wintun
