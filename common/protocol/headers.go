@@ -91,5 +91,12 @@ func (sc *SecurityConfig) GetSecurityType() SecurityType {
 }
 
 func isDomainTooLong(domain string) bool {
-	return len(domain) > 256
+	// Use unsigned comparison: len() returns a signed int, and a torn read
+	// of a string header (e.g. via a racy 16-byte interface read of a
+	// *DomainAddress) can leave the high bit set. With the previous signed
+	// `> 256` check that case slipped through and reached
+	// runtime.stringtoslicebyte with a uint length of ~9 EB, crashing the
+	// process with "fatal error: out of memory". The wire format also only
+	// has one byte for the length, so 255 is the real upper bound.
+	return uint(len(domain)) > 255
 }

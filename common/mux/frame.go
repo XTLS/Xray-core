@@ -100,9 +100,22 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 		} else if b.UDP != nil { // make sure it's user's proxy request
 			b.Write(f.GlobalID[:]) // no need to check whether it's empty
 		}
-	} else if b.UDP != nil {
-		b.WriteByte(byte(TargetNetworkUDP))
-		addrParser.WriteAddressPort(b, b.UDP.Address, b.UDP.Port)
+	} else if udp := b.UDP; udp != nil {
+		// Snapshot the destination by value before serializing it. b.UDP is
+		// a *net.Destination borrowed from the upstream UDP reader (set by
+		// writeMetaWithFrame as `frame.UDP = data[0].UDP`), and reading
+		// udp.Address — a non-atomic two-word interface — races with the
+		// producer mutating the same Destination for its next packet. The
+		// race produces a torn DomainAddress that crashes
+		// addressParser.writeAddress with a multi-exabyte allocation.
+		// Copying the struct is still racy at the field level, but it
+		// closes the window between the type-byte write and the address
+		// write, and it lets us actually return the error below.
+		snap := *udp
+		common.Must(b.WriteByte(byte(TargetNetworkUDP)))
+		if err := addrParser.WriteAddressPort(b, snap.Address, snap.Port); err != nil {
+			return err
+		}
 	}
 
 	len1 := b.Len()
