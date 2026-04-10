@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package xray.proxy.anytls;
+option csharp_namespace = "Xray.Proxy.AnyTLS";
+option go_package = "github.com/xtls/xray-core/proxy/anytls";
+option java_package = "com.xray.proxy.anytls";
+option java_multiple_files = true;
+
+import "common/protocol/user.proto";
+import "common/protocol/server_spec.proto";
+
+message Account {
+  string password = 1;
+}
+
+message ServerConfig {
+  repeated xray.common.protocol.User users = 1;
+  string padding_scheme = 2;
+}
+
+message ClientConfig {
+  xray.common.protocol.ServerEndpoint server = 1;
+  uint32 idleSessionCheckInterval = 2;
+  uint32 idleSessionTimeout = 3;
+  uint32 minIdleSession = 4;
+}
