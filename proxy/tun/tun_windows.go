@@ -175,7 +175,7 @@ func (t *WindowsTun) Start() error {
 		}
 	}
 
-	if t.options.AutoInterface {
+	if updater != nil {
 		t.changeCallback, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
 			if notificationType != winipcfg.MibDeleteInstance {
 				return

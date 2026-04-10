@@ -62,13 +62,16 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 		return err
 	}
 
-	if t.config.AutoInterface {
+	if t.config.Interface != "" {
 		tunIndex, err := tunInterface.Index()
 		if err != nil {
 			_ = tunInterface.Close()
 			return err
 		}
-		updater = &InterfaceUpdater{tunIndex: tunIndex}
+		if t.config.Interface == "auto" {
+			t.config.Interface = ""
+		}
+		updater = &InterfaceUpdater{tunIndex: tunIndex, fixedName: t.config.Interface}
 		updater.Update()
 		internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
 			iface := updater.Get()

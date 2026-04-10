@@ -11,8 +11,9 @@ import (
 type InterfaceUpdater struct {
 	sync.Mutex
 
-	tunIndex int
-	iface    *net.Interface
+	tunIndex  int
+	fixedName string
+	iface     *net.Interface
 }
 
 var updater *InterfaceUpdater
@@ -48,9 +49,16 @@ func (updater *InterfaceUpdater) Update() {
 		if iface.Index == updater.tunIndex {
 			continue
 		}
-		if iface.Flags&net.FlagLoopback == 0 {
-			got = &iface
-			break
+		if updater.fixedName != "" {
+			if iface.Name == updater.fixedName {
+				got = &iface
+				break
+			}
+		} else {
+			if iface.Flags&net.FlagLoopback == 0 {
+				got = &iface
+				break
+			}
 		}
 	}
 
