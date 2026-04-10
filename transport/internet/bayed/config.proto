@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package xray.transport.internet.bayed;
+option csharp_namespace = "Xray.Transport.Internet.Bayed";
+option go_package = "github.com/xtls/xray-core/transport/internet/bayed";
+option java_package = "com.xray.transport.internet.bayed";
+option java_multiple_files = true;
+
+message Config {
+  // Common fields
+  bool show = 1;
+  bytes psk = 2;
+
+  // Server-side fields
+  string upstream_addr = 10;
+  uint64 upstream_timeout_ms = 11;
+  repeated string upstreams = 12;
+  int32 max_handshakes_per_sec = 13;
+
+  // Client-side fields
+  string server_name = 20;
+  string fingerprint = 21;
+  bool insecure_skip_verify = 23;
+}

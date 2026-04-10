@@ -7,10 +7,12 @@ import (
 	"time"
 
 	goreality "github.com/xtls/reality"
+	libbayed "github.com/EvrkMs/bayed-tls/bayed"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/bayed"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -21,6 +23,7 @@ type Listener struct {
 	listener      net.Listener
 	tlsConfig     *gotls.Config
 	realityConfig *goreality.Config
+	bayedConfig   *libbayed.ServerConfig
 	authConfig    internet.ConnectionAuthenticator
 	config        *Config
 	addConn       internet.ConnHandler
@@ -81,6 +84,9 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 		l.realityConfig = config.GetREALITYConfig()
 		go goreality.DetectPostHandshakeRecordsLens(l.realityConfig)
 	}
+	if config := bayed.ConfigFromStreamSettings(streamSettings); config != nil {
+		l.bayedConfig = config.GetBayedServerConfig()
+	}
 
 	if tcpSettings.HeaderSettings != nil {
 		headerConfig, err := tcpSettings.HeaderSettings.GetInstance()
@@ -113,7 +119,8 @@ func (v *Listener) keepAccepting() {
 			continue
 		}
 
-		go func() {
+		go func(conn stat.Connection) {
+			var err error
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)
 			} else if v.realityConfig != nil {
@@ -121,12 +128,21 @@ func (v *Listener) keepAccepting() {
 					errors.LogInfo(context.Background(), err.Error())
 					return
 				}
+			} else if v.bayedConfig != nil {
+				if conn, err = bayed.Server(conn, v.bayedConfig); err != nil {
+					if err == libbayed.ErrNotBayed {
+						// Non-bayed client — already proxied to upstream, nothing to do.
+						return
+					}
+					errors.LogInfo(context.Background(), "BAYED: ", err.Error())
+					return
+				}
 			}
 			if v.authConfig != nil {
 				conn = v.authConfig.Server(conn)
 			}
 			v.addConn(stat.Connection(conn))
-		}()
+		}(conn)
 	}
 }
 

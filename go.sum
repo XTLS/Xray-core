@@ -1,3 +1,5 @@
+github.com/EvrkMs/bayed-tls v1.3.0 h1:0BuIhOEEqHnl13dJ78VcwY+hBSrY2jMIY94ldhkmDpI=
+github.com/EvrkMs/bayed-tls v1.3.0/go.mod h1:5vdMtEBH4okUbUDBEvVAZk53pV8Z3P/NrTW3qjGvZBM=
 github.com/andybalholm/brotli v1.0.6 h1:Yf9fFpf49Zrxb9NlQaluyE92/+X7UVHlhMNJN2sxfOI=
 github.com/andybalholm/brotli v1.0.6/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/apernet/quic-go v0.59.1-0.20260330051153-c402ee641eb6 h1:cbF95uMsQwCwAzH2i8+2lNO2TReoELLuqeeMfyBjFbY=

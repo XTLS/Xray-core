@@ -38,6 +38,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/kcp"
+	"github.com/xtls/xray-core/transport/internet/bayed"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
@@ -994,6 +995,52 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type BAYEDConfig struct {
+	Show                bool     `json:"show"`
+	PSK                 string   `json:"psk"`
+	UpstreamAddr        string   `json:"upstreamAddr"`
+	Upstreams           []string `json:"upstreams"`
+	MaxHandshakesPerSec int      `json:"maxHandshakesPerSec"`
+	UpstreamTimeoutMs   uint64   `json:"upstreamTimeoutMs"`
+	ServerName          string   `json:"serverName"`
+	Fingerprint         string   `json:"fingerprint"`
+	InsecureSkipVerify  bool     `json:"insecureSkipVerify"`
+}
+
+func (c *BAYEDConfig) Build() (proto.Message, error) {
+	config := new(bayed.Config)
+	config.Show = c.Show
+
+	if c.PSK == "" {
+		return nil, errors.New(`BAYED: empty "psk"`)
+	}
+	pskBytes, err := base64.RawURLEncoding.DecodeString(c.PSK)
+	if err != nil {
+		// Try standard base64
+		pskBytes, err = base64.StdEncoding.DecodeString(c.PSK)
+		if err != nil {
+			return nil, errors.New(`BAYED: invalid "psk": expected base64 or unpadded base64url-encoded value`)
+		}
+	}
+	if len(pskBytes) < 16 {
+		return nil, errors.New(`BAYED: "psk" must be at least 16 bytes`)
+	}
+	config.Psk = pskBytes
+
+	// Server-side fields
+	config.UpstreamAddr = c.UpstreamAddr
+	config.Upstreams = c.Upstreams
+	config.MaxHandshakesPerSec = int32(c.MaxHandshakesPerSec)
+	config.UpstreamTimeoutMs = c.UpstreamTimeoutMs
+
+	// Client-side fields
+	config.ServerName = c.ServerName
+	config.Fingerprint = strings.ToLower(c.Fingerprint)
+	config.InsecureSkipVerify = c.InsecureSkipVerify
+
+	return config, nil
+}
+
 type TransportProtocol string
 
 // Build implements Buildable.
@@ -1733,6 +1780,7 @@ type StreamConfig struct {
 	FinalMask           *FinalMask         `json:"finalmask"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
+	BAYEDSettings       *BAYEDConfig       `json:"bayedSettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
 	TCPSettings         *TCPConfig         `json:"tcpSettings"`
 	XHTTPSettings       *SplitHTTPConfig   `json:"xhttpSettings"`
@@ -1792,6 +1840,20 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.SecurityType = tm.Type
 	case "xtls":
 		return nil, errors.PrintRemovedFeatureError(`Legacy XTLS`, `xtls-rprx-vision with TLS or REALITY`)
+	case "bayed":
+		if config.ProtocolName != "tcp" {
+			return nil, errors.New("BAYED only supports RAW (TCP) for now.")
+		}
+		if c.BAYEDSettings == nil {
+			return nil, errors.New(`BAYED: Empty "bayedSettings".`)
+		}
+		ts, err := c.BAYEDSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build BAYED config.").Base(err)
+		}
+		tm := serial.ToTypedMessage(ts)
+		config.SecuritySettings = append(config.SecuritySettings, tm)
+		config.SecurityType = tm.Type
 	default:
 		return nil, errors.New(`Unknown security "` + c.Security + `".`)
 	}
