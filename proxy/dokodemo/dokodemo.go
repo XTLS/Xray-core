@@ -2,6 +2,7 @@ package dokodemo
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -56,7 +57,7 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 
 // Network implements proxy.Inbound.
 func (d *DokodemoDoor) Network() []net.Network {
-	if  len(d.config.Networks) == 1 {
+	if slices.Contains(d.config.Networks, net.Network_TCP) {
 		return append(d.config.Networks, net.Network_UNIX)
 	}
 	return d.config.Networks
@@ -73,7 +74,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
 	// forwarding from unix to tcp add
 	if network == net.Network_UNIX {
-		network =  d.config.Networks[0]
+		network = net.Network_TCP
 	}
 	dest := net.Destination{
 		Network: network,
