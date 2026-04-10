@@ -30,7 +30,13 @@ func (*Client) Close() error { return nil }
 
 // LookupIP implements Client.
 func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
-	ips, err := c.r.LookupIP(context.Background(), "ip", host)
+	var ips []net.IP
+	var err error
+	if len(internet.Controllers) > 0 {
+		ips, err = c.r.LookupIP(context.Background(), "ip", host)
+	} else {
+		ips, err = net.LookupIP(host)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -71,20 +77,25 @@ func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, e
 
 // New create a new dns.Client that queries localhost for DNS.
 func New() *Client {
-	d := &net.Dialer{}
-	d.Timeout = time.Second * 16
-	d.Control = func(network, address string, c syscall.RawConn) error {
-		for _, ctl := range internet.Controllers {
-			if err := ctl(network, address, c); err != nil {
-				errors.LogInfoInner(context.Background(), err, "failed to apply external controller")
-				return err
+	d := &net.Dialer{
+		Timeout: time.Second * 16,
+		Control: func(network, address string, c syscall.RawConn) error {
+			for _, ctl := range internet.Controllers {
+				if err := ctl(network, address, c); err != nil {
+					errors.LogInfoInner(context.Background(), err, "failed to apply external controller")
+					return err
+				}
 			}
-		}
-		return nil
+			return nil
+		},
 	}
 
-	r := &net.Resolver{}
-	r.Dial = d.DialContext
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			return d.DialContext(ctx, network, address)
+		},
+	}
 
 	return &Client{
 		d: d,

@@ -8,6 +8,7 @@ import (
 	go_errors "errors"
 	"net"
 	"net/netip"
+	"sync"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -26,12 +27,15 @@ func procyield(cycles uint32)
 // current version is heavily stripped to do nothing more,
 // then create a network interface, to be provided as endpoint to gVisor ip stack
 type WindowsTun struct {
+	sync.Mutex
+
 	options        *Config
 	adapter        *wintun.Adapter
 	session        wintun.Session
 	readWait       windows.Handle
 	luid           winipcfg.LUID
 	changeCallback winipcfg.ChangeCallback
+	closed         bool
 }
 
 // WindowsTun implements Tun
@@ -187,6 +191,13 @@ func (t *WindowsTun) Start() error {
 }
 
 func (t *WindowsTun) Close() error {
+	t.Lock()
+	defer t.Unlock()
+	if t.closed {
+		return nil
+	}
+	t.closed = true
+
 	if t.changeCallback != nil {
 		t.changeCallback.Unregister()
 	}
@@ -214,6 +225,12 @@ func (t *WindowsTun) Index() (int, error) {
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device
 func (t *WindowsTun) WritePacket(packetBuffer *stack.PacketBuffer) tcpip.Error {
+	t.Lock()
+	defer t.Unlock()
+	if t.closed {
+		return nil
+	}
+
 	// request buffer from Wintun
 	packet, err := t.session.AllocateSendPacket(packetBuffer.Size())
 	if err != nil {
