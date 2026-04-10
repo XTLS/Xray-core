@@ -72,7 +72,7 @@ func (d *DokodemoDoor) policy() policy.Session {
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
-	// forwarding from unix to tcp add
+	// forward to TCP if from UNIX
 	if network == net.Network_UNIX {
 		network = net.Network_TCP
 	}
