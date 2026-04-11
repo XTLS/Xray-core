@@ -6,10 +6,10 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-var AndroidFindProcessImpl func(src Destination, dest Destination) (int, string, string, error) = func(src Destination, dest Destination) (int, string, string, error) {
+var AndroidFindProcessImpl func(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (int, string, string, error) = func(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (int, string, string, error) {
 	return 0, "", "", errors.New("stub: process lookup is not implemented")
 }
 
-func FindProcess(src Destination, dest Destination) (int, string, string, error) {
-	return AndroidFindProcessImpl(src, dest)
+func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (int, string, string, error) {
+	return AndroidFindProcessImpl(network, srcIP, srcPort, destIP, destPort)
 }

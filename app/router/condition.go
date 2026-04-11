@@ -400,8 +400,9 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 
-	srcPort := ctx.GetSourcePort().String()
+	srcPort := uint16(ctx.GetSourcePort())
 	srcIP := ctx.GetSourceIPs()[0].String()
+
 	var network string
 	switch ctx.GetNetwork() {
 	case net.Network_TCP:
@@ -412,26 +413,14 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 
-	src, err := parseDestination(network, srcIP, srcPort)
-	if err != nil {
-		errors.LogDebug(context.Background(), fmt.Sprintf("parse destination failed. src = %s %s %s, err = %s", network, srcIP, srcPort, err))
-		return false
+	var dstIP string
+	var dstPort uint16 = 0
+	if len(ctx.GetTargetIPs()) > 0 {
+		dstIP = ctx.GetTargetIPs()[0].String()
+		dstPort = uint16(ctx.GetTargetPort())
 	}
 
-	if ctx.GetTargetIPs() == nil || len(ctx.GetTargetIPs()) == 0 {
-		errors.LogDebug(context.Background(), fmt.Sprintf("No target IP. src = %s %s %s", network, srcIP, srcPort))
-		return false
-	}
-
-	dstPort := ctx.GetTargetPort().String()
-	dstIP := ctx.GetTargetIPs()[0].String()
-	dst, err := parseDestination(network, dstIP, dstPort)
-	if err != nil {
-		errors.LogDebug(context.Background(), fmt.Sprintf("parse destination failed. dst = %s %s %s, err = %s", network, dstIP, dstPort, err))
-		return false
-	}
-
-	pid, name, absPath, err := net.FindProcess(src, dst)
+	pid, name, absPath, err := net.FindProcess(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
 	if err != nil {
 		if err != net.ErrNotLocal {
 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
