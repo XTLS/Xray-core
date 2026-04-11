@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -385,14 +384,6 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
 		Folders:       folders,
 		MatchXraySelf: matchXraySelf,
 	}
-}
-
-// parseDestination is a wrapper of net.ParseDestination, with ipv6 support.
-func parseDestination(network, ip, port string) (net.Destination, error) {
-	if strings.Contains(ip, ":") {
-		ip = fmt.Sprintf("[%s]", ip)
-	}
-	return net.ParseDestination(fmt.Sprintf("%s:%s:%s", network, ip, port))
 }
 
 func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
