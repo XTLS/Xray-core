@@ -50,11 +50,7 @@ type xicmpConnServer struct {
 	mutex  sync.Mutex
 }
 
-func NewConnServer(c *Config, raw net.PacketConn, level int) (net.PacketConn, error) {
-	if level != 0 {
-		return nil, errors.New("xicmp requires being at the outermost level")
-	}
-
+func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	network := "ip4:icmp"
 	typ := icmp.Type(ipv4.ICMPTypeEchoReply)
 	proto := 1
