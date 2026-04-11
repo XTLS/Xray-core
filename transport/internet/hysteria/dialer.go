@@ -441,6 +441,7 @@ func (m *clientManager) clean() {
 }
 
 var manager *clientManager
+var initmanager sync.Once
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
@@ -451,6 +452,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
 	config := streamSettings.ProtocolSettings.(*Config)
 
+	initmanager.Do(func() {
+		manager = &clientManager{
+			m: make(map[dialerConf]*client),
+		}
+		(&task.Periodic{
+			Interval: 30 * time.Second,
+			Execute: func() error {
+				manager.clean()
+				return nil
+			},
+		}).Start()
+	})
 	manager.mutex.Lock()
 	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
 	if !ok {
@@ -473,19 +486,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return c.udp()
 	}
 	return c.tcp()
-}
-
-func init() {
-	manager = &clientManager{
-		m: make(map[dialerConf]*client),
-	}
-	(&task.Periodic{
-		Interval: 30 * time.Second,
-		Execute: func() error {
-			manager.clean()
-			return nil
-		},
-	}).Start()
 }
 
 func init() {
