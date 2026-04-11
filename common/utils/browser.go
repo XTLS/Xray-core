@@ -54,11 +54,13 @@ func SafariVersion() string {
 	var anchoredTime time.Time = time.Now()
 	var releaseYear int = anchoredTime.Year()
 	var splitPoint time.Time = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
+	var delayedDays = int(math.Floor(math.Pow(globalRng.Float64(), 3) * 75))
+	splitPoint = splitPoint.AddDate(0, 0, delayedDays)
 	if (anchoredTime.Compare(splitPoint) < 0) {
 		releaseYear --
 		splitPoint = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
+		splitPoint = splitPoint.AddDate(0, 0, delayedDays)
 	}
-	splitPoint = splitPoint.AddDate(0, 0, int(math.Floor(math.Pow(globalRng.Float64(), 3) * 75)))
 	var minorVersion = safariMinorMap[(anchoredTime.Unix() - splitPoint.Unix()) / 1296000]
 	return strconv.Itoa(releaseYear - 1999) + "." + strconv.Itoa(minorVersion)
 }
