@@ -421,8 +421,13 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	return pktConn, nil
 }
 
+type dialerConf struct {
+	net.Destination
+	*internet.MemoryStreamConfig
+}
+
 type clientManager struct {
-	m     map[string]*client
+	m     map[dialerConf]*client
 	mutex sync.Mutex
 }
 
@@ -435,7 +440,7 @@ func (m *clientManager) clean() {
 	}
 }
 
-var manger *clientManager
+var manager *clientManager
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
@@ -444,11 +449,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
-	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
-	manger.mutex.Lock()
-	c, ok := manger.m[addr]
+	manager.mutex.Lock()
+	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
 	if !ok {
 		dest.Network = net.Network_UDP
 		c = &client{
@@ -460,10 +464,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			udpmaskManager: streamSettings.UdpmaskManager,
 			quicParams:     streamSettings.QuicParams,
 		}
-		manger.m[addr] = c
+		manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}] = c
 	}
 	c.setCtx(ctx)
-	manger.mutex.Unlock()
+	manager.mutex.Unlock()
 
 	if requireDatagram {
 		return c.udp()
@@ -472,13 +476,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 }
 
 func init() {
-	manger = &clientManager{
-		m: make(map[string]*client),
+	manager = &clientManager{
+		m: make(map[dialerConf]*client),
 	}
 	(&task.Periodic{
 		Interval: 30 * time.Second,
 		Execute: func() error {
-			manger.clean()
+			manager.clean()
 			return nil
 		},
 	}).Start()
