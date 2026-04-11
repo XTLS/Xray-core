@@ -1,0 +1,66 @@
+package geodata
+
+import (
+	"context"
+
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata/strmatcher"
+)
+
+type DomainMatcher interface {
+	Size() uint32
+	Match(input string) []uint32
+	MatchAny(input string) bool
+}
+
+func buildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
+	g := strmatcher.NewMphIndexMatcher()
+	for _, r := range rules {
+		switch v := r.Value.(type) {
+		case *DomainRule_Custom:
+			m, err := parseDomain(v.Custom)
+			if err != nil {
+				return nil, err
+			}
+			g.Add(m)
+		case *DomainRule_Geosite:
+			domains, err := loadSiteWithAttrs(v.Geosite.File, v.Geosite.Code, v.Geosite.Attrs)
+			if err != nil {
+				return nil, err
+			}
+			for i, d := range domains {
+				domains[i] = nil // peak mem
+				m, err := parseDomain(d)
+				if err != nil {
+					errors.LogError(context.Background(), "ignore invalid geosite entry in ", v.Geosite.File, ":", v.Geosite.Code, " at index ", i, ", ", err)
+					continue
+				}
+				g.Add(m)
+			}
+		default:
+			panic("unknown domain rule type")
+		}
+	}
+	if err := g.Build(); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func parseDomain(d *Domain) (strmatcher.Matcher, error) {
+	if d == nil {
+		return nil, errors.New("domain must not be nil")
+	}
+	switch d.Type {
+	case Domain_Substr:
+		return strmatcher.Substr.New(d.Value)
+	case Domain_Regex:
+		return strmatcher.Regex.New(d.Value)
+	case Domain_Domain:
+		return strmatcher.Domain.New(d.Value)
+	case Domain_Full:
+		return strmatcher.Full.New(d.Value)
+	default:
+		return nil, errors.New("unknown domain type: ", d.Type)
+	}
+}
