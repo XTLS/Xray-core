@@ -22,16 +22,12 @@ var globalRng *rand.Rand = GetRandomizer()
 
 // The Chrome version generator will suffer from deviation of a normal distribution.
 func ChromeVersion() int {
-	// Start from Chrome 144 released on 2026.1.13
-	releaseDate := time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC)
-	version := 144
-	now := time.Now()
-	// Each version has random 25-45 day interval
-	for releaseDate.Before(now) {
-		releaseDate = releaseDate.AddDate(0, 0, globalRng.Intn(21)+25)
-		version++
-	}
-	return version - 1
+	// Start from Chrome 144, released on 2026.1.13.
+	var startVersion int = 144
+	var timeStart int64 = time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC).Unix() / 86400
+	var timeCurrent int64 = time.Now().Unix() / 86400
+	var timeDiff int = int((timeCurrent - timeStart - 20)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 100))
+	return startVersion + (timeDiff / 30)
 }
 
 var safariMinorMap [25]int = [25]int{0, 0, 0, 1, 1,
