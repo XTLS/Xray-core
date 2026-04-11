@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"hash/fnv"
+	"math"
 	"math/rand"
 	"strconv"
 	"time"
@@ -10,20 +12,57 @@ import (
 	"github.com/klauspost/cpuid/v2"
 )
 
+func GetRandomizer() *rand.Rand {
+	// Seed the PRNG with the hash of CPU info, increasing the overall probable space.
+	fnvHash := fnv.New64()
+	fnvHash.Write([]byte(strconv.Itoa(cpuid.CPU.Family) + strconv.Itoa(cpuid.CPU.Model) + strconv.Itoa(cpuid.CPU.PhysicalCores) + strconv.Itoa(cpuid.CPU.LogicalCores) + strconv.Itoa(cpuid.CPU.CacheLine) + strconv.Itoa(cpuid.CPU.ThreadsPerCore)))
+	return rand.New(rand.NewSource(int64(fnvHash.Sum64())))
+}
+var globalRng *rand.Rand = GetRandomizer()
+
+// The Chrome version generator will suffer from deviation of a normal distribution.
 func ChromeVersion() int {
-	// Use only CPU info as seed for PRNG
-	seed := int64(cpuid.CPU.Family + cpuid.CPU.Model + cpuid.CPU.PhysicalCores + cpuid.CPU.LogicalCores + cpuid.CPU.CacheLine)
-	rng := rand.New(rand.NewSource(seed))
-	// Start from Chrome 144 released on 2026.1.13
-	releaseDate := time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC)
-	version := 144
-	now := time.Now()
-	// Each version has random 25-45 day interval
-	for releaseDate.Before(now) {
-		releaseDate = releaseDate.AddDate(0, 0, rng.Intn(21)+25)
-		version++
+	// Start from Chrome 144, released on 2026.1.13.
+	var startVersion int = 144
+	var timeStart int64 = time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC).Unix() / 86400
+	var timeCurrent int64 = time.Now().Unix() / 86400
+	var timeDiff int = int((timeCurrent - timeStart - 35)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 105))
+	return startVersion + (timeDiff / 35) // It's 31.15 currently.
+}
+
+var safariMinorMap [25]int = [25]int{0, 0, 0, 1, 1,
+	1, 2, 2, 2, 2, 3, 3, 3, 4, 4,
+	4, 5, 5, 5, 5, 5, 6, 6, 6, 6}
+
+// The following version generators use deterministic generators, but with the distribution scaled by a curve.
+func CurlVersion() string {
+	// curl 8.0.0 was released on 20/03/2023.
+	var timeCurrent int64 = time.Now().Unix() / 86400
+	var timeStart int64 = time.Date(2023, 3, 20, 0, 0, 0, 0, time.UTC).Unix() / 86400
+	var timeDiff int = int((timeCurrent - timeStart - 60)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 165))
+	var minorValue int = int(timeDiff / 57) // The release cadence is actually 56.67 days.
+	return "8." + strconv.Itoa(minorValue) + ".0"
+}
+func FirefoxVersion() int {
+	// Firefox 128 ESR was released on 09/07/2023.
+	var timeCurrent int64 = time.Now().Unix() / 86400
+	var timeStart int64 = time.Date(2024, 7, 29, 0, 0, 0, 0, time.UTC).Unix() / 86400
+	var timeDiff = timeCurrent - timeStart - 25 - int64(math.Floor(math.Pow(globalRng.Float64(), 2) * 50))
+	return int(timeDiff / 30) + 128
+}
+func SafariVersion() string {
+	var anchoredTime time.Time = time.Now()
+	var releaseYear int = anchoredTime.Year()
+	var splitPoint time.Time = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
+	var delayedDays = int(math.Floor(math.Pow(globalRng.Float64(), 3) * 75))
+	splitPoint = splitPoint.AddDate(0, 0, delayedDays)
+	if (anchoredTime.Compare(splitPoint) < 0) {
+		releaseYear --
+		splitPoint = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
+		splitPoint = splitPoint.AddDate(0, 0, delayedDays)
 	}
-	return version - 1
+	var minorVersion = safariMinorMap[(anchoredTime.Unix() - splitPoint.Unix()) / 1296000]
+	return strconv.Itoa(releaseYear - 1999) + "." + strconv.Itoa(minorVersion)
 }
 
 // The full Chromium brand GREASE implementation
@@ -49,7 +88,7 @@ func getGreasedChOrder(brandLength int, seed int) []int {
 		default:
 			return clientHintShuffle4[seed % len(clientHintShuffle4)][:]
 	}
-	return []int{}
+	//return []int{}
 }
 func getUngreasedChUa(majorVersion int, forkName string) []string {
 	// Set the capacity to 4, the maximum allowed brand size, so Go will never allocate memory twice
@@ -74,11 +113,12 @@ func getGreasedChUa(majorVersion int, forkName string) string {
 	return strings.Join(shuffledCh, ", ")
 }
 
-// It's better to pin on Firefox ESR releases, and there could be a Firefox ESR version generator later.
-// However, if the Firefox fingerprint in uTLS doesn't have its update cadence match that of Firefox ESR, then it's better to update the Firefox version manually instead every time a new major ESR release is available.
-var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
-
 // The code below provides a coherent default browser user agent string based on a CPU-seeded PRNG.
+var CurlUA = "curl/" + CurlVersion()
+var AnchoredFirefoxVersion = strconv.Itoa(FirefoxVersion())
+var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:" + AnchoredFirefoxVersion + ".0) Gecko/20100101 Firefox/" + AnchoredFirefoxVersion + ".0"
+var SafariUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/" + SafariVersion() + " Safari/605.1.15"
+// Chromium browsers.
 var AnchoredChromeVersion = ChromeVersion()
 var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
 var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
@@ -106,9 +146,15 @@ func applyMasqueradedHeaders(header http.Header, browser string, variant string)
 		header.Set("User-Agent", FirefoxUA)
 		header["DNT"] = []string{"1"}
 		header.Set("Accept-Language", "en-US,en;q=0.5")
+	case "safari":
+		header.Set("User-Agent", SafariUA)
+		header.Set("Accept-Language", "en-US,en;q=0.9")
 	case "golang":
 		// Expose the default net/http header.
 		header.Del("User-Agent")
+		return
+	case "curl":
+		header.Set("User-Agent", CurlUA)
 		return
 	}
 	// Context-specific.
@@ -125,18 +171,28 @@ func applyMasqueradedHeaders(header http.Header, browser string, variant string)
 			switch browser {
 			case "chrome", "edge":
 				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-			case "firefox":
+			case "firefox", "safari":
 				header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 			}
 		}
 		header.Set("Sec-Fetch-Site", "none")
 		header.Set("Sec-Fetch-Mode", "navigate")
-		header.Set("Sec-Fetch-User", "?1")
+		switch browser {
+		case "safari":
+		default:
+			header.Set("Sec-Fetch-User", "?1")
+		}
 		header.Set("Sec-Fetch-Dest", "document")
 		header.Set("Priority", "u=0, i")
 	case "ws":
 		header.Set("Sec-Fetch-Mode", "websocket")
-		header.Set("Sec-Fetch-Dest", "empty")
+		switch browser {
+		case "safari":
+			// Safari is NOT web-compliant here!
+			header.Set("Sec-Fetch-Dest", "websocket")
+		default:
+			header.Set("Sec-Fetch-Dest", "empty")
+		}
 		header.Set("Sec-Fetch-Site", "same-origin")
 		if header.Get("Cache-Control") == "" {
 			header.Set("Cache-Control", "no-cache")
@@ -157,6 +213,8 @@ func applyMasqueradedHeaders(header http.Header, browser string, variant string)
 				header.Set("Priority", "u=1, i")
 			case "firefox":
 				header.Set("Priority", "u=4")
+			case "safari":
+				header.Set("Priority", "u=3, i")
 			}
 		}
 		if header.Get("Cache-Control") == "" {
@@ -182,8 +240,12 @@ func TryDefaultHeadersWith(header http.Header, variant string) {
 			applyMasqueradedHeaders(header, "chrome", variant)
 		case "firefox":
 			applyMasqueradedHeaders(header, "firefox", variant)
+		case "safari":
+			applyMasqueradedHeaders(header, "safari", variant)
 		case "edge":
 			applyMasqueradedHeaders(header, "edge", variant)
+		case "curl":
+			applyMasqueradedHeaders(header, "curl", variant)
 		case "golang":
 			applyMasqueradedHeaders(header, "golang", variant)
 		}
