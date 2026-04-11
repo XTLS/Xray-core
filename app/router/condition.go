@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -386,6 +387,14 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
 	}
 }
 
+// parseDestination is a wrapper of net.ParseDestination, with ipv6 support.
+func parseDestination(network, ip, port string) (net.Destination, error) {
+	if strings.Contains(ip, ":") {
+		ip = fmt.Sprintf("[%s]", ip)
+	}
+	return net.ParseDestination(fmt.Sprintf("%s:%s:%s", network, ip, port))
+}
+
 func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	if len(ctx.GetSourceIPs()) == 0 {
 		return false
@@ -403,20 +412,22 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 
-	src, err := net.ParseDestination(strings.Join([]string{network, srcIP, srcPort}, ":"))
+	src, err := parseDestination(network, srcIP, srcPort)
 	if err != nil {
+		errors.LogDebug(context.Background(), fmt.Sprintf("parse destination failed. src = %s %s %s, err = %s", network, srcIP, srcPort, err))
 		return false
 	}
 
 	if ctx.GetTargetIPs() == nil || len(ctx.GetTargetIPs()) == 0 {
-		errors.LogDebug(context.Background(), "No target IP. src = "+srcIP+":"+srcPort)
+		errors.LogDebug(context.Background(), fmt.Sprintf("No target IP. src = %s %s %s", network, srcIP, srcPort))
 		return false
 	}
 
 	dstPort := ctx.GetTargetPort().String()
 	dstIP := ctx.GetTargetIPs()[0].String()
-	dst, err := net.ParseDestination(strings.Join([]string{network, dstIP, dstPort}, ":"))
+	dst, err := parseDestination(network, dstIP, dstPort)
 	if err != nil {
+		errors.LogDebug(context.Background(), fmt.Sprintf("parse destination failed. dst = %s %s %s, err = %s", network, dstIP, dstPort, err))
 		return false
 	}
 
