@@ -26,8 +26,8 @@ func ChromeVersion() int {
 	var startVersion int = 144
 	var timeStart int64 = time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC).Unix() / 86400
 	var timeCurrent int64 = time.Now().Unix() / 86400
-	var timeDiff int = int((timeCurrent - timeStart - 20)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 100))
-	return startVersion + (timeDiff / 30)
+	var timeDiff int = int((timeCurrent - timeStart - 24)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 104))
+	return startVersion + (timeDiff / 32) // It's 31.15 currently.
 }
 
 var safariMinorMap [25]int = [25]int{0, 0, 0, 1, 1,
