@@ -465,9 +465,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}).Start()
 	})
 	manager.mutex.Lock()
+	dest.Network = net.Network_UDP
 	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
 	if !ok {
-		dest.Network = net.Network_UDP
 		c = &client{
 			ctx:            ctx,
 			dest:           dest,
