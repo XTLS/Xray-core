@@ -6,7 +6,9 @@ import (
 
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/serial"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -96,15 +98,14 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 	if c != nil {
 		rawRuleList = c.RuleList
 	}
-
 	for _, rawRule := range rawRuleList {
 		rule, err := parseRule(rawRule)
 		if err != nil {
 			return nil, err
 		}
-
 		config.Rule = append(config.Rule, rule)
 	}
+
 	for _, rawBalancer := range c.Balancers {
 		balancer, err := rawBalancer.Build()
 		if err != nil {
@@ -112,6 +113,7 @@ func (c *RouterConfig) Build() (*router.Config, error) {
 		}
 		config.BalancingRule = append(config.BalancingRule, balancer)
 	}
+
 	return config, nil
 }
 
@@ -170,31 +172,27 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.Domain != nil {
-		for _, domain := range *rawFieldRule.Domain {
-			rules, err := parseDomainRule(domain)
-			if err != nil {
-				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
-			}
-			rule.Domain = append(rule.Domain, rules...)
-		}
-	}
-
-	if rawFieldRule.Domains != nil {
-		for _, domain := range *rawFieldRule.Domains {
-			rules, err := parseDomainRule(domain)
-			if err != nil {
-				return nil, errors.New("failed to parse domain rule: ", domain).Base(err)
-			}
-			rule.Domain = append(rule.Domain, rules...)
-		}
-	}
-
-	if rawFieldRule.IP != nil {
-		geoipList, err := ToCidrList(*rawFieldRule.IP)
+		rules, err := geodata.ParseDomainRules(*rawFieldRule.Domain, geodata.Domain_Substr)
 		if err != nil {
 			return nil, err
 		}
-		rule.Geoip = geoipList
+		rule.Domain = rules
+	}
+
+	if rawFieldRule.Domains != nil {
+		rules, err := geodata.ParseDomainRules(*rawFieldRule.Domains, geodata.Domain_Substr)
+		if err != nil {
+			return nil, err
+		}
+		rule.Domain = rules
+	}
+
+	if rawFieldRule.IP != nil {
+		rules, err := geodata.ParseIPRules(*rawFieldRule.IP)
+		if err != nil {
+			return nil, err
+		}
+		rule.Ip = rules
 	}
 
 	if rawFieldRule.Port != nil {
@@ -210,11 +208,11 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.SourceIP != nil {
-		geoipList, err := ToCidrList(*rawFieldRule.SourceIP)
+		rules, err := geodata.ParseIPRules(*rawFieldRule.SourceIP)
 		if err != nil {
 			return nil, err
 		}
-		rule.SourceGeoip = geoipList
+		rule.SourceIp = rules
 	}
 
 	if rawFieldRule.SourcePort != nil {
@@ -222,11 +220,11 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	}
 
 	if rawFieldRule.LocalIP != nil {
-		geoipList, err := ToCidrList(*rawFieldRule.LocalIP)
+		rules, err := geodata.ParseIPRules(*rawFieldRule.LocalIP)
 		if err != nil {
 			return nil, err
 		}
-		rule.LocalGeoip = geoipList
+		rule.LocalIp = rules
 	}
 
 	if rawFieldRule.LocalPort != nil {

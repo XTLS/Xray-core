@@ -7,13 +7,14 @@ option java_package = "com.xray.app.dns";
 option java_multiple_files = true;
 
 import "common/net/destination.proto";
+import "common/geodata/geodat.proto";
 
 message NameServer {
   xray.common.net.Endpoint address = 1;
   bytes client_ip = 5;
   bool skipFallback = 6;
-  repeated string domain = 2;
-  repeated string expected_ip = 3;
+  repeated xray.common.geodata.DomainRule domain = 2;
+  repeated xray.common.geodata.IPRule expected_ip = 3;
   reserved 4;
   QueryStrategy query_strategy = 7;
   bool actPrior = 8;
@@ -23,7 +24,7 @@ message NameServer {
   optional bool serveStale = 15;
   optional uint32 serveExpiredTTL = 16;
   bool finalQuery = 12;
-  repeated string unexpected_ip = 13;
+  repeated xray.common.geodata.IPRule unexpected_ip = 13;
   bool actUnprior = 14;
   uint32 policyID = 17;
 }
@@ -45,7 +46,7 @@ message Config {
   bytes client_ip = 3;
 
   message HostMapping {
-    string domain = 2;
+    xray.common.geodata.DomainRule domain = 2;
 
     repeated bytes ip = 3;
 

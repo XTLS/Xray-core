@@ -9,6 +9,7 @@ option java_multiple_files = true;
 import "common/serial/typed_message.proto";
 import "common/net/port.proto";
 import "common/net/network.proto";
+import "common/geodata/geodat.proto";
 
 message RoutingRule {
   oneof target_tag {
@@ -22,10 +23,10 @@ message RoutingRule {
   string rule_tag = 19;
 
   // List of domains for target domain matching.
-  repeated string domain = 2;
+  repeated xray.common.geodata.DomainRule domain = 2;
 
   // List of IPs for target IP address matching.
-  repeated string ip = 10;
+  repeated xray.common.geodata.IPRule ip = 10;
 
   // List of ports for target port matching.
   xray.common.net.PortList port_list = 14;
@@ -34,7 +35,7 @@ message RoutingRule {
   repeated xray.common.net.Network networks = 13;
 
   // List of IPs for source IP address matching.
-  repeated string source_ip = 11;
+  repeated xray.common.geodata.IPRule source_ip = 11;
 
   // List of ports for source port matching.
   xray.common.net.PortList source_port_list = 16;
@@ -46,7 +47,7 @@ message RoutingRule {
   map<string, string> attributes = 15;
 
   // List of IPs for local IP address matching.
-  repeated string local_ip = 17;
+  repeated xray.common.geodata.IPRule local_ip = 17;
 
   // List of ports for local port matching.
   xray.common.net.PortList local_port_list = 18;

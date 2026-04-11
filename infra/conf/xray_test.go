@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/geodata"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -95,10 +96,10 @@ func TestXrayConfig(t *testing.T) {
 						DomainStrategy: router.Config_AsIs,
 						Rule: []*router.RoutingRule{
 							{
-								Geoip: []*router.GeoIP{
+								Ip: []*geodata.IPRule{
 									{
-										Cidr: []*router.CIDR{
-											{
+										Value: &geodata.IPRule_Custom{
+											Custom: &geodata.CIDR{
 												Ip:     []byte{10, 0, 0, 0},
 												Prefix: 8,
 											},

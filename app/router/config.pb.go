@@ -7,6 +7,7 @@
 package router
 
 import (
+	geodata "github.com/xtls/xray-core/common/geodata"
 	net "github.com/xtls/xray-core/common/net"
 	serial "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -84,15 +85,15 @@ type RoutingRule struct {
 	TargetTag isRoutingRule_TargetTag `protobuf_oneof:"target_tag"`
 	RuleTag   string                  `protobuf:"bytes,19,opt,name=rule_tag,json=ruleTag,proto3" json:"rule_tag,omitempty"`
 	// List of domains for target domain matching.
-	Domain []string `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
+	Domain []*geodata.DomainRule `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
 	// List of IPs for target IP address matching.
-	Ip []string `protobuf:"bytes,10,rep,name=ip,proto3" json:"ip,omitempty"`
+	Ip []*geodata.IPRule `protobuf:"bytes,10,rep,name=ip,proto3" json:"ip,omitempty"`
 	// List of ports for target port matching.
 	PortList *net.PortList `protobuf:"bytes,14,opt,name=port_list,json=portList,proto3" json:"port_list,omitempty"`
 	// List of networks for matching.
 	Networks []net.Network `protobuf:"varint,13,rep,packed,name=networks,proto3,enum=xray.common.net.Network" json:"networks,omitempty"`
 	// List of IPs for source IP address matching.
-	SourceIp []string `protobuf:"bytes,11,rep,name=source_ip,json=sourceIp,proto3" json:"source_ip,omitempty"`
+	SourceIp []*geodata.IPRule `protobuf:"bytes,11,rep,name=source_ip,json=sourceIp,proto3" json:"source_ip,omitempty"`
 	// List of ports for source port matching.
 	SourcePortList *net.PortList     `protobuf:"bytes,16,opt,name=source_port_list,json=sourcePortList,proto3" json:"source_port_list,omitempty"`
 	UserEmail      []string          `protobuf:"bytes,7,rep,name=user_email,json=userEmail,proto3" json:"user_email,omitempty"`
@@ -100,7 +101,7 @@ type RoutingRule struct {
 	Protocol       []string          `protobuf:"bytes,9,rep,name=protocol,proto3" json:"protocol,omitempty"`
 	Attributes     map[string]string `protobuf:"bytes,15,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// List of IPs for local IP address matching.
-	LocalIp []string `protobuf:"bytes,17,rep,name=local_ip,json=localIp,proto3" json:"local_ip,omitempty"`
+	LocalIp []*geodata.IPRule `protobuf:"bytes,17,rep,name=local_ip,json=localIp,proto3" json:"local_ip,omitempty"`
 	// List of ports for local port matching.
 	LocalPortList  *net.PortList  `protobuf:"bytes,18,opt,name=local_port_list,json=localPortList,proto3" json:"local_port_list,omitempty"`
 	VlessRouteList *net.PortList  `protobuf:"bytes,20,opt,name=vless_route_list,json=vlessRouteList,proto3" json:"vless_route_list,omitempty"`
@@ -172,14 +173,14 @@ func (x *RoutingRule) GetRuleTag() string {
 	return ""
 }
 
-func (x *RoutingRule) GetDomain() []string {
+func (x *RoutingRule) GetDomain() []*geodata.DomainRule {
 	if x != nil {
 		return x.Domain
 	}
 	return nil
 }
 
-func (x *RoutingRule) GetIp() []string {
+func (x *RoutingRule) GetIp() []*geodata.IPRule {
 	if x != nil {
 		return x.Ip
 	}
@@ -200,7 +201,7 @@ func (x *RoutingRule) GetNetworks() []net.Network {
 	return nil
 }
 
-func (x *RoutingRule) GetSourceIp() []string {
+func (x *RoutingRule) GetSourceIp() []*geodata.IPRule {
 	if x != nil {
 		return x.SourceIp
 	}
@@ -242,7 +243,7 @@ func (x *RoutingRule) GetAttributes() map[string]string {
 	return nil
 }
 
-func (x *RoutingRule) GetLocalIp() []string {
+func (x *RoutingRule) GetLocalIp() []*geodata.IPRule {
 	if x != nil {
 		return x.LocalIp
 	}
@@ -636,17 +637,17 @@ var File_app_router_config_proto protoreflect.FileDescriptor
 
 const file_app_router_config_proto_rawDesc = "" +
 	"\n" +
-	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\"\xc9\x06\n" +
+	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"\xc1\a\n" +
 	"\vRoutingRule\x12\x12\n" +
 	"\x03tag\x18\x01 \x01(\tH\x00R\x03tag\x12%\n" +
 	"\rbalancing_tag\x18\f \x01(\tH\x00R\fbalancingTag\x12\x19\n" +
-	"\brule_tag\x18\x13 \x01(\tR\aruleTag\x12\x16\n" +
-	"\x06domain\x18\x02 \x03(\tR\x06domain\x12\x0e\n" +
+	"\brule_tag\x18\x13 \x01(\tR\aruleTag\x127\n" +
+	"\x06domain\x18\x02 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12+\n" +
 	"\x02ip\x18\n" +
-	" \x03(\tR\x02ip\x126\n" +
+	" \x03(\v2\x1b.xray.common.geodata.IPRuleR\x02ip\x126\n" +
 	"\tport_list\x18\x0e \x01(\v2\x19.xray.common.net.PortListR\bportList\x124\n" +
-	"\bnetworks\x18\r \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x12\x1b\n" +
-	"\tsource_ip\x18\v \x03(\tR\bsourceIp\x12C\n" +
+	"\bnetworks\x18\r \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x128\n" +
+	"\tsource_ip\x18\v \x03(\v2\x1b.xray.common.geodata.IPRuleR\bsourceIp\x12C\n" +
 	"\x10source_port_list\x18\x10 \x01(\v2\x19.xray.common.net.PortListR\x0esourcePortList\x12\x1d\n" +
 	"\n" +
 	"user_email\x18\a \x03(\tR\tuserEmail\x12\x1f\n" +
@@ -655,8 +656,8 @@ const file_app_router_config_proto_rawDesc = "" +
 	"\bprotocol\x18\t \x03(\tR\bprotocol\x12L\n" +
 	"\n" +
 	"attributes\x18\x0f \x03(\v2,.xray.app.router.RoutingRule.AttributesEntryR\n" +
-	"attributes\x12\x19\n" +
-	"\blocal_ip\x18\x11 \x03(\tR\alocalIp\x12A\n" +
+	"attributes\x126\n" +
+	"\blocal_ip\x18\x11 \x03(\v2\x1b.xray.common.geodata.IPRuleR\alocalIp\x12A\n" +
 	"\x0flocal_port_list\x18\x12 \x01(\v2\x19.xray.common.net.PortListR\rlocalPortList\x12C\n" +
 	"\x10vless_route_list\x18\x14 \x01(\v2\x19.xray.common.net.PortListR\x0evlessRouteList\x12\x18\n" +
 	"\aprocess\x18\x15 \x03(\tR\aprocess\x128\n" +
@@ -724,29 +725,35 @@ var file_app_router_config_proto_goTypes = []any{
 	(*Config)(nil),                  // 6: xray.app.router.Config
 	nil,                             // 7: xray.app.router.RoutingRule.AttributesEntry
 	nil,                             // 8: xray.app.router.WebhookConfig.HeadersEntry
-	(*net.PortList)(nil),            // 9: xray.common.net.PortList
-	(net.Network)(0),                // 10: xray.common.net.Network
-	(*serial.TypedMessage)(nil),     // 11: xray.common.serial.TypedMessage
+	(*geodata.DomainRule)(nil),      // 9: xray.common.geodata.DomainRule
+	(*geodata.IPRule)(nil),          // 10: xray.common.geodata.IPRule
+	(*net.PortList)(nil),            // 11: xray.common.net.PortList
+	(net.Network)(0),                // 12: xray.common.net.Network
+	(*serial.TypedMessage)(nil),     // 13: xray.common.serial.TypedMessage
 }
 var file_app_router_config_proto_depIdxs = []int32{
-	9,  // 0: xray.app.router.RoutingRule.port_list:type_name -> xray.common.net.PortList
-	10, // 1: xray.app.router.RoutingRule.networks:type_name -> xray.common.net.Network
-	9,  // 2: xray.app.router.RoutingRule.source_port_list:type_name -> xray.common.net.PortList
-	7,  // 3: xray.app.router.RoutingRule.attributes:type_name -> xray.app.router.RoutingRule.AttributesEntry
-	9,  // 4: xray.app.router.RoutingRule.local_port_list:type_name -> xray.common.net.PortList
-	9,  // 5: xray.app.router.RoutingRule.vless_route_list:type_name -> xray.common.net.PortList
-	2,  // 6: xray.app.router.RoutingRule.webhook:type_name -> xray.app.router.WebhookConfig
-	8,  // 7: xray.app.router.WebhookConfig.headers:type_name -> xray.app.router.WebhookConfig.HeadersEntry
-	11, // 8: xray.app.router.BalancingRule.strategy_settings:type_name -> xray.common.serial.TypedMessage
-	4,  // 9: xray.app.router.StrategyLeastLoadConfig.costs:type_name -> xray.app.router.StrategyWeight
-	0,  // 10: xray.app.router.Config.domain_strategy:type_name -> xray.app.router.Config.DomainStrategy
-	1,  // 11: xray.app.router.Config.rule:type_name -> xray.app.router.RoutingRule
-	3,  // 12: xray.app.router.Config.balancing_rule:type_name -> xray.app.router.BalancingRule
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	9,  // 0: xray.app.router.RoutingRule.domain:type_name -> xray.common.geodata.DomainRule
+	10, // 1: xray.app.router.RoutingRule.ip:type_name -> xray.common.geodata.IPRule
+	11, // 2: xray.app.router.RoutingRule.port_list:type_name -> xray.common.net.PortList
+	12, // 3: xray.app.router.RoutingRule.networks:type_name -> xray.common.net.Network
+	10, // 4: xray.app.router.RoutingRule.source_ip:type_name -> xray.common.geodata.IPRule
+	11, // 5: xray.app.router.RoutingRule.source_port_list:type_name -> xray.common.net.PortList
+	7,  // 6: xray.app.router.RoutingRule.attributes:type_name -> xray.app.router.RoutingRule.AttributesEntry
+	10, // 7: xray.app.router.RoutingRule.local_ip:type_name -> xray.common.geodata.IPRule
+	11, // 8: xray.app.router.RoutingRule.local_port_list:type_name -> xray.common.net.PortList
+	11, // 9: xray.app.router.RoutingRule.vless_route_list:type_name -> xray.common.net.PortList
+	2,  // 10: xray.app.router.RoutingRule.webhook:type_name -> xray.app.router.WebhookConfig
+	8,  // 11: xray.app.router.WebhookConfig.headers:type_name -> xray.app.router.WebhookConfig.HeadersEntry
+	13, // 12: xray.app.router.BalancingRule.strategy_settings:type_name -> xray.common.serial.TypedMessage
+	4,  // 13: xray.app.router.StrategyLeastLoadConfig.costs:type_name -> xray.app.router.StrategyWeight
+	0,  // 14: xray.app.router.Config.domain_strategy:type_name -> xray.app.router.Config.DomainStrategy
+	1,  // 15: xray.app.router.Config.rule:type_name -> xray.app.router.RoutingRule
+	3,  // 16: xray.app.router.Config.balancing_rule:type_name -> xray.app.router.BalancingRule
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_app_router_config_proto_init() }

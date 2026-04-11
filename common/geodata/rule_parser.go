@@ -121,6 +121,32 @@ func parseCIDR(s string) (*CIDR, error) {
 	}, nil
 }
 
+func ParseDomainRule(r string, defaultType Domain_Type) (*DomainRule, error) {
+	if strings.HasPrefix(r, "geosite:") {
+		r = "ext:" + DefaultGeoSiteDat + ":" + r[len("geosite:"):]
+	}
+
+	prefix := 0
+	for _, ext := range [...]string{"ext:", "ext-domain:"} {
+		if strings.HasPrefix(r, ext) {
+			prefix = len(ext)
+			break
+		}
+	}
+
+	var rule isDomainRule_Value
+	var err error
+	if prefix > 0 {
+		rule, err = parseGeoSiteRule(r[prefix:])
+	} else {
+		rule, err = parseCustomDomainRule(r, defaultType)
+	}
+	if err != nil {
+		return nil, errors.New("illegal domain rule: ", r).Base(err)
+	}
+	return &DomainRule{Value: rule}, nil
+}
+
 func ParseDomainRules(rules []string, defaultType Domain_Type) ([]*DomainRule, error) {
 	var domainRules []*DomainRule
 

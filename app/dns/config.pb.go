@@ -7,6 +7,7 @@
 package dns
 
 import (
+	geodata "github.com/xtls/xray-core/common/geodata"
 	net "github.com/xtls/xray-core/common/net"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -79,8 +80,8 @@ type NameServer struct {
 	Address         *net.Endpoint          `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
 	ClientIp        []byte                 `protobuf:"bytes,5,opt,name=client_ip,json=clientIp,proto3" json:"client_ip,omitempty"`
 	SkipFallback    bool                   `protobuf:"varint,6,opt,name=skipFallback,proto3" json:"skipFallback,omitempty"`
-	Domain          []string               `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
-	ExpectedIp      []string               `protobuf:"bytes,3,rep,name=expected_ip,json=expectedIp,proto3" json:"expected_ip,omitempty"`
+	Domain          []*geodata.DomainRule  `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
+	ExpectedIp      []*geodata.IPRule      `protobuf:"bytes,3,rep,name=expected_ip,json=expectedIp,proto3" json:"expected_ip,omitempty"`
 	QueryStrategy   QueryStrategy          `protobuf:"varint,7,opt,name=query_strategy,json=queryStrategy,proto3,enum=xray.app.dns.QueryStrategy" json:"query_strategy,omitempty"`
 	ActPrior        bool                   `protobuf:"varint,8,opt,name=actPrior,proto3" json:"actPrior,omitempty"`
 	Tag             string                 `protobuf:"bytes,9,opt,name=tag,proto3" json:"tag,omitempty"`
@@ -89,7 +90,7 @@ type NameServer struct {
 	ServeStale      *bool                  `protobuf:"varint,15,opt,name=serveStale,proto3,oneof" json:"serveStale,omitempty"`
 	ServeExpiredTTL *uint32                `protobuf:"varint,16,opt,name=serveExpiredTTL,proto3,oneof" json:"serveExpiredTTL,omitempty"`
 	FinalQuery      bool                   `protobuf:"varint,12,opt,name=finalQuery,proto3" json:"finalQuery,omitempty"`
-	UnexpectedIp    []string               `protobuf:"bytes,13,rep,name=unexpected_ip,json=unexpectedIp,proto3" json:"unexpected_ip,omitempty"`
+	UnexpectedIp    []*geodata.IPRule      `protobuf:"bytes,13,rep,name=unexpected_ip,json=unexpectedIp,proto3" json:"unexpected_ip,omitempty"`
 	ActUnprior      bool                   `protobuf:"varint,14,opt,name=actUnprior,proto3" json:"actUnprior,omitempty"`
 	PolicyID        uint32                 `protobuf:"varint,17,opt,name=policyID,proto3" json:"policyID,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -147,14 +148,14 @@ func (x *NameServer) GetSkipFallback() bool {
 	return false
 }
 
-func (x *NameServer) GetDomain() []string {
+func (x *NameServer) GetDomain() []*geodata.DomainRule {
 	if x != nil {
 		return x.Domain
 	}
 	return nil
 }
 
-func (x *NameServer) GetExpectedIp() []string {
+func (x *NameServer) GetExpectedIp() []*geodata.IPRule {
 	if x != nil {
 		return x.ExpectedIp
 	}
@@ -217,7 +218,7 @@ func (x *NameServer) GetFinalQuery() bool {
 	return false
 }
 
-func (x *NameServer) GetUnexpectedIp() []string {
+func (x *NameServer) GetUnexpectedIp() []*geodata.IPRule {
 	if x != nil {
 		return x.UnexpectedIp
 	}
@@ -370,7 +371,7 @@ func (x *Config) GetEnableParallelQuery() bool {
 
 type Config_HostMapping struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Domain string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	Domain *geodata.DomainRule    `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	Ip     [][]byte               `protobuf:"bytes,3,rep,name=ip,proto3" json:"ip,omitempty"`
 	// ProxiedDomain indicates the mapped domain has the same IP address on this
 	// domain. Xray will use this domain for IP queries.
@@ -409,11 +410,11 @@ func (*Config_HostMapping) Descriptor() ([]byte, []int) {
 	return file_app_dns_config_proto_rawDescGZIP(), []int{1, 0}
 }
 
-func (x *Config_HostMapping) GetDomain() string {
+func (x *Config_HostMapping) GetDomain() *geodata.DomainRule {
 	if x != nil {
 		return x.Domain
 	}
-	return ""
+	return nil
 }
 
 func (x *Config_HostMapping) GetIp() [][]byte {
@@ -434,14 +435,14 @@ var File_app_dns_config_proto protoreflect.FileDescriptor
 
 const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\"\x83\x05\n" +
+	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xde\x05\n" +
 	"\n" +
 	"NameServer\x123\n" +
 	"\aaddress\x18\x01 \x01(\v2\x19.xray.common.net.EndpointR\aaddress\x12\x1b\n" +
 	"\tclient_ip\x18\x05 \x01(\fR\bclientIp\x12\"\n" +
-	"\fskipFallback\x18\x06 \x01(\bR\fskipFallback\x12\x16\n" +
-	"\x06domain\x18\x02 \x03(\tR\x06domain\x12\x1f\n" +
-	"\vexpected_ip\x18\x03 \x03(\tR\n" +
+	"\fskipFallback\x18\x06 \x01(\bR\fskipFallback\x127\n" +
+	"\x06domain\x18\x02 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12<\n" +
+	"\vexpected_ip\x18\x03 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
 	"expectedIp\x12B\n" +
 	"\x0equery_strategy\x18\a \x01(\x0e2\x1b.xray.app.dns.QueryStrategyR\rqueryStrategy\x12\x1a\n" +
 	"\bactPrior\x18\b \x01(\bR\bactPrior\x12\x10\n" +
@@ -455,15 +456,15 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fserveExpiredTTL\x18\x10 \x01(\rH\x02R\x0fserveExpiredTTL\x88\x01\x01\x12\x1e\n" +
 	"\n" +
 	"finalQuery\x18\f \x01(\bR\n" +
-	"finalQuery\x12#\n" +
-	"\runexpected_ip\x18\r \x03(\tR\funexpectedIp\x12\x1e\n" +
+	"finalQuery\x12@\n" +
+	"\runexpected_ip\x18\r \x03(\v2\x1b.xray.common.geodata.IPRuleR\funexpectedIp\x12\x1e\n" +
 	"\n" +
 	"actUnprior\x18\x0e \x01(\bR\n" +
 	"actUnprior\x12\x1a\n" +
 	"\bpolicyID\x18\x11 \x01(\rR\bpolicyIDB\x0f\n" +
 	"\r_disableCacheB\r\n" +
 	"\v_serveStaleB\x12\n" +
-	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\xe1\x04\n" +
+	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\x82\x05\n" +
 	"\x06Config\x129\n" +
 	"\vname_server\x18\x05 \x03(\v2\x18.xray.app.dns.NameServerR\n" +
 	"nameServer\x12\x1b\n" +
@@ -479,9 +480,9 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fdisableFallback\x18\n" +
 	" \x01(\bR\x0fdisableFallback\x126\n" +
 	"\x16disableFallbackIfMatch\x18\v \x01(\bR\x16disableFallbackIfMatch\x120\n" +
-	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a\\\n" +
-	"\vHostMapping\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x0e\n" +
+	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a}\n" +
+	"\vHostMapping\x127\n" +
+	"\x06domain\x18\x02 \x01(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x0e\n" +
 	"\x02ip\x18\x03 \x03(\fR\x02ip\x12%\n" +
 	"\x0eproxied_domain\x18\x04 \x01(\tR\rproxiedDomainJ\x04\b\a\x10\b*B\n" +
 	"\rQueryStrategy\x12\n" +
@@ -512,18 +513,24 @@ var file_app_dns_config_proto_goTypes = []any{
 	(*Config)(nil),             // 2: xray.app.dns.Config
 	(*Config_HostMapping)(nil), // 3: xray.app.dns.Config.HostMapping
 	(*net.Endpoint)(nil),       // 4: xray.common.net.Endpoint
+	(*geodata.DomainRule)(nil), // 5: xray.common.geodata.DomainRule
+	(*geodata.IPRule)(nil),     // 6: xray.common.geodata.IPRule
 }
 var file_app_dns_config_proto_depIdxs = []int32{
 	4, // 0: xray.app.dns.NameServer.address:type_name -> xray.common.net.Endpoint
-	0, // 1: xray.app.dns.NameServer.query_strategy:type_name -> xray.app.dns.QueryStrategy
-	1, // 2: xray.app.dns.Config.name_server:type_name -> xray.app.dns.NameServer
-	3, // 3: xray.app.dns.Config.static_hosts:type_name -> xray.app.dns.Config.HostMapping
-	0, // 4: xray.app.dns.Config.query_strategy:type_name -> xray.app.dns.QueryStrategy
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 1: xray.app.dns.NameServer.domain:type_name -> xray.common.geodata.DomainRule
+	6, // 2: xray.app.dns.NameServer.expected_ip:type_name -> xray.common.geodata.IPRule
+	0, // 3: xray.app.dns.NameServer.query_strategy:type_name -> xray.app.dns.QueryStrategy
+	6, // 4: xray.app.dns.NameServer.unexpected_ip:type_name -> xray.common.geodata.IPRule
+	1, // 5: xray.app.dns.Config.name_server:type_name -> xray.app.dns.NameServer
+	3, // 6: xray.app.dns.Config.static_hosts:type_name -> xray.app.dns.Config.HostMapping
+	0, // 7: xray.app.dns.Config.query_strategy:type_name -> xray.app.dns.QueryStrategy
+	5, // 8: xray.app.dns.Config.HostMapping.domain:type_name -> xray.common.geodata.DomainRule
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_app_dns_config_proto_init() }
