@@ -73,7 +73,7 @@ func (t *AndroidTun) Index() (int, error) {
 func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return fdbased.New(&fdbased.Options{
 		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
+		MTU:               t.options.MTU[0],
 		RXChecksumOffload: true,
 	})
 }
