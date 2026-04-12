@@ -7,11 +7,11 @@ import (
 
 type TunConfig struct {
 	Name                   string   `json:"name"`
-	MTU                    uint32   `json:"mtu"`
-	MyGatewayIPs           []string `json:"myGatewayIPs"`
+	MTU                    []uint32 `json:"mtu"`
+	Gateway                []string `json:"gateway"`
 	DNS                    []string `json:"dns"`
 	UserLevel              uint32   `json:"userLevel"`
-	AutoRouteIPs           []string `json:"autoRouteIPs"`
+	AutoRoutingTable       []string `json:"autoRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
 }
 
@@ -19,10 +19,10 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	config := &tun.Config{
 		Name:             v.Name,
 		MTU:              v.MTU,
-		Gateway:          v.MyGatewayIPs,
+		Gateway:          v.Gateway,
 		DNS:              v.DNS,
 		UserLevel:        v.UserLevel,
-		AutoRoutingTable: v.AutoRouteIPs,
+		AutoRoutingTable: v.AutoRoutingTable,
 	}
 
 	if v.AutoOutboundsInterface != nil {
@@ -33,8 +33,11 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		config.Name = "xray0"
 	}
 
-	if v.MTU == 0 {
-		config.MTU = 1500
+	if len(v.MTU) == 1 {
+		v.MTU = append(v.MTU, v.MTU[0])
+	}
+	if len(v.MTU) == 0 {
+		v.MTU = []uint32{1500, 1280}
 	}
 
 	if len(config.AutoRoutingTable) > 0 && v.AutoOutboundsInterface == nil {

@@ -134,7 +134,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU
+		ipif.NLMTU = t.options.MTU[0]
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -151,7 +151,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU
+		ipif.NLMTU = t.options.MTU[1]
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -278,7 +278,7 @@ func (t *WindowsTun) Wait() {
 }
 
 func (t *WindowsTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
 }
 
 const (

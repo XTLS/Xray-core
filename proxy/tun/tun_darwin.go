@@ -76,7 +76,7 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	err = setup(options.Name, options.MTU)
+	err = setup(options.Name, options.MTU[0])
 	if err != nil {
 		_ = tunFile.Close()
 		return nil, err
@@ -121,7 +121,7 @@ func (t *DarwinTun) Index() (int, error) {
 // WritePacket implements GVisorDevice method to write one packet to the tun device
 func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
 	defer b.Release()
 
 	// prepare Darwin specific packet header
@@ -156,7 +156,7 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 // which will make the stack call Wait which should implement desired push-back
 func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
 
 	// read the bytes to the interface file
 	n, err := b.ReadFrom(t.tunFile)
@@ -193,7 +193,7 @@ func (t *DarwinTun) Wait() {
 }
 
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
 }
 
 // open the interface, by creating new utunN if in the system and returning its file descriptor

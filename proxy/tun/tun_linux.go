@@ -30,7 +30,7 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	tunLink, err := setup(options.Name, int(options.MTU))
+	tunLink, err := setup(options.Name, int(options.MTU[0]))
 	if err != nil {
 		_ = unix.Close(tunFd)
 		return nil, err
@@ -121,7 +121,7 @@ func (t *LinuxTun) Index() (int, error) {
 func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return fdbased.New(&fdbased.Options{
 		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
+		MTU:               t.options.MTU[0],
 		RXChecksumOffload: true,
 	})
 }
