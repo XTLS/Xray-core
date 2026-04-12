@@ -6,13 +6,13 @@ import (
 )
 
 type TunConfig struct {
-	Name      string   `json:"name"`
-	MTU       uint32   `json:"MTU"`
-	UserLevel uint32   `json:"userLevel"`
-	Interface string   `json:"interface"`
-	Address   []string `json:"address"`
-	Route     []string `json:"route"`
-	Dns       []string `json:"dns"`
+	Name         string   `json:"name"`
+	MTU          uint32   `json:"MTU"`
+	UserLevel    uint32   `json:"userLevel"`
+	Interface    string   `json:"interface"`
+	MyGatewayIPs []string `json:"myGatewayIPs"`
+	AutoRouteIPs []string `json:"autoRouteIPs"`
+	Dns          []string `json:"dns"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -21,8 +21,8 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		MTU:       v.MTU,
 		UserLevel: v.UserLevel,
 		Interface: v.Interface,
-		Address:   v.Address,
-		Route:     v.Route,
+		Address:   v.MyGatewayIPs,
+		Route:     v.AutoRouteIPs,
 		Dns:       v.Dns,
 	}
 
