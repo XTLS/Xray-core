@@ -77,15 +77,15 @@ func Subscribe() chan WatchEvent {
 // Unsubscribe removes and closes a channel returned by Subscribe.
 func Unsubscribe(ch chan WatchEvent) {
 	subMu.Lock()
+	defer subMu.Unlock()
+
 	for i, s := range subscribers {
 		if s == ch {
 			subscribers[i] = subscribers[len(subscribers)-1]
 			subscribers = subscribers[:len(subscribers)-1]
-			break
+			return
 		}
 	}
-	subMu.Unlock()
-	close(ch)
 }
 
 func emit(ev WatchEvent) {
