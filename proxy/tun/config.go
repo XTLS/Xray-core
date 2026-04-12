@@ -55,7 +55,13 @@ func (updater *InterfaceUpdater) Update() {
 				break
 			}
 		} else {
-			if iface.Flags&net.FlagLoopback == 0 {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			if (iface.Flags&net.FlagUp != 0) &&
+				(iface.Flags&net.FlagLoopback == 0) &&
+				len(addrs) > 0 {
 				got = &iface
 				break
 			}
