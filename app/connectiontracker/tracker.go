@@ -114,6 +114,19 @@ func New() *Tracker {
 	return t
 }
 
+func disconnectInfo(id uint32, entry *ConnEntry) ConnectionInfo {
+	return ConnectionInfo{
+		ID:           id,
+		Email:        entry.Email,
+		InboundTag:   entry.InboundTag,
+		Protocol:     entry.Protocol,
+		StartTime:    entry.StartTime,
+		LastActivity: time.Unix(0, atomic.LoadInt64(&entry.lastActivity)),
+		Uplink:       atomic.LoadInt64(&entry.uplink),
+		Downlink:     atomic.LoadInt64(&entry.downlink),
+	}
+}
+
 // ListAllConnections returns a snapshot of every active connection across all
 // Tracker instances that were created by New.
 func ListAllConnections() []ConnectionInfo {
@@ -229,12 +242,25 @@ func (t *Tracker) CancelAll(email string) {
 	t.mu.Lock()
 	entries := t.conns[email]
 	delete(t.conns, email)
-	for id := range entries {
+
+	type closingConn struct {
+		id    uint32
+		entry *ConnEntry
+	}
+	closing := make([]closingConn, 0, len(entries))
+
+	for id, entry := range entries {
 		delete(t.byID, id)
+		closing = append(closing, closingConn{id: id, entry: entry})
 	}
 	t.mu.Unlock()
-	for _, entry := range entries {
-		entry.Cancel()
+
+	for _, c := range closing {
+		emit(WatchEvent{
+			Connected: false,
+			Info:      disconnectInfo(c.id, c.entry),
+		})
+		c.entry.Cancel()
 	}
 }
 
@@ -253,7 +279,12 @@ func (t *Tracker) CloseConn(id uint32) bool {
 		}
 	}
 	t.mu.Unlock()
+
 	if ok {
+		emit(WatchEvent{
+			Connected: false,
+			Info:      disconnectInfo(id, entry),
+		})
 		entry.Cancel()
 	}
 	return ok
