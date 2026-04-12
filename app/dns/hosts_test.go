@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	. "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 )
@@ -13,20 +14,17 @@ import (
 func TestStaticHosts(t *testing.T) {
 	pb := []*Config_HostMapping{
 		{
-			Type:          DomainMatchingType_Subdomain,
-			Domain:        "lan",
+			Domain:        &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "lan"}}},
 			ProxiedDomain: "#3",
 		},
 		{
-			Type:   DomainMatchingType_Full,
-			Domain: "example.com",
+			Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "example.com"}}},
 			Ip: [][]byte{
 				{1, 1, 1, 1},
 			},
 		},
 		{
-			Type:   DomainMatchingType_Full,
-			Domain: "proxy.xray.com",
+			Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "proxy.xray.com"}}},
 			Ip: [][]byte{
 				{1, 2, 3, 4},
 				{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -34,20 +32,17 @@ func TestStaticHosts(t *testing.T) {
 			ProxiedDomain: "another-proxy.xray.com",
 		},
 		{
-			Type:          DomainMatchingType_Full,
-			Domain:        "proxy2.xray.com",
+			Domain:        &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "proxy2.xray.com"}}},
 			ProxiedDomain: "proxy.xray.com",
 		},
 		{
-			Type:   DomainMatchingType_Subdomain,
-			Domain: "example.cn",
+			Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "example.cn"}}},
 			Ip: [][]byte{
 				{2, 2, 2, 2},
 			},
 		},
 		{
-			Type:   DomainMatchingType_Subdomain,
-			Domain: "baidu.com",
+			Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "baidu.com"}}},
 			Ip: [][]byte{
 				{127, 0, 0, 1},
 				{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},

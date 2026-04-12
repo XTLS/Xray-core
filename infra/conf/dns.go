@@ -3,6 +3,7 @@ package conf
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -252,9 +253,9 @@ func (m *HostsWrapper) UnmarshalJSON(data []byte) error {
 // Build implements Buildable
 func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 	mappings := make([]*dns.Config_HostMapping, 0, len(m.Hosts))
-	for domain, address := range m.Hosts {
-		mapping := newHostMapping(address)
-		rule, err := geodata.ParseDomainRule(domain, geodata.Domain_Full)
+	for rule, addrs := range m.Hosts {
+		mapping := newHostMapping(addrs)
+		rule, err := geodata.ParseDomainRule(rule, geodata.Domain_Full)
 		if err != nil {
 			return nil, err
 		}
@@ -407,12 +408,16 @@ func readSystemHosts() ([]*dns.Config_HostMapping, error) {
 	}
 	defer file.Close()
 
-	hostsMap := make([]*dns.Config_HostMapping, 0, 16)
-	scanner := bufio.NewScanner(file)
+	return readSystemHostsFrom(file)
+}
+
+func readSystemHostsFrom(r io.Reader) ([]*dns.Config_HostMapping, error) {
+	hosts := make(map[string][][]byte, 16)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if i := strings.IndexByte(line, '#'); i >= 0 {
-			// Discard comments.
+			// Strip inline comments before splitting the line into fields.
 			line = line[0:i]
 		}
 		f := strings.Fields(line)
@@ -423,19 +428,28 @@ func readSystemHosts() ([]*dns.Config_HostMapping, error) {
 		if addr.Family().IsDomain() {
 			continue
 		}
-		ip := addr.IP()
 		for i := 1; i < len(f); i++ {
 			domain := strings.TrimSuffix(f[i], ".")
 			domain = strings.ToLower(domain)
-			rule, err := geodata.ParseDomainRule(domain, geodata.Domain_Full)
-			if err != nil {
-				return nil, err
-			}
-			hostsMap = append(hostsMap, &dns.Config_HostMapping{Domain: rule, Ip: [][]byte{ip}})
+			hosts[domain] = append(hosts[domain], addr.IP())
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+
+	hostsMap := make([]*dns.Config_HostMapping, 0, len(hosts))
+	for domain, ips := range hosts {
+		// ParseDomainRule accepts rule syntax too, not just plain domains.
+		rule, err := geodata.ParseDomainRule(domain, geodata.Domain_Full)
+		if err != nil {
+			return nil, err
+		}
+		hostsMap = append(hostsMap, &dns.Config_HostMapping{
+			Domain: rule,
+			Ip:     ips,
+		})
+	}
+
 	return hostsMap, nil
 }
