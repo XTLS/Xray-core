@@ -9,6 +9,33 @@ type Writer struct {
 	pipe *pipe
 }
 
+// Write implements io.Writer.
+func (w *Writer) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	total := len(p)
+	mb := make(buf.MultiBuffer, 0, (len(p)+buf.Size-1)/buf.Size)
+	for len(p) > 0 {
+		chunkSize := len(p)
+		if chunkSize > buf.Size {
+			chunkSize = buf.Size
+		}
+
+		chunk := buf.NewWithSize(int32(chunkSize))
+		_, _ = chunk.Write(p[:chunkSize])
+		mb = append(mb, chunk)
+		p = p[chunkSize:]
+	}
+
+	if err := w.pipe.WriteMultiBuffer(mb); err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}
+
 // WriteMultiBuffer implements buf.Writer.
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return w.pipe.WriteMultiBuffer(mb)
