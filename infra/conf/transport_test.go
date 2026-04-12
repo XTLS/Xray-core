@@ -177,18 +177,18 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 				],
 				"server": [
 					{
-						"save": "txid",
-						"expr": {
+						"capture": "txid",
+						"transform": {
 							"op": "concat",
 							"args": [
-								{"var": "seed"},
+								{"reuse": "seed"},
 								{"u64": 258},
 								{"type": "hex", "bytes": "c0de"}
 							]
 						}
 					},
 					{
-						"var": "txid"
+						"reuse": "txid"
 					}
 				]
 			}`,
@@ -197,7 +197,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 				Client: []*finalmaskcustom.UDPItem{
 					{
 						RandMax: 255,
-						Packet: []byte{0xAA, 0xBB},
+						Packet:  []byte{0xAA, 0xBB},
 					},
 					{
 						Rand:    2,
@@ -208,7 +208,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 				Server: []*finalmaskcustom.UDPItem{
 					{
 						RandMax: 255,
-						Save: "txid",
+						Save:    "txid",
 						Expr: &finalmaskcustom.Expr{
 							Op: "concat",
 							Args: []*finalmaskcustom.ExprArg{
@@ -232,7 +232,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 					},
 					{
 						RandMax: 255,
-						Var: "txid",
+						Var:     "txid",
 					},
 				},
 			},
@@ -247,7 +247,7 @@ func TestHeaderCustomTCPBuildRejectsMixedItemKinds(t *testing.T) {
 		"clients": [[
 			{
 				"packet": [1, 2],
-				"var": "txid"
+				"reuse": "txid"
 			}
 		]]
 	}`)
@@ -262,7 +262,7 @@ func TestHeaderCustomUDPBuildRejectsInvalidVariableNames(t *testing.T) {
 	_, err := parser(`{
 		"client": [
 			{
-				"save": "bad-name",
+				"capture": "bad-name",
 				"rand": 4
 			}
 		]
@@ -278,13 +278,13 @@ func TestHeaderCustomUDPBuildRejectsExprWithoutArgs(t *testing.T) {
 	_, err := parser(`{
 		"client": [
 			{
-				"expr": {
+				"transform": {
 					"op": "concat"
 				}
 			}
 		]
 	}`)
-	if err == nil || !strings.Contains(err.Error(), "expr args") {
-		t.Fatalf("expected expr arg rejection, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "transform args") {
+		t.Fatalf("expected transform arg rejection, got %v", err)
 	}
 }
