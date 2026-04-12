@@ -2,6 +2,7 @@ package strmatcher
 
 import (
 	"math/bits"
+	"runtime"
 	"sort"
 	"strings"
 	"unsafe"
@@ -102,6 +103,7 @@ func (g *MphMatcherGroup) Build() error {
 		g.values[ruleIdx] = append(ruleInfo.matchers[Full], ruleInfo.matchers[Domain]...) // nolint:gocritic
 	}
 	g.ruleInfos = nil // Set ruleInfos nil to release memory
+	runtime.GC()      // peak mem
 
 	// Sort buckets in descending order with respect to each bucket's size
 	bucketIdxs := make([]int, len(buckets))

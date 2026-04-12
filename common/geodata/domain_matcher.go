@@ -2,7 +2,6 @@ package geodata
 
 import (
 	"context"
-	"runtime"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -42,11 +41,9 @@ func buildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
 			panic("unknown domain rule type")
 		}
 	}
-	runtime.GC() // peak mem
 	if err := g.Build(); err != nil {
 		return nil, err
 	}
-	runtime.GC() // peak mem
 	return g, nil
 }
 
