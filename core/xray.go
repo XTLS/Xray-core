@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
@@ -211,6 +212,7 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 		Instance features.Feature
 	}{
 		{dns.ClientType(), localdns.New()},
+		{connectiontracker.FeatureType(), connectiontracker.NewService()},
 		{policy.ManagerType(), policy.DefaultManager{}},
 		{routing.RouterType(), routing.DefaultRouter{}},
 		{stats.ManagerType(), stats.NoopManager{}},

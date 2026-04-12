@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -64,10 +65,21 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		memUsers = append(memUsers, u)
 	}
 
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	inbound := &MultiUserInbound{
 		networks:    networks,
 		users:       memUsers,
-		connTracker: connectiontracker.New(),
+		connTracker: trackerManager.NewTracker(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
