@@ -26,7 +26,9 @@ type TCPItem struct {
 	DelayMin      int64                  `protobuf:"varint,1,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
 	DelayMax      int64                  `protobuf:"varint,2,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	Rand          int32                  `protobuf:"varint,3,opt,name=rand,proto3" json:"rand,omitempty"`
-	Packet        []byte                 `protobuf:"bytes,4,opt,name=packet,proto3" json:"packet,omitempty"`
+	RandMin       int32                  `protobuf:"varint,4,opt,name=rand_min,json=randMin,proto3" json:"rand_min,omitempty"`
+	RandMax       int32                  `protobuf:"varint,5,opt,name=rand_max,json=randMax,proto3" json:"rand_max,omitempty"`
+	Packet        []byte                 `protobuf:"bytes,6,opt,name=packet,proto3" json:"packet,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -78,6 +80,20 @@ func (x *TCPItem) GetDelayMax() int64 {
 func (x *TCPItem) GetRand() int32 {
 	if x != nil {
 		return x.Rand
+	}
+	return 0
+}
+
+func (x *TCPItem) GetRandMin() int32 {
+	if x != nil {
+		return x.RandMin
+	}
+	return 0
+}
+
+func (x *TCPItem) GetRandMax() int32 {
+	if x != nil {
+		return x.RandMax
 	}
 	return 0
 }
@@ -196,7 +212,9 @@ func (x *TCPConfig) GetErrors() []*TCPSequence {
 type UDPItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Rand          int32                  `protobuf:"varint,1,opt,name=rand,proto3" json:"rand,omitempty"`
-	Packet        []byte                 `protobuf:"bytes,2,opt,name=packet,proto3" json:"packet,omitempty"`
+	RandMin       int32                  `protobuf:"varint,2,opt,name=rand_min,json=randMin,proto3" json:"rand_min,omitempty"`
+	RandMax       int32                  `protobuf:"varint,3,opt,name=rand_max,json=randMax,proto3" json:"rand_max,omitempty"`
+	Packet        []byte                 `protobuf:"bytes,4,opt,name=packet,proto3" json:"packet,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,6 +252,20 @@ func (*UDPItem) Descriptor() ([]byte, []int) {
 func (x *UDPItem) GetRand() int32 {
 	if x != nil {
 		return x.Rand
+	}
+	return 0
+}
+
+func (x *UDPItem) GetRandMin() int32 {
+	if x != nil {
+		return x.RandMin
+	}
+	return 0
+}
+
+func (x *UDPItem) GetRandMax() int32 {
+	if x != nil {
+		return x.RandMax
 	}
 	return 0
 }
@@ -301,21 +333,25 @@ var File_transport_internet_finalmask_header_custom_config_proto protoreflect.Fi
 
 const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" +
 	"\n" +
-	"7transport/internet/finalmask/header/custom/config.proto\x12/xray.transport.internet.finalmask.header.custom\"o\n" +
+	"7transport/internet/finalmask/header/custom/config.proto\x12/xray.transport.internet.finalmask.header.custom\"\xa5\x01\n" +
 	"\aTCPItem\x12\x1b\n" +
 	"\tdelay_min\x18\x01 \x01(\x03R\bdelayMin\x12\x1b\n" +
 	"\tdelay_max\x18\x02 \x01(\x03R\bdelayMax\x12\x12\n" +
-	"\x04rand\x18\x03 \x01(\x05R\x04rand\x12\x16\n" +
-	"\x06packet\x18\x04 \x01(\fR\x06packet\"c\n" +
+	"\x04rand\x18\x03 \x01(\x05R\x04rand\x12\x19\n" +
+	"\brand_min\x18\x04 \x01(\x05R\arandMin\x12\x19\n" +
+	"\brand_max\x18\x05 \x01(\x05R\arandMax\x12\x16\n" +
+	"\x06packet\x18\x06 \x01(\fR\x06packet\"c\n" +
 	"\vTCPSequence\x12T\n" +
 	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\x91\x02\n" +
 	"\tTCPConfig\x12V\n" +
 	"\aclients\x18\x01 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aclients\x12V\n" +
 	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12T\n" +
-	"\x06errors\x18\x03 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\x06errors\"5\n" +
+	"\x06errors\x18\x03 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\x06errors\"k\n" +
 	"\aUDPItem\x12\x12\n" +
-	"\x04rand\x18\x01 \x01(\x05R\x04rand\x12\x16\n" +
-	"\x06packet\x18\x02 \x01(\fR\x06packet\"\xaf\x01\n" +
+	"\x04rand\x18\x01 \x01(\x05R\x04rand\x12\x19\n" +
+	"\brand_min\x18\x02 \x01(\x05R\arandMin\x12\x19\n" +
+	"\brand_max\x18\x03 \x01(\x05R\arandMax\x12\x16\n" +
+	"\x06packet\x18\x04 \x01(\fR\x06packet\"\xaf\x01\n" +
 	"\tUDPConfig\x12P\n" +
 	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
 	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06serverB\xaf\x01\n" +

@@ -186,6 +186,7 @@ func (h *AlwaysOnInboundHandler) Close() error {
 		errs = append(errs, worker.Close())
 	}
 	errs = append(errs, h.mux.Close())
+	errs = append(errs, common.Close(h.proxy))
 	if err := errors.Combine(errs...); err != nil {
 		return errors.New("failed to close all resources").Base(err)
 	}

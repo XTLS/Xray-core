@@ -10,8 +10,8 @@ import (
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/grpc/encoding"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -191,8 +191,16 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	)
 	if err == nil {
 		userAgent := grpcSettings.UserAgent
-		if userAgent == "" {
+		// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
+		switch userAgent {
+		case "chrome", "":
 			userAgent = utils.ChromeUA
+		case "firefox":
+			userAgent = utils.FirefoxUA
+		case "edge":
+			userAgent = utils.MSEdgeUA
+		case "golang":
+			userAgent = ""
 		}
 		setUserAgent(conn, userAgent)
 		conn.Connect()

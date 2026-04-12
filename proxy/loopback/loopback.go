@@ -46,6 +46,9 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 		ctx = session.ContextWithContent(ctx, content)
 
 		inbound := session.InboundFromContext(ctx)
+		if inbound == nil {
+			inbound = &session.Inbound{}
+		}
 
 		inbound.Tag = l.config.InboundTag
 

@@ -121,7 +121,8 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 				IPv4Enable: h.hasIPv4,
 				IPv6Enable: h.hasIPv6,
 			},
-			workers: int(h.conf.NumWorkers),
+			workers:   int(h.conf.NumWorkers),
+			readQueue: make(chan *netReadInfo),
 		},
 		ctx:      ctx,
 		dialer:   dialer,
@@ -226,6 +227,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
+
+		conn = &udpConnClient{
+			Conn: conn,
+			dest: destination,
+		}
 
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
@@ -335,4 +341,47 @@ func (h *Handler) createIPCRequest() string {
 	}
 
 	return request.String()[:request.Len()]
+}
+
+type udpConnClient struct {
+	net.Conn
+	dest net.Destination
+}
+
+func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	b := buf.New()
+	b.Resize(0, buf.Size)
+	n, addr, err := c.Conn.(net.PacketConn).ReadFrom(b.Bytes())
+	if err != nil {
+		b.Release()
+		return nil, err
+	}
+	if addr == nil { // should never hit
+		addr = c.dest.RawNetAddr()
+	}
+	b.Resize(0, int32(n))
+
+	b.UDP = &net.Destination{
+		Address: net.IPAddress(addr.(*net.UDPAddr).IP),
+		Port:    net.Port(addr.(*net.UDPAddr).Port),
+		Network: net.Network_UDP,
+	}
+
+	return buf.MultiBuffer{b}, nil
+}
+
+func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	for i, b := range mb {
+		dst := c.dest
+		if b.UDP != nil {
+			dst = *b.UDP
+		}
+		_, err := c.Conn.(net.PacketConn).WriteTo(b.Bytes(), dst.RawNetAddr())
+		if err != nil {
+			buf.ReleaseMulti(mb[i:])
+			return err
+		}
+		b.Release()
+	}
+	return nil
 }

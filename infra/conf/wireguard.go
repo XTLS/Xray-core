@@ -130,7 +130,7 @@ func ParseWireGuardKey(str string) (string, error) {
 		return "", errors.New("key must not be empty")
 	}
 
-	if len(str)%2 == 0 {
+	if len(str) == 64 {
 		_, err = hex.DecodeString(str)
 		if err == nil {
 			return str, nil

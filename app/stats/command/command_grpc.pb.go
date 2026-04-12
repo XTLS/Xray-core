@@ -25,6 +25,7 @@ const (
 	StatsService_GetSysStats_FullMethodName          = "/xray.app.stats.command.StatsService/GetSysStats"
 	StatsService_GetStatsOnlineIpList_FullMethodName = "/xray.app.stats.command.StatsService/GetStatsOnlineIpList"
 	StatsService_GetAllOnlineUsers_FullMethodName    = "/xray.app.stats.command.StatsService/GetAllOnlineUsers"
+	StatsService_GetUsersStats_FullMethodName        = "/xray.app.stats.command.StatsService/GetUsersStats"
 )
 
 // StatsServiceClient is the client API for StatsService service.
@@ -37,6 +38,7 @@ type StatsServiceClient interface {
 	GetSysStats(ctx context.Context, in *SysStatsRequest, opts ...grpc.CallOption) (*SysStatsResponse, error)
 	GetStatsOnlineIpList(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsOnlineIpListResponse, error)
 	GetAllOnlineUsers(ctx context.Context, in *GetAllOnlineUsersRequest, opts ...grpc.CallOption) (*GetAllOnlineUsersResponse, error)
+	GetUsersStats(ctx context.Context, in *GetUsersStatsRequest, opts ...grpc.CallOption) (*GetUsersStatsResponse, error)
 }
 
 type statsServiceClient struct {
@@ -107,6 +109,16 @@ func (c *statsServiceClient) GetAllOnlineUsers(ctx context.Context, in *GetAllOn
 	return out, nil
 }
 
+func (c *statsServiceClient) GetUsersStats(ctx context.Context, in *GetUsersStatsRequest, opts ...grpc.CallOption) (*GetUsersStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUsersStatsResponse)
+	err := c.cc.Invoke(ctx, StatsService_GetUsersStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StatsServiceServer is the server API for StatsService service.
 // All implementations must embed UnimplementedStatsServiceServer
 // for forward compatibility.
@@ -117,6 +129,7 @@ type StatsServiceServer interface {
 	GetSysStats(context.Context, *SysStatsRequest) (*SysStatsResponse, error)
 	GetStatsOnlineIpList(context.Context, *GetStatsRequest) (*GetStatsOnlineIpListResponse, error)
 	GetAllOnlineUsers(context.Context, *GetAllOnlineUsersRequest) (*GetAllOnlineUsersResponse, error)
+	GetUsersStats(context.Context, *GetUsersStatsRequest) (*GetUsersStatsResponse, error)
 	mustEmbedUnimplementedStatsServiceServer()
 }
 
@@ -144,6 +157,9 @@ func (UnimplementedStatsServiceServer) GetStatsOnlineIpList(context.Context, *Ge
 }
 func (UnimplementedStatsServiceServer) GetAllOnlineUsers(context.Context, *GetAllOnlineUsersRequest) (*GetAllOnlineUsersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAllOnlineUsers not implemented")
+}
+func (UnimplementedStatsServiceServer) GetUsersStats(context.Context, *GetUsersStatsRequest) (*GetUsersStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUsersStats not implemented")
 }
 func (UnimplementedStatsServiceServer) mustEmbedUnimplementedStatsServiceServer() {}
 func (UnimplementedStatsServiceServer) testEmbeddedByValue()                      {}
@@ -274,6 +290,24 @@ func _StatsService_GetAllOnlineUsers_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StatsService_GetUsersStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUsersStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatsServiceServer).GetUsersStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatsService_GetUsersStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatsServiceServer).GetUsersStats(ctx, req.(*GetUsersStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StatsService_ServiceDesc is the grpc.ServiceDesc for StatsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +338,10 @@ var StatsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAllOnlineUsers",
 			Handler:    _StatsService_GetAllOnlineUsers_Handler,
+		},
+		{
+			MethodName: "GetUsersStats",
+			Handler:    _StatsService_GetUsersStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

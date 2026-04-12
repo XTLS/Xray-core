@@ -13,14 +13,14 @@ const (
 
 type ipEntry struct {
 	refCount int
-	lastSeen time.Time
+	lastSeen int64
 }
 
 // OnlineMap is a refcount-based implementation of stats.OnlineMap.
 // IPs are tracked by reference counting: AddIP increments, RemoveIP decrements.
 // An IP is removed from the map when its reference count reaches zero.
 type OnlineMap struct {
-	entries map[string]*ipEntry
+	entries map[string]ipEntry
 	access  sync.Mutex
 	count   atomic.Int64
 }
@@ -28,7 +28,7 @@ type OnlineMap struct {
 // NewOnlineMap creates a new OnlineMap instance.
 func NewOnlineMap() *OnlineMap {
 	return &OnlineMap{
-		entries: make(map[string]*ipEntry),
+		entries: make(map[string]ipEntry),
 	}
 }
 
@@ -37,17 +37,17 @@ func (om *OnlineMap) AddIP(ip string) {
 	if ip == localhostIPv4 || ip == localhostIPv6 {
 		return
 	}
-
+	now := time.Now().Unix()
 	om.access.Lock()
 	defer om.access.Unlock()
-
 	if e, ok := om.entries[ip]; ok {
 		e.refCount++
-		e.lastSeen = time.Now()
+		e.lastSeen = now
+		om.entries[ip] = e
 	} else {
-		om.entries[ip] = &ipEntry{
+		om.entries[ip] = ipEntry{
 			refCount: 1,
-			lastSeen: time.Now(),
+			lastSeen: now,
 		}
 		om.count.Add(1)
 	}
@@ -57,7 +57,6 @@ func (om *OnlineMap) AddIP(ip string) {
 func (om *OnlineMap) RemoveIP(ip string) {
 	om.access.Lock()
 	defer om.access.Unlock()
-
 	e, ok := om.entries[ip]
 	if !ok {
 		return
@@ -66,6 +65,8 @@ func (om *OnlineMap) RemoveIP(ip string) {
 	if e.refCount <= 0 {
 		delete(om.entries, ip)
 		om.count.Add(-1)
+	} else {
+		om.entries[ip] = e
 	}
 }
 
@@ -74,26 +75,13 @@ func (om *OnlineMap) Count() int {
 	return int(om.count.Load())
 }
 
-// List implements stats.OnlineMap.
-func (om *OnlineMap) List() []string {
+// ForEach calls fn for each online IP. If fn returns false, iteration stops.
+func (om *OnlineMap) ForEach(fn func(string, int64) bool) {
 	om.access.Lock()
 	defer om.access.Unlock()
-
-	keys := make([]string, 0, len(om.entries))
-	for ip := range om.entries {
-		keys = append(keys, ip)
-	}
-	return keys
-}
-
-// IPTimeMap implements stats.OnlineMap.
-func (om *OnlineMap) IPTimeMap() map[string]time.Time {
-	om.access.Lock()
-	defer om.access.Unlock()
-
-	result := make(map[string]time.Time, len(om.entries))
 	for ip, e := range om.entries {
-		result[ip] = e.lastSeen
+		if !fn(ip, e.lastSeen) {
+			break
+		}
 	}
-	return result
 }
