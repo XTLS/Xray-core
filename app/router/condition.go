@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -44,40 +44,18 @@ func (v *ConditionChan) Len() int {
 	return len(*v)
 }
 
-var matcherTypeMap = map[Domain_Type]strmatcher.Type{
-	Domain_Plain:  strmatcher.Substr,
-	Domain_Regex:  strmatcher.Regex,
-	Domain_Domain: strmatcher.Domain,
-	Domain_Full:   strmatcher.Full,
-}
+type DomainMatcher struct{ geodata.DomainMatcher }
 
-type DomainMatcher struct {
-	matchers strmatcher.IndexMatcher
-}
-
-func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
-	g := strmatcher.NewMphMatcherGroup()
-	for i, d := range domains {
-		domains[i] = nil
-		matcherType, f := matcherTypeMap[d.Type]
-		if !f {
-			errors.LogError(context.Background(), "ignore unsupported domain type ", d.Type, " of rule ", d.Value)
-			continue
-		}
-		_, err := g.AddPattern(d.Value, matcherType)
-		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "ignore domain rule ", d.Type, " ", d.Value)
-			continue
-		}
+func NewDomainMatcher(rules []*geodata.DomainRule) (*DomainMatcher, error) {
+	m, err := geodata.DomainReg.BuildDomainMatcher(rules)
+	if err != nil {
+		return nil, err
 	}
-	g.Build()
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
+	return &DomainMatcher{DomainMatcher: m}, nil
 }
 
 func (m *DomainMatcher) ApplyDomain(domain string) bool {
-	return len(m.matchers.Match(strings.ToLower(domain))) > 0
+	return m.DomainMatcher.MatchAny(strings.ToLower(domain))
 }
 
 // Apply implements Condition.
@@ -86,7 +64,7 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	if len(domain) == 0 {
 		return false
 	}
-	return m.ApplyDomain(domain)
+	return m.DomainMatcher.MatchAny(strings.ToLower(domain))
 }
 
 type MatcherAsType byte
@@ -99,16 +77,16 @@ const (
 )
 
 type IPMatcher struct {
-	matcher GeoIPMatcher
+	matcher geodata.IPMatcher
 	asType  MatcherAsType
 }
 
-func NewIPMatcher(geoips []*GeoIP, asType MatcherAsType) (*IPMatcher, error) {
-	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
+func NewIPMatcher(rules []*geodata.IPRule, asType MatcherAsType) (*IPMatcher, error) {
+	m, err := geodata.IPReg.BuildIPMatcher(rules)
 	if err != nil {
 		return nil, err
 	}
-	return &IPMatcher{matcher: matcher, asType: asType}, nil
+	return &IPMatcher{matcher: m, asType: asType}, nil
 }
 
 // Apply implements Condition.

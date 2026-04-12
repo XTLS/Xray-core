@@ -328,7 +328,7 @@ func TestChinaSites(t *testing.T) {
 	domains, err := loadGeoSite("CN")
 	common.Must(err)
 
-	acMatcher, err := NewMphMatcherGroup(domains)
+	acMatcher, err := NewDomainMatcher(domains)
 	common.Must(err)
 
 	type TestCase struct {
@@ -370,7 +370,7 @@ func BenchmarkMphDomainMatcher(b *testing.B) {
 	domains, err := loadGeoSite("CN")
 	common.Must(err)
 
-	matcher, err := NewMphMatcherGroup(domains)
+	matcher, err := NewDomainMatcher(domains)
 	common.Must(err)
 
 	type TestCase struct {

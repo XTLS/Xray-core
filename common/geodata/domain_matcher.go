@@ -2,6 +2,7 @@ package geodata
 
 import (
 	"context"
+	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata/strmatcher"
@@ -52,13 +53,13 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 	}
 	switch d.Type {
 	case Domain_Substr:
-		return strmatcher.Substr.New(d.Value)
+		return strmatcher.Substr.New(strings.ToLower(d.Value))
 	case Domain_Regex:
 		return strmatcher.Regex.New(d.Value)
 	case Domain_Domain:
 		return strmatcher.Domain.New(d.Value)
 	case Domain_Full:
-		return strmatcher.Full.New(d.Value)
+		return strmatcher.Full.New(strings.ToLower(d.Value))
 	default:
 		return nil, errors.New("unknown domain type: ", d.Type)
 	}
