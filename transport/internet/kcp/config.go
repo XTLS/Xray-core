@@ -32,7 +32,7 @@ func init() {
 			Tti:              50,
 			UplinkCapacity:   5,
 			DownlinkCapacity: 20,
-			CwndMultiplier:   20,
+			CwndMultiplier:   1,
 			MaxSendingWindow: 2 * 1024 * 1024,
 		}
 	}))
