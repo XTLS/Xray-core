@@ -215,6 +215,108 @@ func TestPacketConnReadWrite(t *testing.T) {
 	}
 }
 
+func TestUDPcustomStaticHeaderWireShape(t *testing.T) {
+	cfg := &custom.UDPConfig{
+		Client: []*custom.UDPItem{
+			{Packet: []byte{0xAA, 0xBB}},
+			{Rand: 2, RandMin: 0x10, RandMax: 0x20},
+		},
+		Server: []*custom.UDPItem{
+			{Packet: []byte{0xCC}},
+			{Rand: 1, RandMin: 0x30, RandMax: 0x40},
+		},
+	}
+	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
+
+	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientRaw.Close()
+
+	serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverRaw.Close()
+
+	client, err := maskManager.WrapPacketConnClient(clientRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := []byte("udp-custom-wire")
+	if _, err := client.WriteTo(payload, serverRaw.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 1024)
+	_ = serverRaw.SetDeadline(time.Now().Add(time.Second))
+	n, _, err := serverRaw.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n != len(payload)+4 {
+		t.Fatalf("unexpected wire size: got=%d want=%d", n, len(payload)+4)
+	}
+	if !bytes.Equal(buf[:2], []byte{0xAA, 0xBB}) {
+		t.Fatalf("unexpected static header prefix: %x", buf[:2])
+	}
+	for i, b := range buf[2:4] {
+		if b < 0x10 || b > 0x20 {
+			t.Fatalf("rand byte %d out of range: %x", i, b)
+		}
+	}
+	if !bytes.Equal(buf[4:n], payload) {
+		t.Fatalf("unexpected payload: %q", buf[4:n])
+	}
+}
+
+func TestUDPcustomServerRejectsMismatchedStaticHeader(t *testing.T) {
+	cfg := &custom.UDPConfig{
+		Client: []*custom.UDPItem{
+			{Packet: []byte{0x01, 0x02}},
+		},
+		Server: []*custom.UDPItem{
+			{Packet: []byte{0x03}},
+		},
+	}
+	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
+
+	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientRaw.Close()
+
+	serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverRaw.Close()
+
+	server, err := maskManager.WrapPacketConnServer(serverRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = server.SetDeadline(time.Now().Add(200 * time.Millisecond))
+
+	if _, err := clientRaw.WriteTo([]byte{0x09, 0x09, 'b', 'a', 'd'}, server.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 128)
+	n, _, err := server.ReadFrom(buf)
+	if n != 0 {
+		t.Fatalf("expected no payload on mismatched header, got %d bytes", n)
+	}
+	if err != nil {
+		t.Fatalf("expected mismatch to be dropped without surfaced error, got %v", err)
+	}
+}
+
 func TestSudokuBDD(t *testing.T) {
 	t.Run("GivenSudokuTCPMask_WhenRoundTripWithAsciiPreference_ThenPayloadMatches", func(t *testing.T) {
 		cfg := &sudoku.Config{
