@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/infra/conf"
-
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestDNSConfigParsing(t *testing.T) {
@@ -24,7 +25,7 @@ func TestDNSConfigParsing(t *testing.T) {
 	}
 	expectedServeStale := true
 	expectedServeExpiredTTL := uint32(172800)
-	runMultiTestCase(t, []TestCase{
+	testCases := []TestCase{
 		{
 			Input: `{
 				"servers": [{
@@ -103,5 +104,21 @@ func TestDNSConfigParsing(t *testing.T) {
 				DisableFallback: true,
 			},
 		},
-	})
+	}
+
+	for _, testCase := range testCases {
+		actual, err := testCase.Parser(testCase.Input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(
+			testCase.Output,
+			actual,
+			protocmp.Transform(),
+			protocmp.SortRepeatedFields(&dns.Config{}, "static_hosts"),
+		); diff != "" {
+			t.Fatalf("Failed in test case:\n%s\nDiff (-want +got):\n%s", testCase.Input, diff)
+		}
+	}
 }
