@@ -7,23 +7,26 @@ import (
 
 type TunConfig struct {
 	Name                   string   `json:"name"`
-	MTU                    uint32   `json:"MTU"`
-	UserLevel              uint32   `json:"userLevel"`
-	AutoOutboundsInterface string   `json:"autoOutboundsInterface"`
+	MTU                    uint32   `json:"mtu"`
 	MyGatewayIPs           []string `json:"myGatewayIPs"`
+	DNS                    []string `json:"dns"`
+	UserLevel              uint32   `json:"userLevel"`
 	AutoRouteIPs           []string `json:"autoRouteIPs"`
-	Dns                    []string `json:"dns"`
+	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
 	config := &tun.Config{
-		Name:      v.Name,
-		MTU:       v.MTU,
-		UserLevel: v.UserLevel,
-		Interface: v.AutoOutboundsInterface,
-		Address:   v.MyGatewayIPs,
-		Route:     v.AutoRouteIPs,
-		Dns:       v.Dns,
+		Name:             v.Name,
+		MTU:              v.MTU,
+		Gateway:          v.MyGatewayIPs,
+		DNS:              v.DNS,
+		UserLevel:        v.UserLevel,
+		AutoRoutingTable: v.AutoRouteIPs,
+	}
+
+	if v.AutoOutboundsInterface != nil {
+		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
 	}
 
 	if v.Name == "" {
@@ -34,8 +37,8 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		config.MTU = 1500
 	}
 
-	if len(config.Route) > 0 && config.Interface == "" {
-		config.Interface = "auto"
+	if len(config.AutoRoutingTable) > 0 && v.AutoOutboundsInterface == nil {
+		config.AutoOutboundsInterface = "auto"
 	}
 
 	return config, nil

@@ -9,9 +9,9 @@ option java_multiple_files = true;
 message Config {
   string name = 1;
   uint32 MTU = 2;
-  uint32 user_level = 3;
-  string interface = 4;
-  repeated string address = 5;
-  repeated string route = 6;
-  repeated string dns = 7;
+  repeated string gateway = 3;
+  repeated string DNS = 4;
+  uint32 user_level = 5;
+  repeated string auto_routing_table = 6;
+  string auto_outbounds_interface = 7;
 }

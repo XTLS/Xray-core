@@ -85,8 +85,8 @@ func open(name string) (*wintun.Adapter, error) {
 
 func (t *WindowsTun) Start() error {
 	var has4, has6 bool
-	allowedIPs := make([]netip.Prefix, 0, len(t.options.Route))
-	for _, route := range t.options.Route {
+	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoRoutingTable))
+	for _, route := range t.options.AutoRoutingTable {
 		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
 	}
 	routesMap := make(map[winipcfg.RouteData]struct{})
@@ -114,9 +114,9 @@ func (t *WindowsTun) Start() error {
 		return errors.New("unable to set routes").Base(err)
 	}
 
-	if len(t.options.Address) > 0 {
-		addresses := make([]netip.Prefix, 0, len(t.options.Address))
-		for _, address := range t.options.Address {
+	if len(t.options.Gateway) > 0 {
+		addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
+		for _, address := range t.options.Gateway {
 			addresses = append(addresses, netip.MustParsePrefix(address))
 		}
 		err := t.luid.SetIPAddresses(addresses)
@@ -160,9 +160,9 @@ func (t *WindowsTun) Start() error {
 		}
 	}
 
-	if len(t.options.Dns) > 0 {
-		dns := make([]netip.Addr, 0, len(t.options.Dns))
-		for _, ip := range t.options.Dns {
+	if len(t.options.DNS) > 0 {
+		dns := make([]netip.Addr, 0, len(t.options.DNS))
+		for _, ip := range t.options.DNS {
 			dns = append(dns, netip.MustParseAddr(ip))
 		}
 		err := t.luid.SetDNS(windows.AF_INET, dns, nil)
