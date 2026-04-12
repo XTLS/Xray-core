@@ -6,6 +6,21 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/head
 option java_package = "com.xray.transport.internet.finalmask.header.custom";
 option java_multiple_files = true;
 
+message Expr {
+    string op = 1;
+    repeated ExprArg args = 2;
+}
+
+message ExprArg {
+    oneof value {
+        bytes bytes = 1;
+        uint64 u64 = 2;
+        string var = 3;
+        string metadata = 4;
+        Expr expr = 5;
+    }
+}
+
 message TCPItem {
     int64 delay_min = 1;
     int64 delay_max = 2;
@@ -13,6 +28,9 @@ message TCPItem {
     int32 rand_min = 4;
     int32 rand_max = 5;
     bytes packet = 6;
+    string save = 7;
+    string var = 8;
+    Expr expr = 9;
 }
 
 message TCPSequence {
@@ -30,6 +48,9 @@ message UDPItem {
     int32 rand_min = 2;
     int32 rand_max = 3;
     bytes packet = 4;
+    string save = 5;
+    string var = 6;
+    Expr expr = 7;
 }
 
 message UDPConfig {

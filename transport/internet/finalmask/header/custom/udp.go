@@ -3,8 +3,8 @@ package custom
 import (
 	"bytes"
 	"net"
+	"time"
 
-	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -12,41 +12,34 @@ type udpCustomClient struct {
 	client []*UDPItem
 	server []*UDPItem
 	merged []byte
+	read   int
+	addr   net.Addr
+	state  *stateStore
+	vars   map[string][]byte
 }
 
 func (h *udpCustomClient) Serialize(b []byte) {
-	index := 0
-	for _, item := range h.client {
-		if item.Rand > 0 {
-			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], byte(item.RandMin), byte(item.RandMax))
-			index += int(item.Rand)
-		} else {
-			index += len(item.Packet)
-		}
+	evaluated, err := evaluateUDPItems(h.client)
+	if err != nil || len(evaluated) != len(h.merged) {
+		copy(b, h.merged)
+		return
 	}
-	copy(b, h.merged)
+	copy(b, evaluated)
 }
 
 func (h *udpCustomClient) Match(b []byte) bool {
-	if len(b) < len(h.merged) {
-		return false
+	var initial map[string][]byte
+	if h.state != nil {
+		initial, _ = h.state.get(udpStateKey(h.addr))
 	}
-
-	data := b
-	match := true
-
-	for _, item := range h.server {
-		length := max(int(item.Rand), len(item.Packet))
-
-		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, data[:length]) {
-			match = false
-			break
+	vars, ok := matchUDPItems(h.server, b, h.read, initial)
+	if ok {
+		h.vars = vars
+		if h.state != nil {
+			h.state.set(udpStateKey(h.addr), vars)
 		}
-
-		data = data[length:]
 	}
-
-	return match
+	return ok
 }
 
 type udpCustomClientConn struct {
@@ -60,18 +53,19 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 		header: &udpCustomClient{
 			client: c.Client,
 			server: c.Server,
+			state:  newStateStore(5 * time.Second),
+			vars:   make(map[string][]byte),
 		},
 	}
-
-	index := 0
-	for _, item := range conn.header.client {
-		if item.Rand > 0 {
-			conn.header.merged = append(conn.header.merged, make([]byte, item.Rand)...)
-			index += int(item.Rand)
-		} else {
-			conn.header.merged = append(conn.header.merged, item.Packet...)
-			index += len(item.Packet)
-		}
+	clientSavedSizes := collectSavedUDPSizes(conn.header.client)
+	size, err := measureUDPItems(conn.header.client)
+	if err != nil {
+		return nil, err
+	}
+	conn.header.merged = make([]byte, size)
+	conn.header.read, err = measureUDPItemsWithFallback(conn.header.server, clientSavedSizes)
+	if err != nil {
+		return nil, err
 	}
 
 	return conn, nil
@@ -86,54 +80,69 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return 0, addr, errors.New("header mismatch")
 	}
 
-	return len(p) - len(c.header.merged), addr, nil
+	return len(p) - c.header.read, addr, nil
 }
 
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.header.Serialize(p)
+	var localAddr net.Addr
+	if c.PacketConn != nil {
+		localAddr = c.PacketConn.LocalAddr()
+	}
+	ctx := newEvalContextWithAddrs(localAddr, addr)
+	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
+		ctx.vars = cloneVars(vars)
+	} else if len(c.header.vars) > 0 {
+		ctx.vars = cloneVars(c.header.vars)
+	}
+	evaluated, err := evaluateUDPItemsWithContext(c.header.client, ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(evaluated) != len(c.header.merged) {
+		return 0, errors.New("header size mismatch")
+	}
+	c.header.state.set(udpStateKey(addr), ctx.vars)
+	copy(p, evaluated)
 
 	return len(p), nil
+}
+
+func (c *udpCustomClientConn) SetReadAddr(addr net.Addr) {
+	c.header.addr = addr
 }
 
 type udpCustomServer struct {
 	client []*UDPItem
 	server []*UDPItem
 	merged []byte
+	read   int
+	addr   net.Addr
+	state  *stateStore
+	vars   map[string][]byte
 }
 
 func (h *udpCustomServer) Serialize(b []byte) {
-	index := 0
-	for _, item := range h.server {
-		if item.Rand > 0 {
-			crypto.RandBytesBetween(h.merged[index:index+int(item.Rand)], byte(item.RandMin), byte(item.RandMax))
-			index += int(item.Rand)
-		} else {
-			index += len(item.Packet)
-		}
+	evaluated, err := evaluateUDPItems(h.server)
+	if err != nil || len(evaluated) != len(h.merged) {
+		copy(b, h.merged)
+		return
 	}
-	copy(b, h.merged)
+	copy(b, evaluated)
 }
 
 func (h *udpCustomServer) Match(b []byte) bool {
-	if len(b) < len(h.merged) {
-		return false
+	var initial map[string][]byte
+	if h.state != nil {
+		initial, _ = h.state.get(udpStateKey(h.addr))
 	}
-
-	data := b
-	match := true
-
-	for _, item := range h.client {
-		length := max(int(item.Rand), len(item.Packet))
-
-		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, data[:length]) {
-			match = false
-			break
+	vars, ok := matchUDPItems(h.client, b, h.read, initial)
+	if ok {
+		h.vars = vars
+		if h.state != nil {
+			h.state.set(udpStateKey(h.addr), vars)
 		}
-
-		data = data[length:]
 	}
-
-	return match
+	return ok
 }
 
 type udpCustomServerConn struct {
@@ -147,18 +156,19 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 		header: &udpCustomServer{
 			client: c.Client,
 			server: c.Server,
+			state:  newStateStore(5 * time.Second),
+			vars:   make(map[string][]byte),
 		},
 	}
-
-	index := 0
-	for _, item := range conn.header.server {
-		if item.Rand > 0 {
-			conn.header.merged = append(conn.header.merged, make([]byte, item.Rand)...)
-			index += int(item.Rand)
-		} else {
-			conn.header.merged = append(conn.header.merged, item.Packet...)
-			index += len(item.Packet)
-		}
+	clientSavedSizes := collectSavedUDPSizes(conn.header.client)
+	size, err := measureUDPItemsWithFallback(conn.header.server, clientSavedSizes)
+	if err != nil {
+		return nil, err
+	}
+	conn.header.merged = make([]byte, size)
+	conn.header.read, err = measureUDPItems(conn.header.client)
+	if err != nil {
+		return nil, err
 	}
 
 	return conn, nil
@@ -173,11 +183,87 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 		return 0, addr, errors.New("header mismatch")
 	}
 
-	return len(p) - len(c.header.merged), addr, nil
+	return len(p) - c.header.read, addr, nil
 }
 
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.header.Serialize(p)
+	var localAddr net.Addr
+	if c.PacketConn != nil {
+		localAddr = c.PacketConn.LocalAddr()
+	}
+	ctx := newEvalContextWithAddrs(localAddr, addr)
+	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
+		ctx.vars = cloneVars(vars)
+	} else if len(c.header.vars) > 0 {
+		ctx.vars = cloneVars(c.header.vars)
+	}
+	evaluated, err := evaluateUDPItemsWithContext(c.header.server, ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(evaluated) != len(c.header.merged) {
+		return 0, errors.New("header size mismatch")
+	}
+	c.header.state.set(udpStateKey(addr), ctx.vars)
+	copy(p, evaluated)
 
 	return len(p), nil
+}
+
+func (c *udpCustomServerConn) SetReadAddr(addr net.Addr) {
+	c.header.addr = addr
+}
+
+func matchUDPItems(items []*UDPItem, data []byte, totalSize int, initial map[string][]byte) (map[string][]byte, bool) {
+	if len(data) < totalSize {
+		return nil, false
+	}
+
+	ctx := newEvalContext()
+	ctx.vars = cloneVars(initial)
+	offset := 0
+	for _, item := range items {
+		length, err := measureItem(item.Rand, item.Packet, item.Save, item.Var, item.Expr, sizeMapFromEvalContext(ctx))
+		if err != nil {
+			return nil, false
+		}
+		if len(data[offset:]) < length {
+			return nil, false
+		}
+		segment := append([]byte(nil), data[offset:offset+length]...)
+		switch {
+		case item.Rand > 0:
+		case len(item.Packet) > 0:
+			if !bytes.Equal(item.Packet, segment) {
+				return nil, false
+			}
+		case item.Var != "":
+			saved, ok := ctx.vars[item.Var]
+			if !ok || !bytes.Equal(saved, segment) {
+				return nil, false
+			}
+		case item.Expr != nil:
+			evaluated, err := evaluateExpr(item.Expr, ctx)
+			if err != nil {
+				return nil, false
+			}
+			expected, err := evaluated.asBytes()
+			if err != nil || !bytes.Equal(expected, segment) {
+				return nil, false
+			}
+		}
+		if item.Save != "" {
+			ctx.vars[item.Save] = segment
+		}
+		offset += length
+	}
+
+	return ctx.vars, true
+}
+
+func udpStateKey(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
 }
