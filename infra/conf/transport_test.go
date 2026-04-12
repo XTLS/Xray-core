@@ -172,6 +172,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 					},
 					{
 						"rand": 2,
+						"capture": "seed",
 						"randRange": "16-32"
 					}
 				],
@@ -203,6 +204,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 						Rand:    2,
 						RandMin: 16,
 						RandMax: 32,
+						Save:    "seed",
 					},
 				},
 				Server: []*finalmaskcustom.UDPItem{
