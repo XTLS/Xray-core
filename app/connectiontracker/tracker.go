@@ -39,9 +39,23 @@ type ConnectionInfo struct {
 	Downlink     int64
 }
 
+// Manager holds the shared connection registry and subscription fan-out for
+// a single Xray instance.
+type Manager struct {
+	globalNext uint32
+
+	globalMu sync.Mutex
+	trackers []*Tracker
+
+	subMu       sync.Mutex
+	subscribers []chan WatchEvent
+}
+
 // Tracker tracks active connections per user, enabling forced disconnection
 // and real-time connection inspection.
 type Tracker struct {
+	manager *Manager
+
 	mu    sync.Mutex
 	conns map[string]map[uint32]*ConnEntry // [email][id] -> entry
 	byID  map[uint32]*ConnEntry            // flat index for O(1) lookup by ID
@@ -53,46 +67,48 @@ type WatchEvent struct {
 	Info      ConnectionInfo
 }
 
-// package-level globals: a monotonic ID counter, a registry of all Trackers,
-// and a fan-out list for streaming subscribers.
-var (
-	globalNext     uint32 // accessed atomically; shared across all Tracker instances
-	globalMu       sync.Mutex
-	globalTrackers []*Tracker
+// NewManager creates an empty tracker manager.
+func NewManager() *Manager {
+	return &Manager{}
+}
 
-	subMu       sync.Mutex
-	subscribers []chan WatchEvent
-)
+func (m *Manager) snapshotTrackers() []*Tracker {
+	m.globalMu.Lock()
+	trackers := make([]*Tracker, len(m.trackers))
+	copy(trackers, m.trackers)
+	m.globalMu.Unlock()
+	return trackers
+}
 
 // Subscribe returns a channel that receives WatchEvents. Call Unsubscribe when
 // done to avoid a goroutine / channel leak.
-func Subscribe() chan WatchEvent {
+func (m *Manager) Subscribe() chan WatchEvent {
 	ch := make(chan WatchEvent, 64)
-	subMu.Lock()
-	subscribers = append(subscribers, ch)
-	subMu.Unlock()
+	m.subMu.Lock()
+	m.subscribers = append(m.subscribers, ch)
+	m.subMu.Unlock()
 	return ch
 }
 
-// Unsubscribe removes and closes a channel returned by Subscribe.
-func Unsubscribe(ch chan WatchEvent) {
-	subMu.Lock()
-	defer subMu.Unlock()
+// Unsubscribe removes a channel returned by Subscribe.
+func (m *Manager) Unsubscribe(ch chan WatchEvent) {
+	m.subMu.Lock()
+	defer m.subMu.Unlock()
 
-	for i, s := range subscribers {
+	for i, s := range m.subscribers {
 		if s == ch {
-			subscribers[i] = subscribers[len(subscribers)-1]
-			subscribers = subscribers[:len(subscribers)-1]
+			m.subscribers[i] = m.subscribers[len(m.subscribers)-1]
+			m.subscribers = m.subscribers[:len(m.subscribers)-1]
 			return
 		}
 	}
 }
 
-func emit(ev WatchEvent) {
-	subMu.Lock()
-	subs := make([]chan WatchEvent, len(subscribers))
-	copy(subs, subscribers)
-	subMu.Unlock()
+func (m *Manager) emit(ev WatchEvent) {
+	m.subMu.Lock()
+	subs := make([]chan WatchEvent, len(m.subscribers))
+	copy(subs, m.subscribers)
+	m.subMu.Unlock()
 	for _, ch := range subs {
 		select {
 		case ch <- ev:
@@ -101,17 +117,25 @@ func emit(ev WatchEvent) {
 	}
 }
 
-// New creates a new, empty Tracker and registers it in the global registry so
+// NewTracker creates a new, empty Tracker and registers it in the manager so
 // that ListAllConnections and CloseGlobalConn can see its connections.
-func New() *Tracker {
+func (m *Manager) NewTracker() *Tracker {
 	t := &Tracker{
-		conns: make(map[string]map[uint32]*ConnEntry),
-		byID:  make(map[uint32]*ConnEntry),
+		manager: m,
+		conns:   make(map[string]map[uint32]*ConnEntry),
+		byID:    make(map[uint32]*ConnEntry),
 	}
-	globalMu.Lock()
-	globalTrackers = append(globalTrackers, t)
-	globalMu.Unlock()
+	m.globalMu.Lock()
+	m.trackers = append(m.trackers, t)
+	m.globalMu.Unlock()
 	return t
+}
+
+// New creates an isolated Tracker backed by its own Manager. It is kept for
+// standalone use and tests; production components should acquire a Manager
+// through Xray features and call NewTracker on it.
+func New() *Tracker {
+	return NewManager().NewTracker()
 }
 
 func disconnectInfo(id uint32, entry *ConnEntry) ConnectionInfo {
@@ -128,12 +152,9 @@ func disconnectInfo(id uint32, entry *ConnEntry) ConnectionInfo {
 }
 
 // ListAllConnections returns a snapshot of every active connection across all
-// Tracker instances that were created by New.
-func ListAllConnections() []ConnectionInfo {
-	globalMu.Lock()
-	ts := make([]*Tracker, len(globalTrackers))
-	copy(ts, globalTrackers)
-	globalMu.Unlock()
+// Tracker instances that were created by NewTracker.
+func (m *Manager) ListAllConnections() []ConnectionInfo {
+	ts := m.snapshotTrackers()
 	var all []ConnectionInfo
 	for _, t := range ts {
 		all = append(all, t.ListConnections()...)
@@ -143,11 +164,8 @@ func ListAllConnections() []ConnectionInfo {
 
 // GetUserStats returns the aggregate uplink bytes, downlink bytes, and active
 // connection count for email across all registered Trackers.
-func GetUserStats(email string) (uplink, downlink int64, connCount int32) {
-	globalMu.Lock()
-	ts := make([]*Tracker, len(globalTrackers))
-	copy(ts, globalTrackers)
-	globalMu.Unlock()
+func (m *Manager) GetUserStats(email string) (uplink, downlink int64, connCount int32) {
+	ts := m.snapshotTrackers()
 	for _, t := range ts {
 		t.mu.Lock()
 		for _, e := range t.conns[email] {
@@ -162,11 +180,8 @@ func GetUserStats(email string) (uplink, downlink int64, connCount int32) {
 
 // CloseGlobalConn closes the connection with the given ID in whichever Tracker
 // owns it. Returns true if the connection was found and cancelled.
-func CloseGlobalConn(id uint32) bool {
-	globalMu.Lock()
-	ts := make([]*Tracker, len(globalTrackers))
-	copy(ts, globalTrackers)
-	globalMu.Unlock()
+func (m *Manager) CloseGlobalConn(id uint32) bool {
+	ts := m.snapshotTrackers()
 	for _, t := range ts {
 		if t.CloseConn(id) {
 			return true
@@ -195,7 +210,7 @@ func (t *Tracker) RegisterWithMeta(email string, cancel context.CancelFunc, inbo
 		StartTime:  now,
 	}
 	atomic.StoreInt64(&entry.lastActivity, now.UnixNano())
-	id := atomic.AddUint32(&globalNext, 1)
+	id := atomic.AddUint32(&t.manager.globalNext, 1)
 	t.mu.Lock()
 	if t.conns[email] == nil {
 		t.conns[email] = make(map[uint32]*ConnEntry)
@@ -203,7 +218,7 @@ func (t *Tracker) RegisterWithMeta(email string, cancel context.CancelFunc, inbo
 	t.conns[email][id] = entry
 	t.byID[id] = entry
 	t.mu.Unlock()
-	emit(WatchEvent{Connected: true, Info: ConnectionInfo{
+	t.manager.emit(WatchEvent{Connected: true, Info: ConnectionInfo{
 		ID:           id,
 		Email:        email,
 		InboundTag:   inboundTag,
@@ -227,7 +242,7 @@ func (t *Tracker) Unregister(email string, id uint32) {
 	}
 	t.mu.Unlock()
 	if entry != nil {
-		emit(WatchEvent{Connected: false, Info: ConnectionInfo{
+		t.manager.emit(WatchEvent{Connected: false, Info: ConnectionInfo{
 			ID:         id,
 			Email:      entry.Email,
 			InboundTag: entry.InboundTag,
@@ -256,7 +271,7 @@ func (t *Tracker) CancelAll(email string) {
 	t.mu.Unlock()
 
 	for _, c := range closing {
-		emit(WatchEvent{
+		t.manager.emit(WatchEvent{
 			Connected: false,
 			Info:      disconnectInfo(c.id, c.entry),
 		})
@@ -281,7 +296,7 @@ func (t *Tracker) CloseConn(id uint32) bool {
 	t.mu.Unlock()
 
 	if ok {
-		emit(WatchEvent{
+		t.manager.emit(WatchEvent{
 			Connected: false,
 			Info:      disconnectInfo(id, entry),
 		})

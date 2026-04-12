@@ -8,14 +8,16 @@ import (
 
 	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/core"
 )
 
 type connTrackerServer struct {
 	UnimplementedConnTrackerServiceServer
+	manager *connectiontracker.Manager
 }
 
 func (s *connTrackerServer) ListConnections(_ context.Context, _ *ListConnectionsRequest) (*ListConnectionsResponse, error) {
-	all := connectiontracker.ListAllConnections()
+	all := s.manager.ListAllConnections()
 	resp := &ListConnectionsResponse{
 		Connections: make([]*ConnInfo, 0, len(all)),
 	}
@@ -26,12 +28,12 @@ func (s *connTrackerServer) ListConnections(_ context.Context, _ *ListConnection
 }
 
 func (s *connTrackerServer) CloseConnection(_ context.Context, req *CloseConnectionRequest) (*CloseConnectionResponse, error) {
-	found := connectiontracker.CloseGlobalConn(req.Id)
+	found := s.manager.CloseGlobalConn(req.Id)
 	return &CloseConnectionResponse{Found: found}, nil
 }
 
 func (s *connTrackerServer) GetUserStats(_ context.Context, req *GetUserStatsRequest) (*GetUserStatsResponse, error) {
-	up, down, count := connectiontracker.GetUserStats(strings.ToLower(req.Email))
+	up, down, count := s.manager.GetUserStats(strings.ToLower(req.Email))
 	return &GetUserStatsResponse{
 		Uplink:    up,
 		Downlink:  down,
@@ -40,8 +42,8 @@ func (s *connTrackerServer) GetUserStats(_ context.Context, req *GetUserStatsReq
 }
 
 func (s *connTrackerServer) StreamConnections(_ *StreamConnectionsRequest, stream grpc.ServerStreamingServer[ConnectionUpdate]) error {
-	ch := connectiontracker.Subscribe()
-	defer connectiontracker.Unsubscribe(ch)
+	ch := s.manager.Subscribe()
+	defer s.manager.Unsubscribe(ch)
 
 	ctx := stream.Context()
 	for {
@@ -79,14 +81,25 @@ func toProto(c connectiontracker.ConnectionInfo) *ConnInfo {
 	}
 }
 
-type service struct{}
+type service struct {
+	manager *connectiontracker.Manager
+}
 
 func (s *service) Register(server *grpc.Server) {
-	RegisterConnTrackerServiceServer(server, &connTrackerServer{})
+	RegisterConnTrackerServiceServer(server, &connTrackerServer{manager: s.manager})
 }
 
 func init() {
-	common.Must(common.RegisterConfig((*Config)(nil), func(_ context.Context, _ interface{}) (interface{}, error) {
-		return &service{}, nil
+	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, _ interface{}) (interface{}, error) {
+		s := new(service)
+
+		if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+			s.manager = trackerSvc.Manager()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		return s, nil
 	}))
 }

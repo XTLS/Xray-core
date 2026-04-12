@@ -163,6 +163,75 @@ func TestListConnectionsReturnsAllActive(t *testing.T) {
 	}
 }
 
+func TestManagerListAllConnectionsAggregatesTrackers(t *testing.T) {
+	manager := connectiontracker.NewManager()
+	first := manager.NewTracker()
+	second := manager.NewTracker()
+
+	first.RegisterWithMeta("alice@example.com", func() {}, "tag-a", "vmess")
+	second.RegisterWithMeta("bob@example.com", func() {}, "tag-b", "trojan")
+
+	conns := manager.ListAllConnections()
+	if len(conns) != 2 {
+		t.Fatalf("ListAllConnections: got %d, want 2", len(conns))
+	}
+}
+
+func TestManagerGetUserStatsAggregatesTrackers(t *testing.T) {
+	manager := connectiontracker.NewManager()
+	first := manager.NewTracker()
+	second := manager.NewTracker()
+
+	_, firstEntry := first.RegisterWithMeta("user@example.com", func() {}, "", "")
+	firstConn := connectiontracker.WrapConn(&fakeConn{readData: make([]byte, 10)}, firstEntry)
+	if _, err := firstConn.Read(make([]byte, 10)); err != nil {
+		t.Fatalf("first read failed: %v", err)
+	}
+	if _, err := firstConn.Write(make([]byte, 20)); err != nil {
+		t.Fatalf("first write failed: %v", err)
+	}
+
+	_, secondEntry := second.RegisterWithMeta("user@example.com", func() {}, "", "")
+	secondConn := connectiontracker.WrapConn(&fakeConn{readData: make([]byte, 30)}, secondEntry)
+	if _, err := secondConn.Read(make([]byte, 30)); err != nil {
+		t.Fatalf("second read failed: %v", err)
+	}
+	if _, err := secondConn.Write(make([]byte, 40)); err != nil {
+		t.Fatalf("second write failed: %v", err)
+	}
+
+	uplink, downlink, connCount := manager.GetUserStats("user@example.com")
+	if uplink != 40 {
+		t.Fatalf("GetUserStats uplink: got %d, want 40", uplink)
+	}
+	if downlink != 60 {
+		t.Fatalf("GetUserStats downlink: got %d, want 60", downlink)
+	}
+	if connCount != 2 {
+		t.Fatalf("GetUserStats connCount: got %d, want 2", connCount)
+	}
+}
+
+func TestManagerCloseGlobalConnAcrossTrackers(t *testing.T) {
+	manager := connectiontracker.NewManager()
+	first := manager.NewTracker()
+	second := manager.NewTracker()
+
+	first.RegisterWithMeta("other@example.com", func() {}, "", "")
+
+	var cancelled int32
+	id, _ := second.RegisterWithMeta("user@example.com", func() {
+		atomic.AddInt32(&cancelled, 1)
+	}, "", "")
+
+	if ok := manager.CloseGlobalConn(id); !ok {
+		t.Fatal("CloseGlobalConn: expected true for existing connection")
+	}
+	if atomic.LoadInt32(&cancelled) != 1 {
+		t.Fatal("CloseGlobalConn: cancel function was not called")
+	}
+}
+
 func TestListConnectionsEmptyAfterCancelAll(t *testing.T) {
 	tracker := connectiontracker.New()
 
