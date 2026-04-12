@@ -335,8 +335,9 @@ func (c *TrackedPacketConn) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 }
 
 func (c *TrackedPacketConn) WritePacket(buffer *B.Buffer, destination M.Socksaddr) error {
+	n := buffer.Len()
 	err := c.PacketConn.WritePacket(buffer, destination)
-	if err == nil && buffer.Len() > 0 {
+	if err == nil && n > 0 {
 		atomic.AddInt64(&c.entry.downlink, int64(buffer.Len()))
 		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
 	}
