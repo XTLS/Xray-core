@@ -8,34 +8,33 @@ import (
 )
 
 type DomainMatcher interface {
-	Size() uint32
 	Match(input string) []uint32
 	MatchAny(input string) bool
 }
 
 func buildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
-	g := strmatcher.NewMphIndexMatcher()
-	for _, r := range rules {
+	g := strmatcher.NewMphValueMatcher()
+	for i, r := range rules {
 		switch v := r.Value.(type) {
 		case *DomainRule_Custom:
 			m, err := parseDomain(v.Custom)
 			if err != nil {
 				return nil, err
 			}
-			g.Add(m)
+			g.Add(m, uint32(i))
 		case *DomainRule_Geosite:
 			domains, err := loadSiteWithAttrs(v.Geosite.File, v.Geosite.Code, v.Geosite.Attrs)
 			if err != nil {
 				return nil, err
 			}
-			for i, d := range domains {
-				domains[i] = nil // peak mem
+			for j, d := range domains {
+				domains[j] = nil // peak mem
 				m, err := parseDomain(d)
 				if err != nil {
-					errors.LogError(context.Background(), "ignore invalid geosite entry in ", v.Geosite.File, ":", v.Geosite.Code, " at index ", i, ", ", err)
+					errors.LogError(context.Background(), "ignore invalid geosite entry in ", v.Geosite.File, ":", v.Geosite.Code, " at index ", j, ", ", err)
 					continue
 				}
-				g.Add(m)
+				g.Add(m, uint32(i))
 			}
 		default:
 			panic("unknown domain rule type")

@@ -82,7 +82,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 
 func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	if c.Address == nil {
-		return nil, errors.New("NameServer address is not specified")
+		return nil, errors.New("nameserver address is not specified")
 	}
 
 	domainRules, err := geodata.ParseDomainRules(c.Domains, geodata.Domain_Substr)

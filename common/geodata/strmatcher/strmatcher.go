@@ -72,3 +72,30 @@ type IndexMatcher interface {
 	// MatchAny returns true as soon as one matching matcher is found.
 	MatchAny(input string) bool
 }
+
+// ValueMatcher is a general type of matcher that accepts all kinds of basic matchers.
+// It should:
+//   - Accept all Matcher types with no exception.
+//   - Optimize string matching with a combination of MatcherGroups.
+//   - Obey certain priority order specification when returning matched values.
+type ValueMatcher interface {
+	// Add adds a new Matcher to ValueMatcher, binding it to the provided value.
+	Add(matcher Matcher, value uint32)
+
+	// Build builds the ValueMatcher to be ready for matching.
+	Build() error
+
+	// Match returns the values of all matchers that matches the input.
+	//   * Empty array is returned if no such matcher exists.
+	//   * The order of returned values should follow priority specification.
+	//   * Same value may appear multiple times if multiple matched matchers were added with that value.
+	// Priority specification:
+	//   1. Priority between matcher types: full > domain > substr > regex.
+	//   2. Priority of same-priority matchers matching at same position: the early added takes precedence.
+	//   3. Priority of domain matchers matching at different levels: the further matched domain takes precedence.
+	//   4. Priority of substr matchers matching at different positions: the further matched substr takes precedence.
+	Match(input string) []uint32
+
+	// MatchAny returns true as soon as one matching matcher is found.
+	MatchAny(input string) bool
+}
