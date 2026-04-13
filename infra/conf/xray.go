@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
@@ -51,38 +52,34 @@ var (
 )
 
 type SniffingConfig struct {
-	Enabled         bool        `json:"enabled"`
-	DestOverride    *StringList `json:"destOverride"`
-	DomainsExcluded *StringList `json:"domainsExcluded"`
-	MetadataOnly    bool        `json:"metadataOnly"`
-	RouteOnly       bool        `json:"routeOnly"`
+	Enabled         bool       `json:"enabled"`
+	DestOverride    StringList `json:"destOverride"`
+	DomainsExcluded StringList `json:"domainsExcluded"`
+	MetadataOnly    bool       `json:"metadataOnly"`
+	RouteOnly       bool       `json:"routeOnly"`
 }
 
 // Build implements Buildable.
 func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	var p []string
-	if c.DestOverride != nil {
-		for _, protocol := range *c.DestOverride {
-			switch strings.ToLower(protocol) {
-			case "http":
-				p = append(p, "http")
-			case "tls", "https", "ssl":
-				p = append(p, "tls")
-			case "quic":
-				p = append(p, "quic")
-			case "fakedns", "fakedns+others":
-				p = append(p, "fakedns")
-			default:
-				return nil, errors.New("unknown protocol: ", protocol)
-			}
+	for _, protocol := range c.DestOverride {
+		switch strings.ToLower(protocol) {
+		case "http":
+			p = append(p, "http")
+		case "tls", "https", "ssl":
+			p = append(p, "tls")
+		case "quic":
+			p = append(p, "quic")
+		case "fakedns", "fakedns+others":
+			p = append(p, "fakedns")
+		default:
+			return nil, errors.New("unknown protocol: ", protocol)
 		}
 	}
 
-	var d []string
-	if c.DomainsExcluded != nil {
-		for _, domain := range *c.DomainsExcluded {
-			d = append(d, strings.ToLower(domain))
-		}
+	d, err := geodata.ParseDomainRules(c.DomainsExcluded, geodata.Domain_Substr)
+	if err != nil {
+		return nil, err
 	}
 
 	return &proxyman.SniffingConfig{
