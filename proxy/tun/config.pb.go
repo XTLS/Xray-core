@@ -28,7 +28,7 @@ type Config struct {
 	Gateway                []string               `protobuf:"bytes,3,rep,name=gateway,proto3" json:"gateway,omitempty"`
 	DNS                    []string               `protobuf:"bytes,4,rep,name=DNS,proto3" json:"DNS,omitempty"`
 	UserLevel              uint32                 `protobuf:"varint,5,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	AutoRoutingTable       []string               `protobuf:"bytes,6,rep,name=auto_routing_table,json=autoRoutingTable,proto3" json:"auto_routing_table,omitempty"`
+	AutoSystemRoutingTable []string               `protobuf:"bytes,6,rep,name=auto_system_routing_table,json=autoSystemRoutingTable,proto3" json:"auto_system_routing_table,omitempty"`
 	AutoOutboundsInterface string                 `protobuf:"bytes,7,opt,name=auto_outbounds_interface,json=autoOutboundsInterface,proto3" json:"auto_outbounds_interface,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -99,9 +99,9 @@ func (x *Config) GetUserLevel() uint32 {
 	return 0
 }
 
-func (x *Config) GetAutoRoutingTable() []string {
+func (x *Config) GetAutoSystemRoutingTable() []string {
 	if x != nil {
-		return x.AutoRoutingTable
+		return x.AutoSystemRoutingTable
 	}
 	return nil
 }
@@ -117,15 +117,15 @@ var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xe1\x01\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xee\x01\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x03(\rR\x03MTU\x12\x18\n" +
 	"\agateway\x18\x03 \x03(\tR\agateway\x12\x10\n" +
 	"\x03DNS\x18\x04 \x03(\tR\x03DNS\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x05 \x01(\rR\tuserLevel\x12,\n" +
-	"\x12auto_routing_table\x18\x06 \x03(\tR\x10autoRoutingTable\x128\n" +
+	"user_level\x18\x05 \x01(\rR\tuserLevel\x129\n" +
+	"\x19auto_system_routing_table\x18\x06 \x03(\tR\x16autoSystemRoutingTable\x128\n" +
 	"\x18auto_outbounds_interface\x18\a \x01(\tR\x16autoOutboundsInterfaceBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 

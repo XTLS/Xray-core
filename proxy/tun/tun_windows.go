@@ -85,8 +85,8 @@ func open(name string) (*wintun.Adapter, error) {
 
 func (t *WindowsTun) Start() error {
 	var has4, has6 bool
-	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoRoutingTable))
-	for _, route := range t.options.AutoRoutingTable {
+	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoSystemRoutingTable))
+	for _, route := range t.options.AutoSystemRoutingTable {
 		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
 	}
 	routesMap := make(map[winipcfg.RouteData]struct{})

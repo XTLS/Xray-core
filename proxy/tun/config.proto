@@ -12,6 +12,6 @@ message Config {
   repeated string gateway = 3;
   repeated string DNS = 4;
   uint32 user_level = 5;
-  repeated string auto_routing_table = 6;
+  repeated string auto_system_routing_table = 6;
   string auto_outbounds_interface = 7;
 }
