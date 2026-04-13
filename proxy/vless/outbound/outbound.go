@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
+	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
 	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
@@ -102,14 +103,12 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			User: handler.server.User, // TODO: email
 		})
 		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
+			request, err := proxymanConfig.BuildSniffingRequest(sc)
+			if err != nil {
+				return nil, errors.New("failed to build reverse sniffing request").Base(err).AtError()
+			}
 			rvsCtx = session.ContextWithContent(rvsCtx, &session.Content{
-				SniffingRequest: session.SniffingRequest{
-					Enabled:                        sc.Enabled,
-					OverrideDestinationForProtocol: sc.DestinationOverride,
-					ExcludeForDomain:               sc.DomainsExcluded,
-					MetadataOnly:                   sc.MetadataOnly,
-					RouteOnly:                      sc.RouteOnly,
-				},
+				SniffingRequest: request,
 			})
 		}
 		handler.reverse = &Reverse{

@@ -158,6 +158,49 @@ func TestXrayConfig(t *testing.T) {
 	})
 }
 
+func TestSniffingConfig_Build(t *testing.T) {
+	config := &SniffingConfig{
+		Enabled:         true,
+		DestOverride:    StringList{"http", "tls"},
+		DomainsExcluded: StringList{"full:api.example.com", "domain:blocked.example", "regexp:^test[0-9]+\\.internal$"},
+		MetadataOnly:    true,
+		RouteOnly:       true,
+	}
+
+	built, err := config.Build()
+	if err != nil {
+		t.Fatalf("SniffingConfig.Build() failed: %v", err)
+	}
+
+	if !built.Enabled || !built.MetadataOnly || !built.RouteOnly {
+		t.Fatalf("SniffingConfig.Build() lost sniffing flags: %+v", built)
+	}
+	if len(built.DestinationOverride) != 2 {
+		t.Fatalf("SniffingConfig.Build() lost destination overrides: %+v", built.DestinationOverride)
+	}
+	if len(built.DomainsExcluded) != 3 {
+		t.Fatalf("SniffingConfig.Build() produced %d domain rules", len(built.DomainsExcluded))
+	}
+
+	want := []struct {
+		ruleType geodata.Domain_Type
+		value    string
+	}{
+		{ruleType: geodata.Domain_Full, value: "api.example.com"},
+		{ruleType: geodata.Domain_Domain, value: "blocked.example"},
+		{ruleType: geodata.Domain_Regex, value: "^test[0-9]+\\.internal$"},
+	}
+	for i, tc := range want {
+		rule := built.DomainsExcluded[i].GetCustom()
+		if rule == nil {
+			t.Fatalf("SniffingConfig.Build() produced a non-custom rule at index %d", i)
+		}
+		if rule.Type != tc.ruleType || rule.Value != tc.value {
+			t.Fatalf("SniffingConfig.Build() produced wrong rule at index %d: got (%v, %q), want (%v, %q)", i, rule.Type, rule.Value, tc.ruleType, tc.value)
+		}
+	}
+}
+
 func TestMuxConfig_Build(t *testing.T) {
 	tests := []struct {
 		name   string
