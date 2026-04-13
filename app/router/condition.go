@@ -390,8 +390,10 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	if len(ctx.GetSourceIPs()) == 0 {
 		return false
 	}
-	srcPort := ctx.GetSourcePort().String()
+
+	srcPort := uint16(ctx.GetSourcePort())
 	srcIP := ctx.GetSourceIPs()[0].String()
+
 	var network string
 	switch ctx.GetNetwork() {
 	case net.Network_TCP:
@@ -401,11 +403,15 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	default:
 		return false
 	}
-	src, err := net.ParseDestination(strings.Join([]string{network, srcIP, srcPort}, ":"))
-	if err != nil {
-		return false
+
+	var dstIP string
+	var dstPort uint16 = 0
+	if len(ctx.GetTargetIPs()) > 0 {
+		dstIP = ctx.GetTargetIPs()[0].String()
+		dstPort = uint16(ctx.GetTargetPort())
 	}
-	pid, name, absPath, err := net.FindProcess(src)
+
+	pid, name, absPath, err := net.FindProcess(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
 	if err != nil {
 		if err != net.ErrNotLocal {
 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
