@@ -38,10 +38,11 @@ func init() {
 
 type MultiUserInbound struct {
 	sync.Mutex
-	networks    []net.Network
-	users       []*protocol.MemoryUser
-	service     *shadowaead_2022.MultiService[int]
-	connTracker *connectiontracker.Tracker
+	networks      []net.Network
+	users         []*protocol.MemoryUser
+	service       *shadowaead_2022.MultiService[int]
+	accessManager *connectiontracker.Manager
+	connTracker   *connectiontracker.Tracker
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -77,9 +78,10 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	}
 
 	inbound := &MultiUserInbound{
-		networks:    networks,
-		users:       memUsers,
-		connTracker: trackerManager.NewTracker(),
+		networks:      networks,
+		users:         memUsers,
+		accessManager: trackerManager,
+		connTracker:   trackerManager.NewTracker(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -268,11 +270,27 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 		return errors.New("invalid destination")
 	}
 
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
-	return singbridge.CopyConn(ctx, conn, link, conn)
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
+	if err := singbridge.CopyConn(ctx, conn, link, conn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
@@ -298,16 +316,32 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 	outConn := &singbridge.PacketConnWrapper{
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,
 	}
-	return bufio.CopyPacketConn(ctx, conn, outConn)
+	if err := bufio.CopyPacketConn(ctx, conn, outConn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *MultiUserInbound) NewError(ctx context.Context, err error) {

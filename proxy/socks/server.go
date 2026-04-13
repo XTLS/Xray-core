@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -28,6 +29,7 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 	cone          bool
 	udpFilter     *UDPFilter
 	httpServer    *http.Server
@@ -36,9 +38,17 @@ type Server struct {
 // NewServer creates a new Server object.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
 		cone:          ctx.Value("cone").(bool),
 	}
 	httpConfig := &http.ServerConfig{
@@ -48,7 +58,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		httpConfig.Accounts = config.Accounts
 		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
-	s.httpServer, _ = http.NewServer(ctx, httpConfig)
+	httpServer, err := http.NewServer(ctx, httpConfig)
+	if err != nil {
+		return nil, err
+	}
+	s.httpServer = httpServer
 	return s, nil
 }
 
@@ -160,10 +174,19 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if inbound.CanSpliceCopy == 2 {
 			inbound.CanSpliceCopy = 1
 		}
-		if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
+		link := &transport.Link{
 			Reader: reader,
-			Writer: buf.NewWriter(conn)},
-		); err != nil {
+			Writer: buf.NewWriter(conn),
+		}
+		var accessRecord *connectiontracker.AccessRecord
+		if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+			ctx, link, accessRecord = s.accessManager.TrackAccessLink(ctx, accessMessage, link, nil)
+			defer s.accessManager.FinishAccessRecord(accessRecord)
+		}
+		if err := dispatcher.DispatchLink(ctx, dest, link); err != nil {
+			if accessRecord != nil {
+				s.accessManager.AbortAccessRecord(accessRecord, err)
+			}
 			return errors.New("failed to dispatch request").Base(err)
 		}
 		return nil

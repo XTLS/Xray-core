@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -24,8 +25,8 @@ import (
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		d := new(DokodemoDoor)
-		err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
-			return d.Init(config.(*Config), pm, session.SockoptFromContext(ctx))
+		err := core.RequireFeatures(ctx, func(pm policy.Manager, trackerSvc connectiontracker.Feature) error {
+			return d.Init(config.(*Config), pm, trackerSvc.Manager(), session.SockoptFromContext(ctx))
 		})
 		return d, err
 	}))
@@ -38,10 +39,11 @@ type DokodemoDoor struct {
 	port          net.Port
 	portMap       map[string]string
 	sockopt       *session.Sockopt
+	accessManager *connectiontracker.Manager
 }
 
 // Init initializes the DokodemoDoor instance with necessary parameters.
-func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
+func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, accessManager *connectiontracker.Manager, sockopt *session.Sockopt) error {
 	if len(config.Networks) == 0 {
 		return errors.New("no network specified")
 	}
@@ -51,6 +53,7 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 	d.portMap = config.PortMap
 	d.policyManager = pm
 	d.sockopt = sockopt
+	d.accessManager = accessManager
 
 	return nil
 }
@@ -190,10 +193,19 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		}
 	}
 
-	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
+	link := &transport.Link{
 		Reader: reader,
-		Writer: writer},
-	); err != nil {
+		Writer: writer,
+	}
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && d.accessManager != nil {
+		ctx, link, accessRecord = d.accessManager.TrackAccessLink(ctx, accessMessage, link, nil)
+		defer d.accessManager.FinishAccessRecord(accessRecord)
+	}
+	if err := dispatcher.DispatchLink(ctx, dest, link); err != nil {
+		if accessRecord != nil {
+			d.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil // Unlike Dispatch(), DispatchLink() will not return until the outbound finishes Process()

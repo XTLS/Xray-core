@@ -84,6 +84,7 @@ type Handler struct {
 	observer               features.Feature
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
+	accessManager          *connectiontracker.Manager
 	connTracker            *connectiontracker.Tracker
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -112,6 +113,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		observer:               v.GetFeature(extension.ObservatoryType()),
 		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
+		accessManager:          trackerManager,
 		connTracker:            trackerManager.NewTracker(),
 	}
 
@@ -636,6 +638,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		ctx = session.ContextWithAllowedNetwork(ctx, net.Network_UDP)
 	}
 
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && h.accessManager != nil {
+		accessRecord = h.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer h.accessManager.FinishAccessRecord(accessRecord)
+	}
+
 	trafficState := proxy.NewTrafficState(userSentID)
 	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
 	if requestAddons.Flow == vless.XRV {
@@ -644,23 +653,44 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
 	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to encode response header").Base(err).AtWarning()
 	}
 	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
 	bufferWriter.SetFlushNext()
+
+	if accessRecord != nil {
+		accessLink := connectiontracker.WrapAccessLink(&transport.Link{
+			Reader: clientReader,
+			Writer: clientWriter,
+		}, accessRecord)
+		clientReader = accessLink.Reader
+		clientWriter = accessLink.Writer
+	}
 
 	if request.Command == protocol.RequestCommandRvs {
 		r, err := h.GetReverse(account)
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
+		if err := r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer); err != nil {
+			if accessRecord != nil {
+				h.accessManager.AbortAccessRecord(accessRecord, err)
+			}
+			return err
+		}
+		return nil
 	}
 
 	if err := dispatch.DispatchLink(ctx, request.Destination(), &transport.Link{
 		Reader: clientReader,
 		Writer: clientWriter},
 	); err != nil {
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil

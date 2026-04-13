@@ -27,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *Validator
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 	cone          bool
 	connTracker   *connectiontracker.Tracker
 }
@@ -61,6 +62,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
 		cone:          ctx.Value("cone").(bool),
 		connTracker:   trackerManager.NewTracker(),
 	}
@@ -258,10 +260,20 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		accessRecord = s.accessManager.NewAccessRecord(accessMessage, cancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	responseDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
@@ -307,6 +319,9 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

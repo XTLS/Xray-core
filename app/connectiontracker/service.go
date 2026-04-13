@@ -42,15 +42,8 @@ func (*Service) Start() error {
 }
 
 func (s *Service) Close() error {
-	s.manager.globalMu.Lock()
-	s.manager.trackers = nil
-	s.manager.globalMu.Unlock()
-
-	s.manager.subMu.Lock()
-	s.manager.subscribers = nil
-	s.manager.subMu.Unlock()
-
-	return nil
+	clearActiveManager(s.manager)
+	return s.manager.Close()
 }
 
 func (s *Service) Manager() *Manager {

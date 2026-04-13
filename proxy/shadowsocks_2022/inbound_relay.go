@@ -13,6 +13,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -22,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -33,9 +35,11 @@ func init() {
 }
 
 type RelayInbound struct {
-	networks     []net.Network
-	destinations []*RelayDestination
-	service      *shadowaead_2022.RelayService[int]
+	networks      []net.Network
+	destinations  []*RelayDestination
+	service       *shadowaead_2022.RelayService[int]
+	accessManager *connectiontracker.Manager
+	connTracker   *connectiontracker.Tracker
 }
 
 func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbound, error) {
@@ -46,9 +50,23 @@ func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbou
 			net.Network_UDP,
 		}
 	}
+
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	inbound := &RelayInbound{
-		networks:     networks,
-		destinations: config.Destinations,
+		networks:      networks,
+		destinations:  config.Destinations,
+		accessManager: trackerManager,
+		connTracker:   trackerManager.NewTracker(),
 	}
 	if !C.Contains(shadowaead_2022.List, config.Method) || !strings.Contains(config.Method, "aes") {
 		return nil, errors.New("unsupported method ", config.Method)
@@ -137,12 +155,42 @@ func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadat
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022-relay")
+		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
-	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
+	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
+	if !destination.IsValid() {
+		return errors.New("invalid destination")
+	}
+
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
+	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
-	return singbridge.CopyConn(ctx, nil, link, conn)
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
+	if err := singbridge.CopyConn(ctx, nil, link, conn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
@@ -160,18 +208,43 @@ func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketCon
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022-relay")
+		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapPacketConn(conn, connEntry)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 	outConn := &singbridge.PacketConnWrapper{
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,
 	}
-	return bufio.CopyPacketConn(ctx, conn, outConn)
+	if err := bufio.CopyPacketConn(ctx, conn, outConn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *RelayInbound) NewError(ctx context.Context, err error) {

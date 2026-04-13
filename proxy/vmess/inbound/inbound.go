@@ -108,6 +108,7 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
+	accessManager         *connectiontracker.Manager
 	connTracker           *connectiontracker.Tracker
 }
 
@@ -131,6 +132,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
+		accessManager:         trackerManager,
 		connTracker:           trackerManager.NewTracker(),
 	}
 
@@ -298,10 +300,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && h.accessManager != nil {
+		accessRecord = h.accessManager.NewAccessRecord(accessMessage, cancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer h.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
 	if err != nil {
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -332,6 +344,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

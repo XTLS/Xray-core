@@ -27,6 +27,7 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 	connTracker   *connectiontracker.Tracker
 }
 
@@ -59,6 +60,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
 		connTracker:   trackerManager.NewTracker(),
 	}
 
@@ -209,10 +211,22 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			return err
 		}
 
-		return dispatcher.DispatchLink(ctx, dest, &transport.Link{
+		link := &transport.Link{
 			Reader: buf.NewReader(conn),
 			Writer: bufferedWriter,
-		})
+		}
+		var accessRecord *connectiontracker.AccessRecord
+		if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+			ctx, link, accessRecord = s.accessManager.TrackAccessLink(ctx, accessMessage, link, connCancel)
+			defer s.accessManager.FinishAccessRecord(accessRecord)
+		}
+		if err := dispatcher.DispatchLink(ctx, dest, link); err != nil {
+			if accessRecord != nil {
+				s.accessManager.AbortAccessRecord(accessRecord, err)
+			}
+			return err
+		}
+		return nil
 	}
 }
 

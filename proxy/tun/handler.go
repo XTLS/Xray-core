@@ -3,6 +3,7 @@ package tun
 import (
 	"context"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -26,6 +27,7 @@ type Handler struct {
 	tun             Tun
 	policyManager   policy.Manager
 	dispatcher      routing.Dispatcher
+	accessManager   *connectiontracker.Manager
 	tag             string
 	sniffingRequest session.SniffingRequest
 }
@@ -44,7 +46,7 @@ func (t *Handler) policy() policy.Session {
 }
 
 // Init the Handler instance with necessary parameters
-func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
+func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher, accessManager *connectiontracker.Manager) error {
 	var err error
 
 	// Retrieve tag and sniffing config from context (set by AlwaysOnInboundHandler)
@@ -58,6 +60,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
+	t.accessManager = accessManager
 
 	tunName := t.config.Name
 	tunOptions := TunOptions{
@@ -141,7 +144,15 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
 		Writer: buf.NewWriter(conn),
 	}
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && t.accessManager != nil {
+		ctx, link, accessRecord = t.accessManager.TrackAccessLink(ctx, accessMessage, link, cancel)
+		defer t.accessManager.FinishAccessRecord(accessRecord)
+	}
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
+		if accessRecord != nil {
+			t.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
 }
@@ -167,8 +178,8 @@ func (t *Handler) Process(ctx context.Context, network net.Network, conn stat.Co
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		t := &Handler{config: config.(*Config)}
-		err := core.RequireFeatures(ctx, func(pm policy.Manager, dispatcher routing.Dispatcher) error {
-			return t.Init(ctx, pm, dispatcher)
+		err := core.RequireFeatures(ctx, func(pm policy.Manager, dispatcher routing.Dispatcher, trackerSvc connectiontracker.Feature) error {
+			return t.Init(ctx, pm, dispatcher, trackerSvc.Manager())
 		})
 		return t, err
 	}))
