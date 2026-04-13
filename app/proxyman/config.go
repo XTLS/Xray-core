@@ -23,5 +23,12 @@ func BuildSniffingRequest(config *SniffingConfig) (session.SniffingRequest, erro
 		}
 		request.ExcludeForDomain = excludeForDomain
 	}
+	if len(config.IpsExcluded) > 0 {
+		excludeForIP, err := geodata.IPReg.BuildIPMatcher(config.IpsExcluded)
+		if err != nil {
+			return session.SniffingRequest{}, err
+		}
+		request.ExcludeForIP = excludeForIP
+	}
 	return request, nil
 }
