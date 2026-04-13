@@ -3,33 +3,17 @@ package dns
 import (
 	"context"
 	"net/url"
-	"runtime"
 	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
 )
-
-type mphMatcherWrapper struct {
-	m strmatcher.IndexMatcher
-}
-
-func (w *mphMatcherWrapper) Match(s string) bool {
-	return w.m.Match(s) != nil
-}
-
-func (w *mphMatcherWrapper) String() string {
-	return "mph-matcher"
-}
 
 // Server is the interface for Name Server.
 type Server interface {
@@ -46,9 +30,8 @@ type Server interface {
 type Client struct {
 	server        Server
 	skipFallback  bool
-	domains       []string
-	expectedIPs   router.GeoIPMatcher
-	unexpectedIPs router.GeoIPMatcher
+	expectedIPs   geodata.IPMatcher
+	unexpectedIPs geodata.IPMatcher
 	actPrior      bool
 	actUnprior    bool
 	tag           string
@@ -111,11 +94,9 @@ func NewClient(
 	disableCache bool, serveStale bool, serveExpiredTTL uint32,
 	tag string,
 	ipOption dns.IPOption,
-	matcherInfos *[]*DomainMatcherInfo,
-	updateDomainRule func(strmatcher.Matcher, int, []*DomainMatcherInfo),
+	updateRules func(bool),
 ) (*Client, error) {
 	client := &Client{}
-
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
 		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
@@ -123,97 +104,25 @@ func NewClient(
 			return errors.New("failed to create nameserver").Base(err).AtWarning()
 		}
 
-		// Prioritize local domains with specific TLDs or those without any dot for the local DNS
-		if _, isLocalDNS := server.(*LocalNameServer); isLocalDNS {
-			ns.PrioritizedDomain = append(ns.PrioritizedDomain, localTLDsAndDotlessDomains...)
-			ns.OriginalRules = append(ns.OriginalRules, localTLDsAndDotlessDomainsRule)
-			// The following lines is a solution to avoid core panics（rule index out of range） when setting `localhost` DNS client in config.
-			// Because the `localhost` DNS client will append len(localTLDsAndDotlessDomains) rules into matcherInfos to match `geosite:private` default rule.
-			// But `matcherInfos` has no enough length to add rules, which leads to core panics (rule index out of range).
-			// To avoid this, the length of `matcherInfos` must be equal to the expected, so manually append it with Golang default zero value first for later modification.
-			// Related issues:
-			// https://github.com/v2fly/v2ray-core/issues/529
-			// https://github.com/v2fly/v2ray-core/issues/719
-			for i := 0; i < len(localTLDsAndDotlessDomains); i++ {
-				*matcherInfos = append(*matcherInfos, &DomainMatcherInfo{
-					clientIdx:     uint16(0),
-					domainRuleIdx: uint16(0),
-				})
-			}
-		}
-
-		// Establish domain rules
-		var rules []string
-		ruleCurr := 0
-		ruleIter := 0
-
-		// Check if domain matcher cache is provided via environment
-		domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
-		var mphLoaded bool
-
-		if domainMatcherPath != "" && ns.Tag != "" {
-			f, err := filesystem.NewFileReader(domainMatcherPath)
-			if err == nil {
-				defer f.Close()
-				g, err := router.LoadGeoSiteMatcher(f, ns.Tag)
-				if err == nil {
-					errors.LogDebug(ctx, "MphDomainMatcher loaded from cache for ", ns.Tag, " dns tag)")
-					updateDomainRule(&mphMatcherWrapper{m: g}, 0, *matcherInfos)
-					rules = append(rules, "[MPH Cache]")
-					mphLoaded = true
-				}
-			}
-		}
-
-		if !mphLoaded {
-			for i, domain := range ns.PrioritizedDomain {
-				ns.PrioritizedDomain[i] = nil
-				domainRule, err := toStrMatcher(domain.Type, domain.Domain)
-				if err != nil {
-					errors.LogErrorInner(ctx, err, "failed to create domain matcher, ignore domain rule [type: ", domain.Type, ", domain: ", domain.Domain, "]")
-					domainRule, _ = toStrMatcher(DomainMatchingType_Full, "hack.fix.index.for.illegal.domain.rule")
-				}
-				originalRuleIdx := ruleCurr
-				if ruleCurr < len(ns.OriginalRules) {
-					rule := ns.OriginalRules[ruleCurr]
-					if ruleCurr >= len(rules) {
-						rules = append(rules, rule.Rule)
-					}
-					ruleIter++
-					if ruleIter >= int(rule.Size) {
-						ruleIter = 0
-						ruleCurr++
-					}
-				} else { // No original rule, generate one according to current domain matcher (majorly for compatibility with tests)
-					rules = append(rules, domainRule.String())
-					ruleCurr++
-				}
-				updateDomainRule(domainRule, originalRuleIdx, *matcherInfos)
-			}
-		}
-		ns.PrioritizedDomain = nil
-		runtime.GC()
+		_, isLocalDNS := server.(*LocalNameServer)
+		updateRules(isLocalDNS)
 
 		// Establish expected IPs
-		var expectedMatcher router.GeoIPMatcher
-		if len(ns.ExpectedGeoip) > 0 {
-			expectedMatcher, err = router.BuildOptimizedGeoIPMatcher(ns.ExpectedGeoip...)
+		var expectedMatcher geodata.IPMatcher
+		if len(ns.ExpectedIp) > 0 {
+			expectedMatcher, err = geodata.IPReg.BuildIPMatcher(ns.ExpectedIp)
 			if err != nil {
 				return errors.New("failed to create expected ip matcher").Base(err).AtWarning()
 			}
-			ns.ExpectedGeoip = nil
-			runtime.GC()
 		}
 
 		// Establish unexpected IPs
-		var unexpectedMatcher router.GeoIPMatcher
-		if len(ns.UnexpectedGeoip) > 0 {
-			unexpectedMatcher, err = router.BuildOptimizedGeoIPMatcher(ns.UnexpectedGeoip...)
+		var unexpectedMatcher geodata.IPMatcher
+		if len(ns.UnexpectedIp) > 0 {
+			unexpectedMatcher, err = geodata.IPReg.BuildIPMatcher(ns.UnexpectedIp)
 			if err != nil {
 				return errors.New("failed to create unexpected ip matcher").Base(err).AtWarning()
 			}
-			ns.UnexpectedGeoip = nil
-			runtime.GC()
 		}
 
 		if len(clientIP) > 0 {
@@ -234,7 +143,6 @@ func NewClient(
 
 		client.server = server
 		client.skipFallback = ns.SkipFallback
-		client.domains = rules
 		client.expectedIPs = expectedMatcher
 		client.unexpectedIPs = unexpectedMatcher
 		client.actPrior = ns.ActPrior

@@ -11,9 +11,9 @@ import (
 	"github.com/xtls/xray-core/app/policy"
 	"github.com/xtls/xray-core/app/proxyman"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
@@ -331,10 +331,9 @@ func TestPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   DomainMatchingType_Full,
-								Domain: "google.com",
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "google.com"}},
 							},
 						},
 					},
@@ -471,8 +470,7 @@ func TestStaticHostDomain(t *testing.T) {
 				},
 				StaticHosts: []*Config_HostMapping{
 					{
-						Type:          DomainMatchingType_Full,
-						Domain:        "example.com",
+						Domain:        &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "example.com"}}},
 						ProxiedDomain: "google.com",
 					},
 				},
@@ -539,11 +537,10 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						ExpectedGeoip: []*router.GeoIP{
+						ExpectedIp: []*geodata.IPRule{
 							{
-								CountryCode: "local",
-								Cidr: []*router.CIDR{
-									{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
 										// inner ip, will not match
 										Ip:     []byte{192, 168, 11, 1},
 										Prefix: 32,
@@ -563,20 +560,18 @@ func TestIPMatch(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						ExpectedGeoip: []*router.GeoIP{
+						ExpectedIp: []*geodata.IPRule{
 							{
-								CountryCode: "test",
-								Cidr: []*router.CIDR{
-									{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
 										Ip:     []byte{8, 8, 8, 8},
 										Prefix: 32,
 									},
 								},
 							},
 							{
-								CountryCode: "test",
-								Cidr: []*router.CIDR{
-									{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
 										Ip:     []byte{8, 8, 8, 4},
 										Prefix: 32,
 									},
@@ -663,19 +658,15 @@ func TestLocalDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							// Equivalent of dotless:localhost
-							{Type: DomainMatchingType_Regex, Domain: "^[^.]*localhost[^.]*$"},
+							{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Regex, Value: "^[^.]*localhost[^.]*$"}}},
 						},
-						ExpectedGeoip: []*router.GeoIP{
-							{ // Will match localhost, localhost-a and localhost-b,
-								CountryCode: "local",
-								Cidr: []*router.CIDR{
-									{Ip: []byte{127, 0, 0, 2}, Prefix: 32},
-									{Ip: []byte{127, 0, 0, 3}, Prefix: 32},
-									{Ip: []byte{127, 0, 0, 4}, Prefix: 32},
-								},
-							},
+						ExpectedIp: []*geodata.IPRule{
+							// Will match localhost, localhost-a and localhost-b,
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 2}, Prefix: 32}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 3}, Prefix: 32}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 4}, Prefix: 32}}},
 						},
 					},
 					{
@@ -688,23 +679,21 @@ func TestLocalDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							// Equivalent of dotless: and domain:local
-							{Type: DomainMatchingType_Regex, Domain: "^[^.]*$"},
-							{Type: DomainMatchingType_Subdomain, Domain: "local"},
-							{Type: DomainMatchingType_Subdomain, Domain: "localdomain"},
+							{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Regex, Value: "^[^.]*$"}}},
+							{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "local"}}},
+							{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "localdomain"}}},
 						},
 					},
 				},
 				StaticHosts: []*Config_HostMapping{
 					{
-						Type:   DomainMatchingType_Full,
-						Domain: "hostnamestatic",
+						Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "hostnamestatic"}}},
 						Ip:     [][]byte{{127, 0, 0, 53}},
 					},
 					{
-						Type:          DomainMatchingType_Full,
-						Domain:        "hostnamealias",
+						Domain:        &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "hostnamealias"}}},
 						ProxiedDomain: "hostname.localdomain",
 					},
 				},
@@ -891,17 +880,27 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "google.com",
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "google.com"}},
 							},
 						},
-						ExpectedGeoip: []*router.GeoIP{
-							{ // Will only match 8.8.8.8 and 8.8.4.4
-								Cidr: []*router.CIDR{
-									{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
-									{Ip: []byte{8, 8, 4, 4}, Prefix: 32},
+						ExpectedIp: []*geodata.IPRule{
+							// Will only match 8.8.8.8 and 8.8.4.4
+							{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
+										Ip:     []byte{8, 8, 8, 8},
+										Prefix: 32,
+									},
+								},
+							},
+							{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
+										Ip:     []byte{8, 8, 4, 4},
+										Prefix: 32,
+									},
 								},
 							},
 						},
@@ -916,16 +915,19 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "google.com",
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "google.com"}},
 							},
 						},
-						ExpectedGeoip: []*router.GeoIP{
-							{ // Will match 8.8.8.8 and 8.8.8.7, etc
-								Cidr: []*router.CIDR{
-									{Ip: []byte{8, 8, 8, 7}, Prefix: 24},
+						ExpectedIp: []*geodata.IPRule{
+							// Will match 8.8.8.8 and 8.8.8.7, etc
+							{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
+										Ip:     []byte{8, 8, 8, 7},
+										Prefix: 24,
+									},
 								},
 							},
 						},
@@ -940,16 +942,19 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   DomainMatchingType_Subdomain,
-								Domain: "api.google.com",
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "api.google.com"}},
 							},
 						},
-						ExpectedGeoip: []*router.GeoIP{
-							{ // Will only match 8.8.7.7 (api.google.com)
-								Cidr: []*router.CIDR{
-									{Ip: []byte{8, 8, 7, 7}, Prefix: 32},
+						ExpectedIp: []*geodata.IPRule{
+							// Will only match 8.8.7.7 (api.google.com)
+							{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
+										Ip:     []byte{8, 8, 7, 7},
+										Prefix: 32,
+									},
 								},
 							},
 						},
@@ -964,16 +969,19 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 							},
 							Port: uint32(port),
 						},
-						PrioritizedDomain: []*NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   DomainMatchingType_Full,
-								Domain: "v2.api.google.com",
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "v2.api.google.com"}},
 							},
 						},
-						ExpectedGeoip: []*router.GeoIP{
-							{ // Will only match 8.8.7.8 (v2.api.google.com)
-								Cidr: []*router.CIDR{
-									{Ip: []byte{8, 8, 7, 8}, Prefix: 32},
+						ExpectedIp: []*geodata.IPRule{
+							// Will only match 8.8.7.8 (v2.api.google.com)
+							{
+								Value: &geodata.IPRule_Custom{
+									Custom: &geodata.CIDR{
+										Ip:     []byte{8, 8, 7, 8},
+										Prefix: 32,
+									},
 								},
 							},
 						},

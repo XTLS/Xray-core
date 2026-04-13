@@ -12,13 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/dns"
 )
 
@@ -32,15 +30,15 @@ type DNS struct {
 	hosts                  *StaticHosts
 	clients                []*Client
 	ctx                    context.Context
-	domainMatcher          strmatcher.IndexMatcher
+	domainMatcher          geodata.DomainMatcher
 	matcherInfos           []*DomainMatcherInfo
 	checkSystem            bool
 }
 
-// DomainMatcherInfo contains information attached to index returned by Server.domainMatcher
+// DomainMatcherInfo contains information attached to index returned by Server.domainMatcher.
 type DomainMatcherInfo struct {
-	clientIdx     uint16
-	domainRuleIdx uint16
+	clientIdx  uint16
+	domainRule string
 }
 
 // New creates a new DNS server with given configuration.
@@ -85,56 +83,40 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		return nil, errors.New("unexpected query strategy ", config.QueryStrategy)
 	}
 
-	var hosts *StaticHosts
-	mphLoaded := false
-	domainMatcherPath := platform.NewEnvFlag(platform.MphCachePath).GetValue(func() string { return "" })
-	if domainMatcherPath != "" {
-		if f, err := os.Open(domainMatcherPath); err == nil {
-			defer f.Close()
-			if m, err := router.LoadGeoSiteMatcher(f, "HOSTS"); err == nil {
-				f.Seek(0, 0)
-				if hostIPs, err := router.LoadGeoSiteHosts(f); err == nil {
-					if sh, err := NewStaticHostsFromCache(m, hostIPs); err == nil {
-						hosts = sh
-						mphLoaded = true
-						errors.LogDebug(ctx, "MphDomainMatcher loaded from cache for DNS hosts, size: ", sh.matchers.Size())
-					}
-				}
-			}
-		}
+	hosts, err := NewStaticHosts(config.StaticHosts)
+	if err != nil {
+		return nil, errors.New("failed to create hosts").Base(err)
 	}
-
-	if !mphLoaded {
-		sh, err := NewStaticHosts(config.StaticHosts)
-		if err != nil {
-			return nil, errors.New("failed to create hosts").Base(err)
-		}
-		hosts = sh
-	}
-
-	var clients []*Client
-	domainRuleCount := 0
 
 	var defaultTag = config.Tag
 	if len(config.Tag) == 0 {
 		defaultTag = generateRandomTag()
 	}
 
-	for _, ns := range config.NameServer {
-		domainRuleCount += len(ns.PrioritizedDomain)
-	}
-
-	// MatcherInfos is ensured to cover the maximum index domainMatcher could return, where matcher's index starts from 1
-	matcherInfos := make([]*DomainMatcherInfo, domainRuleCount+1)
-	domainMatcher := &strmatcher.MatcherGroup{}
+	clients := make([]*Client, 0, len(config.NameServer))
+	matcherInfos := make([]*DomainMatcherInfo, 0)
+	effectiveRules := make([]*geodata.DomainRule, 0)
 
 	for _, ns := range config.NameServer {
 		clientIdx := len(clients)
-		updateDomain := func(domainRule strmatcher.Matcher, originalRuleIdx int, matcherInfos []*DomainMatcherInfo) {
-			midx := domainMatcher.Add(domainRule)
-			matcherInfos[midx] = &DomainMatcherInfo{
-				clientIdx:     uint16(clientIdx),
-				domainRuleIdx: uint16(originalRuleIdx),
+		updateRules := func(isLocalNameServer bool) {
+			// Prioritize local domains with specific TLDs or those without any dot for the local DNS
+			if isLocalNameServer {
+				effectiveRules = append(effectiveRules, localTLDsAndDotlessDomainsRules...)
+				for _, rule := range localTLDsAndDotlessDomainsRules {
+					matcherInfos = append(matcherInfos, &DomainMatcherInfo{
+						clientIdx:  uint16(clientIdx),
+						domainRule: rule.String(),
+					})
+				}
+			}
+
+			effectiveRules = append(effectiveRules, ns.Domain...)
+			for _, rule := range ns.Domain {
+				matcherInfos = append(matcherInfos, &DomainMatcherInfo{
+					clientIdx:  uint16(clientIdx),
+					domainRule: rule.String(),
+				})
 			}
 		}
 
@@ -163,16 +145,22 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		if len(ns.Tag) > 0 {
 			tag = ns.Tag
 		}
+
 		clientIPOption := ResolveIpOptionOverride(ns.QueryStrategy, ipOption)
 		if !clientIPOption.IPv4Enable && !clientIPOption.IPv6Enable {
 			return nil, errors.New("no QueryStrategy available for ", ns.Address)
 		}
 
-		client, err := NewClient(ctx, ns, myClientIP, disableCache, serveStale, serveExpiredTTL, tag, clientIPOption, &matcherInfos, updateDomain)
+		client, err := NewClient(ctx, ns, myClientIP, disableCache, serveStale, serveExpiredTTL, tag, clientIPOption, updateRules)
 		if err != nil {
 			return nil, errors.New("failed to create client").Base(err)
 		}
 		clients = append(clients, client)
+	}
+
+	domainMatcher, err := geodata.DomainReg.BuildDomainMatcher(effectiveRules)
+	if err != nil {
+		return nil, err
 	}
 
 	// If there is no DNS client in config, add a `localhost` DNS client
@@ -283,14 +271,14 @@ func (s *DNS) sortClients(domain string) []*Client {
 
 	// Priority domain matching
 	hasMatch := false
-	MatchSlice := s.domainMatcher.Match(domain)
+	MatchSlice := s.domainMatcher.Match(strings.ToLower(domain))
 	sort.Slice(MatchSlice, func(i, j int) bool {
 		return MatchSlice[i] < MatchSlice[j]
 	})
 	for _, match := range MatchSlice {
 		info := s.matcherInfos[match]
 		client := s.clients[info.clientIdx]
-		domainRule := client.domains[info.domainRuleIdx]
+		domainRule := info.domainRule
 		domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
 		if clientUsed[info.clientIdx] {
 			continue

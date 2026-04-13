@@ -4,17 +4,35 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/geodata/strmatcher"
 )
 
 func TestFullMatcherGroup(t *testing.T) {
-	g := new(FullMatcherGroup)
-	g.Add("example.com", 1)
-	g.Add("google.com", 2)
-	g.Add("x.a.com", 3)
-	g.Add("x.y.com", 4)
-	g.Add("x.y.com", 6)
-
+	patterns := []struct {
+		Pattern string
+		Value   uint32
+	}{
+		{
+			Pattern: "example.com",
+			Value:   1,
+		},
+		{
+			Pattern: "google.com",
+			Value:   2,
+		},
+		{
+			Pattern: "x.a.com",
+			Value:   3,
+		},
+		{
+			Pattern: "x.y.com",
+			Value:   4,
+		},
+		{
+			Pattern: "x.y.com",
+			Value:   6,
+		},
+	}
 	testCases := []struct {
 		Domain string
 		Result []uint32
@@ -32,7 +50,10 @@ func TestFullMatcherGroup(t *testing.T) {
 			Result: []uint32{4, 6},
 		},
 	}
-
+	g := NewFullMatcherGroup()
+	for _, pattern := range patterns {
+		AddMatcherToGroup(g, FullMatcher(pattern.Pattern), pattern.Value)
+	}
 	for _, testCase := range testCases {
 		r := g.Match(testCase.Domain)
 		if !reflect.DeepEqual(r, testCase.Result) {
@@ -42,7 +63,7 @@ func TestFullMatcherGroup(t *testing.T) {
 }
 
 func TestEmptyFullMatcherGroup(t *testing.T) {
-	g := new(FullMatcherGroup)
+	g := NewFullMatcherGroup()
 	r := g.Match("example.com")
 	if len(r) != 0 {
 		t.Error("Expect [], but ", r)

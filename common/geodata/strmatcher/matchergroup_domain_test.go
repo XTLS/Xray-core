@@ -4,19 +4,43 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/xtls/xray-core/common/strmatcher"
+	. "github.com/xtls/xray-core/common/geodata/strmatcher"
 )
 
 func TestDomainMatcherGroup(t *testing.T) {
-	g := new(DomainMatcherGroup)
-	g.Add("example.com", 1)
-	g.Add("google.com", 2)
-	g.Add("x.a.com", 3)
-	g.Add("a.b.com", 4)
-	g.Add("c.a.b.com", 5)
-	g.Add("x.y.com", 4)
-	g.Add("x.y.com", 6)
-
+	patterns := []struct {
+		Pattern string
+		Value   uint32
+	}{
+		{
+			Pattern: "example.com",
+			Value:   1,
+		},
+		{
+			Pattern: "google.com",
+			Value:   2,
+		},
+		{
+			Pattern: "x.a.com",
+			Value:   3,
+		},
+		{
+			Pattern: "a.b.com",
+			Value:   4,
+		},
+		{
+			Pattern: "c.a.b.com",
+			Value:   5,
+		},
+		{
+			Pattern: "x.y.com",
+			Value:   4,
+		},
+		{
+			Pattern: "x.y.com",
+			Value:   6,
+		},
+	}
 	testCases := []struct {
 		Domain string
 		Result []uint32
@@ -58,7 +82,10 @@ func TestDomainMatcherGroup(t *testing.T) {
 			Result: []uint32{4, 6},
 		},
 	}
-
+	g := NewDomainMatcherGroup()
+	for _, pattern := range patterns {
+		AddMatcherToGroup(g, DomainMatcher(pattern.Pattern), pattern.Value)
+	}
 	for _, testCase := range testCases {
 		r := g.Match(testCase.Domain)
 		if !reflect.DeepEqual(r, testCase.Result) {
@@ -68,7 +95,7 @@ func TestDomainMatcherGroup(t *testing.T) {
 }
 
 func TestEmptyDomainMatcherGroup(t *testing.T) {
-	g := new(DomainMatcherGroup)
+	g := NewDomainMatcherGroup()
 	r := g.Match("example.com")
 	if len(r) != 0 {
 		t.Error("Expect [], but ", r)
