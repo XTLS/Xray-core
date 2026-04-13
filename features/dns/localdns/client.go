@@ -1,12 +1,21 @@
 package localdns
 
 import (
+	"context"
+	"syscall"
+	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // Client is an implementation of dns.Client, which queries localhost for DNS.
-type Client struct{}
+type Client struct {
+	d *net.Dialer
+	r *net.Resolver
+}
 
 // Type implements common.HasType.
 func (*Client) Type() interface{} {
@@ -20,8 +29,14 @@ func (*Client) Start() error { return nil }
 func (*Client) Close() error { return nil }
 
 // LookupIP implements Client.
-func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
-	ips, err := net.LookupIP(host)
+func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
+	var ips []net.IP
+	var err error
+	if len(internet.Controllers) > 0 {
+		ips, err = c.r.LookupIP(context.Background(), "ip", host)
+	} else {
+		ips, err = net.LookupIP(host)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -62,5 +77,28 @@ func (*Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, err
 
 // New create a new dns.Client that queries localhost for DNS.
 func New() *Client {
-	return &Client{}
+	d := &net.Dialer{
+		Timeout: time.Second * 16,
+		Control: func(network, address string, c syscall.RawConn) error {
+			for _, ctl := range internet.Controllers {
+				if err := ctl(network, address, c); err != nil {
+					errors.LogInfoInner(context.Background(), err, "failed to apply external controller")
+					return err
+				}
+			}
+			return nil
+		},
+	}
+
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			return d.DialContext(ctx, network, address)
+		},
+	}
+
+	return &Client{
+		d: d,
+		r: r,
+	}
 }

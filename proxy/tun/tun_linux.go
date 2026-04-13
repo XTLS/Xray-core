@@ -3,6 +3,8 @@
 package tun
 
 import (
+	"net"
+
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
@@ -15,23 +17,20 @@ import (
 type LinuxTun struct {
 	tunFd   int
 	tunLink netlink.Link
-	options TunOptions
+	options *Config
 }
 
 // LinuxTun implements Tun
 var _ Tun = (*LinuxTun)(nil)
 
-// LinuxTun implements GVisorTun
-var _ GVisorTun = (*LinuxTun)(nil)
-
 // NewTun builds new tun interface handler (linux specific)
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	tunFd, err := open(options.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	tunLink, err := setup(options.Name, int(options.MTU))
+	tunLink, err := setup(options.Name, int(options.MTU[0]))
 	if err != nil {
 		_ = unix.Close(tunFd)
 		return nil, err
@@ -110,11 +109,23 @@ func (t *LinuxTun) Close() error {
 	return nil
 }
 
+func (t *LinuxTun) Name() (string, error) {
+	return t.tunLink.Attrs().Name, nil
+}
+
+func (t *LinuxTun) Index() (int, error) {
+	return t.tunLink.Attrs().Index, nil
+}
+
 // newEndpoint builds new gVisor stack.LinkEndpoint from the tun interface file descriptor
 func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return fdbased.New(&fdbased.Options{
 		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
+		MTU:               t.options.MTU[0],
 		RXChecksumOffload: true,
 	})
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	return unix.BindToDevice(int(fd), iface.Name)
 }

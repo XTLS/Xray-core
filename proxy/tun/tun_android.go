@@ -4,6 +4,7 @@ package tun
 
 import (
 	"context"
+	"net"
 	"strconv"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -15,17 +16,14 @@ import (
 
 type AndroidTun struct {
 	tunFd   int
-	options TunOptions
+	options *Config
 }
 
 // DefaultTun implements Tun
 var _ Tun = (*AndroidTun)(nil)
 
-// DefaultTun implements GVisorTun
-var _ GVisorTun = (*AndroidTun)(nil)
-
 // NewTun builds new tun interface handler
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	fd, err := strconv.Atoi(platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "0" }))
 	errors.LogInfo(context.Background(), "read Android Tun Fd ", fd, err)
 
@@ -49,10 +47,37 @@ func (t *AndroidTun) Close() error {
 	return nil
 }
 
+func (t *AndroidTun) Name() (string, error) {
+	ifr, err := unix.NewIfreq("")
+	if err != nil {
+		return "", err
+	}
+	if err = unix.IoctlIfreq(t.tunFd, unix.TUNGETIFF, ifr); err != nil {
+		return "", err
+	}
+	return ifr.Name(), nil
+}
+
+func (t *AndroidTun) Index() (int, error) {
+	name, err := t.Name()
+	if err != nil {
+		return 0, err
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return iface.Index, nil
+}
+
 func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return fdbased.New(&fdbased.Options{
 		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
+		MTU:               t.options.MTU[0],
 		RXChecksumOffload: true,
 	})
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	return unix.BindToDevice(int(fd), iface.Name)
 }

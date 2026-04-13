@@ -3,16 +3,16 @@
 package tun
 
 import (
-	"errors"
+	go_errors "errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"os"
 	"strconv"
-	"syscall"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
@@ -25,6 +25,7 @@ const (
 	sysprotoControl = 2
 	gateway         = "169.254.10.1/30"
 	utunHeaderSize  = 4
+	UTUN_OPT_IFNAME = 2
 )
 
 const (
@@ -39,15 +40,15 @@ func procyield(cycles uint32)
 
 type DarwinTun struct {
 	tunFile *os.File
-	options TunOptions
+	options *Config
+	tunFd   int
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 }
 
 var _ Tun = (*DarwinTun)(nil)
-var _ GVisorTun = (*DarwinTun)(nil)
 var _ GVisorDevice = (*DarwinTun)(nil)
 
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	// Check if fd is provided via environment (iOS mode)
 	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
 	if fdStr != "" {
@@ -64,6 +65,7 @@ func NewTun(options TunOptions) (Tun, error) {
 		return &DarwinTun{
 			tunFile: os.NewFile(uintptr(fd), "utun"),
 			options: options,
+			tunFd:   fd,
 			ownsFd:  false,
 		}, nil
 	}
@@ -74,7 +76,7 @@ func NewTun(options TunOptions) (Tun, error) {
 		return nil, err
 	}
 
-	err = setup(options.Name, options.MTU)
+	err = setup(options.Name, options.MTU[0])
 	if err != nil {
 		_ = tunFile.Close()
 		return nil, err
@@ -83,6 +85,7 @@ func NewTun(options TunOptions) (Tun, error) {
 	return &DarwinTun{
 		tunFile: tunFile,
 		options: options,
+		tunFd:   int(tunFile.Fd()),
 		ownsFd:  true,
 	}, nil
 }
@@ -99,10 +102,26 @@ func (t *DarwinTun) Close() error {
 	return nil
 }
 
+func (t *DarwinTun) Name() (string, error) {
+	return unix.GetsockoptString(t.tunFd, sysprotoControl, UTUN_OPT_IFNAME)
+}
+
+func (t *DarwinTun) Index() (int, error) {
+	name, err := t.Name()
+	if err != nil {
+		return 0, err
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return iface.Index, nil
+}
+
 // WritePacket implements GVisorDevice method to write one packet to the tun device
 func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
 	defer b.Release()
 
 	// prepare Darwin specific packet header
@@ -124,7 +143,7 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	b.SetByte(3, family)
 
 	if _, err := t.tunFile.Write(b.Bytes()); err != nil {
-		if errors.Is(err, unix.EAGAIN) {
+		if go_errors.Is(err, unix.EAGAIN) {
 			return &tcpip.ErrWouldBlock{}
 		}
 		return &tcpip.ErrAborted{}
@@ -137,11 +156,11 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 // which will make the stack call Wait which should implement desired push-back
 func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
 
 	// read the bytes to the interface file
 	n, err := b.ReadFrom(t.tunFile)
-	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+	if go_errors.Is(err, unix.EAGAIN) || go_errors.Is(err, unix.EINTR) {
 		b.Release()
 		return 0, nil, ErrQueueEmpty
 	}
@@ -174,7 +193,7 @@ func (t *DarwinTun) Wait() {
 }
 
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
 }
 
 // open the interface, by creating new utunN if in the system and returning its file descriptor
@@ -346,9 +365,20 @@ func setIPAddress(name string, gateway netip.Prefix) error {
 }
 
 func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
-	_, _, errno := unix.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(req), uintptr(arg))
 	if errno != 0 {
 		return errno
 	}
 	return nil
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	switch network {
+	case "tcp4", "udp4", "ip4":
+		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index)
+	case "tcp6", "udp6", "ip6":
+		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index)
+	default:
+		return errors.New("unknown network ", network)
+	}
 }
