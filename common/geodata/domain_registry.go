@@ -1,13 +1,17 @@
 package geodata
 
-type DomainRegistry struct{}
+type DomainRegistry struct {
+	factory DomainMatcherFactory
+}
 
 func (r *DomainRegistry) BuildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
-	return buildDomainMatcher(rules)
+	return r.factory.BuildMatcher(rules)
 }
 
 func newDomainRegistry() *DomainRegistry {
-	return &DomainRegistry{}
+	return &DomainRegistry{
+		factory: newDomainMatcherFactory(),
+	}
 }
 
 var DomainReg = newDomainRegistry()
