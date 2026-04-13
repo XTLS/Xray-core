@@ -163,6 +163,7 @@ func TestSniffingConfig_Build(t *testing.T) {
 		Enabled:         true,
 		DestOverride:    StringList{"http", "tls"},
 		DomainsExcluded: StringList{"full:api.example.com", "domain:blocked.example", "regexp:^test[0-9]+\\.internal$"},
+		IPsExcluded:     StringList{"192.168.1.1", "2001:db8::/32"},
 		MetadataOnly:    true,
 		RouteOnly:       true,
 	}
@@ -181,6 +182,9 @@ func TestSniffingConfig_Build(t *testing.T) {
 	if len(built.DomainsExcluded) != 3 {
 		t.Fatalf("SniffingConfig.Build() produced %d domain rules", len(built.DomainsExcluded))
 	}
+	if len(built.IpsExcluded) != 2 {
+		t.Fatalf("SniffingConfig.Build() produced %d ip rules", len(built.IpsExcluded))
+	}
 
 	want := []struct {
 		ruleType geodata.Domain_Type
@@ -197,6 +201,23 @@ func TestSniffingConfig_Build(t *testing.T) {
 		}
 		if rule.Type != tc.ruleType || rule.Value != tc.value {
 			t.Fatalf("SniffingConfig.Build() produced wrong rule at index %d: got (%v, %q), want (%v, %q)", i, rule.Type, rule.Value, tc.ruleType, tc.value)
+		}
+	}
+
+	wantIPs := []struct {
+		ip     []byte
+		prefix uint32
+	}{
+		{ip: []byte(net.ParseAddress("192.168.1.1").IP()), prefix: 32},
+		{ip: []byte(net.ParseAddress("2001:db8::").IP()), prefix: 32},
+	}
+	for i, tc := range wantIPs {
+		rule := built.IpsExcluded[i].GetCustom()
+		if rule == nil {
+			t.Fatalf("SniffingConfig.Build() produced a non-custom ip rule at index %d", i)
+		}
+		if !reflect.DeepEqual(rule.Ip, tc.ip) || rule.Prefix != tc.prefix {
+			t.Fatalf("SniffingConfig.Build() produced wrong ip rule at index %d: got (%v, %d), want (%v, %d)", i, rule.Ip, rule.Prefix, tc.ip, tc.prefix)
 		}
 	}
 }

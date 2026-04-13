@@ -55,37 +55,44 @@ type SniffingConfig struct {
 	Enabled         bool       `json:"enabled"`
 	DestOverride    StringList `json:"destOverride"`
 	DomainsExcluded StringList `json:"domainsExcluded"`
+	IPsExcluded     StringList `json:"ipsExcluded"`
 	MetadataOnly    bool       `json:"metadataOnly"`
 	RouteOnly       bool       `json:"routeOnly"`
 }
 
 // Build implements Buildable.
 func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
-	var p []string
+	var protocols []string
 	for _, protocol := range c.DestOverride {
 		switch strings.ToLower(protocol) {
 		case "http":
-			p = append(p, "http")
+			protocols = append(protocols, "http")
 		case "tls", "https", "ssl":
-			p = append(p, "tls")
+			protocols = append(protocols, "tls")
 		case "quic":
-			p = append(p, "quic")
+			protocols = append(protocols, "quic")
 		case "fakedns", "fakedns+others":
-			p = append(p, "fakedns")
+			protocols = append(protocols, "fakedns")
 		default:
 			return nil, errors.New("unknown protocol: ", protocol)
 		}
 	}
 
-	d, err := geodata.ParseDomainRules(c.DomainsExcluded, geodata.Domain_Substr)
+	domains, err := geodata.ParseDomainRules(c.DomainsExcluded, geodata.Domain_Substr)
+	if err != nil {
+		return nil, err
+	}
+
+	ips, err := geodata.ParseIPRules(c.IPsExcluded)
 	if err != nil {
 		return nil, err
 	}
 
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
-		DestinationOverride: p,
-		DomainsExcluded:     d,
+		DestinationOverride: protocols,
+		DomainsExcluded:     domains,
+		IpsExcluded:         ips,
 		MetadataOnly:        c.MetadataOnly,
 		RouteOnly:           c.RouteOnly,
 	}, nil

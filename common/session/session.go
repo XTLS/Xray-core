@@ -80,6 +80,7 @@ type Outbound struct {
 // SniffingRequest controls the behavior of content sniffing. They are from inbound config. Read-only
 type SniffingRequest struct {
 	ExcludeForDomain               geodata.DomainMatcher
+	ExcludeForIP                   geodata.IPMatcher
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool
