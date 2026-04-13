@@ -118,5 +118,5 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 }
 
 func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, DialKCP))
+	common.Must(internet.RegisterTransportDialer(ProtocolName, DialKCP))
 }
