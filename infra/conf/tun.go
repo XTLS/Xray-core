@@ -24,25 +24,21 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel:        v.UserLevel,
 		AutoRoutingTable: v.AutoRoutingTable,
 	}
-
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
 	}
-
-	if v.Name == "" {
-		config.Name = "xray0"
-	}
-
-	if len(v.MTU) == 1 {
-		v.MTU = append(v.MTU, v.MTU[0])
-	}
-	if len(v.MTU) == 0 {
-		v.MTU = []uint32{1500, 1280}
-	}
-
-	if len(config.AutoRoutingTable) > 0 && v.AutoOutboundsInterface == nil {
+	if len(v.AutoRoutingTable) > 0 && v.AutoOutboundsInterface == nil {
 		config.AutoOutboundsInterface = "auto"
 	}
 
+	if config.Name == "" {
+		config.Name = "xray0"
+	}
+	if len(config.MTU) == 0 {
+		config.MTU = []uint32{1500, 1280}
+	}
+	if len(config.MTU) == 1 {
+		config.MTU = append(config.MTU, config.MTU[0])
+	}
 	return config, nil
 }
