@@ -421,8 +421,13 @@ func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	return pktConn, nil
 }
 
+type dialerConf struct {
+	net.Destination
+	*internet.MemoryStreamConfig
+}
+
 type clientManager struct {
-	m     map[string]*client
+	m     map[dialerConf]*client
 	mutex sync.Mutex
 }
 
@@ -435,7 +440,8 @@ func (m *clientManager) clean() {
 	}
 }
 
-var manger *clientManager
+var manager *clientManager
+var initmanager sync.Once
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
@@ -444,13 +450,24 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
-	addr := dest.NetAddr()
 	config := streamSettings.ProtocolSettings.(*Config)
 
-	manger.mutex.Lock()
-	c, ok := manger.m[addr]
+	initmanager.Do(func() {
+		manager = &clientManager{
+			m: make(map[dialerConf]*client),
+		}
+		(&task.Periodic{
+			Interval: 30 * time.Second,
+			Execute: func() error {
+				manager.clean()
+				return nil
+			},
+		}).Start()
+	})
+	manager.mutex.Lock()
+	dest.Network = net.Network_UDP
+	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
 	if !ok {
-		dest.Network = net.Network_UDP
 		c = &client{
 			ctx:            ctx,
 			dest:           dest,
@@ -460,28 +477,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			udpmaskManager: streamSettings.UdpmaskManager,
 			quicParams:     streamSettings.QuicParams,
 		}
-		manger.m[addr] = c
+		manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}] = c
 	}
 	c.setCtx(ctx)
-	manger.mutex.Unlock()
+	manager.mutex.Unlock()
 
 	if requireDatagram {
 		return c.udp()
 	}
 	return c.tcp()
-}
-
-func init() {
-	manger = &clientManager{
-		m: make(map[string]*client),
-	}
-	(&task.Periodic{
-		Interval: 30 * time.Second,
-		Execute: func() error {
-			manger.clean()
-			return nil
-		},
-	}).Start()
 }
 
 func init() {

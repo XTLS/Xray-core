@@ -94,6 +94,12 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			useremail = inbound.User.Email
 			userlevel = inbound.User.Level
 		}
+	} else {
+		// get a dummy user
+		inbound.User = &protocol.MemoryUser{
+			Email: "",
+			Level: 0,
+		}
 	}
 
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
