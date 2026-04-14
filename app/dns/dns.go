@@ -288,6 +288,7 @@ func (s *DNS) sortClients(domain string) []*Client {
 		clientNames = append(clientNames, client.Name())
 		hasMatch = true
 		if client.finalQuery {
+			logDecision(s.ctx, domain, domainRules, clientNames)
 			return clients
 		}
 	}
@@ -302,17 +303,13 @@ func (s *DNS) sortClients(domain string) []*Client {
 			clients = append(clients, client)
 			clientNames = append(clientNames, client.Name())
 			if client.finalQuery {
+				logDecision(s.ctx, domain, domainRules, clientNames)
 				return clients
 			}
 		}
 	}
 
-	if len(domainRules) > 0 {
-		errors.LogDebug(s.ctx, "domain ", domain, " matches following rules: ", domainRules)
-	}
-	if len(clientNames) > 0 {
-		errors.LogDebug(s.ctx, "domain ", domain, " will use DNS in order: ", clientNames)
-	}
+	logDecision(s.ctx, domain, domainRules, clientNames)
 
 	if len(clients) == 0 {
 		if len(s.clients) > 0 {
@@ -325,6 +322,15 @@ func (s *DNS) sortClients(domain string) []*Client {
 	}
 
 	return clients
+}
+
+func logDecision(ctx context.Context, domain string, domainRules []string, clientNames []string) {
+	if len(domainRules) > 0 {
+		errors.LogDebug(ctx, "domain ", domain, " matches following rules: ", domainRules)
+	}
+	if len(clientNames) > 0 {
+		errors.LogDebug(ctx, "domain ", domain, " will use DNS in order: ", clientNames)
+	}
 }
 
 func mergeQueryErrors(domain string, errs []error) error {
