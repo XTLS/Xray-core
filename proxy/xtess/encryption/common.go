@@ -33,6 +33,25 @@ type CommonConn struct {
 	// - AEAD/PeerAEAD are initialized during handshake; PeerAEAD is lazily initialized on first Read.
 	// - PreWrite (if non-nil) is written once before the first encrypted application data frame.
 	//
+	// Keying & KDF:
+	// - UnitedKey is assembled by the handshake layer (it is not derived inside CommonConn).
+	//   In the current implementation it is a concatenation of PFS key material and NFS key material.
+	// - AEAD keys are derived from UnitedKey using BLAKE3 DeriveKey:
+	//   blake3.DeriveKey(out32, context, UnitedKey). The context is per-direction/per-epoch:
+	//   - local->peer: the first AEAD is derived from handshake context; subsequent epochs may re-key
+	//     using the current record header as context when nonce reaches MaxNonce.
+	//   - peer->local: derived from peer-provided context (initialized lazily on first Read).
+	//
+	// Rekey (nonce max):
+	// - AEAD/PeerAEAD use an internal 96-bit nonce that is incremented for each Seal/Open.
+	// - When the nonce reaches MaxNonce, the implementation derives a fresh AEAD instance and
+	//   resets nonce state by calling NewAEAD with a per-epoch context.
+	//
+	// Security boundary:
+	// - CommonConn provides confidentiality and integrity for framed application payloads on top of
+	//   the underlying transport. It does not authenticate the peer by itself; peer authentication
+	//   and key agreement are performed by the handshake layer that constructs UnitedKey.
+	//
 	// Fields:
 	// - UseAES: whether to use AES-GCM (true) or ChaCha20-Poly1305 (false) for AEAD.
 	// - Client: optional reference to client instance for session resumption bookkeeping.

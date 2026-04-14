@@ -137,7 +137,7 @@ func (c *XTessInboundConfig) Build() (proto.Message, error) {
 		return nil, errors.New(`XTESS settings: unsupported "decryption": ` + config.Decryption)
 	}
 
-	if config.Decryption != "none" && c.Fallbacks != nil {
+	if config.Decryption != "none" && len(c.Fallbacks) > 0 {
 		return nil, errors.New(`XTESS settings: "fallbacks" can not be used together with "decryption"`)
 	}
 
