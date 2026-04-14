@@ -22,6 +22,11 @@ import (
 
 const xtessEncryptionPrefix = "mlkem768x25519plus"
 
+type xtessUserJSON struct {
+	protocol.User
+	xtess.Account
+}
+
 type XTessInboundFallback struct {
 	Name string          `json:"name"`
 	Alpn string          `json:"alpn"`
@@ -49,14 +54,15 @@ func (c *XTessInboundConfig) Build() (proto.Message, error) {
 		return nil, errors.New(`XTESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 	}
 	for idx, rawUser := range c.Clients {
+		var ua xtessUserJSON
+		if err := json.Unmarshal(rawUser, &ua); err != nil {
+			return nil, errors.New(`XTESS clients: invalid user`).Base(err)
+		}
+
 		user := new(protocol.User)
-		if err := json.Unmarshal(rawUser, user); err != nil {
-			return nil, errors.New(`XTESS clients: invalid user`).Base(err)
-		}
+		*user = ua.User
 		account := new(xtess.Account)
-		if err := json.Unmarshal(rawUser, account); err != nil {
-			return nil, errors.New(`XTESS clients: invalid user`).Base(err)
-		}
+		*account = ua.Account
 
 		u, err := uuid.ParseString(account.Id)
 		if err != nil {
@@ -238,26 +244,29 @@ func (c *XTessOutboundConfig) Build() (proto.Message, error) {
 			Port:    uint32(rec.Port),
 		}
 		for _, rawUser := range rec.Users {
-			user := new(protocol.User)
 			if c.Address != nil {
+				user := new(protocol.User)
 				user.Level = c.Level
 				user.Email = c.Email
-			} else {
-				if err := json.Unmarshal(rawUser, user); err != nil {
-					return nil, errors.New(`XTESS users: invalid user`).Base(err)
-				}
-			}
-			account := new(xtess.Account)
-			if c.Address != nil {
+				account := new(xtess.Account)
 				account.Id = c.Id
 				account.Flow = c.Flow
 				account.Encryption = c.Encryption
 				account.Reverse = c.Reverse
-			} else {
-				if err := json.Unmarshal(rawUser, account); err != nil {
-					return nil, errors.New(`XTESS users: invalid user`).Base(err)
-				}
+				user.Account = serial.ToTypedMessage(account)
+				spec.User = user
+				continue
 			}
+
+			var ua xtessUserJSON
+			if err := json.Unmarshal(rawUser, &ua); err != nil {
+				return nil, errors.New(`XTESS users: invalid user`).Base(err)
+			}
+
+			user := new(protocol.User)
+			*user = ua.User
+			account := new(xtess.Account)
+			*account = ua.Account
 
 			u, err := uuid.ParseString(account.Id)
 			if err != nil {
