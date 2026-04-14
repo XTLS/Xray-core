@@ -89,35 +89,6 @@ type AccessRecord struct {
 	finished atomic.Bool
 }
 
-var (
-	legacyManager     = NewManager()
-	activeManagerMu   sync.RWMutex
-	activeManagerInst *Manager
-)
-
-func currentManager() *Manager {
-	activeManagerMu.RLock()
-	manager := activeManagerInst
-	activeManagerMu.RUnlock()
-	if manager != nil {
-		return manager
-	}
-	return legacyManager
-}
-
-func setActiveManager(manager *Manager) {
-	activeManagerMu.Lock()
-	activeManagerInst = manager
-	activeManagerMu.Unlock()
-}
-
-func clearActiveManager(manager *Manager) {
-	activeManagerMu.Lock()
-	if activeManagerInst == manager {
-		activeManagerInst = nil
-	}
-	activeManagerMu.Unlock()
-}
 
 // NewManager creates an empty tracker manager.
 func NewManager() *Manager {
@@ -306,9 +277,7 @@ func WrapAccessLink(link *transport.Link, record *AccessRecord) *transport.Link 
 	return link
 }
 
-// New creates a Tracker registered in the active manager for backward
-// compatibility with the package-level API. Production components should
-// acquire a Manager through Xray features and call NewTracker on it directly.
+// New creates a new Tracker with its own Manager.
 func New() *Tracker {
 	return NewManager().NewTracker()
 }
@@ -559,7 +528,7 @@ func (c *TrackedPacketConn) WritePacket(buffer *B.Buffer, destination M.Socksadd
 	n := buffer.Len()
 	err := c.PacketConn.WritePacket(buffer, destination)
 	if err == nil && n > 0 {
-		atomic.AddInt64(&c.entry.downlink, int64(buffer.Len()))
+		atomic.AddInt64(&c.entry.downlink, int64(n))
 		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
 	}
 	return err
