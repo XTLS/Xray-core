@@ -52,6 +52,9 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 		balancer.InjectContext(ctx)
 		r.balancers[rule.Tag] = balancer
 	}
+	if err := r.resolveBalancerFallbacks(); err != nil {
+		return err
+	}
 
 	r.rules = make([]*Rule, 0, len(config.Rule))
 	for _, rule := range config.Rule {
@@ -146,6 +149,9 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 		balancer.InjectContext(r.ctx)
 		r.balancers[rule.Tag] = balancer
 	}
+	if err := r.resolveBalancerFallbacks(); err != nil {
+		return err
+	}
 
 	startIdx := len(r.rules)
 	closeNewWebhooks := func() {
@@ -207,6 +213,47 @@ func (r *Router) RuleExists(tag string) bool {
 		}
 	}
 	return false
+}
+
+func (r *Router) resolveBalancerFallbacks() error {
+	for _, balancer := range r.balancers {
+		balancer.fallbackBalancer = nil
+		if balancer.fallbackBalancerTag == "" {
+			continue
+		}
+		fallbackBalancer, found := r.balancers[balancer.fallbackBalancerTag]
+		if !found {
+			return errors.New("fallback balancer ", balancer.fallbackBalancerTag, " not found for balancer ", balancer.tag)
+		}
+		balancer.fallbackBalancer = fallbackBalancer
+	}
+
+	visited := make(map[string]bool)
+	inStack := make(map[string]bool)
+	var walk func(string) error
+	walk = func(tag string) error {
+		if inStack[tag] {
+			return errors.New("fallback balancer cycle detected at ", tag)
+		}
+		if visited[tag] {
+			return nil
+		}
+		visited[tag] = true
+		inStack[tag] = true
+		if balancer := r.balancers[tag]; balancer != nil && balancer.fallbackBalancerTag != "" {
+			if err := walk(balancer.fallbackBalancerTag); err != nil {
+				return err
+			}
+		}
+		delete(inStack, tag)
+		return nil
+	}
+	for tag := range r.balancers {
+		if err := walk(tag); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RemoveRule implements routing.Router.

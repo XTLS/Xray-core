@@ -2,6 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 	_ "unsafe"
@@ -93,10 +94,11 @@ func TestRouterConfig(t *testing.T) {
 				DomainStrategy: router.Config_AsIs,
 				BalancingRule: []*router.BalancingRule{
 					{
-						Tag:              "b1",
-						OutboundSelector: []string{"test"},
-						Strategy:         "random",
-						FallbackTag:      "fall",
+						Tag:                 "b1",
+						OutboundSelector:    []string{"test"},
+						Strategy:            "random",
+						FallbackTag:         "fall",
+						FallbackOutboundTag: "fall",
 					},
 					{
 						Tag:              "b2",
@@ -118,7 +120,8 @@ func TestRouterConfig(t *testing.T) {
 							MaxRTT:    int64(time.Duration(1000) * time.Millisecond),
 							Tolerance: 0.5,
 						}),
-						FallbackTag: "fall",
+						FallbackTag:         "fall",
+						FallbackOutboundTag: "fall",
 					},
 				},
 				Rule: []*router.RoutingRule{
@@ -239,4 +242,55 @@ func TestRouterConfig(t *testing.T) {
 			},
 		},
 	})
+}
+func TestBalancingRuleBuildMapsLegacyFallbackTagToFallbackOutboundTag(t *testing.T) {
+	rule := &BalancingRule{
+		Tag:         "b1",
+		Selectors:   StringList{"test-"},
+		FallbackTag: "fall",
+	}
+
+	built, err := rule.Build()
+	if err != nil {
+		t.Fatalf("Build() failed: %v", err)
+	}
+	if built.FallbackTag != "fall" {
+		t.Fatalf("unexpected legacy fallbackTag: %q", built.FallbackTag)
+	}
+	if built.FallbackOutboundTag != "fall" {
+		t.Fatalf("unexpected fallbackOutboundTag: %q", built.FallbackOutboundTag)
+	}
+	if built.FallbackBalancerTag != "" {
+		t.Fatalf("unexpected fallbackBalancerTag: %q", built.FallbackBalancerTag)
+	}
+}
+
+func TestBalancingRuleBuildRejectsConflictingFallbackTargets(t *testing.T) {
+	rule := &BalancingRule{
+		Tag:                 "b1",
+		Selectors:           StringList{"test-"},
+		FallbackOutboundTag: "direct",
+		FallbackBalancerTag: "backup",
+	}
+
+	if _, err := rule.Build(); err == nil {
+		t.Fatal("expected conflicting fallback targets to fail")
+	} else if !strings.Contains(err.Error(), "fallbackOutboundTag") || !strings.Contains(err.Error(), "fallbackBalancerTag") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBalancingRuleBuildRejectsLegacyAndExplicitFallbackTargets(t *testing.T) {
+	rule := &BalancingRule{
+		Tag:                 "b1",
+		Selectors:           StringList{"test-"},
+		FallbackTag:         "legacy",
+		FallbackBalancerTag: "backup",
+	}
+
+	if _, err := rule.Build(); err == nil {
+		t.Fatal("expected legacy and explicit fallback targets to fail")
+	} else if !strings.Contains(err.Error(), "fallbackTag") || !strings.Contains(err.Error(), "fallbackBalancerTag") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

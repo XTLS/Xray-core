@@ -357,14 +357,16 @@ func (x *WebhookConfig) GetHeaders() map[string]string {
 }
 
 type BalancingRule struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Tag              string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	OutboundSelector []string               `protobuf:"bytes,2,rep,name=outbound_selector,json=outboundSelector,proto3" json:"outbound_selector,omitempty"`
-	Strategy         string                 `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
-	StrategySettings *serial.TypedMessage   `protobuf:"bytes,4,opt,name=strategy_settings,json=strategySettings,proto3" json:"strategy_settings,omitempty"`
-	FallbackTag      string                 `protobuf:"bytes,5,opt,name=fallback_tag,json=fallbackTag,proto3" json:"fallback_tag,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Tag                 string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	OutboundSelector    []string               `protobuf:"bytes,2,rep,name=outbound_selector,json=outboundSelector,proto3" json:"outbound_selector,omitempty"`
+	Strategy            string                 `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	StrategySettings    *serial.TypedMessage   `protobuf:"bytes,4,opt,name=strategy_settings,json=strategySettings,proto3" json:"strategy_settings,omitempty"`
+	FallbackTag         string                 `protobuf:"bytes,5,opt,name=fallback_tag,json=fallbackTag,proto3" json:"fallback_tag,omitempty"`
+	FallbackOutboundTag string                 `protobuf:"bytes,7,opt,name=fallback_outbound_tag,json=fallbackOutboundTag,proto3" json:"fallback_outbound_tag,omitempty"`
+	FallbackBalancerTag string                 `protobuf:"bytes,8,opt,name=fallback_balancer_tag,json=fallbackBalancerTag,proto3" json:"fallback_balancer_tag,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *BalancingRule) Reset() {
@@ -428,6 +430,20 @@ func (x *BalancingRule) GetStrategySettings() *serial.TypedMessage {
 func (x *BalancingRule) GetFallbackTag() string {
 	if x != nil {
 		return x.FallbackTag
+	}
+	return ""
+}
+
+func (x *BalancingRule) GetFallbackOutboundTag() string {
+	if x != nil {
+		return x.FallbackOutboundTag
+	}
+	return ""
+}
+
+func (x *BalancingRule) GetFallbackBalancerTag() string {
+	if x != nil {
+		return x.FallbackBalancerTag
 	}
 	return ""
 }
@@ -673,13 +689,15 @@ const file_app_router_config_proto_rawDesc = "" +
 	"\aheaders\x18\x03 \x03(\v2+.xray.app.router.WebhookConfig.HeadersEntryR\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdc\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x02\n" +
 	"\rBalancingRule\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12+\n" +
 	"\x11outbound_selector\x18\x02 \x03(\tR\x10outboundSelector\x12\x1a\n" +
 	"\bstrategy\x18\x03 \x01(\tR\bstrategy\x12M\n" +
 	"\x11strategy_settings\x18\x04 \x01(\v2 .xray.common.serial.TypedMessageR\x10strategySettings\x12!\n" +
-	"\ffallback_tag\x18\x05 \x01(\tR\vfallbackTag\"T\n" +
+	"\ffallback_tag\x18\x05 \x01(\tR\vfallbackTag\x122\n" +
+	"\x15fallback_outbound_tag\x18\a \x01(\tR\x13fallbackOutboundTag\x122\n" +
+	"\x15fallback_balancer_tag\x18\b \x01(\tR\x13fallbackBalancerTag\"T\n" +
 	"\x0eStrategyWeight\x12\x16\n" +
 	"\x06regexp\x18\x01 \x01(\bR\x06regexp\x12\x14\n" +
 	"\x05match\x18\x02 \x01(\tR\x05match\x12\x14\n" +

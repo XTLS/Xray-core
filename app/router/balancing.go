@@ -83,23 +83,35 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 }
 
 type Balancer struct {
-	selectors   []string
-	strategy    BalancingStrategy
-	ohm         outbound.Manager
-	fallbackTag string
+	tag                 string
+	selectors           []string
+	strategy            BalancingStrategy
+	ohm                 outbound.Manager
+	fallbackTag         string
+	fallbackOutboundTag string
+	fallbackBalancerTag string
+	fallbackBalancer    *Balancer
 
 	override override
 }
 
 // PickOutbound picks the tag of a outbound
 func (b *Balancer) PickOutbound() (string, error) {
+	return b.pickOutbound(make(map[string]bool))
+}
+
+func (b *Balancer) pickOutbound(visited map[string]bool) (string, error) {
+	if b.tag != "" {
+		if visited[b.tag] {
+			return "", errors.New("fallback balancer cycle detected at ", b.tag)
+		}
+		visited[b.tag] = true
+		defer delete(visited, b.tag)
+	}
+
 	candidates, err := b.SelectOutbounds()
 	if err != nil {
-		if b.fallbackTag != "" {
-			errors.LogInfo(context.Background(), "fallback to [", b.fallbackTag, "], due to error: ", err)
-			return b.fallbackTag, nil
-		}
-		return "", err
+		return b.pickFallback(visited, err)
 	}
 	var tag string
 	if o := b.override.Get(); o != "" {
@@ -108,14 +120,40 @@ func (b *Balancer) PickOutbound() (string, error) {
 		tag = b.strategy.PickOutbound(candidates)
 	}
 	if tag == "" {
-		if b.fallbackTag != "" {
-			errors.LogInfo(context.Background(), "fallback to [", b.fallbackTag, "], due to empty tag returned")
-			return b.fallbackTag, nil
-		}
-		// will use default handler
-		return "", errors.New("balancing strategy returns empty tag")
+		return b.pickFallback(visited, errors.New("balancing strategy returns empty tag"))
 	}
 	return tag, nil
+}
+
+func (b *Balancer) pickFallback(visited map[string]bool, cause error) (string, error) {
+	if name := b.fallbackName(); name != "" {
+		errors.LogInfo(context.Background(), "fallback to [", name, "], due to error: ", cause)
+	}
+
+	if b.fallbackOutboundTag != "" {
+		return b.fallbackOutboundTag, nil
+	}
+	if b.fallbackBalancerTag != "" {
+		if b.fallbackBalancer == nil {
+			return "", errors.New("fallback balancer ", b.fallbackBalancerTag, " not found")
+		}
+		return b.fallbackBalancer.pickOutbound(visited)
+	}
+	if b.fallbackTag != "" {
+		return b.fallbackTag, nil
+	}
+	return "", cause
+}
+
+func (b *Balancer) fallbackName() string {
+	switch {
+	case b.fallbackOutboundTag != "":
+		return b.fallbackOutboundTag
+	case b.fallbackBalancerTag != "":
+		return b.fallbackBalancerTag
+	default:
+		return b.fallbackTag
+	}
 }
 
 func (b *Balancer) InjectContext(ctx context.Context) {

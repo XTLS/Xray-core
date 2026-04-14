@@ -70,6 +70,8 @@ message BalancingRule {
   string strategy = 3;
   xray.common.serial.TypedMessage strategy_settings = 4;
   string fallback_tag = 5;
+  string fallback_outbound_tag = 7;
+  string fallback_balancer_tag = 8;
 }
 
 message StrategyWeight {

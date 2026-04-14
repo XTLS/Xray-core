@@ -122,17 +122,23 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 	switch strings.ToLower(br.Strategy) {
 	case "leastping":
 		return &Balancer{
-			selectors:   br.OutboundSelector,
-			strategy:    &LeastPingStrategy{},
-			fallbackTag: br.FallbackTag,
-			ohm:         ohm,
+			tag:                 br.Tag,
+			selectors:           br.OutboundSelector,
+			strategy:            &LeastPingStrategy{},
+			fallbackTag:         br.GetFallbackTag(),
+			fallbackOutboundTag: br.GetFallbackOutboundTag(),
+			fallbackBalancerTag: br.GetFallbackBalancerTag(),
+			ohm:                 ohm,
 		}, nil
 	case "roundrobin":
 		return &Balancer{
-			selectors:   br.OutboundSelector,
-			strategy:    &RoundRobinStrategy{FallbackTag: br.FallbackTag},
-			fallbackTag: br.FallbackTag,
-			ohm:         ohm,
+			tag:                 br.Tag,
+			selectors:           br.OutboundSelector,
+			strategy:            &RoundRobinStrategy{FallbackTag: firstNonEmpty(br.GetFallbackOutboundTag(), br.GetFallbackBalancerTag(), br.GetFallbackTag())},
+			fallbackTag:         br.GetFallbackTag(),
+			fallbackOutboundTag: br.GetFallbackOutboundTag(),
+			fallbackBalancerTag: br.GetFallbackBalancerTag(),
+			ohm:                 ohm,
 		}, nil
 	case "leastload":
 		i, err := br.StrategySettings.GetInstance()
@@ -145,21 +151,36 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 		}
 		leastLoadStrategy := NewLeastLoadStrategy(s)
 		return &Balancer{
-			selectors:   br.OutboundSelector,
-			ohm:         ohm,
-			fallbackTag: br.FallbackTag,
-			strategy:    leastLoadStrategy,
+			tag:                 br.Tag,
+			selectors:           br.OutboundSelector,
+			ohm:                 ohm,
+			fallbackTag:         br.GetFallbackTag(),
+			fallbackOutboundTag: br.GetFallbackOutboundTag(),
+			fallbackBalancerTag: br.GetFallbackBalancerTag(),
+			strategy:            leastLoadStrategy,
 		}, nil
 	case "random":
 		fallthrough
 	case "":
 		return &Balancer{
-			selectors:   br.OutboundSelector,
-			ohm:         ohm,
-			fallbackTag: br.FallbackTag,
-			strategy:    &RandomStrategy{FallbackTag: br.FallbackTag},
+			tag:                 br.Tag,
+			selectors:           br.OutboundSelector,
+			ohm:                 ohm,
+			fallbackTag:         br.GetFallbackTag(),
+			fallbackOutboundTag: br.GetFallbackOutboundTag(),
+			fallbackBalancerTag: br.GetFallbackBalancerTag(),
+			strategy:            &RandomStrategy{FallbackTag: firstNonEmpty(br.GetFallbackOutboundTag(), br.GetFallbackBalancerTag(), br.GetFallbackTag())},
 		}, nil
 	default:
 		return nil, errors.New("unrecognized balancer type")
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

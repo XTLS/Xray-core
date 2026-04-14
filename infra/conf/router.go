@@ -19,10 +19,12 @@ type StrategyConfig struct {
 }
 
 type BalancingRule struct {
-	Tag         string         `json:"tag"`
-	Selectors   StringList     `json:"selector"`
-	Strategy    StrategyConfig `json:"strategy"`
-	FallbackTag string         `json:"fallbackTag"`
+	Tag                 string         `json:"tag"`
+	Selectors           StringList     `json:"selector"`
+	Strategy            StrategyConfig `json:"strategy"`
+	FallbackTag         string         `json:"fallbackTag"`
+	FallbackOutboundTag string         `json:"fallbackOutboundTag"`
+	FallbackBalancerTag string         `json:"fallbackBalancerTag"`
 }
 
 // Build builds the balancing rule
@@ -32,6 +34,12 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	}
 	if len(r.Selectors) == 0 {
 		return nil, errors.New("empty selector list")
+	}
+	if r.FallbackTag != "" && (r.FallbackOutboundTag != "" || r.FallbackBalancerTag != "") {
+		return nil, errors.New("fallbackTag cannot be used together with fallbackOutboundTag or fallbackBalancerTag")
+	}
+	if r.FallbackOutboundTag != "" && r.FallbackBalancerTag != "" {
+		return nil, errors.New("fallbackOutboundTag and fallbackBalancerTag cannot both be set")
 	}
 
 	r.Strategy.Type = strings.ToLower(r.Strategy.Type)
@@ -59,12 +67,20 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 		}
 	}
 
+	fallbackTag := r.FallbackTag
+	fallbackOutboundTag := r.FallbackOutboundTag
+	if fallbackTag != "" {
+		fallbackOutboundTag = fallbackTag
+	}
+
 	return &router.BalancingRule{
-		Strategy:         r.Strategy.Type,
-		StrategySettings: serial.ToTypedMessage(ts),
-		FallbackTag:      r.FallbackTag,
-		OutboundSelector: r.Selectors,
-		Tag:              r.Tag,
+		Strategy:            r.Strategy.Type,
+		StrategySettings:    serial.ToTypedMessage(ts),
+		FallbackTag:         fallbackTag,
+		FallbackOutboundTag: fallbackOutboundTag,
+		FallbackBalancerTag: r.FallbackBalancerTag,
+		OutboundSelector:    r.Selectors,
+		Tag:                 r.Tag,
 	}, nil
 }
 
