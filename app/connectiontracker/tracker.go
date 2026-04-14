@@ -386,13 +386,7 @@ func (t *Tracker) Unregister(email string, id uint32) {
 	}
 	t.mu.Unlock()
 	if entry != nil {
-		t.manager.emit(WatchEvent{Connected: false, Info: ConnectionInfo{
-			ID:         id,
-			Email:      entry.Email,
-			InboundTag: entry.InboundTag,
-			Protocol:   entry.Protocol,
-			StartTime:  entry.StartTime,
-		}})
+		t.manager.emit(WatchEvent{Connected: false, Info: disconnectInfo(id, entry)})
 	}
 }
 
@@ -401,25 +395,17 @@ func (t *Tracker) CancelAll(email string) {
 	t.mu.Lock()
 	entries := t.conns[email]
 	delete(t.conns, email)
-
-	type closingConn struct {
-		id    uint32
-		entry *ConnEntry
-	}
-	closing := make([]closingConn, 0, len(entries))
-
-	for id, entry := range entries {
+	for id := range entries {
 		delete(t.byID, id)
-		closing = append(closing, closingConn{id: id, entry: entry})
 	}
 	t.mu.Unlock()
 
-	for _, c := range closing {
+	for id, entry := range entries {
 		t.manager.emit(WatchEvent{
 			Connected: false,
-			Info:      disconnectInfo(c.id, c.entry),
+			Info:      disconnectInfo(id, entry),
 		})
-		c.entry.Cancel()
+		entry.Cancel()
 	}
 }
 
@@ -462,16 +448,10 @@ func (t *Tracker) ListConnections() []ConnectionInfo {
 	t.mu.Lock()
 	result := make([]ConnectionInfo, 0, len(t.byID))
 	for id, entry := range t.byID {
-		result = append(result, ConnectionInfo{
-			ID:           id,
-			Email:        entry.Email,
-			InboundTag:   entry.InboundTag,
-			Protocol:     entry.Protocol,
-			StartTime:    entry.StartTime,
-			LastActivity: time.Unix(0, atomic.LoadInt64(&entry.lastActivity)),
-			Uplink:       atomic.LoadInt64(&entry.uplink),
-			Downlink:     atomic.LoadInt64(&entry.downlink),
-		})
+		info := disconnectInfo(id, entry)
+		info.Uplink = atomic.LoadInt64(&entry.uplink)
+		info.Downlink = atomic.LoadInt64(&entry.downlink)
+		result = append(result, info)
 	}
 	t.mu.Unlock()
 	return result
@@ -484,11 +464,23 @@ type TrackedConn struct {
 	entry *ConnEntry
 }
 
+func (c *TrackedConn) updateActivity(uplink, downlink int64) {
+	now := time.Now().UnixNano()
+	if uplink > 0 {
+		atomic.AddInt64(&c.entry.uplink, uplink)
+	}
+	if downlink > 0 {
+		atomic.AddInt64(&c.entry.downlink, downlink)
+	}
+	if uplink > 0 || downlink > 0 {
+		atomic.StoreInt64(&c.entry.lastActivity, now)
+	}
+}
+
 func (c *TrackedConn) Read(b []byte) (int, error) {
 	n, err := c.Connection.Read(b)
 	if n > 0 {
-		atomic.AddInt64(&c.entry.uplink, int64(n))
-		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+		c.updateActivity(int64(n), 0)
 	}
 	return n, err
 }
@@ -496,8 +488,7 @@ func (c *TrackedConn) Read(b []byte) (int, error) {
 func (c *TrackedConn) Write(b []byte) (int, error) {
 	n, err := c.Connection.Write(b)
 	if n > 0 {
-		atomic.AddInt64(&c.entry.downlink, int64(n))
-		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+		c.updateActivity(0, int64(n))
 	}
 	return n, err
 }
@@ -515,11 +506,21 @@ type TrackedPacketConn struct {
 	entry *ConnEntry
 }
 
+func (c *TrackedPacketConn) updateActivity(uplink, downlink int64) {
+	now := time.Now().UnixNano()
+	if uplink > 0 {
+		atomic.AddInt64(&c.entry.uplink, uplink)
+	}
+	if downlink > 0 {
+		atomic.AddInt64(&c.entry.downlink, downlink)
+	}
+	atomic.StoreInt64(&c.entry.lastActivity, now)
+}
+
 func (c *TrackedPacketConn) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 	addr, err := c.PacketConn.ReadPacket(buffer)
 	if err == nil && buffer.Len() > 0 {
-		atomic.AddInt64(&c.entry.uplink, int64(buffer.Len()))
-		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+		c.updateActivity(int64(buffer.Len()), 0)
 	}
 	return addr, err
 }
@@ -528,8 +529,7 @@ func (c *TrackedPacketConn) WritePacket(buffer *B.Buffer, destination M.Socksadd
 	n := buffer.Len()
 	err := c.PacketConn.WritePacket(buffer, destination)
 	if err == nil && n > 0 {
-		atomic.AddInt64(&c.entry.downlink, int64(n))
-		atomic.StoreInt64(&c.entry.lastActivity, time.Now().UnixNano())
+		c.updateActivity(0, int64(n))
 	}
 	return err
 }
