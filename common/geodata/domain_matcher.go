@@ -95,48 +95,43 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 		matchers: make([]strmatcher.MatcherGroup, 0, len(rules)),
 		values:   make([]uint32, 0, len(rules)),
 	}
-	custom := strmatcher.NewLinearValueMatcher()
-	var idx uint32
-	for _, r := range rules {
+	for i, r := range rules {
 		switch v := r.Value.(type) {
 		case *DomainRule_Custom:
 			m, err := parseDomain(v.Custom)
 			if err != nil {
 				return nil, err
 			}
-			custom.Add(m, 0)
+			if compact.custom == nil {
+				compact.custom = strmatcher.NewLinearValueMatcher()
+			}
+			compact.custom.Add(m, uint32(i))
 		case *DomainRule_Geosite:
 			m, err := f.getOrCreateFrom(v.Geosite)
 			if err != nil {
 				return nil, err
 			}
 			compact.matchers = append(compact.matchers, m)
-			compact.values = append(compact.values, idx)
-			idx++
+			compact.values = append(compact.values, uint32(i))
 		default:
 			panic("unknown domain rule type")
 		}
-	}
-	if len(compact.matchers) != len(rules) {
-		compact.matchers = append(compact.matchers, custom)
-		compact.values = append(compact.values, idx+1)
 	}
 	return compact, nil
 }
 
 type CompactDomainMatcher struct {
+	custom   strmatcher.ValueMatcher
 	matchers []strmatcher.MatcherGroup
 	values   []uint32
 }
 
-func (c *CompactDomainMatcher) Add(matcher strmatcher.MatcherGroup, value uint32) {
-	c.matchers = append(c.matchers, matcher)
-	c.values = append(c.values, value)
-}
-
 // Match implements DomainMatcher.
 func (c *CompactDomainMatcher) Match(input string) []uint32 {
-	result := make([]uint32, 0)
+	var result []uint32
+	if c.custom != nil {
+		result = append(result, c.custom.Match(input)...)
+	}
 	for i, m := range c.matchers {
 		if m.MatchAny(input) {
 			result = append(result, c.values[i])
@@ -147,6 +142,9 @@ func (c *CompactDomainMatcher) Match(input string) []uint32 {
 
 // MatchAny implements DomainMatcher.
 func (c *CompactDomainMatcher) MatchAny(input string) bool {
+	if c.custom != nil && c.custom.MatchAny(input) {
+		return true
+	}
 	for _, m := range c.matchers {
 		if m.MatchAny(input) {
 			return true
