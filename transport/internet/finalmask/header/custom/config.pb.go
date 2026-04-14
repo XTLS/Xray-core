@@ -511,6 +511,7 @@ type UDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
 	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
+	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -559,6 +560,13 @@ func (x *UDPConfig) GetServer() []*UDPItem {
 	return nil
 }
 
+func (x *UDPConfig) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
 var File_transport_internet_finalmask_header_custom_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" +
@@ -597,10 +605,11 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\x06packet\x18\x04 \x01(\fR\x06packet\x12\x12\n" +
 	"\x04save\x18\x05 \x01(\tR\x04save\x12\x10\n" +
 	"\x03var\x18\x06 \x01(\tR\x03var\x12I\n" +
-	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xaf\x01\n" +
+	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xc3\x01\n" +
 	"\tUDPConfig\x12P\n" +
 	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
-	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06serverB\xaf\x01\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04modeB\xaf\x01\n" +
 	"3com.xray.transport.internet.finalmask.header.customP\x01ZDgithub.com/xtls/xray-core/transport/internet/finalmask/header/custom\xaa\x02/Xray.Transport.Internet.Finalmask.Header.Customb\x06proto3"
 
 var (

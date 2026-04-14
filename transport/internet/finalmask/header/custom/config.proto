@@ -56,4 +56,5 @@ message UDPItem {
 message UDPConfig {
     repeated UDPItem client = 1;
     repeated UDPItem server = 2;
+    string mode = 3;
 }

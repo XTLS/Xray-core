@@ -47,6 +47,14 @@ type layerMaskTcp struct {
 	mask finalmask.Tcpmask
 }
 
+type failingWrapMask struct{}
+
+func (failingWrapMask) TCP() {}
+func (f failingWrapMask) WrapConnClient(raw net.Conn) (net.Conn, error) { return raw, nil }
+func (f failingWrapMask) WrapConnServer(raw net.Conn) (net.Conn, error) {
+	return nil, io.ErrClosedPipe
+}
+
 func TestConnReadWrite(t *testing.T) {
 	cases := []layerMaskTcp{
 		{
@@ -246,4 +254,64 @@ func TestTCPcustomClientRejectsMismatchedServerSequence(t *testing.T) {
 	if ne, ok := readErr.(net.Error); !ok || !ne.Timeout() {
 		t.Fatalf("expected server timeout after client auth failure, got %v", readErr)
 	}
+}
+
+func TestTCPWrapListenerRejectsImmediateWrapErrors(t *testing.T) {
+	clientManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{failingWrapMask{}})
+	serverManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{failingWrapMask{}})
+
+	rawLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rawLn.Close()
+
+	ln, err := serverManager.WrapListener(rawLn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	accepted := make(chan struct {
+		conn net.Conn
+		err  error
+	}, 1)
+	go func() {
+		conn, err := ln.Accept()
+		accepted <- struct {
+			conn net.Conn
+			err  error
+		}{conn: conn, err: err}
+	}()
+
+	clientRaw, err := net.Dial("tcp", rawLn.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientRaw.Close()
+
+	client, err := clientManager.WrapConnClient(clientRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = client.SetDeadline(time.Now().Add(time.Second))
+
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := client.Write([]byte("payload"))
+		writeErr <- err
+	}()
+
+	result := <-accepted
+	if result.err == nil {
+		if result.conn != nil {
+			result.conn.Close()
+		}
+		t.Fatal("expected wrapped listener accept to fail")
+	}
+	if result.conn != nil {
+		result.conn.Close()
+		t.Fatalf("expected no raw conn on wrapped listener failure, got %T", result.conn)
+	}
+	<-writeErr
 }

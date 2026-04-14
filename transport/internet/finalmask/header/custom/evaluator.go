@@ -398,9 +398,19 @@ func loadMetadata(dst map[string]evalValue, prefix string, addr net.Addr) {
 func loadIPPortMetadata(dst map[string]evalValue, prefix string, ip net.IP, port int) {
 	portValue := uint64(port)
 	dst[prefix+"_port"] = evalValue{u64: &portValue}
+	if prefix == "remote" {
+		dst["src_port_u16"] = evalValue{u64: &portValue}
+	} else if prefix == "local" {
+		dst["dst_port_u16"] = evalValue{u64: &portValue}
+	}
 
 	if ip4 := ip.To4(); ip4 != nil {
 		ipValue := uint64(binary.BigEndian.Uint32(ip4))
 		dst[prefix+"_ip4_u32"] = evalValue{u64: &ipValue}
+		if prefix == "remote" {
+			dst["src_ip4_u32"] = evalValue{u64: &ipValue}
+		} else if prefix == "local" {
+			dst["dst_ip4_u32"] = evalValue{u64: &ipValue}
+		}
 	}
 }
