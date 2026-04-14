@@ -37,12 +37,11 @@ func (*Service) Type() interface{} {
 	return FeatureType()
 }
 
-func (*Service) Start() error {
+func (s *Service) Start() error {
 	return nil
 }
 
 func (s *Service) Close() error {
-	clearActiveManager(s.manager)
 	return s.manager.Close()
 }
 
