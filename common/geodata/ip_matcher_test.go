@@ -2,6 +2,7 @@ package geodata
 
 import (
 	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -279,6 +280,9 @@ func TestIPMatcherFilterIPs(t *testing.T) {
 }
 
 func TestIPMatcher4CN(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geoip.dat")); err != nil {
+		t.Skip("geoip.dat not found")
+	}
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
 	matcher := buildIPMatcher("geoip:cn")
@@ -289,6 +293,9 @@ func TestIPMatcher4CN(t *testing.T) {
 }
 
 func TestIPMatcher6US(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geoip.dat")); err != nil {
+		t.Skip("geoip.dat not found")
+	}
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
 	matcher := buildIPMatcher("geoip:us")
@@ -299,6 +306,9 @@ func TestIPMatcher6US(t *testing.T) {
 }
 
 func BenchmarkIPMatcher4CN(b *testing.B) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geoip.dat")); err != nil {
+		b.Skip("geoip.dat not found")
+	}
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
 	matcher := buildIPMatcher("geoip:cn")
@@ -312,6 +322,9 @@ func BenchmarkIPMatcher4CN(b *testing.B) {
 }
 
 func BenchmarkIPMatcher6US(b *testing.B) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geoip.dat")); err != nil {
+		b.Skip("geoip.dat not found")
+	}
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
 	matcher := buildIPMatcher("geoip:us")
