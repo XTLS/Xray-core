@@ -1,0 +1,57 @@
+{
+  "log": {
+    "loglevel": "debug"
+  },
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": "127.0.0.1",
+      "port": 20809,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "xtess-out",
+      "protocol": "xtess",
+      "settings": {
+        "vnext": [
+          {
+            "address": "127.0.0.1",
+            "port": 22345,
+            "users": [
+              {
+                "id": "66ad4540-b58c-4ad2-9926-ea63445a9b57",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp"
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "socks-in"
+        ],
+        "outboundTag": "xtess-out"
+      }
+    ]
+  }
+}
+

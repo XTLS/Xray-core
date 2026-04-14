@@ -1,6 +1,7 @@
 package router_test
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -305,6 +306,9 @@ func TestRoutingRule(t *testing.T) {
 }
 
 func TestChinaSites(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geosite.dat")); err != nil {
+		t.Skip("geosite.dat not found")
+	}
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	rules, err := geodata.ParseDomainRules([]string{"geosite:cn"}, geodata.Domain_Substr)
 	common.Must(err)
@@ -348,6 +352,9 @@ func TestChinaSites(t *testing.T) {
 }
 
 func BenchmarkMphDomainMatcher(b *testing.B) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geosite.dat")); err != nil {
+		b.Skip("geosite.dat not found")
+	}
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	rules, err := geodata.ParseDomainRules([]string{"geosite:cn"}, geodata.Domain_Substr)
 	common.Must(err)
@@ -391,6 +398,9 @@ func BenchmarkMphDomainMatcher(b *testing.B) {
 }
 
 func BenchmarkMultiGeoIPMatcher(b *testing.B) {
+	if _, err := os.Stat(filepath.Join("..", "..", "resources", "geoip.dat")); err != nil {
+		b.Skip("geoip.dat not found")
+	}
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	rules, err := geodata.ParseIPRules([]string{"geoip:cn", "geoip:jp", "geoip:ca", "geoip:us"})
 	common.Must(err)

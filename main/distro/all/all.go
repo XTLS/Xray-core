@@ -47,6 +47,8 @@ import (
 	_ "github.com/xtls/xray-core/proxy/vless/outbound"
 	_ "github.com/xtls/xray-core/proxy/vmess/inbound"
 	_ "github.com/xtls/xray-core/proxy/vmess/outbound"
+	_ "github.com/xtls/xray-core/proxy/xtess/inbound"
+	_ "github.com/xtls/xray-core/proxy/xtess/outbound"
 	_ "github.com/xtls/xray-core/proxy/wireguard"
 
 	// Transports
