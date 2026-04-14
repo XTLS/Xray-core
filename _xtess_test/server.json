@@ -1,0 +1,39 @@
+{
+  "log": {
+    "loglevel": "debug"
+  },
+  "inbounds": [
+    {
+      "tag": "xtess-in",
+      "listen": "127.0.0.1",
+      "port": 12345,
+      "protocol": "xtess",
+      "settings": {
+        "clients": [
+          {
+            "id": "66ad4540-b58c-4ad2-9926-ea63445a9b57",
+            "flow": "none"
+          }
+        ],
+        "decryption": "none",
+        "flow": "none"
+      },
+      "streamSettings": {
+        "network": "tcp"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ]
+}
+
