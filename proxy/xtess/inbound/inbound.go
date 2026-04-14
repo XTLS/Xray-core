@@ -95,7 +95,10 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator xtess.Val
 		s := strings.Split(config.Decryption, ".")
 		var nfsSKeysBytes [][]byte
 		for _, r := range s {
-			b, _ := base64.RawURLEncoding.DecodeString(r)
+			b, err := base64.RawURLEncoding.DecodeString(r)
+			if err != nil {
+				return nil, errors.New("invalid base64 in decryption config").Base(err).AtError()
+			}
 			nfsSKeysBytes = append(nfsSKeysBytes, b)
 		}
 		handler.decryption = &encryption.ServerInstance{}

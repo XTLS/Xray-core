@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const xtessEncryptionPrefix = "mlkem768x25519plus"
+
 type XTessInboundFallback struct {
 	Name string          `json:"name"`
 	Alpn string          `json:"alpn"`
@@ -87,7 +89,7 @@ func (c *XTessInboundConfig) Build() (proto.Message, error) {
 	config.Decryption = c.Decryption
 	if !func() bool {
 		s := strings.Split(config.Decryption, ".")
-		if len(s) < 4 || s[0] != "mlkem768x25519plus" {
+		if len(s) < 4 || s[0] != xtessEncryptionPrefix {
 			return false
 		}
 		switch s[1] {
@@ -271,7 +273,7 @@ func (c *XTessOutboundConfig) Build() (proto.Message, error) {
 
 			if !func() bool {
 				s := strings.Split(account.Encryption, ".")
-				if len(s) < 4 || s[0] != "mlkem768x25519plus" {
+				if len(s) < 4 || s[0] != xtessEncryptionPrefix {
 					return false
 				}
 				switch s[1] {

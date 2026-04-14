@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -114,8 +113,6 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		request.Version = buffer.Byte(2)
 	}
 
-	fmt.Printf("TotalLen=%d, Version=%d\n", totalLen, request.Version)
-
 	switch request.Version {
 	case 2:
 		var id [16]byte
@@ -220,17 +217,9 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 		return nil, errors.New("failed to read response version").Base(err)
 	}
 
-	var totalLen uint16
-	totalLen = binary.BigEndian.Uint16([]byte{
-		buffer.Byte(0),
-		buffer.Byte(1),
-	})
-
 	if buffer.Byte(2) != request.Version {
 		return nil, errors.New("unexpected response version. Expecting ", int(request.Version), " but actually ", int(buffer.Byte(0)))
 	}
-
-	fmt.Printf("TotalLen=%d, Version=%d\n", totalLen, request.Version)
 
 	responseAddons, err := DecodeHeaderAddons(&buffer, reader)
 	if err != nil {

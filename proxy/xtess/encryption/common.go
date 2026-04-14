@@ -26,6 +26,21 @@ var OutBytesPool = sync.Pool{
 
 type CommonConn struct {
 	net.Conn
+	// CommonConn wraps a net.Conn with XTess encryption capabilities.
+	//
+	// Lifecycle:
+	// - Created by the XTess handshake as a replacement for the underlying transport connection.
+	// - AEAD/PeerAEAD are initialized during handshake; PeerAEAD is lazily initialized on first Read.
+	// - PreWrite (if non-nil) is written once before the first encrypted application data frame.
+	//
+	// Fields:
+	// - UseAES: whether to use AES-GCM (true) or ChaCha20-Poly1305 (false) for AEAD.
+	// - Client: optional reference to client instance for session resumption bookkeeping.
+	// - UnitedKey: combined key material used to derive per-connection AEAD keys.
+	// - PreWrite: buffered bytes that must be written before normal encrypted records.
+	// - AEAD: encryption context used for the local->peer direction.
+	// - PeerAEAD: decryption context used for the peer->local direction.
+	// - PeerPadding: pending padding data to be decrypted and discarded before normal reads.
 	UseAES      bool
 	Client      *ClientInstance
 	UnitedKey   []byte
@@ -278,4 +293,3 @@ func CreatPadding(paddingLens, paddingGaps [][3]int) (length int, lens []int, ga
 	}
 	return
 }
-

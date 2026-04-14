@@ -77,7 +77,10 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
 		for _, r := range s {
-			b, _ := base64.RawURLEncoding.DecodeString(r)
+			b, err := base64.RawURLEncoding.DecodeString(r)
+			if err != nil {
+				return nil, errors.New("invalid base64 in encryption config").Base(err).AtError()
+			}
 			nfsPKeysBytes = append(nfsPKeysBytes, b)
 		}
 		handler.encryption = &encryption.ClientInstance{}
