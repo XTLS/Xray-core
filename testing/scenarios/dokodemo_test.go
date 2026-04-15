@@ -97,7 +97,7 @@ func TestDokodemoTCP(t *testing.T) {
 						Receiver: &protocol.ServerEndpoint{
 							Address: net.NewIPOrDomain(net.LocalHostIP),
 							Port:    uint32(serverPort),
-							User:    &protocol.User{
+							User: &protocol.User{
 								Account: serial.ToTypedMessage(&vmess.Account{
 									Id: userID.String(),
 								}),
@@ -157,7 +157,9 @@ func TestDokodemoUDP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -189,7 +191,7 @@ func TestDokodemoUDP(t *testing.T) {
 						Receiver: &protocol.ServerEndpoint{
 							Address: net.NewIPOrDomain(net.LocalHostIP),
 							Port:    uint32(serverPort),
-							User:    &protocol.User{
+							User: &protocol.User{
 								Account: serial.ToTypedMessage(&vmess.Account{
 									Id: userID.String(),
 								}),
