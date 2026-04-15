@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -121,11 +122,13 @@ func (h *Handler) getBlockedIPMatcher(inbound *session.Inbound) geodata.IPMatche
 		return nil
 	}
 	switch inbound.Name {
-	case "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard":
+	case "vmess", "trojan", "hysteria", "wireguard":
 		return defaultPrivateBlockIPMatcher
-	default:
-		return nil
 	}
+	if strings.HasPrefix(inbound.Name, "vless") || strings.HasPrefix(inbound.Name, "shadowsocks") {
+		return defaultPrivateBlockIPMatcher
+	}
+	return nil
 }
 
 func isBlockedAddress(matcher geodata.IPMatcher, addr net.Address) bool {

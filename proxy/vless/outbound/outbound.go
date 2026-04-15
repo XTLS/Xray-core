@@ -151,7 +151,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
 		return errors.New("target not specified").AtError()
 	}
-	ob.Name = "vless"
+	ob.Name = "vless-reverse"
 
 	rec := h.server
 	var conn stat.Connection
