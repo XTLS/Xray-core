@@ -111,7 +111,7 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	return a != net.AnyIP && a != net.AnyIPv6
 }
 
-func (h *Handler) getBlockedIPMatcher(inbound *session.Inbound) geodata.IPMatcher {
+func (h *Handler) getBlockedIPMatcher(ctx context.Context, inbound *session.Inbound) geodata.IPMatcher {
 	if h.blockedIPMatcher != nil {
 		return h.blockedIPMatcher
 	}
@@ -123,9 +123,11 @@ func (h *Handler) getBlockedIPMatcher(inbound *session.Inbound) geodata.IPMatche
 	}
 	switch inbound.Name {
 	case "vmess", "trojan", "hysteria", "wireguard":
+		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
 		return defaultPrivateBlockIPMatcher
 	}
 	if strings.HasPrefix(inbound.Name, "vless") || strings.HasPrefix(inbound.Name, "shadowsocks") {
+		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
 		return defaultPrivateBlockIPMatcher
 	}
 	return nil
@@ -145,7 +147,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 	inbound := session.InboundFromContext(ctx)
-	blockedIPMatcher := h.getBlockedIPMatcher(inbound)
+	blockedIPMatcher := h.getBlockedIPMatcher(ctx, inbound)
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
@@ -469,7 +471,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				blockedAddr := b.UDP.Address
 				b.Release()
 				buf.ReleaseMulti(mb)
-				return errors.New("blocked target IP: ", blockedAddr).AtInfo()
+				return errors.New("blocked target IP: ", blockedAddr).AtDebug()
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
