@@ -110,14 +110,17 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	return a != net.AnyIP && a != net.AnyIPv6
 }
 
-func (h *Handler) getBlockedIPMatcher(ctx context.Context) geodata.IPMatcher {
+func (h *Handler) getBlockedIPMatcher(inbound *session.Inbound) geodata.IPMatcher {
 	if h.blockedIPMatcher != nil {
 		return h.blockedIPMatcher
 	}
 	if h.config.IpsBlocked != nil && len(h.config.IpsBlocked.Rules) == 0 { // "ipsBlocked": []
 		return nil
 	}
-	switch session.InboundFromContext(ctx).Name {
+	if inbound == nil {
+		return nil
+	}
+	switch inbound.Name {
 	case "vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard":
 		return defaultPrivateBlockIPMatcher
 	default:
@@ -139,7 +142,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 	inbound := session.InboundFromContext(ctx)
-	blockedIPMatcher := h.getBlockedIPMatcher(ctx)
+	blockedIPMatcher := h.getBlockedIPMatcher(inbound)
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
