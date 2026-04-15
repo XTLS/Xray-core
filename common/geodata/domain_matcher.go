@@ -173,7 +173,7 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 
 func newDomainMatcherFactory() DomainMatcherFactory {
 	switch runtime.GOOS {
-	case "ios":
+	case "ios", "android":
 		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
 	default:
 		return &MphDomainMatcherFactory{}
