@@ -470,9 +470,10 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				}
 			}
 			if isBlockedAddress(w.BlockedIPMatcher, b.UDP.Address) {
+				blockedAddr := b.UDP.Address
 				b.Release()
 				buf.ReleaseMulti(mb)
-				return errors.New("target IP is blocked: ", b.UDP.Address).AtInfo()
+				return errors.New("target IP is blocked: ", blockedAddr).AtInfo()
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
