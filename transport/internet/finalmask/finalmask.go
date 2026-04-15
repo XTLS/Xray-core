@@ -106,10 +106,10 @@ type headerSize interface {
 
 type headerManagerConn struct {
 	sync.Mutex
-
-	sizes []int
-	conns []net.PacketConn
 	net.PacketConn
+
+	sizes    []int
+	conns    []net.PacketConn
 	writeBuf [UDPSize]byte
 }
 
