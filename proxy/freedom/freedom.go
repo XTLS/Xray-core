@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/retry"
@@ -50,14 +51,22 @@ func init() {
 
 // Handler handles Freedom connections.
 type Handler struct {
-	policyManager policy.Manager
-	config        *Config
+	policyManager  policy.Manager
+	config         *Config
+	blockIPMatcher geodata.IPMatcher
 }
 
 // Init initializes the Handler with necessary parameters.
 func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
+	if len(config.BlockIp) > 0 {
+		m, err := geodata.IPReg.BuildIPMatcher(config.BlockIp)
+		if err != nil {
+			return errors.New("failed to build block ip matcher").Base(err)
+		}
+		h.blockIPMatcher = m
+	}
 	return nil
 }
 
@@ -73,6 +82,14 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 
 	a := addr.AsAddress()
 	return a != net.AnyIP && a != net.AnyIPv6
+}
+
+func (h *Handler) hasBlockedIP(ips []net.IP) bool {
+	return h.blockIPMatcher != nil && h.blockIPMatcher.AnyMatch(ips)
+}
+
+func (h *Handler) isBlockedAddress(addr net.Address) bool {
+	return h.blockIPMatcher != nil && addr != nil && addr.Family().IsIP() && h.blockIPMatcher.Match(addr.IP())
 }
 
 // Process implements proxy.Outbound.
@@ -124,6 +141,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					return err
 				}
 			} else {
+				if h.hasBlockedIP(ips) {
+					return errors.New("domain resolved to blocked IP: ", dialDest.Address.Domain()).AtInfo()
+				}
 				dialDest = net.Destination{
 					Network: dialDest.Network,
 					Address: net.IPAddress(ips[dice.Roll(len(ips))]),
@@ -131,6 +151,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
+		}
+		if h.isBlockedAddress(dialDest.Address) {
+			return errors.New("target IP is blocked: ", dialDest.Address).AtInfo()
 		}
 
 		rawConn, err := dialer.Dial(ctx, dialDest)
@@ -381,6 +404,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 								continue
 							}
 						} else {
+							if w.Handler.hasBlockedIP(ips) {
+								b.Release()
+								buf.ReleaseMulti(mb)
+								return errors.New("domain resolved to blocked IP: ", b.UDP.Address.Domain()).AtInfo()
+							}
 							ip = net.IPAddress(ips[dice.Roll(len(ips))])
 							ShouldUseSystemResolver = false
 						}
@@ -398,6 +426,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
 				}
+			}
+			if w.Handler.isBlockedAddress(b.UDP.Address) {
+				b.Release()
+				buf.ReleaseMulti(mb)
+				return errors.New("target IP is blocked: ", b.UDP.Address).AtInfo()
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
