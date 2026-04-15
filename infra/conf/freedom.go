@@ -15,37 +15,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var defaultFreedomBlockIP = []string{
-	"0.0.0.0/8",
-	"10.0.0.0/8",
-	"100.64.0.0/10",
-	"127.0.0.0/8",
-	"169.254.0.0/16",
-	"172.16.0.0/12",
-	"192.0.0.0/24",
-	"192.0.2.0/24",
-	"192.88.99.0/24",
-	"192.168.0.0/16",
-	"198.18.0.0/15",
-	"198.51.100.0/24",
-	"203.0.113.0/24",
-	"224.0.0.0/3",
-	"::/127",
-	"fc00::/7",
-	"fe80::/10",
-	"ff00::/8",
-}
-
 type FreedomConfig struct {
-	TargetStrategy string      `json:"targetStrategy"`
-	DomainStrategy string      `json:"domainStrategy"`
-	Redirect       string      `json:"redirect"`
-	UserLevel      uint32      `json:"userLevel"`
-	Fragment       *Fragment   `json:"fragment"`
-	Noise          *Noise      `json:"noise"`
-	Noises         []*Noise    `json:"noises"`
-	ProxyProtocol  uint32      `json:"proxyProtocol"`
-	BlockIP        *StringList `json:"blockIP"`
+	TargetStrategy string     `json:"targetStrategy"`
+	DomainStrategy string     `json:"domainStrategy"`
+	Redirect       string     `json:"redirect"`
+	UserLevel      uint32     `json:"userLevel"`
+	Fragment       *Fragment  `json:"fragment"`
+	Noise          *Noise     `json:"noise"`
+	Noises         []*Noise   `json:"noises"`
+	ProxyProtocol  uint32     `json:"proxyProtocol"`
+	BlockIP        StringList `json:"blockIP"`
 }
 
 type Fragment struct {
@@ -185,12 +164,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	if c.ProxyProtocol > 0 && c.ProxyProtocol <= 2 {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
-
-	blockIPConfig := defaultFreedomBlockIP
-	if c.BlockIP != nil {
-		blockIPConfig = *c.BlockIP
-	}
-	blockIP, err := geodata.ParseIPRules(blockIPConfig)
+	blockIP, err := geodata.ParseIPRules(c.BlockIP)
 	if err != nil {
 		return nil, err
 	}
