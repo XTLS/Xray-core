@@ -244,8 +244,11 @@ type UDPReader struct {
 
 func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if r.firstMsg != nil {
-		buffer := buf.NewWithSize(int32(len(r.firstMsg.Data)))
-		buffer.Write(r.firstMsg.Data)
+		buffer := buf.New()
+		_, err := buffer.Write(r.firstMsg.Data)
+		if err != nil {
+			return nil, err
+		}
 		buffer.UDP = r.firstDest
 
 		r.firstMsg = nil
@@ -275,8 +278,11 @@ func (r *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			continue
 		}
 
-		buffer := buf.NewWithSize(int32(len(dfMsg.Data)))
-		buffer.Write(dfMsg.Data)
+		buffer := buf.New()
+		if _, err := buffer.Write(dfMsg.Data); err != nil {
+			return nil, err
+		}
+
 		buffer.UDP = &dest
 
 		return buf.MultiBuffer{buffer}, nil

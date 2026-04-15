@@ -350,8 +350,11 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return nil, io.EOF
 	}
 
-	b := buf.NewWithSize(int32(len(q.p)))
-	b.Write(q.p)
+	b := buf.New()
+	if _, err := b.Write(q.p); err != nil {
+		return nil, err
+	}
+
 	b.UDP = q.dest
 
 	return buf.MultiBuffer{b}, nil
