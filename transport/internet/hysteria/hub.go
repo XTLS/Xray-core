@@ -175,9 +175,9 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var user *protocol.MemoryUser
 		var ok bool
-		if h.validator != nil {
+		if h.validator != nil && h.validator.GetCount() > 0 {
 			user = h.validator.Get(auth)
-		} else {
+		} else if h.config.Auth != "" {
 			ok = auth == h.config.Auth
 		}
 

@@ -28,11 +28,7 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	var validator *account.Validator
-	if len(config.Users) > 0 {
-		validator = account.NewValidator()
-	}
-
+	validator := account.NewValidator()
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
