@@ -33,6 +33,10 @@ message Noise {
   string apply_to = 6;
 }
 
+message IPRules {
+  repeated xray.common.geodata.IPRule rules = 1;
+}
+
 message Config {
   xray.transport.internet.DomainStrategy domain_strategy = 1;
   DestinationOverride destination_override = 3;
@@ -40,5 +44,5 @@ message Config {
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
-  repeated xray.common.geodata.IPRule block_ip = 8;
+  optional IPRules ips_blocked = 8;
 }
