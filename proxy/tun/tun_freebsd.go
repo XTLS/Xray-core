@@ -5,6 +5,7 @@ package tun
 import (
 	"errors"
 	"net"
+	_ "unsafe"
 
 	"golang.zx2c4.com/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/buffer"
