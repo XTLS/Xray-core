@@ -198,16 +198,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return err
 		}
-		if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
-			version := byte(h.config.ProxyProtocol)
-			srcAddr := inbound.Source.RawNetAddr()
-			dstAddr := rawConn.RemoteAddr()
-			header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
-			if _, err = header.WriteTo(rawConn); err != nil {
-				rawConn.Close()
-				return err
-			}
-		}
 
 		conn = rawConn
 		return nil
@@ -218,6 +208,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
 		conn.Close()
 		return errors.New("target IP is blocked: ", remoteAddr).AtInfo()
+	}
+	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
+		version := byte(h.config.ProxyProtocol)
+		srcAddr := inbound.Source.RawNetAddr()
+		dstAddr := conn.RemoteAddr()
+		header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
+		if _, err = header.WriteTo(conn); err != nil {
+			conn.Close()
+			return errors.New("failed to set PROXY protocol v", version).Base(err)
+		}
 	}
 	defer conn.Close()
 	errors.LogInfo(ctx, "connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr())
