@@ -207,7 +207,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	if remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
 		conn.Close()
-		return errors.New("target IP is blocked: ", remoteAddr).AtInfo()
+		return errors.New("blocked target IP: ", remoteAddr).AtInfo()
 	}
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
@@ -469,7 +469,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				blockedAddr := b.UDP.Address
 				b.Release()
 				buf.ReleaseMulti(mb)
-				return errors.New("target IP is blocked: ", blockedAddr).AtInfo()
+				return errors.New("blocked target IP: ", blockedAddr).AtInfo()
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
