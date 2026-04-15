@@ -100,7 +100,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	if a.Reverse != nil {
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
 			Tag:  a.Reverse.Tag,
-			Name: "vless",
+			Name: "vless-reverse",
 			User: handler.server.User, // TODO: email
 		})
 		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
@@ -151,7 +151,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
 		return errors.New("target not specified").AtError()
 	}
-	ob.Name = "vless-reverse"
+	ob.Name = "vless"
 
 	rec := h.server
 	var conn stat.Connection
