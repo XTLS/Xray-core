@@ -198,15 +198,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return err
 		}
-		if h.blockedIPMatcher != nil {
-			remoteAddr, _, err := net.SplitHostPort(rawConn.RemoteAddr().String())
-			if err != nil {
-				ip := net.ParseIP(remoteAddr)
-				if h.blockedIPMatcher.Match(ip) {
-					rawConn.Close()
-					return errors.New("target IP is blocked: ", ip)
-				}
-			}
+		if remoteAddr := net.DestinationFromAddr(rawConn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
+			rawConn.Close()
+			return errors.New("target IP is blocked: ", remoteAddr).AtInfo()
 		}
 
 		if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
