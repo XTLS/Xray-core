@@ -198,11 +198,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return err
 		}
-		if remoteAddr := net.DestinationFromAddr(rawConn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
-			rawConn.Close()
-			return errors.New("target IP is blocked: ", remoteAddr).AtInfo()
-		}
-
 		if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 			version := byte(h.config.ProxyProtocol)
 			srcAddr := inbound.Source.RawNetAddr()
@@ -219,6 +214,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	})
 	if err != nil {
 		return errors.New("failed to open connection to ", destination).Base(err)
+	}
+	if remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
+		conn.Close()
+		return errors.New("target IP is blocked: ", remoteAddr).AtInfo()
 	}
 	defer conn.Close()
 	errors.LogInfo(ctx, "connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr())
