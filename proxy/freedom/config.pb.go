@@ -7,6 +7,7 @@
 package freedom
 
 import (
+	geodata "github.com/xtls/xray-core/common/geodata"
 	protocol "github.com/xtls/xray-core/common/protocol"
 	internet "github.com/xtls/xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -259,6 +260,7 @@ type Config struct {
 	Fragment            *Fragment               `protobuf:"bytes,5,opt,name=fragment,proto3" json:"fragment,omitempty"`
 	ProxyProtocol       uint32                  `protobuf:"varint,6,opt,name=proxy_protocol,json=proxyProtocol,proto3" json:"proxy_protocol,omitempty"`
 	Noises              []*Noise                `protobuf:"bytes,7,rep,name=noises,proto3" json:"noises,omitempty"`
+	BlockIp             []*geodata.IPRule       `protobuf:"bytes,8,rep,name=block_ip,json=blockIp,proto3" json:"block_ip,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -335,11 +337,18 @@ func (x *Config) GetNoises() []*Noise {
 	return nil
 }
 
+func (x *Config) GetBlockIp() []*geodata.IPRule {
+	if x != nil {
+		return x.BlockIp
+	}
+	return nil
+}
+
 var File_proxy_freedom_config_proto protoreflect.FileDescriptor
 
 const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\"S\n" +
+	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\x1a\x1bcommon/geodata/geodat.proto\"S\n" +
 	"\x13DestinationOverride\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"\x98\x02\n" +
 	"\bFragment\x12!\n" +
@@ -362,7 +371,7 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\tdelay_min\x18\x03 \x01(\x04R\bdelayMin\x12\x1b\n" +
 	"\tdelay_max\x18\x04 \x01(\x04R\bdelayMax\x12\x16\n" +
 	"\x06packet\x18\x05 \x01(\fR\x06packet\x12\x19\n" +
-	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"\xe9\x02\n" +
+	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"\xa1\x03\n" +
 	"\x06Config\x12P\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12Z\n" +
 	"\x14destination_override\x18\x03 \x01(\v2'.xray.proxy.freedom.DestinationOverrideR\x13destinationOverride\x12\x1d\n" +
@@ -370,7 +379,8 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"user_level\x18\x04 \x01(\rR\tuserLevel\x128\n" +
 	"\bfragment\x18\x05 \x01(\v2\x1c.xray.proxy.freedom.FragmentR\bfragment\x12%\n" +
 	"\x0eproxy_protocol\x18\x06 \x01(\rR\rproxyProtocol\x121\n" +
-	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noisesBX\n" +
+	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noises\x126\n" +
+	"\bblock_ip\x18\b \x03(\v2\x1b.xray.common.geodata.IPRuleR\ablockIpBX\n" +
 	"\x16com.xray.proxy.freedomP\x01Z'github.com/xtls/xray-core/proxy/freedom\xaa\x02\x12Xray.Proxy.Freedomb\x06proto3"
 
 var (
@@ -393,6 +403,7 @@ var file_proxy_freedom_config_proto_goTypes = []any{
 	(*Config)(nil),                  // 3: xray.proxy.freedom.Config
 	(*protocol.ServerEndpoint)(nil), // 4: xray.common.protocol.ServerEndpoint
 	(internet.DomainStrategy)(0),    // 5: xray.transport.internet.DomainStrategy
+	(*geodata.IPRule)(nil),          // 6: xray.common.geodata.IPRule
 }
 var file_proxy_freedom_config_proto_depIdxs = []int32{
 	4, // 0: xray.proxy.freedom.DestinationOverride.server:type_name -> xray.common.protocol.ServerEndpoint
@@ -400,11 +411,12 @@ var file_proxy_freedom_config_proto_depIdxs = []int32{
 	0, // 2: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
 	1, // 3: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
 	2, // 4: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6, // 5: xray.proxy.freedom.Config.block_ip:type_name -> xray.common.geodata.IPRule
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_proxy_freedom_config_proto_init() }
