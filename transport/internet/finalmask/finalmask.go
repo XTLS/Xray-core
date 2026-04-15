@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 
+	xbuf "github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -104,17 +105,22 @@ type headerSize interface {
 }
 
 type headerManagerConn struct {
-	sizes []int
-	conns []net.PacketConn
+	sync.Mutex
 	net.PacketConn
-	m        sync.Mutex
+
+	sizes    []int
+	conns    []net.PacketConn
 	writeBuf [UDPSize]byte
 }
 
 func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	buf := p
 	if len(buf) < UDPSize {
-		buf = make([]byte, UDPSize)
+		b := xbuf.NewWithSize(UDPSize)
+		defer b.Release()
+		b.Resize(0, UDPSize)
+
+		buf = b.Bytes()
 	}
 
 	n, addr, err = c.PacketConn.ReadFrom(buf)
@@ -153,8 +159,8 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 }
 
 func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.m.Lock()
-	defer c.m.Unlock()
+	c.Lock()
+	defer c.Unlock()
 
 	sum := 0
 	for _, size := range c.sizes {
