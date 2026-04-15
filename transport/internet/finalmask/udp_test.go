@@ -2,12 +2,16 @@ package finalmask_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"io"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	singM "github.com/sagernet/sing/common/metadata"
+	singN "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
@@ -71,6 +75,194 @@ func (c *countingConn) Write(p []byte) (int, error) {
 
 func (c *countingConn) Written() int64 {
 	return c.written.Load()
+}
+
+type recordedPacketWrite struct {
+	payload []byte
+	addr    net.Addr
+}
+
+type scriptedPacketConn struct {
+	local    *net.UDPAddr
+	writes   chan recordedPacketWrite
+	reads    chan recordedPacketWrite
+	closed   atomic.Bool
+	deadline atomic.Int64
+}
+
+func newScriptedPacketConn() *scriptedPacketConn {
+	return &scriptedPacketConn{
+		local:  &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 40000},
+		writes: make(chan recordedPacketWrite, 8),
+		reads:  make(chan recordedPacketWrite, 8),
+	}
+}
+
+func (c *scriptedPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	item, ok := <-c.reads
+	if !ok {
+		return 0, nil, io.EOF
+	}
+	copy(p, item.payload)
+	return len(item.payload), item.addr, nil
+}
+
+func (c *scriptedPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	c.writes <- recordedPacketWrite{
+		payload: append([]byte(nil), p...),
+		addr:    addr,
+	}
+	return len(p), nil
+}
+
+func (c *scriptedPacketConn) Close() error {
+	if c.closed.CompareAndSwap(false, true) {
+		close(c.reads)
+	}
+	return nil
+}
+
+func (c *scriptedPacketConn) LocalAddr() net.Addr { return c.local }
+func (c *scriptedPacketConn) SetDeadline(t time.Time) error {
+	c.deadline.Store(t.UnixNano())
+	return nil
+}
+func (c *scriptedPacketConn) SetReadDeadline(t time.Time) error {
+	c.deadline.Store(t.UnixNano())
+	return nil
+}
+func (c *scriptedPacketConn) SetWriteDeadline(t time.Time) error {
+	c.deadline.Store(t.UnixNano())
+	return nil
+}
+
+type captureUDPHandler struct {
+	gotMetadata chan singM.Metadata
+}
+
+func (h *captureUDPHandler) NewConnection(_ context.Context, _ net.Conn, _ singM.Metadata) error {
+	return nil
+}
+
+func (h *captureUDPHandler) NewPacketConnection(_ context.Context, _ singN.PacketConn, metadata singM.Metadata) error {
+	select {
+	case h.gotMetadata <- metadata:
+	default:
+	}
+	return nil
+}
+
+func (h *captureUDPHandler) NewError(_ context.Context, _ error) {}
+
+func newStandaloneEchoUDPConfig() *custom.UDPConfig {
+	return &custom.UDPConfig{
+		Mode: "standalone",
+		Client: []*custom.UDPItem{
+			{Packet: []byte{0xAA}},
+			{Rand: 2, Save: "txid"},
+		},
+		Server: []*custom.UDPItem{
+			{Packet: []byte{0xBB}},
+			{Var: "txid"},
+		},
+	}
+}
+
+func newStandaloneStunLikeUDPConfig() *custom.UDPConfig {
+	return &custom.UDPConfig{
+		Mode: "standalone",
+		Client: []*custom.UDPItem{
+			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
+			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
+		},
+		Server: []*custom.UDPItem{
+			{Packet: []byte{0x01, 0x01, 0x00, 0x0C, 0x21, 0x12, 0xA4, 0x42}},
+			{Var: "txid"},
+			{Packet: []byte{0x00, 0x20, 0x00, 0x08, 0x00, 0x01}},
+			{Rand: 2, Save: "mapped_port"},
+			{Rand: 4, Save: "mapped_ip"},
+		},
+	}
+}
+
+func newStandaloneStunLikeUDPServerConfig() *custom.UDPConfig {
+	return &custom.UDPConfig{
+		Mode: "standalone",
+		Client: []*custom.UDPItem{
+			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
+			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
+		},
+		Server: []*custom.UDPItem{
+			{Packet: []byte{0x01, 0x01, 0x00, 0x0C, 0x21, 0x12, 0xA4, 0x42}},
+			{Var: "txid"},
+			{Packet: []byte{0x00, 0x20, 0x00, 0x08, 0x00, 0x01}},
+			{
+				Expr: &custom.Expr{
+					Op: "be16",
+					Args: []*custom.ExprArg{
+						{
+							Value: &custom.ExprArg_Expr{
+								Expr: &custom.Expr{
+									Op: "xor16",
+									Args: []*custom.ExprArg{
+										{Value: &custom.ExprArg_Metadata{Metadata: "src_port_u16"}},
+										{Value: &custom.ExprArg_U64{U64: 0x2112}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Expr: &custom.Expr{
+					Op: "be32",
+					Args: []*custom.ExprArg{
+						{
+							Value: &custom.ExprArg_Expr{
+								Expr: &custom.Expr{
+									Op: "xor32",
+									Args: []*custom.ExprArg{
+										{Value: &custom.ExprArg_Metadata{Metadata: "src_ip4_u32"}},
+										{Value: &custom.ExprArg_U64{U64: 0x2112A442}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newUDPClientServerPair(t *testing.T, cfg *custom.UDPConfig) (net.PacketConn, net.PacketConn, net.PacketConn, net.PacketConn) {
+	t.Helper()
+
+	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = clientRaw.Close() })
+
+	serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverRaw.Close() })
+
+	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
+
+	client, err := maskManager.WrapPacketConnClient(clientRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := maskManager.WrapPacketConnServer(serverRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return clientRaw, serverRaw, client, server
 }
 
 func TestPacketConnReadWrite(t *testing.T) {
@@ -314,6 +506,197 @@ func TestUDPcustomServerRejectsMismatchedStaticHeader(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatalf("expected mismatch to be dropped without surfaced error, got %v", err)
+	}
+}
+
+func TestUDPcustomStandaloneClientSendsDetachedHandshakeBeforePayload(t *testing.T) {
+	_, serverRaw, client, _ := newUDPClientServerPair(t, newStandaloneEchoUDPConfig())
+
+	payload := []byte("standalone-payload")
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := client.WriteTo(payload, serverRaw.LocalAddr())
+		writeErr <- err
+	}()
+
+	wire := make([]byte, 128)
+	_ = serverRaw.SetDeadline(time.Now().Add(time.Second))
+	n, addr, err := serverRaw.ReadFrom(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("unexpected handshake size: got=%d want=3", n)
+	}
+	if !bytes.Equal(wire[:1], []byte{0xAA}) {
+		t.Fatalf("unexpected handshake prefix: %x", wire[:1])
+	}
+	txid := append([]byte(nil), wire[1:n]...)
+
+	if _, err := serverRaw.WriteTo(append([]byte{0xBB}, txid...), addr); err != nil {
+		t.Fatal(err)
+	}
+
+	n, _, err = serverRaw.ReadFrom(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wire[:n], payload) {
+		t.Fatalf("unexpected payload after handshake: %q", wire[:n])
+	}
+
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUDPcustomStandaloneServerConsumesHandshakeAndAutoResponds(t *testing.T) {
+	clientRaw, _, _, server := newUDPClientServerPair(t, newStandaloneEchoUDPConfig())
+
+	_ = clientRaw.SetDeadline(time.Now().Add(time.Second))
+	_ = server.SetDeadline(time.Now().Add(time.Second))
+
+	readPayload := make(chan []byte, 1)
+	readErr := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 128)
+		n, _, err := server.ReadFrom(buf)
+		if err != nil {
+			readErr <- err
+			return
+		}
+		readPayload <- append([]byte(nil), buf[:n]...)
+	}()
+
+	txid := []byte{0x10, 0x20}
+	if _, err := clientRaw.WriteTo(append([]byte{0xAA}, txid...), server.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 128)
+	n, _, err := clientRaw.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(buf[:n], append([]byte{0xBB}, txid...)) {
+		t.Fatalf("unexpected auto-response: %x", buf[:n])
+	}
+
+	payload := []byte("server-side-standalone")
+	if _, err := clientRaw.WriteTo(payload, server.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case got := <-readPayload:
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("unexpected payload: %q", got)
+		}
+	case err := <-readErr:
+		t.Fatal(err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("payload read timeout")
+	}
+}
+
+func TestUDPcustomStandaloneStunLikeExchangeUsesSavedTxidAndSrcMetadata(t *testing.T) {
+	clientRaw, _, _, server := newUDPClientServerPair(t, newStandaloneStunLikeUDPServerConfig())
+
+	_ = clientRaw.SetDeadline(time.Now().Add(time.Second))
+	_ = server.SetDeadline(time.Now().Add(time.Second))
+
+	readPayload := make(chan []byte, 1)
+	readErr := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 64)
+		n, _, err := server.ReadFrom(buf)
+		if err != nil {
+			readErr <- err
+			return
+		}
+		readPayload <- append([]byte(nil), buf[:n]...)
+	}()
+
+	txid := bytes.Repeat([]byte{0x2A}, 12)
+	request := append([]byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}, txid...)
+	if _, err := clientRaw.WriteTo(request, server.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 64)
+	n, _, err := clientRaw.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := make([]byte, 0, 32)
+	want = append(want, []byte{0x01, 0x01, 0x00, 0x0C, 0x21, 0x12, 0xA4, 0x42}...)
+	want = append(want, txid...)
+	want = append(want, []byte{0x00, 0x20, 0x00, 0x08, 0x00, 0x01}...)
+
+	clientAddr := clientRaw.LocalAddr().(*net.UDPAddr)
+	xPort := uint16(clientAddr.Port) ^ 0x2112
+	xIP := binary.BigEndian.Uint32(clientAddr.IP.To4()) ^ 0x2112A442
+	want = append(want, byte(xPort>>8), byte(xPort))
+	want = append(want, byte(xIP>>24), byte(xIP>>16), byte(xIP>>8), byte(xIP))
+
+	if !bytes.Equal(buf[:n], want) {
+		t.Fatalf("unexpected stun-like response: got=%x want=%x", buf[:n], want)
+	}
+
+	payload := []byte("after-standalone-stun")
+	if _, err := clientRaw.WriteTo(payload, server.LocalAddr()); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case got := <-readPayload:
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("unexpected payload after stun exchange: %q", got)
+		}
+	case err := <-readErr:
+		t.Fatal(err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("payload read timeout")
+	}
+}
+
+func TestUDPcustomStandaloneClientHandshakeSurvivesConcurrentReader(t *testing.T) {
+	_, serverRaw, clientMask, serverMask := newUDPClientServerPair(t, newStandaloneStunLikeUDPConfig())
+
+	go func() {
+		buf := make([]byte, 2048)
+		_ = clientMask.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_, _, _ = clientMask.ReadFrom(buf)
+	}()
+
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, addr, err := serverMask.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			if n == len([]byte("dns-payload")) && string(buf[:n]) == "dns-payload" {
+				return
+			}
+			_ = addr
+		}
+	}()
+
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := clientMask.WriteTo([]byte("dns-payload"), serverRaw.LocalAddr())
+		writeDone <- err
+	}()
+
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected handshake to complete even with concurrent reader")
 	}
 }
 

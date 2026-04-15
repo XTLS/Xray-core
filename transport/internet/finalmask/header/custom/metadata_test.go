@@ -30,6 +30,100 @@ func TestMetadataEvaluatorRejectsUnknownName(t *testing.T) {
 	}
 }
 
+func TestMetadataAliasesExposeSrcAndDstNames(t *testing.T) {
+	ctx := newEvalContextWithAddrs(
+		&net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 3478},
+		&net.UDPAddr{IP: net.IPv4(203, 0, 113, 9), Port: 54321},
+	)
+
+	items := []*UDPItem{
+		{
+			Expr: &Expr{
+				Op: "concat",
+				Args: []*ExprArg{
+					{
+						Value: &ExprArg_Expr{
+							Expr: &Expr{
+								Op: "be16",
+								Args: []*ExprArg{
+									{Value: &ExprArg_Metadata{Metadata: "src_port_u16"}},
+								},
+							},
+						},
+					},
+					{
+						Value: &ExprArg_Expr{
+							Expr: &Expr{
+								Op: "be32",
+								Args: []*ExprArg{
+									{Value: &ExprArg_Metadata{Metadata: "src_ip4_u32"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := evaluateUDPItemsWithContext(items, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []byte{0xD4, 0x31, 203, 0, 113, 9}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("unexpected alias output: got=%x want=%x", got, want)
+	}
+}
+
+func TestMetadataAliasesExposeDstNames(t *testing.T) {
+	ctx := newEvalContextWithAddrs(
+		&net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 3478},
+		&net.UDPAddr{IP: net.IPv4(203, 0, 113, 9), Port: 54321},
+	)
+
+	items := []*UDPItem{
+		{
+			Expr: &Expr{
+				Op: "concat",
+				Args: []*ExprArg{
+					{
+						Value: &ExprArg_Expr{
+							Expr: &Expr{
+								Op: "be16",
+								Args: []*ExprArg{
+									{Value: &ExprArg_Metadata{Metadata: "dst_port_u16"}},
+								},
+							},
+						},
+					},
+					{
+						Value: &ExprArg_Expr{
+							Expr: &Expr{
+								Op: "be32",
+								Args: []*ExprArg{
+									{Value: &ExprArg_Metadata{Metadata: "dst_ip4_u32"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := evaluateUDPItemsWithContext(items, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []byte{0x0D, 0x96, 10, 0, 0, 1}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("unexpected alias output: got=%x want=%x", got, want)
+	}
+}
+
 func TestMetadataUDPWriteUsesRemotePort(t *testing.T) {
 	cfg := &UDPConfig{
 		Client: []*UDPItem{

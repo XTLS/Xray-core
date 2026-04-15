@@ -3,10 +3,13 @@ package custom
 import (
 	"bytes"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
 )
+
+const udpStandaloneBufferSize = 4096
 
 type udpCustomClient struct {
 	client []*UDPItem
@@ -266,4 +269,234 @@ func udpStateKey(addr net.Addr) string {
 		return ""
 	}
 	return addr.String()
+}
+
+type udpCustomStandaloneClientConn struct {
+	net.PacketConn
+	client []*UDPItem
+	server []*UDPItem
+	state  *stateStore
+	read   int
+	mu     sync.Mutex
+	once   sync.Once
+	queue  chan udpStandalonePacket
+	wait   map[string]*udpStandaloneWaiter
+}
+
+type udpStandalonePacket struct {
+	data []byte
+	addr net.Addr
+	err  error
+}
+
+type udpStandaloneWaiter struct {
+	vars map[string][]byte
+	done chan error
+}
+
+func NewConnClientUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	clientSavedSizes := collectSavedUDPSizes(c.Client)
+	read, err := measureUDPItemsWithFallback(c.Server, clientSavedSizes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &udpCustomStandaloneClientConn{
+		PacketConn: raw,
+		client:     c.Client,
+		server:     c.Server,
+		state:      newStateStore(5 * time.Second),
+		read:       read,
+		queue:      make(chan udpStandalonePacket, 16),
+		wait:       make(map[string]*udpStandaloneWaiter),
+	}, nil
+}
+
+func (c *udpCustomStandaloneClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	c.ensureReader()
+	packet, ok := <-c.queue
+	if !ok {
+		return 0, nil, net.ErrClosed
+	}
+	if packet.err != nil {
+		return 0, packet.addr, packet.err
+	}
+	if len(packet.data) > len(p) {
+		copy(p, packet.data[:len(p)])
+		return len(p), packet.addr, nil
+	}
+	copy(p, packet.data)
+	return len(packet.data), packet.addr, nil
+}
+
+func (c *udpCustomStandaloneClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	c.ensureReader()
+	key := udpStateKey(addr)
+	if _, ok := c.state.get(key); !ok {
+		var localAddr net.Addr
+		if c.PacketConn != nil {
+			localAddr = c.PacketConn.LocalAddr()
+		}
+
+		ctx := newEvalContextWithAddrs(localAddr, addr)
+		request, err := evaluateUDPItemsWithContext(c.client, ctx)
+		if err != nil {
+			return 0, err
+		}
+		waiter := c.registerWaiter(key, ctx.vars)
+		if _, err := c.PacketConn.WriteTo(request, addr); err != nil {
+			c.unregisterWaiter(key, waiter)
+			return 0, err
+		}
+		if err := <-waiter.done; err != nil {
+			return 0, err
+		}
+	}
+
+	return c.PacketConn.WriteTo(p, addr)
+}
+
+func (c *udpCustomStandaloneClientConn) ensureReader() {
+	c.once.Do(func() {
+		go c.readerLoop(c.queue)
+	})
+}
+
+func (c *udpCustomStandaloneClientConn) registerWaiter(key string, vars map[string][]byte) *udpStandaloneWaiter {
+	waiter := &udpStandaloneWaiter{
+		vars: cloneVars(vars),
+		done: make(chan error, 1),
+	}
+	c.mu.Lock()
+	c.wait[key] = waiter
+	c.mu.Unlock()
+	return waiter
+}
+
+func (c *udpCustomStandaloneClientConn) unregisterWaiter(key string, waiter *udpStandaloneWaiter) {
+	c.mu.Lock()
+	if c.wait[key] == waiter {
+		delete(c.wait, key)
+	}
+	c.mu.Unlock()
+}
+
+func (c *udpCustomStandaloneClientConn) readerLoop(queue chan udpStandalonePacket) {
+	buf := make([]byte, udpStandaloneBufferSize)
+	for {
+		n, addr, err := c.PacketConn.ReadFrom(buf)
+		if err != nil {
+			c.failWaiters(err)
+			queue <- udpStandalonePacket{addr: addr, err: err}
+			close(queue)
+			return
+		}
+		data := append([]byte(nil), buf[:n]...)
+		if c.tryCompleteHandshake(addr, data) {
+			continue
+		}
+		queue <- udpStandalonePacket{data: data, addr: addr}
+	}
+}
+
+func (c *udpCustomStandaloneClientConn) tryCompleteHandshake(addr net.Addr, data []byte) bool {
+	key := udpStateKey(addr)
+	c.mu.Lock()
+	waiter, ok := c.wait[key]
+	c.mu.Unlock()
+	if !ok || len(data) != c.read {
+		return false
+	}
+
+	vars, matched := matchUDPItems(c.server, data, c.read, waiter.vars)
+	if !matched {
+		return false
+	}
+
+	c.state.set(key, vars)
+	c.mu.Lock()
+	if c.wait[key] == waiter {
+		delete(c.wait, key)
+	}
+	c.mu.Unlock()
+	waiter.done <- nil
+	return true
+}
+
+func (c *udpCustomStandaloneClientConn) failWaiters(err error) {
+	c.mu.Lock()
+	waiters := c.wait
+	c.wait = make(map[string]*udpStandaloneWaiter)
+	c.mu.Unlock()
+	for _, waiter := range waiters {
+		waiter.done <- err
+	}
+}
+
+type udpCustomStandaloneServerConn struct {
+	net.PacketConn
+	client []*UDPItem
+	server []*UDPItem
+	state  *stateStore
+	read   int
+}
+
+func NewConnServerUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	read, err := measureUDPItems(c.Client)
+	if err != nil {
+		return nil, err
+	}
+
+	return &udpCustomStandaloneServerConn{
+		PacketConn: raw,
+		client:     c.Client,
+		server:     c.Server,
+		state:      newStateStore(5 * time.Second),
+		read:       read,
+	}, nil
+}
+
+func (c *udpCustomStandaloneServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	buf := p
+	copyBack := false
+	if len(buf) < udpStandaloneBufferSize {
+		buf = make([]byte, udpStandaloneBufferSize)
+		copyBack = true
+	}
+
+	for {
+		n, addr, err = c.PacketConn.ReadFrom(buf)
+		if err != nil {
+			return 0, addr, err
+		}
+		if n == c.read {
+			vars, ok := matchUDPItems(c.client, buf[:n], c.read, nil)
+			if ok {
+				var localAddr net.Addr
+				if c.PacketConn != nil {
+					localAddr = c.PacketConn.LocalAddr()
+				}
+				ctx := newEvalContextWithAddrs(localAddr, addr)
+				ctx.vars = cloneVars(vars)
+				response, err := evaluateUDPItemsWithContext(c.server, ctx)
+				if err != nil {
+					return 0, addr, err
+				}
+				if _, err := c.PacketConn.WriteTo(response, addr); err != nil {
+					return 0, addr, err
+				}
+				c.state.set(udpStateKey(addr), ctx.vars)
+				continue
+			}
+		}
+
+		if copyBack {
+			copy(p, buf[:n])
+		}
+		return n, addr, nil
+	}
+}
+
+func (c *udpCustomStandaloneServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	return c.PacketConn.WriteTo(p, addr)
 }
