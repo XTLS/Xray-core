@@ -177,8 +177,8 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var ok bool
 		if h.validator != nil {
 			user = h.validator.Get(auth)
-		} else if auth == h.config.Auth {
-			ok = true
+		} else {
+			ok = auth == h.config.Auth
 		}
 
 		if user != nil || ok {

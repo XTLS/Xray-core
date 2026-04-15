@@ -28,7 +28,11 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
-	validator := account.NewValidator()
+	var validator *account.Validator
+	if len(config.Users) > 0 {
+		validator = account.NewValidator()
+	}
+
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
@@ -82,24 +86,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
+	inbound.User = &protocol.MemoryUser{}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
 
-	var useremail string
-	var userlevel uint32
 	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := iConn.(User); ok {
+	if v, ok := iConn.(User); ok && v.User() != nil {
 		inbound.User = v.User()
-		if inbound.User != nil {
-			useremail = inbound.User.Email
-			userlevel = inbound.User.Level
-		}
-	} else {
-		// get a dummy user
-		inbound.User = &protocol.MemoryUser{
-			Email: "",
-			Level: 0,
-		}
 	}
 
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
@@ -154,7 +147,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			Writer: writer,
 		})
 	} else {
-		sessionPolicy := s.policyManager.ForLevel(userlevel)
+		sessionPolicy := s.policyManager.ForLevel(inbound.User.Level)
 
 		common.Must(conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)))
 		addr, err := ReadTCPRequest(conn)
@@ -178,7 +171,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			To:     dest,
 			Status: log.AccessAccepted,
 			Reason: "",
-			Email:  useremail,
+			Email:  inbound.User.Email,
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
 
