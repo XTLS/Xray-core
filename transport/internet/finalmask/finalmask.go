@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync"
 
-	xbuf "github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -120,11 +120,10 @@ type headerReadAddrAware interface {
 func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	buf := p
 	if len(buf) < UDPSize {
-		b := xbuf.NewWithSize(UDPSize)
-		defer b.Release()
-		b.Resize(0, UDPSize)
-
-		buf = b.Bytes()
+		b := bytespool.Alloc(UDPSize)
+		b = b[:UDPSize]
+		defer bytespool.Free(b)
+		buf = b
 	}
 
 	n, addr, err = c.PacketConn.ReadFrom(buf)
