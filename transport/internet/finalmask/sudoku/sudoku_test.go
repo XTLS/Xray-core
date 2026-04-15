@@ -278,7 +278,9 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
-			{ProxySettings: serial.ToTypedMessage(&freedom.Config{})},
+			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
+				IpsBlocked: &freedom.IPRules{},
+			})},
 		},
 	})
 
@@ -396,7 +398,9 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
-			{ProxySettings: serial.ToTypedMessage(&freedom.Config{})},
+			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
+				IpsBlocked: &freedom.IPRules{},
+			})},
 		},
 	})
 
@@ -512,7 +516,9 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
-			{ProxySettings: serial.ToTypedMessage(&freedom.Config{})},
+			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
+				IpsBlocked: &freedom.IPRules{},
+			})},
 		},
 	})
 
@@ -610,7 +616,9 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
-			{ProxySettings: serial.ToTypedMessage(&freedom.Config{})},
+			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
+				IpsBlocked: &freedom.IPRules{},
+			})},
 		},
 	})
 
