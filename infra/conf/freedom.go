@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	v2net "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
@@ -15,14 +16,15 @@ import (
 )
 
 type FreedomConfig struct {
-	TargetStrategy string    `json:"targetStrategy"`
-	DomainStrategy string    `json:"domainStrategy"`
-	Redirect       string    `json:"redirect"`
-	UserLevel      uint32    `json:"userLevel"`
-	Fragment       *Fragment `json:"fragment"`
-	Noise          *Noise    `json:"noise"`
-	Noises         []*Noise  `json:"noises"`
-	ProxyProtocol  uint32    `json:"proxyProtocol"`
+	TargetStrategy string      `json:"targetStrategy"`
+	DomainStrategy string      `json:"domainStrategy"`
+	Redirect       string      `json:"redirect"`
+	UserLevel      uint32      `json:"userLevel"`
+	Fragment       *Fragment   `json:"fragment"`
+	Noise          *Noise      `json:"noise"`
+	Noises         []*Noise    `json:"noises"`
+	ProxyProtocol  uint32      `json:"proxyProtocol"`
+	IPsBlocked     *StringList `json:"ipsBlocked"`
 }
 
 type Fragment struct {
@@ -161,6 +163,13 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 	if c.ProxyProtocol > 0 && c.ProxyProtocol <= 2 {
 		config.ProxyProtocol = c.ProxyProtocol
+	}
+	if c.IPsBlocked != nil {
+		rules, err := geodata.ParseIPRules(*c.IPsBlocked)
+		if err != nil {
+			return nil, err
+		}
+		config.IpsBlocked = &freedom.IPRules{Rules: rules}
 	}
 	return config, nil
 }

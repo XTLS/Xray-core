@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -12,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/retry"
@@ -29,6 +31,32 @@ import (
 )
 
 var useSplice bool
+
+var defaultPrivateBlockIP = []string{
+	"0.0.0.0/8",
+	"10.0.0.0/8",
+	"100.64.0.0/10",
+	"127.0.0.0/8",
+	"169.254.0.0/16",
+	"172.16.0.0/12",
+	"192.0.0.0/24",
+	"192.0.2.0/24",
+	"192.88.99.0/24",
+	"192.168.0.0/16",
+	"198.18.0.0/15",
+	"198.51.100.0/24",
+	"203.0.113.0/24",
+	"224.0.0.0/3",
+	"::/127",
+	"fc00::/7",
+	"fe80::/10",
+	"ff00::/8",
+}
+
+var defaultPrivateBlockIPMatcher = func() geodata.IPMatcher {
+	rules := common.Must2(geodata.ParseIPRules(defaultPrivateBlockIP))
+	return common.Must2(geodata.IPReg.BuildIPMatcher(rules))
+}()
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
@@ -50,14 +78,22 @@ func init() {
 
 // Handler handles Freedom connections.
 type Handler struct {
-	policyManager policy.Manager
-	config        *Config
+	policyManager    policy.Manager
+	config           *Config
+	blockedIPMatcher geodata.IPMatcher
 }
 
 // Init initializes the Handler with necessary parameters.
 func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
+	if config.IpsBlocked != nil && len(config.IpsBlocked.Rules) > 0 {
+		m, err := geodata.IPReg.BuildIPMatcher(config.IpsBlocked.Rules)
+		if err != nil {
+			return errors.New("failed to build blocked ip matcher").Base(err)
+		}
+		h.blockedIPMatcher = m
+	}
 	return nil
 }
 
@@ -75,6 +111,32 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	return a != net.AnyIP && a != net.AnyIPv6
 }
 
+func (h *Handler) getBlockedIPMatcher(ctx context.Context, inbound *session.Inbound) geodata.IPMatcher {
+	if h.blockedIPMatcher != nil {
+		return h.blockedIPMatcher
+	}
+	if h.config.IpsBlocked != nil && len(h.config.IpsBlocked.Rules) == 0 { // "ipsBlocked": []
+		return nil
+	}
+	if inbound == nil {
+		return nil
+	}
+	switch inbound.Name {
+	case "vmess", "trojan", "hysteria", "wireguard":
+		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
+		return defaultPrivateBlockIPMatcher
+	}
+	if strings.HasPrefix(inbound.Name, "vless") || strings.HasPrefix(inbound.Name, "shadowsocks") {
+		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
+		return defaultPrivateBlockIPMatcher
+	}
+	return nil
+}
+
+func isBlockedAddress(matcher geodata.IPMatcher, addr net.Address) bool {
+	return matcher != nil && addr != nil && addr.Family().IsIP() && matcher.Match(addr.IP())
+}
+
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
@@ -85,6 +147,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 	inbound := session.InboundFromContext(ctx)
+	blockedIPMatcher := h.getBlockedIPMatcher(ctx, inbound)
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
@@ -138,22 +201,25 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return err
 		}
 
-		if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
-			version := byte(h.config.ProxyProtocol)
-			srcAddr := inbound.Source.RawNetAddr()
-			dstAddr := rawConn.RemoteAddr()
-			header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
-			if _, err = header.WriteTo(rawConn); err != nil {
-				rawConn.Close()
-				return err
-			}
-		}
-
 		conn = rawConn
 		return nil
 	})
 	if err != nil {
 		return errors.New("failed to open connection to ", destination).Base(err)
+	}
+	if remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
+		conn.Close()
+		return errors.New("blocked target IP: ", remoteAddr).AtInfo()
+	}
+	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
+		version := byte(h.config.ProxyProtocol)
+		srcAddr := inbound.Source.RawNetAddr()
+		dstAddr := conn.RemoteAddr()
+		header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
+		if _, err = header.WriteTo(conn); err != nil {
+			conn.Close()
+			return errors.New("failed to set PROXY protocol v", version).Base(err)
+		}
 	}
 	defer conn.Close()
 	errors.LogInfo(ctx, "connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr())
@@ -189,7 +255,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, UDPOverride, destination)
+			writer = NewPacketWriter(conn, h, UDPOverride, destination, blockedIPMatcher)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -307,7 +373,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination, blockedIPMatcher geodata.IPMatcher) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -328,6 +394,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, Dia
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
+			BlockedIPMatcher:  blockedIPMatcher,
 			UDPOverride:       UDPOverride,
 			ResolvedUDPAddr:   resolvedUDPAddr,
 			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
@@ -341,7 +408,8 @@ type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
 	*Handler
-	UDPOverride net.Destination
+	BlockedIPMatcher geodata.IPMatcher
+	UDPOverride      net.Destination
 
 	// Dest of udp packets might be a domain, we will resolve them to IP
 	// But resolver will return a random one if the domain has many IPs
@@ -398,6 +466,12 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
 					}
 				}
+			}
+			if isBlockedAddress(w.BlockedIPMatcher, b.UDP.Address) {
+				blockedAddr := b.UDP.Address
+				b.Release()
+				buf.ReleaseMulti(mb)
+				return errors.New("blocked target IP: ", blockedAddr).AtDebug()
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {

@@ -100,6 +100,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	if a.Reverse != nil {
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
 			Tag:  a.Reverse.Tag,
+			Name: "vless-reverse",
 			User: handler.server.User, // TODO: email
 		})
 		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
