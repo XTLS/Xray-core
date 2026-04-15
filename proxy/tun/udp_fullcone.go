@@ -74,7 +74,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 		dest: &dst,
 	}:
 	default:
-		panic("queue full") // impossible
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full 2")
 	}
 }
 

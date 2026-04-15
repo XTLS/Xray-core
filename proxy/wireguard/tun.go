@@ -255,7 +255,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 		dest: &dst,
 	}:
 	default:
-		panic("queue full") // impossible
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full 2")
 	}
 }
 
