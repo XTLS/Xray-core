@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1231,6 +1232,8 @@ func PraseByteSlice(data json.RawMessage, typ string) ([]byte, error) {
 }
 
 var (
+	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
@@ -1256,11 +1259,14 @@ var (
 )
 
 type TCPItem struct {
-	Delay     Int32Range      `json:"delay"`
-	Rand      int32           `json:"rand"`
-	RandRange *Int32Range     `json:"randRange"`
-	Type      string          `json:"type"`
-	Packet    json.RawMessage `json:"packet"`
+	Delay     Int32Range       `json:"delay"`
+	Rand      int32            `json:"rand"`
+	RandRange *Int32Range      `json:"randRange"`
+	Capture   string           `json:"capture"`
+	Type      string           `json:"type"`
+	Reuse     string           `json:"reuse"`
+	Transform *CustomTransform `json:"transform"`
+	Packet    json.RawMessage  `json:"packet"`
 }
 
 type HeaderCustomTCP struct {
@@ -1272,22 +1278,22 @@ type HeaderCustomTCP struct {
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 	for _, value := range c.Clients {
 		for _, item := range value {
-			if len(item.Packet) > 0 && item.Rand > 0 {
-				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
+				return nil, err
 			}
 		}
 	}
 	for _, value := range c.Servers {
 		for _, item := range value {
-			if len(item.Packet) > 0 && item.Rand > 0 {
-				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
+				return nil, err
 			}
 		}
 	}
 	for _, value := range c.Errors {
 		for _, item := range value {
-			if len(item.Packet) > 0 && item.Rand > 0 {
-				return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+			if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -1308,6 +1314,10 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
 			}
+			transform, err := buildCustomTransform(item.Transform)
+			if err != nil {
+				return nil, err
+			}
 			clients[i].Sequence = append(clients[i].Sequence, &custom.TCPItem{
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
@@ -1315,6 +1325,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				RandMin:  item.RandRange.From,
 				RandMax:  item.RandRange.To,
 				Packet:   item.Packet,
+				Save:     item.Capture,
+				Var:      item.Reuse,
+				Expr:     transform,
 			})
 		}
 	}
@@ -1333,6 +1346,10 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
 			}
+			transform, err := buildCustomTransform(item.Transform)
+			if err != nil {
+				return nil, err
+			}
 			servers[i].Sequence = append(servers[i].Sequence, &custom.TCPItem{
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
@@ -1340,6 +1357,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				RandMin:  item.RandRange.From,
 				RandMax:  item.RandRange.To,
 				Packet:   item.Packet,
+				Save:     item.Capture,
+				Var:      item.Reuse,
+				Expr:     transform,
 			})
 		}
 	}
@@ -1358,6 +1378,10 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 			if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 				return nil, err
 			}
+			transform, err := buildCustomTransform(item.Transform)
+			if err != nil {
+				return nil, err
+			}
 			errors[i].Sequence = append(errors[i].Sequence, &custom.TCPItem{
 				DelayMin: int64(item.Delay.From),
 				DelayMax: int64(item.Delay.To),
@@ -1365,6 +1389,9 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 				RandMin:  item.RandRange.From,
 				RandMax:  item.RandRange.To,
 				Packet:   item.Packet,
+				Save:     item.Capture,
+				Var:      item.Reuse,
+				Expr:     transform,
 			})
 		}
 	}
@@ -1471,10 +1498,162 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 }
 
 type UDPItem struct {
-	Rand      int32           `json:"rand"`
-	RandRange *Int32Range     `json:"randRange"`
-	Type      string          `json:"type"`
-	Packet    json.RawMessage `json:"packet"`
+	Rand      int32            `json:"rand"`
+	RandRange *Int32Range      `json:"randRange"`
+	Capture   string           `json:"capture"`
+	Type      string           `json:"type"`
+	Reuse     string           `json:"reuse"`
+	Transform *CustomTransform `json:"transform"`
+	Packet    json.RawMessage  `json:"packet"`
+}
+
+type CustomTransform struct {
+	Op   string               `json:"op"`
+	Args []CustomTransformArg `json:"args"`
+}
+
+type CustomTransformArg struct {
+	Type      string           `json:"type"`
+	Bytes     json.RawMessage  `json:"bytes"`
+	U64       *uint64          `json:"u64"`
+	Reuse     string           `json:"reuse"`
+	Metadata  string           `json:"metadata"`
+	Transform *CustomTransform `json:"transform"`
+}
+
+func validateCustomVarName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if !customVarNamePattern.MatchString(name) {
+		return errors.New("invalid variable name")
+	}
+	return nil
+}
+
+func validateCustomItemSpec(capture string, packet json.RawMessage, rand int32, reuse string, transform *CustomTransform) error {
+	if err := validateCustomVarName(capture); err != nil {
+		return err
+	}
+	if err := validateCustomVarName(reuse); err != nil {
+		return err
+	}
+
+	kindCount := 0
+	if len(packet) > 0 {
+		kindCount++
+	}
+	if rand > 0 {
+		kindCount++
+	}
+	if reuse != "" {
+		kindCount++
+	}
+	if transform != nil {
+		kindCount++
+	}
+	if kindCount > 1 {
+		return errors.New("exactly one item kind must be set")
+	}
+	if kindCount == 0 && capture != "" {
+		return errors.New("exactly one item kind must be set")
+	}
+
+	return nil
+}
+
+func buildCustomTransform(transform *CustomTransform) (*custom.Expr, error) {
+	if transform == nil {
+		return nil, nil
+	}
+	if transform.Op == "" {
+		return nil, errors.New("transform op is required")
+	}
+	if len(transform.Args) == 0 {
+		return nil, errors.New("transform args are required")
+	}
+
+	args := make([]*custom.ExprArg, 0, len(transform.Args))
+	for _, arg := range transform.Args {
+		parsedArg, err := buildCustomTransformArg(arg)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, parsedArg)
+	}
+
+	return &custom.Expr{
+		Op:   transform.Op,
+		Args: args,
+	}, nil
+}
+
+func buildCustomTransformArg(arg CustomTransformArg) (*custom.ExprArg, error) {
+	kindCount := 0
+	if len(arg.Bytes) > 0 {
+		kindCount++
+	}
+	if arg.U64 != nil {
+		kindCount++
+	}
+	if arg.Reuse != "" {
+		kindCount++
+	}
+	if arg.Metadata != "" {
+		kindCount++
+	}
+	if arg.Transform != nil {
+		kindCount++
+	}
+	if kindCount != 1 {
+		return nil, errors.New("transform arg must set exactly one value")
+	}
+
+	if len(arg.Bytes) > 0 {
+		value, err := PraseByteSlice(arg.Bytes, arg.Type)
+		if err != nil {
+			return nil, err
+		}
+		return &custom.ExprArg{
+			Value: &custom.ExprArg_Bytes{
+				Bytes: value,
+			},
+		}, nil
+	}
+	if arg.U64 != nil {
+		return &custom.ExprArg{
+			Value: &custom.ExprArg_U64{
+				U64: *arg.U64,
+			},
+		}, nil
+	}
+	if arg.Reuse != "" {
+		if err := validateCustomVarName(arg.Reuse); err != nil {
+			return nil, err
+		}
+		return &custom.ExprArg{
+			Value: &custom.ExprArg_Var{
+				Var: arg.Reuse,
+			},
+		}, nil
+	}
+	if arg.Metadata != "" {
+		return &custom.ExprArg{
+			Value: &custom.ExprArg_Metadata{
+				Metadata: arg.Metadata,
+			},
+		}, nil
+	}
+
+	parsedExpr, err := buildCustomTransform(arg.Transform)
+	if err != nil {
+		return nil, err
+	}
+	return &custom.ExprArg{
+		Value: &custom.ExprArg_Expr{
+			Expr: parsedExpr,
+		},
+	}, nil
 }
 
 type HeaderCustomUDP struct {
@@ -1484,13 +1663,13 @@ type HeaderCustomUDP struct {
 
 func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	for _, item := range c.Client {
-		if len(item.Packet) > 0 && item.Rand > 0 {
-			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
+			return nil, err
 		}
 	}
 	for _, item := range c.Server {
-		if len(item.Packet) > 0 && item.Rand > 0 {
-			return nil, errors.New("len(item.Packet) > 0 && item.Rand > 0")
+		if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1506,11 +1685,18 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 			return nil, err
 		}
+		transform, err := buildCustomTransform(item.Transform)
+		if err != nil {
+			return nil, err
+		}
 		client = append(client, &custom.UDPItem{
 			Rand:    item.Rand,
 			RandMin: item.RandRange.From,
 			RandMax: item.RandRange.To,
 			Packet:  item.Packet,
+			Save:    item.Capture,
+			Var:     item.Reuse,
+			Expr:    transform,
 		})
 	}
 
@@ -1526,11 +1712,18 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 		if item.Packet, err = PraseByteSlice(item.Packet, item.Type); err != nil {
 			return nil, err
 		}
+		transform, err := buildCustomTransform(item.Transform)
+		if err != nil {
+			return nil, err
+		}
 		server = append(server, &custom.UDPItem{
 			Rand:    item.Rand,
 			RandMin: item.RandRange.From,
 			RandMax: item.RandRange.To,
 			Packet:  item.Packet,
+			Save:    item.Capture,
+			Var:     item.Reuse,
+			Expr:    transform,
 		})
 	}
 

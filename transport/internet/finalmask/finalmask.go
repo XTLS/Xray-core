@@ -113,6 +113,10 @@ type headerManagerConn struct {
 	writeBuf [UDPSize]byte
 }
 
+type headerReadAddrAware interface {
+	SetReadAddr(net.Addr)
+}
+
 func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	buf := p
 	if len(buf) < UDPSize {
@@ -140,6 +144,9 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 	}
 
 	for i := range c.conns {
+		if aware, ok := c.conns[i].(headerReadAddrAware); ok {
+			aware.SetReadAddr(addr)
+		}
 		n, _, err = c.conns[i].ReadFrom(newBuf)
 		if n == 0 || err != nil {
 			errors.LogDebug(context.Background(), addr, " mask read err ", err)
@@ -175,7 +182,7 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 	n = copy(c.writeBuf[sum:], p)
 
 	for i := len(c.conns) - 1; i >= 0; i-- {
-		n, err = c.conns[i].WriteTo(c.writeBuf[sum-c.sizes[i]:n+sum], nil)
+		n, err = c.conns[i].WriteTo(c.writeBuf[sum-c.sizes[i]:n+sum], addr)
 		if n == 0 || err != nil {
 			errors.LogDebug(context.Background(), addr, " mask write err ", err)
 			return 0, nil
