@@ -24,7 +24,7 @@ const (
 type Config struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Name                   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	MTU                    []uint32               `protobuf:"varint,2,rep,packed,name=MTU,proto3" json:"MTU,omitempty"`
+	MTU                    uint32                 `protobuf:"varint,2,opt,name=MTU,proto3" json:"MTU,omitempty"`
 	Gateway                []string               `protobuf:"bytes,3,rep,name=gateway,proto3" json:"gateway,omitempty"`
 	DNS                    []string               `protobuf:"bytes,4,rep,name=DNS,proto3" json:"DNS,omitempty"`
 	UserLevel              uint32                 `protobuf:"varint,5,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
@@ -71,11 +71,11 @@ func (x *Config) GetName() string {
 	return ""
 }
 
-func (x *Config) GetMTU() []uint32 {
+func (x *Config) GetMTU() uint32 {
 	if x != nil {
 		return x.MTU
 	}
-	return nil
+	return 0
 }
 
 func (x *Config) GetGateway() []string {
@@ -120,7 +120,7 @@ const file_proxy_tun_config_proto_rawDesc = "" +
 	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xee\x01\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03MTU\x18\x02 \x03(\rR\x03MTU\x12\x18\n" +
+	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x18\n" +
 	"\agateway\x18\x03 \x03(\tR\agateway\x12\x10\n" +
 	"\x03DNS\x18\x04 \x03(\tR\x03DNS\x12\x1d\n" +
 	"\n" +

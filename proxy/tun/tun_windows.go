@@ -134,7 +134,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU[0]
+		ipif.NLMTU = t.options.MTU
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -151,7 +151,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU[1]
+		ipif.NLMTU = t.options.MTU
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -278,7 +278,7 @@ func (t *WindowsTun) Wait() {
 }
 
 func (t *WindowsTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
 }
 
 const (
@@ -290,26 +290,23 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 	var index [4]byte
 	binary.BigEndian.PutUint32(index[:], uint32(iface.Index))
 
+	var err1, err2, err3, err4 error
+
 	switch network {
-	case "tcp4", "udp4", "ip4":
-		err := windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_UNICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
-		if err != nil {
-			return err
-		}
-		if network == "udp4" {
-			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, windows.IP_MULTICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
-		}
 	case "tcp6", "udp6", "ip6":
-		err := windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_UNICAST_IF, iface.Index)
-		if err != nil {
-			return err
-		}
+		err1 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_UNICAST_IF, iface.Index)
 		if network == "udp6" {
-			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
+			err2 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
+		}
+		fallthrough
+	case "tcp4", "udp4", "ip4":
+		err3 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_UNICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
+		if network == "udp4" || network == "udp6" {
+			err4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, windows.IP_MULTICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
 		}
 	default:
-		return errors.New("unknown network ", network)
+		panic(network + " " + address)
 	}
 
-	return nil
+	return errors.Combine(err1, err2, err3, err4)
 }

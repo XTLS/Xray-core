@@ -3,7 +3,7 @@
 package tun
 
 import (
-	go_errors "errors"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -12,7 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
@@ -76,7 +75,7 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	err = setup(options.Name, options.MTU[0])
+	err = setup(options.Name, options.MTU)
 	if err != nil {
 		_ = tunFile.Close()
 		return nil, err
@@ -121,7 +120,7 @@ func (t *DarwinTun) Index() (int, error) {
 // WritePacket implements GVisorDevice method to write one packet to the tun device
 func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
 	defer b.Release()
 
 	// prepare Darwin specific packet header
@@ -143,7 +142,7 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 	b.SetByte(3, family)
 
 	if _, err := t.tunFile.Write(b.Bytes()); err != nil {
-		if go_errors.Is(err, unix.EAGAIN) {
+		if errors.Is(err, unix.EAGAIN) {
 			return &tcpip.ErrWouldBlock{}
 		}
 		return &tcpip.ErrAborted{}
@@ -156,11 +155,11 @@ func (t *DarwinTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
 // which will make the stack call Wait which should implement desired push-back
 func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU[0]) + utunHeaderSize)
+	b := buf.NewWithSize(int32(t.options.MTU) + utunHeaderSize)
 
 	// read the bytes to the interface file
 	n, err := b.ReadFrom(t.tunFile)
-	if go_errors.Is(err, unix.EAGAIN) || go_errors.Is(err, unix.EINTR) {
+	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
 		b.Release()
 		return 0, nil, ErrQueueEmpty
 	}
@@ -193,7 +192,7 @@ func (t *DarwinTun) Wait() {
 }
 
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
 }
 
 // open the interface, by creating new utunN if in the system and returning its file descriptor
@@ -373,12 +372,17 @@ func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
 }
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	var err1, err2 error
+
 	switch network {
-	case "tcp4", "udp4", "ip4":
-		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index)
 	case "tcp6", "udp6", "ip6":
-		return unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index)
+		err1 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index)
+		fallthrough
+	case "tcp4", "udp4", "ip4":
+		err2 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index)
 	default:
-		return errors.New("unknown network ", network)
+		panic(network + " " + address)
 	}
+
+	return errors.Join(err1, err2)
 }
