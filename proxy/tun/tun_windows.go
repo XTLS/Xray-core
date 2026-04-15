@@ -305,7 +305,7 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 			err4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, windows.IP_MULTICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
 		}
 	default:
-		panic(network)
+		panic(network + " " + address)
 	}
 
 	return errors.Combine(err1, err2, err3, err4)

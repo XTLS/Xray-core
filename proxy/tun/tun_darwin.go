@@ -381,7 +381,7 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 	case "tcp4", "udp4", "ip4":
 		err2 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index)
 	default:
-		panic(network)
+		panic(network + " " + address)
 	}
 
 	return errors.Join(err1, err2)
