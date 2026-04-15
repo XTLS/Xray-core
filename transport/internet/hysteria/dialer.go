@@ -450,6 +450,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
+	dest.Network = net.Network_UDP
 	config := streamSettings.ProtocolSettings.(*Config)
 
 	initmanager.Do(func() {
@@ -464,8 +465,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			},
 		}).Start()
 	})
+
 	manager.mutex.Lock()
-	dest.Network = net.Network_UDP
 	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
 	if !ok {
 		c = &client{
