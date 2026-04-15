@@ -7,7 +7,7 @@ import (
 
 type TunConfig struct {
 	Name                   string   `json:"name"`
-	MTU                    []uint32 `json:"mtu"`
+	MTU                    uint32   `json:"mtu"`
 	Gateway                []string `json:"gateway"`
 	DNS                    []string `json:"dns"`
 	UserLevel              uint32   `json:"userLevel"`
@@ -34,11 +34,8 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	if config.Name == "" {
 		config.Name = "xray0"
 	}
-	if len(config.MTU) == 0 {
-		config.MTU = []uint32{1500, 1280}
-	}
-	if len(config.MTU) == 1 {
-		config.MTU = append(config.MTU, config.MTU[0])
+	if config.MTU == 0 {
+		config.MTU = 1500
 	}
 	return config, nil
 }

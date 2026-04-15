@@ -134,7 +134,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU[0]
+		ipif.NLMTU = t.options.MTU
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -151,7 +151,7 @@ func (t *WindowsTun) Start() error {
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU[1]
+		ipif.NLMTU = t.options.MTU
 		ipif.UseAutomaticMetric = false
 		ipif.Metric = 0
 		err = ipif.Set()
@@ -278,7 +278,7 @@ func (t *WindowsTun) Wait() {
 }
 
 func (t *WindowsTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU[0], device: t}, nil
+	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
 }
 
 const (
@@ -308,7 +308,7 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 			return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
 		}
 	default:
-		return errors.New("unknown network ", network)
+		panic(network)
 	}
 
 	return nil

@@ -4,7 +4,7 @@ package tun
 
 import (
 	"errors"
-	_ "unsafe"
+	"net"
 
 	"golang.zx2c4.com/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/buffer"
@@ -27,11 +27,10 @@ type FreeBSDTun struct {
 }
 
 var _ Tun = (*FreeBSDTun)(nil)
-var _ GVisorTun = (*FreeBSDTun)(nil)
 var _ GVisorDevice = (*FreeBSDTun)(nil)
 
 // NewTun builds new tun interface handler
-func NewTun(options TunOptions) (Tun, error) {
+func NewTun(options *Config) (Tun, error) {
 	tunDev, err := tun.CreateTUN(options.Name, int(options.MTU))
 	if err != nil {
 		return nil, err
@@ -46,6 +45,22 @@ func (t *FreeBSDTun) Start() error {
 
 func (t *FreeBSDTun) Close() error {
 	return t.device.Close()
+}
+
+func (t *FreeBSDTun) Name() (string, error) {
+	return t.device.Name()
+}
+
+func (t *FreeBSDTun) Index() (int, error) {
+	name, err := t.Name()
+	if err != nil {
+		return 0, err
+	}
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return 0, err
+	}
+	return iface.Index, nil
 }
 
 // WritePacket implements GVisorDevice method to write one packet to the tun device
@@ -124,4 +139,8 @@ func (t *FreeBSDTun) Wait() {
 
 func (t *FreeBSDTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return &LinkEndpoint{deviceMTU: t.mtu, device: t}, nil
+}
+
+func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
+	return nil
 }
