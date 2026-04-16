@@ -92,7 +92,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	if destination.Network == net.Network_UDP {
 		request.Command = protocol.RequestCommandUDP
-		request.UDPInTCP = true
 	}
 
 	user := server.User
@@ -145,15 +144,20 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	} else if request.Command == protocol.RequestCommandUDP {
+		udpConn, err := dialer.Dial(ctx, udpRequest.Destination())
+		if err != nil {
+			return errors.New("failed to create UDP connection").Base(err)
+		}
+		defer udpConn.Close()
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			writer := &TCPUDPWriter{Writer: conn}
+			writer := &UDPWriter{Writer: udpConn, Request: request}
 			return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 		}
 		responseFunc = func() error {
 			ob.CanSpliceCopy = 1
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-			reader := &TCPUDPReader{Reader: conn}
+			reader := &UDPReader{Reader: udpConn}
 			return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
 		}
 	}

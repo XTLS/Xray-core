@@ -39,8 +39,8 @@ func TestTCPUDPEncoding(t *testing.T) {
 	request := &protocol.RequestHeader{
 		Address: net.DomainAddress("example.com"),
 		Port:    5353,
-		UDPInTCP: true,
 	}
+	request.Option.Set(protocol.RequestOptionUDPInTCP)
 	content := []byte("relay")
 	var raw bytes.Buffer
 	payload := buf.New()

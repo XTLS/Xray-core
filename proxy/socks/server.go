@@ -170,7 +170,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
-		if request.UDPInTCP {
+		if request.Option.Has(protocol.RequestOptionUDPInTCP) {
 			return s.handleUDPInTCP(ctx, conn, dispatcher)
 		}
 		if s.udpFilter != nil {
@@ -198,10 +198,9 @@ func (s *Server) handleUDPInTCP(ctx context.Context, conn stat.Connection, dispa
 		}
 		if payload.UDP != nil {
 			request = &protocol.RequestHeader{
-				User:     request.User,
-				Address:  payload.UDP.Address,
-				Port:     payload.UDP.Port,
-				UDPInTCP: true,
+				User:    request.User,
+				Address: payload.UDP.Address,
+				Port:    payload.UDP.Port,
 			}
 		}
 		udpMessage, err := EncodeTCPUDPPacket(request, payload.Bytes())
@@ -222,17 +221,17 @@ func (s *Server) handleUDPInTCP(ctx context.Context, conn stat.Connection, dispa
 			return err
 		}
 		for _, payload := range mpayload {
-			if payload.IsEmpty() || payload.UDP == nil {
+			if payload.UDP == nil {
 				payload.Release()
 				continue
 			}
 			destination := *payload.UDP
 			request := &protocol.RequestHeader{
-				Version:  socks5Version,
-				Command:  protocol.RequestCommandUDP,
-				Address:  destination.Address,
-				Port:     destination.Port,
-				UDPInTCP: true,
+				Version: socks5Version,
+				Command: protocol.RequestCommandUDP,
+				Address: destination.Address,
+				Port:    destination.Port,
+				Option:  protocol.RequestOptionUDPInTCP,
 			}
 			currentPacketCtx := protocol.ContextWithRequestHeader(ctx, request)
 			udpServer.Dispatch(currentPacketCtx, destination, payload)

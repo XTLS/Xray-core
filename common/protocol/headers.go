@@ -40,6 +40,8 @@ const (
 	RequestOptionGlobalPadding bitmask.Byte = 0x08
 
 	RequestOptionAuthenticatedLength bitmask.Byte = 0x10
+
+	RequestOptionUDPInTCP bitmask.Byte = 0x20
 )
 
 type RequestHeader struct {
@@ -50,7 +52,6 @@ type RequestHeader struct {
 	Port     net.Port
 	Address  net.Address
 	User     *MemoryUser
-	UDPInTCP bool
 }
 
 func (h *RequestHeader) Destination() net.Destination {

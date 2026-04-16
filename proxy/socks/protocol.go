@@ -178,7 +178,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 			return nil, errors.New("UDP is not enabled.")
 		}
 		request.Command = protocol.RequestCommandUDP
-		request.UDPInTCP = true
+		request.Option.Set(protocol.RequestOptionUDPInTCP)
 	case cmdTCPBind:
 		writeSocks5Response(writer, statusCmdNotSupport, net.AnyIP, net.Port(0))
 		return nil, errors.New("TCP bind is not supported.")
@@ -401,34 +401,6 @@ func EncodeTCPUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buff
 	return b, nil
 }
 
-func DecodeTCPUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
-	if packet.Len() < 5 {
-		return nil, errors.New("insufficient length of packet.")
-	}
-	dlen := int(binary.BigEndian.Uint16(packet.BytesRange(0, 2)))
-	hdrlen := int(packet.Byte(2))
-	if hdrlen < 5 {
-		return nil, errors.New("invalid UDP packet length")
-	}
-	packet.Advance(3)
-	request := &protocol.RequestHeader{
-		Version:  socks5Version,
-		Command:  protocol.RequestCommandUDP,
-		UDPInTCP: true,
-	}
-	addr, port, err := addrParser.ReadAddressPort(nil, packet)
-	if err != nil {
-		return nil, errors.New("failed to read UDP header").Base(err)
-	}
-	request.Address = addr
-	request.Port = port
-	request.UDPInTCP = true
-	if dlen < 0 {
-		return nil, errors.New("invalid UDP data length")
-	}
-	return request, nil
-}
-
 type TCPUDPReader struct {
 	Reader io.Reader
 }
@@ -449,11 +421,10 @@ func (r *TCPUDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 	body := buf.New()
 	defer body.Release()
-	body.Write(head)
 	body.Write(addrBytes)
-	request, err := DecodeTCPUDPPacket(body)
+	addr, port, err := addrParser.ReadAddressPort(nil, body)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to read UDP header").Base(err)
 	}
 	payload := make([]byte, dlen)
 	if _, err := io.ReadFull(r.Reader, payload); err != nil {
@@ -461,7 +432,7 @@ func (r *TCPUDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 	out := buf.New()
 	out.Write(payload)
-	dest := request.Destination()
+	dest := net.UDPDestination(addr, port)
 	out.UDP = &dest
 	return buf.MultiBuffer{out}, nil
 }
@@ -605,7 +576,7 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 
 	command := byte(cmdTCPConnect)
 	if request.Command == protocol.RequestCommandUDP {
-		if request.UDPInTCP {
+		if request.Option.Has(protocol.RequestOptionUDPInTCP) {
 			command = byte(cmdUDPInTCP)
 		} else {
 			command = byte(cmdUDPAssociate)
