@@ -8,17 +8,24 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"sync"
+	"sync/atomic"
 
+	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
+	"golang.org/x/net/http2"
 )
 
 // interface to abstract between use of browser dialer, vs net/http
 type DialerClient interface {
 	IsClosed() bool
+
+	// Close releases any idle transport resources (TCP/TLS/QUIC state)
+	// held by the client. Safe to call multiple times.
+	Close() error
 
 	// ctx, url, sessionId, body, uploadOnly
 	OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error)
@@ -31,7 +38,7 @@ type DialerClient interface {
 type DefaultDialerClient struct {
 	transportConfig *Config
 	client          *http.Client
-	closed          bool
+	closed          atomic.Bool
 	httpVersion     string
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
@@ -39,7 +46,26 @@ type DefaultDialerClient struct {
 }
 
 func (c *DefaultDialerClient) IsClosed() bool {
-	return c.closed
+	return c.closed.Load()
+}
+
+// Close releases the underlying http2.Transport / http3.Transport idle
+// connections so that TCP/TLS sockets and QUIC state are not held for
+// up to ConnIdleTimeout after this client is discarded from the pool.
+func (c *DefaultDialerClient) Close() error {
+	c.closed.Store(true)
+	if c.client == nil {
+		return nil
+	}
+	switch t := c.client.Transport.(type) {
+	case *http2.Transport:
+		t.CloseIdleConnections()
+	case *http.Transport:
+		t.CloseIdleConnections()
+	case *http3.Transport:
+		return t.Close()
+	}
+	return nil
 }
 
 func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
@@ -67,7 +93,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		resp, err := c.client.Do(req)
 		if err != nil {
 			if !uploadOnly { // stream-down is enough
-				c.closed = true
+				c.closed.Store(true)
 				errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			}
 			gotConn.Close()
@@ -101,7 +127,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
 		if err != nil {
-			c.closed = true
+			c.closed.Store(true)
 			return err
 		}
 
@@ -141,7 +167,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				if h1UploadConn.UnreadedResponsesCount > 0 {
 					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
-						c.closed = true
+						c.closed.Store(true)
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					io.Copy(io.Discard, resp.Body)
@@ -160,8 +186,12 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			if err == nil {
 				break
 			} else if newConnection {
+				h1UploadConn.Close()
 				return err
 			}
+			// the pooled connection is dead; close it so its TCP socket
+			// is released instead of leaking, then try the next one.
+			h1UploadConn.Close()
 		}
 
 		c.uploadRawPool.Put(uploadConn)

@@ -21,6 +21,12 @@ func (c *BrowserDialerClient) IsClosed() bool {
 	panic("not implemented yet")
 }
 
+// Close is a no-op for the browser dialer client; the browser itself
+// owns the underlying connection lifecycle.
+func (c *BrowserDialerClient) Close() error {
+	return nil
+}
+
 func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
 	if body != nil {
 		return nil, nil, nil, errors.New("bidirectional streaming for browser dialer not implemented yet")
