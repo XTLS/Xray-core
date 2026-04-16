@@ -79,12 +79,16 @@ func parseGeoIPRule(rule string) (*IPRule_Geoip, error) {
 }
 
 func parseCustomIPRule(rule string) (*IPRule_Custom, error) {
-	cidr, err := parseCIDR(rule)
+	reverse := strings.HasPrefix(rule, "!")
+	cidr, err := parseCIDR(strings.TrimPrefix(rule, "!"))
 	if err != nil {
 		return nil, err
 	}
 	return &IPRule_Custom{
-		Custom: cidr,
+		Custom: &CIDRRule{
+			Cidr:         cidr,
+			ReverseMatch: reverse,
+		},
 	}, nil
 }
 
