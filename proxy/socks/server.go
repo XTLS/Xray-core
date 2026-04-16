@@ -222,17 +222,18 @@ func (s *Server) handleUDPInTCP(ctx context.Context, conn stat.Connection, dispa
 			return err
 		}
 		for _, payload := range mpayload {
-			request, err := DecodeTCPUDPPacket(payload)
-			if err != nil {
-				errors.LogInfoInner(ctx, err, "failed to parse UDP-in-TCP request")
+			if payload.IsEmpty() || payload.UDP == nil {
 				payload.Release()
 				continue
 			}
-			if payload.IsEmpty() {
-				payload.Release()
-				continue
+			destination := *payload.UDP
+			request := &protocol.RequestHeader{
+				Version:  socks5Version,
+				Command:  protocol.RequestCommandUDP,
+				Address:  destination.Address,
+				Port:     destination.Port,
+				UDPInTCP: true,
 			}
-			destination := request.Destination()
 			currentPacketCtx := protocol.ContextWithRequestHeader(ctx, request)
 			udpServer.Dispatch(currentPacketCtx, destination, payload)
 		}

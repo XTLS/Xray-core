@@ -392,8 +392,7 @@ func EncodeTCPUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buff
 		b.Clear()
 		return b, nil
 	}
-	common.Must2(b.Write([]byte{0, 0, byte(3 + addrlen)}))
-	binary.BigEndian.PutUint16(b.Bytes()[:2], uint16(len(data)))
+	common.Must2(b.Write([]byte{byte(len(data) >> 8), byte(len(data)), byte(3 + addrlen)}))
 	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
 		b.Release()
 		return nil, err
@@ -408,7 +407,7 @@ func DecodeTCPUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
 	}
 	dlen := int(binary.BigEndian.Uint16(packet.BytesRange(0, 2)))
 	hdrlen := int(packet.Byte(2))
-	if hdrlen < 5 || hdrlen > int(packet.Len()) {
+	if hdrlen < 5 {
 		return nil, errors.New("invalid UDP packet length")
 	}
 	packet.Advance(3)
@@ -606,7 +605,11 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 
 	command := byte(cmdTCPConnect)
 	if request.Command == protocol.RequestCommandUDP {
-		command = byte(cmdUDPAssociate)
+		if request.UDPInTCP {
+			command = byte(cmdUDPInTCP)
+		} else {
+			command = byte(cmdUDPAssociate)
+		}
 	}
 	common.Must2(b.Write([]byte{socks5Version, command, 0x00 /* reserved */}))
 	if request.Command == protocol.RequestCommandUDP {

@@ -47,6 +47,9 @@ func TestTCPUDPEncoding(t *testing.T) {
 	payload.Write(content)
 	payload.UDP = &net.Destination{Network: net.Network_UDP, Address: request.Address, Port: request.Port}
 	common.Must((&TCPUDPWriter{Writer: &raw}).WriteMultiBuffer(buf.MultiBuffer{payload}))
+	if got := raw.Bytes(); len(got) < 3 || got[0] != 0x00 || got[1] != 0x05 || got[2] != 0x12 {
+		t.Fatalf("unexpected tcp udp frame header: %v", got[:3])
+	}
 
 	reader := &TCPUDPReader{Reader: bytes.NewReader(raw.Bytes())}
 	decodedPayload, err := reader.ReadMultiBuffer()
