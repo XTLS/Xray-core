@@ -340,7 +340,7 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 type PacketReader struct {
 	*internet.PacketConnWrapper
 	stats.Counter
-	BlockedIPMatcher geodata.IPMatcher
+	BlockedIPMatcher  geodata.IPMatcher
 	IsOverridden      bool
 	InitUnchangedAddr net.Address
 	InitChangedAddr   net.Address
@@ -348,38 +348,40 @@ type PacketReader struct {
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
-	b.Resize(0, buf.Size)
-	n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
-	if err != nil {
-		b.Release()
-		return nil, err
-	}
-
-	udpAddr := d.(*net.UDPAddr)
-	sourceAddr := net.IPAddress(udpAddr.IP)
-	if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
-		b.Release()
-		return nil, errors.New("blocked source IP: ", sourceAddr).AtDebug()
-	}
-
-	b.Resize(0, int32(n))
-	// if udp dest addr is changed, we are unable to get the correct src addr
-	// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
-	if !r.IsOverridden {
-		address := sourceAddr
-		if r.InitChangedAddr == address {
-			address = r.InitUnchangedAddr
+	for {
+		b.UDP = nil
+		b.Resize(0, buf.Size)
+		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
+		if err != nil {
+			b.Release()
+			return nil, err
 		}
-		b.UDP = &net.Destination{
-			Address: address,
-			Port:    net.Port(udpAddr.Port),
-			Network: net.Network_UDP,
+
+		udpAddr := d.(*net.UDPAddr)
+		sourceAddr := net.IPAddress(udpAddr.IP)
+		if !r.IsOverridden && r.InitChangedAddr == sourceAddr {
+			sourceAddr = r.InitUnchangedAddr
 		}
+		if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
+			b.Clear()
+			continue
+		}
+
+		b.Resize(0, int32(n))
+		// if udp dest addr is changed, we are unable to get the correct src addr
+		// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
+		if !r.IsOverridden {
+			b.UDP = &net.Destination{
+				Address: sourceAddr,
+				Port:    net.Port(udpAddr.Port),
+				Network: net.Network_UDP,
+			}
+		}
+		if r.Counter != nil {
+			r.Counter.Add(int64(n))
+		}
+		return buf.MultiBuffer{b}, nil
 	}
-	if r.Counter != nil {
-		r.Counter.Add(int64(n))
-	}
-	return buf.MultiBuffer{b}, nil
 }
 
 // DialDest means the dial target used in the dialer when creating conn
@@ -478,10 +480,8 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				}
 			}
 			if isBlockedAddress(w.BlockedIPMatcher, b.UDP.Address) {
-				blockedAddr := b.UDP.Address
 				b.Release()
-				buf.ReleaseMulti(mb)
-				return errors.New("blocked target IP: ", blockedAddr).AtDebug()
+				continue
 			}
 			destAddr := b.UDP.RawNetAddr()
 			if destAddr == nil {
