@@ -173,10 +173,6 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 		}
 		request.Command = protocol.RequestCommandUDP
 	case cmdUDPInTCP:
-		if !s.config.UdpEnabled {
-			writeSocks5Response(writer, statusCmdNotSupport, net.AnyIP, net.Port(0))
-			return nil, errors.New("UDP is not enabled.")
-		}
 		request.Command = protocol.RequestCommandUDP
 		request.Option.Set(protocol.RequestOptionUDPInTCP)
 	case cmdTCPBind:
