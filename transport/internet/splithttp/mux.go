@@ -13,6 +13,11 @@ import (
 
 type XmuxConn interface {
 	IsClosed() bool
+	// Close releases any idle transport resources held by the underlying
+	// client (TCP/TLS/QUIC state). It is called when the XmuxClient is
+	// pruned from the manager so that dead transports do not sit around
+	// holding sockets for up to ConnIdleTimeout.
+	Close() error
 }
 
 type XmuxClient struct {
@@ -72,6 +77,13 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 				", leftUsage = ", xmuxClient.leftUsage,
 				", LeftRequests = ", xmuxClient.LeftRequests.Load(),
 				", UnreusableAt = ", xmuxClient.UnreusableAt)
+			// Release the underlying transport's idle connections before
+			// dropping the last reference, otherwise the http2/http3
+			// transport keeps holding TCP+TLS / QUIC state for up to
+			// ConnIdleTimeout (~5 minutes) even though nothing will use it.
+			if err := xmuxClient.XmuxConn.Close(); err != nil {
+				errors.LogDebug(ctx, "XMUX: error closing xmuxClient: ", err)
+			}
 			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
 		} else {
 			i++

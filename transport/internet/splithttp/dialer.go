@@ -464,6 +464,31 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
+	// Roll back OpenUsage bumps and tear down any partially-initialised
+	// stream if Dial returns an error further down. Without this, a
+	// failure between "stream-down opened" and "stream-up opened" leaks
+	// the already-running stream-down goroutine and two OpenUsage refs.
+	dialSucceeded := false
+	defer func() {
+		if dialSucceeded {
+			return
+		}
+		if closed.Add(1) == 1 {
+			if xmuxClient != nil {
+				xmuxClient.OpenUsage.Add(-1)
+			}
+			if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
+				xmuxClient2.OpenUsage.Add(-1)
+			}
+		}
+		if conn.reader != nil {
+			conn.reader.Close()
+		}
+		if conn.writer != nil {
+			conn.writer.Close()
+		}
+	}()
+
 	var err error
 	if mode == "stream-one" {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
@@ -474,6 +499,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		dialSucceeded = true
 		return stat.Connection(&conn), nil
 	} else { // stream-down
 		if xmuxClient2 != nil {
@@ -492,6 +518,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		dialSucceeded = true
 		return stat.Connection(&conn), nil
 	}
 
@@ -517,12 +544,23 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	go func() {
 		var seq int64
 		var lastWrite time.Time
+		var remainder buf.MultiBuffer
+
+		defer func() {
+			// Release any pooled buffers still held by remainder; otherwise
+			// an early exit (pipe error, doSplit=false) would leak them back
+			// into the pool as unreachable garbage.
+			if !remainder.IsEmpty() {
+				buf.ReleaseMulti(remainder)
+			}
+		}()
 
 		for {
 			// by offloading the uploads into a buffered pipe, multiple conn.Write
 			// calls get automatically batched together into larger POST requests.
 			// without batching, bandwidth is extremely limited.
-			remainder, err := uploadPipeReader.ReadMultiBuffer()
+			var err error
+			remainder, err = uploadPipeReader.ReadMultiBuffer()
 			if err != nil {
 				break
 			}
@@ -580,6 +618,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
+	dialSucceeded = true
 	return stat.Connection(&conn), nil
 }
 
@@ -607,9 +646,14 @@ func (w uploadWriter) Write(b []byte) (int, error) {
 	common.Must2(buffer.Write(b))
 
 	var writed int
-	for _, buff := range buffer.MultiBuffer {
+	for i, buff := range buffer.MultiBuffer {
 		err := w.WriteMultiBuffer(buf.MultiBuffer{buff})
 		if err != nil {
+			// Release the buffers that were not handed off to the pipe;
+			// without this they leak back into the pool as unreachable.
+			// The current `buff` was consumed by WriteMultiBuffer even on
+			// error, so only release the tail starting at i+1.
+			buf.ReleaseMulti(buffer.MultiBuffer[i+1:])
 			return writed, err
 		}
 		writed += int(buff.Len())
