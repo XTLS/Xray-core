@@ -18,6 +18,7 @@ const (
 	cmdTCPConnect    = 0x01
 	cmdTCPBind       = 0x02
 	cmdUDPAssociate  = 0x03
+	cmdUDPInTCP      = 0x05
 	cmdTorResolve    = 0xF0
 	cmdTorResolvePTR = 0xF1
 
@@ -171,6 +172,13 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 			return nil, errors.New("UDP is not enabled.")
 		}
 		request.Command = protocol.RequestCommandUDP
+	case cmdUDPInTCP:
+		if !s.config.UdpEnabled {
+			writeSocks5Response(writer, statusCmdNotSupport, net.AnyIP, net.Port(0))
+			return nil, errors.New("UDP is not enabled.")
+		}
+		request.Command = protocol.RequestCommandUDP
+		request.UDPInTCP = true
 	case cmdTCPBind:
 		writeSocks5Response(writer, statusCmdNotSupport, net.AnyIP, net.Port(0))
 		return nil, errors.New("TCP bind is not supported.")
@@ -360,6 +368,135 @@ func EncodeUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer,
 	}
 	common.Must2(b.Write(data))
 	return b, nil
+}
+
+func EncodeTCPUDPPacket(request *protocol.RequestHeader, data []byte) (*buf.Buffer, error) {
+	b := buf.New()
+	addrlen := 0
+	switch request.Address.Family() {
+	case net.AddressFamilyIPv4:
+		addrlen = 7
+	case net.AddressFamilyIPv6:
+		addrlen = 19
+	case net.AddressFamilyDomain:
+		addrlen = 4 + len(request.Address.Domain())
+	default:
+		b.Release()
+		return nil, errors.New("invalid UDP address family")
+	}
+	if addrlen < 5 || addrlen > 255 {
+		b.Release()
+		return nil, errors.New("invalid UDP header length")
+	}
+	if len(data) > 0xffff {
+		b.Clear()
+		return b, nil
+	}
+	common.Must2(b.Write([]byte{0, 0, byte(3 + addrlen)}))
+	binary.BigEndian.PutUint16(b.Bytes()[:2], uint16(len(data)))
+	if err := addrParser.WriteAddressPort(b, request.Address, request.Port); err != nil {
+		b.Release()
+		return nil, err
+	}
+	common.Must2(b.Write(data))
+	return b, nil
+}
+
+func DecodeTCPUDPPacket(packet *buf.Buffer) (*protocol.RequestHeader, error) {
+	if packet.Len() < 5 {
+		return nil, errors.New("insufficient length of packet.")
+	}
+	dlen := int(binary.BigEndian.Uint16(packet.BytesRange(0, 2)))
+	hdrlen := int(packet.Byte(2))
+	if hdrlen < 5 || hdrlen > int(packet.Len()) {
+		return nil, errors.New("invalid UDP packet length")
+	}
+	packet.Advance(3)
+	request := &protocol.RequestHeader{
+		Version:  socks5Version,
+		Command:  protocol.RequestCommandUDP,
+		UDPInTCP: true,
+	}
+	addr, port, err := addrParser.ReadAddressPort(nil, packet)
+	if err != nil {
+		return nil, errors.New("failed to read UDP header").Base(err)
+	}
+	request.Address = addr
+	request.Port = port
+	request.UDPInTCP = true
+	if dlen < 0 {
+		return nil, errors.New("invalid UDP data length")
+	}
+	return request, nil
+}
+
+type TCPUDPReader struct {
+	Reader io.Reader
+}
+
+func (r *TCPUDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	head := make([]byte, 3)
+	if _, err := io.ReadFull(r.Reader, head); err != nil {
+		return nil, err
+	}
+	dlen := int(binary.BigEndian.Uint16(head[:2]))
+	hdrlen := int(head[2])
+	if hdrlen < 5 {
+		return nil, errors.New("invalid UDP packet length")
+	}
+	addrBytes := make([]byte, hdrlen-3)
+	if _, err := io.ReadFull(r.Reader, addrBytes); err != nil {
+		return nil, err
+	}
+	body := buf.New()
+	defer body.Release()
+	body.Write(head)
+	body.Write(addrBytes)
+	request, err := DecodeTCPUDPPacket(body)
+	if err != nil {
+		return nil, err
+	}
+	payload := make([]byte, dlen)
+	if _, err := io.ReadFull(r.Reader, payload); err != nil {
+		return nil, err
+	}
+	out := buf.New()
+	out.Write(payload)
+	dest := request.Destination()
+	out.UDP = &dest
+	return buf.MultiBuffer{out}, nil
+}
+
+type TCPUDPWriter struct {
+	Writer io.Writer
+}
+
+func (w *TCPUDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	for {
+		mb2, b := buf.SplitFirst(mb)
+		mb = mb2
+		if b == nil {
+			break
+		}
+		if b.UDP == nil {
+			b.Release()
+			continue
+		}
+		request := &protocol.RequestHeader{Address: b.UDP.Address, Port: b.UDP.Port}
+		packet, err := EncodeTCPUDPPacket(request, b.Bytes())
+		b.Release()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
+		if _, err = w.Writer.Write(packet.Bytes()); err != nil {
+			packet.Release()
+			buf.ReleaseMulti(mb)
+			return err
+		}
+		packet.Release()
+	}
+	return nil
 }
 
 type UDPReader struct {

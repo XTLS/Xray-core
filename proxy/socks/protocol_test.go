@@ -35,6 +35,30 @@ func TestUDPEncoding(t *testing.T) {
 	}
 }
 
+func TestTCPUDPEncoding(t *testing.T) {
+	request := &protocol.RequestHeader{
+		Address: net.DomainAddress("example.com"),
+		Port:    5353,
+		UDPInTCP: true,
+	}
+	content := []byte("relay")
+	var raw bytes.Buffer
+	payload := buf.New()
+	payload.Write(content)
+	payload.UDP = &net.Destination{Network: net.Network_UDP, Address: request.Address, Port: request.Port}
+	common.Must((&TCPUDPWriter{Writer: &raw}).WriteMultiBuffer(buf.MultiBuffer{payload}))
+
+	reader := &TCPUDPReader{Reader: bytes.NewReader(raw.Bytes())}
+	decodedPayload, err := reader.ReadMultiBuffer()
+	common.Must(err)
+	if r := cmp.Diff(decodedPayload[0].Bytes(), content); r != "" {
+		t.Error(r)
+	}
+	if decodedPayload[0].UDP == nil || decodedPayload[0].UDP.Port != request.Port || decodedPayload[0].UDP.Address.String() != request.Address.String() {
+		t.Fatal("unexpected udp destination")
+	}
+}
+
 func TestReadUsernamePassword(t *testing.T) {
 	testCases := []struct {
 		Input    []byte

@@ -170,6 +170,9 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
+		if request.UDPInTCP {
+			return s.handleUDPInTCP(ctx, conn, dispatcher)
+		}
 		if s.udpFilter != nil {
 			s.udpFilter.Add(conn.RemoteAddr())
 		}
@@ -183,6 +186,57 @@ func (*Server) handleUDP(c io.Reader) error {
 	// The TCP connection closes after this method returns. We need to wait until
 	// the client closes it.
 	return common.Error2(io.Copy(buf.DiscardBytes, c))
+}
+
+func (s *Server) handleUDPInTCP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
+		payload := packet.Payload
+		request := protocol.RequestHeaderFromContext(ctx)
+		if request == nil {
+			payload.Release()
+			return
+		}
+		if payload.UDP != nil {
+			request = &protocol.RequestHeader{
+				User:     request.User,
+				Address:  payload.UDP.Address,
+				Port:     payload.UDP.Port,
+				UDPInTCP: true,
+			}
+		}
+		udpMessage, err := EncodeTCPUDPPacket(request, payload.Bytes())
+		payload.Release()
+		if err != nil {
+			errors.LogWarningInner(ctx, err, "failed to write UDP-in-TCP response")
+			return
+		}
+		_, _ = conn.Write(udpMessage.Bytes())
+		udpMessage.Release()
+	})
+	defer udpServer.RemoveRay()
+
+	reader := &TCPUDPReader{Reader: conn}
+	for {
+		mpayload, err := reader.ReadMultiBuffer()
+		if err != nil {
+			return err
+		}
+		for _, payload := range mpayload {
+			request, err := DecodeTCPUDPPacket(payload)
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "failed to parse UDP-in-TCP request")
+				payload.Release()
+				continue
+			}
+			if payload.IsEmpty() {
+				payload.Release()
+				continue
+			}
+			destination := request.Destination()
+			currentPacketCtx := protocol.ContextWithRequestHeader(ctx, request)
+			udpServer.Dispatch(currentPacketCtx, destination, payload)
+		}
+	}
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
