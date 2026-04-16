@@ -290,7 +290,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn, UDPOverride, destination)
+			reader = NewPacketReader(conn, UDPOverride, destination, blockedIPMatcher)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
@@ -309,7 +309,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
+func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination, blockedIPMatcher geodata.IPMatcher) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -328,6 +328,7 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
+			BlockedIPMatcher:  blockedIPMatcher,
 			IsOverridden:      isOverridden,
 			InitUnchangedAddr: DialDest.Address,
 			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
@@ -339,6 +340,7 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 type PacketReader struct {
 	*internet.PacketConnWrapper
 	stats.Counter
+	BlockedIPMatcher geodata.IPMatcher
 	IsOverridden      bool
 	InitUnchangedAddr net.Address
 	InitChangedAddr   net.Address
@@ -352,17 +354,25 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		b.Release()
 		return nil, err
 	}
+
+	udpAddr := d.(*net.UDPAddr)
+	sourceAddr := net.IPAddress(udpAddr.IP)
+	if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
+		b.Release()
+		return nil, errors.New("blocked source IP: ", sourceAddr).AtDebug()
+	}
+
 	b.Resize(0, int32(n))
 	// if udp dest addr is changed, we are unable to get the correct src addr
 	// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
 	if !r.IsOverridden {
-		address := net.IPAddress(d.(*net.UDPAddr).IP)
+		address := sourceAddr
 		if r.InitChangedAddr == address {
 			address = r.InitUnchangedAddr
 		}
 		b.UDP = &net.Destination{
 			Address: address,
-			Port:    net.Port(d.(*net.UDPAddr).Port),
+			Port:    net.Port(udpAddr.Port),
 			Network: net.Network_UDP,
 		}
 	}
