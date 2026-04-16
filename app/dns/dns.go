@@ -271,11 +271,11 @@ func (s *DNS) sortClients(domain string) []*Client {
 
 	// Priority domain matching
 	hasMatch := false
-	MatchSlice := s.domainMatcher.Match(strings.ToLower(domain))
-	sort.Slice(MatchSlice, func(i, j int) bool {
-		return MatchSlice[i] < MatchSlice[j]
+	matchSlice := s.domainMatcher.Match(strings.ToLower(domain))
+	sort.Slice(matchSlice, func(i, j int) bool {
+		return matchSlice[i] < matchSlice[j]
 	})
-	for _, match := range MatchSlice {
+	for _, match := range matchSlice {
 		info := s.matcherInfos[match]
 		client := s.clients[info.clientIdx]
 		domainRule := info.domainRule
