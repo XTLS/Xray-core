@@ -124,7 +124,7 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 
 		// misordered packet
 		if packet.Seq > h.nextSeq {
-			if len(h.heap) > h.maxPackets {
+			if len(h.heap)+1 > h.maxPackets {
 				// the "reassembly buffer" is too large, and we want to
 				// constrain memory usage somehow. let's tear down the
 				// connection, and hope the application retries.
