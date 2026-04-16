@@ -19,6 +19,7 @@ func TestParseIPRules(t *testing.T) {
 		"ext-ip:geoip.dat:!cn",
 		"ext-ip:geoip.dat:!ca",
 		"192.168.0.0/24",
+		"!192.168.0.0/24",
 		"192.168.0.1",
 		"fe80::/64",
 		"fe80::",
@@ -27,6 +28,26 @@ func TestParseIPRules(t *testing.T) {
 	_, err := geodata.ParseIPRules(rules)
 	if err != nil {
 		t.Fatalf("Failed to parse ip rules, got %s", err)
+	}
+}
+
+func TestParseCustomIPRuleReverse(t *testing.T) {
+	rules, err := geodata.ParseIPRules([]string{"!192.168.0.0/24"})
+	if err != nil {
+		t.Fatalf("Failed to parse reverse custom ip rules, got %s", err)
+	}
+
+	if len(rules) != 1 {
+		t.Fatalf("Expected 1 rule, got %d", len(rules))
+	}
+
+	rule := rules[0].GetCustom()
+	if rule == nil {
+		t.Fatal("Expected custom CIDR rule")
+	}
+
+	if !rule.GetReverseMatch() {
+		t.Fatal("Expected custom reverse match to be true")
 	}
 }
 
