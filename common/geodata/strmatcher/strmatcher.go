@@ -62,6 +62,7 @@ type IndexMatcher interface {
 	// Match returns the indices of all matchers that matches the input.
 	//   * Empty array is returned if no such matcher exists.
 	//   * The order of returned matchers should follow priority specification.
+	//   * The returned slice is owned by the caller and may be safely modified.
 	// Priority specification:
 	//   1. Priority between matcher types: full > domain > substr > regex.
 	//   2. Priority of same-priority matchers matching at same position: the early added takes precedence.
@@ -89,6 +90,7 @@ type ValueMatcher interface {
 	//   * Empty array is returned if no such matcher exists.
 	//   * The order of returned values should follow priority specification.
 	//   * Same value may appear multiple times if multiple matched matchers were added with that value.
+	//   * The returned slice is owned by the caller and may be safely modified.
 	// Priority specification:
 	//   1. Priority between matcher types: full > domain > substr > regex.
 	//   2. Priority of same-priority matchers matching at same position: the early added takes precedence.

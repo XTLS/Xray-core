@@ -3,6 +3,7 @@ package strmatcher
 import (
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -253,13 +254,12 @@ func AddMatcherToGroup(g MatcherGroup, matcher Matcher, value uint32) error {
 }
 
 // CompositeMatches flattens the matches slice to produce a single matched indices slice.
-// It is designed to avoid new memory allocation as possible.
 func CompositeMatches(matches [][]uint32) []uint32 {
 	switch len(matches) {
 	case 0:
 		return nil
 	case 1:
-		return matches[0]
+		return slices.Clone(matches[0])
 	default:
 		result := make([]uint32, 0, 5)
 		for i := 0; i < len(matches); i++ {
