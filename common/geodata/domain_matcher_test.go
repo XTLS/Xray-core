@@ -48,3 +48,25 @@ func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 		t.Fatalf("Match() = %v, want %v", got, want)
 	}
 }
+
+func TestMphDomainMatcher_MatchReturnsDetachedSlice(t *testing.T) {
+	matcher, err := (&MphDomainMatcherFactory{}).BuildMatcher([]*DomainRule{
+		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
+		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
+	})
+	if err != nil {
+		t.Fatalf("BuildMatcher() failed: %v", err)
+	}
+
+	got := matcher.Match("example.com")
+	if !reflect.DeepEqual(got, []uint32{0, 1}) {
+		t.Fatalf("Match() = %v, want %v", got, []uint32{0, 1})
+	}
+
+	got[0] = 1
+
+	gotAgain := matcher.Match("example.com")
+	if !reflect.DeepEqual(gotAgain, []uint32{0, 1}) {
+		t.Fatalf("Match() after caller mutation = %v, want %v", gotAgain, []uint32{0, 1})
+	}
+}
