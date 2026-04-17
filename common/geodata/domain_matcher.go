@@ -11,7 +11,11 @@ import (
 )
 
 type DomainMatcher interface {
+	// Match returns the indices of all rules that match the input domain.
+	// The returned slice is owned by the caller and may be safely modified.
+	// Note: the slice may contain duplicates and the order is unspecified.
 	Match(input string) []uint32
+
 	MatchAny(input string) bool
 }
 
