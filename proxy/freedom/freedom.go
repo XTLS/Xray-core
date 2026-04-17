@@ -360,7 +360,6 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		udpAddr := d.(*net.UDPAddr)
 		sourceAddr := net.IPAddress(udpAddr.IP)
 		if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
-			b.Clear()
 			continue
 		}
 
