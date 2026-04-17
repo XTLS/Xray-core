@@ -940,45 +940,58 @@ func (f *IPSetFactory) createFrom(yield func(func(*CIDR)) error) (*IPSet, error)
 
 func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error) {
 	n := len(rules)
-	custom := make([]*CIDR, 0, n)
-	pos := make([]*GeoIPRule, 0, n)
-	neg := make([]*GeoIPRule, 0, n)
+	posCustom := make([]*CIDR, 0, n)
+	negCustom := make([]*CIDR, 0, n)
+	posGeoip := make([]*GeoIPRule, 0, n)
+	negGeoip := make([]*GeoIPRule, 0, n)
 
 	for _, r := range rules {
 		switch v := r.Value.(type) {
 		case *IPRule_Custom:
-			custom = append(custom, v.Custom)
+			if !v.Custom.ReverseMatch {
+				posCustom = append(posCustom, v.Custom.Cidr)
+			} else {
+				negCustom = append(negCustom, v.Custom.Cidr)
+			}
 		case *IPRule_Geoip:
 			if !v.Geoip.ReverseMatch {
-				pos = append(pos, v.Geoip)
+				posGeoip = append(posGeoip, v.Geoip)
 			} else {
-				neg = append(neg, v.Geoip)
+				negGeoip = append(negGeoip, v.Geoip)
 			}
 		default:
 			panic("unknown ip rule type")
 		}
 	}
 
-	subs := make([]*HeuristicIPMatcher, 0, 3)
+	subs := make([]*HeuristicIPMatcher, 0, 4)
 
-	if len(custom) > 0 {
-		ipset, err := f.CreateFromCIDRs(custom)
+	if len(posCustom) > 0 {
+		ipset, err := f.CreateFromCIDRs(posCustom)
 		if err != nil {
 			return nil, err
 		}
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
-	if len(pos) > 0 {
-		ipset, err := f.GetOrCreateFromGeoIPRules(pos)
+	if len(negCustom) > 0 {
+		ipset, err := f.CreateFromCIDRs(negCustom)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: true})
+	}
+
+	if len(posGeoip) > 0 {
+		ipset, err := f.GetOrCreateFromGeoIPRules(posGeoip)
 		if err != nil {
 			return nil, err
 		}
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
-	if len(neg) > 0 {
-		ipset, err := f.GetOrCreateFromGeoIPRules(neg)
+	if len(negGeoip) > 0 {
+		ipset, err := f.GetOrCreateFromGeoIPRules(negGeoip)
 		if err != nil {
 			return nil, err
 		}

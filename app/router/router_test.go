@@ -159,9 +159,8 @@ func TestIPOnDemand(t *testing.T) {
 				Ip: []*geodata.IPRule{
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{192, 168, 0, 0}, Prefix: 16},
 							},
 						},
 					},
@@ -204,9 +203,8 @@ func TestIPIfNonMatchDomain(t *testing.T) {
 				Ip: []*geodata.IPRule{
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{192, 168, 0, 0}, Prefix: 16},
 							},
 						},
 					},
@@ -249,9 +247,8 @@ func TestIPIfNonMatchIP(t *testing.T) {
 				Ip: []*geodata.IPRule{
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{127, 0, 0, 0},
-								Prefix: 8,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 0}, Prefix: 8},
 							},
 						},
 					},
