@@ -349,28 +349,27 @@ type PacketReader struct {
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
 	for {
-		b.UDP = nil
 		b.Resize(0, buf.Size)
 		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
 		if err != nil {
 			b.Release()
 			return nil, err
 		}
+		b.Resize(0, int32(n))
 
 		udpAddr := d.(*net.UDPAddr)
 		sourceAddr := net.IPAddress(udpAddr.IP)
-		if !r.IsOverridden && r.InitChangedAddr == sourceAddr {
-			sourceAddr = r.InitUnchangedAddr
-		}
 		if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
 			b.Clear()
 			continue
 		}
 
-		b.Resize(0, int32(n))
 		// if udp dest addr is changed, we are unable to get the correct src addr
 		// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
 		if !r.IsOverridden {
+			if r.InitChangedAddr == sourceAddr {
+				sourceAddr = r.InitUnchangedAddr
+			}
 			b.UDP = &net.Destination{
 				Address: sourceAddr,
 				Port:    net.Port(udpAddr.Port),
