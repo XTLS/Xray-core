@@ -27,6 +27,9 @@ type MphDomainMatcherFactory struct{}
 
 // BuildMatcher implements DomainMatcherFactory.
 func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
+	if len(rules) == 0 {
+		return nil, errors.New("empty domain rule list")
+	}
 	g := strmatcher.NewMphValueMatcher()
 	for i, r := range rules {
 		switch v := r.Value.(type) {
@@ -95,6 +98,9 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 
 // BuildMatcher implements DomainMatcherFactory.
 func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
+	if len(rules) == 0 {
+		return nil, errors.New("empty domain rule list")
+	}
 	compact := &CompactDomainMatcher{
 		matchers: make([]strmatcher.MatcherGroup, 0, len(rules)),
 		values:   make([]uint32, 0, len(rules)),
