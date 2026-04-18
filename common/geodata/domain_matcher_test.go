@@ -50,7 +50,7 @@ func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 }
 
 func TestMphDomainMatcher_MatchReturnsDetachedSlice(t *testing.T) {
-	matcher, err := (&MphDomainMatcherFactory{}).BuildMatcher([]*DomainRule{
+	matcher, err := (&MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}).BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
 	})

@@ -23,12 +23,51 @@ type DomainMatcherFactory interface {
 	BuildMatcher(rules []*DomainRule) (DomainMatcher, error)
 }
 
-type MphDomainMatcherFactory struct{}
+type MphDomainMatcherFactory struct {
+	sync.Mutex
+	shared map[string]strmatcher.MatcherGroup // TODO: cleanup
+}
+
+func buildDomainRulesKey(rules []*DomainRule) string {
+	var sb strings.Builder
+	cache := false
+	for _, r := range rules {
+		switch v := r.Value.(type) {
+		case *DomainRule_Custom:
+			sb.WriteString(v.Custom.Type.String())
+			sb.WriteString(":")
+			sb.WriteString(v.Custom.Value)
+			sb.WriteString(",")
+		case *DomainRule_Geosite:
+			cache = true
+			sb.WriteString(v.Geosite.File)
+			sb.WriteString(":")
+			sb.WriteString(v.Geosite.Code)
+			sb.WriteString("@")
+			sb.WriteString(v.Geosite.Attrs)
+			sb.WriteString(",")
+		default:
+			panic("unknown domain rule type")
+		}
+	}
+	if !cache {
+		return ""
+	}
+	return sb.String()
+}
 
 // BuildMatcher implements DomainMatcherFactory.
 func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
 	if len(rules) == 0 {
 		return nil, errors.New("empty domain rule list")
+	}
+	key := buildDomainRulesKey(rules)
+	if key != "" {
+		f.Lock()
+		defer f.Unlock()
+		if g := f.shared[key]; g != nil {
+			return g, nil
+		}
 	}
 	g := strmatcher.NewMphValueMatcher()
 	for i, r := range rules {
@@ -59,6 +98,9 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 	}
 	if err := g.Build(); err != nil {
 		return nil, err
+	}
+	if key != "" {
+		f.shared[key] = g
 	}
 	return g, nil
 }
@@ -186,6 +228,6 @@ func newDomainMatcherFactory() DomainMatcherFactory {
 	case "ios", "android":
 		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
 	default:
-		return &MphDomainMatcherFactory{}
+		return &MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
 	}
 }
