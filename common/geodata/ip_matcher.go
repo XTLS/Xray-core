@@ -915,24 +915,31 @@ func (f *IPSetFactory) createFrom(yield func(func(*CIDR)) error) (*IPSet, error)
 		return nil, errors.New("failed to build IPv6 set").Base(err)
 	}
 
+	var has4, has6 bool
 	var max4, max6 int
 
 	for _, p := range ipv4.Prefixes() {
+		has4 = true
 		if b := p.Bits(); b > max4 {
 			max4 = b
 		}
 	}
 	for _, p := range ipv6.Prefixes() {
+		has6 = true
 		if b := p.Bits(); b > max6 {
 			max6 = b
 		}
 	}
 
-	if max4 == 0 {
+	if !has4 {
 		max4 = 0xff
+	} else if max4 == 0 {
+		max4 = 0xfe
 	}
-	if max6 == 0 {
+	if !has6 {
 		max6 = 0xff
+	} else if max6 == 0 {
+		max6 = 0xfe
 	}
 
 	return &IPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
