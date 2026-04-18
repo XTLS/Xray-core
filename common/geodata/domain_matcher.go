@@ -65,20 +65,20 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 
 type CompactDomainMatcherFactory struct {
 	sync.Mutex
-	shared map[string]strmatcher.MatcherGroup // TODO: cleanup
+	shared map[string]strmatcher.MatcherSet // TODO: cleanup
 }
 
-func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmatcher.MatcherGroup, error) {
+func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmatcher.MatcherSet, error) {
 	key := rule.File + ":" + rule.Code + "@" + rule.Attrs
 
 	f.Lock()
 	defer f.Unlock()
 
-	if m := f.shared[key]; m != nil {
-		return m, nil
+	if s := f.shared[key]; s != nil {
+		return s, nil
 	}
 
-	g := strmatcher.NewLinearValueMatcher()
+	s := strmatcher.NewLinearAnyMatcher()
 	domains, err := loadSiteWithAttrs(rule.File, rule.Code, rule.Attrs)
 	if err != nil {
 		return nil, err
@@ -90,10 +90,10 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 			errors.LogError(context.Background(), "ignore invalid geosite entry in ", rule.File, ":", rule.Code, " at index ", i, ", ", err)
 			continue
 		}
-		g.Add(m, 0)
+		s.Add(m)
 	}
-	f.shared[key] = g
-	return g, err
+	f.shared[key] = s
+	return s, err
 }
 
 // BuildMatcher implements DomainMatcherFactory.
@@ -102,7 +102,7 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 		return nil, errors.New("empty domain rule list")
 	}
 	compact := &CompactDomainMatcher{
-		matchers: make([]strmatcher.MatcherGroup, 0, len(rules)),
+		matchers: make([]strmatcher.MatcherSet, 0, len(rules)),
 		values:   make([]uint32, 0, len(rules)),
 	}
 	for i, r := range rules {
@@ -132,7 +132,7 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 
 type CompactDomainMatcher struct {
 	custom   strmatcher.ValueMatcher
-	matchers []strmatcher.MatcherGroup
+	matchers []strmatcher.MatcherSet
 	values   []uint32
 }
 
@@ -184,7 +184,7 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 func newDomainMatcherFactory() DomainMatcherFactory {
 	switch runtime.GOOS {
 	case "ios", "android":
-		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
+		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
 	default:
 		return &MphDomainMatcherFactory{}
 	}
