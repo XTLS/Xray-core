@@ -66,8 +66,10 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 		f.Lock()
 		defer f.Unlock()
 		if g := f.shared[key]; g != nil {
+			errors.LogDebug(context.Background(), "geodata mph domain matcher cache HIT for ", len(rules), " rules")
 			return g, nil
 		}
+		errors.LogDebug(context.Background(), "geodata mph domain matcher cache MISS for ", len(rules), " rules")
 	}
 	g := strmatcher.NewMphValueMatcher()
 	for i, r := range rules {
@@ -117,8 +119,10 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 	defer f.Unlock()
 
 	if s := f.shared[key]; s != nil {
+		errors.LogDebug(context.Background(), "geodata geosite matcher cache HIT ", key)
 		return s, nil
 	}
+	errors.LogDebug(context.Background(), "geodata geosite matcher cache MISS ", key)
 
 	s := strmatcher.NewLinearAnyMatcher()
 	domains, err := loadSiteWithAttrs(rule.File, rule.Code, rule.Attrs)
