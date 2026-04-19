@@ -150,6 +150,18 @@ func (name Name) TrimSuffix(suffix Name) (Name, bool) {
 	return fore, true
 }
 
+func (name Name) EqualTo(another Name) bool {
+	if len(name) != len(another) {
+		return false
+	}
+	for i, label := range name {
+		if !bytes.Equal(label, another[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Message represents a DNS message.
 //
 // https://tools.ietf.org/html/rfc1035#section-4.1

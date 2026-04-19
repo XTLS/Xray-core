@@ -9,6 +9,7 @@ import (
 	go_errors "errors"
 	"io"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,11 +38,12 @@ type packet struct {
 }
 
 type xdnsConnClient struct {
-	conn          net.PacketConn
-	resolverConns []net.PacketConn
+	net.PacketConn
+
 	resolverAddrs []*net.UDPAddr
 	resolverIdx   uint32
 	resolverSend  []atomic.Uint32
+	resolverNormalizedAddrs []netip.AddrPort
 
 	clientID []byte
 	domains  []Name
@@ -52,6 +54,11 @@ type xdnsConnClient struct {
 
 	closed bool
 	mutex  sync.Mutex
+}
+
+func normalizeAddrPort(ap netip.AddrPort) netip.AddrPort {
+	ip6 := netip.AddrFrom16(ap.Addr().As16())
+	return netip.AddrPortFrom(ip6, ap.Port())
 }
 
 func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -74,8 +81,8 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		servers = append(servers, parts[1])
 	}
 
-	var resolverConns []net.PacketConn
 	var resolverAddrs []*net.UDPAddr
+	var resolverNormalizedAddrs []netip.AddrPort
 	var resolverSend []atomic.Uint32
 	for _, rs := range servers {
 		h, p, err := net.SplitHostPort(rs)
@@ -90,28 +97,19 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		if port == 0 {
 			return nil, errors.New("invalid port")
 		}
-		var uc net.PacketConn
-		if ip.To4() != nil {
-			uc, err = net.ListenPacket("udp4", ":0")
-		} else {
-			uc, err = net.ListenPacket("udp6", ":0")
-		}
-		if err != nil {
-			for _, rc := range resolverConns {
-				rc.Close()
-			}
-			return nil, errors.New("failed to create resolver socket: ", err)
-		}
-		resolverConns = append(resolverConns, uc)
-		resolverAddrs = append(resolverAddrs, &net.UDPAddr{IP: ip, Port: port})
+
+		addr := &net.UDPAddr{IP: ip, Port: port}
+		resolverAddrs = append(resolverAddrs, addr)
+		resolverNormalizedAddrs = append(resolverNormalizedAddrs, normalizeAddrPort(addr.AddrPort()))
 	}
-	resolverSend = make([]atomic.Uint32, len(resolverConns))
+	resolverSend = make([]atomic.Uint32, len(resolverAddrs))
 
 	conn := &xdnsConnClient{
-		conn:          raw,
-		resolverConns: resolverConns,
+		PacketConn: raw,
+
 		resolverAddrs: resolverAddrs,
 		resolverSend:  resolverSend,
+		resolverNormalizedAddrs: resolverNormalizedAddrs,
 
 		clientID: make([]byte, 8),
 		domains:  domains,
@@ -130,69 +128,69 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 }
 
 func (c *xdnsConnClient) recvLoop() {
-	var wg sync.WaitGroup
+	var buf [finalmask.UDPSize]byte
 
-	for i, rc := range c.resolverConns {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for {
+		if c.closed {
+			break
+		}
 
-			var buf [finalmask.UDPSize]byte
-
-			for {
-				if c.closed {
-					break
-				}
-
-				n, addr, err := rc.ReadFrom(buf[:])
-				if err != nil {
-					if go_errors.Is(err, net.ErrClosed) {
-						break
-					}
-					continue
-				}
-
-				resp, err := MessageFromWireFormat(buf[:n])
-				if err != nil {
-					errors.LogDebug(context.Background(), addr, " xdns from wireformat err ", err)
-					continue
-				}
-
-				payload := dnsResponsePayload(&resp, c.domains)
-
-				r := bytes.NewReader(payload)
-				anyPacket := false
-				for {
-					p, err := nextPacket(r)
-					if err != nil {
-						break
-					}
-					anyPacket = true
-
-					buf := make([]byte, len(p))
-					copy(buf, p)
-					select {
-					case c.readQueue <- &packet{
-						p:    buf,
-						addr: addr,
-					}:
-					default:
-						errors.LogDebug(context.Background(), addr, " mask read err queue full")
-					}
-				}
-
-				if anyPacket {
-					c.resolverSend[i].Store(0)
-					select {
-					case c.pollChan <- struct{}{}:
-					default:
-					}
-				}
+		n, addr, err := c.PacketConn.ReadFrom(buf[:])
+		if err != nil {
+			if go_errors.Is(err, net.ErrClosed) {
+				break
 			}
-		}()
-	}
+			continue
+		}
 
-	wg.Wait()
+		resp, err := MessageFromWireFormat(buf[:n])
+		if err != nil {
+			errors.LogDebug(context.Background(), addr, " xdns from wireformat err ", err)
+			continue
+		}
+
+		payload, domain := dnsResponsePayload(&resp, c.domains)
+
+		rsIdx := -1
+		readAddr := normalizeAddrPort(addr.(*net.UDPAddr).AddrPort())
+		for j, rsAddr := range c.resolverNormalizedAddrs {
+			if readAddr == rsAddr && domain.EqualTo(c.domains[j]) {
+				rsIdx = j
+				break
+			}
+		}
+
+		r := bytes.NewReader(payload)
+		anyPacket := false
+		for {
+			p, err := nextPacket(r)
+			if err != nil {
+				break
+			}
+			anyPacket = true
+
+			buf := make([]byte, len(p))
+			copy(buf, p)
+			select {
+			case c.readQueue <- &packet{
+				p:    buf,
+				addr: addr,
+			}:
+			default:
+				errors.LogDebug(context.Background(), addr, " mask read err queue full")
+			}
+		}
+
+		if anyPacket {
+			if rsIdx >= 0 {
+				c.resolverSend[rsIdx].Store(0)
+			}
+			select {
+			case c.pollChan <- struct{}{}:
+			default:
+			}
+		}
+	}
 
 	errors.LogDebug(context.Background(), "xdns closed")
 
@@ -255,10 +253,10 @@ func (c *xdnsConnClient) sendLoop() {
 
 		cur := c.resolverIdx
 		curSend := c.resolverSend[c.resolverIdx].Add(1)
-		_, _ = c.resolverConns[c.resolverIdx].WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
+		_, _ = c.PacketConn.WriteTo(p.p, c.resolverAddrs[c.resolverIdx])
 		for {
 			c.resolverIdx += 1
-			c.resolverIdx %= uint32(len(c.resolverConns))
+			c.resolverIdx %= uint32(len(c.resolverAddrs))
 			if c.resolverIdx == cur {
 				break
 			}
@@ -290,7 +288,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
-	encoded, err := encode(p, c.clientID, c.domains[c.resolverIdx%uint32(len(c.resolverConns))])
+	encoded, err := encode(p, c.clientID, c.domains[c.resolverIdx%uint32(len(c.resolverAddrs))])
 	if err != nil {
 		errors.LogDebug(context.Background(), addr, " xdns wireformat err ", err, " ", len(p))
 		return 0, nil
@@ -310,35 +308,7 @@ func (c *xdnsConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 func (c *xdnsConnClient) Close() error {
 	c.closed = true
-	for _, rc := range c.resolverConns {
-		rc.Close()
-	}
-	return c.conn.Close()
-}
-
-func (c *xdnsConnClient) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *xdnsConnClient) SetDeadline(t time.Time) error {
-	for _, rc := range c.resolverConns {
-		rc.SetDeadline(t)
-	}
-	return c.conn.SetDeadline(t)
-}
-
-func (c *xdnsConnClient) SetReadDeadline(t time.Time) error {
-	for _, rc := range c.resolverConns {
-		rc.SetReadDeadline(t)
-	}
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *xdnsConnClient) SetWriteDeadline(t time.Time) error {
-	for _, rc := range c.resolverConns {
-		rc.SetWriteDeadline(t)
-	}
-	return c.conn.SetWriteDeadline(t)
+	return c.PacketConn.Close()
 }
 
 func encode(p []byte, clientID []byte, domain Name) ([]byte, error) {
@@ -430,37 +400,39 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	return p, err
 }
 
-func dnsResponsePayload(resp *Message, domains []Name) []byte {
+func dnsResponsePayload(resp *Message, domains []Name) ([]byte, Name) {
 	if resp.Flags&0x8000 != 0x8000 {
-		return nil
+		return nil, nil
 	}
 	if resp.Flags&0x000f != RcodeNoError {
-		return nil
+		return nil, nil
 	}
 
 	if len(resp.Answer) != 1 {
-		return nil
+		return nil, nil
 	}
 	answer := resp.Answer[0]
 
 	var ok bool
+	var respDomain Name = nil
 	for _, domain := range domains {
 		_, ok = answer.Name.TrimSuffix(domain)
 		if ok {
+			respDomain = domain
 			break
 		}
 	}
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	if answer.Type != RRTypeTXT {
-		return nil
+		return nil, nil
 	}
 	payload, err := DecodeRDataTXT(answer.Data)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
-	return payload
+	return payload, respDomain
 }
