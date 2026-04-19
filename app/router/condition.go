@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/routing/dns"
 )
 
 type Condition interface {
@@ -356,7 +357,12 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 
 	var dstIP string
 	var dstPort uint16 = 0
-	if len(ctx.GetTargetIPs()) > 0 {
+
+	resolvableContext, ok := ctx.(*dns.ResolvableContext)
+	if ok && len(resolvableContext.Context.GetTargetIPs()) > 0 {
+		dstIP = resolvableContext.Context.GetTargetIPs()[0].String()
+		dstPort = uint16(resolvableContext.Context.GetTargetPort())
+	} else if len(ctx.GetTargetIPs()) > 0 {
 		dstIP = ctx.GetTargetIPs()[0].String()
 		dstPort = uint16(ctx.GetTargetPort())
 	}
