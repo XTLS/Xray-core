@@ -39,7 +39,8 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-func Init() {
+// Used by external projects when using xray as a go module
+func Reload() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 	mu.Lock()
 	defer mu.Unlock()
@@ -219,6 +220,6 @@ func CheckOK(conn *websocket.Conn) error {
 }
 
 func init() {
-	Init()
+	Reload()
 }
 
