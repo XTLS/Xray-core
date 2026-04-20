@@ -358,6 +358,7 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	var dstIP string
 	var dstPort uint16 = 0
 
+	// do not use resolved IP because Android process lookup needs original dst ip
 	resolvableContext, ok := ctx.(*dns.ResolvableContext)
 	if ok && len(resolvableContext.Context.GetTargetIPs()) > 0 {
 		dstIP = resolvableContext.Context.GetTargetIPs()[0].String()
