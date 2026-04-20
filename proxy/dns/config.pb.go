@@ -23,22 +23,130 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type RuleAction int32
+
+const (
+	RuleAction_Accept RuleAction = 0
+	RuleAction_Drop   RuleAction = 1
+	RuleAction_Refuse RuleAction = 2
+	RuleAction_Hijack RuleAction = 3
+)
+
+// Enum value maps for RuleAction.
+var (
+	RuleAction_name = map[int32]string{
+		0: "Accept",
+		1: "Drop",
+		2: "Refuse",
+		3: "Hijack",
+	}
+	RuleAction_value = map[string]int32{
+		"Accept": 0,
+		"Drop":   1,
+		"Refuse": 2,
+		"Hijack": 3,
+	}
+)
+
+func (x RuleAction) Enum() *RuleAction {
+	p := new(RuleAction)
+	*p = x
+	return p
+}
+
+func (x RuleAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RuleAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_proxy_dns_config_proto_enumTypes[0].Descriptor()
+}
+
+func (RuleAction) Type() protoreflect.EnumType {
+	return &file_proxy_dns_config_proto_enumTypes[0]
+}
+
+func (x RuleAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RuleAction.Descriptor instead.
+func (RuleAction) EnumDescriptor() ([]byte, []int) {
+	return file_proxy_dns_config_proto_rawDescGZIP(), []int{0}
+}
+
+type DNSRuleConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.dns.RuleAction" json:"action,omitempty"`
+	Qtype         []int32                `protobuf:"varint,2,rep,packed,name=qtype,proto3" json:"qtype,omitempty"`
+	Domain        []*geodata.DomainRule  `protobuf:"bytes,3,rep,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DNSRuleConfig) Reset() {
+	*x = DNSRuleConfig{}
+	mi := &file_proxy_dns_config_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DNSRuleConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DNSRuleConfig) ProtoMessage() {}
+
+func (x *DNSRuleConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_dns_config_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DNSRuleConfig.ProtoReflect.Descriptor instead.
+func (*DNSRuleConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_dns_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *DNSRuleConfig) GetAction() RuleAction {
+	if x != nil {
+		return x.Action
+	}
+	return RuleAction_Accept
+}
+
+func (x *DNSRuleConfig) GetQtype() []int32 {
+	if x != nil {
+		return x.Qtype
+	}
+	return nil
+}
+
+func (x *DNSRuleConfig) GetDomain() []*geodata.DomainRule {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
 type Config struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Server is the DNS server address. If specified, this address overrides the
-	// original one.
-	Server        *net.Endpoint       `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
-	UserLevel     uint32              `protobuf:"varint,2,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	BlockMatched  bool                `protobuf:"varint,3,opt,name=block_matched,json=blockMatched,proto3" json:"block_matched,omitempty"`
-	RejectBlocked bool                `protobuf:"varint,4,opt,name=reject_blocked,json=rejectBlocked,proto3" json:"reject_blocked,omitempty"`
-	QueryRule     []*Config_QueryRule `protobuf:"bytes,5,rep,name=query_rule,json=queryRule,proto3" json:"query_rule,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserLevel     uint32                 `protobuf:"varint,1,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	Rule          []*DNSRuleConfig       `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
+	Server        *net.Endpoint          `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_proxy_dns_config_proto_msgTypes[0]
+	mi := &file_proxy_dns_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -50,7 +158,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_dns_config_proto_msgTypes[0]
+	mi := &file_proxy_dns_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63,14 +171,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_dns_config_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Config) GetServer() *net.Endpoint {
-	if x != nil {
-		return x.Server
-	}
-	return nil
+	return file_proxy_dns_config_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Config) GetUserLevel() uint32 {
@@ -80,75 +181,16 @@ func (x *Config) GetUserLevel() uint32 {
 	return 0
 }
 
-func (x *Config) GetBlockMatched() bool {
+func (x *Config) GetRule() []*DNSRuleConfig {
 	if x != nil {
-		return x.BlockMatched
-	}
-	return false
-}
-
-func (x *Config) GetRejectBlocked() bool {
-	if x != nil {
-		return x.RejectBlocked
-	}
-	return false
-}
-
-func (x *Config) GetQueryRule() []*Config_QueryRule {
-	if x != nil {
-		return x.QueryRule
+		return x.Rule
 	}
 	return nil
 }
 
-type Config_QueryRule struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Qtype         int32                  `protobuf:"varint,1,opt,name=qtype,proto3" json:"qtype,omitempty"`
-	Domain        []*geodata.DomainRule  `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Config_QueryRule) Reset() {
-	*x = Config_QueryRule{}
-	mi := &file_proxy_dns_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Config_QueryRule) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Config_QueryRule) ProtoMessage() {}
-
-func (x *Config_QueryRule) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_dns_config_proto_msgTypes[1]
+func (x *Config) GetServer() *net.Endpoint {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Config_QueryRule.ProtoReflect.Descriptor instead.
-func (*Config_QueryRule) Descriptor() ([]byte, []int) {
-	return file_proxy_dns_config_proto_rawDescGZIP(), []int{0, 0}
-}
-
-func (x *Config_QueryRule) GetQtype() int32 {
-	if x != nil {
-		return x.Qtype
-	}
-	return 0
-}
-
-func (x *Config_QueryRule) GetDomain() []*geodata.DomainRule {
-	if x != nil {
-		return x.Domain
+		return x.Server
 	}
 	return nil
 }
@@ -157,18 +199,25 @@ var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xc3\x02\n" +
-	"\x06Config\x121\n" +
-	"\x06server\x18\x01 \x01(\v2\x19.xray.common.net.EndpointR\x06server\x12\x1d\n" +
+	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\x92\x01\n" +
+	"\rDNSRuleConfig\x122\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
+	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\"\x8d\x01\n" +
+	"\x06Config\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x02 \x01(\rR\tuserLevel\x12#\n" +
-	"\rblock_matched\x18\x03 \x01(\bR\fblockMatched\x12%\n" +
-	"\x0ereject_blocked\x18\x04 \x01(\bR\rrejectBlocked\x12?\n" +
+	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
+	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x121\n" +
+	"\x06server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\x06server*:\n" +
 	"\n" +
-	"query_rule\x18\x05 \x03(\v2 .xray.proxy.dns.Config.QueryRuleR\tqueryRule\x1aZ\n" +
-	"\tQueryRule\x12\x14\n" +
-	"\x05qtype\x18\x01 \x01(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x02 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domainBL\n" +
+	"RuleAction\x12\n" +
+	"\n" +
+	"\x06Accept\x10\x00\x12\b\n" +
+	"\x04Drop\x10\x01\x12\n" +
+	"\n" +
+	"\x06Refuse\x10\x02\x12\n" +
+	"\n" +
+	"\x06Hijack\x10\x03BL\n" +
 	"\x12com.xray.proxy.dnsP\x01Z#github.com/xtls/xray-core/proxy/dns\xaa\x02\x0eXray.Proxy.Dnsb\x06proto3"
 
 var (
@@ -183,22 +232,25 @@ func file_proxy_dns_config_proto_rawDescGZIP() []byte {
 	return file_proxy_dns_config_proto_rawDescData
 }
 
+var file_proxy_dns_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proxy_dns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proxy_dns_config_proto_goTypes = []any{
-	(*Config)(nil),             // 0: xray.proxy.dns.Config
-	(*Config_QueryRule)(nil),   // 1: xray.proxy.dns.Config.QueryRule
-	(*net.Endpoint)(nil),       // 2: xray.common.net.Endpoint
+	(RuleAction)(0),            // 0: xray.proxy.dns.RuleAction
+	(*DNSRuleConfig)(nil),      // 1: xray.proxy.dns.DNSRuleConfig
+	(*Config)(nil),             // 2: xray.proxy.dns.Config
 	(*geodata.DomainRule)(nil), // 3: xray.common.geodata.DomainRule
+	(*net.Endpoint)(nil),       // 4: xray.common.net.Endpoint
 }
 var file_proxy_dns_config_proto_depIdxs = []int32{
-	2, // 0: xray.proxy.dns.Config.server:type_name -> xray.common.net.Endpoint
-	1, // 1: xray.proxy.dns.Config.query_rule:type_name -> xray.proxy.dns.Config.QueryRule
-	3, // 2: xray.proxy.dns.Config.QueryRule.domain:type_name -> xray.common.geodata.DomainRule
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0, // 0: xray.proxy.dns.DNSRuleConfig.action:type_name -> xray.proxy.dns.RuleAction
+	3, // 1: xray.proxy.dns.DNSRuleConfig.domain:type_name -> xray.common.geodata.DomainRule
+	1, // 2: xray.proxy.dns.Config.rule:type_name -> xray.proxy.dns.DNSRuleConfig
+	4, // 3: xray.proxy.dns.Config.server:type_name -> xray.common.net.Endpoint
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proxy_dns_config_proto_init() }
@@ -211,13 +263,14 @@ func file_proxy_dns_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_dns_config_proto_rawDesc), len(file_proxy_dns_config_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proxy_dns_config_proto_goTypes,
 		DependencyIndexes: file_proxy_dns_config_proto_depIdxs,
+		EnumInfos:         file_proxy_dns_config_proto_enumTypes,
 		MessageInfos:      file_proxy_dns_config_proto_msgTypes,
 	}.Build()
 	File_proxy_dns_config_proto = out.File
