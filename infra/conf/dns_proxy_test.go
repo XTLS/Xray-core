@@ -10,6 +10,14 @@ import (
 	"github.com/xtls/xray-core/proxy/dns"
 )
 
+func allQTypes() []int32 {
+	out := make([]int32, 256)
+	for i := 0; i < 256; i++ {
+		out[i] = int32(i)
+	}
+	return out
+}
+
 func TestDnsProxyConfig(t *testing.T) {
 	creator := func() Buildable {
 		return new(DNSOutboundConfig)
@@ -29,39 +37,30 @@ func TestDnsProxyConfig(t *testing.T) {
 					Address: net.NewIPOrDomain(net.IPAddress([]byte{8, 8, 8, 8})),
 					Port:    53,
 				},
-				BlockMatched:  true,
-				RejectBlocked: true,
 			},
 		},
 		{
 			Input: `{
-				"blockMethod": "drop"
+				"rules": [{
+					"action": "accept",
+					"qtype": "1,3,23-24"
+				}, {
+					"action": "drop",
+					"qtype": 28,
+					"domain": ["domain:example.com", "full:example.com"]
+				}]
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server:       &net.Endpoint{},
-				BlockMatched: true,
-			},
-		},
-		{
-			Input: `{
-				"blacklist": {
-					"1,3,23-24": null,
-					"28": ["domain:example.com", "full:example.com"]
-				}
-			}`,
-			Parser: loadJSON(creator),
-			Output: &dns.Config{
-				Server:        &net.Endpoint{},
-				BlockMatched:  true,
-				RejectBlocked: true,
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 1},
-					{Qtype: 3},
-					{Qtype: 23},
-					{Qtype: 24},
+				Server: &net.Endpoint{},
+				Rule: []*dns.DNSRuleConfig{
 					{
-						Qtype: 28,
+						Action: dns.RuleAction_Accept,
+						Qtype:  []int32{1, 3, 23, 24},
+					},
+					{
+						Action: dns.RuleAction_Drop,
+						Qtype:  []int32{28},
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -86,22 +85,18 @@ func TestDnsProxyConfig(t *testing.T) {
 		},
 		{
 			Input: `{
-				"whitelist": {
-					"1,3,23-24": null,
-					"28": "keyword:example"
-				}
+				"rules": [{
+					"action": "refuse",
+					"domain": "keyword:example"
+				}]
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server:        &net.Endpoint{},
-				RejectBlocked: true,
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 1},
-					{Qtype: 3},
-					{Qtype: 23},
-					{Qtype: 24},
+				Server: &net.Endpoint{},
+				Rule: []*dns.DNSRuleConfig{
 					{
-						Qtype: 28,
+						Action: dns.RuleAction_Refuse,
+						Qtype:  allQTypes(),
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -118,39 +113,43 @@ func TestDnsProxyConfig(t *testing.T) {
 		},
 		{
 			Input: `{
-				"blockMethod": "drop",
-				"whitelist": {}
-			}`,
-			Parser: loadJSON(creator),
-			Output: &dns.Config{
-				Server: &net.Endpoint{},
-			},
-		},
-		{
-			Input: `{
-				"nonIPQuery": "drop",
 				"blockTypes": []
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
 				Server: &net.Endpoint{},
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 1},
-					{Qtype: 28},
+				Rule: []*dns.DNSRuleConfig{
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  []int32{1, 28},
+					},
+					{
+						Action: dns.RuleAction_Refuse,
+						Qtype:  allQTypes(),
+					},
 				},
 			},
 		},
 		{
 			Input: `{
-				"blockTypes": []
+				"blockTypes": [1, 65]
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server:        &net.Endpoint{},
-				RejectBlocked: true,
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 1},
-					{Qtype: 28},
+				Server: &net.Endpoint{},
+				Rule: []*dns.DNSRuleConfig{
+					{
+						Action: dns.RuleAction_Refuse,
+						Qtype:  []int32{1, 65},
+					},
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  []int32{1, 28},
+					},
+					{
+						Action: dns.RuleAction_Refuse,
+						Qtype:  allQTypes(),
+					},
 				},
 			},
 		},
@@ -162,8 +161,19 @@ func TestDnsProxyConfig(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
 				Server: &net.Endpoint{},
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 28},
+				Rule: []*dns.DNSRuleConfig{
+					{
+						Action: dns.RuleAction_Drop,
+						Qtype:  []int32{1},
+					},
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  []int32{1, 28},
+					},
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  allQTypes(),
+					},
 				},
 			},
 		},
@@ -174,29 +184,24 @@ func TestDnsProxyConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server:       &net.Endpoint{},
-				BlockMatched: true,
-				QueryRule: []*dns.Config_QueryRule{
-					{Qtype: 28},
-					{Qtype: 65},
+				Server: &net.Endpoint{},
+				Rule: []*dns.DNSRuleConfig{
+					{
+						Action: dns.RuleAction_Drop,
+						Qtype:  []int32{65, 28},
+					},
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  []int32{1, 28},
+					},
+					{
+						Action: dns.RuleAction_Accept,
+						Qtype:  allQTypes(),
+					},
 				},
 			},
 		},
 	})
-}
-
-func TestDnsProxyConfigRejectsMixedLists(t *testing.T) {
-	creator := func() Buildable {
-		return new(DNSOutboundConfig)
-	}
-
-	_, err := loadJSON(creator)(`{
-		"blacklist": {"1": null},
-		"whitelist": {"28": null}
-	}`)
-	if err == nil || !strings.Contains(err.Error(), `"blacklist" and "whitelist" are mutually exclusive`) {
-		t.Fatal("expected mixed list error, but got ", err)
-	}
 }
 
 func TestDnsProxyConfigRejectsMixedLegacyAndNewFields(t *testing.T) {
@@ -205,10 +210,13 @@ func TestDnsProxyConfigRejectsMixedLegacyAndNewFields(t *testing.T) {
 	}
 
 	_, err := loadJSON(creator)(`{
-		"blockMethod": "reject",
+		"rules": [{
+			"action": "accept",
+			"qtype": 65
+		}],
 		"blockTypes": [65]
 	}`)
-	if err == nil || !strings.Contains(err.Error(), `legacy "nonIPQuery" and "blockTypes" cannot be mixed`) {
+	if err == nil || !strings.Contains(err.Error(), `legacy nonIPQuery and blockTypes cannot be mixed with rules`) {
 		t.Fatal("expected mixed legacy/new config error, but got ", err)
 	}
 }
