@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	dns_proto "github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
@@ -50,8 +51,11 @@ type Handler struct {
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 	timeout         time.Duration
-	nonIPQuery      string
-	blockTypes      []int32
+
+	blockMatched  bool
+	rejectBlocked bool
+	qTypes        [256]bool
+	qMatchers     [256]geodata.DomainMatcher
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -65,11 +69,26 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 	if config.Server != nil {
 		h.server = config.Server.AsDestination()
 	}
-	h.nonIPQuery = config.Non_IPQuery
-	if h.nonIPQuery == "" {
-		h.nonIPQuery = "reject"
+
+	h.blockMatched = config.BlockMatched
+	h.rejectBlocked = config.RejectBlocked
+	for _, r := range config.QueryRule {
+		if r.Qtype < 0 || r.Qtype > 255 {
+			return errors.New("invalid qtype: ", r.Qtype)
+		}
+		if h.qTypes[r.Qtype] {
+			return errors.New("illegal query rules; duplicate entries exist, qtype: ", r.Qtype)
+		}
+		h.qTypes[r.Qtype] = true
+		if len(r.Domain) > 0 {
+			m, err := geodata.DomainReg.BuildDomainMatcher(r.Domain)
+			if err != nil {
+				return err
+			}
+			h.qMatchers[r.Qtype] = m
+		}
 	}
-	h.blockTypes = config.BlockTypes
+
 	return nil
 }
 
@@ -77,27 +96,35 @@ func (h *Handler) isOwnLink(ctx context.Context) bool {
 	return h.ownLinkVerifier != nil && h.ownLinkVerifier.IsOwnLink(ctx)
 }
 
-func parseIPQuery(b []byte) (r bool, domain string, id uint16, qType dnsmessage.Type) {
+func (h *Handler) matchQuery(qType uint16, domain string) bool {
+	if qType > 255 {
+		return false
+	}
+
+	if !h.qTypes[qType] {
+		return false
+	}
+
+	m := h.qMatchers[qType]
+	return m == nil || m.MatchAny(strings.TrimSuffix(strings.ToLower(domain), "."))
+}
+
+func parseQuery(b []byte) (id uint16, qType dnsmessage.Type, domain string, ok bool) {
 	var parser dnsmessage.Parser
 	header, err := parser.Start(b)
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "parser start")
 		return
 	}
-
 	id = header.ID
 	q, err := parser.Question()
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "question")
 		return
 	}
-	domain = q.Name.String()
 	qType = q.Type
-	if qType != dnsmessage.TypeA && qType != dnsmessage.TypeAAAA {
-		return
-	}
-
-	r = true
+	domain = q.Name.String()
+	ok = true
 	return
 }
 
@@ -191,41 +218,27 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			timer.Update()
 
 			if !h.isOwnLink(ctx) {
-				isIPQuery, domain, id, qType := parseIPQuery(b.Bytes())
-				if len(h.blockTypes) > 0 {
-					for _, blocktype := range h.blockTypes {
-						if blocktype == int32(qType) {
-							b.Release()
-							errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
-							if h.nonIPQuery == "reject" {
-								err := h.rejectNonIPQuery(id, qType, domain, writer)
-								if err != nil {
-									return err
-								}
-							}
-							return nil
+				id, qType, domain, ok := parseQuery(b.Bytes())
+				if !ok {
+					b.Release()
+					continue
+				}
+				if h.blockMatched == h.matchQuery(uint16(qType), domain) {
+					b.Release()
+					errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
+					if h.rejectBlocked {
+						if err := h.rejectNonIPQuery(id, qType, domain, writer); err != nil {
+							return err
 						}
 					}
+					continue
 				}
-				if isIPQuery {
+				if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
 					b.Release()
 					go h.handleIPQuery(id, qType, domain, writer, timer)
 					continue
 				}
-				if h.nonIPQuery == "drop" {
-					b.Release()
-					continue
-				}
-				if h.nonIPQuery == "reject" {
-					b.Release()
-					err := h.rejectNonIPQuery(id, qType, domain, writer)
-					if err != nil {
-						return err
-					}
-					continue
-				}
 			}
-
 			if err := connWriter.WriteMessage(b); err != nil {
 				return err
 			}

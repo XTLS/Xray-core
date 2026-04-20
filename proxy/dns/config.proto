@@ -7,12 +7,22 @@ option java_package = "com.xray.proxy.dns";
 option java_multiple_files = true;
 
 import "common/net/destination.proto";
+import "common/geodata/geodat.proto";
 
 message Config {
   // Server is the DNS server address. If specified, this address overrides the
   // original one.
   xray.common.net.Endpoint server = 1;
+
   uint32 user_level = 2;
-  string non_IP_query = 3;
-  repeated int32 block_types = 4;
+
+  bool block_matched = 3;
+
+  bool reject_blocked = 4;
+
+  message QueryRule {
+    int32 qtype = 1;
+    repeated xray.common.geodata.DomainRule domain = 2;
+  }
+  repeated QueryRule query_rule = 5;
 }
