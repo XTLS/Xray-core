@@ -80,13 +80,17 @@ func New() *Client {
 	d := &net.Dialer{
 		Timeout: time.Second * 16,
 		Control: func(network, address string, c syscall.RawConn) error {
+			var errs []error
 			for _, ctl := range internet.Controllers {
 				if err := ctl(network, address, c); err != nil {
-					errors.LogInfoInner(context.Background(), err, "failed to apply external controller")
-					return err
+					errs = append(errs, err)
 				}
 			}
-			return nil
+			err := errors.Combine(errs...)
+			if err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to apply external controller")
+			}
+			return err
 		},
 	}
 
