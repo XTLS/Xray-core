@@ -37,16 +37,12 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 			if r.From > r.To {
 				return nil, errors.New("invalid qtype range: ", r.String())
 			}
-			if r.To > 255 {
+			if r.To > 65535 {
 				return nil, errors.New("dns rule qtype out of range: ", r.String())
 			}
 			for qtype := r.From; qtype <= r.To; qtype++ {
 				rule.Qtype = append(rule.Qtype, int32(qtype))
 			}
-		}
-	} else {
-		for i := 0; i < 256; i++ {
-			rule.Qtype = append(rule.Qtype, int32(i))
 		}
 	}
 
@@ -127,7 +123,7 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 			rule.Action = dns.RuleAction_Refuse
 		}
 		for _, qtype := range *c.BlockTypes {
-			if qtype < 0 || qtype > 255 {
+			if qtype < 0 || qtype > 65535 {
 				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
 			}
 			rule.Qtype = append(rule.Qtype, qtype)
@@ -144,9 +140,6 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 
 	{
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Refuse}
-		for i := 0; i < 256; i++ {
-			rule.Qtype = append(rule.Qtype, int32(i))
-		}
 		if mode == "reject" {
 			rule.Action = dns.RuleAction_Refuse
 		} else if mode == "drop" {

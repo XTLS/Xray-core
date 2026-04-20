@@ -10,14 +10,6 @@ import (
 	"github.com/xtls/xray-core/proxy/dns"
 )
 
-func allQTypes() []int32 {
-	out := make([]int32, 256)
-	for i := 0; i < 256; i++ {
-		out[i] = int32(i)
-	}
-	return out
-}
-
 func TestDnsProxyConfig(t *testing.T) {
 	creator := func() Buildable {
 		return new(DNSOutboundConfig)
@@ -96,7 +88,6 @@ func TestDnsProxyConfig(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Refuse,
-						Qtype:  allQTypes(),
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -107,6 +98,24 @@ func TestDnsProxyConfig(t *testing.T) {
 								},
 							},
 						},
+					},
+				},
+			},
+		},
+		{
+			Input: `{
+				"rules": [{
+					"action": "drop",
+					"qtype": 257
+				}]
+			}`,
+			Parser: loadJSON(creator),
+			Output: &dns.Config{
+				Server: &net.Endpoint{},
+				Rule: []*dns.DNSRuleConfig{
+					{
+						Action: dns.RuleAction_Drop,
+						Qtype:  []int32{257},
 					},
 				},
 			},
@@ -135,7 +144,6 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 					},
 					{
 						Action: dns.RuleAction_Refuse,
-						Qtype:  allQTypes(),
 					},
 				},
 			},
@@ -158,7 +166,6 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 					},
 					{
 						Action: dns.RuleAction_Refuse,
-						Qtype:  allQTypes(),
 					},
 				},
 			},
@@ -182,7 +189,6 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 					},
 					{
 						Action: dns.RuleAction_Drop,
-						Qtype:  allQTypes(),
 					},
 				},
 			},
@@ -206,7 +212,6 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 					},
 					{
 						Action: dns.RuleAction_Accept,
-						Qtype:  allQTypes(),
 					},
 				},
 			},

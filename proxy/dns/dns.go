@@ -43,15 +43,26 @@ func init() {
 
 type DNSRule struct {
 	action  RuleAction
-	qTypes  [256]bool
+	qTypes  []uint16
 	domains geodata.DomainMatcher
 }
 
+func (r *DNSRule) matchQType(qType uint16) bool {
+	if len(r.qTypes) == 0 {
+		return true
+	}
+	for _, t := range r.qTypes {
+		if t == qType {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *DNSRule) Apply(qType uint16, domain string) bool {
-	if qType > 255 || !r.qTypes[qType] {
+	if !r.matchQType(qType) {
 		return false
 	}
-
 	return r.domains == nil || r.domains.MatchAny(strings.TrimSuffix(strings.ToLower(domain), "."))
 }
 
@@ -82,12 +93,12 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 
 	h.rules = make([]*DNSRule, 0, len(config.Rule))
 	for _, r := range config.Rule {
-		rule := &DNSRule{action: r.Action}
+		rule := &DNSRule{
+			action: r.Action,
+			qTypes: make([]uint16, 0, len(r.Qtype)),
+		}
 		for _, t := range r.Qtype {
-			if t < 0 || t > 255 {
-				return errors.New("invalid qtype: ", t)
-			}
-			rule.qTypes[t] = true
+			rule.qTypes = append(rule.qTypes, uint16(t))
 		}
 		if len(r.Domain) > 0 {
 			m, err := geodata.DomainReg.BuildDomainMatcher(r.Domain)
