@@ -1,9 +1,7 @@
 package conf
 
 import (
-	"encoding/json"
-	"sort"
-	"strconv"
+	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
@@ -12,100 +10,65 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type DNSQueryRulesConfig map[string]json.RawMessage
-
-// UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON.
-func (c *DNSQueryRulesConfig) UnmarshalJSON(data []byte) error {
-	m := make(map[string]json.RawMessage)
-	if err := json.Unmarshal(data, &m); err != nil {
-		return errors.New("invalid dns query rules").Base(err)
-	}
-	*c = m
-	return nil
+type DNSOutboundRuleConfig struct {
+	Action string      `json:"action"`
+	QType  *PortList   `json:"qtype"`
+	Domain *StringList `json:"domain"`
 }
 
-func (c DNSQueryRulesConfig) Build() ([]*dns.Config_QueryRule, error) {
-	if len(c) == 0 {
-		return nil, nil
+func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
+	rule := &dns.DNSRuleConfig{}
+
+	switch strings.ToLower(c.Action) {
+	case "accept":
+		rule.Action = dns.RuleAction_Accept
+	case "drop":
+		rule.Action = dns.RuleAction_Drop
+	case "refuse":
+		rule.Action = dns.RuleAction_Refuse
+	case "hijack":
+		rule.Action = dns.RuleAction_Hijack
+	default:
+		return nil, errors.New("unknown action: ", c.Action)
 	}
 
-	keys := make([]string, 0, len(c))
-	for key := range c {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	var rules [256]*dns.Config_QueryRule
-	for _, key := range keys {
-		var qtypes PortList
-		if err := qtypes.UnmarshalJSON([]byte(strconv.Quote(key))); err != nil {
-			return nil, errors.New("failed to parse dns query rule qtype: ", key).Base(err)
+	if c.QType != nil {
+		for _, r := range c.QType.Range {
+			if r.From > r.To {
+				return nil, errors.New("invalid qtype range: ", r.String())
+			}
+			if r.To > 255 {
+				return nil, errors.New("dns rule qtype out of range: ", r.String())
+			}
+			for qtype := r.From; qtype <= r.To; qtype++ {
+				rule.Qtype = append(rule.Qtype, int32(qtype))
+			}
 		}
+	} else {
+		for i := 0; i < 256; i++ {
+			rule.Qtype = append(rule.Qtype, int32(i))
+		}
+	}
 
-		domains, err := parseQueryDomains(c[key], key)
+	if c.Domain != nil {
+		rules, err := geodata.ParseDomainRules(*c.Domain, geodata.Domain_Substr)
 		if err != nil {
 			return nil, err
 		}
-
-		for _, r := range qtypes.Range {
-			if r.To > 255 {
-				return nil, errors.New("dns query rule qtype out of range: ", r.String())
-			}
-			for qtype := r.From; qtype <= r.To; qtype++ {
-				if rules[qtype] == nil {
-					rules[qtype] = &dns.Config_QueryRule{Qtype: int32(qtype)}
-				}
-				rules[qtype].Domain = appendUniqueDomains(rules[qtype].Domain, domains)
-			}
-		}
+		rule.Domain = rules
 	}
 
-	out := make([]*dns.Config_QueryRule, 0)
-	for _, rule := range rules {
-		if rule != nil {
-			out = append(out, rule)
-		}
-	}
-	return out, nil
-}
-
-func parseQueryDomains(data json.RawMessage, key string) ([]*geodata.DomainRule, error) {
-	var domains *StringList
-	if err := json.Unmarshal(data, &domains); err != nil {
-		return nil, errors.New("failed to parse dns query rule domains for qtype: ", key).Base(err)
-	}
-	if domains == nil {
-		return nil, nil
-	}
-	return geodata.ParseDomainRules(*domains, geodata.Domain_Substr)
-}
-
-func appendUniqueDomains(dst, src []*geodata.DomainRule) []*geodata.DomainRule {
-	for _, rule := range src {
-		dup := false
-		for _, r := range dst {
-			if proto.Equal(r, rule) {
-				dup = true
-				break
-			}
-		}
-		if !dup {
-			dst = append(dst, rule)
-		}
-	}
-	return dst
+	return rule, nil
 }
 
 type DNSOutboundConfig struct {
-	Network     Network              `json:"network"`
-	Address     *Address             `json:"address"`
-	Port        uint16               `json:"port"`
-	UserLevel   uint32               `json:"userLevel"`
-	BlockMethod string               `json:"blockMethod"`
-	Blacklist   *DNSQueryRulesConfig `json:"blacklist"`
-	Whitelist   *DNSQueryRulesConfig `json:"whitelist"`
-	NonIPQuery  *string              `json:"nonIPQuery"` // todo: remove legacy
-	BlockTypes  *[]int32             `json:"blockTypes"` // todo: remove legacy
+	Network    Network                  `json:"network"`
+	Address    *Address                 `json:"address"`
+	Port       uint16                   `json:"port"`
+	UserLevel  uint32                   `json:"userLevel"`
+	Rules      []*DNSOutboundRuleConfig `json:"rules"`
+	NonIPQuery *string                  `json:"nonIPQuery"` // todo: remove legacy
+	BlockTypes *[]int32                 `json:"blockTypes"` // todo: remove legacy
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
@@ -122,91 +85,75 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 
 	// todo: remove legacy
 	if c.NonIPQuery != nil || c.BlockTypes != nil {
-		if c.BlockMethod != "" || c.Blacklist != nil || c.Whitelist != nil {
-			return nil, errors.New(`legacy "nonIPQuery" and "blockTypes" cannot be mixed with "blockMethod", "blacklist", or "whitelist"`)
+		if c.Rules != nil {
+			return nil, errors.New("legacy nonIPQuery and blockTypes cannot be mixed with rules")
 		}
-		block, reject, rules, err := c.buildLegacyDNSPolicy()
+		rules, err := c.buildLegacyDNSPolicy()
 		if err != nil {
 			return nil, err
 		}
-		config.BlockMatched = block
-		config.RejectBlocked = reject
-		config.QueryRule = rules
+		config.Rule = rules
 		return config, nil
 	}
 
-	block, rules, err := c.buildDNSQueryPolicy()
-	if err != nil {
-		return nil, err
-	}
-	config.BlockMatched = block
-	config.QueryRule = rules
-
-	switch c.BlockMethod {
-	case "drop":
-		config.RejectBlocked = false
-	case "", "reject":
-		config.RejectBlocked = true
-	default:
-		return nil, errors.New(`unknown "blockMethod": `, c.BlockMethod)
+	for _, r := range c.Rules {
+		rule, err := r.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.Rule = append(config.Rule, rule)
 	}
 
 	return config, nil
 }
 
-func (c *DNSOutboundConfig) buildDNSQueryPolicy() (bool, []*dns.Config_QueryRule, error) {
-	switch {
-	case c.Blacklist != nil && c.Whitelist != nil:
-		return false, nil, errors.New(`"blacklist" and "whitelist" are mutually exclusive`)
-	case c.Whitelist != nil:
-		rules, err := c.Whitelist.Build()
-		return false, rules, err
-	case c.Blacklist != nil:
-		rules, err := c.Blacklist.Build()
-		return true, rules, err
-	default:
-		return true, nil, nil // default: blacklist mode
-	}
-}
-
 // todo: remove legacy
-func (c *DNSOutboundConfig) buildLegacyDNSPolicy() (bool, bool, []*dns.Config_QueryRule, error) {
+func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error) {
+	rules := make([]*dns.DNSRuleConfig, 0, 2)
+
 	mode := "reject"
 	if c.NonIPQuery != nil && *c.NonIPQuery != "" {
 		mode = *c.NonIPQuery
 	}
-
 	switch mode {
-	case "reject", "drop", "skip":
+	case "", "reject", "drop", "skip":
 	default:
-		return false, false, nil, errors.New(`unknown "nonIPQuery": `, mode)
+		return nil, errors.New("unknown nonIPQuery: ", mode)
 	}
 
-	var blocked [256]bool
-	if c.BlockTypes != nil {
+	if c.BlockTypes != nil && len(*c.BlockTypes) > 0 {
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
+		if mode == "reject" {
+			rule.Action = dns.RuleAction_Refuse
+		}
 		for _, qtype := range *c.BlockTypes {
 			if qtype < 0 || qtype > 255 {
-				return false, false, nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
+				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
 			}
-			blocked[qtype] = true
+			rule.Qtype = append(rule.Qtype, qtype)
 		}
+		rules = append(rules, rule)
 	}
 
-	var rules []*dns.Config_QueryRule
-	block := mode == "skip"
-	if block {
-		for qtype, hit := range blocked {
-			if hit {
-				rules = append(rules, &dns.Config_QueryRule{Qtype: int32(qtype)})
-			}
-		}
-	} else {
-		for _, qtype := range [...]int{1, 28} {
-			if !blocked[qtype] {
-				rules = append(rules, &dns.Config_QueryRule{Qtype: int32(qtype)})
-			}
-		}
+	{
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Accept}
+		rule.Qtype = append(rule.Qtype, 1)
+		rule.Qtype = append(rule.Qtype, 28)
+		rules = append(rules, rule)
 	}
 
-	return block, mode == "reject", rules, nil
+	{
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
+		for i := 0; i < 256; i++ {
+			rule.Qtype = append(rule.Qtype, int32(i))
+		}
+		if mode == "reject" {
+			rule.Action = dns.RuleAction_Refuse
+		} else {
+			rule.Action = dns.RuleAction_Accept
+		}
+		rules = append(rules, rule)
+	}
+
+	return rules, nil
 }
