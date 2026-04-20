@@ -41,6 +41,20 @@ func init() {
 	}))
 }
 
+type DNSRule struct {
+	action  RuleAction
+	qTypes  [256]bool
+	domains geodata.DomainMatcher
+}
+
+func (r *DNSRule) Apply(qType uint16, domain string) bool {
+	if qType > 255 || !r.qTypes[qType] {
+		return false
+	}
+
+	return r.domains == nil || r.domains.MatchAny(strings.TrimSuffix(strings.ToLower(domain), "."))
+}
+
 type ownLinkVerifier interface {
 	IsOwnLink(ctx context.Context) bool
 }
@@ -51,11 +65,7 @@ type Handler struct {
 	ownLinkVerifier ownLinkVerifier
 	server          net.Destination
 	timeout         time.Duration
-
-	blockMatched  bool
-	rejectBlocked bool
-	qTypes        [256]bool
-	qMatchers     [256]geodata.DomainMatcher
+	rules           []*DNSRule
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -70,23 +80,23 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.server = config.Server.AsDestination()
 	}
 
-	h.blockMatched = config.BlockMatched
-	h.rejectBlocked = config.RejectBlocked
-	for _, r := range config.QueryRule {
-		if r.Qtype < 0 || r.Qtype > 255 {
-			return errors.New("invalid qtype: ", r.Qtype)
+	h.rules = make([]*DNSRule, 0, len(config.Rule))
+	for _, r := range config.Rule {
+		rule := &DNSRule{action: r.Action}
+		for _, t := range r.Qtype {
+			if t < 0 || t > 255 {
+				return errors.New("invalid qtype: ", t)
+			}
+			rule.qTypes[t] = true
 		}
-		if h.qTypes[r.Qtype] {
-			return errors.New("illegal query rules; duplicate entries exist, qtype: ", r.Qtype)
-		}
-		h.qTypes[r.Qtype] = true
 		if len(r.Domain) > 0 {
 			m, err := geodata.DomainReg.BuildDomainMatcher(r.Domain)
 			if err != nil {
 				return err
 			}
-			h.qMatchers[r.Qtype] = m
+			rule.domains = m
 		}
+		h.rules = append(h.rules, rule)
 	}
 
 	return nil
@@ -94,19 +104,6 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 
 func (h *Handler) isOwnLink(ctx context.Context) bool {
 	return h.ownLinkVerifier != nil && h.ownLinkVerifier.IsOwnLink(ctx)
-}
-
-func (h *Handler) matchQuery(qType uint16, domain string) bool {
-	if qType > 255 {
-		return false
-	}
-
-	if !h.qTypes[qType] {
-		return false
-	}
-
-	m := h.qMatchers[qType]
-	return m == nil || m.MatchAny(strings.TrimSuffix(strings.ToLower(domain), "."))
 }
 
 func parseQuery(b []byte) (id uint16, qType dnsmessage.Type, domain string, ok bool) {
@@ -126,6 +123,19 @@ func parseQuery(b []byte) (id uint16, qType dnsmessage.Type, domain string, ok b
 	domain = q.Name.String()
 	ok = true
 	return
+}
+
+func (h *Handler) applyRules(qType dnsmessage.Type, domain string) RuleAction {
+	qCode := uint16(qType)
+	for _, r := range h.rules {
+		if r.Apply(qCode, domain) {
+			return r.action
+		}
+	}
+	if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
+		return RuleAction_Hijack
+	}
+	return RuleAction_Refuse
 }
 
 // Process implements proxy.Outbound.
@@ -210,37 +220,51 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			if err == io.EOF {
 				return nil
 			}
-
 			if err != nil {
 				return err
 			}
 
 			timer.Update()
 
-			if !h.isOwnLink(ctx) {
-				id, qType, domain, ok := parseQuery(b.Bytes())
-				if !ok {
-					b.Release()
-					continue
+			if h.isOwnLink(ctx) {
+				if err := connWriter.WriteMessage(b); err != nil {
+					return err
 				}
-				if h.blockMatched == h.matchQuery(uint16(qType), domain) {
-					b.Release()
-					errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
-					if h.rejectBlocked {
-						if err := h.rejectNonIPQuery(id, qType, domain, writer); err != nil {
-							return err
-						}
-					}
-					continue
-				}
-				if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
-					b.Release()
-					go h.handleIPQuery(id, qType, domain, writer, timer)
-					continue
-				}
+				continue
 			}
-			if err := connWriter.WriteMessage(b); err != nil {
-				return err
+
+			id, qType, domain, ok := parseQuery(b.Bytes())
+			if !ok {
+				b.Release()
+				continue
+			}
+
+			switch h.applyRules(qType, domain) {
+			case RuleAction_Drop:
+				b.Release()
+				errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
+			case RuleAction_Refuse:
+				b.Release()
+				errors.LogInfo(ctx, "refused type ", qType, " query for domain ", domain)
+				if err := h.rejectNonIPQuery(id, qType, domain, writer); err != nil {
+					return err
+				}
+			case RuleAction_Hijack:
+				b.Release()
+				if qType != dnsmessage.TypeA && qType != dnsmessage.TypeAAAA {
+					errors.LogError(ctx, "can only hijack A/AAAA records")
+					if err := h.rejectNonIPQuery(id, qType, domain, writer); err != nil {
+						return err
+					}
+				} else {
+					go h.handleIPQuery(id, qType, domain, writer, timer)
+				}
+			case RuleAction_Accept:
+				if err := connWriter.WriteMessage(b); err != nil {
+					return err
+				}
+			default:
+				panic("unknown rule action")
 			}
 		}
 	}

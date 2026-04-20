@@ -126,7 +126,7 @@ func TestUDPDNSTunnel(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{BlockMatched: true}),
+				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{}),
 			},
 		},
 	}
@@ -245,7 +245,7 @@ func TestTCPDNSTunnel(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{BlockMatched: true}),
+				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{}),
 			},
 		},
 	}
@@ -332,7 +332,6 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-					BlockMatched: true,
 					Server: &net.Endpoint{
 						Network: net.Network_TCP,
 					},
@@ -371,7 +370,7 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 	}
 }
 
-func TestBlacklistDNSQuery(t *testing.T) {
+func TestDNSRules(t *testing.T) {
 	port := udp.PickPort()
 
 	dnsServer := dns.Server{
@@ -423,11 +422,23 @@ func TestBlacklistDNSQuery(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-					BlockMatched:  true,
-					RejectBlocked: true,
-					QueryRule: []*dns_proxy.Config_QueryRule{
+					Rule: []*dns_proxy.DNSRuleConfig{
 						{
-							Qtype: int32(dns.TypeA),
+							Qtype: []int32{int32(dns.TypeA)},
+							Domain: []*geodata.DomainRule{
+								{
+									Value: &geodata.DomainRule_Custom{
+										Custom: &geodata.Domain{
+											Type:  geodata.Domain_Domain,
+											Value: "facebook.com",
+										},
+									},
+								},
+							},
+							Action: dns_proxy.RuleAction_Accept,
+						},
+						{
+							Qtype: []int32{int32(dns.TypeA)},
 							Domain: []*geodata.DomainRule{
 								{
 									Value: &geodata.DomainRule_Custom{
@@ -438,6 +449,7 @@ func TestBlacklistDNSQuery(t *testing.T) {
 									},
 								},
 							},
+							Action: dns_proxy.RuleAction_Refuse,
 						},
 					},
 				}),
@@ -450,108 +462,33 @@ func TestBlacklistDNSQuery(t *testing.T) {
 	common.Must(v.Start())
 	defer v.Close()
 
-	m1 := new(dns.Msg)
-	m1.Id = dns.Id()
-	m1.RecursionDesired = true
-	m1.Question = []dns.Question{{Name: "google.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
+	{
+		m1 := new(dns.Msg)
+		m1.Id = dns.Id()
+		m1.RecursionDesired = true
+		m1.Question = []dns.Question{{Name: "google.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
 
-	c := new(dns.Client)
-	in, _, err := c.Exchange(m1, "127.0.0.1:"+strconv.Itoa(int(serverPort)))
-	common.Must(err)
+		c := new(dns.Client)
+		in, _, err := c.Exchange(m1, "127.0.0.1:"+strconv.Itoa(int(serverPort)))
+		common.Must(err)
 
-	if in.Rcode != dns.RcodeRefused {
-		t.Fatal("expected Refused, but got ", in.Rcode)
-	}
-}
-
-func TestWhitelistDNSQuery(t *testing.T) {
-	port := udp.PickPort()
-
-	dnsServer := dns.Server{
-		Addr:    "127.0.0.1:" + port.String(),
-		Net:     "udp",
-		Handler: &staticHandler{},
-	}
-	defer dnsServer.Shutdown()
-
-	go dnsServer.ListenAndServe()
-	time.Sleep(time.Second)
-
-	serverPort := udp.PickPort()
-	config := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&dnsapp.Config{
-				NameServer: []*dnsapp.NameServer{
-					{
-						Address: &net.Endpoint{
-							Network: net.Network_UDP,
-							Address: &net.IPOrDomain{
-								Address: &net.IPOrDomain_Ip{
-									Ip: []byte{127, 0, 0, 1},
-								},
-							},
-							Port: uint32(port),
-						},
-					},
-				},
-			}),
-			serial.ToTypedMessage(&dispatcher.Config{}),
-			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
-			serial.ToTypedMessage(&proxyman.InboundConfig{}),
-			serial.ToTypedMessage(&policy.Config{}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(net.LocalHostIP),
-					Port:     uint32(port),
-					Networks: []net.Network{net.Network_UDP},
-				}),
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-					RejectBlocked: true,
-					QueryRule: []*dns_proxy.Config_QueryRule{
-						{
-							Qtype: int32(dns.TypeA),
-							Domain: []*geodata.DomainRule{
-								{
-									Value: &geodata.DomainRule_Custom{
-										Custom: &geodata.Domain{
-											Type:  geodata.Domain_Full,
-											Value: "google.com",
-										},
-									},
-								},
-							},
-						},
-					},
-				}),
-			},
-		},
+		if in.Rcode != dns.RcodeRefused {
+			t.Fatal("expected Refused, but got ", in.Rcode)
+		}
 	}
 
-	v, err := core.New(config)
-	common.Must(err)
-	common.Must(v.Start())
-	defer v.Close()
+	{
+		m1 := new(dns.Msg)
+		m1.Id = dns.Id()
+		m1.RecursionDesired = true
+		m1.Question = []dns.Question{{Name: "facebook.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
 
-	m1 := new(dns.Msg)
-	m1.Id = dns.Id()
-	m1.RecursionDesired = true
-	m1.Question = []dns.Question{{Name: "facebook.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
+		c := new(dns.Client)
+		in, _, err := c.Exchange(m1, "127.0.0.1:"+strconv.Itoa(int(serverPort)))
+		common.Must(err)
 
-	c := new(dns.Client)
-	in, _, err := c.Exchange(m1, "127.0.0.1:"+strconv.Itoa(int(serverPort)))
-	common.Must(err)
-
-	if in.Rcode != dns.RcodeRefused {
-		t.Fatal("expected Refused, but got ", in.Rcode)
+		if in.Rcode != dns.RcodeSuccess {
+			t.Fatal("expected Accepted, but got ", in.Rcode)
+		}
 	}
 }
