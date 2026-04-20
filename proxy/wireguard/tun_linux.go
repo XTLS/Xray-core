@@ -78,9 +78,9 @@ func (d *deviceNet) DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, erro
 	var conn net.PacketConn
 	var err error
 	if raddr.Addr().Is4() {
-		conn, err = d.lc.ListenPacket(context.Background(), "udp4", ":0")
+		conn, err = d.lc.ListenPacket(context.Background(), "udp", "0.0.0.0:0")
 	} else {
-		conn, err = d.lc.ListenPacket(context.Background(), "udp6", ":0")
+		conn, err = d.lc.ListenPacket(context.Background(), "udp", "[::]:0")
 	}
 	if err != nil {
 		return nil, err
