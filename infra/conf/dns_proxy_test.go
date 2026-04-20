@@ -111,6 +111,16 @@ func TestDnsProxyConfig(t *testing.T) {
 				},
 			},
 		},
+	})
+}
+
+// todo: remove legacy
+func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
+	creator := func() Buildable {
+		return new(DNSOutboundConfig)
+	}
+
+	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
 				"blockTypes": []
@@ -120,7 +130,7 @@ func TestDnsProxyConfig(t *testing.T) {
 				Server: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Hijack,
 						Qtype:  []int32{1, 28},
 					},
 					{
@@ -143,7 +153,7 @@ func TestDnsProxyConfig(t *testing.T) {
 						Qtype:  []int32{1, 65},
 					},
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Hijack,
 						Qtype:  []int32{1, 28},
 					},
 					{
@@ -167,11 +177,11 @@ func TestDnsProxyConfig(t *testing.T) {
 						Qtype:  []int32{1},
 					},
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Hijack,
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Drop,
 						Qtype:  allQTypes(),
 					},
 				},
@@ -191,7 +201,7 @@ func TestDnsProxyConfig(t *testing.T) {
 						Qtype:  []int32{65, 28},
 					},
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Hijack,
 						Qtype:  []int32{1, 28},
 					},
 					{
@@ -204,6 +214,7 @@ func TestDnsProxyConfig(t *testing.T) {
 	})
 }
 
+// todo: remove legacy
 func TestDnsProxyConfigRejectsMixedLegacyAndNewFields(t *testing.T) {
 	creator := func() Buildable {
 		return new(DNSOutboundConfig)

@@ -136,20 +136,22 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Accept}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Hijack}
 		rule.Qtype = append(rule.Qtype, 1)
 		rule.Qtype = append(rule.Qtype, 28)
 		rules = append(rules, rule)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Refuse}
 		for i := 0; i < 256; i++ {
 			rule.Qtype = append(rule.Qtype, int32(i))
 		}
 		if mode == "reject" {
 			rule.Action = dns.RuleAction_Refuse
-		} else {
+		} else if mode == "drop" {
+			rule.Action = dns.RuleAction_Drop
+		} else if mode == "skip" {
 			rule.Action = dns.RuleAction_Accept
 		}
 		rules = append(rules, rule)
