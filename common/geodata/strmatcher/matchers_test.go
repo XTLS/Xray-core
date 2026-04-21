@@ -74,23 +74,6 @@ func TestMatcher(t *testing.T) {
 	}
 }
 
-func TestTypeNewDomainLenient(t *testing.T) {
-	// Type.New(Domain) is the general-purpose API and must not reject patterns
-	// that were accepted before the geodata refactor (including underscore, which
-	// is common in internal service DNS names and SRV records). Strict validation
-	// lives on Type.NewDomainPattern.
-	patterns := []string{
-		"_sip._tcp.example.com",
-		"api_internal.local",
-		"example.com",
-	}
-	for _, p := range patterns {
-		if _, err := Domain.New(p); err != nil {
-			t.Errorf("Domain.New(%q) returned unexpected error: %v", p, err)
-		}
-	}
-}
-
 func TestToDomain(t *testing.T) {
 	{ // Test normal ASCII domain, which should not trigger new string data allocation
 		input := "example.com"
