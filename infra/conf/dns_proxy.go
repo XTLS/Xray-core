@@ -105,7 +105,7 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 
 // todo: remove legacy
 func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error) {
-	rules := make([]*dns.DNSRuleConfig, 0, 2)
+	rules := make([]*dns.DNSRuleConfig, 0, 3)
 
 	mode := "reject"
 	if c.NonIPQuery != nil && *c.NonIPQuery != "" {
