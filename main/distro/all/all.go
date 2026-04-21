@@ -10,6 +10,7 @@ import (
 
 	// Default commander and all its services. This is an optional feature.
 	_ "github.com/xtls/xray-core/app/commander"
+	_ "github.com/xtls/xray-core/app/geodata/command"
 	_ "github.com/xtls/xray-core/app/log/command"
 	_ "github.com/xtls/xray-core/app/proxyman/command"
 	_ "github.com/xtls/xray-core/app/stats/command"
