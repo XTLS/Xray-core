@@ -1,8 +1,11 @@
 package geodata
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type DomainRegistry struct {
@@ -29,6 +32,8 @@ func (r *DomainRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	errors.LogInfo(context.Background(), "reloading GeoSite data for ", len(r.matchers), " domain matcher(s)")
+
 	factory := newDomainMatcherFactory()
 	type reloadEntry struct {
 		dynamic *DynamicDomainMatcher
@@ -38,6 +43,7 @@ func (r *DomainRegistry) Reload() error {
 	for i, d := range r.matchers {
 		m, err := factory.BuildMatcher(d.rules)
 		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "failed to reload GeoSite data for domain matcher ", i)
 			return err
 		}
 		reloaded[i] = reloadEntry{dynamic: d, matcher: m}
@@ -46,6 +52,7 @@ func (r *DomainRegistry) Reload() error {
 		entry.dynamic.Reload(entry.matcher)
 	}
 	r.factory = factory
+	errors.LogInfo(context.Background(), "reloaded GeoSite data for ", len(r.matchers), " domain matcher(s)")
 	return nil
 }
 

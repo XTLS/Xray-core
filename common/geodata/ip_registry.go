@@ -1,9 +1,11 @@
 package geodata
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -31,6 +33,8 @@ func (r *IPRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	errors.LogInfo(context.Background(), "reloading GeoIP data for ", len(r.matchers), " IP matcher(s)")
+
 	factory := newIPSetFactory()
 	type reloadEntry struct {
 		dynamic *DynamicIPMatcher
@@ -40,6 +44,7 @@ func (r *IPRegistry) Reload() error {
 	for i, d := range r.matchers {
 		m, err := buildOptimizedIPMatcher(factory, d.rules)
 		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "failed to reload GeoIP data for IP matcher ", i)
 			return err
 		}
 		reloaded[i] = reloadEntry{dynamic: d, matcher: m}
@@ -48,6 +53,7 @@ func (r *IPRegistry) Reload() error {
 		entry.dynamic.Reload(entry.matcher)
 	}
 	r.ipsetFactory = factory
+	errors.LogInfo(context.Background(), "reloaded GeoIP data for ", len(r.matchers), " IP matcher(s)")
 	return nil
 }
 
