@@ -10,8 +10,10 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -20,6 +22,7 @@ import (
 type Loopback struct {
 	config             *Config
 	dispatcherInstance routing.Dispatcher
+	policyManager      policy.Manager
 }
 
 func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet.Dialer) error {
@@ -76,7 +79,24 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	}
 	defer conn.Close()
 
+	var newCtx context.Context
+	var newCancel context.CancelFunc
+	if session.TimeoutOnlyFromContext(ctx) {
+		newCtx, newCancel = context.WithCancel(context.Background())
+	}
+
+	plcy := l.policy()
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, plcy.Timeouts.ConnectionIdle)
+
 	requestDone := func() error {
+		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
+
 		var writer buf.Writer
 		if destination.Network == net.Network_TCP {
 			writer = buf.NewWriter(conn)
@@ -92,6 +112,8 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	}
 
 	responseDone := func() error {
+		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
+
 		var reader buf.Reader
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
@@ -105,6 +127,10 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 		return nil
 	}
 
+	if newCtx != nil {
+		ctx = newCtx
+	}
+
 	if err := task.Run(ctx, requestDone, task.OnSuccess(responseDone, task.Close(output))); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
@@ -112,8 +138,14 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	return nil
 }
 
-func (l *Loopback) init(config *Config, dispatcherInstance routing.Dispatcher) error {
+func (l *Loopback) policy() policy.Session {
+	p := l.policyManager.ForLevel(l.config.UserLevel)
+	return p
+}
+
+func (l *Loopback) init(config *Config, dispatcherInstance routing.Dispatcher, pm policy.Manager) error {
 	l.dispatcherInstance = dispatcherInstance
+	l.policyManager = pm
 	l.config = config
 	return nil
 }
@@ -121,8 +153,8 @@ func (l *Loopback) init(config *Config, dispatcherInstance routing.Dispatcher) e
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		l := new(Loopback)
-		err := core.RequireFeatures(ctx, func(dispatcherInstance routing.Dispatcher) error {
-			return l.init(config.(*Config), dispatcherInstance)
+		err := core.RequireFeatures(ctx, func(dispatcherInstance routing.Dispatcher, pm policy.Manager) error {
+			return l.init(config.(*Config), dispatcherInstance, pm)
 		})
 		return l, err
 	}))

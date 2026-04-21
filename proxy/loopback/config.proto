@@ -8,4 +8,5 @@ option java_multiple_files = true;
 
 message Config {
   string inbound_tag = 1;
+  uint32 user_level = 5;
 }

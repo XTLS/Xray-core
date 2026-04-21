@@ -24,6 +24,7 @@ const (
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InboundTag    string                 `protobuf:"bytes,1,opt,name=inbound_tag,json=inboundTag,proto3" json:"inbound_tag,omitempty"`
+	UserLevel     uint32                 `protobuf:"varint,5,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,14 +66,23 @@ func (x *Config) GetInboundTag() string {
 	return ""
 }
 
+func (x *Config) GetUserLevel() uint32 {
+	if x != nil {
+		return x.UserLevel
+	}
+	return 0
+}
+
 var File_proxy_loopback_config_proto protoreflect.FileDescriptor
 
 const file_proxy_loopback_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/loopback/config.proto\x12\x13xray.proxy.loopback\")\n" +
+	"\x1bproxy/loopback/config.proto\x12\x13xray.proxy.loopback\"H\n" +
 	"\x06Config\x12\x1f\n" +
 	"\vinbound_tag\x18\x01 \x01(\tR\n" +
-	"inboundTagB[\n" +
+	"inboundTag\x12\x1d\n" +
+	"\n" +
+	"user_level\x18\x05 \x01(\rR\tuserLevelB[\n" +
 	"\x17com.xray.proxy.loopbackP\x01Z(github.com/xtls/xray-core/proxy/loopback\xaa\x02\x13Xray.Proxy.Loopbackb\x06proto3"
 
 var (
