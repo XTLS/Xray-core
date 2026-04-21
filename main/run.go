@@ -75,6 +75,8 @@ func executeRun(cmd *base.Command, args []string) {
 	}
 
 	printVersion()
+
+restartXray:
 	server, err := startXray()
 	if err != nil {
 		fmt.Println("Failed to start:", err)
@@ -91,7 +93,6 @@ func executeRun(cmd *base.Command, args []string) {
 		fmt.Println("Failed to start:", err)
 		os.Exit(-1)
 	}
-	defer server.Close()
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
@@ -99,8 +100,15 @@ func executeRun(cmd *base.Command, args []string) {
 
 	{
 		osSignals := make(chan os.Signal, 1)
-		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
-		<-osSignals
+		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		sig := <-osSignals
+
+		server.Close()
+
+		if sig == syscall.SIGHUP {
+			fmt.Println("Caught SIGHUP, reloading...")
+			goto restartXray
+		}
 	}
 }
 
