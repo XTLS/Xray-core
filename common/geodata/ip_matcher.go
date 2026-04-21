@@ -1007,3 +1007,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		return &HeuristicMultiIPMatcher{matchers: subs}, nil
 	}
 }
+
+func newIPSetFactory() *IPSetFactory {
+	return &IPSetFactory{shared: make(map[string]*IPSet)}
+}
