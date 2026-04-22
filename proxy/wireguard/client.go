@@ -123,6 +123,7 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 			},
 			workers:   int(h.conf.NumWorkers),
 			readQueue: make(chan *netReadInfo),
+			closedCh:  make(chan struct{}),
 		},
 		ctx:      ctx,
 		dialer:   dialer,
