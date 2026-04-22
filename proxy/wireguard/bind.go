@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"runtime"
 	"strconv"
+	"sync"
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
@@ -30,6 +31,7 @@ type netBind struct {
 	workers   int
 	readQueue chan *netReadInfo
 	closedCh  chan struct{}
+	closeOnce sync.Once
 }
 
 // SetMark implements conn.Bind
@@ -77,7 +79,9 @@ func (bind *netBind) BatchSize() int {
 
 // Open implements conn.Bind
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
-	bind.closedCh = make(chan struct{})
+	if bind.closedCh == nil {
+		bind.closedCh = make(chan struct{})
+	}
 	errors.LogDebug(context.Background(), "bind opened")
 
 	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
@@ -109,9 +113,11 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 // Close implements conn.Bind
 func (bind *netBind) Close() error {
 	errors.LogDebug(context.Background(), "bind closed")
-	if bind.closedCh != nil {
-		close(bind.closedCh)
-	}
+	bind.closeOnce.Do(func() {
+		if bind.closedCh != nil {
+			close(bind.closedCh)
+		}
+	})
 	return nil
 }
 
