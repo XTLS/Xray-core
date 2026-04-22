@@ -411,7 +411,19 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		globalDialerAccess.Unlock()
 		memory2 := streamSettings.DownloadSettings
-		dest2 := *memory2.Destination // just panic
+		// Guard: ToMemoryStreamConfig can produce a MemoryStreamConfig
+		// with a nil Destination when the caller's DownloadSettings
+		// carried no explicit address (common for sing-box-shaped
+		// subscriptions that specify only path / host / tls on the
+		// download leg). Fall back to the upload-side destination —
+		// H2/H3 split-channel to the same server is the typical
+		// intent anyway. See https://github.com/XTLS/Xray-core/issues/5997
+		var dest2 net.Destination
+		if memory2 != nil && memory2.Destination != nil {
+			dest2 = *memory2.Destination
+		} else {
+			dest2 = dest
+		}
 		tlsConfig2 := tls.ConfigFromStreamSettings(memory2)
 		realityConfig2 := reality.ConfigFromStreamSettings(memory2)
 		httpVersion2 := decideHTTPVersion(tlsConfig2, realityConfig2)
