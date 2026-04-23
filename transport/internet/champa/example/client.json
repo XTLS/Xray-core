@@ -34,9 +34,9 @@
           "cacheUrl": "https://cdn.ampproject.org/",
           "front": "www.google.com",
           "pubkey": "ca9e4285b58ee8a47e34ca7c446715fc30fa941a0e636108ae80c4e13897595f",
-          "maxConnsPerHost": 8,
-          "requestsPerSecondMax": 20,
-          "requestsPerSecondBurst": 40
+          "maxConnsPerHost": 2,
+          "requestsPerSecondMax": 5,
+          "requestsPerSecondBurst": 4
         }
       }
     }
