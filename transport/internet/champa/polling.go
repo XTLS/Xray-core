@@ -19,13 +19,31 @@ const (
 	pollDelayMultiplier = 2.0
 	pollTimeout         = 30 * time.Second
 
-	requestsPerSecondMax                    = 5.0
-	requestsPerSecondBurst                  = requestsPerSecondMax * 2
+	defaultRequestsPerSecondMax             = 5.0
 	requestsPerSecondRateOfIncrease         = 1.0 / 10.0
 	requestsPerSecondMultiplicativeDecrease = 0.5
 )
 
 type pollFunc func(context.Context, []byte) (io.ReadCloser, error)
+
+// rateConfig configures the polling-loop leaky-bucket rate limiter. Zero
+// values fall back to defaults: max=5.0 req/s, burst=2*max.
+type rateConfig struct {
+	max   float64
+	burst float64
+}
+
+func (r rateConfig) resolved() (float64, float64) {
+	max := r.max
+	if max <= 0 {
+		max = defaultRequestsPerSecondMax
+	}
+	burst := r.burst
+	if burst <= 0 {
+		burst = max * 2
+	}
+	return max, burst
+}
 
 // pollingPacketConn implements net.PacketConn over an abstract poll function.
 // Outgoing packets to remoteAddr are batched, encapsulated, and handed to poll;
@@ -40,7 +58,7 @@ type pollingPacketConn struct {
 	*turbotunnel.QueuePacketConn
 }
 
-func newPollingPacketConn(ctx context.Context, remoteAddr net.Addr, poll pollFunc) *pollingPacketConn {
+func newPollingPacketConn(ctx context.Context, remoteAddr net.Addr, poll pollFunc, rate rateConfig) *pollingPacketConn {
 	clientID := turbotunnel.NewClientID()
 	pctx, cancel := context.WithCancel(ctx)
 	c := &pollingPacketConn{
@@ -51,7 +69,7 @@ func newPollingPacketConn(ctx context.Context, remoteAddr net.Addr, poll pollFun
 		QueuePacketConn: turbotunnel.NewQueuePacketConn(clientID, 0),
 	}
 	go func() {
-		if err := c.pollLoop(poll); err != nil {
+		if err := c.pollLoop(poll, rate); err != nil {
 			xerrors.LogInfo(pctx, "champa pollLoop: ", err)
 		}
 	}()
@@ -63,10 +81,11 @@ func (c *pollingPacketConn) Close() error {
 	return c.QueuePacketConn.Close()
 }
 
-func (c *pollingPacketConn) pollLoop(poll pollFunc) error {
+func (c *pollingPacketConn) pollLoop(poll pollFunc, rate rateConfig) error {
 	const maxPayloadLength = 2048
 
-	rateLimit := newRateLimiter(time.Now(), requestsPerSecondMax, requestsPerSecondBurst, requestsPerSecondRateOfIncrease)
+	rateMax, rateBurst := rate.resolved()
+	rateLimit := newRateLimiter(time.Now(), rateMax, rateBurst, requestsPerSecondRateOfIncrease)
 
 	pollDelay := initPollDelay
 	pollTimer := time.NewTimer(pollDelay)

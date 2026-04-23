@@ -37,9 +37,19 @@ type Config struct {
 	Pubkey string `protobuf:"bytes,4,opt,name=pubkey,proto3" json:"pubkey,omitempty"`
 	// privkey is the server's Noise NK private key, hex-encoded (64 chars).
 	// Server only.
-	Privkey       string `protobuf:"bytes,5,opt,name=privkey,proto3" json:"privkey,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Privkey string `protobuf:"bytes,5,opt,name=privkey,proto3" json:"privkey,omitempty"`
+	// max_conns_per_host caps parallel HTTP connections to the AMP cache /
+	// origin. 0 = use default (2). Higher values pipeline more polls. Client
+	// only.
+	MaxConnsPerHost uint32 `protobuf:"varint,6,opt,name=max_conns_per_host,json=maxConnsPerHost,proto3" json:"max_conns_per_host,omitempty"`
+	// requests_per_second_max caps the polling rate. 0 = use default (5.0).
+	// Client only.
+	RequestsPerSecondMax float64 `protobuf:"fixed64,7,opt,name=requests_per_second_max,json=requestsPerSecondMax,proto3" json:"requests_per_second_max,omitempty"`
+	// requests_per_second_burst is the leaky-bucket burst capacity. 0 = use
+	// 2 * requests_per_second_max. Client only.
+	RequestsPerSecondBurst float64 `protobuf:"fixed64,8,opt,name=requests_per_second_burst,json=requestsPerSecondBurst,proto3" json:"requests_per_second_burst,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -107,18 +117,42 @@ func (x *Config) GetPrivkey() string {
 	return ""
 }
 
+func (x *Config) GetMaxConnsPerHost() uint32 {
+	if x != nil {
+		return x.MaxConnsPerHost
+	}
+	return 0
+}
+
+func (x *Config) GetRequestsPerSecondMax() float64 {
+	if x != nil {
+		return x.RequestsPerSecondMax
+	}
+	return 0
+}
+
+func (x *Config) GetRequestsPerSecondBurst() float64 {
+	if x != nil {
+		return x.RequestsPerSecondBurst
+	}
+	return 0
+}
+
 var File_transport_internet_champa_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_champa_config_proto_rawDesc = "" +
 	"\n" +
-	"&transport/internet/champa/config.proto\x12\x1exray.transport.internet.champa\"\x8c\x01\n" +
+	"&transport/internet/champa/config.proto\x12\x1exray.transport.internet.champa\"\xab\x02\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"server_url\x18\x01 \x01(\tR\tserverUrl\x12\x1b\n" +
 	"\tcache_url\x18\x02 \x01(\tR\bcacheUrl\x12\x14\n" +
 	"\x05front\x18\x03 \x01(\tR\x05front\x12\x16\n" +
 	"\x06pubkey\x18\x04 \x01(\tR\x06pubkey\x12\x18\n" +
-	"\aprivkey\x18\x05 \x01(\tR\aprivkeyB|\n" +
+	"\aprivkey\x18\x05 \x01(\tR\aprivkey\x12+\n" +
+	"\x12max_conns_per_host\x18\x06 \x01(\rR\x0fmaxConnsPerHost\x125\n" +
+	"\x17requests_per_second_max\x18\a \x01(\x01R\x14requestsPerSecondMax\x129\n" +
+	"\x19requests_per_second_burst\x18\b \x01(\x01R\x16requestsPerSecondBurstB|\n" +
 	"\"com.xray.transport.internet.champaP\x01Z3github.com/xtls/xray-core/transport/internet/champa\xaa\x02\x1eXray.Transport.Internet.Champab\x06proto3"
 
 var (

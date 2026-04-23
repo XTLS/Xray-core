@@ -179,21 +179,27 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 }
 
 type ChampaConfig struct {
-	ServerURL string `json:"serverUrl"`
-	CacheURL  string `json:"cacheUrl"`
-	Front     string `json:"front"`
-	Pubkey    string `json:"pubkey"`
-	Privkey   string `json:"privkey"`
+	ServerURL              string  `json:"serverUrl"`
+	CacheURL               string  `json:"cacheUrl"`
+	Front                  string  `json:"front"`
+	Pubkey                 string  `json:"pubkey"`
+	Privkey                string  `json:"privkey"`
+	MaxConnsPerHost        uint32  `json:"maxConnsPerHost"`
+	RequestsPerSecondMax   float64 `json:"requestsPerSecondMax"`
+	RequestsPerSecondBurst float64 `json:"requestsPerSecondBurst"`
 }
 
 // Build implements Buildable.
 func (c *ChampaConfig) Build() (proto.Message, error) {
 	return &champa.Config{
-		ServerUrl: c.ServerURL,
-		CacheUrl:  c.CacheURL,
-		Front:     c.Front,
-		Pubkey:    c.Pubkey,
-		Privkey:   c.Privkey,
+		ServerUrl:              c.ServerURL,
+		CacheUrl:               c.CacheURL,
+		Front:                  c.Front,
+		Pubkey:                 c.Pubkey,
+		Privkey:                c.Privkey,
+		MaxConnsPerHost:        c.MaxConnsPerHost,
+		RequestsPerSecondMax:   c.RequestsPerSecondMax,
+		RequestsPerSecondBurst: c.RequestsPerSecondBurst,
 	}, nil
 }
 

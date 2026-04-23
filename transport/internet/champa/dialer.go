@@ -169,11 +169,11 @@ func dialSession(ctx context.Context, dest xnet.Destination, streamSettings *int
 		return nil, fmt.Errorf("champa: pubkey must be %d bytes, got %d", noise.KeyLen, len(pubkey))
 	}
 
-	rt := newXrayRoundTripper(dest, streamSettings)
+	rt := newXrayRoundTripper(dest, streamSettings, cfg.MaxConnsPerHost)
 
 	pconn := newPollingPacketConn(ctx, turbotunnel.DummyAddr{}, func(pctx context.Context, p []byte) (io.ReadCloser, error) {
 		return exchangeAMP(pctx, rt, serverURL, cacheURL, cfg.Front, p)
-	})
+	}, rateConfig{max: cfg.RequestsPerSecondMax, burst: cfg.RequestsPerSecondBurst})
 
 	nconn, err := noiseDial(pconn, turbotunnel.DummyAddr{}, pubkey)
 	if err != nil {
@@ -277,10 +277,16 @@ func (c *noisePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 // newXrayRoundTripper builds an http.Transport whose underlying TCP dial uses
 // xray's internet.DialSystem so streamSettings.SocketSettings (mark, etc.) is
 // honored. The actual destination is `dest` from the outbound vnext —
-// typically the front domain.
-func newXrayRoundTripper(dest xnet.Destination, streamSettings *internet.MemoryStreamConfig) http.RoundTripper {
+// typically the front domain. maxConnsPerHost=0 falls back to a default of 2
+// (matching upstream champa-client); higher values pipeline more parallel
+// polls through the AMP cache.
+func newXrayRoundTripper(dest xnet.Destination, streamSettings *internet.MemoryStreamConfig, maxConnsPerHost uint32) http.RoundTripper {
 	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.MaxConnsPerHost = 2
+	if maxConnsPerHost == 0 {
+		t.MaxConnsPerHost = 2
+	} else {
+		t.MaxConnsPerHost = int(maxConnsPerHost)
+	}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		// Ignore network/addr and route through xray's dial path to the configured destination.
 		return internet.DialSystem(ctx, dest, streamSettings.SocketSettings)

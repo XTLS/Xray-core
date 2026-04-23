@@ -22,4 +22,15 @@ message Config {
   // privkey is the server's Noise NK private key, hex-encoded (64 chars).
   // Server only.
   string privkey = 5;
+
+  // max_conns_per_host caps parallel HTTP connections to the AMP cache /
+  // origin. 0 = use default (2). Higher values pipeline more polls. Client
+  // only.
+  uint32 max_conns_per_host = 6;
+  // requests_per_second_max caps the polling rate. 0 = use default (5.0).
+  // Client only.
+  double requests_per_second_max = 7;
+  // requests_per_second_burst is the leaky-bucket burst capacity. 0 = use
+  // 2 * requests_per_second_max. Client only.
+  double requests_per_second_burst = 8;
 }
