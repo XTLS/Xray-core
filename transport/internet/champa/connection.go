@@ -4,17 +4,16 @@ import (
 	"net"
 
 	"github.com/xtaci/smux"
-	xnet "github.com/xtls/xray-core/common/net"
 )
 
-// streamConn adapts an smux.Stream into a net.Conn that reports synthetic
-// local/remote addresses chosen by Dial / Listen. smux.Stream's
-// LocalAddr/RemoteAddr return the underlying KCP DummyAddr, which isn't
-// useful to the rest of Xray.
+// streamConn adapts an smux.Stream into a net.Conn that reports concrete
+// *net.TCPAddr local/remote addresses. xray's DestinationFromAddr only
+// accepts *net.TCPAddr / *net.UDPAddr / *net.UnixAddr and panics on anything
+// else, so we must not return a custom net.Addr type from here.
 type streamConn struct {
 	*smux.Stream
 	local  net.Addr
-	remote xnet.Destination
+	remote net.Addr
 }
 
 func (c *streamConn) LocalAddr() net.Addr {
@@ -25,15 +24,10 @@ func (c *streamConn) LocalAddr() net.Addr {
 }
 
 func (c *streamConn) RemoteAddr() net.Addr {
-	if addr := c.remote.RawNetAddr(); addr != nil {
-		return addr
+	if c.remote != nil {
+		return c.remote
 	}
-	return labelAddr(c.remote.NetAddr())
+	return c.Stream.RemoteAddr()
 }
-
-type labelAddr string
-
-func (a labelAddr) Network() string { return "tcp" }
-func (a labelAddr) String() string  { return string(a) }
 
 var _ net.Conn = (*streamConn)(nil)

@@ -47,7 +47,14 @@ func Dial(ctx context.Context, dest xnet.Destination, streamSettings *internet.M
 		return nil, fmt.Errorf("champa: open stream: %w", err)
 	}
 
-	return &streamConn{Stream: stream, local: sess.localAddr, remote: dest}, nil
+	// Synthesize concrete *net.TCPAddr for both ends — xray's
+	// DestinationFromAddr only accepts the three concrete net.Addr types.
+	// dest may carry a domain (e.g. "www.google.com:443") which has no IP yet,
+	// so use loopback + dest port as a stand-in. The interesting routing info
+	// lives in the outbound's session metadata anyway.
+	local := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+	remote := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: int(dest.Port)}
+	return &streamConn{Stream: stream, local: local, remote: remote}, nil
 }
 
 type sessionKey struct {
@@ -59,12 +66,11 @@ type sessionKey struct {
 }
 
 type champaSession struct {
-	mu        sync.Mutex
-	smuxSess  *smux.Session
-	pconn     *pollingPacketConn
-	kcpConn   *kcp.UDPSession
-	localAddr net.Addr
-	closed    bool
+	mu       sync.Mutex
+	smuxSess *smux.Session
+	pconn    *pollingPacketConn
+	kcpConn  *kcp.UDPSession
+	closed   bool
 }
 
 func (s *champaSession) openStream() (*smux.Stream, error) {
@@ -198,10 +204,9 @@ func dialSession(ctx context.Context, dest xnet.Destination, streamSettings *int
 	}
 
 	return &champaSession{
-		smuxSess:  smuxSess,
-		pconn:     pconn,
-		kcpConn:   kcpConn,
-		localAddr: pconn.LocalAddr(),
+		smuxSess: smuxSess,
+		pconn:    pconn,
+		kcpConn:  kcpConn,
 	}, nil
 }
 

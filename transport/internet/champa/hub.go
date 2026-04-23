@@ -160,6 +160,15 @@ func (l *listener) acceptStreams(conn *kcp.UDPSession) {
 	defer sess.Close()
 	defer conn.Close()
 
+	// Synthesize a remote *net.TCPAddr — xray's DestinationFromAddr panics on
+	// any net.Addr type other than the three concrete stdlib ones. There's no
+	// real TCP peer for an smux stream, so use loopback + low 16 bits of the
+	// KCP conv id as a synthetic port.
+	remote := &net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: int(conn.GetConv() & 0xFFFF),
+	}
+
 	for {
 		stream, err := sess.AcceptStream()
 		if err != nil {
@@ -167,13 +176,6 @@ func (l *listener) acceptStreams(conn *kcp.UDPSession) {
 				continue
 			}
 			return
-		}
-		// Synthesize a remote address so downstream code (logging, routing) has
-		// something to display. The KCP conv id is unique per client tunnel.
-		remoteLabel := fmt.Sprintf("champa-conv-%08x", conn.GetConv())
-		remote := xnet.Destination{
-			Network: xnet.Network_TCP,
-			Address: xnet.DomainAddress(remoteLabel),
 		}
 		l.addConn(stat.Connection(&streamConn{
 			Stream: stream,
