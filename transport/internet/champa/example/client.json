@@ -1,0 +1,38 @@
+{
+  "log": { "loglevel": "info" },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": { "udp": false }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "www.google.com",
+            "port": 443,
+            "users": [
+              { "id": "11111111-2222-3333-4444-555555555555", "encryption": "none" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "champa",
+        "security": "tls",
+        "tlsSettings": { "serverName": "www.google.com" },
+        "champaSettings": {
+          "serverUrl": "https://example.com/champa/",
+          "cacheUrl":  "https://cdn.ampproject.org/",
+          "front":     "www.google.com",
+          "pubkey":    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+        }
+      }
+    }
+  ]
+}

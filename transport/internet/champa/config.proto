@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package xray.transport.internet.champa;
+option csharp_namespace = "Xray.Transport.Internet.Champa";
+option go_package = "github.com/xtls/xray-core/transport/internet/champa";
+option java_package = "com.xray.transport.internet.champa";
+option java_multiple_files = true;
+
+message Config {
+  // server_url is the absolute URL of the champa server, e.g.
+  // "https://example.com/champa/". Client only.
+  string server_url = 1;
+  // cache_url is the AMP cache URL, e.g. "https://cdn.ampproject.org/".
+  // Empty means no cache (talk to server_url directly). Client only.
+  string cache_url = 2;
+  // front is the domain to use for the actual TCP connection / SNI / Host
+  // header. Empty means no fronting. Client only.
+  string front = 3;
+  // pubkey is the server's Noise NK public key, hex-encoded (64 chars).
+  // Client only.
+  string pubkey = 4;
+  // privkey is the server's Noise NK private key, hex-encoded (64 chars).
+  // Server only.
+  string privkey = 5;
+}

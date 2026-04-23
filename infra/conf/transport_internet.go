@@ -36,6 +36,7 @@ import (
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
+	"github.com/xtls/xray-core/transport/internet/champa"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
@@ -175,6 +176,25 @@ func (c *WebSocketConfig) Build() (proto.Message, error) {
 		HeartbeatPeriod:     c.HeartbeatPeriod,
 	}
 	return config, nil
+}
+
+type ChampaConfig struct {
+	ServerURL string `json:"serverUrl"`
+	CacheURL  string `json:"cacheUrl"`
+	Front     string `json:"front"`
+	Pubkey    string `json:"pubkey"`
+	Privkey   string `json:"privkey"`
+}
+
+// Build implements Buildable.
+func (c *ChampaConfig) Build() (proto.Message, error) {
+	return &champa.Config{
+		ServerUrl: c.ServerURL,
+		CacheUrl:  c.CacheURL,
+		Front:     c.Front,
+		Pubkey:    c.Pubkey,
+		Privkey:   c.Privkey,
+	}, nil
 }
 
 type HttpUpgradeConfig struct {
@@ -1009,6 +1029,8 @@ func (p TransportProtocol) Build() (string, error) {
 	case "httpupgrade":
 		errors.PrintNonRemovalDeprecatedFeatureWarning("HTTPUpgrade transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
 		return "httpupgrade", nil
+	case "champa":
+		return "champa", nil
 	case "h2", "h3", "http":
 		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")
 	case "quic":
@@ -1950,6 +1972,7 @@ type StreamConfig struct {
 	GRPCSettings        *GRPCConfig        `json:"grpcSettings"`
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
+	ChampaSettings      *ChampaConfig      `json:"champaSettings"`
 	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
@@ -2069,6 +2092,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.ChampaSettings != nil {
+		cs, err := c.ChampaSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build Champa config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "champa",
+			Settings:     serial.ToTypedMessage(cs),
 		})
 	}
 	if c.HysteriaSettings != nil {

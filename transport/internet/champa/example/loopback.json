@@ -1,0 +1,34 @@
+{
+  "log": { "loglevel": "info" },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": { "udp": false }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "127.0.0.1",
+            "port": 8080,
+            "users": [
+              { "id": "11111111-2222-3333-4444-555555555555", "encryption": "none" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "champa",
+        "champaSettings": {
+          "serverUrl": "http://127.0.0.1:8080/",
+          "pubkey":    "REPLACE_WITH_PUBKEY_HEX"
+        }
+      }
+    }
+  ]
+}
