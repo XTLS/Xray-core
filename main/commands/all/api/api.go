@@ -34,7 +34,5 @@ var CmdAPI = &base.Command{
 		cmdOnlineStats,
 		cmdOnlineStatsIpList,
 		cmdGetAllOnlineUsers,
-		cmdReloadGeoIP,
-		cmdReloadGeoSite,
 	},
 }

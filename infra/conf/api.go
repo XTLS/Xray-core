@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/commander"
-	geodataservice "github.com/xtls/xray-core/app/geodata/command"
 	loggerservice "github.com/xtls/xray-core/app/log/command"
 	observatoryservice "github.com/xtls/xray-core/app/observatory/command"
 	handlerservice "github.com/xtls/xray-core/app/proxyman/command"
@@ -40,8 +39,6 @@ func (c *APIConfig) Build() (*commander.Config, error) {
 			services = append(services, serial.ToTypedMessage(&observatoryservice.Config{}))
 		case "routingservice":
 			services = append(services, serial.ToTypedMessage(&routerservice.Config{}))
-		case "geodataservice":
-			services = append(services, serial.ToTypedMessage(&geodataservice.Config{}))
 		}
 	}
 
