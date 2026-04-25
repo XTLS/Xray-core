@@ -12,13 +12,10 @@ import (
 )
 
 func BuildXray() error {
-	genTestBinaryPath()
-	if _, err := os.Stat(testBinaryPath); err == nil {
-		return nil
-	}
-
-	cmd := exec.Command("go", "test", "-tags", "coverage coveragemain", "-coverpkg", "github.com/xtls/xray-core/...", "-c", "-o", testBinaryPath, GetSourcePath())
-	return cmd.Run()
+	return buildTestBinary(func() error {
+		cmd := exec.Command("go", "test", "-tags", "coverage coveragemain", "-coverpkg", "github.com/xtls/xray-core/...", "-c", "-o", testBinaryPath, GetSourcePath())
+		return cmd.Run()
+	})
 }
 
 func RunXrayProtobuf(config []byte) *exec.Cmd {
