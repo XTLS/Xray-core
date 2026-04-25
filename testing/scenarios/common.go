@@ -98,6 +98,8 @@ var (
 	testBinaryPath    string
 	testBinaryCleanFn func()
 	testBinaryPathGen sync.Once
+	testBinaryBuild   sync.Once
+	testBinaryErr     error
 )
 
 func genTestBinaryPath() {
@@ -119,6 +121,17 @@ func genTestBinaryPath() {
 		testBinaryPath = file
 		fmt.Printf("Generated binary path: %s\n", file)
 	})
+}
+
+func buildTestBinary(build func() error) error {
+	genTestBinaryPath()
+	testBinaryBuild.Do(func() {
+		if _, err := os.Stat(testBinaryPath); err == nil {
+			return
+		}
+		testBinaryErr = build()
+	})
+	return testBinaryErr
 }
 
 func GetSourcePath() string {
