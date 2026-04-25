@@ -1,6 +1,7 @@
 package tun
 
 import (
+	stdnet "net"
 	"testing"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -146,6 +147,99 @@ func TestRewriteICMPChecksum(t *testing.T) {
 			t.Fatalf("unexpected ipv6 checksum: got %x want %x", got, want)
 		}
 	})
+}
+
+func TestICMPReplyAddrMatches(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     stdnet.Addr
+		expected stdnet.Addr
+		match    bool
+	}{
+		{
+			name:     "same udp addr",
+			addr:     &stdnet.UDPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			expected: &stdnet.UDPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			match:    true,
+		},
+		{
+			name:     "ip addr matches udp addr",
+			addr:     &stdnet.IPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			expected: &stdnet.UDPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			match:    true,
+		},
+		{
+			name:     "udp addr matches ip addr",
+			addr:     &stdnet.UDPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			expected: &stdnet.IPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			match:    true,
+		},
+		{
+			name:     "different ip",
+			addr:     &stdnet.IPAddr{IP: stdnet.IPv4(1, 1, 1, 1)},
+			expected: &stdnet.UDPAddr{IP: stdnet.IPv4(8, 8, 8, 8)},
+			match:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := icmpReplyAddrMatches(tt.addr, tt.expected); got != tt.match {
+				t.Fatalf("icmpReplyAddrMatches() = %v, want %v", got, tt.match)
+			}
+		})
+	}
+}
+
+func TestDatagramICMPEchoIdentifier(t *testing.T) {
+	ident, ok := datagramICMPEchoIdentifier(&stdnet.UDPAddr{IP: stdnet.IPv4zero, Port: 1234})
+	if !ok {
+		t.Fatal("expected UDP addr to produce a datagram icmp identifier")
+	}
+	if ident != 1234 {
+		t.Fatalf("unexpected identifier: %d", ident)
+	}
+
+	if _, ok := datagramICMPEchoIdentifier(&stdnet.IPAddr{IP: stdnet.IPv4zero}); ok {
+		t.Fatal("expected non-UDP addr to be rejected")
+	}
+}
+
+func TestMatchICMPEchoReply(t *testing.T) {
+	packet := []byte{
+		byte(header.ICMPv4EchoReply), 0,
+		0, 0,
+		0x12, 0x34,
+		0x56, 0x78,
+	}
+	if err := rewriteICMPChecksum(header.IPv4ProtocolNumber, packet, tcpip.Address{}, tcpip.Address{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if matchedIdent, ok := matchICMPEchoReply(header.IPv4ProtocolNumber, packet, 0x1234, 0x5678, 0, false); !ok || matchedIdent != 0x1234 {
+		t.Fatalf("expected original identifier match, got ok=%v ident=%x", ok, matchedIdent)
+	}
+	if matchedIdent, ok := matchICMPEchoReply(header.IPv4ProtocolNumber, packet, 0xabcd, 0x5678, 0x1234, true); !ok || matchedIdent != 0x1234 {
+		t.Fatalf("expected alternate identifier match, got ok=%v ident=%x", ok, matchedIdent)
+	}
+	if _, ok := matchICMPEchoReply(header.IPv4ProtocolNumber, packet, 0xabcd, 0x5678, 0, false); ok {
+		t.Fatal("expected mismatched identifier to be rejected without alternate identifier")
+	}
+}
+
+func TestRewriteICMPEchoIdentifier(t *testing.T) {
+	packet := []byte{
+		byte(header.ICMPv4EchoReply), 0,
+		0, 0,
+		0x12, 0x34,
+		0x56, 0x78,
+	}
+	if err := rewriteICMPEchoIdentifier(header.IPv4ProtocolNumber, packet, 0xabcd); err != nil {
+		t.Fatal(err)
+	}
+	if !isMatchingICMPEchoReply(header.IPv4ProtocolNumber, packet, 0xabcd, 0x5678) {
+		t.Fatal("expected rewritten identifier to match")
+	}
 }
 
 func checksumPayloadV4(payload []byte) uint16 {

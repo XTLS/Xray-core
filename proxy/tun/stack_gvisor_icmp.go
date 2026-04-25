@@ -1,6 +1,7 @@
 package tun
 
 import (
+	"encoding/binary"
 	stdnet "net"
 	"os"
 	"syscall"
@@ -65,6 +66,12 @@ func (t *stackGVisor) forwardICMPEcho(netProto tcpip.NetworkProtocolNumber, srcI
 		return errors.New("set icmp socket deadline").Base(err)
 	}
 
+	var socketIdent uint16
+	var hasSocketIdent bool
+	if isDatagramICMPNetwork(socketConfig.network) {
+		socketIdent, hasSocketIdent = datagramICMPEchoIdentifier(conn.LocalAddr())
+	}
+
 	request, err := marshalICMPEchoMessage(netProto, true, ident, sequence, icmpPayload(message))
 	if err != nil {
 		return errors.New("marshal icmp echo request").Base(err)
@@ -91,7 +98,8 @@ func (t *stackGVisor) forwardICMPEcho(netProto tcpip.NetworkProtocolNumber, srcI
 		if err != nil {
 			return errors.New("normalize icmp echo reply from ", addr).Base(err)
 		}
-		if !isMatchingICMPEchoReply(netProto, reply, ident, sequence) {
+		replyIdent, ok := matchICMPEchoReply(netProto, reply, ident, sequence, socketIdent, hasSocketIdent)
+		if !ok {
 			continue
 		}
 		if isDatagramICMPNetwork(socketConfig.network) {
@@ -101,6 +109,11 @@ func (t *stackGVisor) forwardICMPEcho(netProto tcpip.NetworkProtocolNumber, srcI
 			} else if isLocal {
 				errors.LogInfo(t.ctx, "[tun][icmp] ", icmpProtocolLabel(netProto), " echo reply handled by local stack, skipping tun injection id=", ident, " seq=", sequence, " socket=", socketConfig.network)
 				return nil
+			}
+		}
+		if replyIdent != ident {
+			if err := rewriteICMPEchoIdentifier(netProto, reply, ident); err != nil {
+				return errors.New("rewrite icmp echo reply identifier").Base(err)
 			}
 		}
 		if err := rewriteICMPChecksum(netProto, reply, dstIP, srcIP); err != nil {
@@ -229,6 +242,16 @@ func isMatchingICMPEchoReply(netProto tcpip.NetworkProtocolNumber, message []byt
 	}
 }
 
+func matchICMPEchoReply(netProto tcpip.NetworkProtocolNumber, message []byte, ident, sequence, altIdent uint16, hasAltIdent bool) (uint16, bool) {
+	if isMatchingICMPEchoReply(netProto, message, ident, sequence) {
+		return ident, true
+	}
+	if hasAltIdent && altIdent != ident && isMatchingICMPEchoReply(netProto, message, altIdent, sequence) {
+		return altIdent, true
+	}
+	return 0, false
+}
+
 func normalizeICMPEchoReply(netProto tcpip.NetworkProtocolNumber, message []byte) ([]byte, error) {
 	switch netProto {
 	case header.IPv4ProtocolNumber:
@@ -307,6 +330,24 @@ func rewriteICMPChecksum(netProto tcpip.NetworkProtocolNumber, message []byte, s
 	default:
 		return errors.New("unsupported icmp network protocol")
 	}
+}
+
+func rewriteICMPEchoIdentifier(netProto tcpip.NetworkProtocolNumber, message []byte, ident uint16) error {
+	switch netProto {
+	case header.IPv4ProtocolNumber:
+		if len(message) < header.ICMPv4MinimumSize {
+			return errors.New("invalid icmpv4 echo packet")
+		}
+	case header.IPv6ProtocolNumber:
+		if len(message) < header.ICMPv6MinimumSize {
+			return errors.New("invalid icmpv6 echo packet")
+		}
+	default:
+		return errors.New("unsupported icmp network protocol")
+	}
+
+	binary.BigEndian.PutUint16(message[4:6], ident)
+	return nil
 }
 
 type icmpSocketConfig struct {
@@ -441,16 +482,28 @@ func isDatagramICMPNetwork(network string) bool {
 	return network == "udp4" || network == "udp6"
 }
 
+func datagramICMPEchoIdentifier(addr stdnet.Addr) (uint16, bool) {
+	udpAddr, ok := addr.(*stdnet.UDPAddr)
+	if !ok || udpAddr.Port < 0 || udpAddr.Port > 0xffff {
+		return 0, false
+	}
+	return uint16(udpAddr.Port), true
+}
+
 func icmpReplyAddrMatches(addr, expected stdnet.Addr) bool {
-	switch expected := expected.(type) {
+	addrIP := icmpAddrIP(addr)
+	expectedIP := icmpAddrIP(expected)
+	return addrIP != nil && expectedIP != nil && addrIP.Equal(expectedIP)
+}
+
+func icmpAddrIP(addr stdnet.Addr) stdnet.IP {
+	switch addr := addr.(type) {
 	case *stdnet.IPAddr:
-		ipAddr, ok := addr.(*stdnet.IPAddr)
-		return ok && ipAddr.IP.Equal(expected.IP)
+		return addr.IP
 	case *stdnet.UDPAddr:
-		udpAddr, ok := addr.(*stdnet.UDPAddr)
-		return ok && udpAddr.IP.Equal(expected.IP)
+		return addr.IP
 	default:
-		return false
+		return nil
 	}
 }
 
