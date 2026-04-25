@@ -46,6 +46,7 @@ Here is simple Xray config snippet to enable the inbound:
 ## LIMITATION
 
 - Only ICMP Echo request/reply is supported; other ICMP message types are ignored
+- On Linux, ICMP Echo forwarding needs either `net.ipv4.ping_group_range` to permit the Xray process group to open `udp4`/`udp6` ping sockets, or `CAP_NET_RAW` to open raw ICMP sockets
 - Connections are established to any host, as connection success is only a mark of successful accepting packet for proxying. Hosts that are not accepting connections or don't even exists, will look like they opened a connection (SYN-ACK), and never send back a single byte, closing connection (RST) after some time. This is the side effect of the whole process actually being a proxy, and not real network layer 3 vpn
 
 ## CONSIDERATIONS
