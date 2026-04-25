@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -107,17 +108,32 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
+	accessManager         *connectiontracker.Manager
+	connTracker           *connectiontracker.Tracker
 }
 
 // New creates a new VMess inbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	handler := &Handler{
 		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
+		accessManager:         trackerManager,
+		connTracker:           trackerManager.NewTracker(),
 	}
 
 	for _, user := range config.User {
@@ -180,6 +196,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if !h.usersByEmail.Remove(email) {
 		return errors.New("User ", email, " not found.")
 	}
+	h.connTracker.CancelAll(strings.ToLower(email))
 	h.clients.Remove(email)
 	return nil
 }
@@ -276,12 +293,27 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	if email := strings.ToLower(request.User.Email); email != "" {
+		connID, connEntry := h.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "vmess")
+		defer h.connTracker.Unregister(email, connID)
+		connection = connectiontracker.WrapConn(connection, connEntry)
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && h.accessManager != nil {
+		accessRecord = h.accessManager.NewAccessRecord(accessMessage, cancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer h.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, request.Destination())
 	if err != nil {
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -312,6 +344,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
+		if accessRecord != nil {
+			h.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

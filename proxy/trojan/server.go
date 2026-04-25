@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -38,7 +39,9 @@ type Server struct {
 	policyManager policy.Manager
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
+	accessManager *connectiontracker.Manager
 	cone          bool
+	connTracker   *connectiontracker.Tracker
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -56,10 +59,23 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	server := &Server{
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
+		accessManager: trackerManager,
 		cone:          ctx.Value("cone").(bool),
+		connTracker:   trackerManager.NewTracker(),
 	}
 
 	if config.Fallbacks != nil {
@@ -122,6 +138,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -228,6 +245,14 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID, connEntry := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "trojan")
+		defer s.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
+	}
+
 	if destination.Network == net.Network_UDP { // handle udp request
 		return s.handleUDPPayload(ctx, sessionPolicy, &PacketReader{Reader: clientReader}, &PacketWriter{Writer: conn}, dispatcher)
 	}
@@ -329,11 +354,21 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		accessRecord = s.accessManager.NewAccessRecord(accessMessage, cancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
 
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request to ", destination).Base(err)
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -356,6 +391,9 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

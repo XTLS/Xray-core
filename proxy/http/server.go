@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -31,14 +32,23 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 }
 
 // NewServer creates a new HTTP inbound handler.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
 	}
 
 	return s, nil
@@ -192,10 +202,19 @@ func (s *Server) handleConnect(ctx context.Context, _ *http.Request, buffer *buf
 	if inbound.CanSpliceCopy == 2 {
 		inbound.CanSpliceCopy = 1
 	}
-	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
+	link := &transport.Link{
 		Reader: reader,
-		Writer: buf.NewWriter(conn)},
-	); err != nil {
+		Writer: buf.NewWriter(conn),
+	}
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		ctx, link, accessRecord = s.accessManager.TrackAccessLink(ctx, accessMessage, link, nil)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
+	if err := dispatcher.DispatchLink(ctx, dest, link); err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil
@@ -245,10 +264,21 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 
 	ctx = session.ContextWithContent(ctx, content)
 
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		accessRecord = s.accessManager.NewAccessRecord(accessMessage, nil)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
+
 	link, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	// Plain HTTP request is not a stream. The request always finishes before response. Hense request has to be closed later.
 	defer common.Close(link.Writer)
@@ -305,6 +335,9 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 	if err := task.Run(ctx, requestDone, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

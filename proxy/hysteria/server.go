@@ -3,8 +3,10 @@ package hysteria
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -25,6 +27,8 @@ type Server struct {
 	config        *ServerConfig
 	validator     *account.Validator
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
+	connTracker   *connectiontracker.Tracker
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
@@ -41,10 +45,23 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	s := &Server{
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
+		connTracker:   trackerManager.NewTracker(),
 	}
 
 	return s, nil
@@ -59,6 +76,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 }
 
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -89,6 +107,14 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	type User interface{ User() *protocol.MemoryUser }
 	if v, ok := iConn.(User); ok && v.User() != nil {
 		inbound.User = v.User()
+	}
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(inbound.User.Email); email != "" {
+		connID, connEntry := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "hysteria")
+		defer s.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
 	}
 
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
@@ -180,10 +206,22 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			return err
 		}
 
-		return dispatcher.DispatchLink(ctx, dest, &transport.Link{
+		link := &transport.Link{
 			Reader: buf.NewReader(conn),
 			Writer: bufferedWriter,
-		})
+		}
+		var accessRecord *connectiontracker.AccessRecord
+		if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+			ctx, link, accessRecord = s.accessManager.TrackAccessLink(ctx, accessMessage, link, connCancel)
+			defer s.accessManager.FinishAccessRecord(accessRecord)
+		}
+		if err := dispatcher.DispatchLink(ctx, dest, link); err != nil {
+			if accessRecord != nil {
+				s.accessManager.AbortAccessRecord(accessRecord, err)
+			}
+			return err
+		}
+		return nil
 	}
 }
 

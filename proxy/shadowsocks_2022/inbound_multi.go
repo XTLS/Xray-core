@@ -15,6 +15,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -36,9 +38,11 @@ func init() {
 
 type MultiUserInbound struct {
 	sync.Mutex
-	networks []net.Network
-	users    []*protocol.MemoryUser
-	service  *shadowaead_2022.MultiService[int]
+	networks      []net.Network
+	users         []*protocol.MemoryUser
+	service       *shadowaead_2022.MultiService[int]
+	accessManager *connectiontracker.Manager
+	connTracker   *connectiontracker.Tracker
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -62,9 +66,22 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		memUsers = append(memUsers, u)
 	}
 
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	inbound := &MultiUserInbound{
-		networks: networks,
-		users:    memUsers,
+		networks:      networks,
+		users:         memUsers,
+		accessManager: trackerManager,
+		connTracker:   trackerManager.NewTracker(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -118,6 +135,8 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
 		return errors.New("Email must not be empty.")
 	}
+
+	i.connTracker.CancelAll(strings.ToLower(email))
 
 	i.Lock()
 	defer i.Unlock()
@@ -236,17 +255,42 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
+		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
 	if !destination.IsValid() {
 		return errors.New("invalid destination")
 	}
 
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
-	return singbridge.CopyConn(ctx, conn, link, conn)
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
+	if err := singbridge.CopyConn(ctx, conn, link, conn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
@@ -261,18 +305,43 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 		Email:  user.Email,
 	})
 	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
+
+	ctx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+	if email := strings.ToLower(user.Email); email != "" {
+		connID, connEntry := i.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "shadowsocks-2022")
+		defer i.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapPacketConn(conn, connEntry)
+	}
+
 	dispatcher := session.DispatcherFromContext(ctx)
 	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && i.accessManager != nil {
+		accessRecord = i.accessManager.NewAccessRecord(accessMessage, connCancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer i.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 	outConn := &singbridge.PacketConnWrapper{
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,
 	}
-	return bufio.CopyPacketConn(ctx, conn, outConn)
+	if err := bufio.CopyPacketConn(ctx, conn, outConn); err != nil {
+		if accessRecord != nil {
+			i.accessManager.AbortAccessRecord(accessRecord, err)
+		}
+		return err
+	}
+	return nil
 }
 
 func (i *MultiUserInbound) NewError(ctx context.Context, err error) {

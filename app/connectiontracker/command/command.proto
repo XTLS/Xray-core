@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package xray.app.connectiontracker.command;
+
+option go_package = "github.com/xtls/xray-core/app/connectiontracker/command";
+
+enum ConnEventType {
+  CONNECTED    = 0;
+  DISCONNECTED = 1;
+}
+
+message ConnInfo {
+  uint32 id            = 1;
+  string email         = 2;
+  string inbound_tag   = 3;
+  string protocol      = 4;
+  int64  start_time    = 5;
+  int64  last_activity = 6;
+  int64  uplink        = 7;
+  int64  downlink      = 8;
+}
+
+message ListConnectionsRequest {}
+
+message ListConnectionsResponse {
+  repeated ConnInfo connections = 1;
+}
+
+message CloseConnectionRequest {
+  uint32 id = 1;
+}
+
+message CloseConnectionResponse {
+  bool found = 1;
+}
+
+message GetUserStatsRequest {
+  string email = 1;
+}
+
+message GetUserStatsResponse {
+  int64 uplink     = 1;
+  int64 downlink   = 2;
+  int32 conn_count = 3;
+}
+
+message StreamConnectionsRequest {}
+
+message ConnectionUpdate {
+  ConnEventType event = 1;
+  ConnInfo      conn  = 2;
+}
+
+// Config is the configuration for the connection-tracker gRPC command service.
+// Add it to the commander's services list to enable the API.
+message Config {}
+
+service ConnTrackerService {
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
+  rpc CloseConnection(CloseConnectionRequest) returns (CloseConnectionResponse) {}
+  rpc GetUserStats(GetUserStatsRequest) returns (GetUserStatsResponse) {}
+  rpc StreamConnections(StreamConnectionsRequest) returns (stream ConnectionUpdate) {}
+}

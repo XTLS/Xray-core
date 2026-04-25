@@ -428,7 +428,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: u2.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -486,6 +486,195 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 	if resp == nil {
 		t.Fatal("nil response")
 	}
+}
+
+// TestRemoveUserClosesExistingConnections verifies that calling RemoveUser via
+// the gRPC API terminates connections that are currently active for that user.
+func TestRemoveUserClosesExistingConnections(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	userID := protocol.NewID(uuid.New())
+	cmdPort := tcp.PickPort()
+	serverPort := tcp.PickPort()
+
+	serverConfig := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&commander.Config{
+				Tag: "api",
+				Service: []*serial.TypedMessage{
+					serial.ToTypedMessage(&command.Config{}),
+				},
+			}),
+			serial.ToTypedMessage(&router.Config{
+				Rule: []*router.RoutingRule{
+					{
+						InboundTag: []string{"api"},
+						TargetTag: &router.RoutingRule_Tag{
+							Tag: "api",
+						},
+					},
+				},
+			}),
+			serial.ToTypedMessage(&policy.Config{
+				Level: map[uint32]*policy.Policy{
+					0: {
+						Timeout: &policy.Policy_Timeout{
+							UplinkOnly:   &policy.Second{Value: 0},
+							DownlinkOnly: &policy.Second{Value: 0},
+						},
+					},
+				},
+			}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				Tag: "v",
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&inbound.Config{
+					User: []*protocol.User{
+						{
+							Email: "test@example.com",
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+							}),
+						},
+					},
+				}),
+			},
+			{
+				Tag: "api",
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(cmdPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
+					Networks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&policy.Config{
+				Level: map[uint32]*policy.Policy{
+					0: {
+						Timeout: &policy.Policy_Timeout{
+							UplinkOnly:   &policy.Second{Value: 0},
+							DownlinkOnly: &policy.Second{Value: 0},
+						},
+					},
+				},
+			}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					Address:  net.NewIPOrDomain(dest.Address),
+					Port:     uint32(dest.Port),
+					Networks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Receiver: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User: &protocol.User{
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+								SecuritySettings: &protocol.SecurityConfig{
+									Type: protocol.SecurityType_AES128_GCM,
+								},
+							}),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	// Open a raw TCP connection through the proxy chain (dokodemo → VMess → freedom → echo).
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{
+		IP:   []byte{127, 0, 0, 1},
+		Port: int(clientPort),
+	})
+	common.Must(err)
+	defer conn.Close()
+
+	// Exchange data to confirm the connection is fully established through VMess.
+	payload := make([]byte, 1024)
+	for i := range payload {
+		payload[i] = byte(i % 256)
+	}
+	if _, err := conn.Write(payload); err != nil {
+		t.Fatal("write failed:", err)
+	}
+	response := make([]byte, len(payload))
+	conn.SetReadDeadline(time.Now().Add(time.Second * 5))
+	if _, err := io.ReadFull(conn, response); err != nil {
+		t.Fatal("initial echo failed:", err)
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	// Connect to the gRPC command port and remove the user.
+	cmdConn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", cmdPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	common.Must(err)
+	defer cmdConn.Close()
+
+	hsClient := command.NewHandlerServiceClient(cmdConn)
+	_, err = hsClient.AlterInbound(context.Background(), &command.AlterInboundRequest{
+		Tag:       "v",
+		Operation: serial.ToTypedMessage(&command.RemoveUserOperation{Email: "test@example.com"}),
+	})
+	if err != nil {
+		t.Fatal("RemoveUser failed:", err)
+	}
+
+	// The server must close the active connection after user removal.
+	// Give the cancellation chain (cancel → task.Run → conn.Close) time to propagate,
+	// then verify the connection is gone via a read with a generous deadline.
+	conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+	buf := make([]byte, 1)
+	_, readErr := conn.Read(buf)
+	if readErr == nil {
+		t.Fatal("expected connection to be closed after RemoveUser, but read returned data")
+	}
+	if nerr, ok := readErr.(interface{ Timeout() bool }); ok && nerr.Timeout() {
+		t.Fatalf("connection was NOT closed within 3 s of RemoveUser (read deadline hit): %v", readErr)
+	}
+	// Any non-timeout error (io.EOF, connection reset) confirms the server side closed.
 }
 
 func TestCommanderStats(t *testing.T) {
@@ -603,7 +792,7 @@ func TestCommanderStats(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{

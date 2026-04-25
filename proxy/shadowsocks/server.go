@@ -2,8 +2,10 @@ package shadowsocks
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -25,7 +27,9 @@ type Server struct {
 	config        *ServerConfig
 	validator     *Validator
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 	cone          bool
+	connTracker   *connectiontracker.Tracker
 }
 
 // NewServer create a new Shadowsocks server.
@@ -43,11 +47,24 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 
 	v := core.MustFromContext(ctx)
+	var trackerManager *connectiontracker.Manager
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		trackerManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if trackerManager == nil {
+		return nil, errors.New("connection tracker feature is not available")
+	}
+
 	s := &Server{
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		accessManager: trackerManager,
 		cone:          ctx.Value("cone").(bool),
+		connTracker:   trackerManager.NewTracker(),
 	}
 
 	return s, nil
@@ -60,6 +77,7 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	s.connTracker.CancelAll(strings.ToLower(e))
 	return s.validator.Del(e)
 }
 
@@ -235,12 +253,27 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	sessionPolicy = s.policyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	if email := strings.ToLower(request.User.Email); email != "" {
+		connID, connEntry := s.connTracker.RegisterWithMeta(email, cancel, inbound.Tag, "shadowsocks")
+		defer s.connTracker.Unregister(email, connID)
+		conn = connectiontracker.WrapConn(conn, connEntry)
+	}
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		accessRecord = s.accessManager.NewAccessRecord(accessMessage, cancel)
+		ctx = connectiontracker.ContextWithAccessRecord(ctx, accessRecord)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
 	link, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return err
 	}
+	link = connectiontracker.WrapAccessLink(link, accessRecord)
 
 	responseDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
@@ -286,6 +319,9 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

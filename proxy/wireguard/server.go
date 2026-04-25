@@ -3,6 +3,7 @@ package wireguard
 import (
 	"context"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -24,6 +25,7 @@ type Server struct {
 
 	info          routingInfo
 	policyManager policy.Manager
+	accessManager *connectiontracker.Manager
 }
 
 type routingInfo struct {
@@ -54,6 +56,12 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 			},
 		},
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+	}
+	if err := core.RequireFeatures(ctx, func(trackerSvc connectiontracker.Feature) error {
+		server.accessManager = trackerSvc.Manager()
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	tun, err := conf.createTun()(endpoints, int(conf.Mtu), server.forwardConnection)
@@ -158,12 +166,21 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		Reason: "",
 	})
 
-	err := s.info.dispatcher.DispatchLink(ctx, dest, &transport.Link{
+	link := &transport.Link{
 		Reader: buf.NewReader(conn),
 		Writer: buf.NewWriter(conn),
-	})
+	}
+	var accessRecord *connectiontracker.AccessRecord
+	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil && s.accessManager != nil {
+		ctx, link, accessRecord = s.accessManager.TrackAccessLink(ctx, accessMessage, link, cancel)
+		defer s.accessManager.FinishAccessRecord(accessRecord)
+	}
+	err := s.info.dispatcher.DispatchLink(ctx, dest, link)
 
 	if err != nil {
+		if accessRecord != nil {
+			s.accessManager.AbortAccessRecord(accessRecord, err)
+		}
 		errors.LogInfoInner(ctx, err, "connection ends")
 	}
 
