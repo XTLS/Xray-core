@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
 	grpc "google.golang.org/grpc"
@@ -163,15 +162,10 @@ func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsR
 }
 
 func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
-	matcher, err := strmatcher.Substr.New(request.Pattern)
-	if err != nil {
-		return nil, err
-	}
-
 	response := &QueryStatsResponse{}
 
 	s.stats.VisitCounters(func(name string, c feature_stats.Counter) bool {
-		if matcher.Match(name) {
+		if strings.Contains(name, request.Pattern) {
 			var value int64
 			if request.Reset_ {
 				value = c.Set(0)

@@ -2,6 +2,7 @@ package tun
 
 import (
 	"context"
+	"syscall"
 
 	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
@@ -16,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -40,11 +42,6 @@ type ConnectionHandler interface {
 // Handler implements ConnectionHandler
 var _ ConnectionHandler = (*Handler)(nil)
 
-func (t *Handler) policy() policy.Session {
-	p := t.policyManager.ForLevel(t.config.UserLevel)
-	return p
-}
-
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher, accessManager *connectiontracker.Manager) error {
 	var err error
@@ -63,13 +60,35 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.accessManager = accessManager
 
 	tunName := t.config.Name
-	tunOptions := TunOptions{
-		Name: tunName,
-		MTU:  t.config.MTU,
-	}
-	tunInterface, err := NewTun(tunOptions)
+	tunInterface, err := NewTun(t.config)
 	if err != nil {
 		return err
+	}
+
+	if t.config.AutoOutboundsInterface != "" {
+		tunIndex, err := tunInterface.Index()
+		if err != nil {
+			_ = tunInterface.Close()
+			return err
+		}
+		if t.config.AutoOutboundsInterface == "auto" {
+			t.config.AutoOutboundsInterface = ""
+		}
+		updater = &InterfaceUpdater{tunIndex: tunIndex, fixedName: t.config.AutoOutboundsInterface}
+		updater.Update()
+		internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
+			iface := updater.Get()
+			if iface == nil {
+				errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
+				return nil
+			}
+			return c.Control(func(fd uintptr) {
+				err := setinterface(network, address, fd, iface)
+				if err != nil {
+					errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
+				}
+			})
+		})
 	}
 
 	errors.LogInfo(t.ctx, tunName, " created")

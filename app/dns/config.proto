@@ -7,26 +7,15 @@ option java_package = "com.xray.app.dns";
 option java_multiple_files = true;
 
 import "common/net/destination.proto";
-import "app/router/config.proto";
+import "common/geodata/geodat.proto";
 
 message NameServer {
   xray.common.net.Endpoint address = 1;
   bytes client_ip = 5;
   bool skipFallback = 6;
-
-  message PriorityDomain {
-    DomainMatchingType type = 1;
-    string domain = 2;
-  }
-
-  message OriginalRule {
-    string rule = 1;
-    uint32 size = 2;
-  }
-
-  repeated PriorityDomain prioritized_domain = 2;
-  repeated xray.app.router.GeoIP expected_geoip = 3;
-  repeated OriginalRule original_rules = 4;
+  repeated xray.common.geodata.DomainRule domain = 2;
+  repeated xray.common.geodata.IPRule expected_ip = 3;
+  reserved 4;
   QueryStrategy query_strategy = 7;
   bool actPrior = 8;
   string tag = 9;
@@ -35,16 +24,9 @@ message NameServer {
   optional bool serveStale = 15;
   optional uint32 serveExpiredTTL = 16;
   bool finalQuery = 12;
-  repeated xray.app.router.GeoIP unexpected_geoip = 13;
+  repeated xray.common.geodata.IPRule unexpected_ip = 13;
   bool actUnprior = 14;
   uint32 policyID = 17;
-}
-
-enum DomainMatchingType {
-  Full = 0;
-  Subdomain = 1;
-  Keyword = 2;
-  Regex = 3;
 }
 
 enum QueryStrategy {
@@ -64,8 +46,7 @@ message Config {
   bytes client_ip = 3;
 
   message HostMapping {
-    DomainMatchingType type = 1;
-    string domain = 2;
+    xray.common.geodata.DomainRule domain = 2;
 
     repeated bytes ip = 3;
 

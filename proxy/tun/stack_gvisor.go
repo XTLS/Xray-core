@@ -34,23 +34,18 @@ const (
 // stackGVisor is ip stack implemented by gVisor package
 type stackGVisor struct {
 	ctx         context.Context
-	tun         GVisorTun
+	tun         Tun
 	idleTimeout time.Duration
 	handler     *Handler
 	stack       *stack.Stack
 	endpoint    stack.LinkEndpoint
 }
 
-// GVisorTun implements a bridge to connect gVisor ip stack to tun interface
-type GVisorTun interface {
-	newEndpoint() (stack.LinkEndpoint, error)
-}
-
 // NewStack builds new ip stack (using gVisor)
 func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stack, error) {
 	gStack := &stackGVisor{
 		ctx:         ctx,
-		tun:         options.Tun.(GVisorTun),
+		tun:         options.Tun,
 		idleTimeout: options.IdleTimeout,
 		handler:     handler,
 	}
@@ -115,8 +110,7 @@ func (t *stackGVisor) Start() error {
 		srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
 		dstIP := net.IPAddress(id.LocalAddress.AsSlice())
 		if srcIP == nil || dstIP == nil {
-			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " > invalid ip address ", id.RemoteAddress.AsSlice(), " ", id.LocalAddress.AsSlice())
-			return true
+			panic(id)
 		}
 		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
 		dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))

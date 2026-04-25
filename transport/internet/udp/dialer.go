@@ -2,7 +2,7 @@ package udp
 
 import (
 	"context"
-	reflect "reflect"
+	"reflect"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -33,6 +33,7 @@ func init() {
 						return nil, errors.New("mask err").Base(err)
 					}
 					c.PacketConn = pktConn
+					errors.LogInfo(ctx, "finalmask udp dialer: wrapped existing PacketConnWrapper with ", reflect.TypeOf(pktConn))
 				case *net.UDPConn:
 					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(c)
 					if err != nil {
@@ -43,6 +44,7 @@ func init() {
 						PacketConn: pktConn,
 						Dest:       c.RemoteAddr().(*net.UDPAddr),
 					}
+					errors.LogInfo(ctx, "finalmask udp dialer: wrapped UDPConn with ", reflect.TypeOf(pktConn))
 				case *cnc.Connection:
 					fakeConn := &internet.FakePacketConn{Conn: c}
 					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(fakeConn)
@@ -57,6 +59,7 @@ func init() {
 							Port: 0,
 						},
 					}
+					errors.LogInfo(ctx, "finalmask udp dialer: wrapped cnc.Connection with ", reflect.TypeOf(pktConn))
 				default:
 					conn.Close()
 					return nil, errors.New("unknown conn ", reflect.TypeOf(c))

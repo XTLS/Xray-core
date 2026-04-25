@@ -74,7 +74,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 		dest: &dst,
 	}:
 	default:
-		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
+		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full 2")
 	}
 }
 
@@ -98,25 +98,18 @@ type udpConn struct {
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	for {
-		e, ok := <-c.egress
-		if !ok {
-			return nil, io.EOF
-		}
-
-		b := buf.New()
-
-		_, err := b.Write(e.data)
-		if err != nil {
-			errors.LogDebugInner(context.Background(), err, "drop udp with size ", len(e.data), " to ", e.dest.NetAddr(), " original ", c.dst.NetAddr())
-			b.Release()
-			continue
-		}
-
-		b.UDP = e.dest
-
-		return buf.MultiBuffer{b}, nil
+	e, ok := <-c.egress
+	if !ok {
+		return nil, io.EOF
 	}
+
+	b := buf.New()
+	if _, err := b.Write(e.data); err != nil {
+		return nil, err
+	}
+	b.UDP = e.dest
+
+	return buf.MultiBuffer{b}, nil
 }
 
 // Read packets from the connection
