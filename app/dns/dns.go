@@ -158,9 +158,12 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		clients = append(clients, client)
 	}
 
-	domainMatcher, err := geodata.DomainReg.BuildDomainMatcher(effectiveRules)
-	if err != nil {
-		return nil, err
+	var domainMatcher geodata.DomainMatcher
+	if len(effectiveRules) > 0 {
+		domainMatcher, err = geodata.DomainReg.BuildDomainMatcher(effectiveRules)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// If there is no DNS client in config, add a `localhost` DNS client
@@ -271,25 +274,27 @@ func (s *DNS) sortClients(domain string) []*Client {
 
 	// Priority domain matching
 	hasMatch := false
-	matchSlice := s.domainMatcher.Match(strings.ToLower(domain))
-	sort.Slice(matchSlice, func(i, j int) bool {
-		return matchSlice[i] < matchSlice[j]
-	})
-	for _, match := range matchSlice {
-		info := s.matcherInfos[match]
-		client := s.clients[info.clientIdx]
-		domainRule := info.domainRule
-		domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
-		if clientUsed[info.clientIdx] {
-			continue
-		}
-		clientUsed[info.clientIdx] = true
-		clients = append(clients, client)
-		clientNames = append(clientNames, client.Name())
-		hasMatch = true
-		if client.finalQuery {
-			logDecision(s.ctx, domain, domainRules, clientNames)
-			return clients
+	if s.domainMatcher != nil {
+		matchSlice := s.domainMatcher.Match(strings.ToLower(domain))
+		sort.Slice(matchSlice, func(i, j int) bool {
+			return matchSlice[i] < matchSlice[j]
+		})
+		for _, match := range matchSlice {
+			info := s.matcherInfos[match]
+			client := s.clients[info.clientIdx]
+			domainRule := info.domainRule
+			domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
+			if clientUsed[info.clientIdx] {
+				continue
+			}
+			clientUsed[info.clientIdx] = true
+			clients = append(clients, client)
+			clientNames = append(clientNames, client.Name())
+			hasMatch = true
+			if client.finalQuery {
+				logDecision(s.ctx, domain, domainRules, clientNames)
+				return clients
+			}
 		}
 	}
 

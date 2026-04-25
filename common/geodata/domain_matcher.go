@@ -23,10 +23,54 @@ type DomainMatcherFactory interface {
 	BuildMatcher(rules []*DomainRule) (DomainMatcher, error)
 }
 
-type MphDomainMatcherFactory struct{}
+type MphDomainMatcherFactory struct {
+	sync.Mutex
+	shared map[string]strmatcher.MatcherGroup // TODO: cleanup
+}
+
+func buildDomainRulesKey(rules []*DomainRule) string {
+	var sb strings.Builder
+	cache := false
+	for _, r := range rules {
+		switch v := r.Value.(type) {
+		case *DomainRule_Custom:
+			sb.WriteString(v.Custom.Type.String())
+			sb.WriteString(":")
+			sb.WriteString(v.Custom.Value)
+			sb.WriteString(",")
+		case *DomainRule_Geosite:
+			cache = true
+			sb.WriteString(v.Geosite.File)
+			sb.WriteString(":")
+			sb.WriteString(v.Geosite.Code)
+			sb.WriteString("@")
+			sb.WriteString(v.Geosite.Attrs)
+			sb.WriteString(",")
+		default:
+			panic("unknown domain rule type")
+		}
+	}
+	if !cache {
+		return ""
+	}
+	return sb.String()
+}
 
 // BuildMatcher implements DomainMatcherFactory.
 func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
+	if len(rules) == 0 {
+		return nil, errors.New("empty domain rule list")
+	}
+	key := buildDomainRulesKey(rules)
+	if key != "" {
+		f.Lock()
+		defer f.Unlock()
+		if g := f.shared[key]; g != nil {
+			errors.LogDebug(context.Background(), "geodata mph domain matcher cache HIT for ", len(rules), " rules")
+			return g, nil
+		}
+		errors.LogDebug(context.Background(), "geodata mph domain matcher cache MISS for ", len(rules), " rules")
+	}
 	g := strmatcher.NewMphValueMatcher()
 	for i, r := range rules {
 		switch v := r.Value.(type) {
@@ -57,25 +101,30 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 	if err := g.Build(); err != nil {
 		return nil, err
 	}
+	if key != "" {
+		f.shared[key] = g
+	}
 	return g, nil
 }
 
 type CompactDomainMatcherFactory struct {
 	sync.Mutex
-	shared map[string]strmatcher.MatcherGroup // TODO: cleanup
+	shared map[string]strmatcher.MatcherSet // TODO: cleanup
 }
 
-func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmatcher.MatcherGroup, error) {
+func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmatcher.MatcherSet, error) {
 	key := rule.File + ":" + rule.Code + "@" + rule.Attrs
 
 	f.Lock()
 	defer f.Unlock()
 
-	if m := f.shared[key]; m != nil {
-		return m, nil
+	if s := f.shared[key]; s != nil {
+		errors.LogDebug(context.Background(), "geodata geosite matcher cache HIT ", key)
+		return s, nil
 	}
+	errors.LogDebug(context.Background(), "geodata geosite matcher cache MISS ", key)
 
-	g := strmatcher.NewLinearValueMatcher()
+	s := strmatcher.NewLinearAnyMatcher()
 	domains, err := loadSiteWithAttrs(rule.File, rule.Code, rule.Attrs)
 	if err != nil {
 		return nil, err
@@ -87,16 +136,19 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 			errors.LogError(context.Background(), "ignore invalid geosite entry in ", rule.File, ":", rule.Code, " at index ", i, ", ", err)
 			continue
 		}
-		g.Add(m, 0)
+		s.Add(m)
 	}
-	f.shared[key] = g
-	return g, err
+	f.shared[key] = s
+	return s, err
 }
 
 // BuildMatcher implements DomainMatcherFactory.
 func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
+	if len(rules) == 0 {
+		return nil, errors.New("empty domain rule list")
+	}
 	compact := &CompactDomainMatcher{
-		matchers: make([]strmatcher.MatcherGroup, 0, len(rules)),
+		matchers: make([]strmatcher.MatcherSet, 0, len(rules)),
 		values:   make([]uint32, 0, len(rules)),
 	}
 	for i, r := range rules {
@@ -126,7 +178,7 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 
 type CompactDomainMatcher struct {
 	custom   strmatcher.ValueMatcher
-	matchers []strmatcher.MatcherGroup
+	matchers []strmatcher.MatcherSet
 	values   []uint32
 }
 
@@ -178,8 +230,8 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 func newDomainMatcherFactory() DomainMatcherFactory {
 	switch runtime.GOOS {
 	case "ios", "android":
-		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
+		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
 	default:
-		return &MphDomainMatcherFactory{}
+		return &MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
 	}
 }

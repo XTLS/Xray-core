@@ -10,7 +10,7 @@ import (
 )
 
 func TestCompactDomainMatcher_PreservesCustomRuleIndices(t *testing.T) {
-	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
+	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
 	matcher, err := factory.BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
@@ -31,7 +31,7 @@ func TestCompactDomainMatcher_PreservesCustomRuleIndices(t *testing.T) {
 func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
+	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
 	matcher, err := factory.BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Geosite{Geosite: &GeoSiteRule{File: DefaultGeoSiteDat, Code: "CN"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "163.com"}}},
@@ -50,7 +50,7 @@ func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 }
 
 func TestMphDomainMatcher_MatchReturnsDetachedSlice(t *testing.T) {
-	matcher, err := (&MphDomainMatcherFactory{}).BuildMatcher([]*DomainRule{
+	matcher, err := (&MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}).BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
 	})
