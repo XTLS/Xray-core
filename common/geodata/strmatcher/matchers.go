@@ -100,10 +100,6 @@ func (t Type) New(pattern string) (Matcher, error) {
 	case Substr:
 		return SubstrMatcher(pattern), nil
 	case Domain:
-		pattern, err := ToDomain(pattern)
-		if err != nil {
-			return nil, err
-		}
 		return DomainMatcher(pattern), nil
 	case Regex: // 1. regex matching is case-sensitive
 		regex, err := regexp.Compile(pattern)
