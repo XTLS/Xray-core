@@ -111,7 +111,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	ctx, connCancel := context.WithCancel(ctx)
 	defer connCancel()
-	if email := strings.ToLower(useremail); email != "" {
+	if email := strings.ToLower(inbound.User.Email); email != "" {
 		connID, connEntry := s.connTracker.RegisterWithMeta(email, connCancel, inbound.Tag, "hysteria")
 		defer s.connTracker.Unregister(email, connID)
 		conn = connectiontracker.WrapConn(conn, connEntry)
