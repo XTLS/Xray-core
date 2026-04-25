@@ -10,9 +10,9 @@ import "common/net/destination.proto";
 import "common/geodata/geodat.proto";
 
 enum RuleAction {
-  Accept = 0;
+  Direct = 0;
   Drop = 1;
-  Refuse = 2;
+  Reject = 2;
   Hijack = 3;
 }
 

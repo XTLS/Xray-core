@@ -146,7 +146,7 @@ func (h *Handler) applyRules(qType dnsmessage.Type, domain string) RuleAction {
 	if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
 		return RuleAction_Hijack
 	}
-	return RuleAction_Refuse
+	return RuleAction_Reject
 }
 
 // Process implements proxy.Outbound.
@@ -254,9 +254,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			case RuleAction_Drop:
 				b.Release()
 				errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
-			case RuleAction_Refuse:
+			case RuleAction_Reject:
 				b.Release()
-				errors.LogInfo(ctx, "refused type ", qType, " query for domain ", domain)
+				errors.LogInfo(ctx, "rejected type ", qType, " query for domain ", domain)
 				if err := h.rejectNonIPQuery(id, qType, domain, writer); err != nil {
 					return err
 				}
@@ -270,7 +270,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				} else {
 					go h.handleIPQuery(id, qType, domain, writer, timer)
 				}
-			case RuleAction_Accept:
+			case RuleAction_Direct:
 				if err := connWriter.WriteMessage(b); err != nil {
 					return err
 				}

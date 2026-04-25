@@ -20,12 +20,12 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 	rule := &dns.DNSRuleConfig{}
 
 	switch strings.ToLower(c.Action) {
-	case "accept":
-		rule.Action = dns.RuleAction_Accept
+	case "direct":
+		rule.Action = dns.RuleAction_Direct
 	case "drop":
 		rule.Action = dns.RuleAction_Drop
-	case "refuse":
-		rule.Action = dns.RuleAction_Refuse
+	case "reject":
+		rule.Action = dns.RuleAction_Reject
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
 	default:
@@ -121,7 +121,7 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	if c.BlockTypes != nil && len(*c.BlockTypes) > 0 {
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Refuse
+			rule.Action = dns.RuleAction_Reject
 		}
 		for _, qtype := range *c.BlockTypes {
 			if qtype < 0 || qtype > 65535 {
@@ -140,13 +140,13 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Refuse}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Reject}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Refuse
+			rule.Action = dns.RuleAction_Reject
 		} else if mode == "drop" {
 			rule.Action = dns.RuleAction_Drop
 		} else if mode == "skip" {
-			rule.Action = dns.RuleAction_Accept
+			rule.Action = dns.RuleAction_Direct
 		}
 		rules = append(rules, rule)
 	}

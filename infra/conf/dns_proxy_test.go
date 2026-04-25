@@ -34,7 +34,7 @@ func TestDnsProxyConfig(t *testing.T) {
 		{
 			Input: `{
 				"rules": [{
-					"action": "accept",
+					"action": "direct",
 					"qtype": "1,3,23-24"
 				}, {
 					"action": "drop",
@@ -47,7 +47,7 @@ func TestDnsProxyConfig(t *testing.T) {
 				Server: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Direct,
 						Qtype:  []int32{1, 3, 23, 24},
 					},
 					{
@@ -78,7 +78,7 @@ func TestDnsProxyConfig(t *testing.T) {
 		{
 			Input: `{
 				"rules": [{
-					"action": "refuse",
+					"action": "reject",
 					"domain": "keyword:example"
 				}]
 			}`,
@@ -87,7 +87,7 @@ func TestDnsProxyConfig(t *testing.T) {
 				Server: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Refuse,
+						Action: dns.RuleAction_Reject,
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -143,7 +143,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Refuse,
+						Action: dns.RuleAction_Reject,
 					},
 				},
 			},
@@ -157,7 +157,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				Server: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Refuse,
+						Action: dns.RuleAction_Reject,
 						Qtype:  []int32{1, 65},
 					},
 					{
@@ -165,7 +165,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Refuse,
+						Action: dns.RuleAction_Reject,
 					},
 				},
 			},
@@ -211,7 +211,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Accept,
+						Action: dns.RuleAction_Direct,
 					},
 				},
 			},
@@ -227,7 +227,7 @@ func TestDnsProxyConfigRejectsMixedLegacyAndNewFields(t *testing.T) {
 
 	_, err := loadJSON(creator)(`{
 		"rules": [{
-			"action": "accept",
+			"action": "direct",
 			"qtype": 65
 		}],
 		"blockTypes": [65]

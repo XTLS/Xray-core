@@ -435,7 +435,7 @@ func TestDNSRules(t *testing.T) {
 									},
 								},
 							},
-							Action: dns_proxy.RuleAction_Accept,
+							Action: dns_proxy.RuleAction_Direct,
 						},
 						{
 							Qtype: []int32{int32(dns.TypeA)},
@@ -449,7 +449,7 @@ func TestDNSRules(t *testing.T) {
 									},
 								},
 							},
-							Action: dns_proxy.RuleAction_Refuse,
+							Action: dns_proxy.RuleAction_Reject,
 						},
 					},
 				}),
@@ -488,7 +488,7 @@ func TestDNSRules(t *testing.T) {
 		common.Must(err)
 
 		if in.Rcode != dns.RcodeSuccess {
-			t.Fatal("expected Accepted, but got ", in.Rcode)
+			t.Fatal("expected Success, but got ", in.Rcode)
 		}
 	}
 }

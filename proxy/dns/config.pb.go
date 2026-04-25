@@ -26,24 +26,24 @@ const (
 type RuleAction int32
 
 const (
-	RuleAction_Accept RuleAction = 0
+	RuleAction_Direct RuleAction = 0
 	RuleAction_Drop   RuleAction = 1
-	RuleAction_Refuse RuleAction = 2
+	RuleAction_Reject RuleAction = 2
 	RuleAction_Hijack RuleAction = 3
 )
 
 // Enum value maps for RuleAction.
 var (
 	RuleAction_name = map[int32]string{
-		0: "Accept",
+		0: "Direct",
 		1: "Drop",
-		2: "Refuse",
+		2: "Reject",
 		3: "Hijack",
 	}
 	RuleAction_value = map[string]int32{
-		"Accept": 0,
+		"Direct": 0,
 		"Drop":   1,
-		"Refuse": 2,
+		"Reject": 2,
 		"Hijack": 3,
 	}
 )
@@ -118,7 +118,7 @@ func (x *DNSRuleConfig) GetAction() RuleAction {
 	if x != nil {
 		return x.Action
 	}
-	return RuleAction_Accept
+	return RuleAction_Direct
 }
 
 func (x *DNSRuleConfig) GetQtype() []int32 {
@@ -212,10 +212,10 @@ const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
 	"RuleAction\x12\n" +
 	"\n" +
-	"\x06Accept\x10\x00\x12\b\n" +
+	"\x06Direct\x10\x00\x12\b\n" +
 	"\x04Drop\x10\x01\x12\n" +
 	"\n" +
-	"\x06Refuse\x10\x02\x12\n" +
+	"\x06Reject\x10\x02\x12\n" +
 	"\n" +
 	"\x06Hijack\x10\x03BL\n" +
 	"\x12com.xray.proxy.dnsP\x01Z#github.com/xtls/xray-core/proxy/dns\xaa\x02\x0eXray.Proxy.Dnsb\x06proto3"
