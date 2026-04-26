@@ -40,6 +40,20 @@ type dialerConf struct {
 	*internet.MemoryStreamConfig
 }
 
+type errorDialerClient struct {
+	err error
+}
+
+func (c *errorDialerClient) IsClosed() bool { return false }
+
+func (c *errorDialerClient) OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+	return nil, nil, nil, c.err
+}
+
+func (c *errorDialerClient) PostPacket(context.Context, string, string, string, buf.MultiBuffer) error {
+	return c.err
+}
+
 var (
 	globalDialerMap    map[dialerConf]*XmuxManager
 	globalDialerAccess sync.Mutex
@@ -50,11 +64,22 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	browserDialer := ""
 	if streamSettings.SocketSettings != nil {
 		browserDialer = streamSettings.SocketSettings.BrowserDialer
+		if browserDialer == "" {
+			if taggedDialer, ok := browser_dialer.GetAddressByTag(streamSettings.SocketSettings.DialerProxy); ok {
+				browserDialer = taggedDialer
+			}
+		}
 	}
 
 	if browser_dialer.HasBrowserDialerWithAddress(browserDialer) && realityConfig == nil {
+		transportConfig := streamSettings.ProtocolSettings.(*Config)
+		if transportConfig.Mode != "auto" && transportConfig.Mode != "packet-up" {
+			return &errorDialerClient{
+				err: errors.New("dialerProxy/browserDialer with XHTTP only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
+			}, nil
+		}
 		return &BrowserDialerClient{
-			transportConfig: streamSettings.ProtocolSettings.(*Config),
+			transportConfig: transportConfig,
 			browserDialer:   browserDialer,
 		}, nil
 	}

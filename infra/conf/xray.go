@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 )
 
 var (
@@ -362,6 +363,12 @@ type Config struct {
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 	Version          *VersionConfig          `json:"version"`
 	Geodata          *GeodataConfig          `json:"geodata"`
+	BrowserDialers   []BrowserDialerConfig   `json:"browserDialers"`
+}
+
+type BrowserDialerConfig struct {
+	Tag string `json:"tag"`
+	URL string `json:"url"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -436,6 +443,9 @@ func (c *Config) Override(o *Config, fn string) {
 
 	if o.Geodata != nil {
 		c.Geodata = o.Geodata
+	}
+	if o.BrowserDialers != nil {
+		c.BrowserDialers = o.BrowserDialers
 	}
 
 	// update the Inbound in slice if the only one in override config has same tag
@@ -603,6 +613,20 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if len(c.Transport) > 0 {
 		return nil, errors.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
+	}
+
+	browserDialerTags := make(map[string]string, len(c.BrowserDialers))
+	for _, browserDialer := range c.BrowserDialers {
+		if browserDialer.Tag == "" {
+			return nil, errors.New("browserDialers tag cannot be empty")
+		}
+		if _, found := browserDialerTags[browserDialer.Tag]; found {
+			return nil, errors.New("duplicate browserDialers tag: ", browserDialer.Tag)
+		}
+		browserDialerTags[browserDialer.Tag] = browserDialer.URL
+	}
+	if err := browser_dialer.ConfigureDialerTags(browserDialerTags); err != nil {
+		return nil, errors.New("failed to configure browserDialers").Base(err)
 	}
 
 	for _, rawInboundConfig := range inbounds {

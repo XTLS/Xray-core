@@ -33,6 +33,7 @@ type task struct {
 
 var sockoptDialers map[string]*dialerInstance
 var dialerServers map[string]*dialerServer
+var dialerTags map[string]string
 var mu sync.RWMutex
 
 const browserDialerSubprotocol = "browser-dialer"
@@ -49,6 +50,37 @@ var upgrader = &websocket.Upgrader{
 func HasBrowserDialerWithAddress(addr string) bool {
 	_, _, ok := parseBrowserDialerAddress(addr)
 	return ok
+}
+
+func GetAddressByTag(tag string) (string, bool) {
+	if tag == "" {
+		return "", false
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	addr, ok := dialerTags[tag]
+	return addr, ok
+}
+
+func ConfigureDialerTags(tags map[string]string) error {
+	next := make(map[string]string, len(tags))
+	for tag, addr := range tags {
+		if tag == "" {
+			return errors.New("browserDialers tag cannot be empty")
+		}
+		if addr == "" {
+			return errors.New("browserDialers url cannot be empty for tag: ", tag)
+		}
+		if err := EnsureDialerWithAddress(addr); err != nil {
+			return errors.New("invalid browserDialers entry for tag ", tag).Base(err)
+		}
+		next[tag] = addr
+	}
+
+	mu.Lock()
+	dialerTags = next
+	mu.Unlock()
+	return nil
 }
 
 type webSocketExtra struct {
