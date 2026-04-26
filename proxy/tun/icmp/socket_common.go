@@ -37,6 +37,13 @@ func (s *Socket) ReplyIdentifier() (uint16, bool) {
 	return DatagramEchoIdentifier(s.Conn.LocalAddr())
 }
 
+func (s *Socket) RemoteAddrFor(dstIP tcpip.Address) (stdnet.Addr, error) {
+	if s == nil {
+		return nil, errors.New("nil icmp socket")
+	}
+	return remoteAddrForNetwork(s.Network, dstIP)
+}
+
 func (s *Socket) ShouldSkipSyntheticReply(srcIP stdnet.IP) (bool, error) {
 	return shouldSkipSyntheticReply(s, srcIP)
 }
@@ -112,6 +119,18 @@ func datagramSocketCandidates(netProto tcpip.NetworkProtocolNumber, dstIP tcpip.
 		}
 	default:
 		return nil
+	}
+}
+
+func remoteAddrForNetwork(network string, dstIP tcpip.Address) (stdnet.Addr, error) {
+	ip := stdnet.IP(dstIP.AsSlice())
+	switch network {
+	case "udp4", "udp6":
+		return &stdnet.UDPAddr{IP: ip}, nil
+	case "ip4:icmp", "ip6:ipv6-icmp":
+		return &stdnet.IPAddr{IP: ip}, nil
+	default:
+		return nil, errors.New("unsupported icmp network: ", network)
 	}
 }
 

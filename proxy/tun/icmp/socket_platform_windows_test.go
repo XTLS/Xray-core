@@ -73,7 +73,7 @@ func TestIsPermissionErrorWindows(t *testing.T) {
 
 	for _, tt := range tests {
 		if got := isPermissionError(tt.err); got != tt.want {
-			t.Fatalf("isPermissionError(%q) = %v, want %v", tt.err, got, tt.want)
+			t.Fatalf("isPermissionError(%v) = %v, want %v", tt.err, got, tt.want)
 		}
 	}
 }
