@@ -749,7 +749,6 @@ type SocketConfig struct {
 	AddressPortStrategy        AddressPortStrategy  `protobuf:"varint,21,opt,name=address_port_strategy,json=addressPortStrategy,proto3,enum=xray.transport.internet.AddressPortStrategy" json:"address_port_strategy,omitempty"`
 	HappyEyeballs              *HappyEyeballsConfig `protobuf:"bytes,22,opt,name=happy_eyeballs,json=happyEyeballs,proto3" json:"happy_eyeballs,omitempty"`
 	TrustedXForwardedFor       []string             `protobuf:"bytes,23,rep,name=trusted_x_forwarded_for,json=trustedXForwardedFor,proto3" json:"trusted_x_forwarded_for,omitempty"`
-	BrowserDialer              string               `protobuf:"bytes,24,opt,name=browser_dialer,json=browserDialer,proto3" json:"browser_dialer,omitempty"`
 	unknownFields              protoimpl.UnknownFields
 	sizeCache                  protoimpl.SizeCache
 }
@@ -945,13 +944,6 @@ func (x *SocketConfig) GetTrustedXForwardedFor() []string {
 	return nil
 }
 
-func (x *SocketConfig) GetBrowserDialer() string {
-	if x != nil {
-		return x.BrowserDialer
-	}
-	return ""
-}
-
 type HappyEyeballsConfig struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	PrioritizeIpv6   bool                   `protobuf:"varint,1,opt,name=prioritize_ipv6,json=prioritizeIpv6,proto3" json:"prioritize_ipv6,omitempty"`
@@ -1074,7 +1066,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x05level\x18\x03 \x01(\tR\x05level\x12\x10\n" +
 	"\x03opt\x18\x04 \x01(\tR\x03opt\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\tR\x05value\x12\x12\n" +
-	"\x04type\x18\x06 \x01(\tR\x04type\"\xb0\t\n" +
+	"\x04type\x18\x06 \x01(\tR\x04type\"\x89\t\n" +
 	"\fSocketConfig\x12\x12\n" +
 	"\x04mark\x18\x01 \x01(\x05R\x04mark\x12\x10\n" +
 	"\x03tfo\x18\x02 \x01(\x05R\x03tfo\x12H\n" +
@@ -1099,8 +1091,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\rcustomSockopt\x18\x14 \x03(\v2&.xray.transport.internet.CustomSockoptR\rcustomSockopt\x12`\n" +
 	"\x15address_port_strategy\x18\x15 \x01(\x0e2,.xray.transport.internet.AddressPortStrategyR\x13addressPortStrategy\x12S\n" +
 	"\x0ehappy_eyeballs\x18\x16 \x01(\v2,.xray.transport.internet.HappyEyeballsConfigR\rhappyEyeballs\x125\n" +
-	"\x17trusted_x_forwarded_for\x18\x17 \x03(\tR\x14trustedXForwardedFor\x12%\n" +
-	"\x0ebrowser_dialer\x18\x18 \x01(\tR\rbrowserDialer\"/\n" +
+	"\x17trusted_x_forwarded_for\x18\x17 \x03(\tR\x14trustedXForwardedFor\"/\n" +
 	"\n" +
 	"TProxyMode\x12\a\n" +
 	"\x03Off\x10\x00\x12\n" +

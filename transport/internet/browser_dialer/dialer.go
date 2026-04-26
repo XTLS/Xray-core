@@ -12,7 +12,6 @@ import (
 	"net/url"
 	pathlib "path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,7 +32,6 @@ type task struct {
 
 var dialersByAddress = map[string]*dialerInstance{}
 var serversByListenAddr = map[string]*dialerServer{}
-var initMu sync.Mutex
 var initialized bool
 var pendingURLs map[string]struct{}
 
@@ -62,9 +60,6 @@ func IsBrowserDialerProxy(raw string) bool {
 }
 
 func BeginCollectingDialerProxyURLs() error {
-	initMu.Lock()
-	defer initMu.Unlock()
-
 	if initialized {
 		return errors.New("browser dialer does not support dynamic add/remove; restart is required after changing configuration")
 	}
@@ -79,8 +74,6 @@ func RegisterDialerProxyURL(raw string) error {
 	if !IsBrowserDialerProxy(raw) {
 		return nil
 	}
-	initMu.Lock()
-	defer initMu.Unlock()
 	if pendingURLs == nil {
 		return errors.New("browser dialer url collection is not initialized")
 	}
@@ -89,9 +82,6 @@ func RegisterDialerProxyURL(raw string) error {
 }
 
 func ConfigureCollectedDialerProxyURLs() error {
-	initMu.Lock()
-	defer initMu.Unlock()
-
 	if initialized {
 		return errors.New("browser dialer does not support dynamic add/remove; restart is required after changing configuration")
 	}
