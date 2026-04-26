@@ -271,7 +271,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 
 	if len(sockopt.DialerProxy) > 0 {
 		if _, ok := browser_dialer.GetAddressByTag(sockopt.DialerProxy); ok {
-			return nil, errors.New("dialerProxy tag ", sockopt.DialerProxy, " maps to browserDialers and only supports websocket or splithttp").AtError()
+			return nil, errors.New("dialerProxy tag ", sockopt.DialerProxy, " maps to browserDialers and only supports WebSocket or splithttp").AtError()
 		}
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()

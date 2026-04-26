@@ -75,7 +75,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		if transportConfig.Mode != "auto" && transportConfig.Mode != "packet-up" {
 			return &errorDialerClient{
-				err: errors.New("browserDialer with XHTTP only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
+				err: errors.New("browserDialer with splithttp only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
 			}, nil
 		}
 		return &BrowserDialerClient{
