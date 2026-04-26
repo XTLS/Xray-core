@@ -614,6 +614,9 @@ func (c *Config) Build() (*core.Config, error) {
 	if len(c.Transport) > 0 {
 		return nil, errors.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
 	}
+	if err := browser_dialer.CheckLegacyEnv(); err != nil {
+		return nil, err
+	}
 
 	browserDialerTags := make(map[string]string, len(c.BrowserDialers))
 	for _, browserDialer := range c.BrowserDialers {

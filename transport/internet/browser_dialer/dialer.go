@@ -62,8 +62,20 @@ func GetAddressByTag(tag string) (string, bool) {
 	return addr, ok
 }
 
+func CheckLegacyEnv() error {
+	envAddress := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+	if envAddress == "" {
+		return nil
+	}
+	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "root browserDialers + sockopt.dialerProxy")
+}
+
 func ConfigureDialerTags(tags map[string]string) error {
+	if err := CheckLegacyEnv(); err != nil {
+		return err
+	}
 	next := make(map[string]string, len(tags))
+	listenAddrByPort := make(map[string]string, len(tags))
 	for tag, addr := range tags {
 		if tag == "" {
 			return errors.New("browserDialers tag cannot be empty")
@@ -71,10 +83,35 @@ func ConfigureDialerTags(tags map[string]string) error {
 		if addr == "" {
 			return errors.New("browserDialers url cannot be empty for tag: ", tag)
 		}
-		if err := EnsureDialerWithAddress(addr); err != nil {
-			return errors.New("invalid browserDialers entry for tag ", tag).Base(err)
+		listenAddr, _, ok := parseBrowserDialerAddress(addr)
+		if !ok {
+			return errors.New("invalid browserDialers entry for tag ", tag, ": ", addr)
 		}
+		_, port, err := net.SplitHostPort(listenAddr)
+		if err != nil {
+			return errors.New("invalid browserDialers listen address for tag ", tag, ": ", listenAddr)
+		}
+		if existingAddr, found := listenAddrByPort[port]; found && existingAddr != listenAddr {
+			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
+		}
+		listenAddrByPort[port] = listenAddr
 		next[tag] = addr
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	for existingAddr := range dialerServers {
+		_, existingPort, splitErr := net.SplitHostPort(existingAddr)
+		if splitErr != nil {
+			continue
+		}
+		if newAddr, found := listenAddrByPort[existingPort]; found && newAddr != existingAddr {
+			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", newAddr)
+		}
+	}
+	for tag, addr := range next {
+		if err := EnsureDialerWithAddress(addr); err != nil {
+			return errors.New("failed to initialize browserDialers listener for tag ", tag).Base(err)
+		}
 	}
 
 	mu.Lock()
@@ -203,11 +240,11 @@ func closeConnection(w http.ResponseWriter) {
 func getDialerByAddress(addr string) (*dialerInstance, error) {
 	listenAddr, path, ok := parseBrowserDialerAddress(addr)
 	if !ok {
-		return nil, errors.New("invalid sockopt.browserDialer: ", addr)
+		return nil, errors.New("invalid browserDialers url: ", addr)
 	}
 	_, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
-		return nil, errors.New("invalid sockopt.browserDialer listen address: ", listenAddr)
+		return nil, errors.New("invalid browserDialers listen address: ", listenAddr)
 	}
 
 	key := listenAddr + path
@@ -230,7 +267,7 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 		for existingAddr := range dialerServers {
 			_, existingPort, splitErr := net.SplitHostPort(existingAddr)
 			if splitErr == nil && existingPort == port {
-				return nil, errors.New("sockopt.browserDialer cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
+				return nil, errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
 			}
 		}
 		newServer, serverErr := newDialerServer(listenAddr)
@@ -353,11 +390,11 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 
 	if addr == "" {
-		return nil, errors.New("browser dialer is not configured; set sockopt.browserDialer")
+		return nil, errors.New("browser dialer is not configured; set root browserDialers and use sockopt.dialerProxy tag")
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil || dialer == nil {
-		return nil, errors.New("browser dialer is not configured for sockopt.browserDialer: ", addr)
+		return nil, errors.New("browser dialer is not configured for browserDialers url: ", addr)
 	}
 	conns := dialer.conns
 
@@ -388,16 +425,4 @@ func CheckOK(conn *websocket.Conn) error {
 	}
 
 	return nil
-}
-
-func notifyRemovedEnv() {
-	envAddress := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
-	if envAddress == "" {
-		return
-	}
-	errors.LogWarning(context.Background(), errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.browserDialer"))
-}
-
-func init() {
-	notifyRemovedEnv()
 }

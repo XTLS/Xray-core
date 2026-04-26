@@ -1080,6 +1080,10 @@ type SocketConfig struct {
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
+	if c.BrowserDialer != "" {
+		return nil, errors.PrintRemovedFeatureError("sockopt.browserDialer", "root browserDialers + sockopt.dialerProxy")
+	}
+
 	tfo := int32(0) // don't invoke setsockopt() for TFO
 	if c.TFO != nil {
 		switch v := c.TFO.(type) {
@@ -1196,7 +1200,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		AddressPortStrategy:  addressPortStrategy,
 		HappyEyeballs:        happyEyeballs,
 		TrustedXForwardedFor: c.TrustedXForwardedFor,
-		BrowserDialer:        c.BrowserDialer,
 	}, nil
 }
 
@@ -1974,25 +1977,30 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.ProtocolName = protocol
 	}
 	if c.SocketSettings != nil && c.SocketSettings.BrowserDialer != "" {
-		if config.ProtocolName != "websocket" && config.ProtocolName != "splithttp" {
-			return nil, errors.New("sockopt.browserDialer only supports websocket or splithttp")
-		}
-		if strings.EqualFold(c.Security, "reality") {
-			return nil, errors.New("sockopt.browserDialer does not support REALITY")
-		}
-		if config.ProtocolName == "splithttp" {
-			splitHTTPSettings := c.SplitHTTPSettings
-			if c.XHTTPSettings != nil {
-				splitHTTPSettings = c.XHTTPSettings
+		return nil, errors.PrintRemovedFeatureError("sockopt.browserDialer", "root browserDialers + sockopt.dialerProxy")
+	}
+	if c.SocketSettings != nil && c.SocketSettings.DialerProxy != "" {
+		if _, ok := browser_dialer.GetAddressByTag(c.SocketSettings.DialerProxy); ok {
+			if config.ProtocolName != "websocket" && config.ProtocolName != "splithttp" {
+				return nil, errors.New("dialerProxy tag ", c.SocketSettings.DialerProxy, " maps to browserDialers and only supports websocket or splithttp")
 			}
-			if splitHTTPSettings != nil {
-				splitHTTPSettingsCopy := *splitHTTPSettings
-				hs, err := splitHTTPSettingsCopy.Build()
-				if err != nil {
-					return nil, errors.New("failed to build XHTTP config for browserDialer validation.").Base(err)
+			if strings.EqualFold(c.Security, "reality") {
+				return nil, errors.New("dialerProxy tag ", c.SocketSettings.DialerProxy, " maps to browserDialers and does not support REALITY")
+			}
+			if config.ProtocolName == "splithttp" {
+				splitHTTPSettings := c.SplitHTTPSettings
+				if c.XHTTPSettings != nil {
+					splitHTTPSettings = c.XHTTPSettings
 				}
-				if splitHTTPConfig, ok := hs.(*splithttp.Config); ok && splitHTTPConfig.Mode != "auto" && splitHTTPConfig.Mode != "packet-up" {
-					return nil, errors.New("sockopt.browserDialer only supports XHTTP modes \"auto\" or \"packet-up\", got: \"", splitHTTPConfig.Mode, "\"")
+				if splitHTTPSettings != nil {
+					splitHTTPSettingsCopy := *splitHTTPSettings
+					hs, err := splitHTTPSettingsCopy.Build()
+					if err != nil {
+						return nil, errors.New("failed to build XHTTP config for browserDialers validation.").Base(err)
+					}
+					if splitHTTPConfig, ok := hs.(*splithttp.Config); ok && splitHTTPConfig.Mode != "auto" && splitHTTPConfig.Mode != "packet-up" {
+						return nil, errors.New("dialerProxy tag ", c.SocketSettings.DialerProxy, " maps to browserDialers and only supports XHTTP modes \"auto\" or \"packet-up\", got: \"", splitHTTPConfig.Mode, "\"")
+					}
 				}
 			}
 		}
@@ -2112,9 +2120,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
 			return nil, errors.New("Failed to build sockopt.").Base(err)
-		}
-		if err := browser_dialer.EnsureDialerWithAddress(ss.BrowserDialer); err != nil {
-			return nil, errors.New("Failed to start Browser Dialer listener.").Base(err)
 		}
 		config.SocketSettings = ss
 	}
