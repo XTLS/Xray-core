@@ -363,7 +363,6 @@ type Config struct {
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 	Version          *VersionConfig          `json:"version"`
 	Geodata          *GeodataConfig          `json:"geodata"`
-	BrowserDialers   []string                `json:"browserDialers"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -439,10 +438,6 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.Geodata != nil {
 		c.Geodata = o.Geodata
 	}
-	if o.BrowserDialers != nil {
-		c.BrowserDialers = o.BrowserDialers
-	}
-
 	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
 		for i := range o.InboundConfigs {
@@ -609,12 +604,8 @@ func (c *Config) Build() (*core.Config, error) {
 	if len(c.Transport) > 0 {
 		return nil, errors.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
 	}
-	if err := browser_dialer.CheckLegacyEnv(); err != nil {
+	if err := browser_dialer.BeginCollectingDialerProxyURLs(); err != nil {
 		return nil, err
-	}
-
-	if err := browser_dialer.ConfigureDialers(c.BrowserDialers); err != nil {
-		return nil, errors.New("failed to configure browserDialers").Base(err)
 	}
 
 	for _, rawInboundConfig := range inbounds {
@@ -637,6 +628,9 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, errors.New("failed to build outbound config with tag ", rawOutboundConfig.Tag).Base(err)
 		}
 		config.Outbound = append(config.Outbound, oc)
+	}
+	if err := browser_dialer.ConfigureCollectedDialerProxyURLs(); err != nil {
+		return nil, errors.New("failed to configure browser dialer").Base(err)
 	}
 
 	return config, nil

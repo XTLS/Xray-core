@@ -119,7 +119,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	browserDialer := ""
 	if streamSettings.SocketSettings != nil {
-		if browser_dialer.HasConfiguredURL(streamSettings.SocketSettings.DialerProxy) {
+		if browser_dialer.IsBrowserDialerProxy(streamSettings.SocketSettings.DialerProxy) {
 			browserDialer = streamSettings.SocketSettings.DialerProxy
 		}
 	}

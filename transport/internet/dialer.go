@@ -270,8 +270,8 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	}
 
 	if len(sockopt.DialerProxy) > 0 {
-		if browser_dialer.HasConfiguredURL(sockopt.DialerProxy) {
-			return nil, errors.New("dialerProxy url ", sockopt.DialerProxy, " is in browserDialers and only supports WebSocket or splithttp").AtError()
+		if browser_dialer.IsBrowserDialerProxy(sockopt.DialerProxy) {
+			return nil, errors.New("dialerProxy ", sockopt.DialerProxy, " only supports WebSocket or splithttp").AtError()
 		}
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()

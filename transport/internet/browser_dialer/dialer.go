@@ -13,7 +13,6 @@ import (
 	pathlib "path"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -34,9 +33,9 @@ type task struct {
 
 var dialersByAddress = map[string]*dialerInstance{}
 var serversByListenAddr = map[string]*dialerServer{}
-var configuredURLs atomic.Value
 var initMu sync.Mutex
 var initialized bool
+var pendingURLs map[string]struct{}
 
 const browserDialerSubprotocol = "browser-dialer"
 
@@ -49,53 +48,69 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-func HasConfiguredURL(url string) bool {
-	if url == "" {
-		return false
-	}
-	urls, _ := configuredURLs.Load().(map[string]struct{})
-	_, ok := urls[url]
-	return ok
-}
-
 func CheckLegacyEnv() error {
 	envAddress := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 	if envAddress == "" {
 		return nil
 	}
-	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "root browserDialers + sockopt.dialerProxy")
+	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.dialerProxy with browser://host:port/uuid")
 }
 
-func ConfigureDialers(urls []string) error {
+func IsBrowserDialerProxy(raw string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && strings.EqualFold(parsed.Scheme, "browser")
+}
+
+func BeginCollectingDialerProxyURLs() error {
 	initMu.Lock()
 	defer initMu.Unlock()
 
 	if initialized {
-		return errors.New("browserDialers does not support dynamic add/remove; restart is required after changing configuration")
+		return errors.New("browser dialer does not support dynamic add/remove; restart is required after changing configuration")
 	}
-
 	if err := CheckLegacyEnv(); err != nil {
 		return err
 	}
-	next := make(map[string]struct{}, len(urls))
-	listenAddrByPort := make(map[string]string, len(urls))
-	for _, browserDialerURL := range urls {
-		if browserDialerURL == "" {
-			return errors.New("browserDialers url cannot be empty")
-		}
+	pendingURLs = map[string]struct{}{}
+	return nil
+}
+
+func RegisterDialerProxyURL(raw string) {
+	if !IsBrowserDialerProxy(raw) {
+		return
+	}
+	initMu.Lock()
+	defer initMu.Unlock()
+	if pendingURLs == nil {
+		pendingURLs = map[string]struct{}{}
+	}
+	pendingURLs[raw] = struct{}{}
+}
+
+func ConfigureCollectedDialerProxyURLs() error {
+	initMu.Lock()
+	defer initMu.Unlock()
+
+	if initialized {
+		return errors.New("browser dialer does not support dynamic add/remove; restart is required after changing configuration")
+	}
+	if err := CheckLegacyEnv(); err != nil {
+		return err
+	}
+	listenAddrByPort := make(map[string]string, len(pendingURLs))
+	for browserDialerURL := range pendingURLs {
 		listenAddr, _, ok := parseBrowserDialerAddress(browserDialerURL)
 		if !ok {
-			return errors.New("invalid browserDialers url: ", browserDialerURL)
+			return errors.New("invalid browser dialer url: ", browserDialerURL)
 		}
 		_, port, err := net.SplitHostPort(listenAddr)
 		if err != nil {
-			return errors.New("invalid browserDialers listen address: ", listenAddr)
+			return errors.New("invalid browser dialer listen address: ", listenAddr)
 		}
 		if existingAddr, found := listenAddrByPort[port]; found && existingAddr != listenAddr {
-			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
+			return errors.New("browser dialer cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
 		}
 		listenAddrByPort[port] = listenAddr
-		next[browserDialerURL] = struct{}{}
 	}
 	for existingAddr := range serversByListenAddr {
 		_, existingPort, splitErr := net.SplitHostPort(existingAddr)
@@ -103,20 +118,19 @@ func ConfigureDialers(urls []string) error {
 			continue
 		}
 		if newAddr, found := listenAddrByPort[existingPort]; found && newAddr != existingAddr {
-			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", newAddr)
+			return errors.New("browser dialer cannot use the same port with a different listen address: ", existingAddr, " and ", newAddr)
 		}
 	}
-	for browserDialerURL := range next {
+	for browserDialerURL := range pendingURLs {
 		if err := EnsureDialerWithAddress(browserDialerURL); err != nil {
-			return errors.New("failed to initialize browserDialers listener for url ", browserDialerURL).Base(err)
+			return errors.New("failed to initialize browser dialer listener for url ", browserDialerURL).Base(err)
 		}
 	}
 	for listenAddr, server := range serversByListenAddr {
 		if err := server.start(); err != nil {
-			return errors.New("failed to start browserDialers listener on ", listenAddr).Base(err)
+			return errors.New("failed to start browser dialer listener on ", listenAddr).Base(err)
 		}
 	}
-	configuredURLs.Store(next)
 	initialized = true
 	return nil
 }
@@ -141,8 +155,8 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 		return "", "", false
 	}
 
-	parsedAddr, err := url.Parse("http://" + addr)
-	if err != nil || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
+	parsedAddr, err := url.Parse(addr)
+	if err != nil || !strings.EqualFold(parsedAddr.Scheme, "browser") || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
 		return "", "", false
 	}
 	listenAddr := parsedAddr.Host
@@ -247,23 +261,23 @@ func closeConnection(w http.ResponseWriter) {
 func getDialerByAddress(addr string) (*dialerInstance, error) {
 	listenAddr, path, ok := parseBrowserDialerAddress(addr)
 	if !ok {
-		return nil, errors.New("invalid browserDialers url: ", addr)
+		return nil, errors.New("invalid browser dialer url: ", addr)
 	}
 	key := listenAddr + path
 	if dialer, found := dialersByAddress[key]; found {
 		return dialer, nil
 	}
-	return nil, errors.New("browser dialer is not configured for browserDialers url: ", addr)
+	return nil, errors.New("browser dialer is not configured for url: ", addr)
 }
 
 func ensureDialerWithAddress(addr string) (*dialerInstance, error) {
 	listenAddr, path, ok := parseBrowserDialerAddress(addr)
 	if !ok {
-		return nil, errors.New("invalid browserDialers url: ", addr)
+		return nil, errors.New("invalid browser dialer url: ", addr)
 	}
 	_, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
-		return nil, errors.New("invalid browserDialers listen address: ", listenAddr)
+		return nil, errors.New("invalid browser dialer listen address: ", listenAddr)
 	}
 
 	key := listenAddr + path
@@ -276,7 +290,7 @@ func ensureDialerWithAddress(addr string) (*dialerInstance, error) {
 		for existingAddr := range serversByListenAddr {
 			_, existingPort, splitErr := net.SplitHostPort(existingAddr)
 			if splitErr == nil && existingPort == port {
-				return nil, errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
+				return nil, errors.New("browser dialer cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
 			}
 		}
 		newServer, serverErr := newDialerServer(listenAddr)
@@ -399,7 +413,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 
 	if addr == "" {
-		return nil, errors.New("browser dialer is not configured; set root browserDialers and use sockopt.dialerProxy url")
+		return nil, errors.New("browser dialer is not configured; set sockopt.dialerProxy to browser://host:port/uuid")
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil {
