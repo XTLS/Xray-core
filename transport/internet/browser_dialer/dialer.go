@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/uuid"
 )
 
@@ -290,4 +291,16 @@ func connsByAddress(addr string) chan *websocket.Conn {
 		return nil
 	}
 	return dialer.conns
+}
+
+func notifyRemovedEnv() {
+	envAddress := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+	if envAddress == "" {
+		return
+	}
+	errors.LogWarning(context.Background(), errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.browserDialer"))
+}
+
+func init() {
+	notifyRemovedEnv()
 }
