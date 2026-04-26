@@ -53,12 +53,12 @@ func CheckLegacyEnv() error {
 	if envAddress == "" {
 		return nil
 	}
-	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.dialerProxy with browser://host:port/uuid")
+	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.dialerProxy with http://host:port/uuid")
 }
 
 func IsBrowserDialerProxy(raw string) bool {
 	parsed, err := url.Parse(raw)
-	return err == nil && strings.EqualFold(parsed.Scheme, "browser")
+	return err == nil && strings.EqualFold(parsed.Scheme, "http")
 }
 
 func BeginCollectingDialerProxyURLs() error {
@@ -157,7 +157,7 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 	}
 
 	parsedAddr, err := url.Parse(addr)
-	if err != nil || !strings.EqualFold(parsedAddr.Scheme, "browser") || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
+	if err != nil || !strings.EqualFold(parsedAddr.Scheme, "http") || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
 		return "", "", false
 	}
 	listenAddr := parsedAddr.Host
@@ -414,7 +414,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 
 	if addr == "" {
-		return nil, errors.New("browser dialer is not configured; set sockopt.dialerProxy to browser://host:port/uuid")
+		return nil, errors.New("browser dialer is not configured; set sockopt.dialerProxy to http://host:port/uuid")
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil {
