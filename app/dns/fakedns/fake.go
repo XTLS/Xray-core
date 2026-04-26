@@ -17,7 +17,7 @@ import (
 type Holder struct {
 	domainToIP cache.Lru
 	ipRange    *net.IPNet
-	mu         *sync.Mutex
+	mu         sync.Mutex
 
 	config *FakeDnsPool
 }
@@ -26,13 +26,28 @@ func (fkdns *Holder) IsIPInIPPool(ip net.Address) bool {
 	if ip.Family().IsDomain() {
 		return false
 	}
+
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+
+	if fkdns.ipRange == nil {
+		return false
+	}
+
 	return fkdns.ipRange.Contains(ip.IP())
 }
 
 func (fkdns *Holder) GetFakeIPForDomain3(domain string, ipv4, ipv6 bool) []net.Address {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+
+	if fkdns.ipRange == nil || fkdns.ipRange.IP == nil {
+		return []net.Address{}
+	}
+
 	isIPv6 := fkdns.ipRange.IP.To4() == nil
 	if (isIPv6 && ipv6) || (!isIPv6 && ipv4) {
-		return fkdns.GetFakeIPForDomain(domain)
+		return fkdns.getFakeIPForDomainInternal(domain)
 	}
 	return []net.Address{}
 }
@@ -49,9 +64,11 @@ func (fkdns *Holder) Start() error {
 }
 
 func (fkdns *Holder) Close() error {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+
 	fkdns.domainToIP = nil
 	fkdns.ipRange = nil
-	fkdns.mu = nil
 	return nil
 }
 
@@ -70,7 +87,7 @@ func NewFakeDNSHolder() (*Holder, error) {
 }
 
 func NewFakeDNSHolderConfigOnly(conf *FakeDnsPool) (*Holder, error) {
-	return &Holder{nil, nil, nil, conf}, nil
+	return &Holder{config: conf}, nil
 }
 
 func (fkdns *Holder) initializeFromConfig() error {
@@ -92,14 +109,14 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 	}
 	fkdns.domainToIP = cache.NewLru(lruSize)
 	fkdns.ipRange = ipRange
-	fkdns.mu = new(sync.Mutex)
 	return nil
 }
 
-// GetFakeIPForDomain checks and generates a fake IP for a domain name
-func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
-	fkdns.mu.Lock()
-	defer fkdns.mu.Unlock()
+func (fkdns *Holder) getFakeIPForDomainInternal(domain string) []net.Address {
+	if fkdns.domainToIP == nil || fkdns.ipRange == nil || fkdns.ipRange.IP == nil {
+		return []net.Address{}
+	}
+
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}
@@ -129,9 +146,28 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	return []net.Address{ip}
 }
 
+// GetFakeIPForDomain checks and generates a fake IP for a domain name
+func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+
+	return fkdns.getFakeIPForDomainInternal(domain)
+}
+
 // GetDomainFromFakeDNS checks if an IP is a fake IP and have corresponding domain name
 func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
-	if !ip.Family().IsIP() || !fkdns.ipRange.Contains(ip.IP()) {
+	if !ip.Family().IsIP() {
+		return ""
+	}
+
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+
+	if fkdns.domainToIP == nil || fkdns.ipRange == nil {
+		return ""
+	}
+
+	if !fkdns.ipRange.Contains(ip.IP()) {
 		return ""
 	}
 	if k, ok := fkdns.domainToIP.GetKeyFromValue(ip); ok {
@@ -143,8 +179,7 @@ func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
 
 type HolderMulti struct {
 	holders []*Holder
-
-	config *FakeDnsPoolMulti
+	config  *FakeDnsPoolMulti
 }
 
 func (h *HolderMulti) IsIPInIPPool(ip net.Address) bool {
@@ -202,12 +237,13 @@ func (h *HolderMulti) Start() error {
 }
 
 func (h *HolderMulti) Close() error {
+	var errs error
 	for _, v := range h.holders {
 		if err := v.Close(); err != nil {
-			return errors.New("Cannot close all fake dns pools").Base(err)
+			errs = errors.Combine(errs, err)
 		}
 	}
-	return nil
+	return errs
 }
 
 func (h *HolderMulti) createHolderGroups() error {

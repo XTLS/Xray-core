@@ -66,6 +66,36 @@ func TestFakeDnsHolderCreateMappingManySingleDomain(t *testing.T) {
 	assert.Equal(t, addr[0].IP().String(), addr2[0].IP().String())
 }
 
+func TestCloseAndGetFakeIPForDomainSingle(t *testing.T) {
+	fkdns, err := NewFakeDNSHolder()
+	common.Must(err)
+
+	err = fkdns.Close()
+	common.Must(err)
+
+	addr := fkdns.GetFakeIPForDomain("fakednstest.example.com")
+	assert.Empty(t, addr, "should be empty after close")
+}
+
+func TestCloseAndGetFakeIPForDomainMulti(t *testing.T) {
+	fakeMulti, err := NewFakeDNSHolderMulti(&FakeDnsPoolMulti{
+		Pools: []*FakeDnsPool{{
+			IpPool:  "240.0.0.0/12",
+			LruSize: 256,
+		}, {
+			IpPool:  "fddd:c5b4:ff5f:f4f0::/64",
+			LruSize: 256,
+		}},
+	})
+	common.Must(err)
+
+	err = fakeMulti.Close()
+	common.Must(err)
+
+	addr := fakeMulti.GetFakeIPForDomain("fakednstest.example.com")
+	assert.Empty(t, addr, "should be empty after close")
+}
+
 func TestGetFakeIPForDomainConcurrently(t *testing.T) {
 	fkdns, err := NewFakeDNSHolder()
 	common.Must(err)
