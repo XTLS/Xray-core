@@ -107,8 +107,7 @@ func ConfigureDialers(urls []string) error {
 		}
 	}
 	for browserDialerURL := range next {
-		addr := browserDialerURL
-		if err := EnsureDialerWithAddress(addr); err != nil {
+		if err := EnsureDialerWithAddress(browserDialerURL); err != nil {
 			return errors.New("failed to initialize browserDialers listener for url ", browserDialerURL).Base(err)
 		}
 	}
@@ -142,19 +141,15 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 		return "", "", false
 	}
 
-	listenAddr, pathRaw, ok := strings.Cut(addr, "/")
-	if !ok || listenAddr == "" || pathRaw == "" {
+	parsedAddr, err := url.Parse("http://" + addr)
+	if err != nil || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
 		return "", "", false
 	}
-
-	path := "/" + strings.TrimSuffix(pathRaw, "/")
+	listenAddr := parsedAddr.Host
 	if _, _, err := net.SplitHostPort(listenAddr); err != nil {
 		return "", "", false
 	}
-	parsedPath, err := url.ParseRequestURI(path)
-	if err != nil || parsedPath.RawQuery != "" || parsedPath.Fragment != "" {
-		return "", "", false
-	}
+	path := strings.TrimSuffix(parsedAddr.Path, "/")
 	cleanPath := pathlib.Clean(path)
 	if cleanPath == "." || cleanPath == "/" || cleanPath != path {
 		return "", "", false
@@ -406,9 +401,6 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	dialer, err := getDialerByAddress(addr)
 	if err != nil {
 		return nil, err
-	}
-	if dialer == nil {
-		return nil, errors.New("browser dialer is not configured for browserDialers url: ", addr)
 	}
 	conns := dialer.conns
 
