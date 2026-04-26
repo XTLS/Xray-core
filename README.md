@@ -203,6 +203,30 @@ Make sure that you are using the same Go version, and remember to set the git co
 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
+If you are compiling a Windows x86-64 target, add this environment variable before compiling:
+
+```
+GOAMD64=v2
+```
+
+If you are compiling a macOS x86-64 target, add this environment variable before compiling:
+
+```
+GOAMD64=v3
+```
+
+If you are compiling a Windows ARM64 target, add this environment variable before compiling:
+
+```
+GOARM64=v8.2
+```
+
+If you are compiling a macOS ARM64 target, add this environment variable before compiling:
+
+```
+GOARM64=v8.4
+```
+
 If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
 
 ```bash
