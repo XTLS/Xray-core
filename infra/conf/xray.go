@@ -363,12 +363,7 @@ type Config struct {
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 	Version          *VersionConfig          `json:"version"`
 	Geodata          *GeodataConfig          `json:"geodata"`
-	BrowserDialers   []BrowserDialerConfig   `json:"browserDialers"`
-}
-
-type BrowserDialerConfig struct {
-	Tag string `json:"tag"`
-	URL string `json:"url"`
+	BrowserDialers   []string                `json:"browserDialers"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -618,17 +613,7 @@ func (c *Config) Build() (*core.Config, error) {
 		return nil, err
 	}
 
-	browserDialerTags := make(map[string]string, len(c.BrowserDialers))
-	for _, browserDialer := range c.BrowserDialers {
-		if browserDialer.Tag == "" {
-			return nil, errors.New("browserDialers tag cannot be empty")
-		}
-		if _, found := browserDialerTags[browserDialer.Tag]; found {
-			return nil, errors.New("duplicate browserDialers tag: ", browserDialer.Tag)
-		}
-		browserDialerTags[browserDialer.Tag] = browserDialer.URL
-	}
-	if err := browser_dialer.ConfigureDialerTags(browserDialerTags); err != nil {
+	if err := browser_dialer.ConfigureDialers(c.BrowserDialers); err != nil {
 		return nil, errors.New("failed to configure browserDialers").Base(err)
 	}
 

@@ -34,7 +34,7 @@ type task struct {
 
 var dialersByAddress = map[string]*dialerInstance{}
 var serversByListenAddr = map[string]*dialerServer{}
-var addressByTag atomic.Value
+var configuredURLs atomic.Value
 var initMu sync.Mutex
 var initialized bool
 
@@ -49,13 +49,13 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-func GetAddressByTag(tag string) (string, bool) {
-	if tag == "" {
-		return "", false
+func HasConfiguredURL(url string) bool {
+	if url == "" {
+		return false
 	}
-	tags, _ := addressByTag.Load().(map[string]string)
-	addr, ok := tags[tag]
-	return addr, ok
+	urls, _ := configuredURLs.Load().(map[string]struct{})
+	_, ok := urls[url]
+	return ok
 }
 
 func CheckLegacyEnv() error {
@@ -66,7 +66,7 @@ func CheckLegacyEnv() error {
 	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "root browserDialers + sockopt.dialerProxy")
 }
 
-func ConfigureDialerTags(tags map[string]string) error {
+func ConfigureDialers(urls []string) error {
 	initMu.Lock()
 	defer initMu.Unlock()
 
@@ -77,28 +77,25 @@ func ConfigureDialerTags(tags map[string]string) error {
 	if err := CheckLegacyEnv(); err != nil {
 		return err
 	}
-	next := make(map[string]string, len(tags))
-	listenAddrByPort := make(map[string]string, len(tags))
-	for tag, addr := range tags {
-		if tag == "" {
-			return errors.New("browserDialers tag cannot be empty")
+	next := make(map[string]struct{}, len(urls))
+	listenAddrByPort := make(map[string]string, len(urls))
+	for _, browserDialerURL := range urls {
+		if browserDialerURL == "" {
+			return errors.New("browserDialers url cannot be empty")
 		}
-		if addr == "" {
-			return errors.New("browserDialers url cannot be empty for tag: ", tag)
-		}
-		listenAddr, _, ok := parseBrowserDialerAddress(addr)
+		listenAddr, _, ok := parseBrowserDialerAddress(browserDialerURL)
 		if !ok {
-			return errors.New("invalid browserDialers entry for tag ", tag, ": ", addr)
+			return errors.New("invalid browserDialers url: ", browserDialerURL)
 		}
 		_, port, err := net.SplitHostPort(listenAddr)
 		if err != nil {
-			return errors.New("invalid browserDialers listen address for tag ", tag, ": ", listenAddr)
+			return errors.New("invalid browserDialers listen address: ", listenAddr)
 		}
 		if existingAddr, found := listenAddrByPort[port]; found && existingAddr != listenAddr {
 			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
 		}
 		listenAddrByPort[port] = listenAddr
-		next[tag] = addr
+		next[browserDialerURL] = struct{}{}
 	}
 	for existingAddr := range serversByListenAddr {
 		_, existingPort, splitErr := net.SplitHostPort(existingAddr)
@@ -109,9 +106,10 @@ func ConfigureDialerTags(tags map[string]string) error {
 			return errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", newAddr)
 		}
 	}
-	for tag, addr := range next {
+	for browserDialerURL := range next {
+		addr := browserDialerURL
 		if err := EnsureDialerWithAddress(addr); err != nil {
-			return errors.New("failed to initialize browserDialers listener for tag ", tag).Base(err)
+			return errors.New("failed to initialize browserDialers listener for url ", browserDialerURL).Base(err)
 		}
 	}
 	for listenAddr, server := range serversByListenAddr {
@@ -119,7 +117,7 @@ func ConfigureDialerTags(tags map[string]string) error {
 			return errors.New("failed to start browserDialers listener on ", listenAddr).Base(err)
 		}
 	}
-	addressByTag.Store(next)
+	configuredURLs.Store(next)
 	initialized = true
 	return nil
 }
@@ -403,7 +401,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 
 	if addr == "" {
-		return nil, errors.New("browser dialer is not configured; set root browserDialers and use sockopt.dialerProxy tag")
+		return nil, errors.New("browser dialer is not configured; set root browserDialers and use sockopt.dialerProxy url")
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil {

@@ -63,8 +63,8 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 	browserDialer := ""
 	if streamSettings.SocketSettings != nil {
-		if taggedDialer, ok := browser_dialer.GetAddressByTag(streamSettings.SocketSettings.DialerProxy); ok {
-			browserDialer = taggedDialer
+		if browser_dialer.HasConfiguredURL(streamSettings.SocketSettings.DialerProxy) {
+			browserDialer = streamSettings.SocketSettings.DialerProxy
 		}
 	}
 
