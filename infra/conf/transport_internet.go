@@ -1980,6 +1980,22 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		if strings.EqualFold(c.Security, "reality") {
 			return nil, errors.New("sockopt.browserDialer does not support REALITY")
 		}
+		if config.ProtocolName == "splithttp" {
+			splitHTTPSettings := c.SplitHTTPSettings
+			if c.XHTTPSettings != nil {
+				splitHTTPSettings = c.XHTTPSettings
+			}
+			if splitHTTPSettings != nil {
+				splitHTTPSettingsCopy := *splitHTTPSettings
+				hs, err := splitHTTPSettingsCopy.Build()
+				if err != nil {
+					return nil, errors.New("Failed to build XHTTP config.").Base(err)
+				}
+				if splitHTTPConfig, ok := hs.(*splithttp.Config); ok && splitHTTPConfig.Mode != "auto" && splitHTTPConfig.Mode != "packet-up" {
+					return nil, errors.New("sockopt.browserDialer only supports XHTTP mode auto or packet-up")
+				}
+			}
+		}
 	}
 
 	switch strings.ToLower(c.Security) {
