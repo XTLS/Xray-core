@@ -13,6 +13,7 @@ import (
 	pathlib "path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -31,10 +32,11 @@ type task struct {
 	StreamResponse bool   `json:"streamResponse"`
 }
 
-var sockoptDialers map[string]*dialerInstance
-var dialerServers map[string]*dialerServer
-var dialerTags map[string]string
-var mu sync.RWMutex
+var dialersByAddress = map[string]*dialerInstance{}
+var serversByListenAddr = map[string]*dialerServer{}
+var addressByTag atomic.Value
+var initMu sync.Mutex
+var initialized bool
 
 const browserDialerSubprotocol = "browser-dialer"
 
@@ -47,18 +49,12 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-func HasBrowserDialerWithAddress(addr string) bool {
-	_, _, ok := parseBrowserDialerAddress(addr)
-	return ok
-}
-
 func GetAddressByTag(tag string) (string, bool) {
 	if tag == "" {
 		return "", false
 	}
-	mu.RLock()
-	defer mu.RUnlock()
-	addr, ok := dialerTags[tag]
+	tags, _ := addressByTag.Load().(map[string]string)
+	addr, ok := tags[tag]
 	return addr, ok
 }
 
@@ -71,6 +67,13 @@ func CheckLegacyEnv() error {
 }
 
 func ConfigureDialerTags(tags map[string]string) error {
+	initMu.Lock()
+	defer initMu.Unlock()
+
+	if initialized {
+		return errors.New("browserDialers does not support dynamic add/remove; restart is required after changing configuration")
+	}
+
 	if err := CheckLegacyEnv(); err != nil {
 		return err
 	}
@@ -97,9 +100,7 @@ func ConfigureDialerTags(tags map[string]string) error {
 		listenAddrByPort[port] = listenAddr
 		next[tag] = addr
 	}
-	mu.RLock()
-	defer mu.RUnlock()
-	for existingAddr := range dialerServers {
+	for existingAddr := range serversByListenAddr {
 		_, existingPort, splitErr := net.SplitHostPort(existingAddr)
 		if splitErr != nil {
 			continue
@@ -113,10 +114,13 @@ func ConfigureDialerTags(tags map[string]string) error {
 			return errors.New("failed to initialize browserDialers listener for tag ", tag).Base(err)
 		}
 	}
-
-	mu.Lock()
-	dialerTags = next
-	mu.Unlock()
+	for listenAddr, server := range serversByListenAddr {
+		if err := server.start(); err != nil {
+			return errors.New("failed to start browserDialers listener on ", listenAddr).Base(err)
+		}
+	}
+	addressByTag.Store(next)
+	initialized = true
 	return nil
 }
 
@@ -132,6 +136,7 @@ type dialerInstance struct {
 type dialerServer struct {
 	server     *http.Server
 	pageRoutes map[string]*dialerInstance
+	started    bool
 }
 
 func parseBrowserDialerAddress(addr string) (string, string, bool) {
@@ -178,9 +183,7 @@ func newDialerServer(listenAddr string) (*dialerServer, error) {
 	dialer.server = &http.Server{
 		Addr: listenAddr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mu.RLock()
 			pageDialer := dialer.pageRoutes[r.URL.Path]
-			mu.RUnlock()
 
 			if pageDialer != nil && websocket.IsWebSocketUpgrade(r) {
 				ok := false
@@ -213,16 +216,24 @@ func newDialerServer(listenAddr string) (*dialerServer, error) {
 			closeConnection(w)
 		}),
 	}
-	listener, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		return nil, err
+	return dialer, nil
+}
+
+func (d *dialerServer) start() error {
+	if d.started {
+		return nil
 	}
+	listener, err := net.Listen("tcp", d.server.Addr)
+	if err != nil {
+		return err
+	}
+	d.started = true
 	go func() {
-		if err := dialer.server.Serve(listener); err != nil && !stderrors.Is(err, http.ErrServerClosed) {
-			errors.LogError(context.Background(), "Browser dialer http server unexpected error on ", dialer.server.Addr, ": ", err)
+		if err := d.server.Serve(listener); err != nil && !stderrors.Is(err, http.ErrServerClosed) {
+			errors.LogError(context.Background(), "Browser dialer http server unexpected error on ", d.server.Addr, ": ", err)
 		}
 	}()
-	return dialer, nil
+	return nil
 }
 
 func closeConnection(w http.ResponseWriter) {
@@ -242,29 +253,31 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 	if !ok {
 		return nil, errors.New("invalid browserDialers url: ", addr)
 	}
+	key := listenAddr + path
+	if dialer, found := dialersByAddress[key]; found {
+		return dialer, nil
+	}
+	return nil, errors.New("browser dialer is not configured for browserDialers url: ", addr)
+}
+
+func ensureDialerWithAddress(addr string) (*dialerInstance, error) {
+	listenAddr, path, ok := parseBrowserDialerAddress(addr)
+	if !ok {
+		return nil, errors.New("invalid browserDialers url: ", addr)
+	}
 	_, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
 		return nil, errors.New("invalid browserDialers listen address: ", listenAddr)
 	}
 
 	key := listenAddr + path
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	if sockoptDialers == nil {
-		sockoptDialers = make(map[string]*dialerInstance)
-	}
-	if dialerServers == nil {
-		dialerServers = make(map[string]*dialerServer)
-	}
-	if dialer, found := sockoptDialers[key]; found {
+	if dialer, found := dialersByAddress[key]; found {
 		return dialer, nil
 	}
 
-	server, found := dialerServers[listenAddr]
+	server, found := serversByListenAddr[listenAddr]
 	if !found {
-		for existingAddr := range dialerServers {
+		for existingAddr := range serversByListenAddr {
 			_, existingPort, splitErr := net.SplitHostPort(existingAddr)
 			if splitErr == nil && existingPort == port {
 				return nil, errors.New("browserDialers cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
@@ -275,14 +288,14 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 			return nil, serverErr
 		}
 		server = newServer
-		dialerServers[listenAddr] = server
+		serversByListenAddr[listenAddr] = server
 	}
 
 	dialer := &dialerInstance{
 		conns: make(chan *websocket.Conn, 256),
 		page:  bytes.ReplaceAll(webpage, []byte("dialerPath"), []byte(strings.TrimPrefix(path, "/"))),
 	}
-	sockoptDialers[key] = dialer
+	dialersByAddress[key] = dialer
 	server.pageRoutes[path] = dialer
 	return dialer, nil
 }
@@ -291,7 +304,7 @@ func EnsureDialerWithAddress(addr string) error {
 	if addr == "" {
 		return nil
 	}
-	_, err := getDialerByAddress(addr)
+	_, err := ensureDialerWithAddress(addr)
 	return err
 }
 
@@ -393,7 +406,10 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 		return nil, errors.New("browser dialer is not configured; set root browserDialers and use sockopt.dialerProxy tag")
 	}
 	dialer, err := getDialerByAddress(addr)
-	if err != nil || dialer == nil {
+	if err != nil {
+		return nil, err
+	}
+	if dialer == nil {
 		return nil, errors.New("browser dialer is not configured for browserDialers url: ", addr)
 	}
 	conns := dialer.conns

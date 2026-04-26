@@ -68,7 +68,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		}
 	}
 
-	if browser_dialer.HasBrowserDialerWithAddress(browserDialer) && realityConfig == nil {
+	if browserDialer != "" && realityConfig == nil {
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		if transportConfig.Mode != "auto" && transportConfig.Mode != "packet-up" {
 			return &errorDialerClient{

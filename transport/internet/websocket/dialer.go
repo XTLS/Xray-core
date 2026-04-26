@@ -123,7 +123,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 			browserDialer = taggedDialer
 		}
 	}
-	if browser_dialer.HasBrowserDialerWithAddress(browserDialer) {
+	if browserDialer != "" {
 		conn, err := browser_dialer.DialWSWithAddress(browserDialer, uri, ed)
 		if err != nil {
 			return nil, err

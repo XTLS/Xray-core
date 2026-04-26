@@ -1075,15 +1075,10 @@ type SocketConfig struct {
 	AddressPortStrategy   string                 `json:"addressPortStrategy"`
 	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
 	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
-	BrowserDialer         string                 `json:"browserDialer"`
 }
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
-	if c.BrowserDialer != "" {
-		return nil, errors.PrintRemovedFeatureError("sockopt.browserDialer", "root browserDialers + sockopt.dialerProxy")
-	}
-
 	tfo := int32(0) // don't invoke setsockopt() for TFO
 	if c.TFO != nil {
 		switch v := c.TFO.(type) {
@@ -1975,9 +1970,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			return nil, err
 		}
 		config.ProtocolName = protocol
-	}
-	if c.SocketSettings != nil && c.SocketSettings.BrowserDialer != "" {
-		return nil, errors.PrintRemovedFeatureError("sockopt.browserDialer", "root browserDialers + sockopt.dialerProxy")
 	}
 	if c.SocketSettings != nil && c.SocketSettings.DialerProxy != "" {
 		if _, ok := browser_dialer.GetAddressByTag(c.SocketSettings.DialerProxy); ok {
