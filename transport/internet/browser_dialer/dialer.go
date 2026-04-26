@@ -51,7 +51,7 @@ func CheckLegacyEnv() error {
 	if envAddress == "" {
 		return nil
 	}
-	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.dialerProxy with http://host:port/uuid")
+	return errors.PrintRemovedFeatureError("env "+platform.BrowserDialerAddress, "sockopt.dialerProxy with browser://host:port/uuid")
 }
 
 func IsBrowserDialerProxy(raw string) bool {
@@ -113,7 +113,7 @@ func ConfigureCollectedDialerProxyURLs() error {
 		}
 	}
 	for browserDialerURL := range pendingURLs {
-		if err := EnsureDialerWithAddress(browserDialerURL); err != nil {
+		if _, err := ensureDialerWithAddress(browserDialerURL); err != nil {
 			return errors.New("failed to initialize browser dialer listener for url ", browserDialerURL).Base(err)
 		}
 	}
@@ -147,7 +147,7 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 	}
 
 	parsedAddr, err := url.Parse(addr)
-	if err != nil || !strings.EqualFold(parsedAddr.Scheme, "http") || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
+	if err != nil || !strings.EqualFold(parsedAddr.Scheme, "browser") || parsedAddr.Host == "" || parsedAddr.Path == "" || parsedAddr.RawQuery != "" || parsedAddr.Fragment != "" {
 		return "", "", false
 	}
 	listenAddr := parsedAddr.Host
@@ -166,9 +166,6 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 		return "", "", false
 	}
 	id := strings.TrimPrefix(cleanPath, "/")
-	if len(id) != 36 {
-		return "", "", false
-	}
 	id = strings.ToLower(id)
 	parsedUUID, err := uuid.ParseString(id)
 	if err != nil || parsedUUID.String() != id {
@@ -301,14 +298,6 @@ func ensureDialerWithAddress(addr string) (*dialerInstance, error) {
 	return dialer, nil
 }
 
-func EnsureDialerWithAddress(addr string) error {
-	if addr == "" {
-		return nil
-	}
-	_, err := ensureDialerWithAddress(addr)
-	return err
-}
-
 func DialWSWithAddress(addr string, uri string, ed []byte) (*websocket.Conn, error) {
 	task := task{
 		Method:         "WS",
@@ -404,7 +393,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 
 	if addr == "" {
-		return nil, errors.New("browser dialer is not configured; set sockopt.dialerProxy to http://host:port/uuid")
+		return nil, errors.New("browser dialer is not configured; set sockopt.dialerProxy to browser://host:port/uuid")
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil {
