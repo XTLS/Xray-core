@@ -61,23 +61,24 @@ func newDialerInstance(addr string) *dialerInstance {
 	token := uuid.New()
 	csrfToken := token.String()
 	page := bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
+	wsPath := "/websocket/" + csrfToken
 	dialer := &dialerInstance{
 		conns: make(chan *websocket.Conn, 256),
 	}
 	dialer.server = &http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/websocket" {
-				if r.URL.Query().Get("token") == csrfToken {
-					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-						dialer.conns <- conn
-					} else {
-						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
-					}
+			if r.URL.Path == wsPath {
+				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+					dialer.conns <- conn
+				} else {
+					errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error: ", err)
 				}
-			} else {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-				w.Write(page)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			if _, err := w.Write(page); err != nil {
+				errors.LogError(context.Background(), "Browser dialer http page write unexpected error: ", err)
 			}
 		}),
 	}
