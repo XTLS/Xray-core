@@ -147,6 +147,7 @@
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
 - iOS & macOS arm64 & tvOS
+  - [Anywhere](https://github.com/NodePassProject/Anywhere)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Loon](https://apps.apple.com/us/app/loon/id1373567447)
   - [Egern](https://apps.apple.com/us/app/egern/id1616105820)
