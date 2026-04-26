@@ -7,13 +7,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	stderrors "errors"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/uuid"
 )
 
@@ -27,8 +27,6 @@ type task struct {
 	StreamResponse bool   `json:"streamResponse"`
 }
 
-var conns chan *websocket.Conn
-var server *http.Server
 var sockoptDialers map[string]*dialerInstance
 var mu sync.Mutex
 
@@ -41,32 +39,12 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-// Used by external projects when using xray as a go module
-func Reload() {
-	addr := getEnvAddress()
-	mu.Lock()
-
-	closeDialerInstance(&dialerInstance{conns: conns, server: server})
-	conns = nil
-	server = nil
-
-	var dialer *dialerInstance
-	if addr != "" {
-		dialer = newDialerInstance(addr)
-		conns = dialer.conns
-		server = dialer.server
-	}
-	mu.Unlock()
-
-	startDialerInstance(dialer)
-}
-
-func HasBrowserDialer() bool {
-	return conns != nil
-}
-
 func HasBrowserDialerWithAddress(addr string) bool {
-	return connsByAddress(addr) != nil
+	if addr == "" {
+		return false
+	}
+	_, _, err := net.SplitHostPort(addr)
+	return err == nil
 }
 
 type webSocketExtra struct {
@@ -76,10 +54,6 @@ type webSocketExtra struct {
 type dialerInstance struct {
 	conns  chan *websocket.Conn
 	server *http.Server
-}
-
-func getEnvAddress() string {
-	return platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
 }
 
 func newDialerInstance(addr string) *dialerInstance {
@@ -275,7 +249,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 		if addr != "" {
 			return nil, errors.New("browser dialer is not configured for sockopt.browserDialer: ", addr)
 		}
-		return nil, errors.New("browser dialer is not configured; set sockopt.browserDialer or env ", platform.BrowserDialerAddress)
+		return nil, errors.New("browser dialer is not configured; set sockopt.browserDialer")
 	}
 
 	var conn *websocket.Conn
@@ -308,19 +282,12 @@ func CheckOK(conn *websocket.Conn) error {
 }
 
 func connsByAddress(addr string) chan *websocket.Conn {
-	if addr != "" {
-		dialer := getDialerByAddress(addr)
-		if dialer == nil {
-			return nil
-		}
-		return dialer.conns
+	if addr == "" {
+		return nil
 	}
-	if HasBrowserDialer() {
-		return conns
+	dialer := getDialerByAddress(addr)
+	if dialer == nil {
+		return nil
 	}
-	return nil
-}
-
-func init() {
-	Reload()
+	return dialer.conns
 }
