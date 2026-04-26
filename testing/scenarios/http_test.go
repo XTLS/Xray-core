@@ -47,7 +47,9 @@ func TestHttpConformance(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -108,7 +110,9 @@ func TestHttpError(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -156,7 +160,9 @@ func TestHTTPConnectMethod(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -236,7 +242,9 @@ func TestHttpPost(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -306,7 +314,9 @@ func TestHttpBasicAuth(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}

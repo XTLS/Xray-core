@@ -2,6 +2,7 @@ package tun
 
 import (
 	"context"
+	"syscall"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -23,6 +25,7 @@ type Handler struct {
 	ctx             context.Context
 	config          *Config
 	stack           Stack
+	tun             Tun
 	policyManager   policy.Manager
 	dispatcher      routing.Dispatcher
 	tag             string
@@ -36,11 +39,6 @@ type ConnectionHandler interface {
 
 // Handler implements ConnectionHandler
 var _ ConnectionHandler = (*Handler)(nil)
-
-func (t *Handler) policy() policy.Session {
-	p := t.policyManager.ForLevel(t.config.UserLevel)
-	return p
-}
 
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
@@ -59,13 +57,35 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.dispatcher = dispatcher
 
 	tunName := t.config.Name
-	tunOptions := TunOptions{
-		Name: tunName,
-		MTU:  t.config.MTU,
-	}
-	tunInterface, err := NewTun(tunOptions)
+	tunInterface, err := NewTun(t.config)
 	if err != nil {
 		return err
+	}
+
+	if t.config.AutoOutboundsInterface != "" {
+		tunIndex, err := tunInterface.Index()
+		if err != nil {
+			_ = tunInterface.Close()
+			return err
+		}
+		if t.config.AutoOutboundsInterface == "auto" {
+			t.config.AutoOutboundsInterface = ""
+		}
+		updater = &InterfaceUpdater{tunIndex: tunIndex, fixedName: t.config.AutoOutboundsInterface}
+		updater.Update()
+		internet.RegisterDialerController(func(network, address string, c syscall.RawConn) error {
+			iface := updater.Get()
+			if iface == nil {
+				errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
+				return nil
+			}
+			return c.Control(func(fd uintptr) {
+				err := setinterface(network, address, fd, iface)
+				if err != nil {
+					errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
+				}
+			})
+		})
 	}
 
 	errors.LogInfo(t.ctx, tunName, " created")
@@ -95,6 +115,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 
 	t.stack = tunStack
+	t.tun = tunInterface
 
 	errors.LogInfo(t.ctx, tunName, " up")
 	return nil
@@ -142,6 +163,11 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
+}
+
+// Close implements common.Closable.
+func (t *Handler) Close() error {
+	return errors.Combine(t.stack.Close(), t.tun.Close())
 }
 
 // Network implements proxy.Inbound

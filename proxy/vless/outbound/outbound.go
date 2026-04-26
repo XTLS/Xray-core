@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
+	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
 	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
@@ -97,14 +98,25 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if a.Reverse != nil {
+		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
+			Tag:  a.Reverse.Tag,
+			Name: "vless-reverse",
+			User: handler.server.User, // TODO: email
+		})
+		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
+			request, err := proxymanConfig.BuildSniffingRequest(sc)
+			if err != nil {
+				return nil, errors.New("failed to build reverse sniffing request").Base(err).AtError()
+			}
+			rvsCtx = session.ContextWithContent(rvsCtx, &session.Content{
+				SniffingRequest: request,
+			})
+		}
 		handler.reverse = &Reverse{
 			tag:        a.Reverse.Tag,
 			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
-			ctx: session.ContextWithInbound(ctx, &session.Inbound{
-				Tag:  a.Reverse.Tag,
-				User: handler.server.User, // TODO: email
-			}),
-			handler: handler,
+			ctx:        rvsCtx,
+			handler:    handler,
 		}
 		handler.reverse.monitorTask = &task.Periodic{
 			Execute:  handler.reverse.monitor,

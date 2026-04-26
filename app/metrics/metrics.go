@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/app/observatory"
-	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -39,16 +38,12 @@ func NewMetricsHandler(ctx context.Context, config *Config) (*MetricsHandler, er
 		c.ohm = om
 	}))
 	expvar.Publish("stats", expvar.Func(func() interface{} {
-		manager, ok := c.statsManager.(*stats.Manager)
-		if !ok {
-			return nil
-		}
 		resp := map[string]map[string]map[string]int64{
 			"inbound":  {},
 			"outbound": {},
 			"user":     {},
 		}
-		manager.VisitCounters(func(name string, counter feature_stats.Counter) bool {
+		c.statsManager.VisitCounters(func(name string, counter feature_stats.Counter) bool {
 			nameSplit := strings.Split(name, ">>>")
 			typeName, tagOrUser, direction := nameSplit[0], nameSplit[1], nameSplit[3]
 			if item, found := resp[typeName][tagOrUser]; found {

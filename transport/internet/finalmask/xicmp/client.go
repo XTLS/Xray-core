@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -51,11 +52,7 @@ type xicmpConnClient struct {
 	mutex  sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, error) {
-	if !end {
-		return nil, errors.New("xicmp requires being at the outermost level")
-	}
-
+func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	network := "ip4:icmp"
 	typ := icmp.Type(ipv4.ICMPTypeEcho)
 	proto := 1
@@ -85,8 +82,8 @@ func NewConnClient(c *Config, raw net.PacketConn, end bool) (net.PacketConn, err
 		seqStatus: make(map[int]*seqStatus),
 
 		pollChan:   make(chan struct{}, pollLimit),
-		readQueue:  make(chan *packet, 128),
-		writeQueue: make(chan *packet, 128),
+		readQueue:  make(chan *packet, 256),
+		writeQueue: make(chan *packet, 256),
 	}
 
 	go conn.recvLoop()
@@ -122,8 +119,8 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if len(buf) > 8192 {
-		return nil, errors.New("xicmp len(buf) > 8192")
+	if len(buf) > finalmask.UDPSize {
+		return nil, errors.New("xicmp len(buf) > finalmask.UDPSize")
 	}
 
 	c.seqStatus[c.seq] = &seqStatus{
@@ -144,12 +141,12 @@ func (c *xicmpConnClient) encode(p []byte) ([]byte, error) {
 }
 
 func (c *xicmpConnClient) recvLoop() {
+	var buf [finalmask.UDPSize]byte
+
 	for {
 		if c.closed {
 			break
 		}
-
-		var buf [8192]byte
 
 		n, addr, err := c.icmpConn.ReadFrom(buf[:])
 		if err != nil {
@@ -201,6 +198,7 @@ func (c *xicmpConnClient) recvLoop() {
 				addr: &net.UDPAddr{IP: addr.(*net.IPAddr).IP},
 			}:
 			default:
+				errors.LogDebug(context.Background(), addr, " ", echo.Seq, " ", echo.ID, " mask read err queue full")
 			}
 
 			select {
@@ -210,8 +208,16 @@ func (c *xicmpConnClient) recvLoop() {
 		}
 	}
 
+	errors.LogDebug(context.Background(), "xicmp closed")
+
 	close(c.pollChan)
 	close(c.readQueue)
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.closed = true
+	close(c.writeQueue)
 }
 
 func (c *xicmpConnClient) sendLoop() {
@@ -269,39 +275,37 @@ func (c *xicmpConnClient) sendLoop() {
 		if p != nil {
 			_, err := c.icmpConn.WriteTo(p.p, p.addr)
 			if err != nil {
-				errors.LogDebug(context.Background(), "xicmp writeto err ", err)
+				errors.LogDebug(context.Background(), p.addr, " xicmp writeto err ", err)
 			}
 		}
 	}
 }
 
-func (c *xicmpConnClient) Size() int32 {
-	return 0
-}
-
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readQueue
 	if !ok {
-		return 0, nil, io.EOF
+		return 0, nil, net.ErrClosed
 	}
-	n = copy(p, packet.p)
-	if n != len(packet.p) {
-		return 0, nil, io.ErrShortBuffer
+	if len(p) < len(packet.p) {
+		errors.LogDebug(context.Background(), packet.addr, " mask read err short buffer ", len(p), " ", len(packet.p))
+		return 0, packet.addr, nil
 	}
-	return n, packet.addr, nil
+	copy(p, packet.p)
+	return len(packet.p), packet.addr, nil
 }
 
 func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	encoded, err := c.encode(p)
 	if err != nil {
-		return 0, errors.New("xicmp encode").Base(err)
+		errors.LogDebug(context.Background(), addr, " xicmp wireformat err ", err)
+		return 0, nil
 	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.closed {
-		return 0, errors.New("xicmp closed")
+		return 0, io.ErrClosedPipe
 	}
 
 	select {
@@ -311,21 +315,13 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}:
 		return len(p), nil
 	default:
-		return 0, errors.New("xicmp queue full")
+		errors.LogDebug(context.Background(), addr, " mask write err queue full")
+		return 0, nil
 	}
 }
 
 func (c *xicmpConnClient) Close() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.closed {
-		return nil
-	}
-
 	c.closed = true
-	close(c.writeQueue)
-
 	_ = c.icmpConn.Close()
 	return c.conn.Close()
 }

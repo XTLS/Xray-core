@@ -3,6 +3,7 @@
 package net
 
 import (
+	"net"
 	"net/netip"
 	"path/filepath"
 	"strings"
@@ -49,41 +50,37 @@ func initWin32API() error {
 	return nil
 }
 
-func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, err error) {
+func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
 	once.Do(func() {
 		initErr = initWin32API()
 	})
 	if initErr != nil {
 		return 0, "", "", initErr
 	}
-	isLocal, err := IsLocal(dest.Address.IP())
+	isLocal, err := IsLocal(net.ParseIP(srcIP))
 	if err != nil {
 		return 0, "", "", errors.New("failed to determine if address is local: ", err)
 	}
 	if !isLocal {
 		return 0, "", "", ErrNotLocal
 	}
-	if dest.Network != Network_TCP && dest.Network != Network_UDP {
+	if network != "tcp" && network != "udp" {
 		panic("Unsupported network type for process lookup.")
-	}
-	// the core should never has a domain as source(?
-	if dest.Address.Family() == AddressFamilyDomain {
-		panic("Domain addresses are not supported for process lookup.")
 	}
 	var class int
 	var fn uintptr
-	switch dest.Network {
-	case Network_TCP:
+	switch network {
+	case "tcp":
 		fn = getExTCPTable
 		class = tcpTablePidConn
-	case Network_UDP:
+	case "udp":
 		fn = getExUDPTable
 		class = udpTablePid
 	default:
 		panic("Unsupported network type for process lookup.")
 	}
-	ip := dest.Address.IP()
-	port := int(dest.Port)
+	ip := net.ParseIP(srcIP)
+	port := int(srcPort)
 
 	addr, ok := netip.AddrFromSlice(ip)
 	if !ok {
@@ -101,7 +98,15 @@ func FindProcess(dest Destination) (PID int, Name string, AbsolutePath string, e
 		return 0, "", "", err
 	}
 
-	s := newSearcher(dest.Network, dest.Address.Family())
+	networkType := Network_TCP
+	if network == "udp" {
+		networkType = Network_UDP
+	}
+	familyType := AddressFamilyIPv4
+	if addr.Is6() {
+		familyType = AddressFamilyIPv6
+	}
+	s := newSearcher(networkType, familyType)
 
 	pid, err := s.Search(buf, addr, uint16(port))
 	if err != nil {

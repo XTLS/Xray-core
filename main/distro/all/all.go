@@ -20,6 +20,7 @@ import (
 	// Other optional features.
 	_ "github.com/xtls/xray-core/app/dns"
 	_ "github.com/xtls/xray-core/app/dns/fakedns"
+	_ "github.com/xtls/xray-core/app/geodata"
 	_ "github.com/xtls/xray-core/app/log"
 	_ "github.com/xtls/xray-core/app/metrics"
 	_ "github.com/xtls/xray-core/app/policy"

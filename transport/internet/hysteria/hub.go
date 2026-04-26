@@ -14,6 +14,7 @@ import (
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
+	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -22,6 +23,7 @@ import (
 	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -99,32 +101,39 @@ func (m *udpSessionManagerServer) run() {
 func (m *udpSessionManagerServer) feed(id uint32, d []byte) {
 	m.mutex.RLock()
 	udpConn, ok := m.m[id]
+	if ok {
+		select {
+		case udpConn.ch <- d:
+		default:
+		}
+		m.mutex.RUnlock()
+		return
+	}
 	m.mutex.RUnlock()
 
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	udpConn, ok = m.m[id]
 	if !ok {
-		m.mutex.Lock()
-		udpConn, ok = m.m[id]
-		if !ok {
-			udpConn = &InterUdpConn{
-				conn:   m.conn,
-				local:  m.conn.LocalAddr(),
-				remote: m.conn.RemoteAddr(),
+		udpConn = &InterUdpConn{
+			conn:   m.conn,
+			local:  m.conn.LocalAddr(),
+			remote: m.conn.RemoteAddr(),
 
-				id:   id,
-				ch:   make(chan []byte, udpMessageChanSize),
-				last: time.Now(),
+			id:   id,
+			ch:   make(chan []byte, udpMessageChanSize),
+			last: time.Now(),
 
-				user: m.user,
-			}
-			udpConn.closeFunc = func() {
-				m.mutex.Lock()
-				defer m.mutex.Unlock()
-				m.close(udpConn)
-			}
-			m.m[id] = udpConn
-			m.addConn(udpConn)
+			user: m.user,
 		}
-		m.mutex.Unlock()
+		udpConn.closeFunc = func() {
+			m.mutex.Lock()
+			m.close(udpConn)
+			m.mutex.Unlock()
+		}
+		m.m[id] = udpConn
+		m.addConn(udpConn)
 	}
 
 	select {
@@ -139,6 +148,7 @@ type httpHandler struct {
 	addConn internet.ConnHandler
 
 	config      *Config
+	quicParams  *internet.QuicParams
 	validator   *account.Validator
 	masqHandler http.Handler
 
@@ -154,7 +164,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if h.auth {
 			w.Header().Set(ResponseHeaderUDPEnabled, strconv.FormatBool(hyCtx.RequireDatagramFromContext(h.ctx)))
-			w.Header().Set(CommonHeaderCCRX, strconv.FormatUint(h.config.Down, 10))
+			w.Header().Set(CommonHeaderCCRX, strconv.FormatUint(h.quicParams.BrutalDown, 10))
 			w.Header().Set(CommonHeaderPadding, authResponsePadding.String())
 			w.WriteHeader(StatusAuthOK)
 			return
@@ -165,33 +175,33 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var user *protocol.MemoryUser
 		var ok bool
-		if h.validator != nil {
+		if h.validator != nil && h.validator.GetCount() > 0 {
 			user = h.validator.Get(auth)
-		} else if auth == h.config.Auth {
-			ok = true
+		} else if h.config.Auth != "" {
+			ok = auth == h.config.Auth
 		}
 
 		if user != nil || ok {
 			h.auth = true
 			h.user = user
 
-			switch h.config.Congestion {
+			switch h.quicParams.Congestion {
 			case "reno":
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			case "bbr":
-				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-				congestion.UseBBR(h.conn)
+				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr ", h.quicParams.BbrProfile)
+				congestion.UseBBR(h.conn, bbr.Profile(h.quicParams.BbrProfile))
 			case "brutal", "":
-				if h.config.Up == 0 || clientDown == 0 {
-					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr")
-					congestion.UseBBR(h.conn)
+				if h.quicParams.BrutalUp == 0 || clientDown == 0 {
+					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion bbr ", h.quicParams.BbrProfile)
+					congestion.UseBBR(h.conn, bbr.Profile(h.quicParams.BbrProfile))
 				} else {
-					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", min(h.config.Up, clientDown))
-					congestion.UseBrutal(h.conn, min(h.config.Up, clientDown))
+					errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", min(h.quicParams.BrutalUp, clientDown))
+					congestion.UseBrutal(h.conn, min(h.quicParams.BrutalUp, clientDown))
 				}
 			case "force-brutal":
-				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", h.config.Up)
-				congestion.UseBrutal(h.conn, h.config.Up)
+				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion brutal bytes per second ", h.quicParams.BrutalUp)
+				congestion.UseBrutal(h.conn, h.quicParams.BrutalUp)
 			default:
 				errors.LogDebug(context.Background(), h.conn.RemoteAddr(), " ", "congestion reno")
 			}
@@ -211,7 +221,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			w.Header().Set(ResponseHeaderUDPEnabled, strconv.FormatBool(hyCtx.RequireDatagramFromContext(h.ctx)))
-			w.Header().Set(CommonHeaderCCRX, strconv.FormatUint(h.config.Down, 10))
+			w.Header().Set(CommonHeaderCCRX, strconv.FormatUint(h.quicParams.BrutalDown, 10))
 			w.Header().Set(CommonHeaderPadding, authResponsePadding.String())
 			w.WriteHeader(StatusAuthOK)
 			return
@@ -221,13 +231,17 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.masqHandler.ServeHTTP(w, r)
 }
 
-func (h *httpHandler) ProxyStreamHijacker(ft http3.FrameType, id quic.ConnectionTracingID, stream *quic.Stream, err error) (bool, error) {
+func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
 	if err != nil || !h.auth {
 		return false, nil
 	}
 
 	switch ft {
 	case FrameTypeTCPRequest:
+		if _, err := quicvarint.Read(quicvarint.NewReader(stream)); err != nil {
+			return false, err
+		}
+
 		h.addConn(&interConn{
 			stream: stream,
 			local:  h.conn.LocalAddr(),
@@ -248,6 +262,7 @@ type Listener struct {
 	addConn  internet.ConnHandler
 
 	config      *Config
+	quicParams  *internet.QuicParams
 	validator   *account.Validator
 	masqHandler http.Handler
 }
@@ -259,16 +274,17 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		addConn: l.addConn,
 
 		config:      l.config,
+		quicParams:  l.quicParams,
 		validator:   l.validator,
 		masqHandler: l.masqHandler,
 	}
 	h3 := http3.Server{
-		Handler:        handler,
-		StreamHijacker: handler.ProxyStreamHijacker,
+		Handler:          handler,
+		StreamDispatcher: handler.StreamDispatcher,
 	}
 	err := h3.ServeQUICConn(conn)
-	errors.LogDebug(context.Background(), conn.RemoteAddr(), " disconnected with err ", err)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
+	errors.LogDebug(context.Background(), conn.RemoteAddr(), " disconnected with err ", err)
 }
 
 func (l *Listener) keepAccepting() {
@@ -372,17 +388,43 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		}
 	}
 
+	quicParams := streamSettings.QuicParams
+	if quicParams == nil {
+		quicParams = &internet.QuicParams{
+			BbrProfile: string(bbr.ProfileStandard),
+			UdpHop:     &internet.UdpHop{},
+		}
+	}
+
 	quicConfig := &quic.Config{
-		InitialStreamReceiveWindow:     config.InitStreamReceiveWindow,
-		MaxStreamReceiveWindow:         config.MaxStreamReceiveWindow,
-		InitialConnectionReceiveWindow: config.InitConnReceiveWindow,
-		MaxConnectionReceiveWindow:     config.MaxConnReceiveWindow,
-		MaxIdleTimeout:                 time.Duration(config.MaxIdleTimeout) * time.Second,
-		MaxIncomingStreams:             config.MaxIncomingStreams,
-		DisablePathMTUDiscovery:        config.DisablePathMtuDiscovery,
+		InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+		MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+		MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+		MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+		MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+		DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
 		EnableDatagrams:                true,
 		MaxDatagramFrameSize:           MaxDatagramFrameSize,
 		DisablePathManager:             true,
+	}
+	if quicParams.InitStreamReceiveWindow == 0 {
+		quicConfig.InitialStreamReceiveWindow = 8388608
+	}
+	if quicParams.MaxStreamReceiveWindow == 0 {
+		quicConfig.MaxStreamReceiveWindow = 8388608
+	}
+	if quicParams.InitConnReceiveWindow == 0 {
+		quicConfig.InitialConnectionReceiveWindow = 8388608 * 5 / 2
+	}
+	if quicParams.MaxConnReceiveWindow == 0 {
+		quicConfig.MaxConnectionReceiveWindow = 8388608 * 5 / 2
+	}
+	if quicParams.MaxIdleTimeout == 0 {
+		quicConfig.MaxIdleTimeout = 30 * time.Second
+	}
+	if quicParams.MaxIncomingStreams == 0 {
+		quicConfig.MaxIncomingStreams = 1024
 	}
 
 	qListener, err := quic.Listen(pktConn, tlsConfig.GetTLSConfig(), quicConfig)
@@ -398,6 +440,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		addConn:  handler,
 
 		config:      config,
+		quicParams:  quicParams,
 		validator:   validator,
 		masqHandler: masqHandler,
 	}

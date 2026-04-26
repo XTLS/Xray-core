@@ -8,6 +8,7 @@ option java_multiple_files = true;
 
 import "common/protocol/server_spec.proto";
 import "transport/internet/config.proto";
+import "common/geodata/geodat.proto";
 
 message DestinationOverride {
   xray.common.protocol.ServerEndpoint server = 1;
@@ -32,6 +33,10 @@ message Noise {
   string apply_to = 6;
 }
 
+message IPRules {
+  repeated xray.common.geodata.IPRule rules = 1;
+}
+
 message Config {
   xray.transport.internet.DomainStrategy domain_strategy = 1;
   DestinationOverride destination_override = 3;
@@ -39,4 +44,5 @@ message Config {
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
+  optional IPRules ips_blocked = 8;
 }

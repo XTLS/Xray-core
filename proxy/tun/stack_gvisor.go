@@ -34,23 +34,18 @@ const (
 // stackGVisor is ip stack implemented by gVisor package
 type stackGVisor struct {
 	ctx         context.Context
-	tun         GVisorTun
+	tun         Tun
 	idleTimeout time.Duration
 	handler     *Handler
 	stack       *stack.Stack
 	endpoint    stack.LinkEndpoint
 }
 
-// GVisorTun implements a bridge to connect gVisor ip stack to tun interface
-type GVisorTun interface {
-	newEndpoint() (stack.LinkEndpoint, error)
-}
-
 // NewStack builds new ip stack (using gVisor)
 func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stack, error) {
 	gStack := &stackGVisor{
 		ctx:         ctx,
-		tun:         options.Tun.(GVisorTun),
+		tun:         options.Tun,
 		idleTimeout: options.IdleTimeout,
 		handler:     handler,
 	}
@@ -105,17 +100,22 @@ func (t *stackGVisor) Start() error {
 	// Use custom UDP packet handler, instead of strict gVisor forwarder, for FullCone NAT support
 	udpForwarder := newUdpConnectionHandler(t.handler.HandleConnection, t.writeRawUDPPacket)
 	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
-		data := pkt.Data().AsRange().ToSlice()
-		if len(data) == 0 {
-			return false
-		}
+		data := pkt.Clone().Data().AsRange().ToSlice()
+		// if len(data) == 0 {
+		// 	return false
+		// }
 		// source/destination of the packet we process as incoming, on gVisor side are Remote/Local
 		// in other terms, src is the side behind tun, dst is the side behind gVisor
 		// this function handle packets passing from the tun to the gVisor, therefore the src/dst assignement
-		src := net.UDPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort))
-		dst := net.UDPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort))
-
-		return udpForwarder.HandlePacket(src, dst, data)
+		srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
+		dstIP := net.IPAddress(id.LocalAddress.AsSlice())
+		if srcIP == nil || dstIP == nil {
+			panic(id)
+		}
+		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
+		dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
+		udpForwarder.HandlePacket(src, dst, data)
+		return true
 	})
 
 	t.stack = ipStack

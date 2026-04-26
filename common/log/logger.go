@@ -36,7 +36,7 @@ type serverityLogger struct {
 func NewLogger(logWriterCreator WriterCreator) Handler {
 	return &generalLogger{
 		creator: logWriterCreator,
-		buffer:  make(chan Message, 16),
+		buffer:  make(chan Message, 128),
 		access:  semaphore.New(1),
 		done:    done.New(),
 	}
@@ -46,7 +46,7 @@ func ReplaceWithSeverityLogger(serverity Severity) {
 	w := CreateStdoutLogWriter()
 	g := &generalLogger{
 		creator: w,
-		buffer:  make(chan Message, 16),
+		buffer:  make(chan Message, 128),
 		access:  semaphore.New(1),
 		done:    done.New(),
 	}

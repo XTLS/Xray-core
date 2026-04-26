@@ -557,6 +557,9 @@ func TestEncodeRDataTXT(t *testing.T) {
 	if len(encoded) > 256 {
 		t.Errorf("EncodeRDataTXT(%d bytes) returned %d bytes", len(p), len(encoded))
 	}
+
+	fmt.Println(EncodeRDataTXT(nil))
+	fmt.Println(computeMaxEncodedPayload(maxUDPPayload))
 }
 
 func TestRDataTXTRoundTrip(t *testing.T) {

@@ -22,7 +22,6 @@ import (
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/kcp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -62,7 +61,9 @@ func TestVMessGCM(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -94,9 +95,9 @@ func TestVMessGCM(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -160,7 +161,9 @@ func TestVMessGCMReadv(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -192,9 +195,9 @@ func TestVMessGCMReadv(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -261,7 +264,9 @@ func TestVMessGCMUDP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -293,9 +298,9 @@ func TestVMessGCMUDP(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_AES128_GCM,
 								},
@@ -356,7 +361,9 @@ func TestVMessChacha20(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -388,9 +395,9 @@ func TestVMessChacha20(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
-								Id:               userID.String(),
+								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
 									Type: protocol.SecurityType_CHACHA20_POLY1305,
 								},
@@ -452,7 +459,9 @@ func TestVMessNone(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -484,7 +493,7 @@ func TestVMessNone(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -550,7 +559,9 @@ func TestVMessKCP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -638,25 +649,6 @@ func TestVMessKCPLarge(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
 						ProtocolName: "mkcp",
-						TransportSettings: []*internet.TransportConfig{
-							{
-								ProtocolName: "mkcp",
-								Settings: serial.ToTypedMessage(&kcp.Config{
-									ReadBuffer: &kcp.ReadBuffer{
-										Size: 512 * 1024,
-									},
-									WriteBuffer: &kcp.WriteBuffer{
-										Size: 512 * 1024,
-									},
-									UplinkCapacity: &kcp.UplinkCapacity{
-										Value: 20,
-									},
-									DownlinkCapacity: &kcp.DownlinkCapacity{
-										Value: 20,
-									},
-								}),
-							},
-						},
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
@@ -672,7 +664,9 @@ func TestVMessKCPLarge(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -704,7 +698,7 @@ func TestVMessKCPLarge(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -717,25 +711,6 @@ func TestVMessKCPLarge(t *testing.T) {
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
 						ProtocolName: "mkcp",
-						TransportSettings: []*internet.TransportConfig{
-							{
-								ProtocolName: "mkcp",
-								Settings: serial.ToTypedMessage(&kcp.Config{
-									ReadBuffer: &kcp.ReadBuffer{
-										Size: 512 * 1024,
-									},
-									WriteBuffer: &kcp.WriteBuffer{
-										Size: 512 * 1024,
-									},
-									UplinkCapacity: &kcp.UplinkCapacity{
-										Value: 20,
-									},
-									DownlinkCapacity: &kcp.DownlinkCapacity{
-										Value: 20,
-									},
-								}),
-							},
-						},
 					},
 				}),
 			},
@@ -795,7 +770,9 @@ func TestVMessGCMMux(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -833,7 +810,7 @@ func TestVMessGCMMux(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -906,7 +883,9 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -956,7 +935,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1027,7 +1006,9 @@ func TestVMessZero(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -1059,7 +1040,7 @@ func TestVMessZero(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1122,7 +1103,9 @@ func TestVMessGCMLengthAuth(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -1154,7 +1137,7 @@ func TestVMessGCMLengthAuth(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{
@@ -1222,7 +1205,9 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					IpsBlocked: &freedom.IPRules{},
+				}),
 			},
 		},
 	}
@@ -1254,7 +1239,7 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
 						Port:    uint32(serverPort),
-						User:    &protocol.User{
+						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
 								SecuritySettings: &protocol.SecurityConfig{

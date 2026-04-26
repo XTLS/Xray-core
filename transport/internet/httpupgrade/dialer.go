@@ -52,6 +52,15 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		return nil, err
 	}
 
+	if streamSettings.TcpmaskManager != nil {
+		newConn, err := streamSettings.TcpmaskManager.WrapConnClient(pconn)
+		if err != nil {
+			pconn.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+		pconn = newConn
+	}
+
 	var conn net.Conn
 	var requestURL url.URL
 	tConfig := tls.ConfigFromStreamSettings(streamSettings)
@@ -87,9 +96,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	for key, value := range transportConfiguration.Header {
 		AddHeader(req.Header, key, value)
 	}
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", utils.ChromeUA)
-	}
+	utils.TryDefaultHeadersWith(req.Header, "ws")
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "websocket")
 
