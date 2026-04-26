@@ -194,10 +194,11 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 
 	server, found := dialerServers[listenAddr]
 	if !found {
-		server, err := newDialerServer(listenAddr)
-		if err != nil {
-			return nil, err
+		newServer, serverErr := newDialerServer(listenAddr)
+		if serverErr != nil {
+			return nil, serverErr
 		}
+		server = newServer
 		dialerServers[listenAddr] = server
 	}
 
@@ -317,10 +318,7 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	}
 	dialer, err := getDialerByAddress(addr)
 	if err != nil || dialer == nil {
-		if addr != "" {
-			return nil, errors.New("browser dialer is not configured for sockopt.browserDialer: ", addr)
-		}
-		return nil, errors.New("browser dialer is not configured; set sockopt.browserDialer")
+		return nil, errors.New("browser dialer is not configured for sockopt.browserDialer: ", addr)
 	}
 	conns := dialer.conns
 
