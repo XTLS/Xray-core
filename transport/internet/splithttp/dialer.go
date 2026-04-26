@@ -44,7 +44,7 @@ type errorDialerClient struct {
 	err error
 }
 
-func (c *errorDialerClient) IsClosed() bool { return false }
+func (c *errorDialerClient) IsClosed() bool { return true }
 
 func (c *errorDialerClient) OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error) {
 	return nil, nil, nil, c.err
@@ -75,7 +75,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
 		if transportConfig.Mode != "auto" && transportConfig.Mode != "packet-up" {
 			return &errorDialerClient{
-				err: errors.New("dialerProxy/browserDialer with XHTTP only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
+				err: errors.New("browserDialer with XHTTP only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
 			}, nil
 		}
 		return &BrowserDialerClient{
