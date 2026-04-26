@@ -106,9 +106,11 @@ func parseBrowserDialerAddress(addr string) (*browserDialerAddress, bool) {
 		return nil, false
 	}
 	parsedUUID, err := uuid.ParseString(id)
-	if err != nil || !strings.EqualFold(parsedUUID.String(), id) {
+	id = strings.ToLower(id)
+	if err != nil || parsedUUID.String() != id {
 		return nil, false
 	}
+	cleanPath = "/" + id
 
 	return &browserDialerAddress{
 		listenAddr: listenAddr,
@@ -256,7 +258,6 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 			delete(server.pageRoutes, dialer.pagePath)
 			if len(server.pageRoutes) == 0 {
 				delete(dialerServers, parsed.listenAddr)
-				server.started = false
 			}
 			mu.Unlock()
 			closeDialerInstance(dialer)

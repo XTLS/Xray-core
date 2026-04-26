@@ -20,7 +20,7 @@ func TestStreamConfigBuildRejectsBrowserDialerUnsupportedProtocol(t *testing.T) 
 	}
 
 	_, err := config.Build()
-	if err == nil || !strings.Contains(err.Error(), "sockopt.browserDialer only supports WS or XHTTP") {
+	if err == nil || !strings.Contains(err.Error(), "sockopt.browserDialer only supports websocket or splithttp") {
 		t.Fatalf("expected unsupported protocol error, got: %v", err)
 	}
 }

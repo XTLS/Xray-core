@@ -1975,7 +1975,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	}
 	if c.SocketSettings != nil && c.SocketSettings.BrowserDialer != "" {
 		if config.ProtocolName != "websocket" && config.ProtocolName != "splithttp" {
-			return nil, errors.New("sockopt.browserDialer only supports WS or XHTTP")
+			return nil, errors.New("sockopt.browserDialer only supports websocket or splithttp")
 		}
 		if strings.EqualFold(c.Security, "reality") {
 			return nil, errors.New("sockopt.browserDialer does not support REALITY")
