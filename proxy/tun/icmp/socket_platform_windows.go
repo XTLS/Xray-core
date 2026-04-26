@@ -28,3 +28,7 @@ func isPermissionError(err error) bool {
 		"access permissions",
 	)
 }
+
+func shouldSkipSyntheticReply(*Socket, stdnet.IP) (bool, error) {
+	return false, nil
+}

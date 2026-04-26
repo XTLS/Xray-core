@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
-	xnet "github.com/xtls/xray-core/common/net"
 	tunicmp "github.com/xtls/xray-core/proxy/tun/icmp"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -90,14 +89,12 @@ func (t *stackGVisor) forwardICMPEcho(netProto tcpip.NetworkProtocolNumber, srcI
 		if !ok {
 			continue
 		}
-		if tunicmp.IsDatagramNetwork(socket.Network) {
-			isLocal, err := xnet.IsLocal(stdnet.IP(srcIP.AsSlice()))
-			if err != nil {
-				errors.LogInfoInner(t.ctx, err, "[tun][icmp] failed to determine whether source is local")
-			} else if isLocal {
-				errors.LogInfo(t.ctx, "[tun][icmp] ", tunicmp.ProtocolLabel(netProto), " echo reply handled by local stack, skipping tun injection id=", ident, " seq=", sequence, " socket=", socket.Network)
-				return nil
-			}
+		shouldSkipTunReply, err := socket.ShouldSkipSyntheticReply(stdnet.IP(srcIP.AsSlice()))
+		if err != nil {
+			errors.LogInfoInner(t.ctx, err, "[tun][icmp] failed to decide whether to skip synthetic echo reply")
+		} else if shouldSkipTunReply {
+			errors.LogInfo(t.ctx, "[tun][icmp] ", tunicmp.ProtocolLabel(netProto), " echo reply handled by local stack, skipping tun injection id=", ident, " seq=", sequence, " socket=", socket.Network)
+			return nil
 		}
 		if replyIdent != ident {
 			if err := tunicmp.RewriteEchoIdentifier(netProto, reply, ident); err != nil {

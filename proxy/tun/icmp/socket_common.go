@@ -37,6 +37,10 @@ func (s *Socket) ReplyIdentifier() (uint16, bool) {
 	return DatagramEchoIdentifier(s.Conn.LocalAddr())
 }
 
+func (s *Socket) ShouldSkipSyntheticReply(srcIP stdnet.IP) (bool, error) {
+	return shouldSkipSyntheticReply(s, srcIP)
+}
+
 func applyRawSocketControllers(network, address string, rawConn syscall.RawConn) error {
 	internet.ControllersLock.Lock()
 	controllers := append([]func(string, string, syscall.RawConn) error(nil), internet.Controllers...)

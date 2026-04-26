@@ -3,6 +3,8 @@
 package icmp
 
 import (
+	stdnet "net"
+
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"runtime"
 )
@@ -21,4 +23,30 @@ func socketCandidates(netProto tcpip.NetworkProtocolNumber, dstIP tcpip.Address)
 
 func isPermissionError(err error) bool {
 	return isPermissionErrorWithFragments(err, "permission denied", "operation not permitted")
+}
+
+var localIPChecker = isLocalInterfaceIP
+
+func shouldSkipSyntheticReply(s *Socket, srcIP stdnet.IP) (bool, error) {
+	if s == nil || !IsDatagramNetwork(s.Network) || len(srcIP) == 0 {
+		return false, nil
+	}
+	return localIPChecker(srcIP)
+}
+
+func isLocalInterfaceIP(ip stdnet.IP) (bool, error) {
+	addrs, err := stdnet.InterfaceAddrs()
+	if err != nil {
+		return false, err
+	}
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*stdnet.IPNet)
+		if !ok {
+			continue
+		}
+		if ipNet.IP.Equal(ip) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
