@@ -40,7 +40,6 @@ type stackGVisor struct {
 	handler     *Handler
 	stack       *stack.Stack
 	endpoint    stack.LinkEndpoint
-	icmpEcho    *icmpEchoDispatcher
 }
 
 // NewStack builds new ip stack (using gVisor)
@@ -51,7 +50,6 @@ func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stac
 		idleTimeout: options.IdleTimeout,
 		handler:     handler,
 	}
-	gStack.icmpEcho = newICMPEchoDispatcher(gStack)
 
 	return gStack, nil
 }
@@ -125,7 +123,6 @@ func (t *stackGVisor) Start() error {
 
 	t.stack = ipStack
 	t.endpoint = linkEndpoint
-	t.icmpEcho.start()
 
 	return nil
 }
@@ -195,9 +192,6 @@ func (t *stackGVisor) writeRawUDPPacket(payload []byte, src net.Destination, dst
 
 // Close is called by Handler to shut down the stack
 func (t *stackGVisor) Close() error {
-	if t.icmpEcho != nil {
-		t.icmpEcho.close()
-	}
 	if t.stack == nil {
 		return nil
 	}
