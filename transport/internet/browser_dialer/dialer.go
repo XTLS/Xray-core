@@ -149,7 +149,10 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 	if _, _, err := net.SplitHostPort(listenAddr); err != nil {
 		return "", "", false
 	}
-	path := "/" + strings.Trim(strings.TrimSuffix(parsedAddr.Path, "/"), "/")
+	path := strings.TrimSuffix(parsedAddr.Path, "/")
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	cleanPath := pathlib.Clean(path)
 	if cleanPath == "." || cleanPath == "/" || cleanPath != path {
 		return "", "", false
