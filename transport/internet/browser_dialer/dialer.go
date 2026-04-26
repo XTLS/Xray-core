@@ -105,8 +105,8 @@ func parseBrowserDialerAddress(addr string) (*browserDialerAddress, bool) {
 	if len(id) != 36 {
 		return nil, false
 	}
-	parsedUUID, err := uuid.ParseString(id)
 	id = strings.ToLower(id)
+	parsedUUID, err := uuid.ParseString(id)
 	if err != nil || parsedUUID.String() != id {
 		return nil, false
 	}
