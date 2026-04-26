@@ -175,7 +175,7 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 	}
 	_, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
-		return nil, errors.New("invalid sockopt.browserDialer: ", addr)
+		return nil, errors.New("invalid sockopt.browserDialer listen address: ", listenAddr)
 	}
 
 	key := listenAddr + path

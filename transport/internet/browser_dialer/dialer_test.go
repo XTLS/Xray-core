@@ -1,8 +1,8 @@
 package browser_dialer
 
 import (
-	"net"
-	"strconv"
+	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -25,38 +25,60 @@ func TestParseBrowserDialerAddressRequireUUIDPath(t *testing.T) {
 	}
 }
 
-func TestEnsureDialerWithAddressReusesSameListenAddress(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+func TestGetDialerByAddressReusesExistingServerForSameListenAddress(t *testing.T) {
+	listenAddr := "127.0.0.1:39000"
+	server := &dialerServer{
+		server:     &http.Server{Addr: listenAddr},
+		pageRoutes: make(map[string]*dialerInstance),
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
 
-	addr1 := net.JoinHostPort("127.0.0.1", strconv.Itoa(port)) + "/123e4567-e89b-12d3-a456-426614174000"
-	addr2 := net.JoinHostPort("127.0.0.1", strconv.Itoa(port)) + "/123e4567-e89b-12d3-a456-426614174001"
-	if err := EnsureDialerWithAddress(addr1); err != nil {
-		t.Fatalf("failed to ensure first browser dialer: %v", err)
+	mu.Lock()
+	oldDialers, oldServers := sockoptDialers, dialerServers
+	sockoptDialers = make(map[string]*dialerInstance)
+	dialerServers = map[string]*dialerServer{listenAddr: server}
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		sockoptDialers = oldDialers
+		dialerServers = oldServers
+		mu.Unlock()
+	})
+
+	if _, err := getDialerByAddress(listenAddr + "/123e4567-e89b-12d3-a456-426614174000"); err != nil {
+		t.Fatalf("failed to create first dialer: %v", err)
 	}
-	if err := EnsureDialerWithAddress(addr2); err != nil {
-		t.Fatalf("failed to reuse browser dialer listener on same address: %v", err)
+	if _, err := getDialerByAddress(listenAddr + "/123e4567-e89b-12d3-a456-426614174001"); err != nil {
+		t.Fatalf("failed to create second dialer on same listener: %v", err)
+	}
+	if len(dialerServers) != 1 {
+		t.Fatalf("expected one shared listener, got %d", len(dialerServers))
 	}
 }
 
-func TestEnsureDialerWithAddressRejectsSamePortDifferentAddress(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+func TestGetDialerByAddressRejectsSamePortDifferentAddress(t *testing.T) {
+	listenAddr := "127.0.0.1:39001"
+	server := &dialerServer{
+		server:     &http.Server{Addr: listenAddr},
+		pageRoutes: make(map[string]*dialerInstance),
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
 
-	addr1 := net.JoinHostPort("127.0.0.1", strconv.Itoa(port)) + "/123e4567-e89b-12d3-a456-426614174010"
-	addr2 := net.JoinHostPort("127.0.0.2", strconv.Itoa(port)) + "/123e4567-e89b-12d3-a456-426614174011"
-	if err := EnsureDialerWithAddress(addr1); err != nil {
-		t.Fatalf("failed to ensure first browser dialer: %v", err)
-	}
-	if err := EnsureDialerWithAddress(addr2); err == nil {
+	mu.Lock()
+	oldDialers, oldServers := sockoptDialers, dialerServers
+	sockoptDialers = make(map[string]*dialerInstance)
+	dialerServers = map[string]*dialerServer{listenAddr: server}
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		sockoptDialers = oldDialers
+		dialerServers = oldServers
+		mu.Unlock()
+	})
+
+	_, err := getDialerByAddress("127.0.0.2:39001/123e4567-e89b-12d3-a456-426614174011")
+	if err == nil {
 		t.Fatal("expected error for same port with different listen address")
+	}
+	if !strings.Contains(err.Error(), "cannot use the same port with a different listen address") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
