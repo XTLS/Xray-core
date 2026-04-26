@@ -71,14 +71,11 @@ func parseBrowserDialerAddress(addr string) (string, string, bool) {
 	}
 
 	listenAddr, pathRaw, ok := strings.Cut(addr, "/")
-	if !ok || listenAddr == "" {
+	if !ok || listenAddr == "" || pathRaw == "" {
 		return "", "", false
 	}
 
 	path := "/" + strings.TrimSuffix(pathRaw, "/")
-	if path == "" {
-		return "", "", false
-	}
 	if _, _, err := net.SplitHostPort(listenAddr); err != nil {
 		return "", "", false
 	}
