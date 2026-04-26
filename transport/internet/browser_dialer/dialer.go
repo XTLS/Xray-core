@@ -173,6 +173,10 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 	if !ok {
 		return nil, errors.New("invalid sockopt.browserDialer: ", addr)
 	}
+	_, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return nil, errors.New("invalid sockopt.browserDialer: ", addr)
+	}
 
 	key := listenAddr + path
 
@@ -191,6 +195,12 @@ func getDialerByAddress(addr string) (*dialerInstance, error) {
 
 	server, found := dialerServers[listenAddr]
 	if !found {
+		for existingAddr := range dialerServers {
+			_, existingPort, splitErr := net.SplitHostPort(existingAddr)
+			if splitErr == nil && existingPort == port {
+				return nil, errors.New("sockopt.browserDialer cannot use the same port with a different listen address: ", existingAddr, " and ", listenAddr)
+			}
+		}
 		newServer, serverErr := newDialerServer(listenAddr)
 		if serverErr != nil {
 			return nil, serverErr
