@@ -75,16 +75,17 @@ func BeginCollectingDialerProxyURLs() error {
 	return nil
 }
 
-func RegisterDialerProxyURL(raw string) {
+func RegisterDialerProxyURL(raw string) error {
 	if !IsBrowserDialerProxy(raw) {
-		return
+		return nil
 	}
 	initMu.Lock()
 	defer initMu.Unlock()
 	if pendingURLs == nil {
-		pendingURLs = map[string]struct{}{}
+		return errors.New("browser dialer url collection is not initialized")
 	}
 	pendingURLs[raw] = struct{}{}
+	return nil
 }
 
 func ConfigureCollectedDialerProxyURLs() error {

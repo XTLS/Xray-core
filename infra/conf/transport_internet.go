@@ -1995,7 +1995,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 					}
 				}
 			}
-			browser_dialer.RegisterDialerProxyURL(c.SocketSettings.DialerProxy)
+			if err := browser_dialer.RegisterDialerProxyURL(c.SocketSettings.DialerProxy); err != nil {
+				return nil, errors.New("failed to collect browser dialer url.").Base(err)
+			}
 		}
 	}
 
