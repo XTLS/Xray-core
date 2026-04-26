@@ -57,8 +57,8 @@ func CheckLegacyEnv() error {
 }
 
 func IsBrowserDialerProxy(raw string) bool {
-	parsed, err := url.Parse(raw)
-	return err == nil && strings.EqualFold(parsed.Scheme, "http")
+	_, _, ok := parseBrowserDialerAddress(raw)
+	return ok
 }
 
 func BeginCollectingDialerProxyURLs() error {
