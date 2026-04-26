@@ -5,6 +5,7 @@ package icmp
 import (
 	stderrors "errors"
 	stdnet "net"
+	"runtime"
 	"testing"
 )
 
@@ -52,7 +53,30 @@ func TestShouldSkipSyntheticReply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shouldSkip {
-		t.Fatal("expected raw socket path to keep synthetic injection")
+	wantRawSkip := runtime.GOOS == "linux"
+	if shouldSkip != wantRawSkip {
+		t.Fatalf("unexpected raw socket skip decision: got %v want %v", shouldSkip, wantRawSkip)
+	}
+}
+
+func TestShouldSkipSyntheticReplyForLinuxAndroid(t *testing.T) {
+	tests := []struct {
+		name    string
+		goos    string
+		network string
+		want    bool
+	}{
+		{name: "linux datagram", goos: "linux", network: "udp4", want: true},
+		{name: "linux raw", goos: "linux", network: "ip4:icmp", want: true},
+		{name: "android datagram", goos: "android", network: "udp4", want: true},
+		{name: "android raw", goos: "android", network: "ip4:icmp", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldSkipSyntheticReplyForLinuxAndroid(tt.goos, tt.network); got != tt.want {
+				t.Fatalf("shouldSkipSyntheticReplyForLinuxAndroid(%q, %q) = %v, want %v", tt.goos, tt.network, got, tt.want)
+			}
+		})
 	}
 }

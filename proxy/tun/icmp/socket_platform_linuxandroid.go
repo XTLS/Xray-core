@@ -28,10 +28,23 @@ func isPermissionError(err error) bool {
 var localIPChecker = isLocalInterfaceIP
 
 func shouldSkipSyntheticReply(s *Socket, srcIP stdnet.IP) (bool, error) {
-	if s == nil || !IsDatagramNetwork(s.Network) || len(srcIP) == 0 {
+	if s == nil || len(srcIP) == 0 {
 		return false, nil
 	}
-	return localIPChecker(srcIP)
+
+	isLocal, err := localIPChecker(srcIP)
+	if err != nil || !isLocal {
+		return isLocal, err
+	}
+
+	return shouldSkipSyntheticReplyForLinuxAndroid(runtime.GOOS, s.Network), nil
+}
+
+func shouldSkipSyntheticReplyForLinuxAndroid(goos, network string) bool {
+	if goos == "linux" {
+		return true
+	}
+	return IsDatagramNetwork(network)
 }
 
 func isLocalInterfaceIP(ip stdnet.IP) (bool, error) {
