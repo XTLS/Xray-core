@@ -47,9 +47,16 @@ var (
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+	browserDialer := ""
+	if streamSettings.SocketSettings != nil {
+		browserDialer = streamSettings.SocketSettings.BrowserDialer
+	}
 
-	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
-		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
+	if browser_dialer.HasBrowserDialerWithAddress(browserDialer) && realityConfig == nil {
+		return &BrowserDialerClient{
+			transportConfig: streamSettings.ProtocolSettings.(*Config),
+			browserDialer:   browserDialer,
+		}, nil
 	}
 
 	globalDialerAccess.Lock()

@@ -15,6 +15,7 @@ import (
 // BrowserDialerClient implements splithttp.DialerClient in terms of browser dialer
 type BrowserDialerClient struct {
 	transportConfig *Config
+	browserDialer   string
 }
 
 func (c *BrowserDialerClient) IsClosed() bool {
@@ -33,7 +34,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessio
 
 	c.transportConfig.FillStreamRequest(request, sessionId, "")
 
-	conn, err := browser_dialer.DialGet(request.URL.String(), request.Header, request.Cookies())
+	conn, err := browser_dialer.DialGetWithAddress(c.browserDialer, request.URL.String(), request.Header, request.Cookies())
 	dummyAddr := &net.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
@@ -62,7 +63,7 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessio
 		}
 	}
 
-	err = browser_dialer.DialPacket(method, request.URL.String(), request.Header, request.Cookies(), bytes)
+	err = browser_dialer.DialPacketWithAddress(c.browserDialer, method, request.URL.String(), request.Header, request.Cookies(), bytes)
 	if err != nil {
 		return err
 	}

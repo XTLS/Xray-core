@@ -20,14 +20,15 @@ import (
 var webpage []byte
 
 type task struct {
-	Method string `json:"method"`
-	URL    string `json:"url"`
-	Extra  any    `json:"extra,omitempty"`
-	StreamResponse bool `json:"streamResponse"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	Extra          any    `json:"extra,omitempty"`
+	StreamResponse bool   `json:"streamResponse"`
 }
 
 var conns chan *websocket.Conn
 var server *http.Server
+var sockoptDialers map[string]*dialerInstance
 var mu sync.Mutex
 
 var upgrader = &websocket.Upgrader{
@@ -41,46 +42,18 @@ var upgrader = &websocket.Upgrader{
 
 // Used by external projects when using xray as a go module
 func Reload() {
-	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+	addr := getEnvAddress()
 	mu.Lock()
 	defer mu.Unlock()
 
-	if server != nil {
-		server.Close()
-	}
-	if HasBrowserDialer() {
-		for len(conns) > 0 {
-			select {
-				case c := <-conns:
-					c.Close()
-				default:
-			}
-		}
-		conns = nil
-	}
+	closeDialerInstance(&dialerInstance{conns: conns, server: server})
+	conns = nil
+	server = nil
+
 	if addr != "" {
-		token := uuid.New()
-		csrfToken := token.String()
-		webpage := bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
-		conns = make(chan *websocket.Conn, 256)
-		server = &http.Server{
-			Addr: addr,
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/websocket" {
-					if r.URL.Query().Get("token") == csrfToken {
-						if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-							conns <- conn
-						} else {
-							errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
-						}
-					}
-				} else {
-					w.Header().Set("Access-Control-Allow-Origin", "*");
-					w.Write(webpage)
-				}
-			}),
-		}
-		go server.ListenAndServe()
+		dialer := newDialerInstance(addr)
+		conns = dialer.conns
+		server = dialer.server
 	}
 }
 
@@ -88,14 +61,92 @@ func HasBrowserDialer() bool {
 	return conns != nil
 }
 
+func HasBrowserDialerWithAddress(addr string) bool {
+	return connsByAddress(addr) != nil
+}
+
 type webSocketExtra struct {
 	Protocol string `json:"protocol,omitempty"`
 }
 
+type dialerInstance struct {
+	conns  chan *websocket.Conn
+	server *http.Server
+}
+
+func getEnvAddress() string {
+	return platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+}
+
+func newDialerInstance(addr string) *dialerInstance {
+	token := uuid.New()
+	csrfToken := token.String()
+	page := bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
+	dialer := &dialerInstance{
+		conns: make(chan *websocket.Conn, 256),
+	}
+	dialer.server = &http.Server{
+		Addr: addr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/websocket" {
+				if r.URL.Query().Get("token") == csrfToken {
+					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+						dialer.conns <- conn
+					} else {
+						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+					}
+				}
+			} else {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Write(page)
+			}
+		}),
+	}
+	go dialer.server.ListenAndServe()
+	return dialer
+}
+
+func closeDialerInstance(d *dialerInstance) {
+	if d == nil {
+		return
+	}
+	if d.server != nil {
+		d.server.Close()
+	}
+	for len(d.conns) > 0 {
+		select {
+		case c := <-d.conns:
+			c.Close()
+		default:
+		}
+	}
+}
+
+func getDialerByAddress(addr string) *dialerInstance {
+	if addr == "" {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if sockoptDialers == nil {
+		sockoptDialers = make(map[string]*dialerInstance)
+	}
+	if dialer, found := sockoptDialers[addr]; found {
+		return dialer
+	}
+	dialer := newDialerInstance(addr)
+	sockoptDialers[addr] = dialer
+	return dialer
+}
+
 func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
+	return DialWSWithAddress("", uri, ed)
+}
+
+func DialWSWithAddress(addr string, uri string, ed []byte) (*websocket.Conn, error) {
 	task := task{
-		Method: "WS",
-		URL:    uri,
+		Method:         "WS",
+		URL:            uri,
 		StreamResponse: true,
 	}
 
@@ -105,7 +156,7 @@ func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 		}
 	}
 
-	return dialTask(task)
+	return dialTaskWithAddress(addr, task)
 }
 
 type httpExtra struct {
@@ -143,29 +194,37 @@ func httpExtraFromHeadersAndCookies(headers http.Header, cookies []*http.Cookie)
 }
 
 func DialGet(uri string, headers http.Header, cookies []*http.Cookie) (*websocket.Conn, error) {
+	return DialGetWithAddress("", uri, headers, cookies)
+}
+
+func DialGetWithAddress(addr string, uri string, headers http.Header, cookies []*http.Cookie) (*websocket.Conn, error) {
 	task := task{
-		Method: "GET",
-		URL:    uri,
-		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		Method:         "GET",
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
 		StreamResponse: true,
 	}
 
-	return dialTask(task)
+	return dialTaskWithAddress(addr, task)
 }
 
 func DialPacket(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
-	return dialWithBody(method, uri, headers, cookies, payload)
+	return DialPacketWithAddress("", method, uri, headers, cookies, payload)
 }
 
-func dialWithBody(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
+func DialPacketWithAddress(addr string, method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
+	return dialWithBody(addr, method, uri, headers, cookies, payload)
+}
+
+func dialWithBody(addr string, method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
 	task := task{
-		Method: method,
-		URL:    uri,
-		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		Method:         method,
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
 		StreamResponse: false,
 	}
 
-	conn, err := dialTask(task)
+	conn, err := dialTaskWithAddress(addr, task)
 	if err != nil {
 		return err
 	}
@@ -185,9 +244,18 @@ func dialWithBody(method string, uri string, headers http.Header, cookies []*htt
 }
 
 func dialTask(task task) (*websocket.Conn, error) {
+	return dialTaskWithAddress("", task)
+}
+
+func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 	data, err := json.Marshal(task)
 	if err != nil {
 		return nil, err
+	}
+
+	conns := connsByAddress(addr)
+	if conns == nil {
+		return nil, errors.New("browser dialer is not configured")
 	}
 
 	var conn *websocket.Conn
@@ -219,7 +287,20 @@ func CheckOK(conn *websocket.Conn) error {
 	return nil
 }
 
+func connsByAddress(addr string) chan *websocket.Conn {
+	if addr != "" {
+		dialer := getDialerByAddress(addr)
+		if dialer == nil {
+			return nil
+		}
+		return dialer.conns
+	}
+	if HasBrowserDialer() {
+		return conns
+	}
+	return nil
+}
+
 func init() {
 	Reload()
 }
-

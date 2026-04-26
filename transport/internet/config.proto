@@ -161,6 +161,8 @@ message SocketConfig {
   HappyEyeballsConfig happy_eyeballs = 22;
 
   repeated string trusted_x_forwarded_for = 23;
+
+  string browser_dialer = 24;
 }
 
 message HappyEyeballsConfig {
