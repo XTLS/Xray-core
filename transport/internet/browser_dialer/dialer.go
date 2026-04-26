@@ -35,6 +35,7 @@ var dialerServers map[string]*dialerServer
 var mu sync.RWMutex
 
 const browserDialerSubprotocol = "browser-dialer"
+const uuidPathLength = 37
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -96,11 +97,38 @@ func parseBrowserDialerAddress(addr string) (*browserDialerAddress, bool) {
 	if cleanPath == "." || cleanPath == "/" || cleanPath != path {
 		return nil, false
 	}
+	if !isUUIDPath(cleanPath) {
+		return nil, false
+	}
 
 	return &browserDialerAddress{
 		listenAddr: listenAddr,
 		path:       cleanPath,
 	}, true
+}
+
+func isUUIDPath(path string) bool {
+	if len(path) != uuidPathLength || path[0] != '/' || strings.Count(path, "/") != 1 {
+		return false
+	}
+
+	u := path[1:]
+	for i := 0; i < len(u); i++ {
+		c := u[i]
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+			if !isHex {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func newDialerInstance(path string) *dialerInstance {
