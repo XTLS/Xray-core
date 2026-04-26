@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	pathlib "path"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 //go:embed dialer.html
@@ -36,8 +36,6 @@ var dialerServers map[string]*dialerServer
 var mu sync.RWMutex
 
 const browserDialerSubprotocol = "browser-dialer"
-
-var uuidPathPattern = regexp.MustCompile(`^/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -66,6 +64,7 @@ type dialerInstance struct {
 type dialerServer struct {
 	server     *http.Server
 	pageRoutes map[string]*dialerInstance
+	started    bool
 }
 
 type browserDialerAddress struct {
@@ -99,7 +98,15 @@ func parseBrowserDialerAddress(addr string) (*browserDialerAddress, bool) {
 	if cleanPath == "." || cleanPath == "/" || cleanPath != path {
 		return nil, false
 	}
-	if !uuidPathPattern.MatchString(cleanPath) {
+	if strings.Count(cleanPath, "/") != 1 {
+		return nil, false
+	}
+	id := strings.TrimPrefix(cleanPath, "/")
+	if len(id) != 36 {
+		return nil, false
+	}
+	parsedUUID, err := uuid.ParseString(id)
+	if err != nil || !strings.EqualFold(parsedUUID.String(), id) {
 		return nil, false
 	}
 
@@ -176,15 +183,20 @@ func closeConnection(w http.ResponseWriter) {
 	conn.Close()
 }
 
-func startDialerServer(dialer *dialerServer) {
+func startDialerServer(dialer *dialerServer) error {
 	if dialer == nil || dialer.server == nil {
-		return
+		return nil
+	}
+	listener, err := net.Listen("tcp", dialer.server.Addr)
+	if err != nil {
+		return err
 	}
 	go func() {
-		if err := dialer.server.ListenAndServe(); err != nil && !stderrors.Is(err, http.ErrServerClosed) {
+		if err := dialer.server.Serve(listener); err != nil && !stderrors.Is(err, http.ErrServerClosed) {
 			errors.LogError(context.Background(), "Browser dialer http server unexpected error on ", dialer.server.Addr, ": ", err)
 		}
 	}()
+	return nil
 }
 
 func closeDialerInstance(d *dialerInstance) {
@@ -201,14 +213,15 @@ func closeDialerInstance(d *dialerInstance) {
 	}
 }
 
-func getDialerByAddress(addr string) *dialerInstance {
+func getDialerByAddress(addr string) (*dialerInstance, error) {
 	parsed, ok := parseBrowserDialerAddress(addr)
 	if !ok {
-		return nil
+		return nil, errors.New("invalid sockopt.browserDialer: ", addr)
 	}
 
 	key := parsed.listenAddr + parsed.path
-	startServer := false
+	var server *dialerServer
+	var dialer *dialerInstance
 
 	mu.Lock()
 	if sockoptDialers == nil {
@@ -219,26 +232,47 @@ func getDialerByAddress(addr string) *dialerInstance {
 	}
 	if dialer, found := sockoptDialers[key]; found {
 		mu.Unlock()
-		return dialer
+		return dialer, nil
 	}
 
-	server, found := dialerServers[parsed.listenAddr]
+	found := false
+	server, found = dialerServers[parsed.listenAddr]
 	if !found {
 		server = newDialerServer(parsed.listenAddr)
 		dialerServers[parsed.listenAddr] = server
-		startServer = true
 	}
 
-	dialer := newDialerInstance(parsed.path)
+	dialer = newDialerInstance(parsed.path)
 	sockoptDialers[key] = dialer
 	server.pageRoutes[dialer.pagePath] = dialer
+	startServer := !server.started
+	server.started = true
 	mu.Unlock()
 
 	if startServer {
-		startDialerServer(server)
+		if err := startDialerServer(server); err != nil {
+			mu.Lock()
+			delete(sockoptDialers, key)
+			delete(server.pageRoutes, dialer.pagePath)
+			if len(server.pageRoutes) == 0 {
+				delete(dialerServers, parsed.listenAddr)
+				server.started = false
+			}
+			mu.Unlock()
+			closeDialerInstance(dialer)
+			return nil, err
+		}
 	}
 
-	return dialer
+	return dialer, nil
+}
+
+func EnsureDialerWithAddress(addr string) error {
+	if addr == "" {
+		return nil
+	}
+	_, err := getDialerByAddress(addr)
+	return err
 }
 
 func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
@@ -396,8 +430,8 @@ func connsByAddress(addr string) chan *websocket.Conn {
 	if addr == "" {
 		return nil
 	}
-	dialer := getDialerByAddress(addr)
-	if dialer == nil {
+	dialer, err := getDialerByAddress(addr)
+	if err != nil || dialer == nil {
 		return nil
 	}
 	return dialer.conns

@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
@@ -1972,6 +1973,14 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 		config.ProtocolName = protocol
 	}
+	if c.SocketSettings != nil && c.SocketSettings.BrowserDialer != "" {
+		if config.ProtocolName != "websocket" && config.ProtocolName != "splithttp" {
+			return nil, errors.New("sockopt.browserDialer only supports WS or XHTTP")
+		}
+		if strings.EqualFold(c.Security, "reality") {
+			return nil, errors.New("sockopt.browserDialer does not support REALITY")
+		}
+	}
 
 	switch strings.ToLower(c.Security) {
 	case "", "none":
@@ -2087,6 +2096,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
 			return nil, errors.New("Failed to build sockopt.").Base(err)
+		}
+		if err := browser_dialer.EnsureDialerWithAddress(ss.BrowserDialer); err != nil {
+			return nil, errors.New("Failed to start Browser Dialer listener.").Base(err)
 		}
 		config.SocketSettings = ss
 	}
