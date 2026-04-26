@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"net/http"
 	"sync"
 	"time"
@@ -44,17 +45,20 @@ var upgrader = &websocket.Upgrader{
 func Reload() {
 	addr := getEnvAddress()
 	mu.Lock()
-	defer mu.Unlock()
 
 	closeDialerInstance(&dialerInstance{conns: conns, server: server})
 	conns = nil
 	server = nil
 
+	var dialer *dialerInstance
 	if addr != "" {
-		dialer := newDialerInstance(addr)
+		dialer = newDialerInstance(addr)
 		conns = dialer.conns
 		server = dialer.server
 	}
+	mu.Unlock()
+
+	startDialerInstance(dialer)
 }
 
 func HasBrowserDialer() bool {
@@ -102,8 +106,18 @@ func newDialerInstance(addr string) *dialerInstance {
 			}
 		}),
 	}
-	go dialer.server.ListenAndServe()
 	return dialer
+}
+
+func startDialerInstance(dialer *dialerInstance) {
+	if dialer == nil || dialer.server == nil {
+		return
+	}
+	go func() {
+		if err := dialer.server.ListenAndServe(); err != nil && !stderrors.Is(err, http.ErrServerClosed) {
+			errors.LogError(context.Background(), "Browser dialer http server unexpected error on ", dialer.server.Addr, ": ", err)
+		}
+	}()
 }
 
 func closeDialerInstance(d *dialerInstance) {
@@ -113,11 +127,12 @@ func closeDialerInstance(d *dialerInstance) {
 	if d.server != nil {
 		d.server.Close()
 	}
-	for len(d.conns) > 0 {
+	for {
 		select {
 		case c := <-d.conns:
 			c.Close()
 		default:
+			return
 		}
 	}
 }
@@ -127,15 +142,17 @@ func getDialerByAddress(addr string) *dialerInstance {
 		return nil
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	if sockoptDialers == nil {
 		sockoptDialers = make(map[string]*dialerInstance)
 	}
 	if dialer, found := sockoptDialers[addr]; found {
+		mu.Unlock()
 		return dialer
 	}
 	dialer := newDialerInstance(addr)
 	sockoptDialers[addr] = dialer
+	mu.Unlock()
+	startDialerInstance(dialer)
 	return dialer
 }
 
@@ -255,7 +272,10 @@ func dialTaskWithAddress(addr string, task task) (*websocket.Conn, error) {
 
 	conns := connsByAddress(addr)
 	if conns == nil {
-		return nil, errors.New("browser dialer is not configured")
+		if addr != "" {
+			return nil, errors.New("browser dialer is not configured for sockopt.browserDialer: ", addr)
+		}
+		return nil, errors.New("browser dialer is not configured; set sockopt.browserDialer or env ", platform.BrowserDialerAddress)
 	}
 
 	var conn *websocket.Conn
