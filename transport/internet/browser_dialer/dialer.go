@@ -9,6 +9,9 @@ import (
 	stderrors "errors"
 	"net"
 	"net/http"
+	"net/url"
+	pathlib "path"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,7 +32,8 @@ type task struct {
 }
 
 var sockoptDialers map[string]*dialerInstance
-var mu sync.Mutex
+var dialerServers map[string]*dialerServer
+var mu sync.RWMutex
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -41,11 +45,8 @@ var upgrader = &websocket.Upgrader{
 }
 
 func HasBrowserDialerWithAddress(addr string) bool {
-	if addr == "" {
-		return false
-	}
-	_, _, err := net.SplitHostPort(addr)
-	return err == nil
+	_, ok := parseBrowserDialerAddress(addr)
+	return ok
 }
 
 type webSocketExtra struct {
@@ -53,39 +54,121 @@ type webSocketExtra struct {
 }
 
 type dialerInstance struct {
-	conns  chan *websocket.Conn
-	server *http.Server
+	conns    chan *websocket.Conn
+	pagePath string
+	wsPath   string
+	page     []byte
 }
 
-func newDialerInstance(addr string) *dialerInstance {
+type dialerServer struct {
+	server     *http.Server
+	pageRoutes map[string]*dialerInstance
+	wsRoutes   map[string]*dialerInstance
+}
+
+type browserDialerAddress struct {
+	listenAddr string
+	path       string
+}
+
+func parseBrowserDialerAddress(addr string) (*browserDialerAddress, bool) {
+	if addr == "" {
+		return nil, false
+	}
+
+	index := strings.Index(addr, "/")
+	if index <= 0 {
+		return nil, false
+	}
+
+	listenAddr := addr[:index]
+	path := strings.TrimSuffix(addr[index:], "/")
+	if path == "" {
+		return nil, false
+	}
+	if _, _, err := net.SplitHostPort(listenAddr); err != nil {
+		return nil, false
+	}
+	parsedPath, err := url.ParseRequestURI(path)
+	if err != nil || parsedPath.RawQuery != "" || parsedPath.Fragment != "" {
+		return nil, false
+	}
+	cleanPath := pathlib.Clean(path)
+	if cleanPath == "." || cleanPath == "/" || cleanPath != path {
+		return nil, false
+	}
+
+	return &browserDialerAddress{
+		listenAddr: listenAddr,
+		path:       cleanPath,
+	}, true
+}
+
+func newDialerInstance(path string) *dialerInstance {
 	token := uuid.New()
 	csrfToken := token.String()
-	page := bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
-	wsPath := "/websocket/" + csrfToken
+	escapedCsrfToken := url.PathEscape(csrfToken)
+	wsPath := path + "/" + escapedCsrfToken
+	page := bytes.ReplaceAll(webpage, []byte("dialerPath"), []byte(strings.TrimPrefix(path, "/")))
+	page = bytes.ReplaceAll(page, []byte("csrfToken"), []byte(escapedCsrfToken))
 	dialer := &dialerInstance{
-		conns: make(chan *websocket.Conn, 256),
+		conns:    make(chan *websocket.Conn, 256),
+		pagePath: path,
+		wsPath:   wsPath,
+		page:     page,
+	}
+	return dialer
+}
+
+func newDialerServer(listenAddr string) *dialerServer {
+	dialer := &dialerServer{
+		pageRoutes: make(map[string]*dialerInstance),
+		wsRoutes:   make(map[string]*dialerInstance),
 	}
 	dialer.server = &http.Server{
-		Addr: addr,
+		Addr: listenAddr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == wsPath {
+			mu.RLock()
+			wsDialer := dialer.wsRoutes[r.URL.Path]
+			pageDialer := dialer.pageRoutes[r.URL.Path]
+			mu.RUnlock()
+
+			if wsDialer != nil {
 				if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-					dialer.conns <- conn
+					wsDialer.conns <- conn
 				} else {
 					errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error: ", err)
 				}
 				return
 			}
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			if _, err := w.Write(page); err != nil {
-				errors.LogError(context.Background(), "Browser dialer http page write unexpected error: ", err)
+
+			if pageDialer != nil {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				if _, err := w.Write(pageDialer.page); err != nil {
+					errors.LogError(context.Background(), "Browser dialer http page write unexpected error: ", err)
+				}
+				return
 			}
+
+			closeConnection(w)
 		}),
 	}
 	return dialer
 }
 
-func startDialerInstance(dialer *dialerInstance) {
+func closeConnection(w http.ResponseWriter) {
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		return
+	}
+	conn, _, err := hijacker.Hijack()
+	if err != nil {
+		return
+	}
+	conn.Close()
+}
+
+func startDialerServer(dialer *dialerServer) {
 	if dialer == nil || dialer.server == nil {
 		return
 	}
@@ -100,9 +183,6 @@ func closeDialerInstance(d *dialerInstance) {
 	if d == nil {
 		return
 	}
-	if d.server != nil {
-		d.server.Close()
-	}
 	for {
 		select {
 		case c := <-d.conns:
@@ -114,21 +194,43 @@ func closeDialerInstance(d *dialerInstance) {
 }
 
 func getDialerByAddress(addr string) *dialerInstance {
-	if addr == "" {
+	parsed, ok := parseBrowserDialerAddress(addr)
+	if !ok {
 		return nil
 	}
+
+	key := parsed.listenAddr + parsed.path
+	startServer := false
+
 	mu.Lock()
 	if sockoptDialers == nil {
 		sockoptDialers = make(map[string]*dialerInstance)
 	}
-	if dialer, found := sockoptDialers[addr]; found {
+	if dialerServers == nil {
+		dialerServers = make(map[string]*dialerServer)
+	}
+	if dialer, found := sockoptDialers[key]; found {
 		mu.Unlock()
 		return dialer
 	}
-	dialer := newDialerInstance(addr)
-	sockoptDialers[addr] = dialer
+
+	server, found := dialerServers[parsed.listenAddr]
+	if !found {
+		server = newDialerServer(parsed.listenAddr)
+		dialerServers[parsed.listenAddr] = server
+		startServer = true
+	}
+
+	dialer := newDialerInstance(parsed.path)
+	sockoptDialers[key] = dialer
+	server.pageRoutes[dialer.pagePath] = dialer
+	server.wsRoutes[dialer.wsPath] = dialer
 	mu.Unlock()
-	startDialerInstance(dialer)
+
+	if startServer {
+		startDialerServer(server)
+	}
+
 	return dialer
 }
 
