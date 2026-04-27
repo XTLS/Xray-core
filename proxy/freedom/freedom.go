@@ -252,8 +252,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	output := link.Writer
 
 	var conn stat.Connection
-	var blockedDest net.Destination
-	var blocked bool
+	var blockedDest *net.Destination
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
 		if h.config.DomainStrategy.HasStrategy() && dialDest.Address.Family().IsDomain() {
@@ -277,8 +276,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		}
 		if dialDest.Network == net.Network_TCP && h.applyFinalRules(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule) == RuleAction_Block {
-			blockedDest = dialDest
-			blocked = true
+			blockedDest = &dialDest
 			return nil
 		}
 
@@ -293,8 +291,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if err != nil {
 		return errors.New("failed to open connection to ", destination).Base(err)
 	}
-	if blocked {
-		return errors.New("blocked target: ", blockedDest).AtInfo()
+	if blockedDest != nil {
+		return errors.New("blocked target: ", *blockedDest).AtInfo()
 	}
 	if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
 		conn.Close()

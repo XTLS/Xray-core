@@ -51,6 +51,10 @@ type FreedomFinalRuleConfig struct {
 
 // Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
+	if c.IPsBlocked != nil {
+		return nil, errors.PrintRemovedFeatureError(`"ipsBlocked" in Freedom outbound`, `"finalRules"`)
+	}
+
 	config := new(freedom.Config)
 	targetStrategy := c.TargetStrategy
 	if targetStrategy == "" {
