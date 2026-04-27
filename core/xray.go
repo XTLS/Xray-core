@@ -397,7 +397,7 @@ func (s *Instance) Start() error {
 		if err := f.Start(); err != nil {
 			s.running = false
 			if stopErr := browser_dialer.StopCollectedDialerProxyURLs(); stopErr != nil {
-				return errors.New("failed to clean up browser dialer after startup failure").Base(errors.New(serial.Concat(err, "; ", stopErr)))
+				return errors.New("browser dialer cleanup after startup failure also failed: ", stopErr).Base(err)
 			}
 			return err
 		}
