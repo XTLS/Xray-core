@@ -104,6 +104,13 @@ func ConfigureCollectedDialerProxyURLs() error {
 			return errors.New("failed to initialize browser dialer listener for url ", browserDialerURL).Base(err)
 		}
 	}
+	return nil
+}
+
+func StartCollectedDialerProxyURLs() error {
+	if initialized {
+		return errors.New("browser dialer does not support dynamic add/remove; restart is required after changing configuration")
+	}
 	for listenAddr, server := range serversByListenAddr {
 		if err := server.start(); err != nil {
 			return errors.New("failed to start browser dialer listener on ", listenAddr).Base(err)
