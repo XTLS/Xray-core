@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 )
 
 var (
@@ -437,7 +438,6 @@ func (c *Config) Override(o *Config, fn string) {
 	if o.Geodata != nil {
 		c.Geodata = o.Geodata
 	}
-
 	// update the Inbound in slice if the only one in override config has same tag
 	if len(o.InboundConfigs) > 0 {
 		for i := range o.InboundConfigs {
@@ -604,6 +604,9 @@ func (c *Config) Build() (*core.Config, error) {
 	if len(c.Transport) > 0 {
 		return nil, errors.PrintRemovedFeatureError("Global transport config", "streamSettings in inbounds and outbounds")
 	}
+	if err := browser_dialer.BeginCollectingDialerProxyURLs(); err != nil {
+		return nil, err
+	}
 
 	for _, rawInboundConfig := range inbounds {
 		ic, err := rawInboundConfig.Build()
@@ -625,6 +628,9 @@ func (c *Config) Build() (*core.Config, error) {
 			return nil, errors.New("failed to build outbound config with tag ", rawOutboundConfig.Tag).Base(err)
 		}
 		config.Outbound = append(config.Outbound, oc)
+	}
+	if err := browser_dialer.ConfigureCollectedDialerProxyURLs(); err != nil {
+		return nil, errors.New("failed to configure browser dialer").Base(err)
 	}
 
 	return config, nil

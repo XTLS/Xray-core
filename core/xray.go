@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 )
 
 // Server is an instance of Xray. At any time, there must be at most one Server instance running.
@@ -262,6 +263,9 @@ func (s *Instance) Close() error {
 	s.running = false
 
 	var errs []interface{}
+	if err := browser_dialer.StopCollectedDialerProxyURLs(); err != nil {
+		errs = append(errs, err)
+	}
 	for _, f := range s.features {
 		if err := f.Close(); err != nil {
 			errs = append(errs, err)
@@ -385,9 +389,16 @@ func (s *Instance) Start() error {
 	s.statusLock.Lock()
 	defer s.statusLock.Unlock()
 
+	if err := browser_dialer.StartCollectedDialerProxyURLs(); err != nil {
+		return err
+	}
 	s.running = true
 	for _, f := range s.features {
 		if err := f.Start(); err != nil {
+			s.running = false
+			if stopErr := browser_dialer.StopCollectedDialerProxyURLs(); stopErr != nil {
+				return errors.New("browser dialer cleanup after startup failure also failed: ", stopErr).Base(err)
+			}
 			return err
 		}
 	}

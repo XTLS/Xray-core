@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
@@ -1969,6 +1970,35 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			return nil, err
 		}
 		config.ProtocolName = protocol
+	}
+	if c.SocketSettings != nil && c.SocketSettings.DialerProxy != "" {
+		if browser_dialer.IsBrowserDialerProxy(c.SocketSettings.DialerProxy) {
+			if config.ProtocolName != "websocket" && config.ProtocolName != "splithttp" {
+				return nil, errors.New("dialerProxy ", c.SocketSettings.DialerProxy, " only supports websocket or splithttp")
+			}
+			if strings.EqualFold(c.Security, "reality") {
+				return nil, errors.New("dialerProxy ", c.SocketSettings.DialerProxy, " does not support REALITY")
+			}
+			if config.ProtocolName == "splithttp" {
+				splitHTTPSettings := c.SplitHTTPSettings
+				if c.XHTTPSettings != nil {
+					splitHTTPSettings = c.XHTTPSettings
+				}
+				if splitHTTPSettings != nil {
+					splitHTTPSettingsCopy := *splitHTTPSettings
+					hs, err := splitHTTPSettingsCopy.Build()
+					if err != nil {
+						return nil, errors.New("failed to build XHTTP config for browser dialer validation").Base(err)
+					}
+					if splitHTTPConfig, ok := hs.(*splithttp.Config); ok && splitHTTPConfig.Mode != "auto" && splitHTTPConfig.Mode != "packet-up" {
+						return nil, errors.New("dialerProxy ", c.SocketSettings.DialerProxy, " only supports XHTTP modes \"auto\" or \"packet-up\", got: \"", splitHTTPConfig.Mode, "\"")
+					}
+				}
+			}
+			if err := browser_dialer.RegisterDialerProxyURL(c.SocketSettings.DialerProxy); err != nil {
+				return nil, errors.New("failed to collect browser dialer URL").Base(err)
+			}
+		}
 	}
 
 	switch strings.ToLower(c.Security) {

@@ -40,6 +40,20 @@ type dialerConf struct {
 	*internet.MemoryStreamConfig
 }
 
+type errorDialerClient struct {
+	err error
+}
+
+func (c *errorDialerClient) IsClosed() bool { return true }
+
+func (c *errorDialerClient) OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+	return nil, nil, nil, c.err
+}
+
+func (c *errorDialerClient) PostPacket(context.Context, string, string, string, buf.MultiBuffer) error {
+	return c.err
+}
+
 var (
 	globalDialerMap    map[dialerConf]*XmuxManager
 	globalDialerAccess sync.Mutex
@@ -47,9 +61,24 @@ var (
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
+	browserDialer := ""
+	if streamSettings.SocketSettings != nil {
+		if browser_dialer.IsBrowserDialerProxy(streamSettings.SocketSettings.DialerProxy) {
+			browserDialer = streamSettings.SocketSettings.DialerProxy
+		}
+	}
 
-	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
-		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
+	if browserDialer != "" && realityConfig == nil {
+		transportConfig := streamSettings.ProtocolSettings.(*Config)
+		if transportConfig.Mode != "auto" && transportConfig.Mode != "packet-up" {
+			return &errorDialerClient{
+				err: errors.New("browserDialer with splithttp only supports modes \"auto\" or \"packet-up\", got: \"", transportConfig.Mode, "\""),
+			}, nil
+		}
+		return &BrowserDialerClient{
+			transportConfig: transportConfig,
+			browserDialer:   browserDialer,
+		}, nil
 	}
 
 	globalDialerAccess.Lock()

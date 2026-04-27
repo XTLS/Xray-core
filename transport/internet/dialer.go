@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -269,6 +270,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	}
 
 	if len(sockopt.DialerProxy) > 0 {
+		if browser_dialer.IsBrowserDialerProxy(sockopt.DialerProxy) {
+			return nil, errors.New("dialerProxy ", sockopt.DialerProxy, " only supports WebSocket or splithttp").AtError()
+		}
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()
 		}

@@ -117,8 +117,14 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 	uri := protocol + "://" + host + wsSettings.GetNormalizedPath()
 
-	if browser_dialer.HasBrowserDialer() {
-		conn, err := browser_dialer.DialWS(uri, ed)
+	browserDialer := ""
+	if streamSettings.SocketSettings != nil {
+		if browser_dialer.IsBrowserDialerProxy(streamSettings.SocketSettings.DialerProxy) {
+			browserDialer = streamSettings.SocketSettings.DialerProxy
+		}
+	}
+	if browserDialer != "" {
+		conn, err := browser_dialer.DialWSWithAddress(browserDialer, uri, ed)
 		if err != nil {
 			return nil, err
 		}
