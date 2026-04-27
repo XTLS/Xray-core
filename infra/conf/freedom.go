@@ -150,6 +150,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	config.UserLevel = c.UserLevel
+
 	if len(c.Redirect) > 0 {
 		host, portStr, err := net.SplitHostPort(c.Redirect)
 		if err != nil {
@@ -169,14 +170,11 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			config.DestinationOverride.Server.Address = xnet.NewIPOrDomain(xnet.ParseAddress(host))
 		}
 	}
+
 	if c.ProxyProtocol > 0 && c.ProxyProtocol <= 2 {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
-	legacyFinalRules, err := c.buildLegacyFinalRules()
-	if err != nil {
-		return nil, err
-	}
-	config.FinalRules = append(config.FinalRules, legacyFinalRules...)
+
 	for _, r := range c.FinalRules {
 		rule, err := r.Build()
 		if err != nil {
@@ -184,6 +182,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		}
 		config.FinalRules = append(config.FinalRules, rule)
 	}
+
 	return config, nil
 }
 
@@ -241,35 +240,6 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
 	}
 	return NConfig, nil
-}
-
-func (c *FreedomConfig) buildLegacyFinalRules() ([]*freedom.FinalRuleConfig, error) {
-	if c.IPsBlocked == nil {
-		return nil, nil
-	}
-
-	if len(c.FinalRules) > 0 {
-		return nil, errors.New("legacy ipsBlocked cannot be mixed with finalRules")
-	}
-	errors.PrintDeprecatedFeatureWarning(`"ipsBlocked" in Freedom outbound`, `"finalRules"`)
-
-	rules := make([]*freedom.FinalRuleConfig, 0, 2)
-	if len(*c.IPsBlocked) > 0 {
-		ipRules, err := geodata.ParseIPRules(*c.IPsBlocked)
-		if err != nil {
-			return nil, err
-		}
-		rules = append(rules, &freedom.FinalRuleConfig{
-			Action: freedom.RuleAction_Block,
-			Ip:     ipRules,
-		})
-	}
-
-	rules = append(rules, &freedom.FinalRuleConfig{
-		Action: freedom.RuleAction_Allow,
-	})
-
-	return rules, nil
 }
 
 func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
