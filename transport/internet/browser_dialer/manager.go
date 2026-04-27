@@ -109,6 +109,7 @@ func ConfigureCollectedDialerProxyURLs() error {
 
 // StartCollectedDialerProxyURLs starts listeners for browser dialer URLs
 // prepared by ConfigureCollectedDialerProxyURLs.
+// Subsequent calls after successful initialization return nil.
 func StartCollectedDialerProxyURLs() error {
 	if initialized {
 		return nil
