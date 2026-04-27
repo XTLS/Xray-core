@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
 )
 
@@ -124,17 +125,20 @@ func StartCollectedDialerProxyURLs() error {
 }
 
 func StopCollectedDialerProxyURLs() error {
-	var stopErr error
+	var stopErrs []string
 	for listenAddr, server := range serversByListenAddr {
-		if err := server.stop(); err != nil && stopErr == nil {
-			stopErr = errors.New("failed to stop browser dialer listener on ", listenAddr).Base(err)
+		if err := server.stop(); err != nil {
+			stopErrs = append(stopErrs, serial.Concat("failed to stop browser dialer listener on ", listenAddr, ": ", err))
 		}
 	}
 	dialersByAddress = map[string]*dialerInstance{}
 	serversByListenAddr = map[string]*dialerServer{}
 	pendingURLs = nil
 	initialized = false
-	return stopErr
+	if len(stopErrs) > 0 {
+		return errors.New(strings.Join(stopErrs, "; "))
+	}
+	return nil
 }
 
 type dialerInstance struct {
