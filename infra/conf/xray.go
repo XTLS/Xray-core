@@ -632,9 +632,6 @@ func (c *Config) Build() (*core.Config, error) {
 	if err := browser_dialer.ConfigureCollectedDialerProxyURLs(); err != nil {
 		return nil, errors.New("failed to configure browser dialer").Base(err)
 	}
-	if err := browser_dialer.StartCollectedDialerProxyURLs(); err != nil {
-		return nil, errors.New("failed to start browser dialer listeners").Base(err)
-	}
 
 	return config, nil
 }

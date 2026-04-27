@@ -123,6 +123,20 @@ func StartCollectedDialerProxyURLs() error {
 	return nil
 }
 
+func StopCollectedDialerProxyURLs() error {
+	var stopErr error
+	for listenAddr, server := range serversByListenAddr {
+		if err := server.stop(); err != nil && stopErr == nil {
+			stopErr = errors.New("failed to stop browser dialer listener on ", listenAddr).Base(err)
+		}
+	}
+	dialersByAddress = map[string]*dialerInstance{}
+	serversByListenAddr = map[string]*dialerServer{}
+	pendingURLs = nil
+	initialized = false
+	return stopErr
+}
+
 type dialerInstance struct {
 	conns chan *websocket.Conn
 	page  []byte
@@ -225,6 +239,14 @@ func (d *dialerServer) start() error {
 		}
 	}()
 	return nil
+}
+
+func (d *dialerServer) stop() error {
+	if !d.started {
+		return nil
+	}
+	d.started = false
+	return d.server.Close()
 }
 
 func closeConnection(w http.ResponseWriter) {
