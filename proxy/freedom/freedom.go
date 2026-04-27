@@ -31,32 +31,9 @@ import (
 )
 
 var useSplice bool
-
-var defaultPrivateBlockIP = []string{
-	"0.0.0.0/8",
-	"10.0.0.0/8",
-	"100.64.0.0/10",
-	"127.0.0.0/8",
-	"169.254.0.0/16",
-	"172.16.0.0/12",
-	"192.0.0.0/24",
-	"192.0.2.0/24",
-	"192.88.99.0/24",
-	"192.168.0.0/16",
-	"198.18.0.0/15",
-	"198.51.100.0/24",
-	"203.0.113.0/24",
-	"224.0.0.0/3",
-	"::/127",
-	"fc00::/7",
-	"fe80::/10",
-	"ff00::/8",
-}
-
-var defaultPrivateBlockIPMatcher = func() geodata.IPMatcher {
-	rules := common.Must2(geodata.ParseIPRules(defaultPrivateBlockIP))
-	return common.Must2(geodata.IPReg.BuildIPMatcher(rules))
-}()
+var allNetworks [8]bool
+var defaultBlockPrivateRule *FinalRule
+var defaultBlockAllRule *FinalRule
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
@@ -68,31 +45,159 @@ func init() {
 		}
 		return h, nil
 	}))
+
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
 	value := platform.NewEnvFlag(platform.UseFreedomSplice).GetValue(func() string { return defaultFlagValue })
 	switch value {
 	case defaultFlagValue, "auto", "enable":
 		useSplice = true
 	}
+
+	for i := range allNetworks {
+		allNetworks[i] = true
+	}
+
+	defaultBlockPrivateRule = &FinalRule{
+		action:  RuleAction_Block,
+		network: allNetworks,
+		ip: common.Must2(geodata.IPReg.BuildIPMatcher(common.Must2(geodata.ParseIPRules([]string{
+			"0.0.0.0/8",
+			"10.0.0.0/8",
+			"100.64.0.0/10",
+			"127.0.0.0/8",
+			"169.254.0.0/16",
+			"172.16.0.0/12",
+			"192.0.0.0/24",
+			"192.0.2.0/24",
+			"192.88.99.0/24",
+			"192.168.0.0/16",
+			"198.18.0.0/15",
+			"198.51.100.0/24",
+			"203.0.113.0/24",
+			"224.0.0.0/3",
+			"::/127",
+			"fc00::/7",
+			"fe80::/10",
+			"ff00::/8",
+		})))),
+	}
+
+	defaultBlockAllRule = &FinalRule{
+		action:  RuleAction_Block,
+		network: allNetworks,
+	}
+}
+
+type FinalRule struct {
+	action  RuleAction
+	network [8]bool
+	port    net.MemoryPortList
+	ip      geodata.IPMatcher
 }
 
 // Handler handles Freedom connections.
 type Handler struct {
-	policyManager    policy.Manager
-	config           *Config
-	blockedIPMatcher geodata.IPMatcher
+	policyManager policy.Manager
+	config        *Config
+	finalRules    []*FinalRule
+}
+
+func buildFinalRule(config *FinalRuleConfig) (*FinalRule, error) {
+	rule := &FinalRule{
+		action: config.GetAction(),
+	}
+
+	if len(config.Networks) == 0 {
+		rule.network = allNetworks
+	} else {
+		for _, network := range config.Networks {
+			rule.network[int(network)] = true
+		}
+	}
+
+	if config.PortList != nil {
+		rule.port = net.PortListFromProto(config.PortList)
+	}
+
+	if len(config.Ip) > 0 {
+		matcher, err := geodata.IPReg.BuildIPMatcher(config.Ip)
+		if err != nil {
+			return nil, err
+		}
+		rule.ip = matcher
+	}
+
+	return rule, nil
+}
+
+func (r *FinalRule) matchNetwork(network net.Network) bool {
+	return r.network[int(network)]
+}
+
+func (r *FinalRule) matchPort(port net.Port) bool {
+	if len(r.port) == 0 {
+		return true
+	}
+	return r.port.Contains(port)
+}
+
+func (r *FinalRule) matchIP(addr net.Address) bool {
+	if r.ip == nil {
+		return true
+	}
+	return addr != nil && addr.Family().IsIP() && r.ip.Match(addr.IP())
+}
+
+func (r *FinalRule) Apply(network net.Network, address net.Address, port net.Port) bool {
+	if !r.matchNetwork(network) {
+		return false
+	}
+	if !r.matchPort(port) {
+		return false
+	}
+	return r.matchIP(address)
+}
+
+func getDefaultFinalRule(inbound *session.Inbound) *FinalRule {
+	if inbound == nil {
+		return nil
+	}
+	switch inbound.Name {
+	case "vless-reverse":
+		return defaultBlockAllRule
+	case "vmess", "trojan", "hysteria", "wireguard":
+		return defaultBlockPrivateRule
+	default:
+		if strings.HasPrefix(inbound.Name, "vless") || strings.HasPrefix(inbound.Name, "shadowsocks") {
+			return defaultBlockPrivateRule
+		}
+	}
+	return nil
+}
+
+func (h *Handler) applyFinalRules(network net.Network, address net.Address, port net.Port, defaultRule *FinalRule) RuleAction {
+	for _, rule := range h.finalRules {
+		if rule.Apply(network, address, port) {
+			return rule.action
+		}
+	}
+	if defaultRule != nil && defaultRule.Apply(network, address, port) {
+		return defaultRule.action
+	}
+	return RuleAction_Allow
 }
 
 // Init initializes the Handler with necessary parameters.
 func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
-	if config.IpsBlocked != nil && len(config.IpsBlocked.Rules) > 0 {
-		m, err := geodata.IPReg.BuildIPMatcher(config.IpsBlocked.Rules)
+	h.finalRules = make([]*FinalRule, 0, len(config.FinalRules))
+	for _, rc := range config.FinalRules {
+		rule, err := buildFinalRule(rc)
 		if err != nil {
-			return errors.New("failed to build blocked ip matcher").Base(err)
+			return errors.New("failed to build final rule").Base(err)
 		}
-		h.blockedIPMatcher = m
+		h.finalRules = append(h.finalRules, rule)
 	}
 	return nil
 }
@@ -111,32 +216,6 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	return a != net.AnyIP && a != net.AnyIPv6
 }
 
-func (h *Handler) getBlockedIPMatcher(ctx context.Context, inbound *session.Inbound) geodata.IPMatcher {
-	if h.blockedIPMatcher != nil {
-		return h.blockedIPMatcher
-	}
-	if h.config.IpsBlocked != nil && len(h.config.IpsBlocked.Rules) == 0 { // "ipsBlocked": []
-		return nil
-	}
-	if inbound == nil {
-		return nil
-	}
-	switch inbound.Name {
-	case "vmess", "trojan", "hysteria", "wireguard":
-		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
-		return defaultPrivateBlockIPMatcher
-	}
-	if strings.HasPrefix(inbound.Name, "vless") || strings.HasPrefix(inbound.Name, "shadowsocks") {
-		errors.LogInfo(ctx, "applying default private IP blocking policy for inbound ", inbound.Name)
-		return defaultPrivateBlockIPMatcher
-	}
-	return nil
-}
-
-func isBlockedAddress(matcher geodata.IPMatcher, addr net.Address) bool {
-	return matcher != nil && addr != nil && addr.Family().IsIP() && matcher.Match(addr.IP())
-}
-
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
@@ -147,7 +226,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 	inbound := session.InboundFromContext(ctx)
-	blockedIPMatcher := h.getBlockedIPMatcher(ctx, inbound)
+	defaultRule := getDefaultFinalRule(inbound)
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
@@ -207,9 +286,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if err != nil {
 		return errors.New("failed to open connection to ", destination).Base(err)
 	}
-	if remoteAddr := net.DestinationFromAddr(conn.RemoteAddr()).Address; isBlockedAddress(blockedIPMatcher, remoteAddr) {
+	if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
 		conn.Close()
-		return errors.New("blocked target IP: ", remoteAddr).AtInfo()
+		return errors.New("blocked target: ", remoteDest).AtInfo()
 	}
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
@@ -255,7 +334,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, UDPOverride, destination, blockedIPMatcher)
+			writer = NewPacketWriter(conn, h, defaultRule, UDPOverride, destination)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -290,7 +369,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if destination.Network == net.Network_TCP {
 			reader = buf.NewReader(conn)
 		} else {
-			reader = NewPacketReader(conn, UDPOverride, destination, blockedIPMatcher)
+			reader = NewPacketReader(conn, h, defaultRule, UDPOverride, destination)
 		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
@@ -309,7 +388,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.Destination, blockedIPMatcher geodata.IPMatcher) buf.Reader {
+func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -328,7 +407,8 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 		return &PacketReader{
 			PacketConnWrapper: c,
 			Counter:           counter,
-			BlockedIPMatcher:  blockedIPMatcher,
+			Handler:           h,
+			DefaultRule:       defaultRule,
 			IsOverridden:      isOverridden,
 			InitUnchangedAddr: DialDest.Address,
 			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
@@ -340,7 +420,8 @@ func NewPacketReader(conn net.Conn, UDPOverride net.Destination, DialDest net.De
 type PacketReader struct {
 	*internet.PacketConnWrapper
 	stats.Counter
-	BlockedIPMatcher  geodata.IPMatcher
+	Handler           *Handler
+	DefaultRule       *FinalRule
 	IsOverridden      bool
 	InitUnchangedAddr net.Address
 	InitChangedAddr   net.Address
@@ -357,7 +438,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		}
 		udpAddr := d.(*net.UDPAddr)
 		sourceAddr := net.IPAddress(udpAddr.IP)
-		if isBlockedAddress(r.BlockedIPMatcher, sourceAddr) {
+		if r.Handler.applyFinalRules(net.Network_UDP, sourceAddr, net.Port(udpAddr.Port), r.DefaultRule) == RuleAction_Block {
 			continue
 		}
 		b.Resize(0, int32(n))
@@ -382,7 +463,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 // DialDest means the dial target used in the dialer when creating conn
-func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, DialDest net.Destination, blockedIPMatcher geodata.IPMatcher) buf.Writer {
+func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -403,7 +484,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, UDPOverride net.Destination, Dia
 			PacketConnWrapper: c,
 			Counter:           counter,
 			Handler:           h,
-			BlockedIPMatcher:  blockedIPMatcher,
+			DefaultRule:       defaultRule,
 			UDPOverride:       UDPOverride,
 			ResolvedUDPAddr:   resolvedUDPAddr,
 			LocalAddr:         net.DestinationFromAddr(conn.LocalAddr()).Address,
@@ -417,8 +498,8 @@ type PacketWriter struct {
 	*internet.PacketConnWrapper
 	stats.Counter
 	*Handler
-	BlockedIPMatcher geodata.IPMatcher
-	UDPOverride      net.Destination
+	DefaultRule *FinalRule
+	UDPOverride net.Destination
 
 	// Dest of udp packets might be a domain, we will resolve them to IP
 	// But resolver will return a random one if the domain has many IPs
@@ -476,7 +557,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					}
 				}
 			}
-			if isBlockedAddress(w.BlockedIPMatcher, b.UDP.Address) {
+			if w.applyFinalRules(net.Network_UDP, b.UDP.Address, b.UDP.Port, w.DefaultRule) == RuleAction_Block {
 				b.Release()
 				continue
 			}
