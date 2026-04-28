@@ -175,6 +175,22 @@ func getDefaultFinalRule(inbound *session.Inbound) *FinalRule {
 	return nil
 }
 
+func (h *Handler) shouldResolveDomainBeforeFinalRules(dialDest net.Destination, defaultRule *FinalRule) bool {
+	if dialDest.Network != net.Network_TCP || !dialDest.Address.Family().IsDomain() {
+		return false
+	}
+	if len(h.finalRules) == 1 {
+		rule := h.finalRules[0]
+		if rule.action == RuleAction_Allow && rule.network[dialDest.Network] && len(rule.port) == 0 && rule.ip == nil {
+			return false
+		}
+	}
+	if defaultRule != nil || len(h.finalRules) > 0 {
+		return true
+	}
+	return false
+}
+
 func (h *Handler) applyFinalRules(network net.Network, address net.Address, port net.Port, defaultRule *FinalRule) RuleAction {
 	for _, rule := range h.finalRules {
 		if rule.Apply(network, address, port) {
@@ -274,7 +290,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
-		} else if (defaultRule != nil || len(h.finalRules) > 0) && dialDest.Network == net.Network_TCP && dialDest.Address.Family().IsDomain() {
+		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) {
 			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
