@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	go_net "net"
 	"strings"
 	"time"
 
@@ -276,7 +275,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
 		} else if dialDest.Network == net.Network_TCP && dialDest.Address.Family().IsDomain() {
-			addrs, err := go_net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
+			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
 			} else if len(addrs) > 0 {
