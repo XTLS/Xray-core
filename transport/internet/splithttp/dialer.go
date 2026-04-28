@@ -373,6 +373,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if requestURL.Host == "" {
 		requestURL.Host = dest.Address.String()
 	}
+	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
+		// For Browser Dialer's optimized IP and non-standard port
+		if !(requestURL.Scheme == "http" && dest.Port == 80) && !(requestURL.Scheme == "https" && dest.Port == 443) {
+			requestURL.Host += ":" + dest.Port.String()
+		}
+	}
 
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
@@ -433,6 +439,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		if requestURL2.Host == "" {
 			requestURL2.Host = dest2.Address.String()
+		}
+		if browser_dialer.HasBrowserDialer() && realityConfig2 == nil {
+			// For Browser Dialer's optimized IP and non-standard port
+			if !(requestURL2.Scheme == "http" && dest2.Port == 80) && !(requestURL2.Scheme == "https" && dest2.Port == 443) {
+				requestURL2.Host += ":" + dest2.Port.String()
+			}
 		}
 		requestURL2.Path = config2.GetNormalizedPath()
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
