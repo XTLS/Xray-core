@@ -51,7 +51,7 @@ func TestSocksBridgeTCP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -128,7 +128,7 @@ func TestSocksWithHttpRequest(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -217,7 +217,7 @@ func TestSocksBridageUDP(t *testing.T) {
 			},
 			Outbound: []*core.OutboundHandlerConfig{
 				{
-					ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+					ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 				},
 			},
 		}
@@ -332,7 +332,7 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 				},
 				{
 					Tag:           "out",
-					ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+					ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 				},
 			},
 		}
@@ -429,7 +429,7 @@ func TestSocksConformanceMod(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},

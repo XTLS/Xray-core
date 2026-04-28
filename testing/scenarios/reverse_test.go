@@ -151,7 +151,7 @@ func TestReverseProxy(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 			{
 				Tag: "reverse",
@@ -340,7 +340,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 			{
 				Tag: "reverse",

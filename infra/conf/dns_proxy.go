@@ -84,7 +84,7 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 		if c.Rules != nil {
 			return nil, errors.New("legacy nonIPQuery and blockTypes cannot be mixed with rules")
 		}
-		errors.PrintDeprecatedFeatureWarning(`"nonIPQuery" and "blockTypes" in DNS outbound`, `"rules"`)
+		errors.PrintDeprecatedFeatureWarning(`"nonIPQuery" and "blockTypes"`, `"rules"`)
 		rules, err := c.buildLegacyDNSPolicy()
 		if err != nil {
 			return nil, err

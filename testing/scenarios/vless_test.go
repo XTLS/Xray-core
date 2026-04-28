@@ -67,7 +67,7 @@ func TestVless(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -172,7 +172,7 @@ func TestVlessTls(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -295,7 +295,7 @@ func TestVlessXtlsVision(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -427,7 +427,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -566,7 +566,7 @@ func TestVlessRealityFingerprints(t *testing.T) {
 			Outbound: []*core.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&freedom.Config{
-						IpsBlocked: &freedom.IPRules{},
+						FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 					}),
 				},
 			},
