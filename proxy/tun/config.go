@@ -3,6 +3,7 @@ package tun
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -55,6 +56,9 @@ func (updater *InterfaceUpdater) Update() {
 				break
 			}
 		} else {
+			if strings.Contains(iface.Name, "vEthernet") {
+				continue
+			}
 			addrs, err := iface.Addrs()
 			if err != nil {
 				continue
