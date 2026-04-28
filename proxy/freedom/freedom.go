@@ -274,7 +274,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
-		} else if dialDest.Network == net.Network_TCP && dialDest.Address.Family().IsDomain() {
+		} else if defaultRule != nil && dialDest.Network == net.Network_TCP && dialDest.Address.Family().IsDomain() {
 			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
