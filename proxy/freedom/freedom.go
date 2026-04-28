@@ -320,10 +320,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if blockedDest != nil {
 		return errors.New("blocked target: ", *blockedDest).AtInfo()
 	}
-	if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
-		conn.Close()
-		return errors.New("blocked target: ", remoteDest).AtInfo()
-	}
+	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
+	// 	conn.Close()
+	// 	return errors.New("blocked target: ", remoteDest).AtInfo()
+	// }
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
 		srcAddr := inbound.Source.RawNetAddr()
