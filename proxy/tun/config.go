@@ -55,7 +55,7 @@ func (updater *InterfaceUpdater) Update() {
 			}
 		}
 	} else {
-		var ifs []net.Interface
+		var ifs []ifwithaddr
 		for _, iface := range interfaces {
 			if strings.Contains(iface.Name, "vEthernet") {
 				continue
@@ -66,7 +66,11 @@ func (updater *InterfaceUpdater) Update() {
 			if iface.Flags&net.FlagLoopback != 0 {
 				continue
 			}
-			ifs = append(ifs, iface)
+			addrs, err := iface.Addrs()
+			if err != nil || len(addrs) == 0 {
+				continue
+			}
+			ifs = append(ifs, ifwithaddr{iface, addrs})
 		}
 		sort.Slice(ifs, func(i, j int) bool {
 			iScore := score(ifs[i])
@@ -79,7 +83,7 @@ func (updater *InterfaceUpdater) Update() {
 			return ifs[i].Name < ifs[j].Name
 		})
 		if len(ifs) > 0 {
-			iface := ifs[0]
+			iface := ifs[0].Interface
 			got = &iface
 		}
 	}
@@ -93,7 +97,12 @@ func (updater *InterfaceUpdater) Update() {
 	errors.LogInfo(context.Background(), "[tun] update interface ", got.Name, " ", got.Index)
 }
 
-func score(iface net.Interface) int {
+type ifwithaddr struct {
+	net.Interface
+	addrs []net.Addr
+}
+
+func score(iface ifwithaddr) int {
 	score := 0
 
 	name := strings.ToLower(iface.Name)
@@ -101,18 +110,11 @@ func score(iface net.Interface) int {
 		score += 2
 	}
 
-	addrs, err := iface.Addrs()
-	if err == nil {
-		for _, addr := range addrs {
-			if strings.HasPrefix(addr.String(), "192.168.") {
-				score += 1
-				break
-			}
+	for _, addr := range iface.addrs {
+		if strings.HasPrefix(addr.String(), "192.168.") {
+			score += 1
+			break
 		}
-	}
-
-	if len(addrs) == 0 {
-		score = -1
 	}
 
 	return score
