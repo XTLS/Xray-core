@@ -49,6 +49,9 @@ func (updater *InterfaceUpdater) Update() {
 	var got *net.Interface
 	if updater.fixedName != "" {
 		for _, iface := range interfaces {
+			if iface.Index == updater.tunIndex {
+				continue
+			}
 			if iface.Name == updater.fixedName {
 				got = &iface
 				break
@@ -76,8 +79,8 @@ func (updater *InterfaceUpdater) Update() {
 			ifs = append(ifs, ifwithaddr{iface, addrs})
 		}
 		sort.Slice(ifs, func(i, j int) bool {
-			iScore := score(ifs[i])
-			jScore := score(ifs[j])
+			iScore := ifs[i].score()
+			jScore := ifs[j].score()
 
 			if iScore != jScore {
 				return iScore > jScore
@@ -105,7 +108,7 @@ type ifwithaddr struct {
 	addrs []net.Addr
 }
 
-func score(iface ifwithaddr) int {
+func (iface *ifwithaddr) score() int {
 	score := 0
 
 	name := strings.ToLower(iface.Name)
