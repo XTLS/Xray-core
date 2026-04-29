@@ -3,6 +3,7 @@ package tun
 import (
 	"context"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 
@@ -46,29 +47,40 @@ func (updater *InterfaceUpdater) Update() {
 	}
 
 	var got *net.Interface
-	for _, iface := range interfaces {
-		if iface.Index == updater.tunIndex {
-			continue
-		}
-		if updater.fixedName != "" {
+	if updater.fixedName != "" {
+		for _, iface := range interfaces {
 			if iface.Name == updater.fixedName {
 				got = &iface
 				break
 			}
-		} else {
+		}
+	} else {
+		var ifs []net.Interface
+		for _, iface := range interfaces {
 			if strings.Contains(iface.Name, "vEthernet") {
 				continue
 			}
-			addrs, err := iface.Addrs()
-			if err != nil {
+			if iface.Flags&net.FlagUp == 0 {
 				continue
 			}
-			if (iface.Flags&net.FlagUp != 0) &&
-				(iface.Flags&net.FlagLoopback == 0) &&
-				len(addrs) > 0 {
-				got = &iface
-				break
+			if iface.Flags&net.FlagLoopback != 0 {
+				continue
 			}
+			ifs = append(ifs, iface)
+		}
+		sort.Slice(ifs, func(i, j int) bool {
+			iScore := score(ifs[i])
+			jScore := score(ifs[j])
+
+			if iScore != jScore {
+				return iScore > jScore
+			}
+
+			return ifs[i].Name < ifs[j].Name
+		})
+		if len(ifs) > 0 {
+			iface := ifs[0]
+			got = &iface
 		}
 	}
 
@@ -79,4 +91,25 @@ func (updater *InterfaceUpdater) Update() {
 
 	updater.iface = got
 	errors.LogInfo(context.Background(), "[tun] update interface ", got.Name, " ", got.Index)
+}
+
+func score(iface net.Interface) int {
+	score := 0
+
+	name := strings.ToLower(iface.Name)
+	if strings.Contains(name, "wlan") || strings.Contains(name, "wi-fi") {
+		score += 2
+	}
+
+	addrs, err := iface.Addrs()
+	if err == nil {
+		for _, addr := range addrs {
+			if strings.HasPrefix(addr.String(), "192.168.") {
+				score += 1
+				break
+			}
+		}
+	}
+
+	return score
 }
