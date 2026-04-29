@@ -57,6 +57,9 @@ func (updater *InterfaceUpdater) Update() {
 	} else {
 		var ifs []ifwithaddr
 		for _, iface := range interfaces {
+			if iface.Index == updater.tunIndex {
+				continue
+			}
 			if strings.Contains(iface.Name, "vEthernet") {
 				continue
 			}
