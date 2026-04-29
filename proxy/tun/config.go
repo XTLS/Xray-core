@@ -111,5 +111,9 @@ func score(iface net.Interface) int {
 		}
 	}
 
+	if len(addrs) == 0 {
+		score = -1
+	}
+
 	return score
 }
