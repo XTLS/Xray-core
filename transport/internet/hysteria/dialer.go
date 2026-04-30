@@ -272,9 +272,9 @@ func (c *client) clean() {
 func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
-		errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
+		errors.LogInfo(context.Background(), "skip hop: failed to dial to dest")
 		conn.Close()
-		return nil, errors.New()
+		return nil, errors.New("failed to dial to dest")
 	}
 
 	var pktConn net.PacketConn
@@ -285,9 +285,9 @@ func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	case *net.UDPConn:
 		pktConn = c
 	default:
-		errors.LogDebug(context.Background(), "skip hop: unknown conn ", reflect.TypeOf(c))
+		errors.LogInfo(context.Background(), "skip hop: invalid conn ", reflect.TypeOf(c))
 		conn.Close()
-		return nil, errors.New()
+		return nil, errors.New("invalid conn ", reflect.TypeOf(c))
 	}
 
 	return pktConn, nil
