@@ -628,7 +628,7 @@ type QListener struct {
 }
 
 func (l *QListener) Accept(ctx context.Context) (*quic.Conn, error) {
-	conn, err := l.Accept(ctx)
+	conn, err := l.Qface.Accept(ctx)
 	if err != nil {
 		return nil, err
 	}
