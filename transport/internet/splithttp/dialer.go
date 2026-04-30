@@ -9,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	reflect "reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -173,7 +174,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
 			KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
 			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
-			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 		if quicParams.MaxIdleTimeout == 0 {
 			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout

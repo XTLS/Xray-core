@@ -173,7 +173,9 @@ func (l *Listener) keepAccepting() {
 	for {
 		conn, err := l.listener.Accept(context.Background())
 		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to accept QUIC connection")
+			if err != quic.ErrServerClosed {
+				errors.LogErrorInner(context.Background(), err, "failed to serve hysteria")
+			}
 			break
 		}
 		go l.handleClient(conn)

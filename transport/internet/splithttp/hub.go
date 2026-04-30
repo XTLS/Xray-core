@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -510,7 +511,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
 			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
 			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
-			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
 		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)

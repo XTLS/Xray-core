@@ -2,7 +2,7 @@ package hysteria
 
 import (
 	"context"
-	gotls "crypto/tls"
+	go_tls "crypto/tls"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -31,7 +31,7 @@ type client struct {
 
 	dest           net.Destination
 	config         *Config
-	tlsConfig      *gotls.Config
+	tlsConfig      *go_tls.Config
 	socketConfig   *internet.SocketConfig
 	udpmaskManager *finalmask.UdpmaskManager
 	quicParams     *internet.QuicParams
@@ -158,7 +158,7 @@ func (c *client) dial() error {
 	rt := &http3.Transport{
 		TLSClientConfig: c.tlsConfig,
 		QUICConfig:      quicConfig,
-		Dial: func(ctx context.Context, _ string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			qc, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 			if err != nil {
 				return nil, err
@@ -328,11 +328,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	datagram := DatagramFromContext(ctx)
 	dest.Network = net.Network_UDP
-	config := streamSettings.ProtocolSettings.(*Config)
-	gotlsConfig := tlsConfig.GetTLSConfig()
-	socketConfig := streamSettings.SocketSettings
-	udpmaskManager := streamSettings.UdpmaskManager
-	quicParams := streamSettings.QuicParams
 
 	initmanager.Do(func() {
 		manager = &clientManager{
@@ -351,11 +346,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if c == nil {
 			c = &client{
 				dest:           dest,
-				config:         config,
-				tlsConfig:      gotlsConfig,
-				socketConfig:   socketConfig,
-				udpmaskManager: udpmaskManager,
-				quicParams:     quicParams,
+				config:         streamSettings.ProtocolSettings.(*Config),
+				tlsConfig:      tlsConfig.GetTLSConfig(),
+				socketConfig:   streamSettings.SocketSettings,
+				udpmaskManager: streamSettings.UdpmaskManager,
+				quicParams:     streamSettings.QuicParams,
 			}
 			manager.m[dialerConf{dest, streamSettings}] = c
 		}

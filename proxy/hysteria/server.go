@@ -105,6 +105,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		}
 		b.Resize(0, int32(n))
 		b.UDP = addr
+
 		reader.firstBuf = b
 
 		writer := &UDPWriter{
